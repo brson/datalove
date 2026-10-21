@@ -35,17 +35,20 @@ Let's figure it out.
 - [How does one unit failing to compile affect subsequent units?](#user-content-how-does-one-unit-failing-to-compile-affect-subsequent-units)
 - [How is re-execution affected when subsequent units consume bindings from the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-consume-bindings-from-the-re-executed-unit)
 - [How is re-execution affected when subsequent units mutate the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-mutate-the-re-executed-unit)
-- How is re-execution affected when subsequent units both read and mutate the re-executed unit?
-- Hypothesis: an algebra of rewind and replay for moves and mutations
-- What if a unit reads a binding prior to a unit moving it?
-- What if a unit reads a binding prior to a unit mutating it?
-- Multiple units moving values cause transitive re-execution.
-- What if an edit removes a move?
-- What if an edit removes a mutation?
-- What if a unit deletion removes a move?
-- What if a unit deletion removes a mutation?
-- How this interacts with loops and control flow.
+- What if a unit overwrites a binding without reading it?
+- [Hypothesis: an algebra of rewind and replay for moves and mutations](#user-content-hypothesis-an-algebra-of-rewind-and-replay-for-moves-and-mutations)
+- What if a unit reads a binding before a later unit moves it?
+- What if a unit reads a binding before a later unit mutates it?
+- What if a unit reads a binding after an earlier unit mutated it?
+- What if an edit adds or removes a move?
+- What if an edit adds or removes a mutation?
+- What if a unit that moves or mutates is deleted?
+- What if a unit gives a moved `var` a value again?
+- What if rewinding one unit needs another rewound first?
+- What if a move or mutation is conditional, or in a loop?
+- What does rewinding cost?
 - [How does one unit returning early affect subsequent units?](#user-content-how-does-one-unit-returning-early-affect-subsequent-units)
+- Are the rules right, and what the engine does today
 
 
 
@@ -371,20 +374,50 @@ we have a dependency on writes:
 
 
 
-## Hypothesis: an algebra of rewind and replay for moves vs. mutations
+## Hypothesis: an algebra of rewind and replay for moves and mutations
 
+After those examples a pattern shows.
+What matters about a unit is what it does to bindings
+that belong to _earlier_ units.
+There are four things it can do to one:
 
-On recompilation each unit has an effect on both previous
-and subsequent units based on its moves and mutations against _its_ previous units.
+- _Read_ it, by borrowing: `a + 1`, `f(ref a)`.
+- _Take_ it, by moving it: `let a_moved = a`, `f(a)`.
+- _Overwrite_ it, without reading it first: `set b = 10`, `f(out b)`.
+- _Update_ it, reading it and then writing it: `set b = b * 2`, `f(mut b)`.
 
-A unit may impose:
+Each has effects in two directions.
 
-_Undo_ on previos units if it moves or mutates their value.
-_Replay_ itself.
-_Forward_ bindings to subsequent units.
+_Backward_.
+To _undo_ a unit, because it was deleted or stopped compiling,
+or to _redo_ it, because it was edited or something it uses was,
+the earlier bindings it touched have to be as they were before it first ran.
+When they aren't we _rewind_:
+rerun the unit that made the binding,
+then _replay_ everything after it that uses the binding, in order.
 
-Need to conceptualize this clearly.
+_Forward_.
+What a unit did to a binding is what the units after it see,
+so changing what it does reaches them,
+whether or not they use anything the unit itself defines.
 
+| a unit that ... an earlier binding | undo it | redo it | units after it |
+|------------|---------|----------------------------------------|--------------------------------------------|
+| reads      | nothing | rewind if a later unit took or wrote it | nothing                                    |
+| takes      | rewind  | rewind                                  | can't name it, so recompile when that changes |
+| overwrites | rewind  | nothing                                 | read the new value, so rerun when it changes |
+| updates    | rewind  | rewind                                  | read the new value, so rerun when it changes |
+
+Moves and mutations agree on undo,
+and disagree on redo and on what they pass forward.
+
+<!--
+Note: the engine today treats take, overwrite and update all like take,
+and rewinds a read whenever any unit after the binding's provider took or
+wrote it. That is correct but rewinds more than this table says it needs to:
+`var v = 1` / `set v = 10` / `let b = v + 1`, editing the third unit,
+reruns all three. A candidate for the last section.
+-->
 
 
 
