@@ -22,7 +22,6 @@ pub use datalove_datafun_common::{
     DbClone,
     ParallelMode,
     parallel_mode_from_env,
-    AutoAdaptMode,
     ParsedModuleGraph,
     ModuleNameResolution,
     AllModuleNameResolutions,
@@ -52,7 +51,6 @@ pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_
 /// When a type error can be fixed by inserting the `@` (adapt) operator,
 /// a recovery hint is attached to the diagnostic. This enables:
 /// - Displaying helpful suggestions to the user
-/// - Auto-adapt mode to automatically apply the fix
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub enum RecoveryHint {
@@ -159,7 +157,7 @@ pub enum PendingDiagnostic<'db> {
         expected: InternedText<'db>,
         actual: InternedText<'db>,
         label: InternedText<'db>,
-        /// Recovery hint for auto-adapt mode.
+        /// Recovery hint suggesting an `@`.
         recovery_hint: RecoveryHint,
     },
     /// F065: A literal out of range for the type it is checked against.
@@ -447,9 +445,6 @@ pub struct ScriptEnv<'db> {
     /// The data files the script may require, by path.
     #[returns(ref)]
     pub data: std::collections::BTreeMap<String, bct::input::Source>,
-    /// Auto-adapt mode for type checking.
-    #[returns(copy)]
-    pub auto_adapt_mode: AutoAdaptMode,
 }
 
 /// Result of typechecking one script unit.
@@ -470,12 +465,6 @@ pub struct UnitTypecheckResultTracked<'db> {
     /// are used in function parameters.
     #[returns(ref)]
     pub function_types: Vec<(InternedText<'db>, TypeFunction<'db>)>,
-    /// Expressions auto-adapt accepted by adjusting their type.
-    ///
-    /// Lowering has to supply the conversion the source left out, or the
-    /// binding would hold the unconverted value under the adapted type.
-    #[returns(ref)]
-    pub adapt_sites: datalove_datafun_sema::AdaptSites<'db>,
     /// The data files this unit's `require data` consts name, by path.
     #[returns(ref)]
     pub data_files: crate::DataFiles,

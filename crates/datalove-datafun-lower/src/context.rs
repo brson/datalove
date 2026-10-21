@@ -18,7 +18,7 @@ use crate::ir_ext::IrTypeExt;
 
 /// The data files of a world, by path.
 pub type DataFiles = BTreeMap<String, bct::input::Source>;
-use datalove_datafun_sema::{BindingId, BindingMap, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites, ExprTypes, CallTargets};
+use datalove_datafun_sema::{BindingId, BindingMap, DropSchedule, BindingInfo, TrackingCategory, StmtKey, ExprTypes, CallTargets};
 
 /// Compile-time state for building a function's IR.
 ///
@@ -83,8 +83,6 @@ pub struct FrameState<'db> {
     pub binding_info: Vec<BindingInfo>,
     /// Drop schedule from analysis.
     pub drop_schedule: DropSchedule,
-    /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites<'db>,
     /// Loop context stack for each nested loop.
     pub loop_stack: Vec<LoopLowerContext>,
     /// Whether current block is unreachable (after return/break/continue).
@@ -148,7 +146,6 @@ impl<'db> FrameState<'db> {
             tracking: Vec::new(),
             binding_info: Vec::new(),
             drop_schedule: DropSchedule::default(),
-            adapt_sites: AdaptSites::default(),
             loop_stack: Vec::new(),
             in_unreachable: false,
             expr_temps: Vec::new(),
@@ -641,14 +638,6 @@ impl<'db> LowerCtx<'db> {
             Operand::Param(id) => self.body.param_types.get(id.0 as usize).cloned(),
             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
         }
-    }
-
-    /// Whether auto-adapt supplies an implicit `@` at this expression.
-    ///
-    /// Such a use clones instead of moving, which is what leaves the binding
-    /// available to the use that would otherwise have been an error.
-    pub fn is_adapt_site(&self, expr: ExprFun<'db>) -> bool {
-        self.body.adapt_sites.contains(expr.key())
     }
 
     /// Look up a variable.

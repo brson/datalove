@@ -15,7 +15,6 @@ use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     typecheck_module_graph,
     ParallelMode as TypecheckParallelMode,
-    AutoAdaptMode,
 };
 
 // Enough modules for parallelism, small enough for fast benchmarks.
@@ -226,7 +225,7 @@ fn typecheck_through<'db>(
     let parsed = parse_module_graph(db, graph, LookupMap::new(), Vec::new());
     let names = resolve_phase(db, TypecheckParallelMode::Sequential, parsed);
     let typechecked = typecheck_module_graph(
-        db, parsed, names, AutoAdaptMode::Disabled,
+        db, parsed, names,
     );
     (parsed, typechecked)
 }
@@ -321,7 +320,7 @@ fn typecheck_sequential(bencher: divan::Bencher) {
             let graph = setup_graph(&db, &srcs);
             let parsed = parse_module_graph(&db, graph, LookupMap::new(), Vec::new()); // Memoized.
             let names = resolve_phase(&db, TypecheckParallelMode::Sequential, parsed);
-            let result = typecheck_phase(&db, TypecheckParallelMode::Sequential, parsed, names, AutoAdaptMode::Disabled);
+            let result = typecheck_phase(&db, TypecheckParallelMode::Sequential, parsed, names);
             let _ = divan::black_box(result);
         });
 }
@@ -341,7 +340,7 @@ fn typecheck_parallel(bencher: divan::Bencher) {
             let graph = setup_graph(&db, &srcs);
             let parsed = parse_module_graph(&db, graph, LookupMap::new(), Vec::new());
             let names = resolve_phase(&db, TypecheckParallelMode::Sequential, parsed);
-            let result = typecheck_phase(&db, TypecheckParallelMode::Parallel, parsed, names, AutoAdaptMode::Disabled);
+            let result = typecheck_phase(&db, TypecheckParallelMode::Parallel, parsed, names);
             let _ = divan::black_box(result);
         });
 }
@@ -360,7 +359,7 @@ fn ownership_sequential(bencher: divan::Bencher) {
         .bench_local_values(|(db, srcs)| {
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
-            let result = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked, AutoAdaptMode::Disabled);
+            let result = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked);
             let _ = divan::black_box(result);
         });
 }
@@ -379,7 +378,7 @@ fn ownership_parallel(bencher: divan::Bencher) {
         .bench_local_values(|(db, srcs)| {
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
-            let result = ownership_phase(&db, ParallelMode::Parallel, parsed, typechecked, AutoAdaptMode::Disabled);
+            let result = ownership_phase(&db, ParallelMode::Parallel, parsed, typechecked);
             let _ = divan::black_box(result);
         });
 }
@@ -393,13 +392,13 @@ fn lower_sequential(bencher: divan::Bencher) {
             let srcs = setup_sources(&db, &sources);
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
-            let _ = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked, AutoAdaptMode::Disabled);
+            let _ = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked);
             (db, srcs)
         })
         .bench_local_values(|(db, srcs)| {
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
-            let ownership = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked, AutoAdaptMode::Disabled);
+            let ownership = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked);
             let mut evaluator = InterpCtfeEvaluator::new();
             let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Sequential, &mut evaluator, false, false, GenericsPolicy::Off, None);
             let _ = divan::black_box(result);
@@ -415,13 +414,13 @@ fn lower_parallel(bencher: divan::Bencher) {
             let srcs = setup_sources(&db, &sources);
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
-            let _ = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked, AutoAdaptMode::Disabled);
+            let _ = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked);
             (db, srcs)
         })
         .bench_local_values(|(db, srcs)| {
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
-            let ownership = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked, AutoAdaptMode::Disabled);
+            let ownership = ownership_phase(&db, ParallelMode::Sequential, parsed, typechecked);
             let mut evaluator = InterpCtfeEvaluator::new();
             let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Parallel, &mut evaluator, false, false, GenericsPolicy::Off, None);
             let _ = divan::black_box(result);

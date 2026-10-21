@@ -18,7 +18,7 @@ use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph;
 use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_ct::query_log::{enable_query_logging, disable_query_logging, get_executed_modules};
 use datalove_datafun_interp::InterpCtfeEvaluator;
-use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
+use datalove_datafun_tycheck::typecheck_module_graph;
 use datalove_datafun_resolve::{resolve_all_names, ParallelMode};
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 
@@ -384,7 +384,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
 
         enable_query_logging();
         let all_names = resolve_all_names(&db, parsed_graph);
-                let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names, AutoAdaptMode::Disabled);
+                let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names);
         let typecheck_log = disable_query_logging();
         let resolved_names_modules: BTreeSet<String> = get_executed_modules(&typecheck_log, "resolve_names")
             .into_iter().collect();
@@ -392,7 +392,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .into_iter().collect();
 
         enable_query_logging();
-        let ownership_analysis = analyze_module_graph(&db, parsed_graph, typecheck_result, AutoAdaptMode::Disabled);
+        let ownership_analysis = analyze_module_graph(&db, parsed_graph, typecheck_result);
         let _ownership_analysis_log = disable_query_logging();
         // TODO: Track ownership analysis memoization separately if needed.
         let _ownership_analyzed_modules: BTreeSet<String> = get_executed_modules(&_ownership_analysis_log, "ownership_analysis")

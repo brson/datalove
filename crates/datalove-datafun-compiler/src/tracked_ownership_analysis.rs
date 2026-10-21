@@ -15,7 +15,7 @@ use datalove_datafun_tycheck::{
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
 };
-use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, AutoAdaptMode};
+use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis};
 
 
 /// Result of ownership analysis for a single function.
@@ -88,7 +88,6 @@ pub fn analyze_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
-    auto_adapt_mode: AutoAdaptMode,
 ) -> SingleModuleAnalysis<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -115,9 +114,8 @@ pub fn analyze_module<'db>(
             // Get resolved param types for this function.
             let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
 
-            // Run ownership analysis with auto-adapt mode.
-            let analysis = ownership_analysis::analyze_function_with_mode(
-                db, func, expr_types, typecheck_result.call_targets(db), resolved_params, auto_adapt_mode
+            let analysis = ownership_analysis::analyze_function(
+                db, func, expr_types, typecheck_result.call_targets(db), resolved_params,
             );
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {
@@ -157,13 +155,12 @@ pub fn analyze_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
     let mut module_results = LookupMap::new();
     let mut all_success = true;
 
     for (module, single_typecheck) in analysis_work(db, parsed_graph, typecheck_result) {
-        let result = analyze_module(db, module, single_typecheck, auto_adapt_mode);
+        let result = analyze_module(db, module, single_typecheck);
 
         if !result.errors(db).is_empty() {
             all_success = false;

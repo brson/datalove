@@ -10,7 +10,7 @@
 //
 // A `continue` is not a way out -- it goes back to the head, so what it moved
 // can be moved again, and that stays D007. See
-// `auto-adapt/039_inconsistent_loop_exit` for the refusal and
+// `engines/1019_inconsistent_loop_exit_error` for the refusal and
 // `std_tests/151_owned_past_a_returning_branch` for the `ret` half of this.
 //
 // Each of these hands back a string that one path gave away and another did not,

@@ -488,9 +488,9 @@ cache hits, which `datalove_datafun_common::warm` is:
 
 ```rust
 warm(db, mode, || graph.iter_modules(db.as_salsa_db()), |db, module| {
-    let _ = typecheck_graph_module(db, parsed_graph, names, module, auto_adapt_mode);
+    let _ = typecheck_graph_module(db, parsed_graph, names, module);
 });
-typecheck_module_graph(db.as_salsa_db(), parsed_graph, names, auto_adapt_mode)
+typecheck_module_graph(db.as_salsa_db(), parsed_graph, names)
 ```
 
 The warm-up and the aggregator have to ask with the same function, or the warm

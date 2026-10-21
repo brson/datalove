@@ -422,8 +422,7 @@ pub fn check_expr<'db>(
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
             }
-            // No match or coercion possible - try auto-adapt or report error.
-            ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
+            Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
         }
 
         // Handle atom expressions - check against expected Atom or Enum type.
@@ -552,7 +551,7 @@ pub fn check_expr<'db>(
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
             }
-            ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
+            Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
         }
 
         _ => {
@@ -563,8 +562,7 @@ pub fn check_expr<'db>(
                 return Ok(());
             }
 
-            // No match or coercion possible - try auto-adapt or report error.
-            ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
+            Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
         }
     }
 }

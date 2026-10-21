@@ -19,7 +19,6 @@ use datalove_datafun_resolve::{
 use datalove_datafun_tycheck::{
     typecheck_graph_module, typecheck_module_graph,
     ModuleGraphTypecheckResult,
-    AutoAdaptMode,
 };
 
 use crate::module_graph::{parse_module_graph, parse_module_full};
@@ -98,8 +97,8 @@ pub fn compile_modules<'db>(
 
     let parsed_graph = parse_phase(db, mode, input.graph.clone(), input.resolved_requires, rider_sources.clone());
     let name_resolution = resolve_phase(db, mode, parsed_graph);
-    let typecheck_result = typecheck_phase(db, mode, parsed_graph, name_resolution, AutoAdaptMode::Disabled);
-    let ownership_analysis = ownership_phase(db, mode, parsed_graph, typecheck_result, AutoAdaptMode::Disabled);
+    let typecheck_result = typecheck_phase(db, mode, parsed_graph, name_resolution);
+    let ownership_analysis = ownership_phase(db, mode, parsed_graph, typecheck_result);
 
     let mut output = collect_results(db, input.graph, parsed_graph, name_resolution, typecheck_result, ownership_analysis);
 
@@ -166,14 +165,13 @@ pub fn typecheck_phase<'db>(
     mode: ParallelMode,
     parsed_graph: ParsedModuleGraph<'db>,
     name_resolution: AllModuleNameResolutions<'db>,
-    auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);
     warm(db, mode, || graph.iter_modules(db_salsa), |db, module| {
-        let _ = typecheck_graph_module(db, parsed_graph, name_resolution, module, auto_adapt_mode);
+        let _ = typecheck_graph_module(db, parsed_graph, name_resolution, module);
     });
-    typecheck_module_graph(db_salsa, parsed_graph, name_resolution, auto_adapt_mode)
+    typecheck_module_graph(db_salsa, parsed_graph, name_resolution)
 }
 
 /// Phase 4: ownership analysis.
@@ -182,13 +180,12 @@ pub fn ownership_phase<'db>(
     mode: ParallelMode,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
     let db_salsa = db.as_salsa_db();
     warm(db, mode, || analysis_work(db_salsa, parsed_graph, typecheck_result), |db, (module, single_typecheck)| {
-        let _ = analyze_module(db, module, single_typecheck, auto_adapt_mode);
+        let _ = analyze_module(db, module, single_typecheck);
     });
-    analyze_module_graph(db_salsa, parsed_graph, typecheck_result, auto_adapt_mode)
+    analyze_module_graph(db_salsa, parsed_graph, typecheck_result)
 }
 
 /// Every chunk of every collection the data files plan to cut, as

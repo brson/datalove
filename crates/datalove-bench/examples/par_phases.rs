@@ -16,7 +16,7 @@ use datalove_datafun::pipeline::WorkspaceDescriptor;
 use datalove_datafun_compiler::compile::{parse_phase, resolve_phase, typecheck_phase, ownership_phase};
 use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_datafun_interp::InterpCtfeEvaluator;
-use datalove_datafun_tycheck::{AutoAdaptMode, ParallelMode};
+use datalove_datafun_tycheck::ParallelMode;
 use std::time::{Duration, Instant};
 
 const N: usize = 6;
@@ -42,10 +42,10 @@ fn one(modules: &[(String, String)], riders: &[(String, String)], mode: Parallel
     let names = resolve_phase(&db, mode, parsed);
     d[2] = t.elapsed();
     let t = Instant::now();
-    let tc = typecheck_phase(&db, mode, parsed, names, AutoAdaptMode::Disabled);
+    let tc = typecheck_phase(&db, mode, parsed, names);
     d[3] = t.elapsed();
     let t = Instant::now();
-    let own = ownership_phase(&db, mode, parsed, tc, AutoAdaptMode::Disabled);
+    let own = ownership_phase(&db, mode, parsed, tc);
     d[4] = t.elapsed();
     let t = Instant::now();
     let mut ev = InterpCtfeEvaluator::new();

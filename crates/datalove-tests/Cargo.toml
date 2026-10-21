@@ -38,8 +38,3 @@ datalove-exampletest.path = "../datalove-exampletest"
 name = "worldgen_dual_tests"
 path = "tests/worldgen_dual_tests.rs"
 harness = false
-
-[[test]]
-name = "auto_adapt_tests"
-path = "tests/auto_adapt_tests.rs"
-harness = false

@@ -736,7 +736,7 @@ mod tests {
     // Typecheck Per-Module Caching Tests
     // ========================================================================
 
-    use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
+    use datalove_datafun_tycheck::typecheck_module_graph;
     use datalove_datafun_resolve::{
         resolve_all_names,
         ParsedModuleGraph,
@@ -748,7 +748,7 @@ mod tests {
         parsed: ParsedModuleGraph<'db>,
     ) -> datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db> {
         let all_names = resolve_all_names(db, parsed);
-        typecheck_module_graph(db, parsed, all_names, AutoAdaptMode::Disabled)
+        typecheck_module_graph(db, parsed, all_names)
     }
 
     #[test]
@@ -1092,8 +1092,7 @@ mod tests {
 
     use datalove_datafun_tycheck::ParallelMode as TypecheckParallelMode;
     use datalove_datafun_resolve::DbClone;
-    // Note: ParsedModuleGraph and AutoAdaptMode are already imported in the
-    // earlier test section.
+    // Note: ParsedModuleGraph is already imported in the earlier test section.
 
     /// Names resolved and the graph typechecked, in parallel, as the compile does.
     fn resolve_and_typecheck_parallel<'db>(
@@ -1110,7 +1109,7 @@ mod tests {
         mode: TypecheckParallelMode,
     ) -> datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db> {
         let all_names = crate::compile::resolve_phase(db, mode, parsed);
-        crate::compile::typecheck_phase(db, mode, parsed, all_names, AutoAdaptMode::Disabled)
+        crate::compile::typecheck_phase(db, mode, parsed, all_names)
     }
 
     #[test]

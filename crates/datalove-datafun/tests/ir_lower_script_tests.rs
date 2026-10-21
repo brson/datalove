@@ -139,7 +139,6 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     bindings: script_analysis_raw.bindings,
                     tracking: script_analysis_raw.tracking,
                     unit_end: script_analysis_raw.unit_end,
-                    adapt_sites: script_analysis_raw.adapt_sites,
                     dead_exports: script_analysis_raw.dead_exports,
                     revived_exports: script_analysis_raw.revived_exports,
                 };

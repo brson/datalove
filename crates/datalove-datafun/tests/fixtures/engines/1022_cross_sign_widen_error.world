@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Error test: F016. u8 does not implicitly widen to i16 (signed), but `@`
+// can, so the error suggests it.
+
+let n: u8 = (: u8 / 42)
+let m: i16 = n

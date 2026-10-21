@@ -300,14 +300,12 @@ pub fn typecheck_script_unit<'db>(
     script: Script<'db>,
     env: ScriptEnv<'db>,
 ) -> ScriptUnitTypecheckOutput<'db> {
-    let auto_adapt_mode = env.auto_adapt_mode(db);
-
     // Handles only. A module's parse and name resolution are asked for one
     // module at a time, where an import names it.
     let modules_by_path = script_modules_by_path(db, env);
 
     let unit_spec = unit_ast(db, script.unit(db));
-    let mut ctx = TypeContext::with_options(db, unit_spec.spans.clone(), None, auto_adapt_mode);
+    let mut ctx = TypeContext::new(db, unit_spec.spans.clone());
     ctx.data_files = env.data(db).C();
     ctx.record_asked_names();
 
@@ -499,13 +497,6 @@ pub fn typecheck_script_unit<'db>(
     // Emit pending diagnostics with local spans.
     ctx.emit_pending_diagnostics();
 
-    // Expressions auto-adapt accepted by adjusting their type; lowering has to
-    // supply the conversion the source left out.
-    let mut adapt_sites = datalove_datafun_sema::AdaptSites::default();
-    for adaptation in ctx.auto_adaptations() {
-        adapt_sites.insert(adaptation.expr_key);
-    }
-
     // What this unit asked the environment for, taken before `ctx` is consumed.
     let asked_names = ctx.asked_names();
 
@@ -523,7 +514,7 @@ pub fn typecheck_script_unit<'db>(
     let mut function_types: Vec<_> = ctx.functions.into_iter_unordered().collect();
     function_types.sort_by(|(a, _), (b, _)| a.as_str(db).cmp(b.as_str(db)));
     let result = UnitTypecheckResultTracked::new(
-        db, errors, ctx.expr_types, ctx.call_targets, function_types, adapt_sites, ctx.resolved_data,
+        db, errors, ctx.expr_types, ctx.call_targets, function_types, ctx.resolved_data,
     );
 
     ScriptUnitTypecheckOutput::new(
@@ -563,10 +554,9 @@ pub fn type_check_script_units<'db>(
 pub fn single_fragment_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> (Script<'db>, ScriptEnv<'db>) {
     let unit = ScriptUnit::new(db, source, false);
-    (Script::new(db, None, unit), ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new(), auto_adapt_mode))
+    (Script::new(db, None, unit), ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new()))
 }
 
 /// Typecheck a single script fragment using the production path.
@@ -574,7 +564,7 @@ pub fn type_check_single_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
 ) -> UnitTypecheckResultTracked<'db> {
-    let (script, env) = single_fragment_script(db, source, crate::AutoAdaptMode::Disabled);
+    let (script, env) = single_fragment_script(db, source);
     type_check_script_units(db, script, env).results(db)[0]
 }
 
@@ -608,7 +598,6 @@ pub fn typecheck_module<'db>(
     require_errors: Vec<crate::RequireError>,
     qualified: crate::QualifiedScope<'db>,
     data_files: crate::DataFiles,
-    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> SingleModuleTypecheckResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -619,8 +608,8 @@ pub fn typecheck_module<'db>(
 
     // Create type context for this module with module_id for pending
     // diagnostics, whose spans are found when they are emitted.
-    let mut ctx = TypeContext::with_options(
-        db, DatafunSpans::new(vec![]), Some(module_id), auto_adapt_mode);
+    let mut ctx = TypeContext::with_module_id(
+        db, DatafunSpans::new(vec![]), Some(module_id));
     ctx.data_files = data_files;
 
     for error in &require_errors {
@@ -721,7 +710,6 @@ pub fn typecheck_graph_module<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     all_names: AllModuleNameResolutions<'db>,
     module: Module<'db>,
-    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> SingleModuleTypecheckResult<'db> {
     let name_resolution = *all_names.resolutions(db).get(&module.id(db))
         .expect("module should have name resolution");
@@ -730,7 +718,7 @@ pub fn typecheck_graph_module<'db>(
         db, module, name_resolution,
         import_resolution.imports(db).C(), import_resolution.errors(db).C(),
         import_resolution.require_errors(db).C(), import_resolution.qualified(db).C(),
-        parsed_graph.graph(db).data(db).C(), auto_adapt_mode,
+        parsed_graph.graph(db).data(db).C(),
     )
 }
 
@@ -745,7 +733,6 @@ pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
     all_names: AllModuleNameResolutions<'db>,
-    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     let graph = parsed_graph.graph(db);
 
@@ -759,7 +746,7 @@ pub fn typecheck_module_graph<'db>(
 
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        let result = typecheck_graph_module(db, parsed_graph, all_names, module, auto_adapt_mode);
+        let result = typecheck_graph_module(db, parsed_graph, all_names, module);
 
         // Collect errors from typecheck result.
         let errors = result.errors(db).C();

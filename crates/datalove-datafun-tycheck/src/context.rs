@@ -21,7 +21,6 @@ pub use crate::{
     ResolvedCallTarget,
     ModuleNameResolution,
     CollectedNames,
-    AutoAdaptMode,
 };
 
 use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_with_aliases};
@@ -151,10 +150,6 @@ pub struct TypeContext<'db> {
     /// Whether we're in a mutable binding context (mut/out param).
     /// View types (e.g. tensor sub-views) are not allowed in mut context.
     pub(crate) mut_context: bool,
-    /// Auto-adapt mode for this context.
-    pub(crate) auto_adapt_mode: AutoAdaptMode,
-    /// Auto-adaptations that were applied (for reporting and IR lowering).
-    pub(crate) auto_adaptations: Vec<AutoAdaptation<'db>>,
     /// Whether we are checking the value of a const binding.
     ///
     /// A const expression may only name other consts, since it is evaluated
@@ -167,23 +162,12 @@ pub struct TypeContext<'db> {
     pub(crate) inference: crate::infer::Inference<'db>,
 }
 
-/// Record of an auto-adaptation that was applied.
-#[derive(Clone)]
-pub struct AutoAdaptation<'db> {
-    /// The expression that was adapted.
-    pub expr_key: ExprKey<'db>,
-    /// The original type of the expression.
-    pub from_type: Type<'db>,
-    /// The type after adaptation.
-    pub to_type: Type<'db>,
-}
-
 impl<'db> TypeContext<'db> {
     pub fn new(
         db: &'db dyn crate::Db,
         spans: DatafunSpans<'db>,
     ) -> Self {
-        Self::with_options(db, spans, None, AutoAdaptMode::Disabled)
+        Self::with_module_id(db, spans, None)
     }
 
     /// Create a TypeContext for a specific module.
@@ -191,16 +175,6 @@ impl<'db> TypeContext<'db> {
         db: &'db dyn crate::Db,
         spans: DatafunSpans<'db>,
         module_id: Option<ModuleId<'db>>,
-    ) -> Self {
-        Self::with_options(db, spans, module_id, AutoAdaptMode::Disabled)
-    }
-
-    /// Create a TypeContext with all options.
-    pub fn with_options(
-        db: &'db dyn crate::Db,
-        spans: DatafunSpans<'db>,
-        module_id: Option<ModuleId<'db>>,
-        auto_adapt_mode: AutoAdaptMode,
     ) -> Self {
         TypeContext {
             db,
@@ -231,8 +205,6 @@ impl<'db> TypeContext<'db> {
             loop_depth: 0,
             ref_context: false,
             mut_context: false,
-            auto_adapt_mode,
-            auto_adaptations: Vec::new(),
             in_const_expr: false,
             arena: None,
             inference: crate::infer::Inference::new(db),
@@ -242,16 +214,6 @@ impl<'db> TypeContext<'db> {
     /// The expression at `id` in the body being checked.
     pub(crate) fn expr(&self, id: ExprId) -> ExprFun<'db> {
         self.arena.expect("an expression is checked inside a body").get(id)
-    }
-
-    /// Get the auto-adapt mode.
-    pub fn auto_adapt_mode(&self) -> AutoAdaptMode {
-        self.auto_adapt_mode
-    }
-
-    /// Get the auto-adaptations that were applied.
-    pub fn auto_adaptations(&self) -> &[AutoAdaptation<'db>] {
-        &self.auto_adaptations
     }
 
     /// Get the pending diagnostics.
@@ -482,51 +444,6 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
             expected: expected.S(),
             actual: actual.S(),
         }
-    }
-
-    /// Try to auto-adapt a type mismatch, or return an error.
-    ///
-    /// If auto_adapt_mode is enabled and the mismatch is recoverable via `@`,
-    /// records the adaptation and returns Ok(()). Otherwise, creates a pending
-    /// diagnostic (with recovery hint if applicable) and returns Err.
-    ///
-    /// This is the main entry point for handling type mismatches in expressions.
-    pub fn check_type_mismatch_or_adapt(
-        &mut self,
-        expr: ExprFun<'db>,
-        expected: &Type<'db>,
-        actual: &Type<'db>,
-        label: &str,
-    ) -> Result<(), TypeError> {
-        // Check if @ can fix this mismatch.
-        let can_adapt = can_clone_coerce_to(actual, expected, self.db);
-
-        if can_adapt && self.auto_adapt_mode.is_enabled() {
-            // Auto-adapt: record the adaptation and store the expected type.
-            self.auto_adaptations.push(AutoAdaptation {
-                expr_key: expr.key(),
-                from_type: actual.clone(),
-                to_type: expected.clone(),
-            });
-
-            // Store the adapted (expected) type for this expression.
-            self.store_expr_type(expr, expected);
-
-            // Optionally report what was adapted.
-            if self.auto_adapt_mode.should_report() {
-                use datalove_datafun_common::type_to_string;
-                let from_str = type_to_string(self.db, actual);
-                let to_str = type_to_string(self.db, expected);
-                // TODO: Emit an info-level diagnostic for the adaptation.
-                // For now, we just silently adapt.
-                let _ = (from_str, to_str);
-            }
-
-            return Ok(());
-        }
-
-        // Cannot auto-adapt (or auto-adapt disabled): emit error with recovery hint.
-        Err(self.error_type_mismatch_with_types(expr, expected, actual, label))
     }
 
     /// F016: Type mismatch with recovery hint computation.

@@ -108,40 +108,6 @@ pub fn parallel_mode_from_env() -> ParallelMode {
     }
 }
 
-/// Controls automatic adaptation of type mismatches via the `@` operator.
-///
-/// When enabled, the compiler automatically inserts `@` (adapt) operations
-/// to fix recoverable type errors, such as:
-/// - Integer widening (u8 → int, i16 → i32, etc.)
-/// - Cross-sign widening (u8 → i16, u16 → i32, etc.)
-/// - Float widening (f32 → f64)
-/// - Cloning linear types for reuse
-///
-/// See "Auto-adapt" in `botdocs/compiler-guide.md` for which errors it recovers.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[derive(salsa::SalsaValue)]
-pub enum AutoAdaptMode {
-    /// Disabled - emit errors for type mismatches (default).
-    #[default]
-    Disabled,
-    /// Enabled - automatically insert @ for recoverable errors (silent).
-    Enabled,
-    /// Enabled with reporting - insert @ and emit info diagnostics showing what was adapted.
-    EnabledWithReport,
-}
-
-impl AutoAdaptMode {
-    /// Returns true if auto-adapt is enabled (either silent or with reporting).
-    pub fn is_enabled(&self) -> bool {
-        matches!(self, AutoAdaptMode::Enabled | AutoAdaptMode::EnabledWithReport)
-    }
-
-    /// Returns true if adaptations should be reported as diagnostics.
-    pub fn should_report(&self) -> bool {
-        matches!(self, AutoAdaptMode::EnabledWithReport)
-    }
-}
-
 // ============================================================================
 // Rider Interface
 // ============================================================================

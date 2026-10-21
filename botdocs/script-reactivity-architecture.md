@@ -28,7 +28,6 @@ Script (interned cons list)          the identity everything is keyed on
 
 ScriptEnv (interned)                 what the script is checked against
   modules: Vec<Module>               <- handles; a Module survives set_text
-  auto_adapt_mode
           script_module_spec(module) -> ModuleSpec, per module, tracked
 
 per unit, from typechecking:         ScriptUnitTypecheckOutput

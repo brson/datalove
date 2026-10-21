@@ -173,7 +173,8 @@ What went in, and it is the design below with one thing changed:
   whenever anything in its body moves -- it carries the expression types -- so
   without the projection a body edit would re-run every later unit's `binding_at`
   walk. With it, a body edit stops there.
-- **`ScriptEnv`** interns the modules and the auto-adapt mode. The plan had those
+- **`ScriptEnv`** interns the modules (and then the auto-adapt mode, since
+  removed). The plan had those
   passed by value; `binding_at` is asked once per name a unit uses, and hashing
   the module list at each of those is the module world in the key by another
   route. It held every module's `ModuleSpec` at first, which was the module world
@@ -708,7 +709,7 @@ not its handle. So a `Module` survives a module content edit unchanged, where a
 So:
 
 ```rust
-ScriptEnv { modules: Vec<Module>, auto_adapt_mode }   // was Vec<ModuleSpec>
+ScriptEnv { modules: Vec<Module> }                    // was Vec<ModuleSpec>
 
 script_module_spec(db, module: Module) -> ModuleSpec  // new, tracked per module
 ```

@@ -240,16 +240,12 @@ all. So the blunt rule is load-bearing for soundness, not only for precision.
 **What it would take**, and the coupling to watch. A real fixpoint: analyze the
 body, feed the end state back to the head, repeat until it settles, and ask of
 each *use* whether it can read a moved value rather than asking where the binding
-ended up. Two things depend on the present rule and would have to move with it:
-
-- The loop-exit merge (`merge_loop_exits`) takes the state before the loop as the
-  state at a condition-failure exit. That is sound only because `MoveInLoop`
-  guarantees the end of the body agrees with it for every outer non-copy
-  binding. Relax the rule and that guarantee goes, and the exit merge is
-  unsound rather than imprecise.
-- Auto-adapt mode recovers from the same site by inserting a clone, so the
-  imprecision shows up there as a copy per iteration that nothing needed, not as
-  an error. A fixpoint would remove those too.
+ended up. One thing depends on the present rule and would have to move with it:
+the loop-exit merge (`merge_loop_exits`) takes the state before the loop as the
+state at a condition-failure exit. That is sound only because `MoveInLoop`
+guarantees the end of the body agrees with it for every outer non-copy binding.
+Relax the rule and that guarantee goes, and the exit merge is unsound rather
+than imprecise.
 
 Loop exits themselves are settled: see `merge_loop_exits`, D014, and
 `std_tests/152_owned_past_a_loop_exit`.

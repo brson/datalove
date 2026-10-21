@@ -872,9 +872,6 @@ later passes do not look names up again. Qualified calls resolve into
 `resolve_module_imports`, a script unit's in `typecheck_script_unit`, through
 `module_alias_at` for an alias an earlier unit required.
 
-An `AutoAdaptMode` inserts `@` where `Check-Adapt` would succeed instead of
-reporting F016. Only tests enable it.
-
 ## References
 
 - Jana Dunfield and Neel Krishnaswami, "Bidirectional Typing", ACM

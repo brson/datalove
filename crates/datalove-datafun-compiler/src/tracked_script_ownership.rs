@@ -14,32 +14,27 @@ use datalove_diagnostic::DiagnosticBuilderExt;
 use crate::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ownership::{
     self as ownership_analysis, DropSchedule, BindingInfo, FunctionAnalysis,
-    TrackingCategory, format_analysis_errors, AutoAdaptMode,
+    TrackingCategory, format_analysis_errors,
 };
 pub use datalove_datafun_sema::{
-    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint, AdaptSites,
+    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint,
 };
-
-// Re-export AutoAdaptMode for callers.
-pub use datalove_datafun_ownership::AutoAdaptMode as OwnershipAutoAdaptMode;
 
 /// Hashable wrapper for FunctionAnalysis.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[derive(salsa::SalsaValue)]
-pub struct FunctionAnalysisData<'db> {
+pub struct FunctionAnalysisData {
     pub schedule: DropSchedule,
     pub bindings: Vec<BindingInfo>,
     pub tracking: Vec<TrackingCategory>,
-    pub adapt_sites: AdaptSites<'db>,
 }
 
-impl<'db> From<FunctionAnalysis<'db>> for FunctionAnalysisData<'db> {
+impl<'db> From<FunctionAnalysis<'db>> for FunctionAnalysisData {
     fn from(analysis: FunctionAnalysis<'db>) -> Self {
         Self {
             schedule: analysis.schedule,
             bindings: analysis.bindings,
             tracking: analysis.tracking,
-            adapt_sites: analysis.adapt_sites,
         }
     }
 }
@@ -49,10 +44,10 @@ impl<'db> From<FunctionAnalysis<'db>> for FunctionAnalysisData<'db> {
 pub struct ScriptUnitOwnershipResult<'db> {
     /// Function analyses: (name, analysis data).
     #[returns(ref)]
-    pub function_analyses: Vec<(String, FunctionAnalysisData<'db>)>,
+    pub function_analyses: Vec<(String, FunctionAnalysisData)>,
     /// Script-level analysis (None for expression units).
     #[returns(ref)]
-    pub script_analysis: Option<ScriptAnalysisData<'db>>,
+    pub script_analysis: Option<ScriptAnalysisData>,
     /// Formatted error messages (for backward compatibility).
     #[returns(ref)]
     pub errors: Vec<String>,
@@ -97,7 +92,6 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
                     schedule: data.schedule.clone(),
                     bindings: data.bindings.clone(),
                     tracking: data.tracking.clone(),
-                    adapt_sites: data.adapt_sites.clone(),
                 };
                 map.insert(func, analysis);
             }
@@ -113,14 +107,13 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
 
 /// Analyze ownership for a script fragment unit.
 ///
-/// Memoized: if typecheck_result, the unit's statements, and auto_adapt_mode
-/// match a previous call, returns the cached result.
+/// Memoized: if typecheck_result and the unit's statements match a previous
+/// call, returns the cached result.
 #[salsa::tracked(returns(copy))]
 pub fn analyze_script_fragment_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
     top: TopLevel<'db>,
-    auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
@@ -134,9 +127,8 @@ pub fn analyze_script_fragment_tracked<'db>(
     }
 
     // Analyze functions in this unit for ownership.
-    let func_analyses_result = ownership_analysis::analyze_script_functions_with_mode(
+    let func_analyses_result = ownership_analysis::analyze_script_functions(
         db, expr_types, typecheck_result.call_targets(db), &body.statements, Some(&func_param_types),
-        auto_adapt_mode,
     );
 
     let (func_analyses, func_errors, structured_func_errors) = match func_analyses_result {
@@ -161,9 +153,8 @@ pub fn analyze_script_fragment_tracked<'db>(
     };
 
     // Analyze script-level statements for drop schedule.
-    let script_analysis = ownership_analysis::analyze_script_statements_with_mode(
-        db, expr_types, typecheck_result.call_targets(db), body, auto_adapt_mode,
-        dead_externals, external_consts,
+    let script_analysis = ownership_analysis::analyze_script_statements_with_externals(
+        db, expr_types, typecheck_result.call_targets(db), body, dead_externals, external_consts,
     );
 
     // Check for script analysis errors.
@@ -199,7 +190,6 @@ pub fn analyze_script_fragment_tracked<'db>(
         bindings: script_analysis.bindings,
         tracking: script_analysis.tracking,
         unit_end: script_analysis.unit_end,
-        adapt_sites: script_analysis.adapt_sites,
         dead_exports: script_analysis.dead_exports,
         revived_exports: script_analysis.revived_exports,
     };
@@ -220,22 +210,20 @@ pub fn analyze_script_fragment_tracked<'db>(
 /// Expression units have no functions but still need ownership analysis to detect
 /// use-after-move errors within the expression. For example, `(x, x)` where x is non-Copy.
 ///
-/// Memoized: if typecheck_result, expr, and auto_adapt_mode match a previous call,
-/// returns the cached result.
+/// Memoized: if typecheck_result and expr match a previous call, returns the
+/// cached result.
 #[salsa::tracked(returns(copy))]
 pub fn analyze_script_expr_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
     parsed: ParsedExpr<'db>,
-    auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     let expr_types = typecheck_result.expr_types(db);
 
-    let analysis = ownership_analysis::analyze_expr_with_mode(
-        db, parsed.expr(db), expr_types, typecheck_result.call_targets(db), auto_adapt_mode,
-        dead_externals, external_consts,
+    let analysis = ownership_analysis::analyze_expr_with_externals(
+        db, parsed.expr(db), expr_types, typecheck_result.call_targets(db), dead_externals, external_consts,
     );
 
     if !analysis.errors.is_empty() {

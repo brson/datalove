@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Error test: D003 moving out of a const in a script. A const is borrowed
+// wherever it is named, so moving out of one needs a clone.
+
+fun consume(xs: [int]): int
+  ret 42
+end fun
+
+const LST: [int] = [1, 2]
+let a: int = consume(LST)
+let b: [int] = LST

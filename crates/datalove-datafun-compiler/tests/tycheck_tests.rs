@@ -349,7 +349,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Use the tracked functions directly so we can get accumulated diagnostics.
     let (script_handle, env) = datalove_datafun_tycheck::single_fragment_script(
-        &db, source, datalove_datafun_tycheck::AutoAdaptMode::Disabled);
+        &db, source);
     let results = datalove_datafun_tycheck::type_check_script_units(&db, script_handle, env);
     let tycheck_result = results.results(&db)[0];
 

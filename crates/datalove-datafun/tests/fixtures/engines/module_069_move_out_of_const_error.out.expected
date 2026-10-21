@@ -1,0 +1,19 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/ownership"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "Ownership error in test_move: CannotMoveConst { expr_key: ExprKey(fn #1), name: \"MSG\", recovery_hint: InsertAdapt { description: \"clone `MSG`\" } }, CannotMoveConst { expr_key: ExprKey(fn #4), name: \"LOCAL\", recovery_hint: InsertAdapt { description: \"clone `LOCAL`\" } }",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

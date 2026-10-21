@@ -807,47 +807,6 @@ pub struct FunctionAnalysis<'db> {
     /// Tracking category for each binding (indexed by BindingId).
     /// Determines whether precise or tracked move/drop instructions are used.
     pub tracking: Vec<TrackingCategory>,
-    /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites<'db>,
-}
-
-/// Expressions where auto-adapt supplies the `@` the source left out.
-///
-/// Keyed by the expression's stable key, the same key ownership analysis uses
-/// for spans, so lowering can recognize the expression it is looking at.
-/// Lowering clones such a use instead of moving it.
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
-pub struct AdaptSites<'db> {
-    sites: Vec<ExprKey<'db>>,
-}
-
-impl<'db> AdaptSites<'db> {
-    /// Record that an expression needs an implicit `@`.
-    pub fn insert(&mut self, expr_key: ExprKey<'db>) {
-        if !self.sites.contains(&expr_key) {
-            self.sites.push(expr_key);
-        }
-    }
-
-    /// Whether an expression needs an implicit `@`.
-    pub fn contains(&self, expr_key: ExprKey<'db>) -> bool {
-        self.sites.contains(&expr_key)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.sites.is_empty()
-    }
-
-    /// Take on another set's sites.
-    ///
-    /// A key names a function and an index within it, so a set that names
-    /// expressions belonging to some other body is harmless: nothing matches.
-    pub fn extend(&mut self, other: &AdaptSites<'db>) {
-        for site in &other.sites {
-            self.insert(*site);
-        }
-    }
 }
 
 /// Analysis result for script-level statements.
@@ -856,7 +815,7 @@ impl<'db> AdaptSites<'db> {
 /// drops for bindings that should be dropped when the script unit ends.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ScriptAnalysisData<'db> {
+pub struct ScriptAnalysisData {
     /// Computed drop schedule.
     pub schedule: DropSchedule,
     /// Information about each binding (indexed by BindingId).
@@ -865,8 +824,6 @@ pub struct ScriptAnalysisData<'db> {
     pub tracking: Vec<TrackingCategory>,
     /// Bindings to drop at unit end (for AOT cleanup).
     pub unit_end: Vec<BindingId>,
-    /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites<'db>,
     /// Names this unit exports whose value it already gave away.
     ///
     /// Later units can still see the name, but there is nothing behind it, so

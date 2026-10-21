@@ -1,0 +1,19 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "pass_param: error[D003]: cannot move out of const: `xs`\n  help: use `@` to clone `xs`\ntest_move: error[D003]: cannot move out of const: `LST`\n  help: use `@` to clone `LST`\nerror[D003]: cannot move out of const: `LOCAL`\n  help: use `@` to clone `LOCAL`",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

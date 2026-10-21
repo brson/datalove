@@ -3,7 +3,6 @@ use std::path::Path;
 use rmx::serde_json::json;
 use std::collections::BTreeMap;
 use datalove_datafun_resolve::resolve_all_names;
-use datalove_datafun_tycheck::AutoAdaptMode;
 
 fn diagnostic_to_json(db: &dyn datalove_datafun::Db, diag: &bct::diagnostic::Diagnostic) -> rmx::serde_json::Value {
     let code = diag.code.map(|c| c.as_str(db).to_string());
@@ -328,10 +327,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let module_graph = graph_with_requires.graph;
     let parsed_graph = datalove_datafun::module_graph::parse_module_graph(&db, module_graph, graph_with_requires.resolved_requires, Vec::new());
     let all_names = resolve_all_names(&db, parsed_graph);
-    let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph, all_names, AutoAdaptMode::Disabled);
+    let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph, all_names);
 
     // Collect accumulated type diagnostics with spans.
-    let type_diagnostics = datalove_datafun_tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, parsed_graph, all_names, AutoAdaptMode::Disabled);
+    let type_diagnostics = datalove_datafun_tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, parsed_graph, all_names);
     let diagnostics: Vec<_> = type_diagnostics
         .iter()
         .map(|d| diagnostic_to_json(&db, &d.to_diagnostic(&db)))

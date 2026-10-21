@@ -2,9 +2,8 @@
 module local/test/ownership
 ----------
 
-// Test: D003 moving out of consts in a module function
-// A module const and a function const are both borrowed
-// Expected: D003 errors with recovery hints in normal mode, success in auto-adapt mode
+// Error test: D003 moving out of consts in a module function.
+// A module const and a function const are both borrowed.
 
 const MSG: string = "hello"
 

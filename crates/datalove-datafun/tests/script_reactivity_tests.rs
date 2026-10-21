@@ -35,7 +35,7 @@ use bct::input::Source;
 use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
 use datalove_datafun as datafun;
 use datalove_datafun_tycheck::{
-    type_check_script_units, AutoAdaptMode, Script, ScriptEnv, ScriptUnit,
+    type_check_script_units, Script, ScriptEnv, ScriptUnit,
 };
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
@@ -61,7 +61,7 @@ fn build<'db>(
     let units: Vec<ScriptUnit<'db>> =
         sources.iter().map(|source| ScriptUnit::new(db, *source, false)).collect();
     let script = Script::from_units(db, &units).expect("at least one unit");
-    (script, ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new(), AutoAdaptMode::Disabled))
+    (script, ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new()))
 }
 
 /// What each unit provides and what it uses, as owned text.

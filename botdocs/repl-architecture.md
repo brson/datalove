@@ -238,10 +238,6 @@ working and a session need not be typed in dependency order. See
 `compiler-guide.md` under "Ownership across units" for what that costs and
 what it leaves behind (D013 for a binding a unit gave away before it ended).
 
-Auto-adapt is off at the prompt. It repairs mistakes *within* a line, which
-is the case where the whole story is visible in front of you and the error
-teaches you something.
-
 The long-term answer to a moved binding is rewind and replay - recompiling
 the earlier unit with the `@` inserted and re-executing from there. It becomes
 necessary rather than merely nicer when non-cloneable types land, since copying

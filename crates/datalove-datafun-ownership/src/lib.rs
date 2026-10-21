@@ -55,11 +55,8 @@ use datalove_datafun_sema::{BindingMap, Destructure};
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
-    AdaptSites, ExprTypes, CallTargets,
+    ExprTypes, CallTargets,
 };
-
-// Re-export AutoAdaptMode for callers.
-pub use datalove_datafun_common::AutoAdaptMode;
 
 // ============================================================================
 // Call site information
@@ -113,8 +110,6 @@ struct AnalysisCtx<'a, 'db> {
     name_to_binding: rustc_hash::FxHashMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
     scope_stack: Vec<ScopeFrame<'db>>,
-    /// Uses that auto-adapt turns into clones.
-    adapt_sites: AdaptSites<'db>,
     /// Names earlier units exported without a value behind them.
     dead_externals: Vec<String>,
     /// Which names this analysis cannot see the binding of are consts.
@@ -127,8 +122,6 @@ struct AnalysisCtx<'a, 'db> {
     errors: Vec<AnalysisError<'db>>,
     /// Computed drop schedule.
     schedule: DropSchedule,
-    /// Auto-adapt mode for suppressing recoverable errors.
-    auto_adapt_mode: AutoAdaptMode,
     /// The ways out of each loop currently being analyzed, innermost last.
     ///
     /// `break` and `continue` carry no label, so both always belong to the
@@ -241,7 +234,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     fn new(
         db: &'db dyn salsa::Database,
         expr_types: &'a ExprTypes<'db>,
-        auto_adapt_mode: AutoAdaptMode,
         dead_externals: Vec<String>,
         outer_consts: OuterConsts,
         call_targets: &'a CallTargets<'db>,
@@ -255,14 +247,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             bindings: Vec::new(),
             name_to_binding: Default::default(),
             scope_stack: Vec::new(),
-            adapt_sites: AdaptSites::default(),
             dead_externals,
             outer_consts,
             call_targets,
             revived_externals: Vec::new(),
             errors: Vec::new(),
             schedule: DropSchedule::default(),
-            auto_adapt_mode,
             loop_exits: Vec::new(),
             walked: Vec::new(),
             arena: None,
@@ -301,12 +291,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         }
     }
 
-    /// Report a move out of a const, or clone there under auto-adapt.
+    /// Report a move out of a const.
     fn move_out_of_const(&mut self, name: &str, expr_key: ExprKey<'db>) {
-        if self.auto_adapt_mode.is_enabled() {
-            self.adapt_sites.insert(expr_key);
-            return;
-        }
         let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
             description: format!("clone `{}`", name),
         };
@@ -625,14 +611,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
         if self.get_state(id) == Some(BindingState::Moved) {
             // Double move error - can be recovered by cloning before the second move.
-            if self.auto_adapt_mode.is_enabled() {
-                // Clone at the earlier move, which leaves this one a real move.
-                if let Some(moved_at) = self.get_moved_at(id) {
-                    self.adapt_sites.insert(moved_at);
-                }
-                self.set_moved_at(id, expr_key);
-                return;
-            }
             let name = self.bindings[id.0 as usize].name.C();
             let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
             let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
@@ -941,19 +919,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// Returns the binding ID if the expression is a simple move of a binding.
     /// Check that a binding read at `expr_key` has not been moved out of.
     ///
-    /// Reports a use after move and gives false if it has, unless auto-adapt
-    /// can clone it at the earlier move instead.
+    /// Reports a use after move and gives false if it has.
     fn check_not_moved(&mut self, id: BindingId, expr_key: ExprKey<'db>) -> bool {
         if self.get_state(id) != Some(BindingState::Moved) {
-            return true;
-        }
-        if self.auto_adapt_mode.is_enabled() {
-            // Clone at the earlier move, which leaves the binding live for
-            // this read.
-            if let Some(moved_at) = self.get_moved_at(id) {
-                self.adapt_sites.insert(moved_at);
-            }
-            self.set_state(id, BindingState::Live);
             return true;
         }
         let name = self.bindings[id.0 as usize].name.C();
@@ -1018,9 +986,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     if callee_mode == Some(ParamMode::Out) {
                         // For Out args, we only need to check use-after-move, not uninitialized.
                         if let Some(binding_id) = self.expr_to_binding(*arg) {
-                            if self.get_state(binding_id) == Some(BindingState::Moved)
-                                && !self.auto_adapt_mode.is_enabled()
-                            {
+                            if self.get_state(binding_id) == Some(BindingState::Moved) {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
                                 let expr_key = arg.key();
                                 let moved_at = self.get_moved_at(binding_id).unwrap_or(expr_key);
@@ -1265,21 +1231,9 @@ pub fn analyze_function<'db>(
     call_targets: &CallTargets<'db>,
     resolved_param_types: Option<&[Type<'db>]>,
 ) -> FunctionAnalysis<'db> {
-    analyze_function_with_mode(db, func, expr_types, call_targets, resolved_param_types, AutoAdaptMode::Disabled)
-}
-
-/// Analyze a function for ownership with configurable auto-adapt mode.
-pub fn analyze_function_with_mode<'db>(
-    db: &'db dyn salsa::Database,
-    func: &'db StmtFun<'db>,
-    expr_types: &ExprTypes<'db>,
-    call_targets: &CallTargets<'db>,
-    resolved_param_types: Option<&[Type<'db>]>,
-    auto_adapt_mode: AutoAdaptMode,
-) -> FunctionAnalysis<'db> {
     // A function body cannot name script-level bindings.
     let mut ctx = AnalysisCtx::new(
-        db, expr_types, auto_adapt_mode, Vec::new(), OuterConsts::AllUnresolved, call_targets,
+        db, expr_types, Vec::new(), OuterConsts::AllUnresolved, call_targets,
     );
     ctx.type_params = func.type_params();
 
@@ -1332,7 +1286,6 @@ pub fn analyze_function_with_mode<'db>(
         schedule: ctx.schedule,
         bindings: ctx.bindings,
         tracking,
-        adapt_sites: ctx.adapt_sites,
     }
 }
 
@@ -1376,41 +1329,6 @@ pub fn analyze_script_functions<'db>(
     }
 }
 
-/// Analyze all functions in a list of statements with configurable auto-adapt mode.
-pub fn analyze_script_functions_with_mode<'db>(
-    db: &'db dyn salsa::Database,
-    expr_types: &ExprTypes<'db>,
-    call_targets: &CallTargets<'db>,
-    stmts: &'db [Statement<'db>],
-    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
-    auto_adapt_mode: AutoAdaptMode,
-) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
-    let mut analyses = bct::lookup::LookupMap::new();
-    let mut errors = Vec::new();
-
-    for stmt in stmts {
-        if let Statement::Fun(func) = stmt {
-            // Look up resolved param types if available.
-            let func_name = func.name().text(db);
-            let resolved_params = func_param_types
-                .and_then(|m| m.get(func_name))
-                .map(|v| v.as_slice());
-
-            let analysis = analyze_function_with_mode(db, func, expr_types, call_targets, resolved_params, auto_adapt_mode);
-            if !analysis.errors.is_empty() {
-                errors.push((func_name.S(), analysis.errors.C()));
-            }
-            analyses.insert(func.key(), analysis);
-        }
-    }
-
-    if errors.is_empty() {
-        Ok(analyses)
-    } else {
-        Err(errors)
-    }
-}
-
 /// Result of analyzing script-level statements.
 #[derive(Clone, Debug)]
 pub struct ScriptAnalysis<'db> {
@@ -1430,8 +1348,6 @@ pub struct ScriptAnalysis<'db> {
     /// - Interpreter: no-op (bindings persist for REPL)
     /// - AOT: conditional drop (checks tracking byte)
     pub unit_end: Vec<BindingId>,
-    /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites<'db>,
     /// Names this unit exports that hold no value.
     pub dead_exports: Vec<String>,
     /// Names from earlier units this unit assigned to.
@@ -1456,23 +1372,25 @@ pub fn analyze_script_statements<'db>(
     call_targets: &CallTargets<'db>,
     body: &'db Body<'db>,
 ) -> ScriptAnalysis<'db> {
-    analyze_script_statements_with_mode(
-        db, expr_types, call_targets, body, AutoAdaptMode::Disabled, Vec::new(), Vec::new(),
+    analyze_script_statements_with_externals(
+        db, expr_types, call_targets, body, Vec::new(), Vec::new(),
     )
 }
 
-/// Analyze script statements for ownership with configurable auto-adapt mode.
-pub fn analyze_script_statements_with_mode<'db>(
+/// Analyze script statements for ownership, given what earlier units left.
+///
+/// `dead_externals` are names earlier units exported without a value behind
+/// them, and `external_consts` the names from earlier units that are consts.
+pub fn analyze_script_statements_with_externals<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     body: &'db Body<'db>,
-    auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
 ) -> ScriptAnalysis<'db> {
     let mut ctx = AnalysisCtx::new(
-        db, expr_types, auto_adapt_mode, dead_externals, OuterConsts::Named(external_consts),
+        db, expr_types, dead_externals, OuterConsts::Named(external_consts),
         call_targets,
     );
 
@@ -1521,7 +1439,6 @@ pub fn analyze_script_statements_with_mode<'db>(
         bindings: ctx.bindings,
         tracking,
         unit_end: unit_end_bindings,
-        adapt_sites: ctx.adapt_sites,
         dead_exports,
         revived_exports: ctx.revived_externals,
     }
@@ -1550,21 +1467,22 @@ pub fn analyze_expr<'db>(
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
 ) -> ExprAnalysis<'db> {
-    analyze_expr_with_mode(db, expr, expr_types, call_targets, AutoAdaptMode::Disabled, Vec::new(), Vec::new())
+    analyze_expr_with_externals(db, expr, expr_types, call_targets, Vec::new(), Vec::new())
 }
 
-/// Analyze expression for ownership with configurable auto-adapt mode.
-pub fn analyze_expr_with_mode<'db>(
+/// Analyze an expression for ownership, given what earlier units left.
+///
+/// See [`analyze_script_statements_with_externals`].
+pub fn analyze_expr_with_externals<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
-    auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
 ) -> ExprAnalysis<'db> {
     let mut ctx = AnalysisCtx::new(
-        db, expr_types, auto_adapt_mode, dead_externals, OuterConsts::Named(external_consts),
+        db, expr_types, dead_externals, OuterConsts::Named(external_consts),
         call_targets,
     );
 
@@ -2344,7 +2262,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
     analyze_statements(ctx, &stmt.body);
 
     let exits = ctx.loop_exits.pop().expect("unbalanced loop exit records");
-    let adapted = check_loop_repeats(ctx, &stmt.body, &exits, &entry);
+    check_loop_repeats(ctx, &stmt.body, &exits, &entry);
 
     // Drops at end of loop iteration.
     let loop_drops = ctx.exit_scope();
@@ -2352,7 +2270,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
         ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
     }
 
-    merge_loop_exits(ctx, stmt.condition.is_some(), stmt_idx, &exits, &entry, &adapted);
+    merge_loop_exits(ctx, stmt.condition.is_some(), stmt_idx, &exits, &entry);
 }
 
 /// Analyze a `for`: a loop that binds references into a collection, and so
@@ -2393,7 +2311,7 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
     }
 
     let exits = ctx.loop_exits.pop().expect("unbalanced loop exit records");
-    let adapted = check_loop_repeats(ctx, &stmt.body, &exits, &entry);
+    check_loop_repeats(ctx, &stmt.body, &exits, &entry);
 
     let loop_drops = ctx.exit_scope();
     if !loop_drops.is_empty() {
@@ -2401,7 +2319,7 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
     }
 
     // A walk can always run out of elements, on the first look included.
-    merge_loop_exits(ctx, true, stmt_idx, &exits, &entry, &adapted);
+    merge_loop_exits(ctx, true, stmt_idx, &exits, &entry);
 }
 
 /// Analyze what a loop reads before its body: a `loop while` condition, or
@@ -2444,9 +2362,8 @@ impl LoopEntry {
 }
 
 /// Check for outer-scope bindings moved somewhere that gets back to the loop
-/// head, which is the only way a move repeats, and return the ones auto-adapt
-/// cloned instead. The end of the body gets there, and so does every
-/// `continue`.
+/// head, which is the only way a move repeats. The end of the body gets
+/// there, and so does every `continue`.
 ///
 /// The `continue` states have to be asked separately, because a branch that
 /// leaves is kept out of the merge after an `if`: a move followed by
@@ -2465,35 +2382,23 @@ fn check_loop_repeats<'db>(
     body: &[Statement<'db>],
     exits: &LoopExits,
     entry: &LoopEntry,
-) -> Vec<BindingId> {
+) {
     let body_reaches_head = body_completes(body);
-    let mut adapted: Vec<BindingId> = Vec::new();
     for id in &entry.outer_live {
         let moved_at_body_end = body_reaches_head
             && ctx.get_state(*id) == Some(BindingState::Moved);
         let moved_at_continue = exits.continues.iter()
             .any(|state| state.get(id) == Some(&BindingState::Moved));
         if moved_at_body_end || moved_at_continue {
-            if ctx.auto_adapt_mode.is_enabled() {
-                // Clone at the use inside the loop, so each iteration takes a
-                // copy and the binding survives the loop.
-                if let Some(moved_at) = ctx.get_moved_at(*id) {
-                    ctx.adapt_sites.insert(moved_at);
-                }
-                ctx.set_state(*id, BindingState::Live);
-                adapted.push(*id);
-            } else {
-                let name = ctx.bindings[id.0 as usize].name.C();
-                // The binding is Moved, so mark_moved recorded where.
-                let expr_key = ctx.get_moved_at(*id).X();
-                let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                    description: format!("clone `{}` inside the loop", name),
-                };
-                ctx.errors.push(AnalysisError::MoveInLoop { expr_key, name, recovery_hint });
-            }
+            let name = ctx.bindings[id.0 as usize].name.C();
+            // The binding is Moved, so mark_moved recorded where.
+            let expr_key = ctx.get_moved_at(*id).X();
+            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                description: format!("clone `{}` inside the loop", name),
+            };
+            ctx.errors.push(AnalysisError::MoveInLoop { expr_key, name, recovery_hint });
         }
     }
-    adapted
 }
 
 /// Settle what is true after a loop from the ways out of it.
@@ -2513,7 +2418,6 @@ fn merge_loop_exits<'db>(
     stmt_idx: usize,
     exits: &LoopExits,
     entry: &LoopEntry,
-    adapted: &[BindingId],
 ) {
     let state_before = &entry.state_before;
     let mut exit_states: Vec<&BindingMap<BindingState>> = exits.breaks.iter().collect();
@@ -2541,9 +2445,7 @@ fn merge_loop_exits<'db>(
     }
 
     for id in state_before.keys() {
-        // A binding the repeat check cloned is live on every path by
-        // construction, the move it disagreed about having gone away.
-        if adapted.contains(&id) || ctx.bindings[id.0 as usize].ty.is_copy() {
+        if ctx.bindings[id.0 as usize].ty.is_copy() {
             continue;
         }
 
@@ -2555,13 +2457,6 @@ fn merge_loop_exits<'db>(
             if let Some(frame) = ctx.scope_stack.last_mut() {
                 frame.current_state.insert(id, first);
             }
-        } else if ctx.auto_adapt_mode.is_enabled() {
-            // Clone at the move, so the exit that took it leaves it behind and
-            // every way out agrees it is still held.
-            if let Some(moved_at) = ctx.get_moved_at(id) {
-                ctx.adapt_sites.insert(moved_at);
-            }
-            ctx.set_state(id, BindingState::Live);
         } else {
             let name = ctx.bindings[id.0 as usize].name.C();
             ctx.errors.push(AnalysisError::InconsistentLoopExit { stmt_idx, name });

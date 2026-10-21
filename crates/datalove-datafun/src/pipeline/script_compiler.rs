@@ -51,7 +51,6 @@ use datalove_datafun_tycheck::{
     typecheck_script_unit, unit_ast, unit_parses,
     Script, ScriptEnv, ScriptUnit, ScriptUnitKind,
     UnitTypecheckResultTracked,
-    AutoAdaptMode,
 };
 
 use super::compiled_modules::{CompiledModules, SharedModuleContext};
@@ -74,7 +73,7 @@ struct TypecheckOutput<'db> {
 /// Output from ownership phase.
 struct OwnershipOutput<'db> {
     func_analyses: ScriptFunctionAnalyses<'db>,
-    script_analysis: Option<ScriptAnalysisData<'db>>,
+    script_analysis: Option<ScriptAnalysisData>,
     /// Names this unit exports that hold no value.
     dead_exports: Vec<String>,
     /// Names from earlier units this unit assigned to.
@@ -154,7 +153,7 @@ impl<'db> CompiledModules<'db> {
             db,
             scripts: Vec::new(),
             env: ScriptEnv::new(
-                db, modules, self.shared.module_graph.data(db).C(), AutoAdaptMode::Disabled),
+                db, modules, self.shared.module_graph.data(db).C()),
             last_script: None,
             unit_records: Vec::new(),
             last_source: None,
@@ -163,7 +162,6 @@ impl<'db> CompiledModules<'db> {
             skip_specialization: false,
             generics: GenericsPolicy::Off,
             shared_context: self.shared.clone(),
-            auto_adapt_mode: AutoAdaptMode::Disabled,
             last_ownership_errors: Vec::new(),
             last_spans: None,
         })
@@ -227,7 +225,6 @@ pub struct ScriptSession {
     skip_const_inlining: bool,
     skip_specialization: bool,
     generics: GenericsPolicy,
-    auto_adapt_mode: AutoAdaptMode,
 }
 
 impl ScriptSession {
@@ -266,7 +263,7 @@ pub struct ScriptCompiler<'db> {
     /// the earlier handles alone and editing a unit's text leaves all of them
     /// alone. See `botdocs/plan-script-reactivity.md`.
     scripts: Vec<Script<'db>>,
-    /// The modules the script is checked against, and the auto-adapt mode.
+    /// The modules the script is checked against.
     env: ScriptEnv<'db>,
     /// The script as it stood for the last unit compiled.
     ///
@@ -294,8 +291,6 @@ pub struct ScriptCompiler<'db> {
     generics: GenericsPolicy,
     /// Shared module context for cross-module CTFE function calls.
     shared_context: Arc<SharedModuleContext<'db>>,
-    /// Auto-adapt mode for ownership analysis.
-    auto_adapt_mode: AutoAdaptMode,
     /// Last ownership errors from compilation (for diagnostic rendering).
     last_ownership_errors: Vec<AnalysisError<'db>>,
     /// Spans for the last compilation unit (for diagnostic rendering).
@@ -696,7 +691,6 @@ impl<'db> ScriptCompiler<'db> {
         self.skip_const_inlining = session.skip_const_inlining;
         self.skip_specialization = session.skip_specialization;
         self.generics = session.generics;
-        self.set_auto_adapt_mode(session.auto_adapt_mode);
     }
 
     /// Hand back what an edit needs to survive letting this compiler go.
@@ -708,7 +702,6 @@ impl<'db> ScriptCompiler<'db> {
             skip_const_inlining: self.skip_const_inlining,
             skip_specialization: self.skip_specialization,
             generics: self.generics,
-            auto_adapt_mode: self.auto_adapt_mode,
         }
     }
 
@@ -812,24 +805,6 @@ impl<'db> ScriptCompiler<'db> {
     /// and debugging const expressions.
     pub fn set_skip_const_inlining(&mut self, enabled: bool) {
         self.skip_const_inlining = enabled;
-    }
-
-    /// Set auto-adapt mode for ownership analysis.
-    ///
-    /// When enabled, recoverable ownership errors (use-after-move, double-move,
-    /// move-in-loop) are suppressed, treating them as if `@` was inserted.
-    pub fn set_auto_adapt_mode(&mut self, mode: AutoAdaptMode) {
-        self.auto_adapt_mode = mode;
-        // The mode is part of what a unit is checked against, so the handle the
-        // per-unit queries are keyed on has to carry it.
-        let modules: Vec<bct::module_graph::Module<'db>> = self.env.modules(self.db).C();
-        let data = self.env.data(self.db).C();
-        self.env = ScriptEnv::new(self.db, modules, data, mode);
-    }
-
-    /// Get current auto-adapt mode.
-    pub fn auto_adapt_mode(&self) -> AutoAdaptMode {
-        self.auto_adapt_mode
     }
 
     /// The result for unit `index`, whose lowering failed with `error`.
@@ -1095,7 +1070,6 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.result,
                     *top,
-                    self.auto_adapt_mode,
                     dead_externals,
                     external_consts,
                 );
@@ -1110,20 +1084,8 @@ impl<'db> ScriptCompiler<'db> {
                         ir_unit: None,
                     });
                 }
-                let mut func_analyses = ownership_result.to_function_analyses_map(self.db, &body.statements);
-                let mut script_analysis = ownership_result.script_analysis(self.db).clone();
-
-                // Type adaptations are decided during typechecking, and lowering
-                // needs them alongside the ones ownership analysis decided.
-                let type_adapts = typecheck.result.adapt_sites(self.db);
-                if !type_adapts.is_empty() {
-                    if let Some(analysis) = script_analysis.as_mut() {
-                        analysis.adapt_sites.extend(type_adapts);
-                    }
-                    for analysis in func_analyses.values_mut_unordered() {
-                        analysis.adapt_sites.extend(type_adapts);
-                    }
-                }
+                let func_analyses = ownership_result.to_function_analyses_map(self.db, &body.statements);
+                let script_analysis = ownership_result.script_analysis(self.db).clone();
                 Ok(OwnershipOutput {
                     func_analyses,
                     script_analysis,
@@ -1136,7 +1098,6 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.result,
                     parsed.clone(),
-                    self.auto_adapt_mode,
                     dead_externals,
                     external_consts,
                 );

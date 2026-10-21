@@ -10,7 +10,7 @@ use datalove_datafun_ir::{ConstValue, IrModuleId, IrType};
 
 use datalove_datafun_compiler::tracked_lower::FuncIdLookup;
 use datalove_datafun_interp::{ModuleFunctionRegistry, NativeResolver};
-use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
+use datalove_datafun_tycheck::typecheck_module_graph;
 use datalove_datafun_resolve::resolve_all_names;
 use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult,
@@ -169,7 +169,7 @@ impl<'db> CompiledModules<'db> {
         let all_names = resolve_all_names(db, self.shared.parsed_graph);
         let riders = self.rider_sources.iter()
             .flat_map(|(_, source)| datalove_datafun_compiler::module_graph::rider_interface_diagnostics(db, *source).1);
-        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph, all_names, AutoAdaptMode::Disabled)
+        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph, all_names)
             .into_iter()
             .chain(riders)
             .collect()

@@ -34,7 +34,6 @@ Reference for the datalove-datafun compiler architecture.
   - [Parallel Execution](#user-content-parallel-execution)
 - [Ownership Analysis](#user-content-ownership-analysis)
   - [Tracking Categories](#user-content-tracking-categories)
-  - [Auto-adapt](#user-content-auto-adapt)
   - [Error Codes](#user-content-error-codes)
   - [Drop Schedule](#user-content-drop-schedule)
   - [AOT Tracking Bytes](#user-content-aot-tracking-bytes)
@@ -1300,14 +1299,14 @@ salsa, so the parallel compile is the sequential one, run sooner. The move is
 
 ```rust
 // Phase 3 in `compile.rs`.
-pub fn typecheck_phase<'db>(db: &'db dyn DbClone, mode: ParallelMode, parsed_graph, name_resolution, auto_adapt_mode)
+pub fn typecheck_phase<'db>(db: &'db dyn DbClone, mode: ParallelMode, parsed_graph, name_resolution)
     -> ModuleGraphTypecheckResult<'db>
 {
     let graph = parsed_graph.graph(db.as_salsa_db());
     warm(db, mode, || graph.iter_modules(db.as_salsa_db()), |db, module| {
-        let _ = typecheck_graph_module(db, parsed_graph, name_resolution, module, auto_adapt_mode);
+        let _ = typecheck_graph_module(db, parsed_graph, name_resolution, module);
     });
-    typecheck_module_graph(db.as_salsa_db(), parsed_graph, name_resolution, auto_adapt_mode)
+    typecheck_module_graph(db.as_salsa_db(), parsed_graph, name_resolution)
 }
 ```
 
@@ -1418,56 +1417,6 @@ specialized copy's const parameter, is lowered as a value defined by a `Const`
 and promoted afterwards by `promote_function_consts`; see
 [Consts Built Once](plan-static-consts.md#user-content-as-built).
 
-### Auto-adapt
-
-`AutoAdaptMode::Enabled` accepts the errors an `@` would have fixed by
-supplying the `@` the source left out. Both analyses record where it belongs
-as `AdaptSites`, keyed by `ExprKey`, and lowering emits what an explicit `@` on
-that expression would - a widening, a clone for linear types.
-
-| Code | What `@` fixes | Auto-adapt |
-|------|----------------|------------|
-| F016 | Widening along a signedness chain, `f32` to `f64`, cross-sign widening (`u8` to `i16` and up), a clone where the types already match, an atom or term into its enum -- whatever `can_clone_coerce_to` accepts | Yes |
-| D001, D002 | A clone at the earlier move | Yes |
-| D007 | A clone at the use inside the loop, so each iteration takes a copy | Yes |
-| D013 | A clone where an earlier script unit gave the value away | No: that unit has already run |
-| D003 moving out of a const | A clone at the use | Yes |
-| D003 moving a parameter, D004 | Nothing; the parameter mode is wrong | No |
-| D005, D006 | Nothing; there is no value to clone | No |
-| F011 | Nothing; `@` needs an expected type, so `let x = v@` cannot synthesize one | No |
-
-Arithmetic on fixed integers producing `int` where a fixed type was wanted is
-deliberately not on the list: the result really is an `int`, and the fix is
-checked arithmetic.
-
-Ownership analysis records the *earlier* use, not the one that would have
-errored: a value read after a move is already gone, so the repair belongs
-where it was given away. The REPL avoids D013 differently, by copying out of
-earlier units in the first place (see [Ownership across
-units](#user-content-ownership-across-units)). Sites are keyed by expression,
-so handing a body a set naming expressions from elsewhere is harmless - no
-expression there matches.
-
-The mode is set on a `ScriptCompiler` with `set_auto_adapt_mode`, which also
-rebuilds its `ScriptEnv`, since the mode is part of what the per-unit queries
-are keyed on. What is not done:
-
-- **Modules.** `compile_modules` passes `AutoAdaptMode::Disabled` to both
-  typechecking and ownership analysis, and `ModuleCompilationPipeline` has no
-  way to ask for anything else, so the module fixtures record that their
-  modules did not compile.
-- **`EnabledWithReport`** behaves exactly like `Enabled`; the report is a TODO
-  in the typechecker's `context.rs`.
-- **No driver exposes it.** The `--auto-adapt` CLI flags and
-  `DATALOVE_AUTO_ADAPT` variable once proposed were never implemented.
-
-`auto_adapt_tests` (in `datalove-tests`, fixtures under
-`tests/fixtures/auto-adapt/`) runs each worldfile with the mode off and on and
-then *executes* what the mode accepted, recording the computed values. A check
-that the errors went away says nothing about whether the adapted program is
-the one meant, and running it is what showed the mode had once inserted
-nothing at all.
-
 ### Error Codes
 
 Variants of `AnalysisError` in `datalove-datafun-sema`.
@@ -1491,8 +1440,8 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D014 | `InconsistentLoopExit` | Moved on one way out of a loop and not another |
 | D015 | `WalkedCollectionChanged`, `WalkedCollectionAssigned` | The collection a `for` walks moved, passed `mut`/`out`, or assigned to or through |
 
-D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`;
-auto-adapt can apply the first three, not D013. The parsers' own `D0xx` codes
+D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`,
+as D003 does for a move out of a const. The parsers' own `D0xx` codes
 start at D017 and do not reuse any of these; see
 [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 
@@ -2021,7 +1970,6 @@ Most live in `crates/datalove-datafun/tests`.
 |-------|---------|
 | `parser_tests` | Parse and emit AST + diagnostics (in the compiler crate) |
 | `tycheck_tests`, `tycheck_world_tests` | Typecheck results |
-| `auto_adapt_tests` | `@`-recoverable errors under `AutoAdaptMode::Enabled`, then run (in `datalove-tests`) |
 | `ir_lower_tests` | IR lowering from worldfiles |
 | `ir_lower_script_tests` | Script IR lowering |
 | `ir_inline_tests` | Inlining transformations |

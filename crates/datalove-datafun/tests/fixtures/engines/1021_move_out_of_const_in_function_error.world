@@ -2,9 +2,8 @@
 scriptunit-fragment
 ----------
 
-// Test: D003 moving out of consts in a script function
-// A script const, a function const and a const parameter are all borrowed
-// Expected: D003 errors with recovery hints in normal mode, success in auto-adapt mode
+// Error test: D003 moving out of consts in a script function. A script const,
+// a function const and a const parameter are all borrowed.
 
 const LST: [int] = [1, 2]
 

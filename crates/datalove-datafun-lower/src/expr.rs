@@ -192,7 +192,7 @@ fn lower_call_arg<'db>(
                 operand,
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. },
             );
-            if ctx.is_adapt_site(arg) || is_external {
+            if is_external {
                 // The callee consumes the copy, not the binding, and a const
                 // built for the occasion is dropped once copied.
                 if is_fresh_const {
@@ -407,34 +407,19 @@ pub fn lower_expression_for_ref<'db>(
 
 /// Produce an owned value from an operand without consuming it.
 ///
-/// Emits what an explicit `@` on the expression would: a widening between
-/// fixed ints or from f32 to f64, a clone for linear types. Used where auto-adapt supplies the
-/// `@`, and for every consuming use of a binding an earlier unit owns.
+/// Used for every consuming use of a binding an earlier unit owns.
 fn emit_owned_copy<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
     operand: Operand,
 ) -> ValueId {
-    let dest_type = ctx.expr_type(expr);
-    let src_type = ctx.operand_type(operand).unwrap_or_else(|| dest_type.clone());
-    let dest = ctx.fresh_value(dest_type.clone());
-
-    if src_type == dest_type {
-        if src_type.is_copy() {
-            ctx.emit(Instruction::Copy { dest, src: operand });
-        } else {
-            ctx.emit(Instruction::Clone { dest, src: operand });
-        }
-    } else if is_fixed_width_int(&src_type) && is_fixed_width_int(&dest_type) {
-        ctx.emit(Instruction::WidenFixed { dest, src: operand });
-    } else if matches!((&src_type, &dest_type), (IrType::F32, IrType::F64)) {
-        ctx.emit_intrinsic(dest, IntrinsicId::F32ToF64, vec![operand]);
-    } else if widens_to_int(&src_type) && matches!(dest_type, IrType::Int) {
-        ctx.emit(Instruction::Widen { dest, src: operand });
+    let ty = ctx.expr_type(expr);
+    let dest = ctx.fresh_value(ty.clone());
+    if ty.is_copy() {
+        ctx.emit(Instruction::Copy { dest, src: operand });
     } else {
         ctx.emit(Instruction::Clone { dest, src: operand });
     }
-
     dest
 }
 
@@ -447,16 +432,7 @@ pub fn lower_expression<'db>(
         ExprFunKind::Place(place) if place.steps.is_empty() => {
             ctx.note_place_lowered(expr);
             let name_str = place.root.text(ctx.db);
-            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
-
-            // Auto-adapt supplies the `@` here, so clone rather than consume,
-            // and drop a const built for the occasion once it is copied.
-            if ctx.is_adapt_site(expr) {
-                if is_fresh_const {
-                    record_fresh_const_temp(ctx, &operand);
-                }
-                return Ok(emit_owned_copy(ctx, expr, operand));
-            }
+            let (operand, _) = lower_var_operand(ctx, name_str)?;
 
             match operand {
                 Operand::Value(v) => {
@@ -503,14 +479,7 @@ pub fn lower_expression<'db>(
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                     // A binding an earlier unit owns is copied out of, never
                     // taken: the name has to keep working at the next prompt.
-                    let ext_type = ctx.expr_type(expr);
-                    let dest = ctx.fresh_value(ext_type.clone());
-                    if ext_type.is_copy() {
-                        ctx.emit(Instruction::Copy { dest, src: operand });
-                    } else {
-                        ctx.emit(Instruction::Clone { dest, src: operand });
-                    }
-                    Ok(dest)
+                    Ok(emit_owned_copy(ctx, expr, operand))
                 }
             }
         }
