@@ -181,8 +181,69 @@ In the second pass after editing:
 | 2    | no         | no    |
 | 3    | success    | yes   |
 
+After this second pass, because unit 3 ran,
+it moved `a` and `b` out of the frames of units 1 and 2, into its own.
+
+Now let's revert the previous edit to unit 1, making it fail to compile again.
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | fail       | no    |
+| 2    | no         | no    |
+| 3    | fail       | no    |
+
+Because unit 2 doesn't depend on unit 1 it neither compiles nor reexucutes.
+Unit 3 recompiles and fails, so doesn't reexecute.
+
+
+
 
 ### How is re-execution affected when subsequent units consume bindings from the re-executed unit?
+
+Continuing the previous example, lets make unit 1 compile again!
+This time we have a complication:
+unit 3 wants to reexecute,
+but it already executed once in a previous revision,
+moving the `b` binding out of unit 2.
+
+```datalove
+---
+script-unit
+---
+
+let a = 1000
+
+---
+script-unit
+---
+
+// Naively we don't want to rerun this because it doesn't depend on
+// unit 1, which now compiles.
+let b = 100
+
+---
+script-unit
+---
+
+let a_moved = a
+let b_moved = b // `b` no longer exists!
+let c = a_moved /! b_moved
+
+debuglog c
+```
+
+Static ownership analysis says there is a value in `b`,
+but if we just rerun unit 2 there won't be.
+We have to recognize that unit 3 moves bindings out of unit 2,
+and also reexecute unit 2.
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | success    | yes   |
+| 2    | no         | yes   |
+| 3    | success    | yes   |
+
+
 
 
 ### How is re-execution affected when subsequent units mutate the re-executed unit?
