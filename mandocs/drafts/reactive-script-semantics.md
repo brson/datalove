@@ -505,6 +505,11 @@ There are four things it can do to one:
 - _Overwrite_ it, without reading it first: `set b = 10`, `f(out b)`.
 - _Update_ it, reading it and then writing it: `set b = b * 2`, `f(mut b)`.
 
+A unit can do different things to different bindings,
+like reading `a` and updating `b`.
+The rules apply to each binding separately,
+and what the unit needs is all of them together.
+
 Each has effects in two directions.
 
 _Backward_.
@@ -513,7 +518,15 @@ or to _redo_ it, because it was edited or something it uses was,
 the earlier bindings it touched have to be as they were before it first ran.
 When they aren't we _rewind_:
 rerun the unit that made the binding,
-then _replay_ everything after it that uses the binding, in order.
+which builds all of that unit's bindings again,
+then _replay_ the units after it that took or wrote any of them, in order.
+Units that only read them don't need to replay for the rewind's sake.
+The rerun unit wasn't edited,
+so it builds the same values,
+and a reader would compute what it already holds.
+If what a reader sees does change,
+because the unit being undone or redone changed it,
+that's the forward rule's business, below.
 
 _Forward_.
 What a unit did to a binding is what the units after it see,
@@ -522,7 +535,7 @@ whether or not they use anything the unit itself defines.
 
 | a unit that ... an earlier binding | undo it | redo it | units after it |
 |------------|---------|----------------------------------------|--------------------------------------------|
-| reads      | nothing | rewind if a later unit took or wrote it | nothing                                    |
+| reads      | nothing | rewind if a unit after it took or wrote it | nothing                                 |
 | takes      | rewind  | rewind                                  | can't name it, so recompile when that changes |
 | overwrites | rewind  | nothing                                 | read the new value, so rerun when it changes |
 | updates    | rewind  | rewind                                  | read the new value, so rerun when it changes |
@@ -535,7 +548,9 @@ Note: the engine today treats take, overwrite and update all like take,
 and rewinds a read whenever any unit after the binding's provider took or
 wrote it. That is correct but rewinds more than this table says it needs to:
 `var v = 1` / `set v = 10` / `let b = v + 1`, editing the third unit,
-reruns all three. A candidate for the last section.
+reruns all three. It also replays every unit after a rewound unit that
+uses anything it provides, readers included. A candidate for the last
+section.
 -->
 
 
