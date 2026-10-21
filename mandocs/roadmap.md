@@ -30,7 +30,7 @@ Focus on ergonomic scripting experience and the REPL.
 - [ ] script interpreter reactivity
 - [ ] repl error and abort semantics
 - [ ] assert statements
-- [ ] auto-adapt and other conveniences
+- [ ] ergonomic conveniences
 - [ ] rational numbers
 - [ ] monadic math ops
 - [ ] ?/! polymorphism

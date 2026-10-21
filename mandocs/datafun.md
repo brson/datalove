@@ -409,8 +409,6 @@ described in [Numerics](#user-content-numerics),
 and converts an atom or term into an enum that has it as a variant.
 
 When `@` solves a compiler error, the compiler will say exactly where to write it.
-In some scenarious Datalove can optionally compile in an "auto-adapt" mode,
-which inserts the `@` itself.
 
 The `ref`, `mut` and `out` parameter modes _borrow_ values temporarily
 instead of moving them.
