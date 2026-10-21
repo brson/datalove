@@ -81,14 +81,21 @@ They share a type checking context and execution environment.
 script-unit
 ---
 
-let a = 100
+let a = 1000
 
 ---
 script-unit
 ---
 
-let b = a
-let c = b /! 10
+let b = 100
+
+---
+script-unit
+---
+
+let a_moved = a
+let b_moved = b
+let c = a_moved /! b_moved
 
 debuglog c
 
@@ -99,9 +106,11 @@ debuglog c
 
 In this example the integers are type `int`, bigints.
 They are linear types allocated on the heap,
-so the assignment `let b = a` moves `a` into `b`, leaving `a` empty.
+so the assignment `let a_moved = a` moves `a` into `a_moved`, leaving `a` empty.
 The `/!` operator is checked division, and returns early on divide by 0,
 indicating failure.
+Scripts and script units are allowed to return the type `!()`,
+"result of unit".
 
 
 
