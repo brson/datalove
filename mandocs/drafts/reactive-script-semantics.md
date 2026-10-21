@@ -218,7 +218,7 @@ script-unit
 ---
 
 // Naively we don't want to rerun this because it doesn't depend on
-// unit 1, which now compiles.
+// unit 1, which now compiles...
 let b = 100
 
 ---
@@ -226,7 +226,8 @@ script-unit
 ---
 
 let a_moved = a
-let b_moved = b // `b` no longer exists!
+// ...but `b` no longer exists!
+let b_moved = b
 let c = a_moved /! b_moved
 
 debuglog c
