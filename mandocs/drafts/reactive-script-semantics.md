@@ -35,7 +35,7 @@ Let's figure it out.
 - [How does one unit failing to compile affect subsequent units?](#user-content-how-does-one-unit-failing-to-compile-affect-subsequent-units)
 - [How is re-execution affected when subsequent units consume bindings from the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-consume-bindings-from-the-re-executed-unit)
 - [How is re-execution affected when subsequent units mutate the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-mutate-the-re-executed-unit)
-- What if a unit overwrites a binding without reading it?
+- [What if a unit overwrites a binding without reading it?](#user-content-what-if-a-unit-overwrites-a-binding-without-reading-it)
 - [Hypothesis: an algebra of rewind and replay for moves and mutations](#user-content-hypothesis-an-algebra-of-rewind-and-replay-for-moves-and-mutations)
 - What if a unit reads a binding before a later unit moves it?
 - What if a unit reads a binding before a later unit mutates it?
@@ -392,6 +392,103 @@ The analysis is essentially the same,
 but instead of a dependency on move operations
 we have a dependency on writes:
 `set`, and passing a binding to a `mut` or `out` parameter.
+
+
+
+
+## What if a unit overwrites a binding without reading it?
+
+Doubling `b` reads it before writing it,
+so running the write again starting from its own result gives the wrong answer.
+But not every write reads.
+Here unit 3 just replaces `b`:
+
+```datalove
+---
+script-unit
+---
+
+let a = 1000
+
+---
+script-unit
+---
+
+var b = 125
+
+---
+script-unit
+---
+
+set b = 500
+let c = a /! b
+
+debuglog c
+```
+
+On first run unit 3 replaces 125 with 500 and logs "2".
+
+**Step 1: all three units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
+| 2 | `var b = 125` | - | compiles, runs | new | `b` = 500 |
+| 3 | `set b = 500; let c = a /! b` | reads `a` (1), overwrites `b` (2) | compiles, runs | new | `c` = 2 |
+
+Now edit unit 3 to write a different value.
+Unit 3 has to rerun, and it writes `b` again.
+But the write doesn't care what `b` held,
+so it doesn't matter that `b` is still the 500 that unit 3 left last time.
+Unit 2 can be left alone,
+which is where an overwrite differs from an update.
+
+**Step 2: unit 3 is edited to write 250.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | untouched | nothing it uses changed | `a` = 1000 |
+| 2 | `var b = 125` | - | untouched | unit 3 overwrites `b` without reading it | `b` = 250 |
+| 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompiles, runs | edited | `c` = 4 |
+
+Undoing the overwrite is a different story.
+Break unit 1 and unit 3 stops compiling,
+so the session should look like unit 3 never ran,
+and `b` should be 125 again.
+Nothing but unit 2 knows how to make that 125,
+so it reruns,
+exactly as it did for the move and for the update.
+
+**Step 3: unit 1 is broken.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
+| 2 | `var b = 125` | - | reruns | rewind: unit 3 overwrote `b` when it last ran, and is undone | `b` = 125 |
+| 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
+
+And fixing unit 1 reruns unit 3,
+which overwrites `b` again without anything to undo first.
+
+**Step 4: unit 1 is fixed.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` = 1000 |
+| 2 | `var b = 125` | - | untouched | unit 3 overwrites `b` without reading it | `b` = 250 |
+| 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompiles, runs | reads `a` from unit 1 | `c` = 4 |
+
+So writes come in two kinds.
+An _update_ reads the binding first,
+and like a move it needs the binding rebuilt both to undo it and to redo it.
+An _overwrite_ doesn't read it,
+and needs the binding rebuilt only to undo it.
+
+<!--
+Note: Datalove's engine today doesn't make this distinction.
+It treats every write like an update, so in step 2 it reruns unit 2 as well.
+Correct, but more than necessary. A candidate for the last section.
+-->
 
 
 
