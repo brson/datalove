@@ -134,6 +134,17 @@ pub enum Eval {
     ErrorReset(String),
     /// The history was saved, as this many inputs, to this path.
     Saved { path: String, inputs: usize },
+    /// The unit returned early through `!` or `?`, with what it returned.
+    ///
+    /// It stays in the session, offering none of its bindings, and runs again
+    /// when an edit reaches it.
+    ReturnedEarly(String),
+    /// The unit compiled and was not run, because it reads from these units
+    /// and they did not run to their end. Units are named by their index in
+    /// the session.
+    ///
+    /// It stays in the session too, and runs when an edit lets them finish.
+    Blocked { on: Vec<usize> },
 }
 
 

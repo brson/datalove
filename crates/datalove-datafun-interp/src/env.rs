@@ -64,6 +64,22 @@ impl ScriptEnvironment {
         self.registry.add_unit_code_units(code_units);
     }
 
+    /// Take the next index for a unit that did not run: no frame, and no
+    /// functions for a `CodeRef::External` to land on.
+    pub fn add_empty_unit(&mut self) {
+        self.frames.add_empty();
+        self.registry.add_unit_code_units(Vec::new());
+    }
+
+    /// Leave unit `unit` as one that did not run, destroying what its frame
+    /// owned.
+    ///
+    /// Both halves go together for the reason [`Self::replace_unit`] moves both.
+    pub fn clear_unit(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, unit: u32) {
+        self.frames.clear_frame(rt_handle, unit as usize);
+        self.registry.set_unit_code_units(unit, Vec::new());
+    }
+
     /// Put a re-executed unit's frame and code units in place of the ones it
     /// had, destroying what the old frame owned.
     ///

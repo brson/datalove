@@ -943,10 +943,12 @@ fn a_move_across_units_survives_an_edit() {
 
 /// Whether a unit compiled now would be refused for naming `name`.
 ///
-/// The unit is not kept: one that fails to compile comes back off the script,
-/// so this asks the question without changing the session.
+/// The unit is taken back off afterwards, so this asks the question without
+/// changing the session.
 fn gave_away(session: &mut Session, name: &str) -> bool {
+    let count = session.unit_count();
     let result = session.compile_append(&format!("let probe = {name}\n"));
+    session.truncate(count);
     format!("{:?}", result.ownership).contains("D013")
 }
 

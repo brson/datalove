@@ -75,6 +75,16 @@ re-scanning the source text. All four error phases are checked, ownership
 included: an ownership error leaves lowering `Skipped`, so a use-after-move
 inside a fragment used to slip through as a successful binding.
 
+**A line that fails stays in the session** unless it fails with a runtime
+error. A line that does not compile reports `Eval::Error`, one that returns
+early through `!` or `?` reports `Eval::ReturnedEarly`, and one that reads from
+either is compiled and not run, reporting `Eval::Blocked`. Each stays as a unit
+offering no bindings, so the history and the engine's units line up one to one
+for script inputs, and an edit upstream can make any of them go green. The app
+shows all three as errors and clears nothing.
+[script-reactivity-architecture.md](script-reactivity-architecture.md) has how
+the layers keep a failed unit's names from the units after it.
+
 A runtime error empties the session. What the frames the error unwound
 owned is not destroyed a value at a time: the runtime discards all its
 memory instead (`IrInterpreter::discard_runtime_state`), and every binding
@@ -104,10 +114,10 @@ this. `repl --load <worldfile>` replays a saved history before the first
 prompt.
 
 **What is saved is the app's history, not the engine's session.** The
-engine's session holds only the units that compiled, and the history also
-has the failures and the slash commands. So the app writes the file when the
-engine hands `/save` back to it as `CallerInterpret`. A few things are left
-out:
+engine's session holds the script units, and the history also has the slash
+commands and whatever a reset took out of the session. So the app writes the
+file when the engine hands `/save` back to it as `CallerInterpret`. A few
+things are left out:
 
 - Anything typed after the `/save`. Those lines can still be waiting on a
   parse, while everything before it has been answered, because the engine
@@ -148,6 +158,10 @@ unit names a module function by `CodeRef::Module`, resolved against the
 `Arc<ModuleFunctionRegistry>` the executor was handed, so `set_module_registry`
 is what makes the new module IR the code that runs. Re-lowering the importing
 unit alone leaves every value stale.
+
+`Engine::remove_unit` and `Engine::insert_unit` splice the list and re-derive
+the whole suffix. A unit of the suffix that stops compiling stays, as one
+appended does.
 
 A module edit that does not compile is rejected whole and the previous text
 goes back, because nothing in the engine can build a compiler against a module
@@ -242,8 +256,9 @@ out of an earlier unit stops being available.
   They run against `datalove_sys_packages::system_library()`, so the suite covers
   the library and the linked riders the binary actually ships.
   `BLESS=1` updates them; unset `RUST_BACKTRACE` first.
-- **engine_edit_tests** - the edit path: `edit_unit` and `edit_module`, the
-  units each reaches, and the environment afterwards. Separate from
+- **engine_edit_tests** - the edit path: `edit_unit`, `edit_module` and the
+  splices, the units each reaches, and the environment afterwards; and units
+  that did not compile, parse, or run to their end staying and going green. Separate from
   `engine_tests` because that one is `harness = false` and has a `main` of its
   own, so `#[test]` functions cannot live beside it. The reach itself is
   measured in `datalove-datafun`'s `script_exec_reactivity_tests` and

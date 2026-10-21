@@ -20,6 +20,10 @@ use datalove_repl::{Engine, Eval};
 /// A B C D, where C uses nothing B provides and D uses `b`.
 const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
 
+fn bound(engine: &mut Engine, name: &str) -> bool {
+    engine.get_environment().iter().any(|(bound, _, _)| bound == name)
+}
+
 fn value_of(engine: &mut Engine, name: &str) -> String {
     engine.get_environment().into_iter()
         .find(|(bound, _, _)| bound == name)
@@ -153,7 +157,7 @@ fn removing_a_unit_rederives_the_suffix() {
     let mut engine = engine();
     engine.run_source(INDEPENDENT);
 
-    let reports = engine.remove_unit(1).expect("nothing reads `b`");
+    let reports = engine.remove_unit(1);
 
     assert_eq!(
         reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
@@ -169,25 +173,25 @@ fn removing_a_unit_rederives_the_suffix() {
     );
 }
 
-/// **Removing a unit a later unit depends on is rejected, and the session is
-/// unchanged and still usable.**
-///
-/// D is `b + 5`, so taking B out leaves it with nothing to resolve `b` to. A
-/// unit that fails to compile has no frame, and the numbering the frame store
-/// shares with every `(unit, value)` reference cannot have a hole in it, so the
-/// removal is put back whole and the frame store is never touched.
+/// **Removing a unit a later unit depends on leaves that unit failing**, in the
+/// session, and putting the binding back makes it run again.
 #[test]
-fn removing_a_unit_a_later_unit_depends_on_is_rejected() {
+fn removing_a_unit_a_later_unit_depends_on_leaves_it_failing() {
     let mut engine = engine();
     engine.run_source(SCRIPT);
 
-    let error = engine.remove_unit(1).expect_err("D reads `b`, which B provides");
-    assert!(!error.is_empty(), "the suffix's errors are reported");
+    let reports = engine.remove_unit(1);
 
-    assert_eq!(value_of(&mut engine, "b"), "2", "the session is as it was");
-    assert_eq!(value_of(&mut engine, "d"), "7");
-    engine.run_source("let e = d + 1");
-    assert_eq!(value_of(&mut engine, "e"), "8", "and it still compiles new lines");
+    let failed: Vec<usize> = reports.iter()
+        .filter(|report| matches!(report.eval, Eval::Error(_)))
+        .map(|report| report.unit)
+        .collect();
+    assert_eq!(failed, vec![2], "D, at the index it now has, reads the `b` that went");
+    assert!(!bound(&mut engine, "d"), "D provides nothing");
+    assert_eq!(value_of(&mut engine, "c"), "30");
+
+    engine.insert_unit(1, "let b = 2", false);
+    assert_eq!(value_of(&mut engine, "d"), "7", "D compiled and ran against the new `b`");
 }
 
 /// **Inserting in the middle re-derives the suffix**, the inserted unit's
@@ -199,7 +203,7 @@ fn inserting_a_unit_rederives_the_suffix() {
     engine.run_source(SHADOWED);
     assert_eq!(value_of(&mut engine, "b"), "2");
 
-    let reports = engine.insert_unit(1, "let n = 5", false).expect("the suffix compiles");
+    let reports = engine.insert_unit(1, "let n = 5", false);
 
     assert_eq!(
         reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
@@ -220,7 +224,7 @@ fn an_inserted_expression_unit_reports_its_value() {
     let mut engine = engine();
     engine.run_source("let a = 1\n---\nlet b = a + 1");
 
-    let reports = engine.insert_unit(1, "a + 100", true).expect("the suffix compiles");
+    let reports = engine.insert_unit(1, "a + 100", true);
 
     assert_eq!(reports.len(), 2, "the expression and the unit it moved up");
     assert!(
@@ -230,22 +234,156 @@ fn an_inserted_expression_unit_reports_its_value() {
     assert_eq!(value_of(&mut engine, "b"), "2", "B is re-derived at its new index");
 }
 
-/// **An insertion whose suffix does not compile is rejected, and the session is
-/// unchanged.**
+/// **An insertion that breaks a later unit leaves it failing**, and fixing the
+/// inserted unit makes it run again.
 #[test]
-fn an_insertion_that_breaks_a_later_unit_is_rejected() {
+fn an_insertion_that_breaks_a_later_unit_leaves_it_failing() {
     let mut engine = engine();
     engine.run_source(SHADOWED);
 
-    let error = engine
-        .insert_unit(1, "let n = \"five\"", false)
-        .expect_err("B would add 1 to a string");
-    assert!(error.contains("unit 2"), "B is the unit that failed: {error}");
+    let reports = engine.insert_unit(1, "let n = \"five\"", false);
 
-    assert_eq!(value_of(&mut engine, "b"), "2", "B is back to reading the first `n`");
-    assert_eq!(value_of(&mut engine, "d"), "107");
-    engine.run_source("let e = b + d");
-    assert_eq!(value_of(&mut engine, "e"), "109", "and the session still computes");
+    assert!(
+        reports.iter().any(|report| report.unit == 2 && matches!(report.eval, Eval::Error(_))),
+        "B would add 1 to a string: {reports:?}",
+    );
+    assert!(!bound(&mut engine, "b"));
+    assert_eq!(value_of(&mut engine, "d"), "107", "C still shadows `n` for D");
+
+    engine.edit_unit(1, "let n = 5");
+    assert_eq!(value_of(&mut engine, "b"), "6", "B ran against the fixed `n`");
+}
+
+// ============================================================================
+// Units that did not run to their end
+// ============================================================================
+
+/// **A unit that does not compile stays, and an edit upstream can make it.**
+///
+/// B asks for a `c` nothing binds. Editing A to bind one reaches B, because
+/// B's question is in the graph although the answer was no, and B compiles and
+/// runs. C, which reads nothing of either, is untouched.
+#[test]
+fn a_unit_that_did_not_compile_goes_green_when_an_edit_lets_it() {
+    let mut engine = engine();
+    let results = engine.run_source("let a = 1\n---\nlet b = c + 1\n---\nlet z = a + 100");
+    assert!(matches!(results[1].eval, Some(Eval::Error(_))), "{:?}", results[1].eval);
+    assert_eq!(value_of(&mut engine, "z"), "101", "C is numbered as the compiler numbered it");
+
+    let reports = engine.edit_unit(0, "let a = 1\nlet c = 10");
+
+    assert_eq!(
+        reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
+        vec![0, 1, 2],
+        "A, B which asked for `c`, and C which reads `a`",
+    );
+    assert_eq!(value_of(&mut engine, "b"), "11");
+    assert_eq!(value_of(&mut engine, "z"), "101");
+}
+
+/// **A unit that does not parse stays too**, and is not typechecked: it is as if
+/// it were not there until an edit makes it parse.
+#[test]
+fn a_unit_that_did_not_parse_stays_and_can_be_fixed() {
+    let mut engine = engine();
+    let results = engine.run_source("let a = 1\n---\nlet = = =\n---\nlet b = a + 1");
+    assert!(matches!(results[1].eval, Some(Eval::Error(_))), "{:?}", results[1].eval);
+    assert_eq!(value_of(&mut engine, "b"), "2", "B reads A's `a`, as if B were not there");
+
+    engine.edit_unit(1, "let a = 5");
+
+    assert_eq!(value_of(&mut engine, "a"), "5");
+    assert_eq!(value_of(&mut engine, "b"), "6", "B now reads the fixed unit's `a`");
+}
+
+/// A B C, where B returns early through `!` and C reads what B binds.
+const EARLY: &str = "let xs: [u32] = []\n---\nlet x = xs[(: index / 5)]!\n---\n\
+    let y = icall add_wrapping_u32(x, : u32 / 1)";
+
+/// **A unit that returns early stays, offers nothing, and blocks what reads it.**
+///
+/// B's `x` is never written, so C compiles against it and is not run. Neither
+/// binding is on offer, and A is untouched by any of it.
+#[test]
+fn a_unit_that_returned_early_blocks_what_reads_it() {
+    let mut engine = engine();
+    let results = engine.run_source(EARLY);
+
+    assert!(
+        matches!(&results[1].eval, Some(Eval::ReturnedEarly(returned)) if returned.contains("out of bounds")),
+        "{:?}", results[1].eval,
+    );
+    assert!(
+        matches!(&results[2].eval, Some(Eval::Blocked { on }) if *on == vec![1]),
+        "{:?}", results[2].eval,
+    );
+    assert!(!bound(&mut engine, "x"), "B did not get as far as binding `x`");
+    assert!(!bound(&mut engine, "y"), "C did not run");
+    assert_eq!(value_of(&mut engine, "xs"), "[]");
+
+    let results = engine.run_source("x");
+    assert!(
+        matches!(&results[0].eval, Some(Eval::Blocked { on }) if *on == vec![1]),
+        "showing `x` reads B too: {:?}", results[0].eval,
+    );
+}
+
+/// **Fixing what made a unit return early runs it, and what it blocked.**
+#[test]
+fn a_unit_that_returned_early_goes_green_when_an_edit_lets_it() {
+    let mut engine = engine();
+    engine.run_source(EARLY);
+
+    let reports = engine.edit_unit(0, "let xs: [u32] = [1, 2, 3, 4, 5, 6]");
+
+    assert_eq!(
+        reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
+        vec![0, 1, 2],
+    );
+    assert_eq!(value_of(&mut engine, "x"), "6");
+    assert_eq!(value_of(&mut engine, "y"), "7");
+
+    let reports = engine.edit_unit(0, "let xs: [u32] = [1]");
+    assert!(matches!(reports[1].eval, Eval::ReturnedEarly(_)), "{:?}", reports[1].eval);
+    assert!(matches!(&reports[2].eval, Eval::Blocked { on } if *on == vec![1]), "{:?}", reports[2].eval);
+    assert!(!bound(&mut engine, "x"), "and back again: B's frame was destroyed");
+    assert!(!bound(&mut engine, "y"));
+}
+
+/// **A unit that returns early takes nothing with it but itself.**
+///
+/// What it bound before it returned is not on offer, and a name it binds
+/// shadows an earlier one for the units after it, which read it and are
+/// blocked, rather than reading past it.
+#[test]
+fn a_unit_that_returned_early_shadows_and_offers_nothing() {
+    let mut engine = engine();
+    engine.run_source(
+        "let n: u32 = 1\n---\nlet xs: [u32] = []\n---\n\
+         let made = \"made\"\nlet n = xs[(: index / 5)]!\n---\n\
+         let m = icall add_wrapping_u32(n, : u32 / 1)");
+
+    assert!(!bound(&mut engine, "made"), "bound before the return, and not offered");
+    assert!(!bound(&mut engine, "n"), "the nearest `n` is the one that was never written");
+    assert!(!bound(&mut engine, "m"), "and the unit reading it did not run");
+    assert_eq!(value_of(&mut engine, "xs"), "[]");
+}
+
+/// **A unit that returns early keeps what it wrote into an earlier unit.**
+///
+/// Pinned as it is rather than as it should be: the `set` lands in A's frame
+/// before C returns, and nothing puts it back, so a failed unit does influence
+/// the session. `botdocs/issues.md` has what fixing it would take; this test
+/// should flip when it is fixed.
+#[test]
+fn a_unit_that_returned_early_keeps_its_writes_for_now() {
+    let mut engine = engine();
+    let results = engine.run_source(
+        "var p = (1, \"a\")\n---\nlet xs: [u32] = []\n---\n\
+         set p.1 = \"mutated\"\nlet x = xs[(: index / 5)]!");
+
+    assert!(matches!(results[2].eval, Some(Eval::ReturnedEarly(_))), "{:?}", results[2].eval);
+    assert_eq!(value_of(&mut engine, "p"), "(1, \"mutated\")");
 }
 
 // ============================================================================

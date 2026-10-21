@@ -159,6 +159,65 @@ setter reachable, and builds a compiler per operation. The entry points are
 `Engine::truncate_units(n)`, `Engine::remove_unit(i)` and
 `Engine::insert_unit(i, source, is_expr)`.
 
+## Units that did not run to their end
+
+An edit can break a unit, and the edit that fixes it can be anywhere upstream.
+So **a unit that fails stays in the session**, holding its index, and is
+re-derived like any other when an edit reaches it. A unit fails in one of three
+ways, and `ScriptExecutor::unit_status` says which:
+
+- `NotCompiled` -- it did not parse, or did not typecheck, or failed in
+  ownership analysis or lowering. A unit that did not parse is never
+  typechecked: `unit_provides` answers for it from `unit_parses` alone, and the
+  script compiler does not ask for its typecheck, so it provides nothing and
+  asks for nothing. `typecheck_script_unit` itself still checks a broken parse,
+  which the typechecker's own recovery tests rely on.
+- `ReturnedEarly` -- it ran and left its top level through `!` or `?`.
+- `Blocked { on }` -- it compiled, and was not run because it reads from units
+  that did not run to their end.
+
+**Only a unit that ran offers its bindings.** The rule is enforced at the
+layer that can see the failure:
+
+- A unit that failed to typecheck provides nothing to `binding_at`, so later
+  units resolve past it to an older binding of the name, or to nothing.
+- A unit that typechecked and failed later leaves an empty `UnitLowerRecord`,
+  so the typechecker sees its names and lowering does not. The later unit fails
+  to lower, and `lowering_failure` reports it as "`x` is bound by unit N, which
+  did not compile".
+- A unit that failed at run time keeps its full record, because typecheck and
+  lowering cannot see run-time outcomes. The later units compile against it
+  and the executor refuses to run them. `IrCodeUnit::script_units_read` lists
+  every unit a unit's code names -- external operands, external slot stores,
+  cross-unit calls, its functions' bodies included -- and a unit that reads
+  one whose status is not `Ran` is `Blocked`. A bare-name expression unit reads
+  its binding outside its code, so its provider counts too.
+
+Blocking rather than hiding the names keeps the static view honest: the later
+unit keeps its types, and it is in the reach of the failed unit because it uses
+names that unit provides. When the failed unit goes green, its dependents are
+re-derived with it and run.
+
+**The numbering must not have a hole in it**, so a unit that did not run takes
+its index with no frame: `FrameStore::frames` is `Vec<Option<ScriptFrame>>`,
+`ScriptExecutor::skip_unit` appends an empty one and `clear_unit` empties one an
+edit broke, destroying what it owned. An early-returned unit keeps its frame,
+which holds whatever it bound before the return, until it runs again or the
+session ends. The executor folds every unit's exports, so a name a failed unit
+binds still shadows an earlier one, as it does in the compiler, and
+`get_binding` and `get_environment` leave out names whose nearest binding did
+not run.
+
+**The compiler and the executor have to number units alike**, and every caller
+that drives the two side by side has to hand the executor every unit the
+compiler keeps -- a failed one through `skip_unit`. The script compiler stamps
+each unit's index in `ScriptContext::unit`, and the executor asserts it on every
+append and re-execution, because a caller that drops a failure would otherwise
+read the wrong frames rather than panic.
+
+A runtime error is not one of these: the runtime discards all of its memory
+(`IrInterpreter::discard_runtime_state`), so the session starts again.
+
 ## How it is validated
 
 **The technique.** Ask how far downstream a change travelled and compare against
@@ -176,8 +235,8 @@ suites missed.
 | `script_exec_reactivity_tests` | 17 | lowering and execution reach, values through an executor |
 | `script_scenario_tests` | 14 | the edit-kind matrix, the module cases, a twelve-unit session, blanking, ownership |
 | `script_const_tests` | 11 | consts across units and into function bodies |
-| `script_splice_tests` | 14 | truncate, remove and insert: the suffix, the values, the rejections |
-| `datalove-repl/engine_edit_tests` | 12 | the shipped entry points end to end |
+| `script_splice_tests` | 14 | truncate, remove and insert: the suffix, the values, a suffix that stops compiling |
+| `datalove-repl/engine_edit_tests` | 18 | the shipped entry points end to end, failed units going green |
 
 **Falsification, which is the part that makes it evidence.** Every stage was
 checked by injecting a fault into the shipped code and confirming the tests
@@ -276,31 +335,26 @@ typechecking is lazy. Ask the units directly when the question is about validity
   same `Source` handles go back in** for the units a splice does not touch:
   `Source::new` would mint a new one and move every memo key from there on.
 
-  **A splice whose suffix fails to compile is rejected and put back**, the
-  policy `edit_module` already follows, because a unit that fails to compile has
-  no IR and so no frame, and the numbering the frame store shares with every
-  `(unit_index, ValueId)` reference cannot have a hole in it. So the suffix is
-  compiled before the frame store is touched, and a rejected splice leaves the
-  session exactly as it was and still usable. A consequence: **a unit a later
-  unit depends on cannot be removed without removing its dependents first.**
-
-  Blanking a unit is still legal and still behaves correctly, at the cost of an
-  index and a frame until the session ends; removing it is now the cheaper
-  answer everywhere the suffix compiles without it.
+  **A unit of the suffix that stops compiling stays**, as an appended unit that
+  fails does (see [Units that did not run to their end](#user-content-units-that-did-not-run-to-their-end)).
+  Removing a unit a later unit reads leaves that unit failing, and putting the
+  binding back makes it compile and run again. Splices used to be rejected
+  whole instead, because a unit with no IR had no frame and the numbering could
+  not have a hole in it; an index with no frame is what made accepting them
+  possible.
 
   **This is the third time positional identity has been the constraint** --
   `IrModuleId` numbered by graph position, script `unit_index`, and now this. The
   standing answer is the same each time: derive the id from something content- or
   name-shaped rather than from a position, and the renumbering goes away.
 
-- **A unit an earlier edit left failing to compile blocks every splice before
-  it.** `relower_reach` leaves such a unit in place -- it provides nothing and
-  keeps its frame -- so a later `remove_unit` or `insert_unit` finds it in the
-  suffix, and the rule is that the suffix must compile. The splice is rejected
-  by a unit that has nothing to do with it, and the only ways on are to fix that
-  unit or to remove it first. Deliberate rather than overlooked, since the
-  alternative is a placeholder frame for a unit with no IR, but nothing asserts
-  it today.
+- **A unit that returns early keeps what it wrote into earlier units.** A
+  `set` or an `out` argument writes into an earlier unit's frame, and an early
+  return after one leaves the write in place: `var p = (1, "a")` and then a
+  unit that does `set p.1 = "mutated"` before a failing `!` leaves `p` mutated.
+  So a failed unit does influence the session. Restoring the places a unit
+  writes when it fails -- it records them as `revived` -- would close this
+  while every type can be copied.
 - **There is no undo or redo.** Nothing keeps a unit's previous text;
   `ModuleCompilationPipeline::module_text` exists only so `edit_module` can put
   back an edit that did not compile. The machinery needs nothing new for it --

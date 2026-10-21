@@ -752,6 +752,7 @@ pub use api::{
     single_fragment_script,
     typecheck_script_unit,
     unit_ast,
+    unit_parses,
     unit_provides,
     report_interface_resolution_errors,
 };

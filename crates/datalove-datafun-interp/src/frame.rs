@@ -807,9 +807,15 @@ impl ScriptFrame {
 /// Stores frames from previously executed units for external value/slot access.
 /// A binding that is moved out of is marked uninitialized in the frame that
 /// owns it, which is what makes it unreadable afterwards.
+///
+/// **A unit that did not run holds its index with no frame.** A unit stays in
+/// its session when it fails to compile, or when it reads from a unit that did
+/// not run to its end, and the numbering every `(unit, id)` reference shares
+/// cannot have a hole in it. Nothing that ran reads from such a unit, so its
+/// missing frame is never asked for.
 pub struct FrameStore {
     /// Frames from executed units, indexed by unit number.
-    frames: Vec<ScriptFrame>,
+    frames: Vec<Option<ScriptFrame>>,
     /// Unit-end values for each unit (persistent bindings to destroy).
     unit_end_values: Vec<Vec<ValueId>>,
     /// Unit-end slots for each unit (persistent bindings to destroy).
@@ -833,9 +839,16 @@ impl FrameStore {
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,
     ) {
-        self.frames.push(frame);
+        self.frames.push(Some(frame));
         self.unit_end_values.push(unit_end_values);
         self.unit_end_slots.push(unit_end_slots);
+    }
+
+    /// Take the next index for a unit that did not run.
+    pub fn add_empty(&mut self) {
+        self.frames.push(None);
+        self.unit_end_values.push(Vec::new());
+        self.unit_end_slots.push(Vec::new());
     }
 
     /// Put a new frame in place of unit `unit`'s, destroying what the old one
@@ -865,13 +878,28 @@ impl FrameStore {
             "unit {unit} has no frame to replace; the store holds {}",
             self.frames.len(),
         );
-        let old_values = std::mem::take(&mut self.unit_end_values[unit]);
-        let old_slots = std::mem::take(&mut self.unit_end_slots[unit]);
-        self.frames[unit].frame().destroy_unit_end_bindings(rt_handle, &old_values, &old_slots);
-
-        self.frames[unit] = frame;
+        self.clear_frame(rt_handle, unit);
+        self.frames[unit] = Some(frame);
         self.unit_end_values[unit] = unit_end_values;
         self.unit_end_slots[unit] = unit_end_slots;
+    }
+
+    /// Leave unit `unit` with no frame, destroying what the one it had owned.
+    ///
+    /// For a unit that ran before and now does not: one an edit stopped
+    /// compiling, or one an edit left reading from a unit that did not finish.
+    /// A unit that had no frame is left as it was.
+    pub fn clear_frame(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, unit: usize) {
+        assert!(
+            unit < self.frames.len(),
+            "unit {unit} has no frame to clear; the store holds {}",
+            self.frames.len(),
+        );
+        let old_values = std::mem::take(&mut self.unit_end_values[unit]);
+        let old_slots = std::mem::take(&mut self.unit_end_slots[unit]);
+        if let Some(old) = self.frames[unit].take() {
+            old.frame().destroy_unit_end_bindings(rt_handle, &old_values, &old_slots);
+        }
     }
 
     /// Drop the frames from `len` on, destroying what they owned.
@@ -897,7 +925,9 @@ impl FrameStore {
         for unit in len..self.frames.len() {
             let values = &self.unit_end_values[unit];
             let slots = &self.unit_end_slots[unit];
-            self.frames[unit].frame().destroy_unit_end_bindings(rt_handle, values, slots);
+            if let Some(frame) = &self.frames[unit] {
+                frame.frame().destroy_unit_end_bindings(rt_handle, values, slots);
+            }
         }
         self.frames.truncate(len);
         self.unit_end_values.truncate(len);
@@ -999,16 +1029,21 @@ impl FrameStore {
         for i in 0..self.frames.len() {
             let values = &self.unit_end_values[i];
             let slots = &self.unit_end_slots[i];
-            self.frames[i].frame().destroy_unit_end_bindings(rt_handle, values, slots);
+            if let Some(frame) = &self.frames[i] {
+                frame.frame().destroy_unit_end_bindings(rt_handle, values, slots);
+            }
         }
     }
 
     /// The frame of a previous unit.
     ///
-    /// Panics if the unit is not in the store (compiler bug).
+    /// Panics if the unit is not in the store (compiler bug), or did not run:
+    /// a unit that reads from one that did not run is not run itself.
     fn frame(&self, unit: u32) -> Frame {
         self.frames.get(unit as usize)
             .unwrap_or_else(|| panic!("external unit {} not found", unit))
+            .as_ref()
+            .unwrap_or_else(|| panic!("external unit {} did not run", unit))
             .frame()
     }
 }

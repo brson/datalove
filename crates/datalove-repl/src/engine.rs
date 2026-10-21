@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, WorkspaceDescriptor};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 
@@ -294,10 +294,17 @@ impl Engine {
         }
     }
 
+    /// Compile and run a fragment as the next unit.
+    ///
+    /// **A unit that fails stays in the session**, whether it did not compile,
+    /// returned early, or read from a unit that did either, and offers no
+    /// bindings until an edit makes it run to its end. Only a runtime error
+    /// takes the session with it.
     fn eval_script_statement(&mut self, source: String) -> Eval {
         let compiled = self.with_compiler(|compiler| compiler.compile_fragment(&source));
 
         if let Some(error) = compiled.first_error() {
+            self.executor.skip_unit();
             return Eval::Error(error);
         }
 
@@ -309,7 +316,7 @@ impl Engine {
             return self.failed(output);
         }
 
-        self.report_exports(ir_unit)
+        self.outcome(ir_unit, None, output)
     }
 
     /// A unit failed at run time: the executor has freed everything the
@@ -318,6 +325,25 @@ impl Engine {
     fn failed(&mut self, output: String) -> Eval {
         self.reset();
         Eval::ErrorReset(output)
+    }
+
+    /// What a unit that has just been run, or not run, came to.
+    ///
+    /// `ty` is the type an expression unit's value came to, which is how one
+    /// that ran is told from a fragment.
+    fn outcome(&mut self, ir_unit: &IrCodeUnit, ty: Option<String>, output: String) -> Eval {
+        let index = ir_unit.script_context()
+            .and_then(|ctx| ctx.unit)
+            .expect("a compiled unit is numbered") as usize;
+        match self.executor.unit_status(index).C() {
+            UnitStatus::Ran => match ty {
+                Some(ty) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
+                None => self.report_exports(ir_unit),
+            },
+            UnitStatus::ReturnedEarly => Eval::ReturnedEarly(output),
+            UnitStatus::Blocked { on } => Eval::Blocked { on },
+            UnitStatus::NotCompiled => unreachable!("unit {index} compiled"),
+        }
     }
 
     /// Report the bindings a fragment defined, as the compiler recorded them.
@@ -348,9 +374,9 @@ impl Engine {
     /// `botdocs/plan-script-reactivity.md`.
     ///
     /// Returns one report per unit re-derived, in index order, the edited unit
-    /// first. A unit whose re-lowering failed is reported as an error and keeps
-    /// the frame it had, so its bindings are gone from the environment but its
-    /// values are still there to be destroyed when the session ends.
+    /// first. A unit whose re-lowering failed is reported as an error and
+    /// stays, with its frame destroyed and its bindings gone from the
+    /// environment, until an edit makes it compile again.
     pub fn edit_unit(&mut self, unit: usize, source: &str) -> Vec<UnitEdit> {
         let sources = self.script.as_ref().expect("a session").unit_sources();
         assert!(
@@ -386,19 +412,11 @@ impl Engine {
     /// it and their IR has to be built again against the indices they now have.
     /// That cost is inherent to the identity being positional.
     ///
-    /// **A removal whose suffix does not compile is rejected and put back**, with
-    /// the errors returned, which is the policy [`Self::edit_module`] already
-    /// follows and for a related reason: a unit that fails to compile has no IR
-    /// and so no frame, which would leave a hole in the numbering the frame
-    /// store and every `(unit_index, ValueId)` reference share. So **a unit a
-    /// later unit depends on cannot be removed without removing its dependents
-    /// first.** A rejected removal leaves the session exactly as it was -- the
-    /// frame store is not touched until the whole suffix has compiled.
-    pub fn remove_unit(&mut self, unit: usize) -> Result<Vec<UnitEdit>, String> {
-        match self.with_compiler(|compiler| compiler.remove_unit(unit)) {
-            Ok(redone) => Ok(self.rerun_spliced(unit, redone)),
-            Err(errors) => Err(errors.join("; ")),
-        }
+    /// A unit of the suffix that read what the removed unit provided stops
+    /// compiling and stays, as any unit that fails does.
+    pub fn remove_unit(&mut self, unit: usize) -> Vec<UnitEdit> {
+        let redone = self.with_compiler(|compiler| compiler.remove_unit(unit));
+        self.rerun_spliced(unit, redone)
     }
 
     /// Splice a new unit in at `unit`, and re-derive everything after it.
@@ -407,18 +425,16 @@ impl Engine {
     /// statements; nothing in the text decides it, which is why the appending
     /// path has two entry points rather than one.
     ///
-    /// The suffix is re-derived whole and an insertion whose suffix does not
-    /// compile is rejected, both for the reasons [`Self::remove_unit`] gives.
+    /// The suffix is re-derived whole, for the reason [`Self::remove_unit`]
+    /// gives, and the new unit and the suffix stay whether or not they compile.
     pub fn insert_unit(
         &mut self,
         unit: usize,
         source: &str,
         is_expr: bool,
-    ) -> Result<Vec<UnitEdit>, String> {
-        match self.with_compiler(|compiler| compiler.insert_unit(unit, source, is_expr)) {
-            Ok(redone) => Ok(self.rerun_spliced(unit, redone)),
-            Err(errors) => Err(errors.join("; ")),
-        }
+    ) -> Vec<UnitEdit> {
+        let redone = self.with_compiler(|compiler| compiler.insert_unit(unit, source, is_expr));
+        self.rerun_spliced(unit, redone)
     }
 
     /// Change one module's source and re-derive the script units that import
@@ -516,22 +532,22 @@ impl Engine {
         let mut reports = Vec::new();
         for (index, compiled) in redone {
             let eval = match (compiled.first_error(), &compiled.ir_unit) {
-                (Some(error), _) => Eval::Error(error),
+                (Some(error), _) => {
+                    self.executor.clear_unit(index);
+                    Eval::Error(error)
+                }
                 (None, None) => unreachable!("a unit that compiled without errors has ir"),
                 (None, Some(ir_unit)) => {
                     let (ty, output) = self.executor.reexecute_unit(index, ir_unit);
-                    match (output.starts_with("Error:"), ty) {
-                        (true, _) => {
-                            // The session is gone, so there is nothing left
-                            // for the rest to run against.
-                            reports.push(UnitEdit { unit: index, eval: self.failed(output) });
-                            break;
-                        }
-                        // An expression unit reports the value it now comes to;
-                        // a fragment reports the bindings it defines.
-                        (false, Some(ty)) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
-                        (false, None) => self.report_exports(ir_unit),
+                    if output.starts_with("Error:") {
+                        // The session is gone, so there is nothing left
+                        // for the rest to run against.
+                        reports.push(UnitEdit { unit: index, eval: self.failed(output) });
+                        break;
                     }
+                    // An expression unit reports the value it now comes to;
+                    // a fragment reports the bindings it defines.
+                    self.outcome(ir_unit, ty, output)
                 }
             };
             reports.push(UnitEdit { unit: index, eval });
@@ -549,8 +565,7 @@ impl Engine {
     /// to nobody. They are destroyed, and the re-derived units are executed as
     /// appends, each taking the next free index.
     ///
-    /// Every unit here compiled, because a splice whose suffix did not was
-    /// rejected before the frame store was touched.
+    /// A unit here that did not compile takes its index with no frame.
     fn rerun_spliced(
         &mut self,
         at: usize,
@@ -561,30 +576,25 @@ impl Engine {
 
         let mut reports = Vec::new();
         for (index, compiled) in redone {
-            let ir_unit = compiled.ir_unit.as_ref()
-                .expect("a splice whose suffix failed to compile was rejected");
-            let eval = if is_expr[index] {
-                let (ty, output) = self.executor.execute_expr(ir_unit);
-                match (output.starts_with("Error:"), ty) {
-                    (true, _) => Err(output),
-                    (false, Some(ty)) => Ok(Eval::SuccessExpr(EvalExpr { ty, value: output })),
-                    (false, None) => Ok(self.report_exports(ir_unit)),
-                }
-            } else {
-                let output = self.executor.execute_fragment(ir_unit);
-                match output.starts_with("Error:") {
-                    true => Err(output),
-                    false => Ok(self.report_exports(ir_unit)),
-                }
-            };
-            match eval {
-                Ok(eval) => reports.push(UnitEdit { unit: index, eval }),
-                Err(output) => {
-                    // As in `rerun`: nothing is left for the rest.
-                    reports.push(UnitEdit { unit: index, eval: self.failed(output) });
-                    break;
-                }
+            if let Some(error) = compiled.first_error() {
+                self.executor.skip_unit();
+                reports.push(UnitEdit { unit: index, eval: Eval::Error(error) });
+                continue;
             }
+            let ir_unit = compiled.ir_unit.as_ref()
+                .expect("a unit that compiled without errors has ir");
+            let (ty, output) = if is_expr[index] {
+                self.executor.execute_expr(ir_unit)
+            } else {
+                (None, self.executor.execute_fragment(ir_unit))
+            };
+            if output.starts_with("Error:") {
+                // As in `rerun`: nothing is left for the rest.
+                reports.push(UnitEdit { unit: index, eval: self.failed(output) });
+                break;
+            }
+            let eval = self.outcome(ir_unit, ty, output);
+            reports.push(UnitEdit { unit: index, eval });
         }
         reports
     }
@@ -609,10 +619,13 @@ impl Engine {
             .expect("the executor registered the unit's exports before executing it")
     }
 
+    /// Compile and run an expression as the next unit, which stays whatever
+    /// becomes of it, as a fragment does.
     fn eval_expression(&mut self, source: String) -> Eval {
         let compiled = self.with_compiler(|compiler| compiler.compile_expr(&source));
 
         if let Some(error) = compiled.first_error() {
+            self.executor.skip_unit();
             return Eval::Error(error);
         }
 
@@ -624,10 +637,7 @@ impl Engine {
             return self.failed(output);
         }
 
-        Eval::SuccessExpr(EvalExpr {
-            ty: ty.expect("an executed expression unit has a result type"),
-            value: output,
-        })
+        self.outcome(ir_unit, ty, output)
     }
 
     /// Get current environment bindings (functions and let statements).

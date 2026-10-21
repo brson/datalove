@@ -127,6 +127,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
             result: Some(result_value),
             result_name: None,
             exports: Vec::new(),
+            unit: None,
         }),
         nested_units,
     })

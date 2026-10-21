@@ -166,6 +166,7 @@ pub fn lower_script_fragment_raw<'db>(
             result: None,
             result_name: None,
             exports: ctx.exports,
+            unit: None,
         }),
         nested_units: ctx.functions,
     })
@@ -340,6 +341,7 @@ pub fn lower_script_expr<'db>(
             result,
             result_name,
             exports: ctx.exports,
+            unit: None,
         }),
         nested_units: ctx.functions,
     })

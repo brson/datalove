@@ -47,6 +47,7 @@ fn graph_of(units: &[&str]) -> Vec<(Vec<String>, Vec<String>)> {
     let outputs = compiler.unit_typecheck_outputs();
     outputs.iter()
         .map(|output| {
+            let output = output.expect("every unit parsed");
             let mut provides: Vec<String> = output.new_vars(&db).iter()
                 .map(|(name, _, _)| name.as_str(&db).S())
                 .chain(output.new_fns(&db).iter().map(|(name, _)| name.as_str(&db).S()))

@@ -16,7 +16,7 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
+  - [A REPL unit that fails keeps what it wrote into earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-wrote-into-earlier-units)
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
@@ -58,26 +58,30 @@ home here.
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
 
-### A REPL unit that returns early reports success
+### A REPL unit that fails keeps what it wrote into earlier units
 
 **Reproduced.**
 
 ```datalove
-let xs: [u32] = []
-let x = xs[(: index / 5)]!
+var p = (1, "a")
 ---
-let n = icall add_wrapping_u32(x, : u32 / 1)
+let xs: [u32] = []
+---
+set p.1 = "mutated"
+let x = xs[(: index / 5)]!
 ```
 
-`datalove script` stops at the `!` and prints `er error "index out of
-bounds"`. The REPL reports the first unit as `Success`, with `x` bound and
-shown as `<moved>`, though nothing ever wrote it. The second unit reads `x`
-and panics (`Option::unwrap()` on a `None`), which is a `CrashReset`, and the
-session loses every binding. The REPL ignores a unit's early return
-(`UnitCompletion`): `ScriptExecutor` hands the returned error back as the
-unit's output, without the `Error:` that marks a failure. The bindings the
-unit never reached also stay on offer. Treating an early return as a runtime
-error would settle both, at the price of the session (see `Eval::ErrorReset`).
+The third unit returns early, and so stays in the session offering none of its
+bindings. But `p` reads `(1, "mutated")` afterwards: a `set` or an `out`
+argument writes into an earlier unit's frame, and nothing puts the write back
+when the unit that made it fails. So a failed unit influences the session, which
+the model in `script-reactivity-architecture.md` says it does not. Running the
+unit again when an edit reaches it applies the write again, which is wrong for a
+write that is not idempotent, like `set n = n + 1`.
+
+The places a unit writes are known -- its record lists them as `revived` -- so
+copying them before the unit runs and restoring them if it does not finish would
+close this while every type can be copied.
 
 ### Deep recursion aborts the process off Linux
 

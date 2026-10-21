@@ -381,7 +381,9 @@ impl<E: ReplExecutor> ReplApp<E> {
         entry.eval_result = Some(eval.C());
 
         match &eval {
-            repl::Eval::Error(_) => {
+            // A unit that did not run to its end stays in the session, so
+            // nothing is cleared; it is reported as the error it is.
+            repl::Eval::Error(_) | repl::Eval::ReturnedEarly(_) | repl::Eval::Blocked { .. } => {
                 entry.status = EntryStatus::Error;
             }
             repl::Eval::Nothing => {

@@ -29,6 +29,7 @@ fn make_script_unit(
             result,
             result_name: None,
             exports: vec![],
+            unit: None,
         }),
         nested_units: vec![],
     }

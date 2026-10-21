@@ -48,7 +48,7 @@ use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrTy
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_tycheck::{
-    type_check_script_units, typecheck_script_unit, unit_ast,
+    typecheck_script_unit, unit_ast, unit_parses,
     Script, ScriptEnv, ScriptUnit, ScriptUnitKind,
     UnitTypecheckResultTracked,
     AutoAdaptMode,
@@ -268,11 +268,11 @@ pub struct ScriptCompiler<'db> {
     scripts: Vec<Script<'db>>,
     /// The modules the script is checked against, and the auto-adapt mode.
     env: ScriptEnv<'db>,
-    /// The script as it stood for the last unit *attempted*.
+    /// The script as it stood for the last unit compiled.
     ///
-    /// Held apart from `scripts` because a unit that failed is taken back off
-    /// that -- it provides nothing to what follows -- and the diagnostics the
-    /// caller is about to render are the failing unit's.
+    /// Held apart from `scripts` because re-deriving compiles units in the
+    /// middle of it, and the diagnostics the caller is about to render are the
+    /// last compiled unit's.
     last_script: Option<Script<'db>>,
     /// What each unit's compilation produced, indexed by unit.
     ///
@@ -303,37 +303,29 @@ pub struct ScriptCompiler<'db> {
 }
 
 impl<'db> ScriptCompiler<'db> {
-    /// Compile a script fragment (statements).
+    /// Compile a script fragment (statements), as the next unit.
+    ///
+    /// The unit joins the script whether or not it compiles; see
+    /// [`Self::compile_unit_at`] for what a unit that failed amounts to.
     pub fn compile_fragment(&mut self, source: &str) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
-        self.last_source = Some(src);
-
-        let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
-        if let Some(result) = self.check_parse_errors(&parse_diags) {
-            return result;
-        }
-
         self.append_unit(src, false)
     }
 
-    /// Compile a script expression.
+    /// Compile a script expression, as the next unit.
     pub fn compile_expr(&mut self, source: &str) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
-        self.last_source = Some(src);
-
-        let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
-        if let Some(result) = self.check_parse_errors(&parse_diags) {
-            return result;
-        }
-
         self.append_unit(src, true)
     }
 
     /// Put a new unit on the end of the script and compile it.
     ///
-    /// A unit that fails comes back off: it provides nothing to what follows,
-    /// and leaving it in place would put a hole in the numbering the frame
-    /// store and every `(unit, value)` reference share.
+    /// **A unit that fails stays.** It provides nothing to what follows, so the
+    /// units after it are built as if it were not there, and an edit that
+    /// makes it compile is an edit like any other: the reach of an edit
+    /// includes a unit that asked for a name in vain and now finds it. Its
+    /// executor gives it an index with no frame, so the numbering every
+    /// `(unit, value)` reference shares has no hole in it.
     fn append_unit(
         &mut self,
         src: bct::input::Source,
@@ -342,17 +334,8 @@ impl<'db> ScriptCompiler<'db> {
         let script_unit = ScriptUnit::new(self.db, src, is_expr);
         let script = Script::new(self.db, self.scripts.last().copied(), script_unit);
         self.scripts.push(script);
-        self.last_script = Some(script);
-        self.last_spans = Some(unit_ast(self.db, script_unit).spans.clone());
         self.unit_records.push(UnitLowerRecord::default());
-
-        let index = self.scripts.len() - 1;
-        let result = self.compile_unit_at(index);
-        if result.ir_unit.is_none() {
-            self.scripts.pop();
-            self.unit_records.pop();
-        }
-        result
+        self.rederive_one(self.scripts.len() - 1)
     }
 
     /// Re-lower the units an edit to unit `edited` reaches, in index order.
@@ -370,8 +353,8 @@ impl<'db> ScriptCompiler<'db> {
     /// because a unit reads only from units before it.
     ///
     /// A unit that fails to re-lower is left providing nothing, so its
-    /// bindings drop out of the environment; its frame stays where it is until
-    /// the session ends, because the numbering cannot have a hole in it.
+    /// bindings drop out of the environment, and stays where it is: the
+    /// numbering cannot have a hole in it. Its executor drops its frame.
     pub fn relower_reach(&mut self, edited: usize) -> Vec<(usize, ScriptCompilationResult)> {
         assert!(
             edited < self.scripts.len(),
@@ -437,14 +420,12 @@ impl<'db> ScriptCompiler<'db> {
 
     /// Splice the unit at `i` out, and re-derive everything after it.
     ///
-    /// See [`Self::splice`] for why the whole suffix is re-derived and what
-    /// happens when a unit of it stops compiling. A unit a later unit depends
-    /// on cannot be removed without removing its dependents first: the later
-    /// unit would fail to compile, which rejects the removal.
+    /// See [`Self::splice`] for why the whole suffix is re-derived. A unit that
+    /// read what the removed unit provided stops compiling, and stays.
     pub fn remove_unit(
         &mut self,
         i: usize,
-    ) -> Result<Vec<(usize, ScriptCompilationResult)>, Vec<String>> {
+    ) -> Vec<(usize, ScriptCompilationResult)> {
         let mut units = self.unit_list();
         assert!(
             i < units.len(),
@@ -462,14 +443,15 @@ impl<'db> ScriptCompiler<'db> {
     /// [`Self::compile_expr`] say it for an append: nothing in the text decides
     /// it.
     ///
-    /// See [`Self::splice`] for why the whole suffix is re-derived and what
-    /// happens when a unit of it stops compiling.
+    /// See [`Self::splice`] for why the whole suffix is re-derived. The new
+    /// unit joins the script whether or not it compiles, as an appended one
+    /// does.
     pub fn insert_unit(
         &mut self,
         i: usize,
         source: &str,
         is_expr: bool,
-    ) -> Result<Vec<(usize, ScriptCompilationResult)>, Vec<String>> {
+    ) -> Vec<(usize, ScriptCompilationResult)> {
         let mut units = self.unit_list();
         assert!(
             i <= units.len(),
@@ -478,18 +460,6 @@ impl<'db> ScriptCompiler<'db> {
         );
 
         let src = bct::input::Source::new(self.db, source.S());
-        self.last_source = Some(src);
-        let parse_diags = if is_expr {
-            datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
-        } else {
-            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
-        };
-        if let Some(result) = self.check_parse_errors(&parse_diags) {
-            return Err(vec![
-                result.first_error().expect("a parse error is an error"),
-            ]);
-        }
-
         units.insert(i, (src, is_expr));
         self.splice(units, i)
     }
@@ -502,42 +472,15 @@ impl<'db> ScriptCompiler<'db> {
     /// cost is inherent rather than over-propagation: the ids really did
     /// change. The reach is for an edit, which moves no index.
     ///
-    /// **A splice whose suffix does not compile is rejected and put back**, with
-    /// the errors returned. A unit that fails to compile has no IR, so it has no
-    /// frame, so it would leave a hole in the numbering the frame store and
-    /// every `(unit_index, ValueId)` reference share; keeping the numbering
-    /// hole-free would need a placeholder frame, and that is not built. This is
-    /// the policy a module edit that does not compile already follows. Putting
-    /// the old list back is cheap -- the same `Source` handles go back in, so
-    /// every memo keyed on them is still good.
-    ///
-    /// A session can already hold a unit that does not compile, since
-    /// [`Self::relower_reach`] leaves one in place after an edit that broke it.
-    /// So such a unit rejects every splice before it until it is fixed or
-    /// removed, and the restore path's own re-derivation reports its errors
-    /// again, which are discarded: the rule is that the suffix must compile,
-    /// and the session going back to exactly what it was is the point.
+    /// A unit of the suffix that stops compiling stays, as an appended unit
+    /// that fails does, and so does one that already did not compile.
     fn splice(
         &mut self,
         units: Vec<(bct::input::Source, bool)>,
         at: usize,
-    ) -> Result<Vec<(usize, ScriptCompilationResult)>, Vec<String>> {
-        let held = self.unit_list();
+    ) -> Vec<(usize, ScriptCompilationResult)> {
         self.set_units(units, at);
-        let redone = self.rederive((at..self.scripts.len()).collect());
-
-        let failed: Vec<String> = redone.iter()
-            .filter_map(|(index, result)| {
-                result.first_error().map(|error| format!("unit {index}: {error}"))
-            })
-            .collect();
-        if failed.is_empty() {
-            return Ok(redone);
-        }
-
-        self.set_units(held, at);
-        self.rederive((at..self.scripts.len()).collect());
-        Err(failed)
+        self.rederive((at..self.scripts.len()).collect())
     }
 
     /// Each unit's source and kind, which is the list a splice is taken over.
@@ -583,14 +526,18 @@ impl<'db> ScriptCompiler<'db> {
     fn rederive(&mut self, units: Vec<usize>) -> Vec<(usize, ScriptCompilationResult)> {
         units
             .into_iter()
-            .map(|index| {
-                self.last_script = Some(self.scripts[index]);
-                self.last_spans =
-                    Some(unit_ast(self.db, self.scripts[index].unit(self.db)).spans.clone());
-                let result = self.compile_unit_at(index);
-                (index, result)
-            })
+            .map(|index| (index, self.rederive_one(index)))
             .collect()
+    }
+
+    /// Compile unit `index`, with the diagnostics the caller renders next
+    /// pointed at it.
+    fn rederive_one(&mut self, index: usize) -> ScriptCompilationResult {
+        let unit = self.scripts[index].unit(self.db);
+        self.last_script = Some(self.scripts[index]);
+        self.last_source = Some(unit.source(self.db));
+        self.last_spans = unit_parses(self.db, unit).then(|| unit_ast(self.db, unit).spans.clone());
+        self.compile_unit_at(index)
     }
 
     /// The units an edit to `edited` reaches, in index order, `edited` included.
@@ -672,8 +619,16 @@ impl<'db> ScriptCompiler<'db> {
         let mut provides = Vec::with_capacity(outputs.len());
         let mut uses = Vec::with_capacity(outputs.len());
         for (index, output) in outputs.iter().enumerate() {
-            provides.push(self.unit_provides_names(*output));
-            uses.push(self.unit_used_names(index, *output));
+            match output {
+                Some(output) => {
+                    provides.push(self.unit_provides_names(*output));
+                    uses.push(self.unit_used_names(index, *output));
+                }
+                None => {
+                    provides.push(Vec::new());
+                    uses.push(Vec::new());
+                }
+            }
         }
         (provides, uses)
     }
@@ -681,7 +636,7 @@ impl<'db> ScriptCompiler<'db> {
     /// The modules each unit imports from, as things stand now.
     fn imports_now(&self) -> Vec<Vec<String>> {
         self.unit_typecheck_outputs().iter()
-            .map(|output| output.imported_modules(self.db).C())
+            .map(|output| output.map(|output| output.imported_modules(self.db).C()).unwrap_or_default())
             .collect()
     }
 
@@ -762,14 +717,18 @@ impl<'db> ScriptCompiler<'db> {
     /// What a unit provided and what it asked the environment for -- the
     /// dependency graph over the session. Empty before anything has compiled.
     /// See `botdocs/plan-script-reactivity.md`.
+    ///
+    /// `None` for a unit that did not parse, which is not typechecked: it
+    /// provides nothing and asks for nothing.
     pub fn unit_typecheck_outputs(
         &self,
-    ) -> Vec<datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>> {
-        match self.scripts.last() {
-            None => Vec::new(),
-            Some(script) => type_check_script_units(self.db, *script, self.env)
-                .unit_outputs(self.db),
-        }
+    ) -> Vec<Option<datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>>> {
+        self.scripts.iter()
+            .map(|script| {
+                unit_parses(self.db, script.unit(self.db))
+                    .then(|| typecheck_script_unit(self.db, *script, self.env))
+            })
+            .collect()
     }
 
     /// Get parse diagnostics from the last compilation.
@@ -782,11 +741,16 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     /// Get type diagnostics from the last compilation.
+    ///
+    /// Those of the last unit and whatever its typechecking asked of the units
+    /// before it, which never includes typechecking one that did not parse.
     pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
         match self.last_script {
-            Some(script) => type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(
-                self.db, script, self.env),
-            None => Vec::new(),
+            Some(script) if unit_parses(self.db, script.unit(self.db)) => {
+                typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(
+                    self.db, script, self.env)
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -868,23 +832,65 @@ impl<'db> ScriptCompiler<'db> {
         self.auto_adapt_mode
     }
 
-    /// Check for parse errors and return early result if any.
-    fn check_parse_errors(&self, parse_diags: &[&datalove_diagnostic::ParseDiagnostic]) -> Option<ScriptCompilationResult> {
-        if parse_diags.is_empty() {
-            return None;
+    /// The result for unit `index`, whose lowering failed with `error`.
+    ///
+    /// **A name the typechecker found and lowering cannot is one an earlier
+    /// unit binds and did not compile.** The typechecker sees what a unit that
+    /// typechecked provides, and lowering only what one that compiled does, so
+    /// a unit that failed in ownership analysis or later leaves its names to
+    /// the one and not the other. That is said as such, rather than as a
+    /// binding that is not available yet.
+    fn lowering_failure(
+        &self,
+        index: usize,
+        context: &str,
+        error: datalove_datafun_compiler::lower::LowerError,
+    ) -> ScriptCompilationResult {
+        let failed_provider = match &error {
+            datalove_datafun_compiler::lower::LowerError::BindingNotAvailable(name) => {
+                let outputs = self.unit_typecheck_outputs();
+                (0..index).rev()
+                    .find(|unit| {
+                        outputs[*unit].is_some_and(|output| self.unit_provides_names(output).contains(name))
+                    })
+                    .filter(|unit| self.unit_records[*unit].provides.is_empty())
+                    .map(|unit| (name, unit))
+            }
+            _ => None,
+        };
+        let message = match failed_provider {
+            Some((name, unit)) => format!("`{name}` is bound by unit {unit}, which did not compile"),
+            None => format!("{context}{error}"),
+        };
+        ScriptCompilationResult {
+            typecheck: TypecheckResult::Success,
+            ownership: OwnershipResult::Success,
+            lowering: LoweringResult::Error { message },
+            ir_unit: None,
         }
+    }
+
+    /// The result for unit `index`, which did not parse.
+    fn parse_failure_at(&self, index: usize) -> ScriptCompilationResult {
+        let unit = self.scripts[index].unit(self.db);
+        let source = unit.source(self.db);
+        let parse_diags = if unit.is_expr(self.db) {
+            datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
+        } else {
+            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
+        };
         let parse_errors: Vec<String> = parse_diags.iter()
             .map(|d| {
                 let diag = d.to_diagnostic(self.db);
                 diag.message.as_str(self.db).S()
             })
             .collect();
-        Some(ScriptCompilationResult {
+        ScriptCompilationResult {
             typecheck: TypecheckResult::ParseError { errors: parse_errors },
             ownership: OwnershipResult::Skipped,
             lowering: LoweringResult::Skipped,
             ir_unit: None,
-        })
+        }
     }
 
     /// The statements or the expression unit `index` parsed to.
@@ -912,12 +918,22 @@ impl<'db> ScriptCompiler<'db> {
     /// 4. Const Inlining - replace const bindings with evaluated values
     ///
     /// Every exit leaves `unit_records[index]` describing what this unit now
-    /// provides -- nothing at all, if it failed.
+    /// provides -- nothing at all, if it failed. A unit that did not parse goes
+    /// no further than that: its tree is not typechecked.
     fn compile_unit_at(&mut self, index: usize) -> ScriptCompilationResult {
-        let unit = self.parsed_unit_at(index);
-        let result = self.run_phases(index, &unit);
-        if result.ir_unit.is_none() {
+        if !unit_parses(self.db, self.scripts[index].unit(self.db)) {
             self.unit_records[index] = UnitLowerRecord::default();
+            return self.parse_failure_at(index);
+        }
+        let unit = self.parsed_unit_at(index);
+        let mut result = self.run_phases(index, &unit);
+        match &mut result.ir_unit {
+            None => self.unit_records[index] = UnitLowerRecord::default(),
+            Some(ir_unit) => {
+                ir_unit.script_context_mut()
+                    .expect("a script unit compiles to a script code unit")
+                    .unit = Some(index as u32);
+            }
         }
         result
     }
@@ -1216,16 +1232,7 @@ impl<'db> ScriptCompiler<'db> {
                     deferred: lowered.deferred,
                 })
             }
-            Err(e) => {
-                Err(ScriptCompilationResult {
-                    typecheck: TypecheckResult::Success,
-                    ownership: OwnershipResult::Success,
-                    lowering: LoweringResult::Error {
-                        message: format!("function lowering error: {}", e),
-                    },
-                    ir_unit: None,
-                })
-            }
+            Err(e) => Err(self.lowering_failure(index, "function lowering error: ", e)),
         }
     }
 
@@ -1519,12 +1526,7 @@ impl<'db> ScriptCompiler<'db> {
                     Some(&func_param_types),
                     Some(&func_return_types),
                     lowered_funcs_arg,
-                ).map_err(|e| ScriptCompilationResult {
-                    typecheck: TypecheckResult::Success,
-                    ownership: OwnershipResult::Success,
-                    lowering: LoweringResult::Error { message: format!("{}", e) },
-                    ir_unit: None,
-                })
+                ).map_err(|e| self.lowering_failure(index, "", e))
             }
             ParsedUnit::Expr(parsed) => {
                 lower_script_expr(
@@ -1535,12 +1537,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.env.data(self.db),
                     script_ctx,
                     parsed.expr(self.db),
-                ).map_err(|e| ScriptCompilationResult {
-                    typecheck: TypecheckResult::Success,
-                    ownership: OwnershipResult::Success,
-                    lowering: LoweringResult::Error { message: format!("{}", e) },
-                    ir_unit: None,
-                })
+                ).map_err(|e| self.lowering_failure(index, "", e))
             }
         }
     }

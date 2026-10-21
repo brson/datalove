@@ -275,6 +275,9 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 ),
                             ]));
                         }
+                        repl::Eval::ReturnedEarly(_) | repl::Eval::Blocked { .. } => {
+                            unreachable!("the app reports a unit that did not run as an error")
+                        }
                         repl::Eval::CrashReset(_msg) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
@@ -292,10 +295,15 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
             }
             EntryStatus::Error => {
                 // Try to extract error message from eval_result.
-                let error_msg = if let Some(repl::Eval::Error(e)) = &entry.eval_result {
-                    format!("error: {}", e)
-                } else {
-                    "error".S()
+                let error_msg = match &entry.eval_result {
+                    Some(repl::Eval::Error(e)) => format!("error: {}", e),
+                    Some(repl::Eval::ReturnedEarly(returned)) => {
+                        format!("returned early: {returned}")
+                    }
+                    Some(repl::Eval::Blocked { on }) => {
+                        format!("not run: it reads from units {on:?}, which did not finish")
+                    }
+                    _ => "error".S(),
                 };
 
                 lines.push(Line::from(vec![

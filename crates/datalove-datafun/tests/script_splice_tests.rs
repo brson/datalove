@@ -15,12 +15,11 @@
 //! Truncating is the special case that renumbers nothing, because nothing sits
 //! after what goes, and so re-derives nothing at all.
 //!
-//! **A splice whose suffix stops compiling is rejected and put back.** A unit
-//! that fails to compile has no IR, so it has no frame, so it would leave a
-//! hole in the numbering the frame store and every `(unit_index, ValueId)`
-//! reference share. The tests for that assert a value computed *after* the
-//! rejection, not merely that nothing panicked: "unchanged" has to mean the
-//! session still works.
+//! **A unit of the suffix that stops compiling stays**, as any unit that fails
+//! does: it holds its index with no frame and provides nothing, and an edit
+//! that makes it compile again runs it. The tests for that assert a value
+//! computed *after* the failure, and after the fix, not merely that nothing
+//! panicked.
 //!
 //! **Values, not only reach.** A recorded lesson from this work is that the
 //! scenario matrix once missed a real bug by measuring reach and never asking
@@ -156,7 +155,7 @@ fn four_units() -> Session {
 fn removing_a_unit_nothing_depends_on_rederives_the_suffix() {
     let mut session = four_units();
 
-    let redone = session.remove(1).expect("nothing reads `b`");
+    let redone = session.remove(1);
 
     assert_eq!(redone, BTreeSet::from([1, 2]), "C and D, at the indices they now have");
     assert_eq!(session.unit_count(), 3);
@@ -181,7 +180,7 @@ fn the_whole_suffix_is_rederived_not_just_the_reach() {
     let reach = graph.reach(1);
     assert_eq!(reach, BTreeSet::from([1]), "nothing after B reads what B provides");
 
-    let redone = session.remove(1).expect("nothing reads `b`");
+    let redone = session.remove(1);
 
     assert_eq!(redone, BTreeSet::from([1, 2]), "the suffix: both units after the splice");
     assert!(
@@ -196,7 +195,7 @@ fn the_whole_suffix_is_rederived_not_just_the_reach() {
 fn removing_the_last_unit_rederives_nothing() {
     let mut session = four_units();
 
-    let redone = session.remove(3).expect("nothing comes after D");
+    let redone = session.remove(3);
 
     assert_eq!(redone, BTreeSet::new(), "there is no suffix to re-derive");
     assert!(!session.has_binding("d"));
@@ -204,31 +203,30 @@ fn removing_the_last_unit_rederives_nothing() {
     assert_eq!(session.marks_run(&["A", "B", "C", "D"]), BTreeSet::new());
 }
 
-/// **Removing a unit a later unit depends on is rejected, and the session is
-/// unchanged and still usable.**
+/// **Removing a unit a later unit depends on leaves that unit failing, and in
+/// the session.**
 ///
-/// D reads `a`, so taking A out leaves D with nothing to resolve it to. A unit
-/// that fails to compile has no frame, and the numbering cannot have a hole in
-/// it, so the removal is put back whole. What is asserted is that the session
-/// still *computes*: the frame store was never touched, so nothing of it is
-/// half spliced.
+/// D reads `a`, so taking A out leaves D with nothing to resolve it to. D keeps
+/// the index it now has, with no frame and no bindings, and putting a unit
+/// that binds `a` back in front of it makes it compile and run again.
 #[test]
-fn removing_a_unit_a_later_unit_depends_on_is_rejected() {
+fn removing_a_unit_a_later_unit_depends_on_leaves_it_failing() {
     let mut session = four_units();
 
-    let errors = session.remove(0).expect_err("D reads `a`, which A provides");
+    let redone = session.remove(0);
 
-    assert!(!errors.is_empty(), "the suffix's errors are reported: {errors:?}");
-    assert!(
-        errors.iter().any(|error| error.contains('a')),
-        "the error is about the name that stopped resolving: {errors:?}",
-    );
-    assert_eq!(session.unit_count(), 4, "the unit list is as it was");
-    assert_eq!(session.binding("a"), "1");
+    assert_eq!(redone, BTreeSet::from([0, 1, 2]), "B, C and D, at the indices they now have");
+    assert_eq!(session.unit_count(), 3, "D is still in the session");
+    assert_eq!(session.failed(), vec![2], "D, which reads the `a` that went");
+    assert!(!session.has_binding("d"));
     assert_eq!(session.binding("b"), "2");
     assert_eq!(session.binding("c"), "30");
-    assert_eq!(session.binding("d"), "6");
+    assert_eq!(session.marks_run(&["A", "B", "C", "D"]), BTreeSet::from(["B", "C"]));
 
+    session.insert(0, &unit("A", "let a = 1"));
+
+    assert_eq!(session.failed(), Vec::<usize>::new(), "D compiles against the new `a`");
+    assert_eq!(session.binding("d"), "6");
     session.append(&unit("E", "let e = a + d"));
     assert_eq!(session.binding("e"), "7", "and the session still compiles new units");
 }
@@ -259,7 +257,7 @@ fn shadowing_units() -> Session {
 fn inserting_in_the_middle_rederives_the_suffix() {
     let mut session = shadowing_units();
 
-    let redone = session.insert(1, &unit("X", "let n = 5")).expect("the suffix compiles");
+    let redone = session.insert(1, &unit("X", "let n = 5"));
 
     assert_eq!(
         redone,
@@ -282,24 +280,24 @@ fn inserting_in_the_middle_rederives_the_suffix() {
 fn inserting_at_the_end_runs_only_the_new_unit() {
     let mut session = shadowing_units();
 
-    let redone = session.insert(4, &unit("X", "let x = n + 1")).expect("the suffix compiles");
+    let redone = session.insert(4, &unit("X", "let x = n + 1"));
 
     assert_eq!(redone, BTreeSet::from([4]), "there is no suffix after it");
     assert_eq!(session.binding("x"), "8", "which reads C's `n`");
     assert_eq!(session.marks_run(&["A", "B", "C", "D", "X"]), BTreeSet::from(["X"]));
 }
 
-/// **A unit that does not typecheck is rejected, and the session is unchanged.**
+/// **A unit that does not typecheck is inserted all the same, and provides
+/// nothing.**
 #[test]
-fn inserting_a_unit_that_does_not_typecheck_is_rejected() {
+fn inserting_a_unit_that_does_not_typecheck_keeps_it() {
     let mut session = shadowing_units();
 
-    let errors = session
-        .insert(1, &unit("X", "let x = n + \"five\""))
-        .expect_err("an int plus a string is a type error");
+    let redone = session.insert(1, &unit("X", "let x = n + \"five\""));
 
-    assert!(!errors.is_empty(), "the errors are reported: {errors:?}");
-    assert_eq!(session.unit_count(), 4, "the unit list is as it was");
+    assert_eq!(redone, BTreeSet::from([1, 2, 3, 4]), "X and the three that moved up");
+    assert_eq!(session.unit_count(), 5);
+    assert_eq!(session.failed(), vec![1], "X, and none of the units it moved up");
     assert!(!session.has_binding("x"));
     assert_eq!(session.binding("b"), "2");
     assert_eq!(session.binding("d"), "107");
@@ -308,46 +306,48 @@ fn inserting_a_unit_that_does_not_typecheck_is_rejected() {
     assert_eq!(session.binding("e"), "108", "and the session still compiles new units");
 }
 
-/// **A unit that compiles but breaks a later one is rejected too.**
+/// **A unit that compiles but breaks a later one leaves that one failing**, and
+/// fixing the inserted unit makes it run again.
 ///
-/// This is the half that exercises the put-back: the inserted unit is fine on
-/// its own, and B is what stops compiling, so the whole suffix has to be
-/// re-derived against the old list again before the session is handed back.
+/// The inserted unit is fine on its own; B is what stops compiling, at the
+/// index it now has. The fix is an edit like any other, and B is in its reach
+/// because it asks for the `n` the edit makes an int again.
 #[test]
-fn inserting_a_unit_that_breaks_a_later_unit_is_rejected() {
+fn inserting_a_unit_that_breaks_a_later_unit_leaves_that_unit_failing() {
     let mut session = shadowing_units();
 
-    let errors = session
-        .insert(1, &unit("X", "let n = \"five\""))
-        .expect_err("B would add 1 to a string");
+    session.insert(1, &unit("X", "let n = \"five\""));
 
-    assert!(
-        errors.iter().any(|error| error.starts_with("unit 2:")),
-        "B is the unit that failed, at the index it would have had: {errors:?}",
-    );
-    assert_eq!(session.unit_count(), 4);
-    assert_eq!(session.binding("b"), "2", "B is back to reading A's `n`");
+    assert_eq!(session.failed(), vec![2], "B, at the index it now has");
+    assert!(!session.has_binding("b"));
+    assert_eq!(session.binding("d"), "107", "C still shadows `n` for D");
+
+    session.edit(1, &unit("X", "let n = 5"));
+    let redone = session.rederive(1);
+
+    assert_eq!(redone, BTreeSet::from([1, 2]), "X, and B, which reads its `n`");
+    assert_eq!(session.failed(), Vec::<usize>::new());
+    assert_eq!(session.binding("b"), "6", "B ran against the fixed `n`");
     assert_eq!(session.binding("d"), "107");
-
-    session.append(&unit("E", "let e = b + d"));
-    assert_eq!(session.binding("e"), "109", "and the session still computes");
 }
 
-/// **A unit the session already failed to parse is not inserted at all.**
-///
-/// Parse errors are checked before anything is spliced, the way the appending
-/// path checks them before a unit joins the script.
+/// **A unit that does not parse is inserted too**, and is not typechecked: it
+/// provides nothing and asks for nothing until an edit makes it parse.
 #[test]
-fn inserting_a_unit_that_does_not_parse_is_rejected() {
+fn inserting_a_unit_that_does_not_parse_keeps_it() {
     let mut session = shadowing_units();
 
-    let errors = session
-        .insert(1, "let = = =\n")
-        .expect_err("that is not a statement");
+    session.insert(1, "let = = =\n");
 
-    assert!(!errors.is_empty(), "the parse errors are reported: {errors:?}");
-    assert_eq!(session.unit_count(), 4);
-    assert_eq!(session.binding("b"), "2");
+    assert_eq!(session.unit_count(), 5);
+    assert_eq!(session.failed(), vec![1]);
+    assert_eq!(session.binding("b"), "2", "B reads A's `n`, as if X were not there");
+
+    session.edit(1, &unit("X", "let n = 5"));
+    let redone = session.rederive(1);
+
+    assert_eq!(redone, BTreeSet::from([1, 2]), "X, and B, which asked for `n`");
+    assert_eq!(session.binding("b"), "6");
 }
 
 // ============================================================================
@@ -367,11 +367,11 @@ fn the_three_verbs_compose() {
     session.append(&unit("D", "let d = c + 1"));
     assert_eq!(session.binding("d"), "4");
 
-    session.insert(1, &unit("X", "let a = 10")).expect("the suffix compiles");
+    session.insert(1, &unit("X", "let a = 10"));
     assert_eq!(session.binding("d"), "13", "B, C and D ran again against `a` at 10");
     assert_eq!(session.frame_count(), 5);
 
-    session.remove(1).expect("nothing but B reads `a`, and A provides it again");
+    session.remove(1);
     assert_eq!(session.binding("d"), "4", "back to the values it started with");
     assert_eq!(session.frame_count(), 4);
 

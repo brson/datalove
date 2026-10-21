@@ -142,6 +142,27 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     pub imported_modules: Vec<String>,
 }
 
+/// Whether a unit's text parsed, as a fragment or as an expression.
+///
+/// **A unit that did not parse provides nothing** to the units after it:
+/// [`unit_provides`] answers for it without typechecking the partial tree the
+/// parser left, and a script session does not typecheck it at all. It is
+/// invisible to the units around it until an edit makes it parse.
+/// [`typecheck_script_unit`] itself still checks whatever tree it is given,
+/// which is what the typechecker's own tests of recovery from a broken parse
+/// rely on.
+#[salsa::tracked(returns(copy))]
+pub fn unit_parses<'db>(db: &'db dyn crate::Db, unit: ScriptUnit<'db>) -> bool {
+    let source = unit.source(db);
+    if unit.is_expr(db) {
+        datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(
+            db, source).is_empty()
+    } else {
+        datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(
+            db, source).is_empty()
+    }
+}
+
 /// One unit's parse, name resolution and spans.
 ///
 /// Keyed on the unit alone, because none of it depends on the units around it.
@@ -176,6 +197,9 @@ pub fn unit_provides<'db>(
     script: Script<'db>,
     env: ScriptEnv<'db>,
 ) -> UnitProvides<'db> {
+    if !unit_parses(db, script.unit(db)) {
+        return UnitProvides::default();
+    }
     let output = typecheck_script_unit(db, script, env);
     if !output.result(db).errors(db).is_empty() {
         return UnitProvides::default();

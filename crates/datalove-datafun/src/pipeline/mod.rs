@@ -72,7 +72,7 @@ pub use result::{
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
 pub use compiled_world::CompiledWorld;
 pub use script_compiler::{ScriptCompiler, ScriptSession};
-pub use script_executor::ScriptExecutor;
+pub use script_executor::{ScriptExecutor, UnitStatus};
 pub use module_pipeline::ModuleCompilationPipeline;
 pub use workspace::{
     WorkspaceDescriptor, WorkspaceDelta, SystemLibrary,

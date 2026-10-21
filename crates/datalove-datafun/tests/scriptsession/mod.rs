@@ -118,6 +118,10 @@ impl Session {
     }
 
     /// Compile one more unit on the end of the script, without running it.
+    ///
+    /// The unit stays whether or not it compiles. One that did not is given its
+    /// index in the executor here; one that did is the caller's to run, or to
+    /// take back off with [`Self::truncate`].
     pub fn compile_append(&mut self, text: &str) -> ScriptCompilationResult {
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
@@ -125,8 +129,9 @@ impl Session {
             .expect("a script compiler");
         let result = compiler.compile_fragment(text);
         self.script = Some(compiler.into_session());
-        if result.ir_unit.is_some() {
-            self.texts.push(text.S());
+        self.texts.push(text.S());
+        if result.ir_unit.is_none() {
+            self.executor.skip_unit();
         }
         result
     }
@@ -150,8 +155,9 @@ impl Session {
             .expect("a script compiler");
         let result = compiler.compile_expr(text);
         self.script = Some(compiler.into_session());
-        if result.ir_unit.is_some() {
-            self.texts.push(text.S());
+        self.texts.push(text.S());
+        if result.ir_unit.is_none() {
+            self.executor.skip_unit();
         }
         result
     }
@@ -224,34 +230,39 @@ impl Session {
     /// Splice the unit at `i` out and re-derive and re-execute the suffix.
     ///
     /// Returns the units re-derived, which a splice makes the whole suffix
-    /// rather than the reach: every one of their values changed identity. `Err`
-    /// is a rejected splice -- some unit of the suffix stopped compiling -- and
-    /// holds its errors, with the session left exactly as it was.
-    pub fn remove(&mut self, i: usize) -> Result<BTreeSet<usize>, Vec<String>> {
+    /// rather than the reach: every one of their values changed identity. A
+    /// unit of the suffix that stopped compiling stays, and [`Self::failed`]
+    /// says which did.
+    pub fn remove(&mut self, i: usize) -> BTreeSet<usize> {
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let spliced = compiler.remove_unit(i);
+        let redone = compiler.remove_unit(i);
         self.script = Some(compiler.into_session());
 
-        let redone = spliced?;
         self.texts.remove(i);
-        Ok(self.rerun_spliced(i, redone))
+        self.rerun_spliced(i, redone)
     }
 
     /// Splice a new fragment in at `i`, the other half of [`Self::remove`].
-    pub fn insert(&mut self, i: usize, text: &str) -> Result<BTreeSet<usize>, Vec<String>> {
+    pub fn insert(&mut self, i: usize, text: &str) -> BTreeSet<usize> {
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let spliced = compiler.insert_unit(i, text, false);
+        let redone = compiler.insert_unit(i, text, false);
         self.script = Some(compiler.into_session());
 
-        let redone = spliced?;
         self.texts.insert(i, text.S());
-        Ok(self.rerun_spliced(i, redone))
+        self.rerun_spliced(i, redone)
+    }
+
+    /// The units that did not run to their end, in index order.
+    pub fn failed(&self) -> Vec<usize> {
+        (0..self.unit_count())
+            .filter(|unit| *self.executor.unit_status(*unit) != datafun::pipeline::UnitStatus::Ran)
+            .collect()
     }
 
     /// Run a re-derived suffix as appends, which is what a splice needs.
@@ -270,16 +281,17 @@ impl Session {
 
         let mut order = Vec::new();
         for (index, result) in redone {
-            let ir_unit = result.ir_unit.as_ref().unwrap_or_else(|| {
-                panic!("a rejected splice is reported rather than run: unit {index}")
-            });
+            order.push(index);
+            let Some(ir_unit) = result.ir_unit.as_ref() else {
+                self.executor.skip_unit();
+                continue;
+            };
             let output = if is_expr[index] {
                 self.executor.execute_expr(ir_unit).1
             } else {
                 self.executor.execute_fragment(ir_unit)
             };
             assert!(!output.starts_with("Error:"), "running unit {index}: {output}");
-            order.push(index);
         }
 
         let mut sorted = order.clone();
@@ -375,6 +387,7 @@ impl Session {
             failed: Vec::new(),
         };
         for (index, output) in compiler.unit_typecheck_outputs().iter().enumerate() {
+            let output = output.unwrap_or_else(|| panic!("unit {index} does not parse"));
             graph.provides.push(
                 output.new_vars(db).iter().map(|(name, _, _)| name.as_str(db).S())
                     .chain(output.new_fns(db).iter().map(|(name, _)| name.as_str(db).S()))

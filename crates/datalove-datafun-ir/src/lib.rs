@@ -2592,6 +2592,15 @@ pub struct ScriptContext {
     /// Bindings exported to subsequent units.
     #[serde(default)]
     pub exports: Vec<(String, ExportBinding)>,
+    /// The unit's index in its script, which the script compiler stamps.
+    ///
+    /// **The one number the compiler and the executor have to agree on**: every
+    /// `(unit, id)` reference in a later unit was lowered against it, and the
+    /// executor puts the unit's frame at the index it has reached. A unit built
+    /// for anything but a script session -- a const expression, a test -- has
+    /// none.
+    #[serde(default)]
+    pub unit: Option<u32>,
 }
 
 /// Context for a native function implemented in Rust.
@@ -2764,6 +2773,48 @@ impl IrCodeUnit {
         match &mut self.context {
             CodeUnitContext::Script(ctx) => Some(ctx),
             _ => None,
+        }
+    }
+
+    /// The earlier script units this unit's code names, its functions' included.
+    ///
+    /// Every place a script unit can reach another: a value or slot it reads,
+    /// a slot it stores to or passes as an `out` argument, and a function it
+    /// calls. A unit that reads from a unit that did not run to its end cannot
+    /// run either, and this is how the executor knows.
+    pub fn script_units_read(&self) -> std::collections::BTreeSet<u32> {
+        let mut units = std::collections::BTreeSet::new();
+        self.collect_script_units_read(&mut units);
+        units
+    }
+
+    fn collect_script_units_read(&self, units: &mut std::collections::BTreeSet<u32>) {
+        let external = |op: &Operand| match op {
+            Operand::ExternalValue { unit, .. } | Operand::ExternalSlot { unit, .. } => Some(*unit),
+            Operand::Value(_) | Operand::ValueRef(_) | Operand::Slot(_) | Operand::Param(_) => None,
+        };
+        for block in &self.blocks {
+            for instr in &block.instructions {
+                instr.for_each_operand(|op| units.extend(external(op)));
+                match instr {
+                    Instruction::SlotStoreCopy { dest: SlotDest::External { unit, .. }, .. }
+                    | Instruction::SlotStoreCopyTracked { dest: SlotDest::External { unit, .. }, .. }
+                    | Instruction::SlotStoreMove { dest: SlotDest::External { unit, .. }, .. }
+                    | Instruction::SlotStoreMoveTracked { dest: SlotDest::External { unit, .. }, .. }
+                    | Instruction::SetField { slot: SlotDest::External { unit, .. }, .. }
+                    | Instruction::SetFieldTracked { slot: SlotDest::External { unit, .. }, .. } => {
+                        units.insert(*unit);
+                    }
+                    _ => {}
+                }
+                if let Some(CodeRef::External { unit, .. }) = instr.call_target() {
+                    units.insert(*unit);
+                }
+            }
+            block.terminator.for_each_operand(|op| units.extend(external(op)));
+        }
+        for nested in &self.nested_units {
+            nested.collect_script_units_read(units);
         }
     }
 
