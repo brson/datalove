@@ -98,7 +98,6 @@ let b_moved = b
 let c = a_moved /! b_moved
 
 debuglog c
-
 ```
 
 > Worlfiles are chunks of text delimited by headers bound between `---` lines.
@@ -112,6 +111,11 @@ indicating failure.
 Scripts and script units are allowed to return the type `!()`,
 "result of unit".
 
+In this example all three units compile and execute successfully.
+The third logs the value "10".
+Previous units both compile and execute prior to subsequent units,
+as the results of execution may affect which bindings are subsequently available.
+
 
 
 
@@ -120,9 +124,71 @@ Scripts and script units are allowed to return the type `!()`,
 
 ### How does one unit failing to compiler affect subsequent units?
 
-### How does one unit returning early affect subsequent units?
+Imagine our first script unit doesn't compile.
+No recompilation yet.
+This is as originally written.
+
+```datalove
+---
+script-unit
+---
+
+let a = 1000
+let x = y // `y` doesn't exist
+
+---
+script-unit
+---
+
+let b = 100
+
+---
+script-unit
+---
+
+let a_moved = a
+let b_moved = b
+let c = a_moved /! b_moved
+
+debuglog c
+```
+
+The first unit will fail in name resolution with an error.
+The second will compile successfully because it references no bindings in the first.
+_The second unit will then run_,
+creating the binding `b` and making it available to subsequent units.
+The third will fail to compile because the binding `a` does not exist,
+as the unit that creates it failed to compile.
+
+So in the first compile/run pass where the first unit failed:
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | fail       | no    |
+| 2    | success    | yes   |
+| 3    | fail       | no    |
+
+Imagine we fix the first unit's compilation error.
+That allows the first and third units to both compile and run.
+But we need to completely skip the second unit because it already did both
+and has no dependencies on the first.
+
+In the second pass after editing:
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | success    | yes   |
+| 2    | no         | no    |
+| 3    | success    | yes   |
+
+
+### How is re-execution affected when subsequent units consume bindings from the re-executed unit?
+
 
 ### How is re-execution affected when subsequent units mutate the re-executed unit?
 
+
+
+### How does one unit returning early affect subsequent units?
 
 
