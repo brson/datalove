@@ -178,27 +178,35 @@ creating the binding `b` and making it available to subsequent units.
 The third will fail to compile because the binding `a` does not exist,
 as the unit that creates it failed to compile.
 
-So in the first compile/run pass where the first unit failed
-(the columns say what happened to each unit in this pass):
+Each step below is a table with a row per unit:
+its code, joined into one line,
+what it does to bindings of earlier units, and which unit made them,
+what happened to it in this step,
+why,
+and what its own bindings hold once the step is over,
+with `-` for nothing.
+Each step is caused by the unit whose "because" says "edited".
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | fail       | no    |
-| 2    | success    | yes   |
-| 3    | fail       | no    |
+**Step 1: all three units are entered, unit 1 broken.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000; let x = y` | - | compile fails | new | - |
+| 2 | `let b = 100` | - | compiles, runs | new | `b` = 100 |
+| 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | compile fails | `a` is unbound: unit 1 failed | - |
 
 Imagine we fix the first unit's compilation error.
 That allows the first and third units to both compile and run.
 But we need to completely skip the second unit because it already did both
 and has no dependencies on the first.
 
-In the second pass after editing:
+**Step 2: unit 1 is fixed.**
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | success    | yes   |
-| 2    | no         | no    |
-| 3    | success    | yes   |
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` moved |
+| 2 | `let b = 100` | - | untouched | uses nothing of unit 1's | `b` moved |
+| 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
 
 After this second pass, because unit 3 ran,
 it moved `a` and `b` out of the frames of units 1 and 2, into its own.
@@ -208,11 +216,13 @@ Unit 3 depends on unit 1, so it recompiles and fails, and doesn't reexecute.
 Unit 2 doesn't depend on unit 1,
 so naively it neither recompiles nor reexecutes.
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | fail       | no    |
-| 2    | no         | no    |
-| 3    | fail       | no    |
+**Step 3, naively: unit 1 is broken again.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
+| 2 | `let b = 100` | - | untouched | uses nothing of unit 1's | `b` moved, though nothing took it |
+| 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 
 But that's wrong.
 
@@ -267,11 +277,13 @@ We have to recognize that unit 3 moved a binding out of unit 2,
 and that anything that undoes or redoes unit 3 has to build the binding again,
 by rerunning unit 2.
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | fail       | no    |
-| 2    | no         | yes   |
-| 3    | fail       | no    |
+**Step 3: unit 1 is broken again.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
+| 2 | `let b = 100` | - | reruns | rewind: unit 3 took `b` when it last ran, and is undone | `b` = 100 |
+| 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 
 The rule is in terms of what unit 3 did _the last time it ran_,
 not what it does now.
@@ -283,11 +295,13 @@ unit 2 has nothing to do:
 `b` is already as unit 2 made it,
 and unit 3 moves it again.
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | success    | yes   |
-| 2    | no         | no    |
-| 3    | success    | yes   |
+**Step 4: unit 1 is fixed again.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` moved |
+| 2 | `let b = 100` | - | untouched | `b` is as unit 2 made it | `b` moved |
+| 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
 
 
 
@@ -325,20 +339,24 @@ Doubling is not idempotent:
 running it twice is not the same as running it once.
 On first run it mutates `b` from 125 to 250 and logs the value "4".
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | success    | yes   |
-| 2    | success    | yes   |
-| 3    | success    | yes   |
+**Step 1: all three units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
+| 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
+| 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | compiles, runs | new | `c` = 4 |
 
 At this point unit 2's frame contains the mutated `b`, 250.
 Imagine in the second run we cause the first unit to fail as previously.
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | fail       | no    |
-| 2    | no         | no    |
-| 3    | fail       | no    |
+**Step 2, naively: unit 1 is broken.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
+| 2 | `var b = 125` | - | untouched | uses nothing of unit 1's | `b` = 250, though nothing doubled it |
+| 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 
 Unit 3 failed to compile because it depends on unit 1.
 Naively unit 2 is untouched because it doesn't.
@@ -346,11 +364,13 @@ But like with the move, unit 3 wrote to `b` the last time it ran,
 and now it can't have,
 so we need to rerun unit 2 to put `b` back to 125.
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | fail       | no    |
-| 2    | no         | yes   |
-| 3    | fail       | no    |
+**Step 2: unit 1 is broken.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
+| 2 | `var b = 125` | - | reruns | rewind: unit 3 updated `b` when it last ran, and is undone | `b` = 125 |
+| 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 
 Now if we fix unit 1,
 unit 3 runs against `b` as unit 2 made it,
@@ -360,11 +380,13 @@ unit 3 would have doubled the 250 it left behind last time,
 to 500,
 and logged "2".
 
-| unit | compiled   | ran   |
-|------|------------|-------|
-| 1    | success    | yes   |
-| 2    | no         | no    |
-| 3    | success    | yes   |
+**Step 3: unit 1 is fixed.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` = 1000 |
+| 2 | `var b = 125` | - | untouched | `b` is as unit 2 made it | `b` = 250 |
+| 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | recompiles, runs | reads `a` from unit 1 | `c` = 4 |
 
 The analysis is essentially the same,
 but instead of a dependency on move operations
