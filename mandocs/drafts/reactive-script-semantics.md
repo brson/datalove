@@ -35,6 +35,16 @@ Let's figure it out.
 - [How does one unit failing to compile affect subsequent units?](#user-content-how-does-one-unit-failing-to-compile-affect-subsequent-units)
 - [How is re-execution affected when subsequent units consume bindings from the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-consume-bindings-from-the-re-executed-unit)
 - [How is re-execution affected when subsequent units mutate the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-mutate-the-re-executed-unit)
+- How is re-execution affected when subsequent units both read and mutate the re-executed unit?
+- Hypothesis: an algebra of rewind and replay for moves and mutations
+- What if a unit reads a binding prior to a unit moving it?
+- What if a unit reads a binding prior to a unit mutating it?
+- Multiple units moving values cause transitive re-execution.
+- What if an edit removes a move?
+- What if an edit removes a mutation?
+- What if a unit deletion removes a move?
+- What if a unit deletion removes a mutation?
+- How this interacts with loops and control flow.
 - [How does one unit returning early affect subsequent units?](#user-content-how-does-one-unit-returning-early-affect-subsequent-units)
 
 
@@ -357,6 +367,24 @@ The analysis is essentially the same,
 but instead of a dependency on move operations
 we have a dependency on writes:
 `set`, and passing a binding to a `mut` or `out` parameter.
+
+
+
+
+## Hypothesis: an algebra of rewind and replay for moves vs. mutations
+
+
+On recompilation each unit has an effect on both previous
+and subsequent units based on its moves and mutations against _its_ previous units.
+
+A unit may impose:
+
+_Undo_ on previos units if it moves or mutates their value.
+_Replay_ itself.
+_Forward_ bindings to subsequent units.
+
+Need to conceptualize this clearly.
+
 
 
 
