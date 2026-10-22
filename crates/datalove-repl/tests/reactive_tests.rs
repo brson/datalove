@@ -19,6 +19,7 @@
 //! | Header | Content |
 //! |--------|---------|
 //! | `expect <title>` | The step table: `unit`, `uses`, `this step`, `because`, `holds after` |
+//! | `expect Step 2, ...: <title>` | The same, called something other than `Step N` |
 //! | `engine` | Rows where the engine is conservative: `unit`, `this step`, `note` |
 //! | `scriptunit-edit <unit>` | The unit's new source |
 //! | `scriptunit-delete <unit>` | Nothing |
@@ -64,6 +65,9 @@ struct Fixture {
 }
 
 struct Step {
+    /// What the document calls the step, when not `Step N`: an `expect`
+    /// header that starts with `Step` names it up to the first `: `.
+    label: Option<String>,
     title: String,
     change: Change,
     expect: Vec<Row>,
@@ -169,7 +173,12 @@ fn parse_fixture(path: &Path) -> Fixture {
                         Row { unit, uses, this_step, because, holds_after }
                     })
                     .collect();
-                steps.push(Step { title: args.join(" "), change, expect, engine: Vec::new() });
+                let header = args.join(" ");
+                let (label, title) = match header.split_once(": ") {
+                    Some((label, title)) if label.starts_with("Step ") => (Some(label.S()), title.S()),
+                    _ => (None, header),
+                };
+                steps.push(Step { label, title, change, expect, engine: Vec::new() });
             }
             "engine" => {
                 let step = steps.last_mut().unwrap_or_else(|| panic!("{name}: an `engine` table before any step"));
@@ -661,7 +670,8 @@ fn render_step(fixture: &Fixture, number: usize) -> String {
     let source = |unit: &str| sources.iter().find(|(name, _)| name == unit).map(|(_, source)| one_line(source)).X();
 
     let mut out = String::new();
-    writeln!(out, "**Step {number}: {}.**", step.title).X();
+    let label = step.label.C().unwrap_or_else(|| fmt!("Step {number}"));
+    writeln!(out, "**{label}: {}.**", step.title).X();
     writeln!(out).X();
     writeln!(out, "| unit | code | uses from earlier units | this step | because | holds after |").X();
     writeln!(out, "|------|------|-------------------------|-----------|---------|-------------|").X();

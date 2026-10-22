@@ -1,0 +1,43 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! 10
+
+----------
+scriptunit-fragment
+----------
+
+let a_moved = a
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` moved |
+| 2 | reads `a` (1) | compiles, runs | new | `c` = 100 |
+| 3 | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
+
+----------
+scriptunit-edit 2
+----------
+
+let c = a /! 100
+
+----------
+expect unit 2 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rewind: unit 2 reads `a`, which unit 3 took after it | `a` moved |
+| 2 | reads `a` (1) | recompiles, runs | edited | `c` = 10 |
+| 3 | takes `a` (1) | reruns | replay: takes `a` from unit 1, which reran | `a_moved` = 1000 |

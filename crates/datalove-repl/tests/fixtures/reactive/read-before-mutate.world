@@ -1,0 +1,51 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! b
+
+----------
+scriptunit-fragment
+----------
+
+set b = b * 2
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 1000 |
+| 2 | - | compiles, runs | new | `b` = 250 |
+| 3 | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+| 4 | updates `b` (2) | compiles, runs | new | - |
+
+----------
+scriptunit-edit 3
+----------
+
+let c = (a /! b) * 2
+
+----------
+expect unit 3 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | - | reruns | rewind: unit 3 reads `b`, which unit 4 updated after it | `b` = 250 |
+| 3 | reads `a` (1), reads `b` (2) | recompiles, runs | edited | `c` = 16 |
+| 4 | updates `b` (2) | reruns | replay: updates `b` from unit 2, which reran | - |

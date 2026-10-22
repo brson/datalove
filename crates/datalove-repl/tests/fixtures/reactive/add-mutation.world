@@ -1,0 +1,68 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let d = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! b
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 1000 |
+| 2 | - | compiles, runs | new | `b` = 125 |
+| 3 | reads `b` (2) | compiles, runs | new | `d` = 250 |
+| 4 | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = b * 2
+
+----------
+expect unit 3 is edited to update `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | - | untouched | `b` is as unit 2 made it | `b` = 250 |
+| 3 | updates `b` (2) | recompiles, runs | edited | - |
+| 4 | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which now updates it | `c` = 4 |
+
+----------
+scriptunit-edit 3
+----------
+
+let d = b * 2
+
+----------
+expect unit 3 is edited back to read `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | - | reruns | rewind: unit 3 updated `b` when it last ran, and the edit undoes that | `b` = 125 |
+| 3 | reads `b` (2) | recompiles, runs | edited | `d` = 250 |
+| 4 | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 8 |

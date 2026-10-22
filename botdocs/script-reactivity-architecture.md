@@ -202,14 +202,27 @@ units and returns a `Splice` like the others. A splice does not skip readers:
 it re-executes from the rewind point as appends, so every unit from the
 provider on runs again.
 
-A write counts the same in the reach whether it reads the binding first or
-not, so a unit that only overwrites a `var` rewinds to it when it is redone,
-which it does not need to. The record does tell the two apart:
-`UnitLowerRecord::overwritten` is the part of `written` the unit writes on
-every way through it before reading what the binding held, early returns
-included. Ownership analysis decides it with the machinery that checks an `out`
-parameter is written, an earlier unit's `var` starting out "not yet replaced".
-The reach does not use it yet; see `mandocs/drafts/reactive-script-semantics.md`.
+**Overwrites need less.** `UnitLowerRecord::overwritten` is the part of
+`written` the unit writes on every way through it before reading what the
+binding held, early returns included. Ownership analysis decides it with the
+machinery that checks an `out` parameter is written, an earlier unit's `var`
+starting out "not yet replaced". The back rule uses it twice:
+
+- A reached unit that overwrites a binding needs nothing of what it held, so
+  it does not reach back for it at all.
+- What builds a binding as a unit finds it is the nearest unit before it that
+  sets it without reading it -- its provider, or an overwrite after that. If
+  that unit is reached anyway, nothing more is needed; if not, it is the one
+  rewound, not the provider. So a rewind runs from the last overwrite rather
+  than from where the `var` was made.
+
+The records the reach reads are the units' current ones, so an edit that makes
+a unit overwrite what it used to update shrinks the reach once the unit is
+compiled. `rederive_reach` takes the reach again until it settles, either way.
+The splices do not use any of this yet: `rewind_point` still starts at the
+provider. A revival, a write to a binding that was given away, is not an
+overwrite here, so undoing one reruns the provider where emptying the binding
+would do; see `mandocs/drafts/reactive-script-semantics.md`.
 
 This is rewind and replay, and it is what makes the reach sound without
 copying anything. The cost is running the provider again, which may be the

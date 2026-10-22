@@ -1,0 +1,95 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let d = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! b
+
+----------
+scriptunit-fragment
+----------
+
+set b = b + 1
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 1000 |
+| 2 | - | compiles, runs | new | `b` = 126 |
+| 3 | reads `b` (2) | compiles, runs | new | `d` = 250 |
+| 4 | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+| 5 | updates `b` (2) | compiles, runs | new | - |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = b * 2
+
+----------
+expect unit 3 is edited to update `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | - | reruns | rewind: unit 3 updates `b`, which unit 5 updated after it | `b` = 251 |
+| 3 | updates `b` (2) | recompiles, runs | edited | - |
+| 4 | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which now updates it | `c` = 4 |
+| 5 | updates `b` (2) | reruns | replay: updates `b` from unit 2, which reran | - |
+
+----------
+scriptunit-edit 3
+----------
+
+let d = b * 2
+
+----------
+expect unit 3 is edited back to read `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | - | reruns | rewind: unit 3 updated `b` when it last ran, and the edit undoes that | `b` = 126 |
+| 3 | reads `b` (2) | recompiles, runs | edited | `d` = 250 |
+| 4 | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 8 |
+| 5 | updates `b` (2) | reruns | replay: updates `b` from unit 2, which reran | - |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = 500
+
+----------
+expect unit 3 is edited to overwrite `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | - | untouched | unit 3 overwrites `b` without reading it | `b` = 501 |
+| 3 | overwrites `b` (2) | recompiles, runs | edited | - |
+| 4 | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which now writes 500 | `c` = 2 |
+| 5 | updates `b` (2) | reruns | replay: updates `b` from unit 3, which reran | - |

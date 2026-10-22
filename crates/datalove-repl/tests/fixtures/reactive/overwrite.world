@@ -1,0 +1,78 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+set b = 500
+let c = a /! b
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 1000 |
+| 2 | - | compiles, runs | new | `b` = 500 |
+| 3 | reads `a` (1), overwrites `b` (2) | compiles, runs | new | `c` = 2 |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = 250
+let c = a /! b
+
+----------
+expect unit 3 is edited to write 250
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing it uses changed | `a` = 1000 |
+| 2 | - | untouched | unit 3 overwrites `b` without reading it | `b` = 250 |
+| 3 | reads `a` (1), overwrites `b` (2) | recompiles, runs | edited | `c` = 4 |
+
+----------
+scriptunit-edit 1
+----------
+
+let a = 1000
+let x = y
+
+----------
+expect unit 1 is broken
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompile fails | edited | - |
+| 2 | - | reruns | rewind: unit 3 overwrote `b` when it last ran, and is undone | `b` = 125 |
+| 3 | reads `a` (1), overwrites `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
+
+----------
+scriptunit-edit 1
+----------
+
+let a = 1000
+
+----------
+expect unit 1 is fixed
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `a` = 1000 |
+| 2 | - | untouched | unit 3 overwrites `b` without reading it | `b` = 250 |
+| 3 | reads `a` (1), overwrites `b` (2) | recompiles, runs | reads `a` from unit 1 | `c` = 4 |

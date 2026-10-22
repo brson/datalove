@@ -654,24 +654,29 @@ impl<'db> ScriptCompiler<'db> {
     /// unit is compiled, and a unit that now takes or writes something reaches
     /// the units after it that use it. So the reach is taken, its units are
     /// compiled, and the reach is taken again with what they now do, until it
-    /// stops growing. What the units did before the edit is held from the
+    /// settles. What the units did before the edit is held from the
     /// start, being what the running session went through.
     fn rederive_reach(&mut self, seeds: BTreeSet<usize>) -> Vec<(usize, ScriptCompilationResult)> {
         let held = self.held_graph();
         let mut changed = held.changed.clone();
-        loop {
+        for _ in 0..=self.unit_records.len() {
             let units = self.reach_from(&seeds, &held, &changed);
             let results = self.rederive(units.clone());
-            let mut grew = false;
             for (unit, record) in self.unit_records.iter().enumerate() {
                 for name in record.taken.iter().chain(&record.written) {
-                    grew |= changed[unit].insert(name.C());
+                    changed[unit].insert(name.C());
                 }
             }
-            if !grew || self.reach_from(&seeds, &held, &changed) == units {
+            // What the units do now can shrink the reach as well as grow it:
+            // an edit that makes a unit overwrite what it updated needs no
+            // rewind, which only its new record says. The results are for the
+            // reach as it settles; a unit compiled on the way and left out of
+            // it compiled to what it was.
+            if self.reach_from(&seeds, &held, &changed) == units {
                 return results;
             }
         }
+        panic!("the reach of an edit did not settle");
     }
 
     /// The units whose imports resolve into one of `edited`.
@@ -752,6 +757,14 @@ impl<'db> ScriptCompiler<'db> {
             (0..unit).rev().find(|earlier| provides[*earlier].contains(name))
         };
 
+        // The nearest unit before `unit` that set the binding `name` without
+        // reading it, as the units do now.
+        let setter = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| {
+                provides[*earlier].contains(name) || self.unit_records[*earlier].overwritten.contains(name)
+            })
+        };
+
         // The unit the binding `name` is as a unit at `unit` finds it: the
         // nearest earlier one that provided, took or wrote it.
         let source = |unit: usize, name: &String| {
@@ -783,14 +796,26 @@ impl<'db> ScriptCompiler<'db> {
                     let Some(source) = provider(unit, name) else {
                         continue;
                     };
-                    if reached(source) {
+                    // What builds the binding as this unit finds it is the
+                    // nearest unit before it that sets it without reading it:
+                    // its provider, or an overwrite after that. Running that
+                    // one again is enough, and if it runs anyway, nothing is
+                    // needed.
+                    let setter = setter(unit, name).expect("a binding with a provider has a setter");
+                    if reached(setter) {
+                        continue;
+                    }
+                    // A unit that overwrites the binding needs nothing of what
+                    // it held, so it does not matter what changed it. The
+                    // units after it that changed it are replayed from it.
+                    if self.unit_records[unit].overwritten.contains(name) {
                         continue;
                     }
                     let since = (unit..count)
                         .take_while(|later| provider(*later, name) == Some(source))
                         .any(|later| held.changed[later].contains(name));
                     if since {
-                        added |= rewound.insert(source);
+                        added |= rewound.insert(setter);
                     }
                 }
             }

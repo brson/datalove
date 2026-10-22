@@ -1,0 +1,60 @@
+----------
+scriptunit-fragment
+----------
+
+var b = 1
+
+----------
+scriptunit-fragment
+----------
+
+var z = 10
+
+----------
+scriptunit-fragment
+----------
+
+set b = 500
+set z = z + 1
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+
+----------
+scriptunit-fragment
+----------
+
+set b = 0
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 0 |
+| 2 | - | compiles, runs | new | `z` = 11 |
+| 3 | overwrites `b` (1), updates `z` (2) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 501 |
+| 5 | overwrites `b` (1) | compiles, runs | new | - |
+
+----------
+scriptunit-edit 4
+----------
+
+let c = b + 2
+
+----------
+expect unit 4 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 3 overwrites `b` after it | `b` = 0 |
+| 2 | - | reruns | rerun: unit 3 reruns and updates `z`, so `z` has to be as unit 3 first found it | `z` = 11 |
+| 3 | overwrites `b` (1), updates `z` (2) | reruns | rerun: unit 4 reads `b`, which unit 5 overwrote after it, and unit 3 is the nearest to set it | - |
+| 4 | reads `b` (1) | recompiles, runs | edited | `c` = 502 |
+| 5 | overwrites `b` (1) | reruns | rerun: overwrites `b` after unit 4 | - |

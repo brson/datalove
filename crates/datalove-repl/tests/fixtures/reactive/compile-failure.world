@@ -1,0 +1,79 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+let x = y // `y` doesn't exist
+
+----------
+scriptunit-fragment
+----------
+
+let b = 100
+
+----------
+scriptunit-fragment
+----------
+
+let a_moved = a
+let b_moved = b
+let c = a_moved /! b_moved
+
+----------
+expect all three units are entered, unit 1 broken
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compile fails | new | - |
+| 2 | - | compiles, runs | new | `b` = 100 |
+| 3 | takes `a` (1), takes `b` (2) | compile fails | `a` is unbound: unit 1 failed | - |
+
+----------
+scriptunit-edit 1
+----------
+
+let a = 1000
+
+----------
+expect unit 1 is fixed
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `a` moved |
+| 2 | - | untouched | uses nothing of unit 1's | `b` moved |
+| 3 | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
+
+----------
+scriptunit-edit 1
+----------
+
+let a = 1000
+let x = y
+
+----------
+expect unit 1 is broken again
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompile fails | edited | - |
+| 2 | - | reruns | rewind: unit 3 took `b` when it last ran, and is undone | `b` = 100 |
+| 3 | takes `a` (1), takes `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
+
+----------
+scriptunit-edit 1
+----------
+
+let a = 1000
+
+----------
+expect unit 1 is fixed again
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `a` moved |
+| 2 | - | untouched | `b` is as unit 2 made it | `b` moved |
+| 3 | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |

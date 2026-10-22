@@ -149,6 +149,7 @@ Imagine our first script unit doesn't compile.
 No recompilation yet.
 This is as originally written.
 
+<!-- world compile-failure code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -171,6 +172,7 @@ let a_moved = a
 let b_moved = b
 let c = a_moved /! b_moved
 ```
+<!-- end world -->
 
 The first unit will fail in name resolution with an error.
 The second will compile successfully because it references no bindings in the first.
@@ -188,6 +190,7 @@ and what its own bindings hold once the step is over,
 with `-` for nothing.
 Each step is caused by the unit whose "because" says "edited".
 
+<!-- world compile-failure step 1 -->
 **Step 1: all three units are entered, unit 1 broken.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -195,12 +198,14 @@ Each step is caused by the unit whose "because" says "edited".
 | 1 | `let a = 1000; let x = y` | - | compile fails | new | - |
 | 2 | `let b = 100` | - | compiles, runs | new | `b` = 100 |
 | 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | compile fails | `a` is unbound: unit 1 failed | - |
+<!-- end world -->
 
 Imagine we fix the first unit's compilation error.
 That allows the first and third units to both compile and run.
 But we need to completely skip the second unit because it already did both
 and has no dependencies on the first.
 
+<!-- world compile-failure step 2 -->
 **Step 2: unit 1 is fixed.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -208,6 +213,7 @@ and has no dependencies on the first.
 | 1 | `let a = 1000` | - | recompiles, runs | edited | `a` moved |
 | 2 | `let b = 100` | - | untouched | uses nothing of unit 1's | `b` moved |
 | 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
+<!-- end world -->
 
 After this second pass, because unit 3 ran,
 it moved `a` and `b` out of the frames of units 1 and 2, into its own.
@@ -276,6 +282,7 @@ We have to recognize that unit 3 moved a binding out of unit 2,
 and that anything that undoes or redoes unit 3 has to build the binding again,
 by rerunning unit 2.
 
+<!-- world compile-failure step 3 -->
 **Step 3: unit 1 is broken again.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -283,6 +290,7 @@ by rerunning unit 2.
 | 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
 | 2 | `let b = 100` | - | reruns | rewind: unit 3 took `b` when it last ran, and is undone | `b` = 100 |
 | 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
+<!-- end world -->
 
 The rule is in terms of what unit 3 did _the last time it ran_,
 not what it does now.
@@ -294,6 +302,7 @@ unit 2 has nothing to do:
 `b` is already as unit 2 made it,
 and unit 3 moves it again.
 
+<!-- world compile-failure step 4 -->
 **Step 4: unit 1 is fixed again.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -301,6 +310,7 @@ and unit 3 moves it again.
 | 1 | `let a = 1000` | - | recompiles, runs | edited | `a` moved |
 | 2 | `let b = 100` | - | untouched | `b` is as unit 2 made it | `b` moved |
 | 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
+<!-- end world -->
 
 
 
@@ -310,6 +320,7 @@ and unit 3 moves it again.
 Here's a new variation on our running example
 that mutates instead of moves.
 
+<!-- world mutate-earlier code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -330,12 +341,14 @@ scriptunit-fragment
 set b = b * 2
 let c = a /! b
 ```
+<!-- end world -->
 
 The third unit doubles `b` in place.
 Doubling is not idempotent:
 running it twice is not the same as running it once.
 On first run it mutates `b` from 125 to 250, and `c` is 4.
 
+<!-- world mutate-earlier step 1 -->
 **Step 1: all three units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -343,6 +356,7 @@ On first run it mutates `b` from 125 to 250, and `c` is 4.
 | 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
 | 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
 | 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | compiles, runs | new | `c` = 4 |
+<!-- end world -->
 
 At this point unit 2's frame contains the mutated `b`, 250.
 Imagine in the second run we cause the first unit to fail as previously.
@@ -361,6 +375,7 @@ But like with the move, unit 3 wrote to `b` the last time it ran,
 and now it can't have,
 so we need to rerun unit 2 to put `b` back to 125.
 
+<!-- world mutate-earlier step 2 -->
 **Step 2: unit 1 is broken.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -368,6 +383,7 @@ so we need to rerun unit 2 to put `b` back to 125.
 | 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
 | 2 | `var b = 125` | - | reruns | rewind: unit 3 updated `b` when it last ran, and is undone | `b` = 125 |
 | 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
+<!-- end world -->
 
 Now if we fix unit 1,
 unit 3 runs against `b` as unit 2 made it,
@@ -377,6 +393,7 @@ unit 3 would have doubled the 250 it left behind last time,
 to 500,
 and `c` would have been 2.
 
+<!-- world mutate-earlier step 3 -->
 **Step 3: unit 1 is fixed.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -384,6 +401,7 @@ and `c` would have been 2.
 | 1 | `let a = 1000` | - | recompiles, runs | edited | `a` = 1000 |
 | 2 | `var b = 125` | - | untouched | `b` is as unit 2 made it | `b` = 250 |
 | 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | recompiles, runs | reads `a` from unit 1 | `c` = 4 |
+<!-- end world -->
 
 The analysis is essentially the same,
 but instead of a dependency on move operations
@@ -400,6 +418,7 @@ so running the write again starting from its own result gives the wrong answer.
 But not every write reads.
 Here unit 3 just replaces `b`:
 
+<!-- world overwrite code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -420,9 +439,11 @@ scriptunit-fragment
 set b = 500
 let c = a /! b
 ```
+<!-- end world -->
 
 On first run unit 3 replaces 125 with 500, and `c` is 2.
 
+<!-- world overwrite step 1 -->
 **Step 1: all three units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -430,6 +451,7 @@ On first run unit 3 replaces 125 with 500, and `c` is 2.
 | 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
 | 2 | `var b = 125` | - | compiles, runs | new | `b` = 500 |
 | 3 | `set b = 500; let c = a /! b` | reads `a` (1), overwrites `b` (2) | compiles, runs | new | `c` = 2 |
+<!-- end world -->
 
 Now edit unit 3 to write a different value.
 Unit 3 has to rerun, and it writes `b` again.
@@ -438,6 +460,7 @@ so it doesn't matter that `b` is still the 500 that unit 3 left last time.
 Unit 2 can be left alone,
 which is where an overwrite differs from an update.
 
+<!-- world overwrite step 2 -->
 **Step 2: unit 3 is edited to write 250.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -445,6 +468,7 @@ which is where an overwrite differs from an update.
 | 1 | `let a = 1000` | - | untouched | nothing it uses changed | `a` = 1000 |
 | 2 | `var b = 125` | - | untouched | unit 3 overwrites `b` without reading it | `b` = 250 |
 | 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompiles, runs | edited | `c` = 4 |
+<!-- end world -->
 
 Undoing the overwrite is a different story.
 Break unit 1 and unit 3 stops compiling,
@@ -454,6 +478,7 @@ Nothing but unit 2 knows how to make that 125,
 so it reruns,
 exactly as it did for the move and for the update.
 
+<!-- world overwrite step 3 -->
 **Step 3: unit 1 is broken.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -461,10 +486,12 @@ exactly as it did for the move and for the update.
 | 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
 | 2 | `var b = 125` | - | reruns | rewind: unit 3 overwrote `b` when it last ran, and is undone | `b` = 125 |
 | 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
+<!-- end world -->
 
 And fixing unit 1 reruns unit 3,
 which overwrites `b` again without anything to undo first.
 
+<!-- world overwrite step 4 -->
 **Step 4: unit 1 is fixed.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -472,6 +499,7 @@ which overwrites `b` again without anything to undo first.
 | 1 | `let a = 1000` | - | recompiles, runs | edited | `a` = 1000 |
 | 2 | `var b = 125` | - | untouched | unit 3 overwrites `b` without reading it | `b` = 250 |
 | 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompiles, runs | reads `a` from unit 1 | `c` = 4 |
+<!-- end world -->
 
 So writes come in two kinds.
 An _update_ reads the binding first,
@@ -479,11 +507,6 @@ and like a move it needs the binding rebuilt both to undo it and to redo it.
 An _overwrite_ doesn't read it,
 and needs the binding rebuilt only to undo it.
 
-<!--
-Note: Datalove's engine today doesn't make this distinction.
-It treats every write like an update, so in step 2 it reruns unit 2 as well.
-Correct, but more than necessary. A candidate for the last section.
--->
 
 
 
@@ -539,13 +562,9 @@ Moves and mutations agree on undo,
 and disagree on redo and on what they pass forward.
 
 <!--
-Note: the engine today treats take, overwrite and update all like take,
-so it rewinds to redo an overwrite. Otherwise it follows this table:
-a read rewinds only when the reader or a unit after it took or wrote the
-binding, and a rewind replays only the units that took or wrote what it
-rebuilt, not the readers. The splices (delete, insert, truncate) still
-rerun every unit from the rewind point on. A candidate for the last
-section.
+Note: the engine follows this table for edits, overwrites included.
+It treats a revival like an update, and the splices (delete, insert,
+truncate) rerun every unit from the rewind point on.
 -->
 
 
@@ -557,6 +576,7 @@ So far the unit being redone was the one doing the moving.
 But a unit that only reads can be caught out too,
 if the binding it reads was taken _after_ it ran.
 
+<!-- world read-before-move code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -576,9 +596,11 @@ scriptunit-fragment
 
 let a_moved = a
 ```
+<!-- end world -->
 
 Unit 2 borrows `a`, and unit 3 takes it.
 
+<!-- world read-before-move step 1 -->
 **Step 1: all three units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -586,6 +608,7 @@ Unit 2 borrows `a`, and unit 3 takes it.
 | 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
 | 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
 | 3 | `let a_moved = a` | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
+<!-- end world -->
 
 Now edit unit 2.
 It reads `a`, which is empty:
@@ -597,6 +620,7 @@ And once unit 1 has rerun,
 unit 3 has to take the new `a`,
 or `a` will be left holding a value nothing took.
 
+<!-- world read-before-move step 2 -->
 **Step 2: unit 2 is edited.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -604,6 +628,7 @@ or `a` will be left holding a value nothing took.
 | 1 | `let a = 1000` | - | reruns | rewind: unit 2 reads `a`, which unit 3 took after it | `a` moved |
 | 2 | `let c = a /! 100` | reads `a` (1) | recompiles, runs | edited | `c` = 10 |
 | 3 | `let a_moved = a` | takes `a` (1) | reruns | replay: takes `a` from unit 1, which reran | `a_moved` = 1000 |
+<!-- end world -->
 
 So a read can need a rewind as much as a move can.
 What matters is not what the edited unit does to `a`,
@@ -618,6 +643,7 @@ affects which units need to be redone.
 
 The same goes for a mutation after the read.
 
+<!-- world read-before-mutate code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -643,10 +669,12 @@ scriptunit-fragment
 
 set b = b * 2
 ```
+<!-- end world -->
 
 Unit 3 reads `b` as 125, so `c` is 8.
 Then unit 4 doubles `b` to 250.
 
+<!-- world read-before-mutate step 1 -->
 **Step 1: all four units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -655,6 +683,7 @@ Then unit 4 doubles `b` to 250.
 | 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
 | 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
 | 4 | `set b = b * 2` | updates `b` (2) | compiles, runs | new | - |
+<!-- end world -->
 
 Edit unit 3 to double its result.
 Rerun on its own it would read the 250 that unit 4 left
@@ -663,6 +692,7 @@ So unit 2 reruns to put `b` back to 125,
 unit 3 runs against that,
 and unit 4 doubles `b` again.
 
+<!-- world read-before-mutate step 2 -->
 **Step 2: unit 3 is edited.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -671,6 +701,7 @@ and unit 4 doubles `b` again.
 | 2 | `var b = 125` | - | reruns | rewind: unit 3 reads `b`, which unit 4 updated after it | `b` = 250 |
 | 3 | `let c = (a /! b) * 2` | reads `a` (1), reads `b` (2) | recompiles, runs | edited | `c` = 16 |
 | 4 | `set b = b * 2` | updates `b` (2) | reruns | replay: updates `b` from unit 2, which reran | - |
+<!-- end world -->
 
 Here it doesn't matter what kind of write unit 4 makes.
 Had it been an overwrite, `set b = 500`,
@@ -690,6 +721,7 @@ so unit 1 is left alone.
 
 Swap units 3 and 4, so the write comes first.
 
+<!-- world read-after-mutate code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -715,7 +747,9 @@ scriptunit-fragment
 
 let c = a /! b
 ```
+<!-- end world -->
 
+<!-- world read-after-mutate step 1 -->
 **Step 1: all four units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -724,12 +758,14 @@ let c = a /! b
 | 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
 | 3 | `set b = b * 2` | updates `b` (2) | compiles, runs | new | - |
 | 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 4 |
+<!-- end world -->
 
 Now unit 4 reads `b` after the write,
 and the `b` it reads is the one unit 3 left.
 That's still what's there,
 so editing unit 4 needs nothing else rerun.
 
+<!-- world read-after-mutate step 2 -->
 **Step 2: unit 4 is edited.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -738,6 +774,7 @@ so editing unit 4 needs nothing else rerun.
 | 2 | `var b = 125` | - | untouched | `b` is as unit 4 first saw it | `b` = 250 |
 | 3 | `set b = b * 2` | updates `b` (2) | untouched | unit 4 reads after it | - |
 | 4 | `let c = (a /! b) * 2` | reads `a` (1), reads `b` (2) | recompiles, runs | edited | `c` = 8 |
+<!-- end world -->
 
 A write passes its value forward,
 and a unit after it depends on it the way it would on a `let`.
@@ -754,10 +791,6 @@ A reader needs a rewind only if the binding was changed
 _after_ the reader last ran.
 Changes before it are just what it read.
 
-<!--
-Note: the engine today matches this, rerunning only unit 4, in the D013
-case too.
--->
 
 
 
@@ -776,6 +809,7 @@ The bindings the old code touched need what the undo rules ask for,
 and the bindings the new code touches need what the redo rules ask for.
 Forward, the units after it see the difference between the two.
 
+<!-- world add-move code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -801,9 +835,11 @@ scriptunit-fragment
 
 let e = a + 2
 ```
+<!-- end world -->
 
 Three units read `a`, and nothing takes it.
 
+<!-- world add-move step 1 -->
 **Step 1: all four units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -812,6 +848,7 @@ Three units read `a`, and nothing takes it.
 | 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
 | 3 | `let d = a + 1` | reads `a` (1) | compiles, runs | new | `d` = 1001 |
 | 4 | `let e = a + 2` | reads `a` (1) | compiles, runs | new | `e` = 1002 |
+<!-- end world -->
 
 Now edit unit 3 to take `a` instead of reading it.
 The old code only read `a`, so there is nothing to undo.
@@ -835,6 +872,7 @@ but it no longer compiles:
 error[D013]: `a` was given away by an earlier input
 ```
 
+<!-- world add-move step 2 -->
 **Step 2: unit 3 is edited to take `a`.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -843,6 +881,7 @@ error[D013]: `a` was given away by an earlier input
 | 2 | `let c = a /! 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 100 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a + 2` | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |
+<!-- end world -->
 
 Unit 2 is untouched too.
 It reads `a` before the take,
@@ -856,6 +895,7 @@ The new code reads `a`, which is now there to read.
 And unit 4 can name `a` again,
 so it recompiles and runs.
 
+<!-- world add-move step 3 -->
 **Step 3: unit 3 is edited back to read `a`.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -863,7 +903,8 @@ so it recompiles and runs.
 | 1 | `let a = 1000` | - | reruns | rewind: unit 3 took `a` when it last ran, and the edit undoes that | `a` = 1000 |
 | 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
 | 3 | `let d = a + 1` | reads `a` (1) | recompiles, runs | edited | `d` = 1001 |
-| 4 | `let e = a + 2` | reads `a` (1) | recompiles, runs | `a` can be named again | `e` = 1002 |
+| 4 | `let e = a + 2` | reads `a` (1) | reruns | `a` can be named again, as it could in step 1, whose compile is still memoized | `e` = 1002 |
+<!-- end world -->
 
 Adding the move and removing it are not mirror images.
 Adding it cost nothing backward and broke a unit forward.
@@ -874,6 +915,7 @@ if something after it already took the binding.
 Make unit 4 `let e = a`, so it is the one that takes `a`,
 and then edit unit 3 to take it instead.
 
+<!-- world add-move-later-take step 2 -->
 **Step 2, with unit 4 taking `a`: unit 3 is edited to take `a`.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -882,6 +924,7 @@ and then edit unit 3 to take it instead.
 | 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a` | takes `a` (1) | recompile fails | `a` was given away by unit 3 | - |
+<!-- end world -->
 
 The take has moved from unit 4 to unit 3.
 The rewind is not because of anything unit 3 did.
@@ -891,9 +934,6 @@ The redo rule holds if it is read that way:
 a take needs a rewind when the binding is not as its maker left it,
 and that is usually, but not always, because the unit took it itself.
 
-<!--
-Note: the engine today matches all three steps and the variant.
--->
 
 
 
@@ -904,6 +944,7 @@ A move added or removed changes which names the units after it can use.
 A mutation doesn't change any names.
 It changes values.
 
+<!-- world add-mutation code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -929,10 +970,12 @@ scriptunit-fragment
 
 let c = a /! b
 ```
+<!-- end world -->
 
 Unit 3 reads `b` and doubles it into a binding of its own.
 Unit 4 reads `b` as 125, so `c` is 8.
 
+<!-- world add-mutation step 1 -->
 **Step 1: all four units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -941,6 +984,7 @@ Unit 4 reads `b` as 125, so `c` is 8.
 | 2 | `var b = 125` | - | compiles, runs | new | `b` = 125 |
 | 3 | `let d = b * 2` | reads `b` (2) | compiles, runs | new | `d` = 250 |
 | 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+<!-- end world -->
 
 Now edit unit 3 to double `b` in place.
 As with the added move, nothing needs to be undone,
@@ -958,6 +1002,7 @@ But the `b` it reads is now the one unit 3 left,
 so it has to rerun,
 and `c` becomes 4.
 
+<!-- world add-mutation step 2 -->
 **Step 2: unit 3 is edited to update `b`.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -966,6 +1011,7 @@ and `c` becomes 4.
 | 2 | `var b = 125` | - | untouched | `b` is as unit 2 made it | `b` = 250 |
 | 3 | `set b = b * 2` | updates `b` (2) | recompiles, runs | edited | - |
 | 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which now updates it | `c` = 4 |
+<!-- end world -->
 
 Now edit unit 3 back to a read.
 The old code updated `b`,
@@ -982,6 +1028,7 @@ from the 250 unit 3 left
 back to the 125 unit 2 made.
 That's the forward rule.
 
+<!-- world add-mutation step 3 -->
 **Step 3: unit 3 is edited back to read `b`.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -990,6 +1037,7 @@ That's the forward rule.
 | 2 | `var b = 125` | - | reruns | rewind: unit 3 updated `b` when it last ran, and the edit undoes that | `b` = 125 |
 | 3 | `let d = b * 2` | reads `b` (2) | recompiles, runs | edited | `d` = 250 |
 | 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 8 |
+<!-- end world -->
 
 An overwrite in place of the update, `set b = 500`,
 reruns the same units in both steps.
@@ -1017,11 +1065,8 @@ a write to each binding.
 Their code alone doesn't tell it.
 
 <!--
-Note: the engine today matches steps 2 and 3, rerunning units 3 and 4,
-then units 2, 3 and 4.
-With the fifth unit, it rewinds to unit 2 for the added overwrite as well
-as the added update, because it treats every write like an update.
-Same gap as noted under the overwrite section.
+Note: the fifth-unit case is checked against the engine too, in
+`crates/datalove-repl/tests/fixtures/reactive/add-mutation-later-write.world`.
 -->
 
 
@@ -1481,14 +1526,14 @@ A forward rerun of a unit that takes or writes
 is an undo and a redo of the same code, and cascades the same way.
 
 <!--
-Note: the engine today differs from this section in four places.
-It treats overwrites and revivals like updates, so it reruns to redo an
-overwrite and to undo a revival, where a fixup would do.
-It always starts a rerun at the unit that made the binding, never at a
-nearer overwrite (`reach_from` and `rewind_point` in
-`crates/datalove-datafun/src/pipeline/script_compiler.rs`).
-And the splices, delete among them, rerun every unit from the rerun point
-on, readers included, because a value is identified by its unit's index.
+Note: the engine today differs from this section in two places.
+It treats a revival like an update, so it reruns to undo one where a
+fixup would do.
+And the splices, delete among them, start a rerun at the unit that made
+the binding rather than a nearer overwrite (`rewind_point` in
+`crates/datalove-datafun/src/pipeline/script_compiler.rs`), and rerun
+every unit from there on, readers included, because a value is identified
+by its unit's index.
 -->
 
 

@@ -1,0 +1,51 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! 10
+
+----------
+scriptunit-fragment
+----------
+
+let d = a + 1
+
+----------
+scriptunit-fragment
+----------
+
+let e = a
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` moved |
+| 2 | reads `a` (1) | compiles, runs | new | `c` = 100 |
+| 3 | reads `a` (1) | compiles, runs | new | `d` = 1001 |
+| 4 | takes `a` (1) | compiles, runs | new | `e` = 1000 |
+
+----------
+scriptunit-edit 3
+----------
+
+let d = a
+
+----------
+expect Step 2, with unit 4 taking `a`: unit 3 is edited to take `a`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rewind: unit 3 takes `a`, which unit 4 took after it | `a` moved |
+| 2 | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
+| 3 | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
+| 4 | takes `a` (1) | recompile fails | `a` was given away by unit 3 | - |

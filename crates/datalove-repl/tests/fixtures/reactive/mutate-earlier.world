@@ -1,0 +1,61 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+set b = b * 2
+let c = a /! b
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 1000 |
+| 2 | - | compiles, runs | new | `b` = 250 |
+| 3 | reads `a` (1), updates `b` (2) | compiles, runs | new | `c` = 4 |
+
+----------
+scriptunit-edit 1
+----------
+
+let a = 1000
+let x = y
+
+----------
+expect unit 1 is broken
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompile fails | edited | - |
+| 2 | - | reruns | rewind: unit 3 updated `b` when it last ran, and is undone | `b` = 125 |
+| 3 | reads `a` (1), updates `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
+
+----------
+scriptunit-edit 1
+----------
+
+let a = 1000
+
+----------
+expect unit 1 is fixed
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `a` = 1000 |
+| 2 | - | untouched | `b` is as unit 2 made it | `b` = 250 |
+| 3 | reads `a` (1), updates `b` (2) | recompiles, runs | reads `a` from unit 1 | `c` = 4 |
