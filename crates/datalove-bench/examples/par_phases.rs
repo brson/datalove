@@ -8,6 +8,7 @@
 //! Scratch tool. `cargo run --release -p datalove-bench --example par_phases -- [iterations]`.
 
 use datalove_datafun_compiler::instances::GenericsPolicy;
+use datalove_datafun_compiler::module_graph::ModuleIdTable;
 use rmx::prelude::*;
 
 use datalove_datafun as datafun;
@@ -32,11 +33,12 @@ fn one(modules: &[(String, String)], riders: &[(String, String)], mode: Parallel
     let deps = extract_dependencies_with_mode(&world, &db, &Roots::All, mode);
     let (graph, rr) = world.build_graph(&db, deps, &Roots::All);
     d[0] = t.elapsed();
-    let riders = riders.iter()
+    let riders: Vec<_> = riders.iter()
         .map(|(n, s)| (n.clone(), bct::input::Source::new(&db, s.clone())))
         .collect();
+    let module_ids = ModuleIdTable::numbering(&db, riders.iter().map(|(n, _)| n), graph);
     let t = Instant::now();
-    let parsed = parse_phase(&db, mode, graph, rr, riders);
+    let parsed = parse_phase(&db, mode, graph, rr, riders, module_ids);
     d[1] = t.elapsed();
     let t = Instant::now();
     let names = resolve_phase(&db, mode, parsed);

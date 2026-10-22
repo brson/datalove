@@ -8,6 +8,7 @@ use rmx::std::collections::HashMap;
 use rmx::std::hash::Hash;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{FunHead, FunParam, FunSignature};
+pub use datalove_datafun_common::ModuleIdTable;
 
 // Re-export core module graph types from bct.
 pub use bct::module_graph::{
@@ -36,12 +37,32 @@ pub use datalove_datafun_parser::{parse_module_ast, parse_module_full, module_sp
 ///
 /// This is the salsa-tracked implementation that handles caching. Use
 /// `parse_module_graph_parallel` for parallel execution when you have a `&dyn Db`.
+///
+/// The modules are numbered for this graph alone, which is right for a
+/// compile done once. A pipeline that compiles again as its module set changes
+/// keeps a numbering across compiles, and gives it to
+/// [`parse_module_graph_with_ids`].
 #[salsa::tracked(returns(copy))]
 pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph<'db>,
     resolved_requires_str: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, bct::input::Source)>,
+) -> ParsedModuleGraph<'db> {
+    let module_ids = ModuleIdTable::numbering(
+        db, rider_sources.iter().map(|(name, _)| name.as_str()), graph);
+    parse_module_graph_with_ids(db, graph, resolved_requires_str, rider_sources, module_ids)
+}
+
+/// The same, with the modules numbered by `module_ids`, which has a number
+/// for every one of them.
+#[salsa::tracked(returns(copy))]
+pub fn parse_module_graph_with_ids<'db>(
+    db: &'db dyn salsa::Database,
+    graph: ModuleGraph<'db>,
+    resolved_requires_str: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+    rider_sources: Vec<(String, bct::input::Source)>,
+    module_ids: ModuleIdTable<'db>,
 ) -> ParsedModuleGraph<'db> {
     // Convert String aliases to InternedText.
     let resolved_requires: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>> =
@@ -58,7 +79,7 @@ pub fn parse_module_graph<'db>(
     // where salsa tracked struct creation (TypeFunction) is allowed.
     let resolved_riders = build_resolved_riders_from_sources(db, graph, &rider_sources);
 
-    ParsedModuleGraph::new(db, graph, resolved_requires, resolved_riders)
+    ParsedModuleGraph::new(db, graph, resolved_requires, resolved_riders, module_ids)
 }
 
 /// What each generic native declares about its type parameters.
@@ -175,7 +196,7 @@ fn rider_interfaces<'db>(
         let parse_result = datalove_datafun_parser::parse_rider_interface(db, *source);
         let collected = check_rider_interface(db, *source);
         let rider_name = InternedText::new(db, name.clone());
-        let rider_path = format!("@rider/{}", name);
+        let rider_path = datalove_datafun_common::rider_module_path(name);
         let module_id = ModuleId::new(db, rider_path);
         let generic_functions = generic_natives(
             db, parse_result.parsed.statements(db), &collected.functions);
@@ -1056,7 +1077,7 @@ mod tests {
         ]);
 
         // First parallel parse populates cache.
-        let _parsed1 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new());
+        let _parsed1 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph.clone()));
 
         // Record which queries executed during first parse.
         let first_executed = db.executed_queries();
@@ -1070,7 +1091,7 @@ mod tests {
         db.clear_events();
 
         // Second parse should be fully memoized.
-        let _parsed2 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new());
+        let _parsed2 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph.clone()));
 
         let second_executed = db.executed_queries();
         // Filter to just parse_module_full queries (not input lookups).

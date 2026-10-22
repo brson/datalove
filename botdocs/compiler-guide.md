@@ -683,8 +683,8 @@ How it flows through the pipeline:
   `ParsedModuleGraph::resolved_riders`.
 - Each distinct alias gets a synthetic `ModuleId` with path `@rider/{alias}`,
   created once in `build_resolved_riders_from_sources` and shared by every
-  module that requires it. `compute_func_id_map` assigns rider functions
-  `IrModuleId`s after the regular modules.
+  module that requires it. Its `IrModuleId` is the one the pipeline's
+  `ModuleIdTable` gives that path, and riders are numbered before any module.
 - The typechecker resolves imports from riders in
   `resolve_module_imports_internal`.
 - `add_native_rider_units` registers an `IrCodeUnit` per rider function whose
@@ -1001,7 +1001,7 @@ pub struct ParamId(pub u32);    // Function parameter
 pub struct BlockId(pub u32);    // Control flow block
 pub struct FuncId(pub u32);     // Module-local function ID
 pub struct CodeUnitId(pub u32); // Code unit, local to its containing scope
-pub struct IrModuleId(pub u32); // Module index (not salsa ModuleId)
+pub struct IrModuleId(pub u32); // Module number, by path (not salsa ModuleId)
 ```
 
 `CodeUnitId` is the unified addressing scheme that replaced `FuncId` inside the
@@ -1871,12 +1871,13 @@ asked to be compiled, and a library module they do not use is not.
 does not resolve, because pruning on a program whose requires are wrong would
 drop the module the diagnostic is about.
 
-The REPL stays at `All` because narrowing it looks like a net loss. Its module
-set is fixed for the session, compiled once at startup, and each line compiles
-against it. Narrowing would save that startup compile once and then re-lower
-everything reachable on every line that adds a `require`, since modules are
-numbered by their place in the graph and an inserted module renumbers what
-follows it. See issues.md for the numbering.
+The REPL stays at `All` for now. Its module set is fixed for the session,
+compiled once at startup, and each line compiles against it. Narrowing it
+means changing the roots as lines add `require`s, which the numbering allows:
+a pipeline numbers each module by path, once, for its whole life (see
+`ModuleIdTable` in `crates/datalove-datafun-common/src/lib.rs`), so a module
+joining the graph moves no other module's number and leaves the units already
+lowered calling the modules they named.
 
 ### Workspaces
 

@@ -113,7 +113,7 @@ look at each module; they must not look at each function.
 |---|---|---|
 | `parse_module_graph` | compiler | `ParsedModuleGraph`: statements and resolved requires per module |
 | `resolve_all_names` | resolve | the per-module name resolutions, gathered |
-| `ir_module_ids` | compiler | every module's `IrModuleId`, riders numbered first. The one place that decides one |
+| `ir_module_ids` | compiler | every module's `IrModuleId`, read from the graph's `ModuleIdTable`, which numbers by path. The one place that decides one |
 | `rider_interfaces` | compiler | each rider's signatures and the statement behind each native, keyed on an interned `RiderSources` |
 | `compute_func_id_map` | compiler | `FuncIdMap`: every function's `(IrModuleId, FuncId)` |
 | `func_id_lookup` | compiler | the same as a lookup map, memoized so it is built once per revision rather than once per const |

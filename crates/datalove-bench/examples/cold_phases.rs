@@ -15,6 +15,7 @@
 //! Scratch tool. `cargo run --release -p datalove-bench --example cold_phases -- [iterations]`.
 
 use datalove_datafun_compiler::instances::GenericsPolicy;
+use datalove_datafun_compiler::module_graph::ModuleIdTable;
 use rmx::prelude::*;
 
 use datalove_datafun as datafun;
@@ -61,7 +62,11 @@ fn one_cold_compile(
     let t = Instant::now();
     let output = compile_modules(
         &db,
-        ModuleCompilationInput { graph, resolved_requires },
+        ModuleCompilationInput {
+            graph,
+            resolved_requires,
+            module_ids: ModuleIdTable::numbering(&db, rider_sources.iter().map(|(name, _)| name), graph),
+        },
         rider_sources.iter()
             .map(|(name, text)| (name.clone(), bct::input::Source::new(&db, text.clone())))
             .collect(),

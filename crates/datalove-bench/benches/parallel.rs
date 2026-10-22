@@ -1,6 +1,7 @@
 //! Benchmarks for parallel vs sequential compilation phases.
 
 use datalove_datafun_compiler::instances::GenericsPolicy;
+use datalove_datafun_compiler::module_graph::ModuleIdTable;
 use bct::lookup::LookupMap;
 use bct::input::Source;
 use bct::module_graph::ModuleGraphBuilder;
@@ -38,6 +39,7 @@ fn verify_generated_source_compiles() {
     let input = ModuleCompilationInput {
         graph,
         resolved_requires: LookupMap::new(),
+        module_ids: ModuleIdTable::numbering(&db, Vec::<String>::new(), graph),
     };
     let output = compile_modules(&db, input, Vec::new(), ParallelMode::Sequential);
     if output.is_successful() {
@@ -244,7 +246,7 @@ fn parse_sequential(bencher: divan::Bencher) {
         })
         .bench_local_values(|(db, srcs)| {
             let graph = setup_graph(&db, &srcs);
-            let result = parse_phase(&db, ParallelMode::Sequential, graph, LookupMap::new(), Vec::new());
+            let result = parse_phase(&db, ParallelMode::Sequential, graph, LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph));
             let _ = divan::black_box(result);
         });
 }
@@ -260,7 +262,7 @@ fn parse_parallel(bencher: divan::Bencher) {
         })
         .bench_local_values(|(db, srcs)| {
             let graph = setup_graph(&db, &srcs);
-            let result = parse_phase(&db, ParallelMode::Parallel, graph, LookupMap::new(), Vec::new());
+            let result = parse_phase(&db, ParallelMode::Parallel, graph, LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph));
             let _ = divan::black_box(result);
         });
 }

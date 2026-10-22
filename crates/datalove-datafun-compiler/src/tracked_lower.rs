@@ -208,46 +208,40 @@ fn reachable_func_ids<'db>(
 
 /// The `IrModuleId` of every module the program has, riders included.
 ///
-/// **The riders come first, and that is the whole point.** They used to be
-/// numbered after the regular modules -- `rider_module_idx =
-/// regular_module_count` -- so adding or removing any module anywhere shifted
-/// every rider's id. Every module's `reachable_func_ids` keeps every rider
-/// entry, riders being the entries the graph does not account for, so every
-/// module's `ReachableFuncIds` moved; that re-keyed `lower_module_functions` for
-/// all of them and re-minted the `ModuleLowered` handles the rest of phase 5 is
-/// keyed on. A module appearing anywhere re-lowered and re-assembled the whole
-/// world. Numbered first, a rider's id depends on the rider sources alone.
+/// **The numbers come from the graph's [`ModuleIdTable`](datalove_datafun_common::ModuleIdTable), not from where a
+/// module sits in the graph.** They used to be positions -- riders first, then
+/// the graph in dependency order -- and a module joining the graph moved every
+/// module after it. A script unit lowered before the move kept calling by the
+/// old number, and nothing re-lowers a unit whose own text did not change, so
+/// the call landed on another module's function, or on memory that was none.
+/// A pipeline keeps its table for its life and only adds to it, so a module's
+/// number stays its own while the module set grows and shrinks around it.
 ///
-/// **This is the one place that decides, and it is worth keeping that way.**
-/// Four other places used to derive the same numbering from a position in the
-/// graph, and all four had to agree with this one for a call to land on the
-/// function it named.
-///
-/// Riders are ordered by their synthetic path, which comes from the rider's
-/// name and so from its source. Ordering them by `ModuleId` would compare
-/// salsa ids, which is interning order.
+/// **This is the one place that reads the numbering, and it is worth keeping
+/// that way.** Four other places used to derive the same numbering from a
+/// position in the graph, and all four had to agree with this one for a call
+/// to land on the function it named.
 #[salsa::tracked(returns(ref))]
 pub fn ir_module_ids<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> LookupMap<ModuleId<'db>, IrModuleId> {
-    let mut riders_by_path: BTreeMap<String, ModuleId<'db>> = BTreeMap::new();
-    for riders in parsed_graph.resolved_riders(db).values_unordered() {
-        for (_alias, rider) in riders {
-            riders_by_path.insert(rider.module_id.path(db).clone(), rider.module_id);
-        }
-    }
+    let table = parsed_graph.module_ids(db).ids(db);
+    let number = |module_id: ModuleId<'db>| {
+        let path = module_id.path(db);
+        let id = table.get(path)
+            .unwrap_or_else(|| panic!("module `{path}` was compiled without being numbered"));
+        IrModuleId(*id)
+    };
 
     let mut ids = LookupMap::new();
-    let mut next = 0u32;
-    for rider_module_id in riders_by_path.into_values() {
-        ids.insert(rider_module_id, IrModuleId(next));
-        next += 1;
+    for riders in parsed_graph.resolved_riders(db).values_unordered() {
+        for (_alias, rider) in riders {
+            ids.insert(rider.module_id, number(rider.module_id));
+        }
     }
-    let graph = parsed_graph.graph(db);
-    for module in graph.iter_modules(db) {
-        ids.insert(module.id(db), IrModuleId(next));
-        next += 1;
+    for module in parsed_graph.graph(db).iter_modules(db) {
+        ids.insert(module.id(db), number(module.id(db)));
     }
     ids
 }

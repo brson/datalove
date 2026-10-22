@@ -47,6 +47,7 @@ pub fn unit_letter(index: usize) -> char {
 }
 
 /// A module, as the pipeline names one.
+#[derive(Clone, Copy)]
 pub struct Module<'a> {
     pub library: &'a str,
     pub package: &'a str,

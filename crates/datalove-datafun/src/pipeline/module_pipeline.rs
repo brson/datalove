@@ -36,7 +36,8 @@ use datalove_datafun_ir::CtfeEvaluator;
 use datalove_datafun_compiler::const_cache::{ConstCache, ConstCacheReport};
 use datalove_datafun_interp::{InterpCtfeEvaluator, NativeResolver};
 use datalove_datafun_tycheck::{DbClone, ParallelMode, parallel_mode_from_env};
-use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleId};
+use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleId, ModuleIdTable};
+use datalove_datafun_common::number_modules;
 use datalove_datafun_interp::ModuleFunctionRegistry;
 use datalove_datafun_ir::ModuleCodeUnits;
 
@@ -78,6 +79,12 @@ pub struct ModuleCompilationPipeline {
     /// Keyed on what the modules say; what the natives do is not in that, so
     /// setting them empties it. See `const_cache`.
     const_cache: ConstCache,
+    /// The number each module's IR has been given, by path, for the life of
+    /// the pipeline.
+    ///
+    /// Only ever added to, so a module keeps its number while roots and edits
+    /// change which modules a compile reaches; see `ModuleIdTable`.
+    module_ids: BTreeMap<String, u32>,
 }
 
 impl ModuleCompilationPipeline {
@@ -91,6 +98,7 @@ impl ModuleCompilationPipeline {
             roots: Roots::All,
             natives: None,
             const_cache: ConstCache::default(),
+            module_ids: BTreeMap::new(),
         }
     }
 
@@ -447,7 +455,10 @@ impl ModuleCompilationPipeline {
         let path_deps = extract_dependencies_with_mode(&self.world, db, &self.roots, mode);
         let (module_graph, resolved_requires) =
             self.world.build_graph(db.as_salsa_db(), &path_deps, &self.roots);
-        self.compile_impl(db, module_graph, resolved_requires, mode, evaluator)
+        let rider_names = self.rider_sources.iter().map(|(name, _)| name.as_str());
+        number_modules(db.as_salsa_db(), &mut self.module_ids, rider_names, module_graph);
+        let module_ids = ModuleIdTable::new(db.as_salsa_db(), self.module_ids.clone());
+        self.compile_impl(db, module_graph, resolved_requires, module_ids, mode, evaluator)
     }
 
     /// Internal compilation implementation.
@@ -460,6 +471,7 @@ impl ModuleCompilationPipeline {
         db: &'db dyn DbClone,
         module_graph: ModuleGraph<'db>,
         resolved_requires: bct::lookup::LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+        module_ids: ModuleIdTable<'db>,
         mode: ParallelMode,
         evaluator: &mut dyn CtfeEvaluator,
     ) -> CompiledModules<'db> {
@@ -467,6 +479,7 @@ impl ModuleCompilationPipeline {
         let input = ModuleCompilationInput {
             graph: module_graph,
             resolved_requires,
+            module_ids,
         };
         let riders = self.rider_inputs(db.as_salsa_db());
         let output = compiler_compile_modules(db, input, riders, mode);

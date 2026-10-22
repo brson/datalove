@@ -229,6 +229,17 @@ the pipeline already had.
 Five derivations of one numbering is five chances to disagree, and the numbering
 being positional is what let a change at one end of the world move the other.
 
+It was still positional after that, and the cost turned out to be correctness,
+not only recompilation. A lowered script unit calls into a module by its
+`IrModuleId`, and nothing re-lowers a unit whose own text did not change, so a
+module joining the graph ahead of another sent the unit's calls to whichever
+module now had the number: the wrong function's answer, or a read of memory
+that was no value. So the numbers are no longer derived from the graph at all.
+The pipeline keeps a `ModuleIdTable`, path to number, for its whole life,
+numbering riders first and then each new module as it first appears, and never
+reusing or taking back a number. `ir_module_ids` still decides, by reading
+that table. `crates/datalove-datafun/tests/module_id_tests.rs` holds the cases.
+
 No salsa struct is `Ord`, for the reason in the determinism section: the only
 order salsa could give one is its id, and ids are not the same between
 compiles.
@@ -277,7 +288,7 @@ key and the entity re-runs for an edit it cannot see.
 |---|---|---|
 | `resolve_module_imports` | `AllModuleExports` | per-module export lookup |
 | the rider stubs | `ParsedModuleGraph` | `rider_interfaces`, keyed on `RiderSources` |
-| rider `IrModuleId`s | the module's graph position | `ir_module_ids`, riders numbered first |
+| `IrModuleId`s | the module's graph position | `ir_module_ids`, reading the pipeline's `ModuleIdTable` |
 | script units | `accumulated` diagnostics | per-unit reads |
 | script lowering | `accumulated_lower_bindings` | `UnitLowerRecord` folded per position |
 | `typecheck_script_unit` | `ScriptEnv` over `Vec<ModuleSpec>` | `Vec<Module>` plus `script_module_spec` |

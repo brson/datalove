@@ -412,7 +412,8 @@ typechecking is lazy. Ask the units directly when the question is about validity
   **This is the third time positional identity has been the constraint** --
   `IrModuleId` numbered by graph position, script `unit_index`, and now this. The
   standing answer is the same each time: derive the id from something content- or
-  name-shaped rather than from a position, and the renumbering goes away.
+  name-shaped rather than from a position, and the renumbering goes away. For
+  `IrModuleId` it has: a pipeline numbers modules by path, once, for its life.
 
 - **A unit that returns early keeps what it did to earlier units.** A `set`
   or an `out` argument writes into an earlier unit's frame, and a move takes

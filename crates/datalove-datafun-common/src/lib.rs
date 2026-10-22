@@ -3,6 +3,8 @@
 //! Contains types used by both name resolution and typechecking phases:
 //! Type, TypeFunction, TypeError, ParsedModuleGraph, and related utilities.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use bct::lookup::LookupMap;
 use bct::text::InternedText;
 use bct::module_graph::ModuleId;
@@ -188,6 +190,66 @@ pub struct ParsedModuleGraph<'db> {
     #[tracked]
     #[returns(ref)]
     pub resolved_riders: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>>,
+
+    /// The number each module's IR is known by; see [`ModuleIdTable`].
+    #[tracked]
+    pub module_ids: ModuleIdTable<'db>,
+}
+
+/// The number each module's IR is known by, by its path.
+///
+/// **A number, once given, is never given to another module or taken back.**
+/// A lowered script unit calls into a module by its number, and nothing
+/// re-lowers that unit when the module set around it changes, so a numbering
+/// that moved with the graph sent the call to whichever module had the number
+/// now -- a different module's function, or memory that was none. A pipeline
+/// keeps one table for its life and only adds to it; a one-off compile gets a
+/// table of its own from [`ModuleIdTable::numbering`].
+///
+/// The numbers are `IrModuleId`s, which this crate does not know about.
+#[salsa::interned]
+pub struct ModuleIdTable<'db> {
+    #[returns(ref)]
+    pub ids: BTreeMap<String, u32>,
+}
+
+impl<'db> ModuleIdTable<'db> {
+    /// The table a compile of these riders and this graph starts from.
+    pub fn numbering(
+        db: &'db dyn Db,
+        rider_names: impl IntoIterator<Item = impl AsRef<str>>,
+        graph: bct::module_graph::ModuleGraph<'db>,
+    ) -> ModuleIdTable<'db> {
+        let mut ids = BTreeMap::new();
+        number_modules(db, &mut ids, rider_names, graph);
+        ModuleIdTable::new(db, ids)
+    }
+}
+
+/// The path a rider's module is known by.
+pub fn rider_module_path(name: &str) -> String {
+    format!("@rider/{name}")
+}
+
+/// Give a number to each of these modules that does not have one yet.
+///
+/// **The riders come first, ordered by path.** The set of riders is the
+/// workspace's and does not move with the graph, so numbered first, their
+/// numbers are the same whatever modules a compile reaches. The graph's
+/// modules follow in dependency order.
+pub fn number_modules<'db>(
+    db: &'db dyn Db,
+    ids: &mut BTreeMap<String, u32>,
+    rider_names: impl IntoIterator<Item = impl AsRef<str>>,
+    graph: bct::module_graph::ModuleGraph<'db>,
+) {
+    let riders: BTreeSet<String> =
+        rider_names.into_iter().map(|name| rider_module_path(name.as_ref())).collect();
+    let modules = graph.iter_modules(db).map(|module| module.id(db).path(db).clone());
+    for path in riders.into_iter().chain(modules) {
+        let next = u32::try_from(ids.len()).expect("fewer than 2^32 modules");
+        ids.entry(path).or_insert(next);
+    }
 }
 
 impl<'db> ParsedModuleGraph<'db> {

@@ -46,7 +46,6 @@ home here.
   - [The allocator maps a page per large block and keeps every small page](#user-content-the-allocator-maps-a-page-per-large-block-and-keeps-every-small-page)
 
 - [Compilation pipeline and incrementality](#user-content-compilation-pipeline-and-incrementality)
-  - [Module ids are positional](#user-content-module-ids-are-positional)
   - [Pruning stops at the module](#user-content-pruning-stops-at-the-module)
   - [Nothing consumes a WorkspaceDelta](#user-content-nothing-consumes-a-workspacedelta)
   - [No batch of scripts against one world](#user-content-no-batch-of-scripts-against-one-world)
@@ -579,24 +578,6 @@ A program working in buffers of a few kilobytes would find the first two.
 ## Compilation pipeline and incrementality
 
 What the driver and salsa layers recompute, keep or cannot yet do.
-
-### Module ids are positional
-
-**Measured.** `ir_module_ids` numbers rider modules first, by path, then regular
-modules in graph order, and the ids are encoded in the IR. So a module appearing
-anywhere but the end renumbers everything after it: a newly required module that
-sorts first costs one parse, typecheck and ownership analysis, but re-lowers every
-module. A newly required rider, numbered ahead of all of them, should renumber
-every regular module (reasoned, not measured).
-
-It costs nothing shipped today, because the cli fixes its roots once and the REPL
-compiles `Roots::All`, so no module set changes mid-session. It blocks narrowing
-the REPL. The two fixes are priced very differently: hash the path to an id
-(small, but about 215 expected-output files render ids as `m{}` and need
-blessing, and collisions need deterministic resolution), or name modules
-symbolically in the IR
-and assign dense numbers at registry-build time (the right end state; touches the
-IR, its serialization, both AOT backends, the jit and display).
 
 ### Pruning stops at the module
 

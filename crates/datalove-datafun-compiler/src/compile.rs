@@ -21,7 +21,7 @@ use datalove_datafun_tycheck::{
     ModuleGraphTypecheckResult,
 };
 
-use crate::module_graph::{parse_module_graph, parse_module_full};
+use crate::module_graph::{parse_module_graph_with_ids, parse_module_full, ModuleIdTable};
 use crate::tracked_ownership_analysis::{analysis_work, analyze_module, analyze_module_graph, ModuleGraphAnalysis};
 
 /// Input for module compilation - the output of package resolution.
@@ -30,6 +30,9 @@ pub struct ModuleCompilationInput<'db> {
     pub graph: ModuleGraph<'db>,
     /// Resolved require aliases per module: (alias, target_module_id).
     pub resolved_requires: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+    /// The number each module's IR is known by, which has one for every
+    /// module of the graph and every rider.
+    pub module_ids: ModuleIdTable<'db>,
 }
 
 /// Output of module compilation - analysis results without lowering.
@@ -95,7 +98,7 @@ pub fn compile_modules<'db>(
         let _ = datalove_datalit::parser::parse_chunk(db, source, collection, chunk);
     });
 
-    let parsed_graph = parse_phase(db, mode, input.graph.clone(), input.resolved_requires, rider_sources.clone());
+    let parsed_graph = parse_phase(db, mode, input.graph.clone(), input.resolved_requires, rider_sources.clone(), input.module_ids);
     let name_resolution = resolve_phase(db, mode, parsed_graph);
     let typecheck_result = typecheck_phase(db, mode, parsed_graph, name_resolution);
     let ownership_analysis = ownership_phase(db, mode, parsed_graph, typecheck_result);
@@ -129,7 +132,7 @@ pub fn compile_modules<'db>(
 /// module already; a graph built without it, as the benches and tests build
 /// theirs, is parsed here, ahead of the phases that read each module's AST.
 /// Rider sources are passed through as raw strings; `RiderInterface` creation
-/// happens inside the tracked `parse_module_graph`, where salsa tracked struct
+/// happens inside the tracked `parse_module_graph_with_ids`, where salsa tracked struct
 /// creation is allowed.
 pub fn parse_phase<'db>(
     db: &'db dyn DbClone,
@@ -137,12 +140,13 @@ pub fn parse_phase<'db>(
     graph: ModuleGraph<'db>,
     resolved_requires: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, bct::input::Source)>,
+    module_ids: ModuleIdTable<'db>,
 ) -> ParsedModuleGraph<'db> {
     let db_salsa = db.as_salsa_db();
     warm(db, mode, || graph.iter_modules(db_salsa), |db, module| {
         let _ = parse_module_full(db, module);
     });
-    parse_module_graph(db_salsa, graph, resolved_requires, rider_sources)
+    parse_module_graph_with_ids(db_salsa, graph, resolved_requires, rider_sources, module_ids)
 }
 
 /// Phase 2: name resolution.

@@ -65,7 +65,7 @@ The crate is `crates/datalove-datafun-ir`, with four modules -- `layout`,
 | `BlockId(u32)` | Basic block |
 | `CodeUnitId(u32)` | Code unit, numbered within its containing scope |
 | `FuncId(u32)` | Module-local function, in the compiler's `FuncIdMap` |
-| `IrModuleId(u32)` | Module index; *not* salsa's `ModuleId` |
+| `IrModuleId(u32)` | Module number, given by path and kept for the pipeline's life; *not* salsa's `ModuleId` |
 
 `CodeUnitId` is the unified addressing scheme that replaced `FuncId` inside the
 IR. `FuncId` survives above it, in the compiler's map from `(ModuleId, name)` to
