@@ -436,8 +436,6 @@ typechecking is lazy. Ask the units directly when the question is about validity
   knows how. What a set change does to the analysis is pinned -- the env interns
   over the modules, so every unit re-keys, which is right -- but the *reach* for
   an added or removed module has never been asked about.
-- **A rejected module edit is put back**, deliberately, because nothing can build
-  a compiler against a module set with errors.
 - **Only pure `fun`s exist**, so the only effect is `debuglog` and skipping a
   unit's execution skips nothing observable beyond it. `proc`s and real I/O need
   virtualized I/O, which does not exist yet.

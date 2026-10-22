@@ -76,14 +76,21 @@ by path and kept for the pipeline's life; when ids were graph positions, a
 module joining ahead of another sent existing calls to the wrong module.
 
 **A required module that does not compile is left out**, with every required
-module that reaches it, and the rest of the roots stay
-(`Engine::settle_roots`). The unit that requires it fails on its `require`,
-and the engine replaces that error with the module's own. One broken module
-costs only the units that require it, as one failed unit costs only the units
-that read it. This is a stopgap: the engine cannot yet hold modules with
-errors, and fixing the module with `edit_module` does not bring it back,
-because a module outside the roots is not compiled; editing a unit that
-requires it does.
+module that reaches it, and the rest of the roots stay (`settle_roots` in
+`crates/datalove-repl/src/engine.rs`). The unit that requires it fails on its
+`require`, and the engine replaces that error with the module's own. One
+broken module costs only the units that require it, as one failed unit costs
+only the units that read it. That is how the engine holds modules with
+errors: outside the compile, with what they said kept in
+`Engine::module_errors`. The engine starts whatever its modules do; the one
+error no root's leaving can fix is a rider interface's, and that still stops
+it starting.
+
+`ModuleErrors` keeps the failing compile's type diagnostics in their stored
+form, `StoredDiagnostic`, which names its `Source`s but holds no database
+lifetime, so a caller in the same process renders them against
+`Engine::db`. A caller across a thread, as the interactive REPL is, has only
+the messages, `ModuleErrors::broken`, for now.
 
 `ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` instead of a value:
 those addresses are raw pointers and so not `Send`, and the worker thread
@@ -171,14 +178,12 @@ It refuses `repl-command` sections, which are `repl --load`'s.
 
 Two things about how the CLI drives it:
 
-- **The CLI compiles the worldfile's own modules before the engine does.**
-  They are roots whether or not a unit requires them, and an engine cannot
-  start over modules with errors and says only that there were some, so the
-  CLI narrows to them, renders what stops them compiling, and only then hands
-  the pipeline over with `Engine::with_pipeline`, naming them as
-  `also_roots`. The engine's compile of the same roots is salsa verifying
-  what the CLI already has. Library modules the units require join as the
-  units come, as at the REPL.
+- **The worldfile's own modules are compiled from the start.** They are
+  roots whether or not a unit requires them, so `Engine::with_options` is
+  given them as `also_roots`. If any does not compile, the CLI renders the
+  engine's `module_errors` and runs nothing: an error in a module the author
+  wrote is an error in the worldfile. Library modules the units require join
+  as the units come, as at the REPL.
 - **Diagnostics are rendered from inside the eval.** A compiler's diagnostics
   are those of the last unit it compiled, and the engine lets each compiler go
   when its operation is over, so `Engine::eval_reporting` takes a callback
@@ -212,10 +217,16 @@ unit alone leaves every value stale.
 the whole suffix. A unit of the suffix that stops compiling stays, as one
 appended does.
 
-A module edit that does not compile is rejected whole and the previous text
-goes back, because nothing in the engine can build a compiler against a module
-set with errors: the alternative is carrying module diagnostics through every
-path that compiles. Adding and removing modules mid-session is not offered.
+**A module edit that does not compile is kept.** The roots are settled again,
+so the module leaves the compile with the modules requiring it, and the units
+reached fail saying why. The reach of a module edit is the units importing
+from the edited module, from a module that requires it, or from a module the
+edit broke or fixed, and the units reading what those compute. The last of
+those is what the import edge alone would miss: a module that leaves the
+compile because one it requires broke is in no graph to be found from. An
+edit that fixes the module brings it and them back. A module no unit requires
+is not compiled, so an edit to one reports nothing until something requires
+it. Adding and removing modules mid-session is not offered.
 
 ## When there is no engine
 

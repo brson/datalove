@@ -1007,8 +1007,6 @@ impl ScriptWorldCommand {
         use datalove::datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
         use datalove::repl::{Command, Engine, Eval};
 
-        let db = datafun::Database::default();
-
         // Read and parse the worldfile.
         let file_contents = rmx::std::fs::read_to_string(&self.file_path)
             .with_context(|| format!("Failed to read worldfile: {}", self.file_path.display()))?;
@@ -1042,15 +1040,13 @@ impl ScriptWorldCommand {
         );
         let descriptor = sys_descriptor.merge(&worldfile_descriptor)
             .with_work_dir(datalove::paths::work_dir()?);
-        let mut pipeline = descriptor.to_pipeline(&db);
-        let natives = attach_natives(&descriptor, &sys, &mut pipeline);
 
         // The engine compiles what the script units require as they come, the
         // same as the REPL does, and the worldfile's own modules from the
         // start. Those are roots whether the script reaches them or not: the
         // author wrote them in the file they asked to be compiled, so an error
-        // in one is an error in the worldfile. Only the system library is
-        // pruned.
+        // in one is an error in the worldfile, and nothing runs. Only the
+        // system library is pruned.
         let worldfile_modules: Vec<String> = parsed.sections.iter()
             .filter_map(|section| match section {
                 WorldfileSection::Module { library, package, module, .. } =>
@@ -1058,33 +1054,22 @@ impl ScriptWorldCommand {
                 _ => None,
             })
             .collect();
-        pipeline.narrow_roots_to_sources(&db, &[], &worldfile_modules);
+        let mut engine = Engine::with_options(
+            sys, descriptor, datafun::DebugOutputMode::Stderr, worldfile_modules)?;
 
-        // The engine cannot start over modules with errors, and would say only
-        // that there were some, so the modules it starts with are compiled and
-        // reported here first.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        {
-            let compiled = pipeline.compile(&db);
-            if compiled.has_errors() {
-                // Render module type diagnostics with ariadne.
-                let type_diags = compiled.get_module_type_diagnostics(&db);
-                if !type_diags.is_empty() {
-                    render::render_module_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
-                }
-
-                // Also report any lowering errors that don't have diagnostics yet.
-                for error in compiled.all_lowering_errors() {
-                    eprintln!("{}", error);
-                }
-
-                bail!("Module compilation error");
+        let module_errors = engine.module_errors();
+        if !module_errors.is_empty() {
+            render::render_module_type_diagnostics(
+                engine.db(), &module_errors.type_diagnostics, &self.file_path, &cwd);
+            // Lowering errors have no spans yet, so they are printed as they are.
+            for error in &module_errors.lowering_errors {
+                eprintln!("{}", error);
             }
+            bail!("Module compilation error");
         }
 
-        let files = source_files(&descriptor, &pipeline);
-        let mut engine = Engine::with_pipeline(
-            db, descriptor, pipeline, &natives, datafun::DebugOutputMode::Stderr, worldfile_modules)?;
+        let files = source_files(engine.workspace(), engine.pipeline());
 
         let total = units.len();
         let mut failed: Vec<(usize, AnyError)> = Vec::new();

@@ -474,8 +474,7 @@ fn editing_a_module_rederives_the_units_that_import_from_it() {
     assert_eq!(value_of(&mut engine, "a"), "1");
 
     let reports = engine
-        .edit_module("local", "test", "m", "fun f(x: int): int\n    ret x + 41\nend fun\n")
-        .expect("the edited module compiles");
+        .edit_module("local", "test", "m", "fun f(x: int): int\n    ret x + 41\nend fun\n");
 
     assert_eq!(
         reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
@@ -499,8 +498,7 @@ fn a_module_edit_reaches_the_dependents_of_the_importing_unit() {
         "require module local/test/m\nimport m.f\nlet a = f(1)\n---\nlet b = a + 5\n---\nlet c = 100");
 
     let reports = engine
-        .edit_module("local", "test", "m", "fun f(x: int): int\n    ret x * 10\nend fun\n")
-        .expect("the edited module compiles");
+        .edit_module("local", "test", "m", "fun f(x: int): int\n    ret x * 10\nend fun\n");
 
     assert_eq!(
         reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
@@ -512,26 +510,108 @@ fn a_module_edit_reaches_the_dependents_of_the_importing_unit() {
     assert_eq!(value_of(&mut engine, "c"), "100");
 }
 
-/// A module edit that does not compile is put back, and the session goes on.
+/// A module edit that does not compile is kept, and fails what requires it.
 ///
-/// Nothing in the engine can work against a module set with errors -- every
-/// later line would fail to build a compiler at all -- so the edit is rejected
-/// whole rather than left in place with the errors reported. What is asserted
-/// here is that the session still works afterwards, which is the reason for
-/// doing it that way.
+/// The module leaves the compile, so the unit importing from it fails and its
+/// binding goes, saying it is the module; the unit that does not is untouched.
+/// The edit that fixes the module brings the unit back with the new value.
 #[test]
-fn a_module_edit_that_does_not_compile_is_rejected() {
+fn a_module_edit_that_does_not_compile_fails_its_units_until_fixed() {
     let mut engine = engine_with_module("fun f(x: int): int\n    ret x\nend fun\n");
-    engine.run_source("require module local/test/m\nimport m.f\nlet a = f(1)");
+    engine.run_source("require module local/test/m\nimport m.f\nlet a = f(1)\n---\nlet b = 20");
 
-    let error = engine
-        .edit_module("local", "test", "m", "fun f(x: int): int\n    ret \"nope\"\nend fun\n")
-        .expect_err("returning a string where an int was promised is an error");
-    assert!(!error.is_empty(), "the module's errors are reported");
+    let reports = engine.edit_module("local", "test", "m", "fun f(x: int): int\n    ret \"nope\"\nend fun\n");
+    assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
+    let Eval::Error(error) = &reports[0].eval else {
+        panic!("the importing unit fails: {reports:?}");
+    };
+    assert!(error.starts_with("module `local/test/m` does not compile: "), "{error}");
+    assert!(engine.module_errors().broken.contains_key("local/test/m"));
+    assert!(!bound(&mut engine, "a"), "its binding goes with it");
+    assert_eq!(value_of(&mut engine, "b"), "20", "the other unit is untouched");
+    engine.run_source("let c = b + 1");
+    assert_eq!(value_of(&mut engine, "c"), "21", "and new lines still compile");
 
-    assert_eq!(value_of(&mut engine, "a"), "1", "the session is as it was");
-    engine.run_source("let b = a + 1");
-    assert_eq!(value_of(&mut engine, "b"), "2", "and it still compiles new lines");
+    let reports = engine.edit_module("local", "test", "m", "fun f(x: int): int\n    ret x + 1\nend fun\n");
+    assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
+    assert!(engine.module_errors().is_empty());
+    assert_eq!(value_of(&mut engine, "a"), "2", "the unit is back, calling the fixed module");
+}
+
+/// A module that did not compile when a unit first required it comes in when
+/// an edit fixes it, and the unit with it.
+///
+/// That unit's `require` failed, so when it last compiled it imported nothing
+/// from the module; it is found by its imports as they resolve now.
+#[test]
+fn fixing_a_module_brings_back_a_unit_that_never_ran() {
+    let mut engine = engine_with_module("fun f(): int\n    ret \"nope\"\nend fun\n");
+    let eval = eval_of(&mut engine, "require module local/test/m\nimport m.f\nlet a = f()");
+    assert!(matches!(eval, Eval::Error(_)), "{eval:?}");
+
+    let reports = engine.edit_module("local", "test", "m", "fun f(): int\n    ret 7\nend fun\n");
+
+    assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
+    assert_eq!(value_of(&mut engine, "a"), "7");
+}
+
+/// An edit to a module reaches the units importing from a module that
+/// requires it, whose functions call into it.
+#[test]
+fn a_module_edit_reaches_the_units_of_the_modules_requiring_it() {
+    let mut engine = engine_with_modules(&[
+        ("m", "fun f(): int\n    ret 1\nend fun\n"),
+        ("n", "require module local/test/m\nimport m.f\nfun g(): int\n    ret f() + 10\nend fun\n"),
+    ]);
+    engine.run_source("require module local/test/n\nimport n.g\nlet a = g()");
+    assert_eq!(value_of(&mut engine, "a"), "11");
+
+    let reports = engine.edit_module("local", "test", "m", "fun f(): int\n    ret 2\nend fun\n");
+
+    assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
+    assert_eq!(value_of(&mut engine, "a"), "12");
+}
+
+/// Breaking a module fails the units of the modules requiring it too, which
+/// leave the compile with it, and fixing it brings them back.
+#[test]
+fn breaking_a_module_fails_the_units_of_the_modules_requiring_it() {
+    let mut engine = engine_with_modules(&[
+        ("m", "fun f(): int\n    ret 1\nend fun\n"),
+        ("n", "require module local/test/m\nimport m.f\nfun g(): int\n    ret f() + 10\nend fun\n"),
+    ]);
+    engine.run_source("require module local/test/n\nimport n.g\nlet a = g()");
+
+    let reports = engine.edit_module("local", "test", "m", "fun f(): int\n    ret \"nope\"\nend fun\n");
+    assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
+    let Eval::Error(error) = &reports[0].eval else {
+        panic!("the unit importing from `n` fails: {reports:?}");
+    };
+    assert!(error.starts_with("module `local/test/n` does not compile: "), "{error}");
+    assert!(!bound(&mut engine, "a"));
+
+    engine.edit_module("local", "test", "m", "fun f(): int\n    ret 3\nend fun\n");
+    assert_eq!(value_of(&mut engine, "a"), "13");
+}
+
+/// A module compiled whether or not a unit requires it, which does not
+/// compile, is reported and leaves the engine running.
+#[test]
+fn an_engine_starts_over_a_module_that_does_not_compile() {
+    let sys = datalove_sys_packages::system_library();
+    let workspace = engine_with_modules(&[("m", "fun f(): int\n    ret \"nope\"\nend fun\n")])
+        .workspace()
+        .C();
+    let mut engine = Engine::with_options(
+        sys, workspace, datalove_datafun::DebugOutputMode::Disabled, vec!["local/test/m".S()])
+        .expect("the engine starts");
+
+    let errors = engine.module_errors();
+    assert_eq!(errors.broken.keys().collect::<Vec<_>>(), vec!["local/test/m"]);
+    assert!(!errors.type_diagnostics.is_empty(), "with diagnostics to render");
+
+    engine.run_source("let a = 1");
+    assert_eq!(value_of(&mut engine, "a"), "1");
 }
 
 /// What one appended unit came to.

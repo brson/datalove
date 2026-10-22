@@ -38,10 +38,11 @@ pub fn render_type_diagnostics<'db>(
 /// Render module type diagnostics to stderr.
 ///
 /// A worldfile's modules are separate sources, and a diagnostic about one can
-/// point at another, so these are rendered against all of them at once.
+/// point at another, so these are rendered against all of them at once. They
+/// come stored, as an engine keeps them, and are read back against `db`.
 pub fn render_module_type_diagnostics<'db>(
     db: &'db dyn datalove::datafun::Db,
-    diagnostics: &[&datalove::diagnostic::TypeDiagnostic],
+    diagnostics: &[datalove::bct::diagnostic::StoredDiagnostic],
     worldfile_path: &Path,
     cwd: &Path,
 ) {
