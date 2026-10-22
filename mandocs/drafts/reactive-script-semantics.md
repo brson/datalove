@@ -1373,10 +1373,38 @@ Units that only read it are not rerun:
 the rerun units have the same code and inputs as before,
 so a reader would compute what it already holds.
 
-A _fixup_ restores a binding without running anything.
-It is only possible for a revival,
+A rerun doesn't have to start as far back as the unit that made the binding.
+What it needs is the nearest unit before the triggering unit
+that set the binding without reading it.
+That unit's value doesn't depend on anything the binding held before,
+so rerunning it rebuilds the binding from there,
+and only the takes and writes between it and the triggering unit rerun after it.
+The unit that made the binding is one such unit,
+and an overwrite or a revival after it is a nearer one.
+An update is not, because it reads what it writes.
+
+A take is a nearer starting point too.
+It leaves the binding holding nothing,
+and nothing can update a binding that holds nothing,
+so if the nearest such unit is a take,
+the binding held nothing before the triggering unit.
+Rerunning from a take means emptying the binding,
+which runs nothing.
+
+A _fixup_ is that case: it restores a binding without running anything.
+It happens when the nearest unit that set the binding was a take,
+which is always so when undoing a revival,
 because what a revival overwrote was nothing,
 and emptying the binding puts that back.
+
+Starting nearer doesn't make the rerun simpler in kind.
+The unit it starts from reruns whole,
+so whatever else it reads has to be as it found it,
+and whatever else it takes or writes is redone.
+That is as true of the unit that made the binding,
+but a nearer start is more likely to be a unit that reads other bindings.
+That is where one rerun can need another first,
+a question for a later section.
 
 _Undo_ needs a rerun, or for a revival a fixup,
 whenever the triggering unit changed the binding,
@@ -1414,9 +1442,12 @@ A forward rerun of a unit that takes or writes
 is an undo and a redo of the same code, and cascades the same way.
 
 <!--
-Note: the engine today differs from this table in three places.
+Note: the engine today differs from this section in four places.
 It treats overwrites and revivals like updates, so it reruns to redo an
 overwrite and to undo a revival, where a fixup would do.
+It always starts a rerun at the unit that made the binding, never at a
+nearer overwrite (`reach_from` and `rewind_point` in
+`crates/datalove-datafun/src/pipeline/script_compiler.rs`).
 And the splices, delete among them, rerun every unit from the rerun point
 on, readers included, because a value is identified by its unit's index.
 -->
