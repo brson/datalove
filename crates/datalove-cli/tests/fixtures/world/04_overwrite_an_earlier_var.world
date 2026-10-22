@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+set b = 500
+let c = a /! b
+
+debuglog c

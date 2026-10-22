@@ -327,25 +327,37 @@ impl ModuleCompilationPipeline {
         script: &str,
         also: &[String],
     ) {
-        use datalove_datafun_ast::ast::{Statement, StmtRequire};
+        self.narrow_roots_to_scripts(db, &[script], also);
+    }
 
-        let source = bct::input::Source::new(db, script.S());
-        let parsed = datalove_datafun_parser::parse(db, source);
+    /// The same for a script of several units, which reaches what any of them
+    /// requires.
+    pub fn narrow_roots_to_scripts(
+        &mut self,
+        db: &dyn salsa::Database,
+        scripts: &[&str],
+        also: &[String],
+    ) {
+        use datalove_datafun_ast::ast::{Statement, StmtRequire};
 
         let mut roots: rmx::std::collections::BTreeSet<String> =
             also.iter().filter(|p| self.world.contains(p)).cloned().collect();
-        for statement in parsed.parsed.statements(db).iter() {
-            let Statement::Require(StmtRequire::Module(require)) = statement else {
-                continue;
-            };
-            let path = format!(
-                "{}/{}/{}",
-                require.import_space.as_str(db),
-                require.package_alias.as_str(db),
-                require.module_alias.as_str(db),
-            );
-            if self.world.contains(&path) {
-                roots.insert(path);
+        for script in scripts {
+            let source = bct::input::Source::new(db, script.S());
+            let parsed = datalove_datafun_parser::parse(db, source);
+            for statement in parsed.parsed.statements(db).iter() {
+                let Statement::Require(StmtRequire::Module(require)) = statement else {
+                    continue;
+                };
+                let path = format!(
+                    "{}/{}/{}",
+                    require.import_space.as_str(db),
+                    require.package_alias.as_str(db),
+                    require.module_alias.as_str(db),
+                );
+                if self.world.contains(&path) {
+                    roots.insert(path);
+                }
             }
         }
 

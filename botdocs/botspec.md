@@ -2375,7 +2375,7 @@ is expected is a mismatch rather than a conversion, and the same in reverse;
 |---------|-------------|
 | `script` | Execute a .dfs script |
 | `script-ir` | Dump the IR a .dfs script lowers to |
-| `script-world` | Execute a worldfile's modules and script section |
+| `script-world` | Execute a worldfile's modules and script units, in one REPL session |
 | `aot-compile` | Compile a .dfs script to native code |
 | `repl` | Interactive REPL |
 | `lit-tycheck` | Type check a datalit expression |

@@ -1,0 +1,29 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+set b = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! b
+
+----------
+scriptunit-expr
+----------
+
+c

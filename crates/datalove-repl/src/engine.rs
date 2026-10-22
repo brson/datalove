@@ -50,7 +50,18 @@ pub struct Engine {
     /// registered, so neither can be reached after its code has gone whatever
     /// order these fields go in.
     natives: RegisteredNatives,
+    /// Where `debuglog` goes, kept so a reset sends it to the same place.
+    debug_output: datafun::DebugOutputMode,
 }
+
+/// What a caller is shown of a unit that did not compile, while the compiler
+/// that compiled it is still alive.
+///
+/// The compiler's diagnostics are those of the last unit it compiled and do
+/// not outlive it, and the engine lets each compiler go once its operation is
+/// over, so a caller that renders them has to be handed them here.
+pub type OnCompileError<'a> =
+    &'a mut dyn FnMut(&ScriptCompiler<'_>, &datafun::pipeline::ScriptCompilationResult);
 
 /// One input's parse and eval, and the environment it left behind.
 #[derive(Debug, Serialize)]
@@ -92,6 +103,7 @@ impl Started {
         db: &datafun::Database,
         pipeline: &mut ModuleCompilationPipeline,
         natives: &Arc<RiderNatives>,
+        debug_output: datafun::DebugOutputMode,
     ) -> AnyResult<Started> {
         let compiled = pipeline.compile(db);
 
@@ -104,7 +116,7 @@ impl Started {
         let script = compiled.script_compiler_default(db)
             .expect("script_compiler should succeed after error check")
             .into_session();
-        let mut executor = compiled.script_executor(datafun::DebugOutputMode::Disabled, None)
+        let mut executor = compiled.script_executor(debug_output, None)
             .expect("script_executor should succeed after error check");
         let natives = register_natives(natives, &compiled, &mut executor)?;
 
@@ -154,7 +166,26 @@ impl Engine {
         // neither rebuilds riders nor reloads them.
         let natives = Arc::new(RiderNatives::for_workspace(&workspace, &sys.natives));
         pipeline.set_natives(natives.clone());
-        let started = Started::compile(&db, &mut pipeline, &natives)?;
+        Engine::with_pipeline(db, workspace, pipeline, &natives, datafun::DebugOutputMode::Disabled)
+    }
+
+    /// The same, over a pipeline the caller built from `workspace` in `db`.
+    ///
+    /// For a caller that compiles the modules itself first, to report what
+    /// stops them compiling in its own way: an engine cannot be started over
+    /// modules with errors, and says only that they had some. Compiling them
+    /// again here is salsa verifying what the caller already has.
+    ///
+    /// `natives` are the ones `pipeline` was given, and `debug_output` is where
+    /// `debuglog` goes.
+    pub fn with_pipeline(
+        db: datafun::Database,
+        workspace: WorkspaceDescriptor,
+        mut pipeline: ModuleCompilationPipeline,
+        natives: &Arc<RiderNatives>,
+        debug_output: datafun::DebugOutputMode,
+    ) -> AnyResult<Engine> {
+        let started = Started::compile(&db, &mut pipeline, natives, debug_output)?;
 
         Ok(Engine {
             db,
@@ -163,6 +194,7 @@ impl Engine {
             script: Some(started.script),
             executor: started.executor,
             natives: started.natives,
+            debug_output,
         })
     }
 
@@ -171,7 +203,7 @@ impl Engine {
         self.executor.destroy_live_values();
         // The library compiled at startup and has not changed since, so this is
         // salsa verifying what it has rather than compiling it again.
-        let started = Started::compile(&self.db, &mut self.pipeline, &self.natives.natives)
+        let started = Started::compile(&self.db, &mut self.pipeline, &self.natives.natives, self.debug_output)
             .expect("system library compiled successfully at startup");
         self.script = Some(started.script);
         self.executor = started.executor;
@@ -245,8 +277,13 @@ impl Engine {
     }
 
     pub fn eval(&mut self, command: Command) -> Eval {
+        self.eval_reporting(command, &mut |_, _| {})
+    }
+
+    /// The same, showing `on_error` a unit that does not compile.
+    pub fn eval_reporting(&mut self, command: Command, on_error: OnCompileError<'_>) -> Eval {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.eval_impl(command.C())
+            self.eval_impl(command.C(), on_error)
         }));
 
         match result {
@@ -265,11 +302,11 @@ impl Engine {
         }
     }
 
-    fn eval_impl(&mut self, command: Command) -> Eval {
+    fn eval_impl(&mut self, command: Command, on_error: OnCompileError<'_>) -> Eval {
         match command {
             Command::ReplCommand(repl_command) => self.eval_repl_command(repl_command),
-            Command::ScriptStatement(source) => self.eval_script_statement(source),
-            Command::Expression(source) => self.eval_expression(source),
+            Command::ScriptStatement(source) => self.eval_script_statement(source, on_error),
+            Command::Expression(source) => self.eval_expression(source, on_error),
         }
     }
 
@@ -300,8 +337,14 @@ impl Engine {
     /// returned early, or read from a unit that did either, and offers no
     /// bindings until an edit makes it run to its end. Only a runtime error
     /// takes the session with it.
-    fn eval_script_statement(&mut self, source: String) -> Eval {
-        let compiled = self.with_compiler(|compiler| compiler.compile_fragment(&source));
+    fn eval_script_statement(&mut self, source: String, on_error: OnCompileError<'_>) -> Eval {
+        let compiled = self.with_compiler(|compiler| {
+            let compiled = compiler.compile_fragment(&source);
+            if compiled.first_error().is_some() {
+                on_error(compiler, &compiled);
+            }
+            compiled
+        });
 
         if let Some(error) = compiled.first_error() {
             self.executor.skip_unit();
@@ -620,8 +663,14 @@ impl Engine {
 
     /// Compile and run an expression as the next unit, which stays whatever
     /// becomes of it, as a fragment does.
-    fn eval_expression(&mut self, source: String) -> Eval {
-        let compiled = self.with_compiler(|compiler| compiler.compile_expr(&source));
+    fn eval_expression(&mut self, source: String, on_error: OnCompileError<'_>) -> Eval {
+        let compiled = self.with_compiler(|compiler| {
+            let compiled = compiler.compile_expr(&source);
+            if compiled.first_error().is_some() {
+                on_error(compiler, &compiled);
+            }
+            compiled
+        });
 
         if let Some(error) = compiled.first_error() {
             self.executor.skip_unit();

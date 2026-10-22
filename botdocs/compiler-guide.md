@@ -1859,7 +1859,8 @@ for vouching for a world, and `All` stays the default:
 
 - `script`, `script-ir`, `aot-compile` and `script-world` narrow, through
   `ModuleCompilationPipeline::narrow_roots_to_script`, which reads the script's
-  `require`s.
+  `require`s. `script-world` uses `narrow_roots_to_scripts`, the same over every
+  script unit the worldfile has.
 - `typecheck-std`, the test suites that build their own pipelines, and the REPL
   pass `All`.
 

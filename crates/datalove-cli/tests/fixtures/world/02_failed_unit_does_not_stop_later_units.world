@@ -1,0 +1,22 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+let x = y // `y` doesn't exist
+
+----------
+scriptunit-fragment
+----------
+
+let b = 100
+
+----------
+scriptunit-fragment
+----------
+
+let a_moved = a
+let b_moved = b
+let c = a_moved /! b_moved
+
+debuglog c

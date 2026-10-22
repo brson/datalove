@@ -139,6 +139,30 @@ of it read so far. The file is read before the terminal is set up, so a bad
 one is reported on the ordinary screen. A worldfile with module, data or
 rider sections is refused.
 
+## `script-world` runs through the engine
+
+`datalove script-world` runs a worldfile's script units in order through one
+`Engine`, so a worldfile behaves the way the same units typed at the REPL
+would: a unit that fails to compile, returns early, or is blocked on one that
+did stays, and the units after it still run. A runtime error ends the run.
+It refuses `repl-command` sections, which are `repl --load`'s.
+
+Two things about how the CLI drives it:
+
+- **The CLI compiles the modules before the engine does.** An engine cannot
+  start over modules with errors and says only that there were some, so the
+  CLI builds the pipeline, renders what stops it compiling, and only then
+  hands it over with `Engine::with_pipeline`. The engine's compile of the same
+  pipeline is salsa verifying what the CLI already has.
+- **Diagnostics are rendered from inside the eval.** A compiler's diagnostics
+  are those of the last unit it compiled, and the engine lets each compiler go
+  when its operation is over, so `Engine::eval_reporting` takes a callback
+  that is handed the compiler while it is still alive.
+
+Locations in a unit's diagnostics are lines of that section, not of the
+worldfile, as they were when `script-world` ran one unit; the renderer has no
+way to offset them yet.
+
 ## Editing, not only appending
 
 `Engine::edit_unit(i, text)` changes one line of the session and re-derives

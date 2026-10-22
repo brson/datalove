@@ -1,0 +1,23 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! 10
+
+----------
+scriptunit-fragment
+----------
+
+let a_moved = a
+
+----------
+scriptunit-expr
+----------
+
+c

@@ -231,7 +231,7 @@ enum Command {
     TypecheckStd(TypecheckStdCommand),
     /// Generate HTML documentation from mandocs/.
     Docs(DocsCommand),
-    /// Execute a worldfile containing modules and a script section.
+    /// Execute a worldfile's modules and its script units, in one REPL session.
     ScriptWorld(ScriptWorldCommand),
     /// Generate a random worldfile.
     Worldgen(WorldgenCommand),
@@ -996,10 +996,16 @@ impl AotCompileCommand {
 }
 
 impl ScriptWorldCommand {
+    /// Run a worldfile's script units in order, in one REPL session.
+    ///
+    /// A unit that fails to compile, returns early, or reads from one that did
+    /// stays in the session and the units after it still run, as they would at
+    /// the REPL. A runtime error ends the session, and the run with it.
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove::datafun;
         use datafun::pipeline::WorkspaceDescriptor;
         use datalove::datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
+        use datalove::repl::{Command, Engine, Eval};
 
         let db = datafun::Database::default();
 
@@ -1009,15 +1015,18 @@ impl ScriptWorldCommand {
         let parsed = parse_worldfile_sections(file_contents.as_bytes())
             .with_context(|| format!("Failed to parse worldfile: {}", self.file_path.display()))?;
 
-        // Validate: must have exactly one script section (scriptunit-fragment or scriptunit-expr).
-        let script_sections: Vec<_> = parsed.sections.iter()
-            .filter(|s| matches!(s, WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. }))
+        if parsed.sections.iter().any(|s| matches!(s, WorldfileSection::ReplCommand { .. })) {
+            bail!("script-world does not run repl-command sections; `repl --load` does");
+        }
+        let units: Vec<Command> = parsed.sections.iter()
+            .filter_map(|section| match section {
+                WorldfileSection::ScriptFragment { source } => Some(Command::ScriptStatement(source.C())),
+                WorldfileSection::ScriptExpr { source } => Some(Command::Expression(source.C())),
+                _ => None,
+            })
             .collect();
-        if script_sections.len() != 1 {
-            bail!(
-                "Worldfile must have exactly one script section (scriptunit-fragment or scriptunit-expr), found {}",
-                script_sections.len()
-            );
+        if units.is_empty() {
+            bail!("Worldfile has no script section (scriptunit-fragment or scriptunit-expr)");
         }
 
         // Build workspace descriptor from sys library + worldfile sections.
@@ -1036,14 +1045,11 @@ impl ScriptWorldCommand {
         let mut pipeline = descriptor.to_pipeline(&db);
         let natives = attach_natives(&descriptor, &sys, &mut pipeline);
 
-        // Compile only what the script section reaches, the same as `script`
-        // does. The worldfile's own modules are in the world alongside the
-        // system library, and a script that requires two of them should not pay
-        // for the rest.
-        // The worldfile's own modules are roots whether the script reaches them or
-        // not: the author wrote them in the file they asked to be compiled, so an
-        // error in one is an error in the worldfile. Only the system library is
-        // pruned here.
+        // Compile only what the script units reach, the same as `script`
+        // does, except for the worldfile's own modules. Those are roots whether
+        // the script reaches them or not: the author wrote them in the file
+        // they asked to be compiled, so an error in one is an error in the
+        // worldfile. Only the system library is pruned here.
         let worldfile_modules: Vec<String> = parsed.sections.iter()
             .filter_map(|section| match section {
                 WorldfileSection::Module { library, package, module, .. } =>
@@ -1051,96 +1057,120 @@ impl ScriptWorldCommand {
                 _ => None,
             })
             .collect();
-        if let WorldfileSection::ScriptFragment { source } | WorldfileSection::ScriptExpr { source }
-            = script_sections[0]
-        {
-            pipeline.narrow_roots_to_script(&db, source, &worldfile_modules);
-        }
+        let sources: Vec<&str> = parsed.sections.iter()
+            .filter_map(|section| match section {
+                WorldfileSection::ScriptFragment { source } | WorldfileSection::ScriptExpr { source } =>
+                    Some(source.as_str()),
+                _ => None,
+            })
+            .collect();
+        pipeline.narrow_roots_to_scripts(&db, &sources, &worldfile_modules);
 
-        // Compile modules.
-        let compiled = pipeline.compile(&db);
-
-        // Check for module compilation errors.
+        // The engine cannot start over modules with errors, and would say only
+        // that there were some, so they are compiled and reported here first.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        if compiled.has_errors() {
-            // Render module type diagnostics with ariadne.
-            let type_diags = compiled.get_module_type_diagnostics(&db);
-            if !type_diags.is_empty() {
-                render::render_module_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
+        {
+            let compiled = pipeline.compile(&db);
+            if compiled.has_errors() {
+                // Render module type diagnostics with ariadne.
+                let type_diags = compiled.get_module_type_diagnostics(&db);
+                if !type_diags.is_empty() {
+                    render::render_module_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
+                }
+
+                // Also report any lowering errors that don't have diagnostics yet.
+                for error in compiled.all_lowering_errors() {
+                    eprintln!("{}", error);
+                }
+
+                bail!("Module compilation error");
             }
+        }
 
-            // Also report any lowering errors that don't have diagnostics yet.
-            for error in compiled.all_lowering_errors() {
-                eprintln!("{}", error);
+        let files = source_files(&descriptor, &pipeline);
+        let mut engine = Engine::with_pipeline(
+            db, descriptor, pipeline, &natives, datafun::DebugOutputMode::Stderr)?;
+
+        let total = units.len();
+        let mut failed: Vec<(usize, AnyError)> = Vec::new();
+        for (index, unit) in units.into_iter().enumerate() {
+            let mut compile_error = None;
+            let eval = engine.eval_reporting(unit, &mut |compiler, compiled| {
+                compile_error = Some(script_world_error(compiler, compiled, &files, &self.file_path, &cwd));
+            });
+            let error = match eval {
+                Eval::Nothing | Eval::Success(_) => None,
+                Eval::SuccessExpr(expr) => {
+                    println!("{}", expr.value);
+                    None
+                }
+                Eval::ReturnedEarly(output) => {
+                    println!("{}", output);
+                    None
+                }
+                Eval::Error(_) => Some(compile_error.expect("a unit that failed to compile was reported")),
+                Eval::Blocked { on } => {
+                    let on: Vec<String> = on.iter().map(|unit| (unit + 1).to_string()).collect();
+                    Some(anyhow!("Not run: reads from unit {}, which did not run to its end", on.join(", ")))
+                }
+                // The session is gone, so nothing is left for the rest to run against.
+                Eval::ErrorReset(output) => bail!("{}", output.strip_prefix("Error: ").unwrap_or(&output)),
+                Eval::CrashReset(message) => bail!("{}", message),
+                Eval::CallerInterpret(_) | Eval::Saved { .. } => unreachable!("only script units are evaluated"),
+            };
+            if let Some(error) = error {
+                if total > 1 {
+                    eprintln!("unit {}: {}", index + 1, error);
+                }
+                failed.push((index, error));
             }
-
-            bail!("Module compilation error");
         }
 
-        // Create script compiler and executor.
-        // Safe to unwrap since we checked has_errors() above.
-        let mut compiler = compiled.script_compiler_default(&db)
-            .expect("script_compiler should succeed after error check");
-        let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
-            .expect("script_executor should succeed after error check");
-
-        let _natives = register_natives(&natives, &compiled, &mut executor)?;
-
-        // Compile and execute the script section.
-        let script_section = script_sections[0];
-        let (compiled_unit, output) = match script_section {
-            WorldfileSection::ScriptFragment { source } => {
-                let compiled_unit = compiler.compile_fragment(source);
-                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
-                    executor.execute_fragment(ir_unit)
-                } else {
-                    String::new()
-                };
-                (compiled_unit, output)
-            }
-            WorldfileSection::ScriptExpr { source } => {
-                let compiled_unit = compiler.compile_expr(source);
-                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
-                    let (_, value) = executor.execute_expr(ir_unit);
-                    value
-                } else {
-                    String::new()
-                };
-                (compiled_unit, output)
-            }
-            _ => unreachable!(),
-        };
-
-        // Check for script errors and render diagnostics.
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
-            let parse_diags = compiler.get_parse_diagnostics();
-            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
-            bail!("Parse error");
+        match (failed.len(), total) {
+            (0, _) => Ok(()),
+            (_, 1) => Err(failed.pop().expect("one unit failed").1),
+            (n, total) => bail!("{} of {} script units failed", n, total),
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
-            let type_diags = compiler.get_type_diagnostics();
-            render_script_type_diagnostics(
-                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &cwd);
-            return Err(type_error(&type_diags, errors));
-        }
-        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
-        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
-            bail!("Lowering error: {}", message);
-        }
-        if let Some(error) = output.strip_prefix("Error: ") {
-            bail!("{error}");
-        }
-
-        // Print output if any (for scriptunit-expr).
-        if !output.is_empty() && output != "(fragment executed)" {
-            println!("{}", output);
-        }
-
-        // Cleanup.
-        executor.destroy_live_values();
-
-        Ok(())
     }
+}
+
+/// Render why a worldfile's script unit did not compile, and say what it was.
+fn script_world_error(
+    compiler: &datalove::datafun::pipeline::ScriptCompiler<'_>,
+    compiled: &datalove::datafun::pipeline::ScriptCompilationResult,
+    files: &std::collections::HashMap<datalove::bct::input::Source, PathBuf>,
+    file_path: &std::path::Path,
+    cwd: &std::path::Path,
+) -> AnyError {
+    use datalove::datafun::pipeline::{LoweringResult, TypecheckResult};
+
+    if let TypecheckResult::ParseError { errors: _ } = &compiled.typecheck {
+        let parse_diags = compiler.get_parse_diagnostics();
+        render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, cwd);
+        return anyhow!("Parse error");
+    }
+    if let TypecheckResult::Error { errors } = &compiled.typecheck {
+        // Typechecking a unit asks of the units before it, so its diagnostics
+        // include theirs, which were reported with them. What is this unit's
+        // points into its own text, or into a module or data file.
+        let own = compiler.last_source().expect("a unit was compiled");
+        let type_diags: Vec<_> = compiler.get_type_diagnostics().into_iter()
+            .filter(|diag| {
+                let diag = diag.to_diagnostic(compiler.db());
+                diag.labels.is_empty()
+                    || diag.labels.iter().any(|label| label.source == own || files.contains_key(&label.source))
+            })
+            .collect();
+        render_script_type_diagnostics(compiler.db(), &type_diags, files, file_path, cwd);
+        return type_error(&type_diags, errors);
+    }
+    if let Err(error) = bail_on_ownership_error(compiled, compiler, file_path, cwd) {
+        return error;
+    }
+    if let LoweringResult::Error { message } = &compiled.lowering {
+        return anyhow!("Lowering error: {}", message);
+    }
+    unreachable!("the unit was reported as failing to compile")
 }
 
 impl TypecheckStdCommand {

@@ -872,6 +872,11 @@ impl<'db> ScriptCompiler<'db> {
             .collect()
     }
 
+    /// The source of the unit compiled last.
+    pub fn last_source(&self) -> Option<bct::input::Source> {
+        self.last_source
+    }
+
     /// Get parse diagnostics from the last compilation.
     pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
         if let Some(src) = self.last_source {
