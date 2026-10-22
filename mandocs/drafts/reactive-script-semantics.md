@@ -1221,10 +1221,15 @@ error[D013]: `b` was given away by an earlier input
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | `b` dropped | unit 3 revived `b` when it last ran, and is undone | `b` moved |
+| 1 | `var b = 125` | - | _`b` dropped_ | unit 3 revived `b` when it last ran, and is undone | `b` moved |
 | 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
 | 3 | `set b = 600; let x = y` | revives `b` (1) | recompile fails | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
+
+_`b` dropped_ is a new kind of action.
+It is neither a recompile nor a rerun.
+It's just a cleanup to the frame of that unit
+to make a particular binding inaccessable again.
 
 Fixing unit 3 again is a redo,
 and needs no rewind either.
