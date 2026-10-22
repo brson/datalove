@@ -1302,7 +1302,7 @@ lowering a store to an earlier unit's slot always emits `DropTracked`
 The rules describe how _modifications_, editing, adding, and removing script units,
 change the value of bindings in other script units and their own,
 through _reruns_ and _fixups_.
-It does not describe how such changes trigger recompiles
+They do not describe how such changes trigger recompiles
 of other units.
 That is treated as a function of the data dependencies in the compiler's
 memoization architecture,
@@ -1312,16 +1312,25 @@ Every modification triggers a _step_.
 The outcome of every modification depends on compiler analysis of both the current step
 and the previous step.
 
-Different modifications trigger _undo_ and/or _redo_ actions, and _forward_ _actions_.
+Different modifications trigger _undo_ and/or _redo_ _actions_, and _forward_ actions.
 
-- _Undo_ actions are on units prior to the triggering unit.
-  They restore bindings to their previous-step values.
-- _Redo_ actions are on the triggering unit.
-  They update bindings to their current-step values.
-- _Forward_ actions are on units subsequent to the triggering unit.
+- _Undo_ actions reverse what the triggering unit's previous-step code
+  did to bindings of earlier units.
+  They rerun earlier units, or fix a binding up,
+  to restore those bindings to the values they held before the triggering unit.
+- _Redo_ actions run the triggering unit's current-step code.
+  The bindings it reads must hold what they held before it,
+  so when a later unit has changed one,
+  earlier units rerun first.
+- _Forward_ actions rerun units subsequent to the triggering unit.
   They update bindings to their current-step values.
 
-Modifications on a unit that cause a replay:
+Both undo and redo can rerun units prior to the triggering unit.
+What separates them is which version of the triggering unit's code
+decides what has to be restored:
+the previous step's for undo, the current step's for redo.
+
+Each modification is made of these actions:
 
 - _Edit_ => _undo_ + _redo_.
   An edit that successfully compiles.
@@ -1334,7 +1343,7 @@ Modifications on a unit that cause a replay:
 - _Add_ => _redo_.
   An insertion or append of a unit.
 
-A unit can perform five _operations_ to a binding of an earlier unit:
+A unit can perform five _operations_ on a binding of an earlier unit:
 _read_ it, _take_ it, _overwrite_ it, _update_ it,
 or _revive_ it, overwriting a binding that was given away.
 The undo, redo, and forward effects of a script unit
@@ -1342,61 +1351,74 @@ are determined by the operation
 (actually the union of these operations over the bindings
 the unit operates on).
 
-todo rewrite from here
+_Undo and redo use the operation in different steps_.
+Undo looks up what the triggering unit did in the previous step,
+and redo what it does in the current step.
+An edit that turns a take into a read
+undoes a take and redoes a read.
 
-| operation | undo it | redo it | forward effect |
-|------------|----------|-------------------------------------------------|---------------------------------------------------|
-| reads      | nothing  | rewind if a unit after it took or wrote it      | nothing                                           |
-| takes      | rewind   | rewind if it or a unit after it took or wrote it | can't name it, so recompile when that changes     |
-| overwrites | rewind   | nothing                                         | read the new value, so rerun when it changes      |
-| updates    | rewind   | rewind if it or a unit after it took or wrote it | read the new value, so rerun when it changes      |
-| revives    | empty it | nothing                                         | can name it again, so recompile when that changes |
+| operation | undo | redo | forward |
+|-----------|------|------|---------|
+| read      | nothing | rerun if a later unit took or wrote it | nothing |
+| take      | rerun   | rerun if it or a later unit took or wrote it | later units that name it break; removing the take fixes them |
+| overwrite | rerun   | nothing | later units that read it rerun |
+| update    | rerun   | rerun if it or a later unit took or wrote it | later units that read it rerun |
+| revive    | fixup: empty it | nothing | later units that name it are fixed, and rerun; removing the revival breaks them |
 
-_Undo_ puts the binding back as it was before the unit.
-For most writes that means a rewind:
-rerun the unit that made the binding,
-then replay the units after it that took or wrote what it rebuilt,
-in order.
-Units that only read it are not replayed.
-A revival is the exception.
-What it overwrote was nothing,
-so emptying the binding puts it back.
+A _rerun_ restores a binding to what it held before the triggering unit.
+It reruns the unit that made the binding,
+then the units between that one and the triggering unit
+that took or wrote it, in order.
+Units that only read it are not rerun:
+the rerun units have the same code and inputs as before,
+so a reader would compute what it already holds.
 
-_Redo_ is one rule for the three kinds that read the binding.
-A unit that reads, takes or updates a binding
-needs it as the unit found it.
-If the unit itself or a unit after it took or wrote the binding
-since the unit last ran,
-the binding has to be rebuilt first.
-A change made by a unit before it is just what it found, and stays.
-An overwrite and a revival don't read the binding,
-so they never need a rewind to redo.
+A _fixup_ restores a binding without running anything.
+It is only possible for a revival,
+because what a revival overwrote was nothing,
+and emptying the binding puts that back.
 
-_Units after it_ split by what changed.
-A take or a revival changes which names the later units can use,
-so they find out when they are compiled.
-An overwrite or an update changes values,
-so they find out when they run.
-Either way the reach goes to units
-that use nothing the unit itself defines.
-A write doesn't change what a later unit compiles to,
-because the binding it reads is in the same place with the same type.
+_Undo_ needs a rerun, or for a revival a fixup,
+whenever the triggering unit changed the binding,
+since it then has to be put back as it was before it.
+Undoing a read changes nothing,
+even if a later unit took or wrote the binding:
+that later change would have happened anyway.
 
-Three kinds of edit are made of these two operations,
-taken binding by binding.
-Editing a unit is an undo of what the old code did when it last ran,
-and a redo of what the new code does.
-Breaking a unit, so it no longer compiles, is an undo alone.
-So is deleting it:
-the units after it move up a place,
-but that changes their numbers, not what they compute.
+_Redo_ needs a rerun only for the operations that read the binding,
+which are read, take and update.
+The triggering unit has to find the binding as it was before it,
+and it won't if the triggering unit itself, in the previous step,
+or a later unit, took or wrote it.
+A change made by a unit before the triggering unit is just what it found,
+and stays.
+An overwrite or a revival doesn't read the binding,
+so its redo needs nothing.
+
+_Forward_ actions follow from what the step changed.
+Units after the triggering unit rerun if they read
+a binding whose value the step changed,
+or if they took or wrote a binding that a rerun rebuilt,
+since what they did to it has been undone by the rebuild.
+That reaches units that use nothing the triggering unit defines.
+A take or a revival added or removed
+changes which names the later units can use,
+so it breaks or fixes them.
+Those breaks and fixes are modifications in their own right,
+with their own undo and redo,
+so the effects cascade.
+The first example in this document is one:
+breaking unit 1 broke unit 3,
+and undoing unit 3's take reran unit 2.
+A forward rerun of a unit that takes or writes
+is an undo and a redo of the same code, and cascades the same way.
 
 <!--
 Note: the engine today differs from this table in three places.
-It treats overwrites and revivals like updates, so it rewinds to redo an
-overwrite and to undo a revival.
-And the splices, delete among them, rerun every unit from the rewind point
-on, because a value is identified by its unit's index.
+It treats overwrites and revivals like updates, so it reruns to redo an
+overwrite and to undo a revival, where a fixup would do.
+And the splices, delete among them, rerun every unit from the rerun point
+on, readers included, because a value is identified by its unit's index.
 -->
 
 
