@@ -1,0 +1,61 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1
+
+----------
+scriptunit-fragment
+----------
+
+let b = a
+
+----------
+scriptunit-fragment
+----------
+
+let c = b
+
+----------
+scriptunit-fragment
+----------
+
+let d = c
+
+----------
+scriptunit-fragment
+----------
+
+let e = d + 1
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` moved |
+| 2 | takes `a` (1) | compiles, runs | new | `b` moved |
+| 3 | takes `b` (2) | compiles, runs | new | `c` moved |
+| 4 | takes `c` (3) | compiles, runs | new | `d` = 1 |
+| 5 | reads `d` (4) | compiles, runs | new | `e` = 2 |
+
+----------
+scriptunit-edit 4
+----------
+
+let d = c
+let note = 0
+
+----------
+expect unit 4, at the end of the chain, is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 2 reruns and takes `a` | `a` moved |
+| 2 | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `b` | `b` moved |
+| 3 | takes `b` (2) | reruns | rerun: unit 4 takes `c`, which it took when it last ran | `c` moved |
+| 4 | takes `c` (3) | recompiles, runs | edited | `d` = 1, `note` = 0 |
+| 5 | reads `d` (4) | reruns | reads `d` from unit 4 | `e` = 2 |
+

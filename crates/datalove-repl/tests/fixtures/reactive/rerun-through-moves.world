@@ -1,0 +1,60 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let a2 = a
+
+----------
+scriptunit-fragment
+----------
+
+var w = a2
+
+----------
+scriptunit-fragment
+----------
+
+let c = w + 1
+
+----------
+scriptunit-fragment
+----------
+
+set w = w * 2
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` moved |
+| 2 | takes `a` (1) | compiles, runs | new | `a2` moved |
+| 3 | takes `a2` (2) | compiles, runs | new | `w` = 2000 |
+| 4 | reads `w` (3) | compiles, runs | new | `c` = 1001 |
+| 5 | updates `w` (3) | compiles, runs | new | - |
+
+----------
+scriptunit-edit 4
+----------
+
+let c = w + 2
+
+----------
+expect unit 4 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 2 reruns and takes `a`, which it took when it last ran | `a` moved |
+| 2 | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `a2`, which it took when it last ran | `a2` moved |
+| 3 | takes `a2` (2) | reruns | rerun: unit 4 reads `w`, which unit 5 updated after it | `w` = 2000 |
+| 4 | reads `w` (3) | recompiles, runs | edited | `c` = 1002 |
+| 5 | updates `w` (3) | reruns | rerun: updates `w` from unit 3, which reran | - |
+

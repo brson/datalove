@@ -222,6 +222,10 @@ uses them three ways:
   rewound, not the provider. So a rewind runs from the last overwrite rather
   than from where the `var` was made.
 
+Nor is a unit re-derived because a unit before it that takes a binding was:
+if the take is there before the edit and after it, the binding holds nothing
+after it either way.
+
 The records the reach reads are the units' current ones, so an edit that makes
 a unit overwrite what it used to update shrinks the reach once the unit is
 compiled. `rederive_reach` takes the reach again until it settles, either way.

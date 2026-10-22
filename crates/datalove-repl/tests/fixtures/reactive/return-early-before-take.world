@@ -1,0 +1,61 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let d = 0
+
+----------
+scriptunit-fragment
+----------
+
+let q = 10 /! d
+let a2 = a
+
+----------
+scriptunit-fragment
+----------
+
+let e = a + 1
+
+----------
+expect all four units are entered, and unit 3 returns early before its take
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 1000 |
+| 2 | - | compiles, runs | new | `d` = 0 |
+| 3 | takes `a` (1), reads `d` (2) | compiles, returns early | `10 /! 0` | - |
+| 4 | reads `a` (1) | compile fails | `a` is given away by unit 3 | - |
+
+----------
+scriptunit-edit 2
+----------
+
+let d = 5
+
+----------
+expect unit 2 is edited so unit 3 finishes
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 3 returned early before taking `a`, so `a` is as unit 1 made it | `a` moved |
+| 2 | - | recompiles, runs | edited | `d` = 5 |
+| 3 | takes `a` (1), reads `d` (2) | reruns | reads `d` from unit 2 | `q` = 2, `a2` = 1000 |
+| 4 | reads `a` (1) | untouched | still cannot name `a` | - |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 1 | reruns | assumes a unit that returned early did everything its code could, so reruns unit 1 for a take that never happened |
+

@@ -87,6 +87,8 @@ struct HeldGraph {
     uses: Vec<BTreeSet<String>>,
     /// What each unit took or wrote of earlier units' bindings.
     changed: Vec<BTreeSet<String>>,
+    /// What each unit took of earlier units' bindings.
+    taken: Vec<BTreeSet<String>>,
 }
 
 /// Output from ownership phase.
@@ -790,10 +792,17 @@ impl<'db> ScriptCompiler<'db> {
                 // care how an earlier unit left it, only what the binding is,
                 // which its provider says. If its write was undone it is
                 // replayed.
+                //
+                // Nor does a unit after a take that is still there: the
+                // binding holds nothing after it, as it did before.
                 rederived[unit] = seeds.contains(&unit)
                     || uses[unit].iter().any(|name| {
                         source(unit, name).is_some_and(|source| {
+                            let still_taken = !provides[source].contains(name)
+                                && held.taken[source].contains(name)
+                                && self.unit_records[source].taken.contains(name);
                             rederived[source]
+                                && !still_taken
                                 && (provides[source].contains(name) || !writes_without_reading(unit, name))
                         })
                     });
@@ -851,6 +860,7 @@ impl<'db> ScriptCompiler<'db> {
             changed: self.unit_records.iter()
                 .map(|record| record.taken.iter().chain(&record.written).cloned().collect())
                 .collect(),
+            taken: self.unit_records.iter().map(|record| set(&record.taken)).collect(),
         }
     }
 

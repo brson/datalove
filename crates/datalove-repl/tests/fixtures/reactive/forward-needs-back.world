@@ -1,0 +1,61 @@
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+var z = 10
+
+----------
+scriptunit-fragment
+----------
+
+var total = 0
+
+----------
+scriptunit-fragment
+----------
+
+set total = b + 1
+set z = z + 1
+
+----------
+scriptunit-fragment
+----------
+
+let shown = total * 10
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 125 |
+| 2 | - | compiles, runs | new | `z` = 11 |
+| 3 | - | compiles, runs | new | `total` = 126 |
+| 4 | reads `b` (1), updates `z` (2), overwrites `total` (3) | compiles, runs | new | - |
+| 5 | reads `total` (3) | compiles, runs | new | `shown` = 1260 |
+
+----------
+scriptunit-edit 1
+----------
+
+var b = 50
+
+----------
+expect unit 1 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `b` = 50 |
+| 2 | - | reruns | rerun: unit 4 reruns and updates `z`, which it updated when it last ran | `z` = 11 |
+| 3 | - | untouched | unit 4 overwrites `total` without reading it | `total` = 51 |
+| 4 | reads `b` (1), updates `z` (2), overwrites `total` (3) | reruns | reads `b` from unit 1 | - |
+| 5 | reads `total` (3) | reruns | reads `total` after unit 4, which wrote a new value | `shown` = 510 |
+

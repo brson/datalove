@@ -1578,10 +1578,12 @@ But names are coarse.
 They assume a conditional write always happens,
 and a write to `p.1` counts as a write to all of `p`.
 That's sound, just more reruns than needed.
-Conditional overwrites do break the nearest-overwrite refinement, though:
-an overwrite can only be a rerun's starting point if it certainly ran.
+It's also what keeps the nearest-overwrite refinement safe:
+a write that might not happen counts as an update,
+so only an overwrite that certainly ran can start a rerun.
 
-The sections below are experiments to poke at all this.
+The sections below poke at all this,
+each with a test the engine passes.
 
 
 
@@ -1590,6 +1592,7 @@ The sections below are experiments to poke at all this.
 
 The smallest case I can think of:
 
+<!-- world rerun-needs-rerun code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -1622,6 +1625,7 @@ scriptunit-fragment
 
 set b = 0
 ```
+<!-- end world -->
 
 Edit unit 4.
 It needs `b` as 500, so unit 3 reruns.
@@ -1629,12 +1633,105 @@ But unit 3 also updates `z`,
 so rerunning it as is would leave `z` at 12.
 Unit 2 has to rerun first, though unit 4 never names `z`.
 
-Things to check:
-does the engine rerun unit 2 here?
-Does it matter whether the rerun starts at unit 1 or unit 3?
-And what about a chain of moves,
-`let a2 = a`, then `var w = a2`, then something that changes `w`,
-where restoring `w` walks back through two names to `a`?
+<!-- world rerun-needs-rerun step 1 -->
+**Step 1: all five units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 1` | - | compiles, runs | new | `b` = 0 |
+| 2 | `var z = 10` | - | compiles, runs | new | `z` = 11 |
+| 3 | `set b = 500; set z = z + 1` | overwrites `b` (1), updates `z` (2) | compiles, runs | new | - |
+| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
+| 5 | `set b = 0` | overwrites `b` (1) | compiles, runs | new | - |
+<!-- end world -->
+
+<!-- world rerun-needs-rerun step 2 -->
+**Step 2: unit 4 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 1` | - | untouched | unit 3 overwrites `b` after it | `b` = 0 |
+| 2 | `var z = 10` | - | reruns | rerun: unit 3 reruns and updates `z`, so `z` has to be as unit 3 first found it | `z` = 11 |
+| 3 | `set b = 500; set z = z + 1` | overwrites `b` (1), updates `z` (2) | reruns | rerun: unit 4 reads `b`, which unit 5 overwrote after it, and unit 3 is the nearest to set it | - |
+| 4 | `let c = b + 2` | reads `b` (1) | recompiles, runs | edited | `c` = 502 |
+| 5 | `set b = 0` | overwrites `b` (1) | reruns | rerun: overwrites `b` after unit 4 | - |
+<!-- end world -->
+
+The engine does rerun unit 2.
+And the rerun of `b` starts at unit 3, not unit 1:
+unit 3 overwrites `b`,
+so it's the nearest unit that sets `b` without reading it,
+and unit 1 is left alone.
+
+A chain of moves walks back further.
+Here `w` is made from `a2`, which was made from `a`.
+
+<!-- world rerun-through-moves code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let a2 = a
+
+----------
+scriptunit-fragment
+----------
+
+var w = a2
+
+----------
+scriptunit-fragment
+----------
+
+let c = w + 1
+
+----------
+scriptunit-fragment
+----------
+
+set w = w * 2
+```
+<!-- end world -->
+
+<!-- world rerun-through-moves step 1 -->
+**Step 1: all five units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 2 | `let a2 = a` | takes `a` (1) | compiles, runs | new | `a2` moved |
+| 3 | `var w = a2` | takes `a2` (2) | compiles, runs | new | `w` = 2000 |
+| 4 | `let c = w + 1` | reads `w` (3) | compiles, runs | new | `c` = 1001 |
+| 5 | `set w = w * 2` | updates `w` (3) | compiles, runs | new | - |
+<!-- end world -->
+
+Edit unit 4, which reads `w` before unit 5 doubles it.
+
+<!-- world rerun-through-moves step 2 -->
+**Step 2: unit 4 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reruns and takes `a`, which it took when it last ran | `a` moved |
+| 2 | `let a2 = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `a2`, which it took when it last ran | `a2` moved |
+| 3 | `var w = a2` | takes `a2` (2) | reruns | rerun: unit 4 reads `w`, which unit 5 updated after it | `w` = 2000 |
+| 4 | `let c = w + 2` | reads `w` (3) | recompiles, runs | edited | `c` = 1002 |
+| 5 | `set w = w * 2` | updates `w` (3) | reruns | rerun: updates `w` from unit 3, which reran | - |
+<!-- end world -->
+
+Unit 3 reruns to rebuild `w`,
+but it took `a2` the last time it ran,
+so unit 2 reruns first,
+and that took `a`, so unit 1 reruns before it.
+Each link is a take some unit recorded by name,
+so following the records follows the value.
 
 
 
@@ -1642,22 +1739,155 @@ where restoring `w` walks back through two names to `a`?
 ## What if values flow through intermediate bindings?
 
 The forward direction.
-Unit 2 reads `b` and computes `d`,
-unit 3 writes `d` into an earlier `var`,
-and unit 4 reads that `var`.
-Change `b`, and does the rerun reach unit 4?
+Unit 3 reads `b` and computes `d`,
+unit 4 writes `d` into an earlier `var`,
+and unit 5 reads that `var`.
 
-Then mix the directions:
-make unit 3 also update some unrelated binding,
-so the forward rerun of unit 3 needs a backward rerun first.
+<!-- world values-through-bindings code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+var total = 0
+
+----------
+scriptunit-fragment
+----------
+
+let d = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+set total = d + 1
+
+----------
+scriptunit-fragment
+----------
+
+let shown = total * 10
+```
+<!-- end world -->
+
+<!-- world values-through-bindings step 1 -->
+**Step 1: all five units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 125 |
+| 2 | `var total = 0` | - | compiles, runs | new | `total` = 251 |
+| 3 | `let d = b * 2` | reads `b` (1) | compiles, runs | new | `d` = 250 |
+| 4 | `set total = d + 1` | overwrites `total` (2), reads `d` (3) | compiles, runs | new | - |
+| 5 | `let shown = total * 10` | reads `total` (2) | compiles, runs | new | `shown` = 2510 |
+<!-- end world -->
+
+Change `b`.
+
+<!-- world values-through-bindings step 2 -->
+**Step 2: unit 1 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 50` | - | recompiles, runs | edited | `b` = 50 |
+| 2 | `var total = 0` | - | untouched | unit 4 overwrites `total` without reading it | `total` = 101 |
+| 3 | `let d = b * 2` | reads `b` (1) | reruns | reads `b` from unit 1 | `d` = 100 |
+| 4 | `set total = d + 1` | overwrites `total` (2), reads `d` (3) | reruns | reads `d` from unit 3 | - |
+| 5 | `let shown = total * 10` | reads `total` (2) | reruns | reads `total` after unit 4, which wrote a new value | `shown` = 1010 |
+<!-- end world -->
+
+The rerun reaches unit 5,
+though unit 5 names nothing units 1 or 3 make:
+unit 4 left `total` holding a new value.
+Unit 2 is left alone,
+because unit 4 overwrites `total` without reading it.
+
+Then mix the directions.
+Make unit 4 also update some unrelated binding,
+so its forward rerun needs a backward rerun first.
+
+<!-- world forward-needs-back code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+var z = 10
+
+----------
+scriptunit-fragment
+----------
+
+var total = 0
+
+----------
+scriptunit-fragment
+----------
+
+set total = b + 1
+set z = z + 1
+
+----------
+scriptunit-fragment
+----------
+
+let shown = total * 10
+```
+<!-- end world -->
+
+<!-- world forward-needs-back step 1 -->
+**Step 1: all five units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 125 |
+| 2 | `var z = 10` | - | compiles, runs | new | `z` = 11 |
+| 3 | `var total = 0` | - | compiles, runs | new | `total` = 126 |
+| 4 | `set total = b + 1; set z = z + 1` | reads `b` (1), updates `z` (2), overwrites `total` (3) | compiles, runs | new | - |
+| 5 | `let shown = total * 10` | reads `total` (3) | compiles, runs | new | `shown` = 1260 |
+<!-- end world -->
+
+<!-- world forward-needs-back step 2 -->
+**Step 2: unit 1 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 50` | - | recompiles, runs | edited | `b` = 50 |
+| 2 | `var z = 10` | - | reruns | rerun: unit 4 reruns and updates `z`, which it updated when it last ran | `z` = 11 |
+| 3 | `var total = 0` | - | untouched | unit 4 overwrites `total` without reading it | `total` = 51 |
+| 4 | `set total = b + 1; set z = z + 1` | reads `b` (1), updates `z` (2), overwrites `total` (3) | reruns | reads `b` from unit 1 | - |
+| 5 | `let shown = total * 10` | reads `total` (3) | reruns | reads `total` after unit 4, which wrote a new value | `shown` = 510 |
+<!-- end world -->
+
+Unit 4 reruns forward, because it reads `b`.
+It updated `z` when it last ran,
+so unit 2 reruns backward first.
+
 How many rounds until it settles?
-Is there a case that needs more than two?
+The engine doesn't count: it loops until nothing is added.
+Each round only adds units,
+so it settles, and the count is a cost, not a correctness question.
+The chain of moves in the section before is one round per link.
 
 
 
 
 ## What if a move or mutation is conditional, or in a loop?
 
+<!-- world conditional-write code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -1685,43 +1915,232 @@ scriptunit-fragment
 
 let c = b + 1
 ```
+<!-- end world -->
 
 Unit 3's write depends on a value, not just on code.
+
+<!-- world conditional-write step 1 -->
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 500 |
+| 2 | `let flag = true` | - | compiles, runs | new | `flag` = true |
+| 3 | `if flag; set b = 500; end if` | reads `flag` (2), updates `b` (1) | compiles, runs | new | - |
+| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
+<!-- end world -->
+
 Edit unit 2 to `false`,
 and unit 3 now does nothing to `b` at run time,
 though its record still says it writes `b`.
+
+<!-- world conditional-write step 2 -->
+**Step 2: unit 2 is edited so the write does not happen.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 may not write `b`, so it needs `b` as unit 1 made it | `b` = 125 |
+| 2 | `let flag = false` | - | recompiles, runs | edited | `flag` = false |
+| 3 | `if flag; set b = 500; end if` | reads `flag` (2), updates `b` (1) | reruns | reads `flag` from unit 2 | - |
+| 4 | `let c = b + 1` | reads `b` (1) | reruns | reads `b` after unit 3, which no longer writes it | `c` = 126 |
+<!-- end world -->
+
 So `b` has to be rebuilt to 125, and unit 4 rerun.
-And unit 3 can't be a starting point for a rerun of `b`,
-because it might not have written.
+The record says unit 3 _updates_ `b`, not overwrites it:
+a write that might not happen leaves the old value on some path,
+so it counts as reading it.
+That's why unit 3 can't be a starting point for a rerun of `b`.
 
 A take in one branch only is already an error,
 so a conditional take is out.
-What about an update in a loop,
-`loop while i .< n` with `set b = b * 2` inside?
-It's still one update to the table, I think.
+
+An update in a loop is still one update to the table.
+
+<!-- world loop-update code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var b = 1
+
+----------
+scriptunit-fragment
+----------
+
+let n = 3
+
+----------
+scriptunit-fragment
+----------
+
+var i = 0
+loop while i .< n
+  set b = b * 2
+  set i = i + 1
+end loop
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+```
+<!-- end world -->
+
+<!-- world loop-update step 1 -->
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 1` | - | compiles, runs | new | `b` = 8 |
+| 2 | `let n = 3` | - | compiles, runs | new | `n` = 3 |
+| 3 | `var i = 0; loop while i .< n; set b = b * 2; set i = i + 1; end loop` | updates `b` (1), reads `n` (2) | compiles, runs | new | `i` = 3 |
+| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 9 |
+<!-- end world -->
+
+Edit unit 2 to loop once more.
+
+<!-- world loop-update step 2 -->
+**Step 2: unit 2 is edited to loop once more.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 1` | - | reruns | rerun: unit 3 updates `b` when it last ran, and reruns | `b` = 16 |
+| 2 | `let n = 4` | - | recompiles, runs | edited | `n` = 4 |
+| 3 | `var i = 0; loop while i .< n; set b = b * 2; set i = i + 1; end loop` | updates `b` (1), reads `n` (2) | reruns | reads `n` from unit 2 | `i` = 4 |
+| 4 | `let c = b + 1` | reads `b` (1) | reruns | reads `b` after unit 3, which wrote a new value | `c` = 17 |
+<!-- end world -->
+
+A loop that might run zero times counts like an `if`,
+so even `set b = 500` inside one would be an update.
 
 
 
 
 ## What if a unit writes only part of a binding?
 
-`var p = (1, "a")`,
-then `set p.1 = "b"`,
-then a unit that reads only `p.0`.
-By names the reader depends on the write.
-By dataflow it doesn't.
-How much does that coarseness cost in practice,
-and would tracking places instead of names be worth it?
+<!-- world partial-write code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var p = (1, "a")
+
+----------
+scriptunit-fragment
+----------
+
+let n = p.0 + 1
+
+----------
+scriptunit-fragment
+----------
+
+set p.1 = "b"
+```
+<!-- end world -->
+
+Unit 2 reads only `p.0`,
+and unit 3 writes only `p.1`.
+
+<!-- world partial-write step 1 -->
+**Step 1: all three units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var p = (1, "a")` | - | compiles, runs | new | `p` = (1, "b") |
+| 2 | `let n = p.0 + 1` | reads `p` (1) | compiles, runs | new | `n` = 2 |
+| 3 | `set p.1 = "b"` | updates `p` (1) | compiles, runs | new | - |
+<!-- end world -->
+
+Edit unit 2.
+By dataflow nothing else needs to run.
+
+<!-- world partial-write step 2 -->
+**Step 2: unit 2 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var p = (1, "a")` | - | untouched | unit 2 reads only `p.0`, which unit 3 does not write | `p` = (1, "b") |
+| 2 | `let n = p.0 + 2` | reads `p` (1) | recompiles, runs | edited | `n` = 3 |
+| 3 | `set p.1 = "b"` | updates `p` (1) | untouched | nothing it uses changed | - |
+
+<!--
+Engine today, more than the rule asks:
+unit 1 reruns: tracks bindings by name, so the write to `p.1` counts as a write to all of `p`
+unit 3 reruns: replays its write after rerunning unit 1
+-->
+<!-- end world -->
+
+By names the reader depends on the write,
+and that's what the engine goes by:
+a write to `p.1` counts as a write to all of `p`,
+and an update at that, since the rest of `p` is kept.
+So it reruns unit 1 to rebuild `p` and unit 3 to write it again.
+Sound, and a cost of one rerun of the maker and the writers per such edit.
+Tracking places instead of names would save it.
+Not done.
 
 
 
 
 ## What if a rerun produces the same value?
 
-Rerun a unit that computes `let big = b .< 1000`.
-If `b` changed from 125 to 126,
-`big` is still `true`,
-and nothing that reads `big` needs to rerun.
+<!-- world same-value code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let big = b .> 100
+
+----------
+scriptunit-fragment
+----------
+
+let shown = big
+```
+<!-- end world -->
+
+<!-- world same-value step 1 -->
+**Step 1: all three units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 125 |
+| 2 | `let big = b .> 100` | reads `b` (1) | compiles, runs | new | `big` = true |
+| 3 | `let shown = big` | reads `big` (2) | compiles, runs | new | `shown` = true |
+<!-- end world -->
+
+Change `b` from 125 to 126.
+Unit 2 reruns, and `big` is still `true`,
+so nothing that reads `big` needs to rerun.
+
+<!-- world same-value step 2 -->
+**Step 2: unit 1 is edited, and `big` comes out the same.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 126` | - | recompiles, runs | edited | `b` = 126 |
+| 2 | `let big = b .> 100` | reads `b` (1) | reruns | reads `b` from unit 1 | `big` = true |
+| 3 | `let shown = big` | reads `big` (2) | untouched | `big` is what it was | `shown` = true |
+
+<!--
+Engine today, more than the rule asks:
+unit 3 reruns: does not compare a rerun unit's values with what they were
+-->
+<!-- end world -->
+
+The engine reruns unit 3 anyway.
+It doesn't compare a rerun unit's values with what they were.
 That's salsa's backdating, applied to run-time values.
 It needs values compared, which may cost more than it saves.
 Worth trying on a chain where it cuts off something expensive.
@@ -1734,8 +2153,74 @@ Worth trying on a chain where it cuts off something expensive.
 A rerun reruns the unit that made the binding,
 and that may be the expensive one,
 like a unit that loads and parses a big dataset.
+The worst case is a chain of takes.
+
+<!-- world rerun-chain code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let a = 1
+
+----------
+scriptunit-fragment
+----------
+
+let b = a
+
+----------
+scriptunit-fragment
+----------
+
+let c = b
+
+----------
+scriptunit-fragment
+----------
+
+let d = c
+
+----------
+scriptunit-fragment
+----------
+
+let e = d + 1
+```
+<!-- end world -->
+
+<!-- world rerun-chain step 1 -->
+**Step 1: all five units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1` | - | compiles, runs | new | `a` moved |
+| 2 | `let b = a` | takes `a` (1) | compiles, runs | new | `b` moved |
+| 3 | `let c = b` | takes `b` (2) | compiles, runs | new | `c` moved |
+| 4 | `let d = c` | takes `c` (3) | compiles, runs | new | `d` = 1 |
+| 5 | `let e = d + 1` | reads `d` (4) | compiles, runs | new | `e` = 2 |
+<!-- end world -->
+
+Edit the last link.
+
+<!-- world rerun-chain step 2 -->
+**Step 2: unit 4, at the end of the chain, is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1` | - | reruns | rerun: unit 2 reruns and takes `a` | `a` moved |
+| 2 | `let b = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `b` | `b` moved |
+| 3 | `let c = b` | takes `b` (2) | reruns | rerun: unit 4 takes `c`, which it took when it last ran | `c` moved |
+| 4 | `let d = c; let note = 0` | takes `c` (3) | recompiles, runs | edited | `d` = 1, `note` = 0 |
+| 5 | `let e = d + 1` | reads `d` (4) | reruns | reads `d` from unit 4 | `e` = 2 |
+<!-- end world -->
+
+Unit 4 took `c` the last time it ran,
+so unit 3 reruns to make it,
+which took `b`, so unit 2 reruns,
+which took `a`, so unit 1 reruns.
 Editing a cheap unit at the end of a session
-could rerun the whole session.
+reruns the session from where the chain starts.
 
 The alternative is snapshots:
 keep a binding's value as each unit found it,
@@ -1751,14 +2236,142 @@ Could snapshots be taken only of bindings a later unit takes or writes?
 
 ## How does one unit returning early affect subsequent units?
 
-A unit that returns early keeps what it did before the return.
-Today it's assumed to have done everything its code could,
-so its provider gets rerun for takes that never happened.
+A unit that returns early keeps what it did before the return,
+and offers none of its bindings.
+A unit after it that reads one is blocked:
+it compiles, and doesn't run.
 
-Try a unit that takes `a`, then `!`s out before using it,
-and one that `!`s out before a take.
-Then edit an upstream unit so the early return stops happening.
+Here unit 3 takes `a`, then `!`s out.
+
+<!-- world return-early code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let d = 0
+
+----------
+scriptunit-fragment
+----------
+
+let a2 = a
+let q = 10 /! d
+
+----------
+scriptunit-fragment
+----------
+
+let e = q + 1
+```
+<!-- end world -->
+
+<!-- world return-early step 1 -->
+**Step 1: all four units are entered, and unit 3 returns early.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 2 | `let d = 0` | - | compiles, runs | new | `d` = 0 |
+| 3 | `let a2 = a; let q = 10 /! d` | takes `a` (1), reads `d` (2) | compiles, returns early | `10 /! 0` | - |
+| 4 | `let e = q + 1` | reads `q` (3) | compiles, is blocked | unit 3 did not finish | - |
+<!-- end world -->
+
+Edit unit 2 so the division succeeds.
+
+<!-- world return-early step 2 -->
+**Step 2: unit 2 is edited so unit 3 finishes.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | reruns | rerun: unit 3 took `a` when it last ran, and reruns | `a` moved |
+| 2 | `let d = 5` | - | recompiles, runs | edited | `d` = 5 |
+| 3 | `let a2 = a; let q = 10 /! d` | takes `a` (1), reads `d` (2) | reruns | reads `d` from unit 2 | `a2` = 1000, `q` = 2 |
+| 4 | `let e = q + 1` | reads `q` (3) | reruns | reads `q` from unit 3, which finished | `e` = 3 |
+<!-- end world -->
+
 Is that a fix, an edit, or something else?
+None of them.
+Unit 3's code didn't change,
+so it's a forward rerun, because it reads `d`.
+It took `a` when it last ran,
+so unit 1 reruns first.
+And unit 4, blocked before, runs.
+
+Now `!` out before the take.
+
+<!-- world return-early-before-take code -->
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let d = 0
+
+----------
+scriptunit-fragment
+----------
+
+let q = 10 /! d
+let a2 = a
+
+----------
+scriptunit-fragment
+----------
+
+let e = a + 1
+```
+<!-- end world -->
+
+<!-- world return-early-before-take step 1 -->
+**Step 1: all four units are entered, and unit 3 returns early before its take.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
+| 2 | `let d = 0` | - | compiles, runs | new | `d` = 0 |
+| 3 | `let q = 10 /! d; let a2 = a` | takes `a` (1), reads `d` (2) | compiles, returns early | `10 /! 0` | - |
+| 4 | `let e = a + 1` | reads `a` (1) | compile fails | `a` is given away by unit 3 | - |
+<!-- end world -->
+
+Unit 4 can't name `a`, though nothing took it at run time.
+What a unit gives away is decided when it compiles,
+and unit 3's code gives `a` away.
+
+<!-- world return-early-before-take step 2 -->
+**Step 2: unit 2 is edited so unit 3 finishes.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | untouched | unit 3 returned early before taking `a`, so `a` is as unit 1 made it | `a` moved |
+| 2 | `let d = 5` | - | recompiles, runs | edited | `d` = 5 |
+| 3 | `let q = 10 /! d; let a2 = a` | takes `a` (1), reads `d` (2) | reruns | reads `d` from unit 2 | `q` = 2, `a2` = 1000 |
+| 4 | `let e = a + 1` | reads `a` (1) | untouched | still cannot name `a` | - |
+
+<!--
+Engine today, more than the rule asks:
+unit 1 reruns: assumes a unit that returned early did everything its code could, so reruns unit 1 for a take that never happened
+-->
+<!-- end world -->
+
+Unit 3 never took `a`,
+so unit 1 needs nothing when unit 3 finishes.
+But the engine assumes a unit that returned early
+did everything its code could,
+and reruns unit 1 for a take that never happened.
+Sound, more than needed.
 
 
 
@@ -1766,10 +2379,27 @@ Is that a fix, an edit, or something else?
 ## Are the rules right, and what does the engine do today?
 
 Every step table in this document is a test case.
-The plan is to write each one down as an engine test,
-check the engine against the table,
-and keep a list of where they differ.
-The notes in the comments already list several:
-overwrites treated as updates,
-reruns that always start at the maker,
-and splices that rerun the whole suffix.
+Each lives as a fixture in `crates/datalove-repl/tests/fixtures/reactive/`,
+is rendered into this document from there,
+and is checked against the engine by `crates/datalove-repl/tests/reactive_tests.rs`:
+which units recompile, which rerun,
+what each does to earlier bindings,
+and what each holds after.
+
+Where the engine does more than a table asks,
+the fixture says so,
+and it shows as a comment under the table.
+What's left of those:
+
+- Undoing a revival reruns the maker and the take, where a fixup would do.
+- The splices, delete and insert, rerun every unit from the rerun point on,
+  readers included, and start that point at the maker.
+- A write to part of a binding counts as a write to all of it.
+- A rerun that comes out the same still reruns its readers.
+- A unit that returned early is assumed to have done everything its code could.
+
+And recompiles aren't held to anything tighter than salsa's memos yet.
+
+
+
+
