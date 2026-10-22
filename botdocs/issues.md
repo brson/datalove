@@ -21,7 +21,8 @@ home here.
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
-  - [The REPL takes most statements for expressions](#user-content-the-repl-takes-most-statements-for-expressions)
+  - [A type declared in one unit is unknown to the next](#user-content-a-type-declared-in-one-unit-is-unknown-to-the-next)
+  - [The REPL never reads a brace-delimited input over several lines](#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines)
   - [The REPL prints errors as Rust values](#user-content-the-repl-prints-errors-as-rust-values)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
@@ -193,15 +194,22 @@ failed definition. Dropping the engine and starting a fresh one is the
 heavier alternative. The CLI's REPL does not use the JIT, so a long session
 does not reach this today.
 
-### The REPL takes most statements for expressions
+### A type declared in one unit is unknown to the next
 
-**Reproduced** for `debuglog`. `classify_input` (`datalove-repl/src/lib.rs`)
-treats only `let`, `var`, `const`, `set`, `call`, `require` and `import` as
-one-line statements, and `fun` as a multiline one. Every other line is parsed
-as an expression. So `debuglog a` fails with "unexpected token after
-expression", and by the same path `if`, `loop`, `match`, `type`, `native` and
-`ret` should too (not tried). The `OpenBraceTree` kind is never produced
-(`is_open_brace_tree = false; // todo`), and its multiline arm is `todo!()`.
+**Reproduced** at the REPL and through `Engine`. `type Flag: enum { atom Yes,
+atom No }` in one unit and `let f: Flag = atom No` in the next fails with
+`UnresolvedTypeAlias { name: "Flag", local_index: Some(0) }`; the two in one
+unit work. Script units carry bindings, functions, consts and module aliases
+forward (`binding_at`, `module_alias_at`), and nothing does the same for type
+aliases. Not looked into further.
+
+### The REPL never reads a brace-delimited input over several lines
+
+**Reasoned about, not tried.** `classify_input` (`datalove-repl/src/lib.rs`)
+never produces `InputKind::OpenBraceTree` (`is_open_brace_tree = false; //
+todo`), and its multiline arm in the engine is `todo!()`. So a line that
+opens a brace, as a long `type` or a list literal would, is submitted on its
+own.
 
 ### The REPL prints errors as Rust values
 

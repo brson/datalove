@@ -1,0 +1,348 @@
+[
+  {
+    "input": "var b = 125",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var b = 125"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "b",
+            "ty": "int",
+            "value": "125"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "125"
+      }
+    ]
+  },
+  {
+    "input": "let flag = true",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let flag = true"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "flag",
+            "ty": "bool",
+            "value": "true"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "125"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      }
+    ]
+  },
+  {
+    "input": "if flag\n  set b = 500\nend if",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "if flag\n  set b = 500\nend if"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "500"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      }
+    ]
+  },
+  {
+    "input": "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom No",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom No"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "f",
+            "ty": "enum{No, Yes}",
+            "value": "enum { atom No }"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "500"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      }
+    ]
+  },
+  {
+    "input": "match f\ncase atom Yes\n  set b = 1\ncase atom No\n  set b = 2\nend match",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "match f\ncase atom Yes\n  set b = 1\ncase atom No\n  set b = 2\nend match"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      }
+    ]
+  },
+  {
+    "input": "var i = 0",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var i = 0"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "i",
+            "ty": "int",
+            "value": "0"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      },
+      {
+        "name": "i",
+        "ty": "int",
+        "value": "0"
+      }
+    ]
+  },
+  {
+    "input": "loop while i .< 3\n  set i = i + 1\nend loop",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "loop while i .< 3\n  set i = i + 1\nend loop"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      },
+      {
+        "name": "i",
+        "ty": "int",
+        "value": "3"
+      }
+    ]
+  },
+  {
+    "input": "loop\n  set i = i + 1\n  break\nend loop",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "loop\n  set i = i + 1\n  break\nend loop"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      },
+      {
+        "name": "i",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  },
+  {
+    "input": "debuglog b",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "debuglog b"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      },
+      {
+        "name": "i",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  },
+  {
+    "input": "b",
+    "parse": {
+      "Command": {
+        "Expression": "b"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "int",
+        "value": "2"
+      }
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      },
+      {
+        "name": "i",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  },
+  {
+    "input": "i",
+    "parse": {
+      "Command": {
+        "Expression": "i"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "int",
+        "value": "4"
+      }
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "f",
+        "ty": "enum{No, Yes}",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flag",
+        "ty": "bool",
+        "value": "true"
+      },
+      {
+        "name": "i",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  }
+]

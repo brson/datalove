@@ -192,12 +192,17 @@ pub(crate) fn classify_input(input: &str) -> InputKind {
     let is_whitespace = code.is_empty();
     let is_repl_command = !starts_a_comment(input.trim())
         && input.trim().starts_with(REPL_COMMAND_SIGIL);
+    // Every word a statement can start with, as the parser's statement
+    // dispatch has them. None of them starts an expression, so an input
+    // starting with one is a statement; one that opens a block reads on to
+    // its `end`.
     let is_oneline_statement_keyword = parse_ident(code).map(|ident| match ident {
-        "let" | "var" | "const" | "set" | "call" | "require" | "import" => true,
+        "let" | "var" | "const" | "set" | "call" | "require" | "import"
+        | "ret" | "break" | "continue" | "debuglog" | "type" | "native" => true,
         _ => false
     }).unwrap_or(false);
     let is_multiline_statement_keyword = parse_ident(code).map(|ident| match ident {
-        "fun" => true,
+        "fun" | "if" | "match" | "loop" | "for" => true,
         _ => false
     }).unwrap_or(false);
     let is_open_brace_tree = false; // todo
@@ -248,7 +253,9 @@ fn parse_ident(input: &str) -> Option<&str> {
     alphanumeric_prefix(input.trim())
 }
 
+/// The word `s` starts with, which is all of it when it is one word: a bare
+/// `loop` opens a block as much as `loop while` does.
 fn alphanumeric_prefix(s: &str) -> Option<&str> {
-    s.find(|c: char| !c.is_alphanumeric())
-        .map(|pos| &s[..pos])
+    let end = s.find(|c: char| !c.is_alphanumeric()).unwrap_or(s.len());
+    (end > 0).then(|| &s[..end])
 }
