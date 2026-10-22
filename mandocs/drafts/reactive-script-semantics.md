@@ -17,9 +17,9 @@ Synthesis:
 
 Datalove's language and compiler model have been designed
 primarily as an interactive scripting environment.
-It has been designed such that editing existing
+It is designed such that editing existing
 code quickly recompiles previously compiled code.
-It has been designed such that editing existing
+It is designed such that editing existing
 code _should be able to_ quickly re-execute previously compiled code,
 producing the same result.
 Datalove's scripting environment is intended to be
@@ -70,7 +70,7 @@ Every pass of the compiler is memoized (and parallelized).
 Editing any code only recompiles its dependents.
 The compiler design is aided by and informs the restrictions of the language design.
 
-Of course a language that doesn't do any I/O is quite limited.
+A language that doesn't do any I/O is quite limited.
 Datalove will have I/O.
 One of my [principles](../principles.md) in Datalove is to start with a severely
 restricted language design, build out the desired compiler capabilities,
