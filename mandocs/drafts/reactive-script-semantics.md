@@ -45,12 +45,15 @@ Let's figure it out.
 - [What if a unit that moves or mutates is deleted?](#user-content-what-if-a-unit-that-moves-or-mutates-is-deleted)
 - [What if a unit gives a moved `var` a value again?](#user-content-what-if-a-unit-gives-a-moved-var-a-value-again)
 - [An amended algebra of rewind and replay](#user-content-an-amended-algebra-of-rewind-and-replay)
-- Speculating about transitivity
-- What if rewinding one unit needs another rewound first?
-- What if a move or mutation is conditional, or in a loop?
-- What does rewinding cost?
-- How does one unit returning early affect subsequent units?
-- Are the rules right, and what the engine does today
+- [Speculating about transitivity](#user-content-speculating-about-transitivity)
+- [What if a rerun needs another rerun first?](#user-content-what-if-a-rerun-needs-another-rerun-first)
+- [What if values flow through intermediate bindings?](#user-content-what-if-values-flow-through-intermediate-bindings)
+- [What if a move or mutation is conditional, or in a loop?](#user-content-what-if-a-move-or-mutation-is-conditional-or-in-a-loop)
+- [What if a unit writes only part of a binding?](#user-content-what-if-a-unit-writes-only-part-of-a-binding)
+- [What if a rerun produces the same value?](#user-content-what-if-a-rerun-produces-the-same-value)
+- [What does rerunning cost?](#user-content-what-does-rerunning-cost)
+- [How does one unit returning early affect subsequent units?](#user-content-how-does-one-unit-returning-early-affect-subsequent-units)
+- [Are the rules right, and what does the engine do today?](#user-content-are-the-rules-right-and-what-does-the-engine-do-today)
 
 
 
@@ -1462,8 +1465,13 @@ but I think still within the realm of what I can personally understand
 and reason about.
 Getting close to my personal reasoning frontier though.
 
-There is an obvious omission yet.
+There's still an obvious omission.
 There are missing transitive properties in both the reverse and forward directions.
+
+The root of it is that the table is per binding,
+but a rerun reruns a whole unit.
+Everything else that unit reads has to be as it found it,
+and everything else it takes or writes gets done again.
 
 In the reverse direction,
 there can be multiple bindings involved in the chain
@@ -1482,11 +1490,214 @@ It seems like there's a transitive closure of bindings and the operations
 needed to recover them.
 A recursive algorithm running backwards and forwards across units to a fixed point.
 
+<!--
+The engine already loops like this:
+`reach_from` repeats its back rule over every unit it reaches
+until no more providers are added.
+-->
+
+Can the closure be found from binding names alone,
+or does it need real dataflow?
+I suspect names are enough, thanks to linearity.
+A value has one owner at a time,
+and every handoff is a take or a write some unit recorded by name,
+so following the records follows the value.
+But names are coarse.
+They assume a conditional write always happens,
+and a write to `p.1` counts as a write to all of `p`.
+That's sound, just more reruns than needed.
+Conditional overwrites do break the nearest-overwrite refinement, though:
+an overwrite can only be a rerun's starting point if it certainly ran.
+
+The sections below are experiments to poke at all this.
 
 
 
 
+## What if a rerun needs another rerun first?
+
+The smallest case I can think of:
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var b = 1
+
+----------
+scriptunit-fragment
+----------
+
+var z = 10
+
+----------
+scriptunit-fragment
+----------
+
+set b = 500
+set z = z + 1
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+
+----------
+scriptunit-fragment
+----------
+
+set b = 0
+```
+
+Edit unit 4.
+It needs `b` as 500, so unit 3 reruns.
+But unit 3 also updates `z`,
+so rerunning it as is would leave `z` at 12.
+Unit 2 has to rerun first, though unit 4 never names `z`.
+
+Things to check:
+does the engine rerun unit 2 here?
+Does it matter whether the rerun starts at unit 1 or unit 3?
+And what about a chain of moves,
+`let a2 = a`, then `var w = a2`, then something that changes `w`,
+where restoring `w` walks back through two names to `a`?
 
 
 
 
+## What if values flow through intermediate bindings?
+
+The forward direction.
+Unit 2 reads `b` and computes `d`,
+unit 3 writes `d` into an earlier `var`,
+and unit 4 reads that `var`.
+Change `b`, and does the rerun reach unit 4?
+
+Then mix the directions:
+make unit 3 also update some unrelated binding,
+so the forward rerun of unit 3 needs a backward rerun first.
+How many rounds until it settles?
+Is there a case that needs more than two?
+
+
+
+
+## What if a move or mutation is conditional, or in a loop?
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let flag = true
+
+----------
+scriptunit-fragment
+----------
+
+if flag
+  set b = 500
+end if
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+```
+
+Unit 3's write depends on a value, not just on code.
+Edit unit 2 to `false`,
+and unit 3 now does nothing to `b` at run time,
+though its record still says it writes `b`.
+So `b` has to be rebuilt to 125, and unit 4 rerun.
+And unit 3 can't be a starting point for a rerun of `b`,
+because it might not have written.
+
+A take in one branch only is already an error,
+so a conditional take is out.
+What about an update in a loop,
+`loop while i .< n` with `set b = b * 2` inside?
+It's still one update to the table, I think.
+
+
+
+
+## What if a unit writes only part of a binding?
+
+`var p = (1, "a")`,
+then `set p.1 = "b"`,
+then a unit that reads only `p.0`.
+By names the reader depends on the write.
+By dataflow it doesn't.
+How much does that coarseness cost in practice,
+and would tracking places instead of names be worth it?
+
+
+
+
+## What if a rerun produces the same value?
+
+Rerun a unit that computes `let big = b .< 1000`.
+If `b` changed from 125 to 126,
+`big` is still `true`,
+and nothing that reads `big` needs to rerun.
+That's salsa's backdating, applied to run-time values.
+It needs values compared, which may cost more than it saves.
+Worth trying on a chain where it cuts off something expensive.
+
+
+
+
+## What does rerunning cost?
+
+A rerun reruns the unit that made the binding,
+and that may be the expensive one,
+like a unit that loads and parses a big dataset.
+Editing a cheap unit at the end of a session
+could rerun the whole session.
+
+The alternative is snapshots:
+keep a binding's value as each unit found it,
+and restore by copying instead of rerunning.
+That trades memory for time,
+and it makes most of the transitivity above go away,
+because a copy has no inputs.
+Where's the line between the two?
+Could snapshots be taken only of bindings a later unit takes or writes?
+
+
+
+
+## How does one unit returning early affect subsequent units?
+
+A unit that returns early keeps what it did before the return.
+Today it's assumed to have done everything its code could,
+so its provider gets rerun for takes that never happened.
+
+Try a unit that takes `a`, then `!`s out before using it,
+and one that `!`s out before a take.
+Then edit an upstream unit so the early return stops happening.
+Is that a fix, an edit, or something else?
+
+
+
+
+## Are the rules right, and what does the engine do today?
+
+Every step table in this document is a test case.
+The plan is to write each one down as an engine test,
+check the engine against the table,
+and keep a list of where they differ.
+The notes in the comments already list several:
+overwrites treated as updates,
+reruns that always start at the maker,
+and splices that rerun the whole suffix.
