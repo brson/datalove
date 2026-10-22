@@ -23,6 +23,7 @@ home here.
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [The REPL takes most statements for expressions](#user-content-the-repl-takes-most-statements-for-expressions)
   - [The REPL prints errors as Rust values](#user-content-the-repl-prints-errors-as-rust-values)
+  - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
   - [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
@@ -209,6 +210,25 @@ with no span: `NonCopyIndexProjection { elem_ty: "string" }`,
 `UnresolvedName("x")`, `InvalidOperandType { op: "/", ty: "int" }`. Not
 wrong, but every user sees them. A module's ownership errors have
 the same problem; see the store demo entry below.
+
+### An edit to a module no unit requires reports nothing
+
+**Reproduced.** The REPL engine compiles only the modules the session's units
+require (see [repl-architecture.md](repl-architecture.md)), so
+`Engine::edit_module` on any other module compiles nothing. An edit that
+breaks one comes back with no unit reports, nothing in `module_errors()` and no
+diagnostics. The error surfaces only when a unit later requires the module, and
+then as that unit's failure: ``module `local/test/m` does not compile: ...``. Not
+wrong as semantics -- a module nothing requires fails nothing -- but a reader
+editing a module learns nothing about the edit.
+
+The capability would be an `Engine::check_module(path)` that compiles the
+module, with what it requires, beside the session's roots and puts the roots
+back, touching neither the executor nor `module_errors()`, and an `edit_module`
+that returns that check with its unit reports. The check is the same shape as
+`ModuleErrors`, messages and stored diagnostics, so the CLI renders either.
+How the interactive REPL shows it is the open part; it has no module editing
+yet, so nothing calls `edit_module` but the tests.
 
 ## The language and its checks
 

@@ -356,6 +356,9 @@ setup and the loop together.
   terminal text selection for no benefit.
 - History entries are two plain lines rather than the cards `repl-ui.md`
   describes.
+- An edit to a module no unit requires reports nothing, since only required
+  modules are compiled; see
+  [issues.md](issues.md#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing).
 - PageUp and PageDown are the only way to scroll the history. The mouse wheel
   is captured and dropped, and the pane cannot be scrolled while the menu or a
   modal is open.
