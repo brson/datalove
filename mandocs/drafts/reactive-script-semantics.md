@@ -777,8 +777,8 @@ and turn a read into a take, or a take into a read.
 Then the edit is two things at once.
 It undoes what the old code did the last time it ran,
 and it redoes what the new code does now.
-The bindings the old code touched need what the undo column asks for,
-and the bindings the new code touches need what the redo column asks for.
+The bindings the old code touched need what the undo rules ask for,
+and the bindings the new code touches need what the redo rules ask for.
 Forward, the units after it see the difference between the two.
 
 ```datalove
@@ -821,7 +821,7 @@ Three units read `a`, and nothing takes it.
 Now edit unit 3 to take `a` instead of reading it.
 The old code only read `a`, so there is nothing to undo.
 The new code takes `a`,
-and the redo column says a take needs a rewind.
+and the redo rules say a take needs a rewind.
 But it doesn't need one here.
 That column assumed the unit took the binding the last time it ran too,
 so the binding would be empty.
@@ -892,7 +892,7 @@ The take has moved from unit 4 to unit 3.
 The rewind is not because of anything unit 3 did.
 Unit 4 emptied `a` after unit 3 last ran,
 the same case as a read before a later move.
-The redo column holds if it is read that way:
+The redo rule holds if it is read that way:
 a take needs a rewind when the binding is not as its maker left it,
 and that is usually, but not always, because the unit took it itself.
 
@@ -907,8 +907,7 @@ Note: the engine today matches all three steps and the variant.
 
 A move added or removed changes which names the units after it can use.
 A mutation doesn't change any names.
-It changes values,
-and nothing in the later units' code says so.
+It changes values.
 
 ```datalove
 ----------
