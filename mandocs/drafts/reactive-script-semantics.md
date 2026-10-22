@@ -98,21 +98,21 @@ In this example of a self-contained Datalove _worldfile_ we have two sequential 
 They share a type checking context and execution environment.
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let b = 100
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a_moved = a
 let b_moved = b
@@ -121,7 +121,7 @@ let c = a_moved /! b_moved
 debuglog c
 ```
 
-> Worldfiles are chunks of text delimited by headers bound between `---` lines.
+> Worldfiles are chunks of text delimited by headers bound between `----------` lines.
 > Each chunk is interpreted as determined by the header.
 
 In this example the integers are type `int`, bigints.
@@ -147,22 +147,22 @@ No recompilation yet.
 This is as originally written.
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 let x = y // `y` doesn't exist
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let b = 100
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a_moved = a
 let b_moved = b
@@ -245,24 +245,24 @@ and a new unit typed after this one that reads `b`
 compiles fine and then reads a value that isn't there.
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 let x = y // broken again
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 // Naively we don't want to rerun this because it doesn't depend on
 // unit 1...
 let b = 100
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a_moved = a
 // ...but this moved `b` the last time it ran,
@@ -312,21 +312,21 @@ Here's a new variation on our running example
 that mutates instead of moves.
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 var b = 125
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 set b = b * 2
 let c = a /! b
@@ -404,21 +404,21 @@ But not every write reads.
 Here unit 3 just replaces `b`:
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 var b = 125
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 set b = 500
 let c = a /! b
@@ -563,21 +563,21 @@ But a unit that only reads can be caught out too,
 if the binding it reads was taken _after_ it ran.
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let c = a /! 10
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a_moved = a
 ```
@@ -624,27 +624,27 @@ affects which units need to be redone.
 The same goes for a mutation after the read.
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 var b = 125
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let c = a /! b
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 set b = b * 2
 ```
@@ -696,27 +696,27 @@ so unit 1 is left alone.
 Swap units 3 and 4, so the write comes first.
 
 ```datalove
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let a = 1000
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 var b = 125
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 set b = b * 2
 
----
-script-unit
----
+----------
+scriptunit-fragment
+----------
 
 let c = a /! b
 ```
