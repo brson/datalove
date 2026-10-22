@@ -40,8 +40,8 @@ Let's figure it out.
 - [What if a unit reads a binding before a later unit moves it?](#user-content-what-if-a-unit-reads-a-binding-before-a-later-unit-moves-it)
 - [What if a unit reads a binding before a later unit mutates it?](#user-content-what-if-a-unit-reads-a-binding-before-a-later-unit-mutates-it)
 - [What if a unit reads a binding after an earlier unit mutated it?](#user-content-what-if-a-unit-reads-a-binding-after-an-earlier-unit-mutated-it)
-- What if an edit adds or removes a move?
-- What if an edit adds or removes a mutation?
+- [What if an edit adds or removes a move?](#user-content-what-if-an-edit-adds-or-removes-a-move)
+- [What if an edit adds or removes a mutation?](#user-content-what-if-an-edit-adds-or-removes-a-mutation)
 - What if a unit that moves or mutates is deleted?
 - What if a unit gives a moved `var` a value again?
 - What if rewinding one unit needs another rewound first?
@@ -765,6 +765,275 @@ the step 2 edit, because its rule is "changed by any unit after the
 binding's provider". Correct, but more than necessary. The D013 case also
 reruns units 2 and 3 for an edit to the failing unit 4. Candidates for the
 last section.
+-->
+
+
+
+
+## What if an edit adds or removes a move?
+
+Every edit so far kept what the edited unit does to earlier bindings.
+A unit that took `a` before the edit still took it after.
+But an edit can change that too,
+and turn a read into a take, or a take into a read.
+
+Then the edit is two things at once.
+It undoes what the old code did the last time it ran,
+and it redoes what the new code does now.
+The bindings the old code touched need what the undo column asks for,
+and the bindings the new code touches need what the redo column asks for.
+Forward, the units after it see the difference between the two.
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! 10
+
+----------
+scriptunit-fragment
+----------
+
+let d = a + 1
+
+----------
+scriptunit-fragment
+----------
+
+let e = a + 2
+```
+
+Three units read `a`, and nothing takes it.
+
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
+| 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
+| 3 | `let d = a + 1` | reads `a` (1) | compiles, runs | new | `d` = 1001 |
+| 4 | `let e = a + 2` | reads `a` (1) | compiles, runs | new | `e` = 1002 |
+
+Now edit unit 3 to take `a` instead of reading it.
+The old code only read `a`, so there is nothing to undo.
+The new code takes `a`,
+and the redo column says a take needs a rewind.
+But it doesn't need one here.
+That column assumed the unit took the binding the last time it ran too,
+so the binding would be empty.
+This take is new,
+and `a` still holds what unit 1 made,
+so unit 1 is left alone.
+
+The cost lands forward instead.
+Unit 4 reads `a`,
+and `a` was given away before unit 4 gets to it.
+It hasn't been edited,
+and nothing it uses was rebuilt,
+but it no longer compiles:
+
+```
+error[D013]: `a` was given away by an earlier input
+```
+
+**Step 2: unit 3 is edited to take `a`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | untouched | `a` is as unit 1 made it | `a` moved |
+| 2 | `let c = a /! 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 100 |
+| 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
+| 4 | `let e = a + 2` | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |
+
+Unit 2 is untouched too.
+It reads `a` before the take,
+so what it read is still what's there.
+
+Now edit unit 3 back to a read.
+This time the old code took `a`,
+and undoing a take needs a rewind:
+unit 1 reruns to build `a` again.
+The new code reads `a`, which is now there to read.
+And unit 4 can name `a` again,
+so it recompiles and runs.
+
+**Step 3: unit 3 is edited back to read `a`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | reruns | rewind: unit 3 took `a` when it last ran, and the edit undoes that | `a` = 1000 |
+| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
+| 3 | `let d = a + 1` | reads `a` (1) | recompiles, runs | edited | `d` = 1001 |
+| 4 | `let e = a + 2` | reads `a` (1) | recompiles, runs | `a` can be named again | `e` = 1002 |
+
+Adding the move and removing it are not mirror images.
+Adding it cost nothing backward and broke a unit forward.
+Removing it needed a rewind backward, and fixed that unit forward.
+
+The added move does need a rewind
+if something after it already took the binding.
+Make unit 4 `let e = a`, so it is the one that takes `a`,
+and then edit unit 3 to take it instead.
+
+**Step 2, with unit 4 taking `a`: unit 3 is edited to take `a`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | reruns | rewind: unit 3 takes `a`, which unit 4 took after it | `a` moved |
+| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
+| 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
+| 4 | `let e = a` | takes `a` (1) | recompile fails | `a` was given away by unit 3 | - |
+
+The take has moved from unit 4 to unit 3.
+The rewind is not because of anything unit 3 did.
+Unit 4 emptied `a` after unit 3 last ran,
+the same case as a read before a later move.
+The redo column holds if it is read that way:
+a take needs a rewind when the binding is not as its maker left it,
+and that is usually, but not always, because the unit took it itself.
+
+<!--
+Note: the engine today does all of this,
+but in step 3 and in the variant it also reruns unit 2,
+because it replays readers after a rewind.
+Same gap as noted under the hypothesis.
+-->
+
+
+
+
+## What if an edit adds or removes a mutation?
+
+A move added or removed changes which names the units after it can use.
+A mutation doesn't change any names.
+It changes values,
+and nothing in the later units' code says so.
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let d = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! b
+```
+
+Unit 3 reads `b` and doubles it into a binding of its own.
+Unit 4 reads `b` as 125, so `c` is 8.
+
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
+| 2 | `var b = 125` | - | compiles, runs | new | `b` = 125 |
+| 3 | `let d = b * 2` | reads `b` (2) | compiles, runs | new | `d` = 250 |
+| 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+
+Now edit unit 3 to double `b` in place.
+As with the added move, nothing needs to be undone,
+and `b` still holds what unit 2 made,
+so the new update needs no rewind.
+Unit 3 doubles `b` to 250.
+
+Unit 4 is where it differs from the move.
+It still compiles:
+its code names `a` and `b`,
+both are still there,
+and their types are the same.
+Its compiled code doesn't change at all.
+But the `b` it reads is now the one unit 3 left,
+so it has to rerun,
+and `c` becomes 4.
+
+**Step 2: unit 3 is edited to update `b`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | `var b = 125` | - | untouched | `b` is as unit 2 made it | `b` = 250 |
+| 3 | `set b = b * 2` | updates `b` (2) | recompiles, runs | edited | - |
+| 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which now updates it | `c` = 4 |
+
+Now edit unit 3 back to a read.
+The old code updated `b`,
+and undoing an update needs a rewind,
+so unit 2 reruns to put `b` back to 125.
+The new code reads that 125,
+and `d` is 250 again.
+
+Unit 4 reruns too, but not for the rewind's sake.
+A rewind replays only the units that took or wrote what was rebuilt,
+and unit 4 only reads.
+It reruns because the edit changed the `b` it sees,
+from the 250 unit 3 left
+back to the 125 unit 2 made.
+That's the forward rule.
+
+**Step 3: unit 3 is edited back to read `b`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | `var b = 125` | - | reruns | rewind: unit 3 updated `b` when it last ran, and the edit undoes that | `b` = 125 |
+| 3 | `let d = b * 2` | reads `b` (2) | recompiles, runs | edited | `d` = 250 |
+| 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 8 |
+
+An overwrite in place of the update, `set b = 500`,
+reruns the same units in both steps.
+The kinds of write differ on redo,
+and a write that is new is never redone against its own result.
+They come apart when something after already wrote the binding.
+Add a fifth unit, `set b = b + 1`,
+so `b` is 126 before the edit.
+An update added to unit 3 has to read 125,
+so unit 2 reruns first.
+An overwrite added to unit 3 doesn't read `b`,
+so it can write over the 126,
+and unit 5 reruns forward from there.
+
+So the move and the mutation agree backward,
+and disagree forward in where the break shows.
+The later units notice an added or removed move
+when they are compiled,
+as an error.
+They notice an added or removed mutation
+only when they run,
+as a different value.
+To find those units the engine has to know which units come after
+a write to each binding.
+Their code alone doesn't tell it.
+
+<!--
+Note: the engine today matches steps 2 and 3, rerunning units 3 and 4,
+then units 2, 3 and 4.
+With the fifth unit, it rewinds to unit 2 for the added overwrite as well
+as the added update, because it treats every write like an update.
+Same gap as noted under the overwrite section.
 -->
 
 
