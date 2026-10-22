@@ -45,10 +45,11 @@ Let's figure it out.
 - [What if a unit that moves or mutates is deleted?](#user-content-what-if-a-unit-that-moves-or-mutates-is-deleted)
 - [What if a unit gives a moved `var` a value again?](#user-content-what-if-a-unit-gives-a-moved-var-a-value-again)
 - [An amended algebra of rewind and replay](#user-content-an-amended-algebra-of-rewind-and-replay)
+- Speculating about transitivity
 - What if rewinding one unit needs another rewound first?
 - What if a move or mutation is conditional, or in a loop?
 - What does rewinding cost?
-- [How does one unit returning early affect subsequent units?](#user-content-how-does-one-unit-returning-early-affect-subsequent-units)
+- How does one unit returning early affect subsequent units?
 - Are the rules right, and what the engine does today
 
 
@@ -1454,7 +1455,38 @@ on, readers included, because a value is identified by its unit's index.
 
 
 
+## Speculating about transitivity
 
-## How does one unit returning early affect subsequent units?
+These rules are getting complex
+but I think still within the realm of what I can personally understand
+and reason about.
+Getting close to my personal reasoning frontier though.
+
+There is an obvious omission yet.
+There are missing transitive properties in both the reverse and forward directions.
+
+In the reverse direction,
+there can be multiple bindings involved in the chain
+responsible for writing a particular target binding,
+and some of those other bindings might themselves
+be mutated or taken by intervening units that have no direct
+relation to the triggering unit.
+
+In the forward direction
+the units that rerun may themselves depend on other unrelated mutated bindings,
+forcing yet more undo operations in the reverse direction before they can rerun.
+And as data flows through intermediate bindings subsequent readers and writers
+need themselves to rerun.
+
+It seems like there's a transitive closure of bindings and the operations
+needed to recover them.
+A recursive algorithm running backwards and forwards across units to a fixed point.
+
+
+
+
+
+
+
 
 
