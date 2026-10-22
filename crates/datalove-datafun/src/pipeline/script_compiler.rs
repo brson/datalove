@@ -336,6 +336,15 @@ impl<'db> ScriptCompiler<'db> {
         self.append_unit(src, true)
     }
 
+    /// Compile a unit from a source the caller made, as the next unit.
+    ///
+    /// For a caller that reads the unit before it is compiled -- for the
+    /// modules it requires, say -- and wants that read and the compile to be
+    /// of one input.
+    pub fn compile_source(&mut self, source: bct::input::Source, is_expr: bool) -> ScriptCompilationResult {
+        self.append_unit(source, is_expr)
+    }
+
     /// Put a new unit on the end of the script and compile it.
     ///
     /// **A unit that fails stays.** It provides nothing to what follows, so the
@@ -471,6 +480,17 @@ impl<'db> ScriptCompiler<'db> {
         source: &str,
         is_expr: bool,
     ) -> Splice {
+        let src = bct::input::Source::new(self.db, source.S());
+        self.insert_source(i, src, is_expr)
+    }
+
+    /// The same, from a source the caller made; see [`Self::compile_source`].
+    pub fn insert_source(
+        &mut self,
+        i: usize,
+        source: bct::input::Source,
+        is_expr: bool,
+    ) -> Splice {
         let mut units = self.unit_list();
         assert!(
             i <= units.len(),
@@ -478,8 +498,7 @@ impl<'db> ScriptCompiler<'db> {
             units.len(),
         );
 
-        let src = bct::input::Source::new(self.db, source.S());
-        units.insert(i, (src, is_expr));
+        units.insert(i, (source, is_expr));
         self.splice(units, i)
     }
 

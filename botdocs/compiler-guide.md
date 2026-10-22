@@ -1857,12 +1857,14 @@ script requiring nothing went from about 43ms to under 7ms end to end.
 reported. So the line is that compiling from roots is for running a program, not
 for vouching for a world, and `All` stays the default:
 
-- `script`, `script-ir`, `aot-compile` and `script-world` narrow, through
+- `script`, `script-ir` and `aot-compile` narrow once, through
   `ModuleCompilationPipeline::narrow_roots_to_script`, which reads the script's
-  `require`s. `script-world` uses `narrow_roots_to_scripts`, the same over every
-  script unit the worldfile has.
-- `typecheck-std`, the test suites that build their own pipelines, and the REPL
-  pass `All`.
+  `require`s.
+- The REPL engine, and so the REPL and `script-world`, narrows again before
+  every step, to what the session's units require; see
+  [repl-architecture.md](repl-architecture.md).
+- `typecheck-std` and the test suites that build their own pipelines pass
+  `All`.
 
 A worldfile's own modules are always roots, whether the script reaches them or
 not: a module the author wrote in the file being compiled is part of what they
@@ -1871,10 +1873,8 @@ asked to be compiled, and a library module they do not use is not.
 does not resolve, because pruning on a program whose requires are wrong would
 drop the module the diagnostic is about.
 
-The REPL stays at `All` for now. Its module set is fixed for the session,
-compiled once at startup, and each line compiles against it. Narrowing it
-means changing the roots as lines add `require`s, which the numbering allows:
-a pipeline numbers each module by path, once, for its whole life (see
+Narrowing again as a session goes is sound because of the numbering: a
+pipeline numbers each module by path, once, for its whole life (see
 `ModuleIdTable` in `crates/datalove-datafun-common/src/lib.rs`), so a module
 joining the graph moves no other module's number and leaves the units already
 lowered calling the modules they named.

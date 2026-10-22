@@ -11,6 +11,7 @@ repository.workspace = true
 rmx.workspace = true
 datalove-datafun.workspace = true
 datalove-datafun-ir.workspace = true
+bct.workspace = true
 # For `Setter`, which is what editing a unit's source is.
 salsa.workspace = true
 serde = { version = "1.0", features = ["derive"] }

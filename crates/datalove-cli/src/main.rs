@@ -1045,11 +1045,12 @@ impl ScriptWorldCommand {
         let mut pipeline = descriptor.to_pipeline(&db);
         let natives = attach_natives(&descriptor, &sys, &mut pipeline);
 
-        // Compile only what the script units reach, the same as `script`
-        // does, except for the worldfile's own modules. Those are roots whether
-        // the script reaches them or not: the author wrote them in the file
-        // they asked to be compiled, so an error in one is an error in the
-        // worldfile. Only the system library is pruned here.
+        // The engine compiles what the script units require as they come, the
+        // same as the REPL does, and the worldfile's own modules from the
+        // start. Those are roots whether the script reaches them or not: the
+        // author wrote them in the file they asked to be compiled, so an error
+        // in one is an error in the worldfile. Only the system library is
+        // pruned.
         let worldfile_modules: Vec<String> = parsed.sections.iter()
             .filter_map(|section| match section {
                 WorldfileSection::Module { library, package, module, .. } =>
@@ -1057,17 +1058,11 @@ impl ScriptWorldCommand {
                 _ => None,
             })
             .collect();
-        let sources: Vec<&str> = parsed.sections.iter()
-            .filter_map(|section| match section {
-                WorldfileSection::ScriptFragment { source } | WorldfileSection::ScriptExpr { source } =>
-                    Some(source.as_str()),
-                _ => None,
-            })
-            .collect();
-        pipeline.narrow_roots_to_scripts(&db, &sources, &worldfile_modules);
+        pipeline.narrow_roots_to_sources(&db, &[], &worldfile_modules);
 
         // The engine cannot start over modules with errors, and would say only
-        // that there were some, so they are compiled and reported here first.
+        // that there were some, so the modules it starts with are compiled and
+        // reported here first.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         {
             let compiled = pipeline.compile(&db);
@@ -1089,7 +1084,7 @@ impl ScriptWorldCommand {
 
         let files = source_files(&descriptor, &pipeline);
         let mut engine = Engine::with_pipeline(
-            db, descriptor, pipeline, &natives, datafun::DebugOutputMode::Stderr)?;
+            db, descriptor, pipeline, &natives, datafun::DebugOutputMode::Stderr, worldfile_modules)?;
 
         let total = units.len();
         let mut failed: Vec<(usize, AnyError)> = Vec::new();

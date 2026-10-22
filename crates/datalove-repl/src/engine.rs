@@ -10,6 +10,9 @@ use datalove_datafun as datafun;
 use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
+use bct::input::Source;
+use datafun::incremental::Roots;
+use rmx::std::collections::{BTreeMap, BTreeSet};
 
 /// The engine, which owns the database the session is compiled in.
 ///
@@ -52,6 +55,36 @@ pub struct Engine {
     natives: RegisteredNatives,
     /// Where `debuglog` goes, kept so a reset sends it to the same place.
     debug_output: datafun::DebugOutputMode,
+    /// Modules compiled whether or not a unit requires them.
+    ///
+    /// The rest of the roots are what the session's units require, worked out
+    /// again before every step; see [`Engine::with_compiler`].
+    also_roots: Vec<String>,
+}
+
+/// The required modules left out of a compile because they do not compile,
+/// by path, with their errors.
+type BrokenModules = BTreeMap<String, Vec<String>>;
+
+/// Every module each module of a compile reaches by `require`, itself
+/// included, by path.
+fn module_reach(db: &datafun::Database, compiled: &datafun::pipeline::CompiledModules<'_>) -> BTreeMap<String, BTreeSet<String>> {
+    let parsed = compiled.shared.parsed_graph;
+    let requires = parsed.resolved_requires(db);
+    let path = |module: bct::module_graph::ModuleId<'_>| module.path(db).C();
+
+    let mut reach = BTreeMap::new();
+    for module in parsed.graph(db).iter_modules(db) {
+        let mut seen = BTreeSet::new();
+        let mut stack = vec![module.id(db)];
+        while let Some(next) = stack.pop() {
+            if seen.insert(path(next)) {
+                stack.extend(requires.get(&next).into_iter().flatten().map(|(_, target)| *target));
+            }
+        }
+        reach.insert(path(module.id(db)), seen);
+    }
+    reach
 }
 
 /// What a caller is shown of a unit that did not compile, while the compiler
@@ -166,7 +199,7 @@ impl Engine {
         // neither rebuilds riders nor reloads them.
         let natives = Arc::new(RiderNatives::for_workspace(&workspace, &sys.natives));
         pipeline.set_natives(natives.clone());
-        Engine::with_pipeline(db, workspace, pipeline, &natives, datafun::DebugOutputMode::Disabled)
+        Engine::with_pipeline(db, workspace, pipeline, &natives, datafun::DebugOutputMode::Disabled, Vec::new())
     }
 
     /// The same, over a pipeline the caller built from `workspace` in `db`.
@@ -178,13 +211,20 @@ impl Engine {
     ///
     /// `natives` are the ones `pipeline` was given, and `debug_output` is where
     /// `debuglog` goes.
+    ///
+    /// **The engine decides the pipeline's roots**: the modules in `also_roots`,
+    /// and whatever the session's units require, which starts as nothing. A
+    /// caller compiling first to report errors should narrow to `also_roots` to
+    /// compile what the engine will.
     pub fn with_pipeline(
         db: datafun::Database,
         workspace: WorkspaceDescriptor,
         mut pipeline: ModuleCompilationPipeline,
         natives: &Arc<RiderNatives>,
         debug_output: datafun::DebugOutputMode,
+        also_roots: Vec<String>,
     ) -> AnyResult<Engine> {
+        pipeline.narrow_roots_to_sources(&db, &[], &also_roots);
         let started = Started::compile(&db, &mut pipeline, natives, debug_output)?;
 
         Ok(Engine {
@@ -195,16 +235,18 @@ impl Engine {
             executor: started.executor,
             natives: started.natives,
             debug_output,
+            also_roots,
         })
     }
 
     fn reset(&mut self) {
         // Cleanup the current executor.
         self.executor.destroy_live_values();
-        // The library compiled at startup and has not changed since, so this is
-        // salsa verifying what it has rather than compiling it again.
+        // An empty session requires nothing, so the roots go back to what they
+        // were at startup, which compiled then and has not changed since.
+        self.pipeline.narrow_roots_to_sources(&self.db, &[], &self.also_roots);
         let started = Started::compile(&self.db, &mut self.pipeline, &self.natives.natives, self.debug_output)
-            .expect("system library compiled successfully at startup");
+            .expect("the roots compiled successfully at startup");
         self.script = Some(started.script);
         self.executor = started.executor;
         self.natives = started.natives;
@@ -216,14 +258,135 @@ impl Engine {
     /// Everything that needs a compiler goes through here, because a compiler
     /// borrows the database and the engine owns it. The session is out of the
     /// engine while `work` runs, so `work` cannot reach back into it.
-    fn with_compiler<R>(&mut self, work: impl FnOnce(&mut ScriptCompiler<'_>) -> R) -> R {
+    ///
+    /// **The modules compiled are the ones `units` require**, `units` being
+    /// the session's units as they will stand once `work` is done, so a unit
+    /// that requires a module nothing required before compiles against it, and
+    /// one that goes takes its modules with it. When that changes which modules
+    /// there are, the executor is handed their new registry and their natives
+    /// before anything runs. A module keeps its `IrModuleId` across the change,
+    /// so the units already lowered still call the modules they named.
+    ///
+    /// Required modules that do not compile are left out, and come back by
+    /// path with their errors; see [`Self::settle_roots`].
+    fn with_compiler<R>(
+        &mut self,
+        units: &[Source],
+        work: impl FnOnce(&mut ScriptCompiler<'_>) -> R,
+    ) -> (R, BrokenModules) {
+        let previous = self.pipeline.roots().clone();
+        let broken = self.settle_roots(units, &previous);
+
         let compiled = self.pipeline.compile(&self.db);
+        if *self.pipeline.roots() != previous {
+            self.executor.set_module_registry(compiled.shared.module_registry.clone());
+            // A module that joined may call natives nothing called before.
+            self.natives = register_natives(&self.natives.natives, &compiled, &mut self.executor)
+                .expect("the natives of modules that compiled are found");
+        }
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
-            .expect("the library compiled at startup and has not changed");
+            .expect("the roots were settled on modules that compile");
         let result = work(&mut compiler);
         self.script = Some(compiler.into_session());
-        result
+        (result, broken)
+    }
+
+    /// Narrow the roots to what `units` require, leaving out what does not
+    /// compile.
+    ///
+    /// **A required module that does not compile is left out, along with
+    /// every required module that reaches it**, and the rest stay, so one
+    /// broken module costs only the units that require it, the way one failed
+    /// unit costs only the units that read it. A unit requiring a left-out
+    /// module fails on its `require`, and the engine says why with what comes
+    /// back here. An error no module path explains goes back to `previous`,
+    /// which compiled, and is put down to the modules this step added.
+    ///
+    /// The engine cannot yet hold modules with errors, which is what keeps
+    /// broken modules out rather than in the session failing.
+    fn settle_roots(&mut self, units: &[Source], previous: &Roots) -> BrokenModules {
+        self.pipeline.narrow_roots_to_sources(&self.db, units, &self.also_roots);
+        let mut broken = BrokenModules::new();
+        loop {
+            let compiled = self.pipeline.compile(&self.db);
+            if !compiled.has_errors() {
+                return broken;
+            }
+            let Roots::From(roots) = self.pipeline.roots().clone() else {
+                unreachable!("the engine always narrows");
+            };
+
+            let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+            for by_path in [&compiled.parse_errors, &compiled.path_to_errors,
+                            &compiled.ownership_errors, &compiled.lowering_errors] {
+                for (path, messages) in by_path.iter().filter(|(_, messages)| !messages.is_empty()) {
+                    errors.entry(path.C()).or_default().extend(messages.iter().cloned());
+                }
+            }
+
+            let reach = module_reach(&self.db, &compiled);
+            let failing: Vec<&String> = roots.iter()
+                .filter(|root| reach.get(*root).is_some_and(|reached| reached.iter().any(|m| errors.contains_key(m))))
+                .collect();
+
+            if compiled.resolution_error.is_some() || failing.is_empty() {
+                let Roots::From(before) = previous else {
+                    unreachable!("the engine always narrows");
+                };
+                let all = compiled.all_errors();
+                for added in roots.difference(before) {
+                    broken.insert(added.C(), all.clone());
+                }
+                self.pipeline.set_roots(previous.clone());
+                return broken;
+            }
+
+            for root in &failing {
+                let messages = reach[*root].iter()
+                    .filter_map(|m| errors.get(m))
+                    .flatten()
+                    .cloned()
+                    .collect();
+                broken.insert((*root).C(), messages);
+            }
+            let kept = roots.iter().filter(|root| !failing.contains(root)).cloned().collect();
+            self.pipeline.set_roots(Roots::From(kept));
+        }
+    }
+
+    /// Say why units that failed on a module that does not compile failed.
+    ///
+    /// A unit requiring a left-out module fails on its `require` as though the
+    /// module did not exist, which is true of the compile and misleading to
+    /// read, so its error becomes the module's.
+    fn explain(&self, unit: Source, eval: Eval, broken: &BrokenModules) -> Eval {
+        let Eval::Error(error) = eval else {
+            return eval;
+        };
+        let reasons: Vec<String> = self.pipeline.required_modules(&self.db, unit).into_iter()
+            .filter_map(|path| broken.get(&path).map(|errors| {
+                fmt!("module `{path}` does not compile: {}", errors.join("; "))
+            }))
+            .collect();
+        if reasons.is_empty() {
+            Eval::Error(error)
+        } else {
+            Eval::Error(reasons.join("\n"))
+        }
+    }
+
+    /// The same for the reports of a re-derivation.
+    fn explain_all(&self, reports: Vec<UnitEdit>, broken: &BrokenModules) -> Vec<UnitEdit> {
+        let sources = self.unit_sources();
+        reports.into_iter()
+            .map(|UnitEdit { unit, eval }| UnitEdit { unit, eval: self.explain(sources[unit], eval, broken) })
+            .collect()
+    }
+
+    /// The session's units' sources, in order.
+    fn unit_sources(&self) -> Vec<Source> {
+        self.script.as_ref().expect("a session").unit_sources()
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -338,8 +501,11 @@ impl Engine {
     /// bindings until an edit makes it run to its end. Only a runtime error
     /// takes the session with it.
     fn eval_script_statement(&mut self, source: String, on_error: OnCompileError<'_>) -> Eval {
-        let compiled = self.with_compiler(|compiler| {
-            let compiled = compiler.compile_fragment(&source);
+        let source = Source::new(&self.db, source);
+        let mut units = self.unit_sources();
+        units.push(source);
+        let (compiled, broken) = self.with_compiler(&units, |compiler| {
+            let compiled = compiler.compile_source(source, false);
             if compiled.first_error().is_some() {
                 on_error(compiler, &compiled);
             }
@@ -348,7 +514,7 @@ impl Engine {
 
         if let Some(error) = compiled.first_error() {
             self.executor.skip_unit();
-            return Eval::Error(error);
+            return self.explain(source, Eval::Error(error), &broken);
         }
 
         let ir_unit = compiled.ir_unit.as_ref()
@@ -429,8 +595,9 @@ impl Engine {
         );
         sources[unit].set_text(&mut self.db).to(source.S());
 
-        let redone = self.with_compiler(|compiler| compiler.relower_reach(unit));
-        self.rerun(redone)
+        let (redone, broken) = self.with_compiler(&sources, |compiler| compiler.relower_reach(unit));
+        let reports = self.rerun(redone);
+        self.explain_all(reports, &broken)
     }
 
     /// Drop the units from `n` on.
@@ -443,10 +610,13 @@ impl Engine {
     /// written an earlier unit's binding rewinds the session to where that
     /// binding was made, and the units from there to `n` run again.
     pub fn truncate_units(&mut self, n: usize) -> Vec<UnitEdit> {
-        let count = self.script.as_ref().expect("a session").unit_sources().len();
+        let mut units = self.unit_sources();
+        let count = units.len();
         assert!(n <= count, "cannot truncate to {n} units; the session has {count}");
-        let splice = self.with_compiler(|compiler| compiler.truncate_units(n));
-        self.rerun_spliced(splice)
+        units.truncate(n);
+        let (splice, broken) = self.with_compiler(&units, |compiler| compiler.truncate_units(n));
+        let reports = self.rerun_spliced(splice);
+        self.explain_all(reports, &broken)
     }
 
     /// Splice the unit at `unit` out, and re-derive everything after it.
@@ -460,8 +630,12 @@ impl Engine {
     /// A unit of the suffix that read what the removed unit provided stops
     /// compiling and stays, as any unit that fails does.
     pub fn remove_unit(&mut self, unit: usize) -> Vec<UnitEdit> {
-        let splice = self.with_compiler(|compiler| compiler.remove_unit(unit));
-        self.rerun_spliced(splice)
+        let mut units = self.unit_sources();
+        assert!(unit < units.len(), "unit {unit} was removed but the session has {} units", units.len());
+        units.remove(unit);
+        let (splice, broken) = self.with_compiler(&units, |compiler| compiler.remove_unit(unit));
+        let reports = self.rerun_spliced(splice);
+        self.explain_all(reports, &broken)
     }
 
     /// Splice a new unit in at `unit`, and re-derive everything after it.
@@ -478,8 +652,13 @@ impl Engine {
         source: &str,
         is_expr: bool,
     ) -> Vec<UnitEdit> {
-        let splice = self.with_compiler(|compiler| compiler.insert_unit(unit, source, is_expr));
-        self.rerun_spliced(splice)
+        let source = Source::new(&self.db, source.S());
+        let mut units = self.unit_sources();
+        assert!(unit <= units.len(), "unit {unit} was inserted but the session has {} units", units.len());
+        units.insert(unit, source);
+        let (splice, broken) = self.with_compiler(&units, |compiler| compiler.insert_source(unit, source, is_expr));
+        let reports = self.rerun_spliced(splice);
+        self.explain_all(reports, &broken)
     }
 
     /// Change one module's source and re-derive the script units that import
@@ -523,6 +702,10 @@ impl Engine {
                 // its module functions by `CodeRef::Module`, so the new IR only
                 // takes effect once the executor is looking at the new registry.
                 self.executor.set_module_registry(compiled.shared.module_registry.clone());
+                // A `require` the edit added may have brought in modules, and
+                // the natives they call.
+                self.natives = register_natives(&self.natives.natives, &compiled, &mut self.executor)
+                    .expect("the natives of modules that compiled are found");
                 let mut compiler = compiled
                     .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
                     .expect("the modules compiled without errors");
@@ -664,8 +847,11 @@ impl Engine {
     /// Compile and run an expression as the next unit, which stays whatever
     /// becomes of it, as a fragment does.
     fn eval_expression(&mut self, source: String, on_error: OnCompileError<'_>) -> Eval {
-        let compiled = self.with_compiler(|compiler| {
-            let compiled = compiler.compile_expr(&source);
+        let source = Source::new(&self.db, source);
+        let mut units = self.unit_sources();
+        units.push(source);
+        let (compiled, broken) = self.with_compiler(&units, |compiler| {
+            let compiled = compiler.compile_source(source, true);
             if compiled.first_error().is_some() {
                 on_error(compiler, &compiled);
             }
@@ -674,7 +860,7 @@ impl Engine {
 
         if let Some(error) = compiled.first_error() {
             self.executor.skip_unit();
-            return Eval::Error(error);
+            return self.explain(source, Eval::Error(error), &broken);
         }
 
         let ir_unit = compiled.ir_unit.as_ref()

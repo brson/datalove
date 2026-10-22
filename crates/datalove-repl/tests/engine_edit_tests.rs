@@ -41,6 +41,11 @@ fn engine() -> Engine {
 /// library is the copy embedded in the binary and editing it would recompile
 /// the standard library, which is not what these are measuring.
 fn engine_with_module(source: &str) -> Engine {
+    engine_with_modules(&[("m", source)])
+}
+
+/// The same with several modules, all in `local/test`.
+fn engine_with_modules(modules: &[(&str, &str)]) -> Engine {
     let sys = datalove_sys_packages::system_library();
     let mut workspace = WorkspaceDescriptor::from_system_library(&sys);
     workspace.user_libraries.push(PackageLibrary {
@@ -49,10 +54,12 @@ fn engine_with_module(source: &str) -> Engine {
             "test".S(),
             PackageDescriptor {
                 name: "test".S(),
-                modules: [(
-                    "m".S(),
-                    ModuleDescriptor { name: "m".S(), source: source.into(), origin: None },
-                )].into_iter().collect(),
+                modules: modules.iter()
+                    .map(|(name, source)| (
+                        name.S(),
+                        ModuleDescriptor { name: name.S(), source: (*source).into(), origin: None },
+                    ))
+                    .collect(),
                 data: Default::default(),
                 rider: None,
             },
@@ -525,4 +532,82 @@ fn a_module_edit_that_does_not_compile_is_rejected() {
     assert_eq!(value_of(&mut engine, "a"), "1", "the session is as it was");
     engine.run_source("let b = a + 1");
     assert_eq!(value_of(&mut engine, "b"), "2", "and it still compiles new lines");
+}
+
+/// What one appended unit came to.
+fn eval_of(engine: &mut Engine, source: &str) -> Eval {
+    let mut results = engine.run_source(source);
+    assert_eq!(results.len(), 1, "one unit");
+    results.remove(0).eval.expect("a unit is evaluated")
+}
+
+/// A unit requiring a module nothing required before compiles against it,
+/// and the units already lowered still call the modules they named.
+///
+/// `b` is the only module when `g` is lowered, and `a`, which sorts ahead of
+/// it, joins after. When modules were numbered by position `g` then called
+/// `fa`; see `crates/datalove-datafun/tests/module_id_tests.rs`.
+#[test]
+fn a_module_a_later_unit_requires_joins_without_moving_the_others() {
+    let mut engine = engine_with_modules(&[
+        ("a", "fun fa(): int\n    ret 1\nend fun\n"),
+        ("b", "fun fb(): int\n    ret 2\nend fun\n"),
+    ]);
+    engine.run_source(
+        "require module local/test/b\nimport b.fb\nfun g(): int\n    ret fb()\nend fun\nlet x = g()");
+    engine.run_source("require module local/test/a\nimport a.fa\nlet y = fa()");
+    engine.run_source("let z = g()");
+
+    assert_eq!(value_of(&mut engine, "x"), "2");
+    assert_eq!(value_of(&mut engine, "y"), "1");
+    assert_eq!(value_of(&mut engine, "z"), "2", "`g` still calls `fb`");
+}
+
+/// A module of the standard library joins the same way, natives and all.
+#[test]
+fn a_library_module_a_later_unit_requires_brings_its_natives() {
+    let mut engine = engine();
+    engine.run_source("let a = 1");
+    engine.run_source("require module sys/std/string\nlet s = \"four\"\nlet n = string.len(ref s)");
+    assert_eq!(value_of(&mut engine, "n"), "4");
+}
+
+/// A module that does not compile is a problem only for a unit that requires
+/// it: the engine starts, and units that do not require it run.
+#[test]
+fn a_broken_module_fails_only_the_units_that_require_it() {
+    let mut engine = engine_with_module("fun f(): int\n    ret \"nope\"\nend fun\n");
+
+    engine.run_source("let a = 1");
+    let eval = eval_of(&mut engine, "require module local/test/m\nimport m.f\nlet b = f()");
+    let Eval::Error(error) = eval else {
+        panic!("the requiring unit fails: {eval:?}");
+    };
+    assert!(
+        error.starts_with("module `local/test/m` does not compile: ") && error.contains("F016"),
+        "it says the module is why, and what is wrong with it: {error}",
+    );
+    engine.run_source("let c = a + 1");
+    assert_eq!(value_of(&mut engine, "c"), "2", "the session goes on without the module");
+    assert!(!bound(&mut engine, "b"));
+
+    // A module required after the broken one still joins.
+    engine.run_source("require module sys/std/string\nlet s = \"four\"\nlet n = string.len(ref s)");
+    assert_eq!(value_of(&mut engine, "n"), "4", "the broken module does not hold the others back");
+}
+
+/// Taking away the only unit that requires a module takes the module out of
+/// the compile, so the session carries on as if it had never been required.
+#[test]
+fn truncating_the_unit_that_required_a_module_leaves_the_rest_running() {
+    let mut engine = engine_with_module("fun f(): int\n    ret 5\nend fun\n");
+    engine.run_source("let a = 1");
+    engine.run_source("require module local/test/m\nimport m.f\nlet b = f()");
+    assert_eq!(value_of(&mut engine, "b"), "5");
+
+    engine.truncate_units(1);
+    engine.run_source("let c = a + 1");
+
+    assert!(!bound(&mut engine, "b"));
+    assert_eq!(value_of(&mut engine, "c"), "2");
 }

@@ -346,30 +346,52 @@ impl ModuleCompilationPipeline {
         scripts: &[&str],
         also: &[String],
     ) {
-        use datalove_datafun_ast::ast::{Statement, StmtRequire};
+        let sources: Vec<bct::input::Source> = scripts.iter()
+            .map(|script| bct::input::Source::new(db, script.S()))
+            .collect();
+        self.narrow_roots_to_sources(db, &sources, also);
+    }
 
+    /// The same for units whose sources the caller already has.
+    ///
+    /// For a session that narrows again at every step: parsing a unit's own
+    /// source is the parse its compile memoized, where a new source made from
+    /// the same text is a new input each time.
+    pub fn narrow_roots_to_sources(
+        &mut self,
+        db: &dyn salsa::Database,
+        sources: &[bct::input::Source],
+        also: &[String],
+    ) {
         let mut roots: rmx::std::collections::BTreeSet<String> =
             also.iter().filter(|p| self.world.contains(p)).cloned().collect();
-        for script in scripts {
-            let source = bct::input::Source::new(db, script.S());
-            let parsed = datalove_datafun_parser::parse(db, source);
-            for statement in parsed.parsed.statements(db).iter() {
-                let Statement::Require(StmtRequire::Module(require)) = statement else {
-                    continue;
-                };
-                let path = format!(
+        for &source in sources {
+            roots.extend(self.required_modules(db, source));
+        }
+
+        self.roots = Roots::From(roots);
+    }
+
+    /// The modules of this world a script unit requires, by path.
+    ///
+    /// A `require` naming a module the world does not have is left out; the
+    /// unit's own compile is what reports it.
+    pub fn required_modules(&self, db: &dyn salsa::Database, source: bct::input::Source) -> Vec<String> {
+        use datalove_datafun_ast::ast::{Statement, StmtRequire};
+
+        let parsed = datalove_datafun_parser::parse(db, source);
+        parsed.parsed.statements(db).iter()
+            .filter_map(|statement| match statement {
+                Statement::Require(StmtRequire::Module(require)) => Some(format!(
                     "{}/{}/{}",
                     require.import_space.as_str(db),
                     require.package_alias.as_str(db),
                     require.module_alias.as_str(db),
-                );
-                if self.world.contains(&path) {
-                    roots.insert(path);
-                }
-            }
-        }
-
-        self.roots = Roots::From(roots);
+                )),
+                _ => None,
+            })
+            .filter(|path| self.world.contains(path))
+            .collect()
     }
 
 

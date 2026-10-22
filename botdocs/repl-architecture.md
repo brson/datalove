@@ -56,12 +56,34 @@ what lets the tests drive the state machine with a scripted mock.
 ## The engine
 
 `Engine::new(db, sys)` takes a `SystemLibrary` rather than going looking for
-one, and compiles it. The library carries the addresses of the native rider
+one, and compiles what the session requires of it, which at startup is nothing.
+The library carries the addresses of the native rider
 functions alongside the sources, which become a `RiderNatives` given to both the
 pipeline, for consts, and the executor, so a session can
 `require module sys/std/string` and call into it. The engine keeps the pipeline,
 the descriptor and the natives, so a crash reset rebuilds the compiler and
 executor from them without building or loading a rider again.
+
+**The roots follow the units.** Before every step -- an append, an edit, a
+splice -- `Engine::with_compiler` narrows the pipeline's roots to what the
+session's units will require once the step is done, plus the caller's
+`also_roots`, and compiles. A unit adding `require module sys/std/u8` brings
+`u8` into the compile, and truncating it away takes `u8` back out. When the
+module set moves, the executor is given the new module registry and the
+natives the new modules call before anything runs. The units already lowered
+are left alone, which is only sound because a module's `IrModuleId` is given
+by path and kept for the pipeline's life; when ids were graph positions, a
+module joining ahead of another sent existing calls to the wrong module.
+
+**A required module that does not compile is left out**, with every required
+module that reaches it, and the rest of the roots stay
+(`Engine::settle_roots`). The unit that requires it fails on its `require`,
+and the engine replaces that error with the module's own. One broken module
+costs only the units that require it, as one failed unit costs only the units
+that read it. This is a stopgap: the engine cannot yet hold modules with
+errors, and fixing the module with `edit_module` does not bring it back,
+because a module outside the roots is not compiled; editing a unit that
+requires it does.
 
 `ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` instead of a value:
 those addresses are raw pointers and so not `Send`, and the worker thread
@@ -149,11 +171,14 @@ It refuses `repl-command` sections, which are `repl --load`'s.
 
 Two things about how the CLI drives it:
 
-- **The CLI compiles the modules before the engine does.** An engine cannot
+- **The CLI compiles the worldfile's own modules before the engine does.**
+  They are roots whether or not a unit requires them, and an engine cannot
   start over modules with errors and says only that there were some, so the
-  CLI builds the pipeline, renders what stops it compiling, and only then
-  hands it over with `Engine::with_pipeline`. The engine's compile of the same
-  pipeline is salsa verifying what the CLI already has.
+  CLI narrows to them, renders what stops them compiling, and only then hands
+  the pipeline over with `Engine::with_pipeline`, naming them as
+  `also_roots`. The engine's compile of the same roots is salsa verifying
+  what the CLI already has. Library modules the units require join as the
+  units come, as at the REPL.
 - **Diagnostics are rendered from inside the eval.** A compiler's diagnostics
   are those of the last unit it compiled, and the engine lets each compiler go
   when its operation is over, so `Engine::eval_reporting` takes a callback
