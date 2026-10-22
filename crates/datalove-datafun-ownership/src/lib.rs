@@ -2203,7 +2203,12 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
     let state_before = ctx.scope_stack.last()
         .map(|f| f.current_state.C())
         .unwrap_or_default();
+    let inits_before = ctx.scope_stack.last()
+        .map(|f| f.out_param_init.C())
+        .unwrap_or_default();
     let before = ctx.branch_end("before the `match`");
+    // What each arm left the out parameters with, beside `arm_ends`.
+    let mut arm_inits: Vec<BindingMap<OutParamInitState>> = Vec::new();
 
     let mut arm_ends: Vec<BranchEnd<'db>> = Vec::new();
     // Whether each arm, in the same order, leaves rather than merging after the
@@ -2212,9 +2217,11 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
 
     // Analyze each case arm.
     for (arm_idx, case) in stmt.cases.iter().enumerate() {
-        // Reset to pre-match state.
+        // Reset to pre-match state. An arm starts with the out parameters as
+        // the `match` found them too, not as the arm before it left them.
         if let Some(frame) = ctx.scope_stack.last_mut() {
             frame.current_state = state_before.C();
+            frame.out_param_init = inits_before.C();
         }
 
         ctx.enter_scope(ScopeKind::MatchArm);
@@ -2248,6 +2255,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         };
         arm_ends.push(ctx.branch_end(format!("in the `{}` arm", case_name)));
         let arm_drops = ctx.exit_scope();
+        arm_inits.push(ctx.scope_stack.last().map(|f| f.out_param_init.C()).unwrap_or_default());
 
         if !arm_drops.is_empty() {
             ctx.schedule.match_arm_exit.insert((stmt_idx, arm_idx), arm_drops);
@@ -2261,6 +2269,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         // Reset to pre-match state.
         if let Some(frame) = ctx.scope_stack.last_mut() {
             frame.current_state = state_before.C();
+            frame.out_param_init = inits_before.C();
         }
 
         let default_arm_idx = stmt.cases.len();
@@ -2268,6 +2277,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         analyze_statements(ctx, default_body);
         arm_ends.push(ctx.branch_end("in the default arm"));
         let arm_drops = ctx.exit_scope();
+        arm_inits.push(ctx.scope_stack.last().map(|f| f.out_param_init.C()).unwrap_or_default());
 
         if !arm_drops.is_empty() {
             ctx.schedule.match_arm_exit.insert((stmt_idx, default_arm_idx), arm_drops);
@@ -2287,6 +2297,23 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
 
     let at = ctx.expr(stmt.input).key();
     check_branches_agree(ctx, stmt_idx, at, &before, &merging);
+
+    // An out parameter has a value after the `match` only if every arm that
+    // falls through gave it one. With every arm leaving, nothing after the
+    // `match` runs and the state is moot.
+    let merging_inits: Vec<&BindingMap<OutParamInitState>> = arm_inits.iter()
+        .zip(&arm_leaves)
+        .filter(|(_, leaves)| !**leaves)
+        .map(|(inits, _)| inits)
+        .collect();
+    if !merging_inits.is_empty() {
+        for id in inits_before.keys() {
+            let initialized = merging_inits.iter()
+                .all(|inits| inits.get(&id) == Some(&OutParamInitState::Initialized));
+            let state = if initialized { OutParamInitState::Initialized } else { OutParamInitState::Uninitialized };
+            ctx.set_out_param_init(id, state);
+        }
+    }
 
     // Update state after match convergence. With every arm leaving, nothing
     // after the `match` runs and any of them will do.
