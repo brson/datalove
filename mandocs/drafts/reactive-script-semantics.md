@@ -42,7 +42,7 @@ Let's figure it out.
 - [What if a unit reads a binding after an earlier unit mutated it?](#user-content-what-if-a-unit-reads-a-binding-after-an-earlier-unit-mutated-it)
 - [What if an edit adds or removes a move?](#user-content-what-if-an-edit-adds-or-removes-a-move)
 - [What if an edit adds or removes a mutation?](#user-content-what-if-an-edit-adds-or-removes-a-mutation)
-- What if a unit that moves or mutates is deleted?
+- [What if a unit that moves or mutates is deleted?](#user-content-what-if-a-unit-that-moves-or-mutates-is-deleted)
 - What if a unit gives a moved `var` a value again?
 - What if rewinding one unit needs another rewound first?
 - What if a move or mutation is conditional, or in a loop?
@@ -1017,6 +1017,117 @@ then units 2, 3 and 4.
 With the fifth unit, it rewinds to unit 2 for the added overwrite as well
 as the added update, because it treats every write like an update.
 Same gap as noted under the overwrite section.
+-->
+
+
+
+
+## What if a unit that moves or mutates is deleted?
+
+An edit that removes a move or a mutation undoes what the old code did
+and redoes what the new code does.
+Deleting the unit is the same edit with nothing to redo.
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! b
+
+----------
+scriptunit-fragment
+----------
+
+let a_moved = a
+set b = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+let d = b + 1
+```
+
+Unit 3 reads `a` and `b` before anything changes them.
+Unit 4 takes `a` and doubles `b`.
+Unit 5 reads `b` as unit 4 left it.
+
+**Step 1: all five units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
+| 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+| 4 | `let a_moved = a; set b = b * 2` | takes `a` (1), updates `b` (2) | compiles, runs | new | `a_moved` = 1000 |
+| 5 | `let d = b + 1` | reads `b` (2) | compiles, runs | new | `d` = 251 |
+
+Now delete unit 4.
+The session should look as if unit 4 had never been entered.
+That is the undo column of the table,
+once for each binding unit 4 touched.
+Undoing a take needs a rewind, so unit 1 reruns.
+Undoing an update needs a rewind, so unit 2 reruns.
+
+The rows below keep the numbers the units had before the deletion,
+so unit 5 is still called unit 5, though it is now the fourth.
+
+**Step 2: unit 4 is deleted.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | reruns | rewind: unit 4 took `a` when it last ran, and is deleted | `a` = 1000 |
+| 2 | `var b = 125` | - | reruns | rewind: unit 4 updated `b` when it last ran, and is deleted | `b` = 125 |
+| 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 built the same `a` and `b` | `c` = 8 |
+| 4 | `let a_moved = a; set b = b * 2` | takes `a` (1), updates `b` (2) | deleted | deleted | - |
+| 5 | `let d = b + 1` | reads `b` (2) | reruns | reads `b` after unit 4, which no longer updates it | `d` = 126 |
+
+Unit 3 read `a` and `b` before unit 4 changed them,
+and the rewind builds them again as they were,
+so unit 3 is left alone.
+Unit 5 reruns by the forward rule,
+as it did when an edit removed the mutation:
+the `b` it sees has gone from 250 back to 125.
+
+Had unit 4 overwritten `b` rather than updated it,
+the step would be the same.
+The two kinds of write differ only on redo,
+and a deleted unit is never redone.
+
+The other forward effects are the ones the earlier sections found.
+A later unit that used `a_moved` would fail to compile,
+as it would if unit 4 had stopped compiling.
+A later unit that named `a`,
+and failed because unit 4 had given it away,
+would compile and run.
+
+So deleting a unit asks nothing new of the rules.
+It is the same as editing it to nothing,
+and the same as breaking it so it no longer compiles.
+What is new is only that the units after it move up a place.
+That changes their numbers, not what they compute,
+so in these terms it costs nothing.
+
+<!--
+Note: the engine today does not leave unit 3 alone.
+A value is identified by its unit's index, so deleting a unit renumbers
+every unit after it, and removal re-derives the whole suffix.
+It starts at the rewind point, unit 1 here, and reruns units 1, 2, 3 and 5.
+Unit 3 reruns for the renumbering, not for the rewind.
+A candidate for the last section.
 -->
 
 
