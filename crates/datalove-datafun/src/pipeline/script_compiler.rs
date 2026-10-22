@@ -101,6 +101,8 @@ struct OwnershipOutput<'db> {
     taken: Vec<String>,
     /// The earlier units' bindings this unit wrote to.
     written: Vec<String>,
+    /// Those of them it overwrote rather than updated.
+    overwritten: Vec<String>,
 }
 
 /// Lowered functions from the lowering phase.
@@ -228,6 +230,25 @@ impl<'db> CompiledModules<'db> {
     }
 }
 
+/// What a unit provides and what it does to earlier units' bindings.
+///
+/// Apart from `provides`, the names are of bindings earlier units made. A
+/// name in `uses` and in none of `taken`, `overwritten`, `updated` or
+/// `revived` is only read.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UnitEffects {
+    pub provides: Vec<String>,
+    /// Every name the unit asked its environment for.
+    pub uses: Vec<String>,
+    pub taken: Vec<String>,
+    /// Written on every way through the unit before anything read it.
+    pub overwritten: Vec<String>,
+    /// Written, and the value it held read or kept on some way through.
+    pub updated: Vec<String>,
+    /// Written after an earlier unit gave it away.
+    pub revived: Vec<String>,
+}
+
 /// The part of a script compiler that survives a database mutation.
 ///
 /// A [`ScriptCompiler`] borrows the database for as long as it lives, and
@@ -260,6 +281,25 @@ impl ScriptSession {
     /// across it. See `botdocs/plan-script-reactivity.md`.
     pub fn unit_sources(&self) -> Vec<bct::input::Source> {
         self.units.iter().map(|(source, _)| *source).collect()
+    }
+
+    /// What unit `index` provides, and what it does to earlier units'
+    /// bindings, as of its last compile. A unit that did not compile does
+    /// nothing.
+    pub fn unit_effects(&self, index: usize) -> UnitEffects {
+        let record = &self.records[index];
+        let updated = record.written.iter()
+            .filter(|name| !record.overwritten.contains(name) && !record.revived.contains(name))
+            .cloned()
+            .collect();
+        UnitEffects {
+            provides: record.provides.clone(),
+            uses: record.uses.clone(),
+            taken: record.taken.clone(),
+            overwritten: record.overwritten.clone(),
+            updated,
+            revived: record.revived.clone(),
+        }
     }
 
     /// Whether each unit was submitted as a bare expression, in order.
@@ -1092,7 +1132,9 @@ impl<'db> ScriptCompiler<'db> {
             return self.parse_failure_at(index);
         }
         let unit = self.parsed_unit_at(index);
-        let mut result = self.run_phases(index, &unit);
+        // Marked for a recorder: ownership analysis is keyed on what the
+        // earlier units left behind, so its key alone does not say whose it is.
+        let mut result = datalove_ct::query_events::compiling_unit(index, || self.run_phases(index, &unit));
         match &mut result.ir_unit {
             None => self.unit_records[index] = UnitLowerRecord::default(),
             Some(ir_unit) => {
@@ -1287,6 +1329,7 @@ impl<'db> ScriptCompiler<'db> {
                     revived: ownership_result.revived_exports(self.db).clone(),
                     taken: ownership_result.taken_externals(self.db).clone(),
                     written: ownership_result.written_externals(self.db).clone(),
+                    overwritten: ownership_result.overwritten_externals(self.db).clone(),
                 })
             }
             ParsedUnit::Expr(parsed) => {
@@ -1315,6 +1358,7 @@ impl<'db> ScriptCompiler<'db> {
                     revived: Vec::new(),
                     taken: ownership_result.taken_externals(self.db).clone(),
                     written: ownership_result.written_externals(self.db).clone(),
+                    overwritten: ownership_result.overwritten_externals(self.db).clone(),
                 })
             }
         }
@@ -1991,6 +2035,7 @@ impl<'db> ScriptCompiler<'db> {
             revived: ownership.revived.clone(),
             taken: ownership.taken.clone(),
             written: ownership.written.clone(),
+            overwritten: ownership.overwritten.clone(),
             provides: self.unit_provides_names(typecheck.output),
             uses: self.unit_used_names(index, typecheck.output),
             imports: typecheck.output.imported_modules(self.db).C(),

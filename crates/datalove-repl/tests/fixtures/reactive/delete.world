@@ -1,0 +1,67 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let c = a /! b
+
+----------
+scriptunit-fragment
+----------
+
+let a_moved = a
+set b = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+let d = b + 1
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` moved |
+| 2 | - | compiles, runs | new | `b` = 250 |
+| 3 | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+| 4 | takes `a` (1), updates `b` (2) | compiles, runs | new | `a_moved` = 1000 |
+| 5 | reads `b` (2) | compiles, runs | new | `d` = 251 |
+
+----------
+scriptunit-delete 4
+----------
+
+----------
+expect unit 4 is deleted
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rewind: unit 4 took `a` when it last ran, and is deleted | `a` = 1000 |
+| 2 | - | reruns | rewind: unit 4 updated `b` when it last ran, and is deleted | `b` = 125 |
+| 3 | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 built the same `a` and `b` | `c` = 8 |
+| 4 | takes `a` (1), updates `b` (2) | deleted | deleted | - |
+| 5 | reads `b` (2) | reruns | reads `b` after unit 4, which no longer updates it | `d` = 126 |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 3 | reruns | a splice reruns every unit from the rerun point on, readers included |
+| 5 | recompiles, runs | a removal renumbers every later unit, so they are typechecked under new keys |

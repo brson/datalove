@@ -306,6 +306,26 @@ impl Engine {
         debug_output: datafun::DebugOutputMode,
         also_roots: Vec<String>,
     ) -> AnyResult<Engine> {
+        Engine::with_options_in(datafun::Database::default(), sys, workspace, debug_output, also_roots)
+    }
+
+    /// An engine over the system library alone, in a database the caller made.
+    ///
+    /// For a database that records what salsa runs
+    /// (`datafun::Database::recording`), which is how a test sees which units
+    /// were typechecked again.
+    pub fn in_database(db: datafun::Database, sys: SystemLibrary) -> AnyResult<Engine> {
+        let workspace = WorkspaceDescriptor::from_system_library(&sys);
+        Engine::with_options_in(db, sys, workspace, datafun::DebugOutputMode::Disabled, Vec::new())
+    }
+
+    fn with_options_in(
+        db: datafun::Database,
+        sys: SystemLibrary,
+        workspace: WorkspaceDescriptor,
+        debug_output: datafun::DebugOutputMode,
+        also_roots: Vec<String>,
+    ) -> AnyResult<Engine> {
         // An engine needs somewhere to build riders, so a caller that did not
         // say gets this installation's work dir rather than an engine that
         // cannot start. It only matters with `DATALOVE_BUILD_SYS_RIDERS` set,
@@ -317,7 +337,6 @@ impl Engine {
             None => workspace.with_work_dir(datalove_paths::work_dir()?),
         };
 
-        let db = datafun::Database::default();
         let mut pipeline = workspace.to_pipeline(&db);
         // The same natives for the life of the pipeline, so that a reset
         // neither rebuilds riders nor reloads them.
@@ -938,6 +957,20 @@ impl Engine {
             .into_iter()
             .map(|(name, _kind, ty, value)| (name, ty, value))
             .collect()
+    }
+
+    /// What unit `unit` provides and does to earlier units' bindings.
+    pub fn unit_effects(&self, unit: usize) -> datafun::pipeline::UnitEffects {
+        self.script.as_ref().expect("a session").unit_effects(unit)
+    }
+
+    /// What unit `unit` binds and what each binding holds now, `None` for one
+    /// given away.
+    ///
+    /// One unit's frame, where [`Self::get_environment`] is the nearest
+    /// binding of each name.
+    pub fn unit_bindings(&mut self, unit: usize) -> Vec<(String, Option<String>)> {
+        self.executor.unit_bindings(unit)
     }
 
     /// Evaluate a script of inputs, one result per input.

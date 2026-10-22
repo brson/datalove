@@ -53,6 +53,10 @@ pub struct UnitLowerRecord {
     /// what re-running a unit has to take back first: see
     /// `ScriptCompiler::reach_from`.
     pub written: Vec<String>,
+    /// Those of `written` it overwrote: wrote on every way through the unit
+    /// before reading what they held. Running the unit again needs nothing of
+    /// such a binding as it was. The rest of `written` it updated.
+    pub overwritten: Vec<String>,
     /// The names this unit provides, as the typechecker recorded them.
     ///
     /// Kept as owned text because the reach of an edit is computed across a

@@ -22,6 +22,8 @@ datalove-paths.workspace = true
 # The engine tests run against the system library the binary ships.
 datalove-sys-packages.workspace = true
 datalove-exampletest.path = "../datalove-exampletest"
+# For `QueryRecorder`, which says which units salsa typechecked again.
+datalove-ct.workspace = true
 
 [[test]]
 name = "engine_tests"

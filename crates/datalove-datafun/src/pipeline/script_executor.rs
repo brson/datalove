@@ -598,6 +598,38 @@ impl ScriptExecutor {
         self.interp.forget_compiled_bodies();
     }
 
+    /// The values unit `index` binds, in the order it binds them.
+    ///
+    /// Each is what the binding holds now, `None` for one given away. Unlike
+    /// [`Self::get_environment`] this is one unit's frame, shadowed bindings
+    /// included, and functions are left out. A unit that did not run binds
+    /// nothing.
+    pub fn unit_bindings(&mut self, index: usize) -> Vec<(String, Option<String>)> {
+        if self.units[index].status != UnitStatus::Ran {
+            return Vec::new();
+        }
+        let unit = index as u32;
+        let held: Vec<(String, Option<_>)> = self.units[index].exports.bindings.iter()
+            .filter_map(|(name, binding)| {
+                let value = match binding {
+                    ExportBinding::Value(id) => self.env.frames.external_value(unit, *id),
+                    ExportBinding::Slot(id) => self.env.frames.external_slot(unit, *id),
+                    ExportBinding::Function(_) => return None,
+                };
+                Some((name.C(), value))
+            })
+            .collect();
+        held.into_iter()
+            .map(|(name, value)| {
+                let printed = value.map(|value| {
+                    self.interp.pretty_print_value(&value)
+                        .unwrap_or_else(|e| format!("<print error: {:?}>", e))
+                });
+                (name, printed)
+            })
+            .collect()
+    }
+
     /// Get the type and value of a binding by name.
     ///
     /// `None` when the nearest unit binding it did not run to its end, as when

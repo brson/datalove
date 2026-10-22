@@ -970,7 +970,9 @@ and the unit-end list leave them out.
 
 What a unit does to the earlier bindings is part of its record:
 `taken_externals` for the ones it moved out of, `written_externals` for the
-ones it wrote by `set` or through a `mut` or `out` argument, and
+ones it wrote by `set` or through a `mut` or `out` argument (with
+`overwritten_externals` the ones of those written on every way through the unit
+before anything read them), and
 `revived_exports` for the ones that held nothing and that it assigned to. A
 unit can also give away a binding it defined itself, which goes in
 `dead_exports`. `dead_externals_over` folds the records into the names a later

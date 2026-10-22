@@ -1,0 +1,130 @@
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let b_moved = b
+
+----------
+scriptunit-fragment
+----------
+
+set b = 500
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 500 |
+| 2 | takes `b` (1) | compiles, runs | new | `b_moved` = 125 |
+| 3 | revives `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 501 |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = 600
+
+----------
+expect unit 3 is edited to write 600
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 3 overwrites `b` without reading it | `b` = 600 |
+| 2 | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 3 | revives `b` (1) | recompiles, runs | edited | - |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3, which now writes 600 | `c` = 601 |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 1 | reruns | treats the overwrite like an update, and reruns from the maker |
+| 2 | reruns | replays the take after rerunning unit 1 |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = 600
+let x = y
+
+----------
+expect unit 3 is broken
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | _`b` dropped_ | unit 3 revived `b` when it last ran, and is undone | `b` moved |
+| 2 | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 3 | revives `b` (1) | recompile fails | edited | - |
+| 4 | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 1 | reruns | treats the revival like any other write, and reruns rather than dropping `b` |
+| 2 | reruns | replays the take after rerunning unit 1 |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = 600
+
+----------
+expect unit 3 is fixed
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | `b` holds nothing, and unit 3 overwrites it | `b` = 600 |
+| 2 | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 3 | revives `b` (1) | recompiles, runs | edited | - |
+| 4 | reads `b` (1) | reruns | `b` can be named again, as it could in step 2, whose compile is still memoized | `c` = 601 |
+
+----------
+scriptunit-edit 2
+----------
+
+let d = b + 1
+
+----------
+expect unit 2 is edited to read `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rewind: unit 2 took `b` when it last ran, and the edit undoes that | `b` = 600 |
+| 2 | reads `b` (1) | recompiles, runs | edited | `d` = 126 |
+| 3 | overwrites `b` (1) | reruns | replay: overwrites `b` from unit 1, which reran | - |
+| 4 | reads `b` (1) | untouched | `b` is 600 after unit 3, as before | `c` = 601 |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 3 | recompiles, runs | `b` is no longer given away before it, so its ownership analysis runs again, though its lowered code is the same |
+| 4 | reruns | counts unit 2's old take as providing `b`, so the edit reaches unit 4 |

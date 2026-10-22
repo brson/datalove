@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 mod engine;
-pub use engine::{Engine, EnvBinding, InputResult, ModuleErrors, OnCompileError};
+pub use engine::{Engine, EnvBinding, InputResult, ModuleErrors, OnCompileError, UnitEdit};
 
 pub mod app;
 

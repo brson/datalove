@@ -116,6 +116,12 @@ struct AnalysisCtx<'a, 'db> {
     /// The earlier units' bindings this unit writes to, by `set` or by
     /// passing them to a `mut` or `out` parameter.
     written_externals: std::collections::BTreeSet<String>,
+    /// The earlier units' `var`s this unit may read the value of before
+    /// replacing it, on some path.
+    externals_read_before_replaced: std::collections::BTreeSet<String>,
+    /// The earlier units' `var`s some way out of this unit may leave as it
+    /// found them: an early return, or its end, before replacing them.
+    externals_left_unreplaced: std::collections::BTreeSet<String>,
     /// Which names this analysis cannot see the binding of are consts.
     outer_consts: OuterConsts,
     /// What each call resolved to, for which of its arguments are const.
@@ -250,6 +256,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             scope_stack: Vec::new(),
             externals: Vec::new(),
             written_externals: Default::default(),
+            externals_read_before_replaced: Default::default(),
+            externals_left_unreplaced: Default::default(),
             outer_consts,
             call_targets,
             errors: Vec::new(),
@@ -277,9 +285,54 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             let id = self.alloc_binding(external.name.C(), external.ty.C(), external.is_slot, None);
             if external.dead {
                 self.set_state(id, BindingState::Moved);
+            } else if external.is_slot {
+                // Whether the unit has replaced the `var` yet is the question
+                // an out parameter's initialization answers, so it is tracked
+                // the same way, through branches, loops and early returns.
+                // "Uninitialized" here means still holding what the earlier
+                // units left; see `overwritten_externals`.
+                self.set_out_param_init(id, OutParamInitState::Uninitialized);
             }
         }
         self.externals = externals;
+    }
+
+    /// Note a read of `id` and say whether it is of an earlier unit's `var`
+    /// that this unit has not replaced yet, which is not an error.
+    fn note_external_read(&mut self, id: BindingId) -> bool {
+        if !self.is_external(id) || self.get_out_param_init(id) != Some(OutParamInitState::Uninitialized) {
+            return false;
+        }
+        self.externals_read_before_replaced.insert(self.bindings[id.0 as usize].name.C());
+        true
+    }
+
+    /// Note a way out of the unit: the earlier units' `var`s not replaced by
+    /// then are left as the unit found them.
+    fn note_unit_exit(&mut self) {
+        for id in 0..self.externals.len() {
+            let id = BindingId(id as u32);
+            if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+                self.externals_left_unreplaced.insert(self.bindings[id.0 as usize].name.C());
+            }
+        }
+    }
+
+    /// The earlier units' `var`s this unit overwrites: writes on every way
+    /// through it, before anything reads the value it found.
+    ///
+    /// Running such a unit again needs nothing of the binding as it was, which
+    /// is what tells an overwrite from an update. The rest of what it writes
+    /// it updates.
+    fn overwritten_externals(&self) -> Vec<String> {
+        self.written_externals.iter()
+            .filter(|name| !self.externals_read_before_replaced.contains(*name))
+            .filter(|name| !self.externals_left_unreplaced.contains(*name))
+            .filter(|name| self.externals.iter().any(|external| {
+                &external.name == *name && external.is_slot && !external.dead
+            }))
+            .cloned()
+            .collect()
     }
 
     /// Whether `id` is the binding of an earlier unit's binding.
@@ -1204,7 +1257,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     let root_name = place.root.text(self.db);
                     if let Some(id) = self.lookup(root_name) {
                         // Check for reading uninitialized binding (Out param or uninitialized var).
-                        if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+                        if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized)
+                            && !self.note_external_read(id)
+                        {
                             let name = self.bindings[id.0 as usize].name.C();
                             self.errors.push(AnalysisError::ReadUninitialized { expr_key, name });
                             return None;
@@ -1236,6 +1291,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     // Non-zero steps: root is borrowed, index sub-expressions are borrowed.
                     let root_name = place.root.text(self.db);
                     if let Some(id) = self.lookup(root_name) {
+                        self.note_external_read(id);
                         self.check_not_moved(id, expr_key);
                     }
                     for step in &place.steps {
@@ -1394,6 +1450,9 @@ pub struct ScriptAnalysis<'db> {
     pub taken_externals: Vec<String>,
     /// The earlier units' bindings this unit wrote to.
     pub written_externals: Vec<String>,
+    /// Those of them it overwrote rather than updated; see
+    /// `AnalysisCtx::overwritten_externals`.
+    pub overwritten_externals: Vec<String>,
     /// How many of the first bindings are earlier units' bindings, which
     /// lowering makes none of.
     pub externals: u32,
@@ -1474,6 +1533,8 @@ pub fn analyze_script_statements_with_externals<'db>(
     let dead_exports = ctx.dead_exports();
     let (taken_externals, revived_exports) = ctx.external_outcome();
     let externals = ctx.externals.len() as u32;
+    ctx.note_unit_exit();
+    let overwritten_externals = ctx.overwritten_externals();
 
     // Exit scope (returns empty for ScriptUnit, but we collected bindings above).
     let _ = ctx.exit_scope();
@@ -1491,6 +1552,7 @@ pub fn analyze_script_statements_with_externals<'db>(
         revived_exports,
         taken_externals,
         written_externals: ctx.written_externals.into_iter().collect(),
+        overwritten_externals,
         externals,
     }
 }
@@ -1506,6 +1568,8 @@ pub struct ExprAnalysis<'db> {
     pub taken_externals: Vec<String>,
     /// The earlier units' bindings the expression wrote to.
     pub written_externals: Vec<String>,
+    /// Those of them it overwrote rather than updated.
+    pub overwritten_externals: Vec<String>,
 }
 
 /// Analyze a standalone expression for ownership errors.
@@ -1556,6 +1620,8 @@ pub fn analyze_expr_with_externals<'db>(
     ctx.arena = Some(expr.arena());
     ctx.analyze_expr_moves(expr, !shows_external);
     let (taken_externals, _) = ctx.external_outcome();
+    ctx.note_unit_exit();
+    let overwritten_externals = ctx.overwritten_externals();
 
     // Exit scope. No drops needed since expression result is returned.
     let _ = ctx.exit_scope();
@@ -1565,6 +1631,7 @@ pub fn analyze_expr_with_externals<'db>(
         bindings: ctx.bindings,
         taken_externals,
         written_externals: ctx.written_externals.into_iter().collect(),
+        overwritten_externals,
     }
 }
 
@@ -1816,7 +1883,11 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         // Projection/index chain — check root for partial write to uninit.
         let root_name = place.root.text(ctx.db);
         if let Some(id) = ctx.lookup(root_name) {
-            if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+            // Writing part of an earlier unit's `var` keeps the rest of what
+            // it held, so it reads it.
+            if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized)
+                && !ctx.note_external_read(id)
+            {
                 ctx.errors.push(AnalysisError::OutParamPartialWrite {
                     expr_key: ctx.expr(stmt.value).key(),
                     name: root_name.to_string(),
@@ -1836,7 +1907,7 @@ fn check_compound_target_readable<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &St
     let Some(id) = ctx.lookup(root_name) else {
         return;
     };
-    if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+    if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) && !ctx.note_external_read(id) {
         let name = ctx.bindings[id.0 as usize].name.C();
         ctx.errors.push(AnalysisError::ReadUninitialized { expr_key, name });
         return;
@@ -1852,6 +1923,7 @@ fn check_out_params_initialized<'db>(
     ctx: &mut AnalysisCtx<'_, 'db>,
     ret_stmt_idx: Option<usize>,
 ) {
+    ctx.note_unit_exit();
     for (idx, info) in ctx.bindings.iter().enumerate() {
         if info.param_mode == Some(ParamMode::Out) {
             let id = BindingId(idx as u32);

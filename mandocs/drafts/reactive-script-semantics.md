@@ -1033,6 +1033,7 @@ An edit that removes a move or a mutation undoes what the old code did
 and redoes what the new code does.
 Deleting the unit is the same edit with nothing to redo.
 
+<!-- world delete code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -1065,11 +1066,13 @@ scriptunit-fragment
 
 let d = b + 1
 ```
+<!-- end world -->
 
 Unit 3 reads `a` and `b` before anything changes them.
 Unit 4 takes `a` and doubles `b`.
 Unit 5 reads `b` as unit 4 left it.
 
+<!-- world delete step 1 -->
 **Step 1: all five units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -1079,6 +1082,7 @@ Unit 5 reads `b` as unit 4 left it.
 | 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
 | 4 | `let a_moved = a; set b = b * 2` | takes `a` (1), updates `b` (2) | compiles, runs | new | `a_moved` = 1000 |
 | 5 | `let d = b + 1` | reads `b` (2) | compiles, runs | new | `d` = 251 |
+<!-- end world -->
 
 Now delete unit 4.
 The session should look as if unit 4 had never been entered.
@@ -1090,6 +1094,7 @@ Undoing an update needs a rewind, so unit 2 reruns.
 The rows below keep the numbers the units had before the deletion,
 so unit 5 is still called unit 5, though it is now the fourth.
 
+<!-- world delete step 2 -->
 **Step 2: unit 4 is deleted.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -1099,6 +1104,13 @@ so unit 5 is still called unit 5, though it is now the fourth.
 | 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 built the same `a` and `b` | `c` = 8 |
 | 4 | `let a_moved = a; set b = b * 2` | takes `a` (1), updates `b` (2) | deleted | deleted | - |
 | 5 | `let d = b + 1` | reads `b` (2) | reruns | reads `b` after unit 4, which no longer updates it | `d` = 126 |
+
+<!--
+Engine today, more than the rule asks:
+unit 3 reruns: a splice reruns every unit from the rerun point on, readers included
+unit 5 recompiles, runs: a removal renumbers every later unit, so they are typechecked under new keys
+-->
+<!-- end world -->
 
 Unit 3 read `a` and `b` before unit 4 changed them,
 and the rewind builds them again as they were,
@@ -1126,14 +1138,6 @@ What is new is only that the units after it move up a place.
 That changes their numbers, not what they compute,
 so in these terms it costs nothing.
 
-<!--
-Note: the engine today does not leave unit 3 alone.
-A value is identified by its unit's index, so deleting a unit renumbers
-every unit after it, and removal re-derives the whole suffix.
-It starts at the rewind point, unit 1 here, and reruns units 1, 2, 3 and 5.
-Unit 3 reruns for the renumbering, not for the rewind.
-A candidate for the last section.
--->
 
 
 
@@ -1147,6 +1151,7 @@ It also gives the name back:
 the units after it can use the binding again.
 Call that _reviving_ the binding.
 
+<!-- world revive code -->
 ```datalove
 ----------
 scriptunit-fragment
@@ -1172,11 +1177,13 @@ scriptunit-fragment
 
 let c = b + 1
 ```
+<!-- end world -->
 
 Unit 2 takes `b`, unit 3 revives it,
 and unit 4 reads what unit 3 put there.
 Without unit 3, unit 4 wouldn't compile.
 
+<!-- world revive step 1 -->
 **Step 1: all four units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -1185,6 +1192,7 @@ Without unit 3, unit 4 wouldn't compile.
 | 2 | `let b_moved = b` | takes `b` (1) | compiles, runs | new | `b_moved` = 125 |
 | 3 | `set b = 500` | revives `b` (1) | compiles, runs | new | - |
 | 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
+<!-- end world -->
 
 Edit unit 3 to write a different value.
 Redoing an overwrite needs no rewind,
@@ -1193,6 +1201,7 @@ it doesn't matter what `b` holds before the write.
 Unit 4 reruns by the forward rule,
 as it would after any overwrite.
 
+<!-- world revive step 2 -->
 **Step 2: unit 3 is edited to write 600.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -1201,6 +1210,13 @@ as it would after any overwrite.
 | 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
 | 3 | `set b = 600` | revives `b` (1) | recompiles, runs | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | reruns | reads `b` after unit 3, which now writes 600 | `c` = 601 |
+
+<!--
+Engine today, more than the rule asks:
+unit 1 reruns: treats the overwrite like an update, and reruns from the maker
+unit 2 reruns: replays the take after rerunning unit 1
+-->
+<!-- end world -->
 
 _Undoing is where a revival differs from every other write_.
 Break unit 3,
@@ -1222,6 +1238,7 @@ and nothing gives it back now:
 error[D013]: `b` was given away by an earlier input
 ```
 
+<!-- world revive step 3 -->
 **Step 3: unit 3 is broken.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -1230,6 +1247,13 @@ error[D013]: `b` was given away by an earlier input
 | 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
 | 3 | `set b = 600; let x = y` | revives `b` (1) | recompile fails | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
+
+<!--
+Engine today, more than the rule asks:
+unit 1 reruns: treats the revival like any other write, and reruns rather than dropping `b`
+unit 2 reruns: replays the take after rerunning unit 1
+-->
+<!-- end world -->
 
 _`b` dropped_ is a new kind of action.
 It is neither a recompile nor a rerun.
@@ -1241,6 +1265,17 @@ and needs no rewind either.
 Unit 3 writes 600 into the empty `b`,
 and unit 4 compiles and runs.
 The session is back to how step 2 left it.
+
+<!-- world revive step 4 -->
+**Step 4: unit 3 is fixed.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | untouched | `b` holds nothing, and unit 3 overwrites it | `b` = 600 |
+| 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 3 | `set b = 600` | revives `b` (1) | recompiles, runs | edited | - |
+| 4 | `let c = b + 1` | reads `b` (1) | reruns | `b` can be named again, as it could in step 2, whose compile is still memoized | `c` = 601 |
+<!-- end world -->
 
 Whether a write revives is not up to the writer.
 It depends on whether something before it gave the binding away.
@@ -1257,7 +1292,8 @@ Unit 4 could name `b` before the edit and after it,
 and reads 600 both times,
 so it is left alone.
 
-**Step 4: unit 2 is edited to read `b`.**
+<!-- world revive step 5 -->
+**Step 5: unit 2 is edited to read `b`.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
@@ -1265,6 +1301,13 @@ so it is left alone.
 | 2 | `let d = b + 1` | reads `b` (1) | recompiles, runs | edited | `d` = 126 |
 | 3 | `set b = 600` | overwrites `b` (1) | reruns | replay: overwrites `b` from unit 1, which reran | - |
 | 4 | `let c = b + 1` | reads `b` (1) | untouched | `b` is 600 after unit 3, as before | `c` = 601 |
+
+<!--
+Engine today, more than the rule asks:
+unit 3 recompiles, runs: `b` is no longer given away before it, so its ownership analysis runs again, though its lowered code is the same
+unit 4 reruns: counts unit 2's old take as providing `b`, so the edit reaches unit 4
+-->
+<!-- end world -->
 
 So a revival is an overwrite backward and an undone move forward,
 with one difference from both.
@@ -1278,15 +1321,7 @@ That gives the table a fifth row:
 | revives    | empty it | nothing                               | can name it again, so recompile when that changes |
 
 <!--
-Note: the engine today rewinds in steps 2 and 3.
-For step 2 it treats the overwrite like an update, the same gap as the
-overwrite section, and reruns units 1, 2, 3 and 4.
-For step 3 it treats the revival like any other write, and reruns units 1
-and 2 to leave `b` empty, rather than dropping it. The result is the same.
-Fixing unit 3 again matches, rerunning units 3 and 4.
-For step 4 it reruns unit 4 as well: the forward rule counts unit 2's take
-as providing `b`, so the edit to unit 2 reaches unit 3, which it re-derives
-rather than replays, and unit 4 after it.
+Note: the engine's own notes are rendered with each step above.
 The write's code does not depend on whether the binding was given away:
 lowering a store to an earlier unit's slot always emits `DropTracked`
 (`store_external_slot` in `crates/datalove-datafun-lower/src/stmt.rs`).

@@ -23,6 +23,27 @@ pub struct ExecutedQuery {
     /// Whether it ran on one of rayon's worker threads, which in the parallel
     /// compile is where a query computed ahead of its step runs.
     pub on_worker: bool,
+    /// The script unit being compiled when it ran, if one was; see
+    /// [`compiling_unit`].
+    pub compiling: Option<usize>,
+}
+
+thread_local! {
+    static COMPILING: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Run `f` as the compile of script unit `unit`, so that a recorded query
+/// says which unit it ran for.
+///
+/// Some queries cannot say so by their key: one keyed on what an earlier unit
+/// left behind runs under a key no unit has had before exactly when that
+/// changes. This is for recording only, and costs a thread-local write when
+/// nothing records.
+pub fn compiling_unit<R>(unit: usize, f: impl FnOnce() -> R) -> R {
+    let outer = COMPILING.replace(Some(unit));
+    let result = f();
+    COMPILING.set(outer);
+    result
 }
 
 /// Collects the queries salsa runs.
@@ -53,7 +74,8 @@ impl QueryRecorder {
             let rendered = format!("{database_key:?}");
             let query = rendered.split('(').next().unwrap_or(&rendered).to_string();
             let on_worker = rmx::rayon::current_thread_index().is_some();
-            executed.lock().X().push(ExecutedQuery { query, key: database_key.key_index(), on_worker });
+            let compiling = COMPILING.get();
+            executed.lock().X().push(ExecutedQuery { query, key: database_key.key_index(), on_worker, compiling });
         })
     }
 

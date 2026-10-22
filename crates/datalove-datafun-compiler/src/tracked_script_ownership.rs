@@ -66,6 +66,10 @@ pub struct ScriptUnitOwnershipResult<'db> {
     /// The earlier units' bindings this unit wrote to.
     #[returns(ref)]
     pub written_externals: Vec<String>,
+    /// Those of them it overwrote, writing on every way through the unit
+    /// before reading what they held; the rest it updated.
+    #[returns(ref)]
+    pub overwritten_externals: Vec<String>,
 }
 
 impl<'db> ScriptUnitOwnershipResult<'db> {
@@ -156,6 +160,7 @@ pub fn analyze_script_fragment_tracked<'db>(
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
+                Vec::new(),
             );
         }
     };
@@ -179,6 +184,7 @@ pub fn analyze_script_fragment_tracked<'db>(
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         );
     }
 
@@ -197,6 +203,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     let revived_exports = script_analysis.revived_exports.clone();
     let taken_externals = script_analysis.taken_externals;
     let written_externals = script_analysis.written_externals;
+    let overwritten_externals = script_analysis.overwritten_externals;
     let script_data = ScriptAnalysisData {
         schedule: script_analysis.schedule,
         bindings: script_analysis.bindings,
@@ -217,6 +224,7 @@ pub fn analyze_script_fragment_tracked<'db>(
         revived_exports,
         taken_externals,
         written_externals,
+        overwritten_externals,
     )
 }
 
@@ -247,7 +255,7 @@ pub fn analyze_script_expr_tracked<'db>(
         let structured_errors = analysis.errors.clone();
         return ScriptUnitOwnershipResult::new(
             db, Vec::new(), None, vec![error_msg], structured_errors,
-            Vec::new(), Vec::new(), Vec::new(), Vec::new(),
+            Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(),
         );
     }
 
@@ -255,7 +263,7 @@ pub fn analyze_script_expr_tracked<'db>(
     // The expression result is consumed by the caller, so no drops needed.
     ScriptUnitOwnershipResult::new(
         db, Vec::new(), None, Vec::new(), Vec::new(), Vec::new(), Vec::new(),
-        analysis.taken_externals, analysis.written_externals,
+        analysis.taken_externals, analysis.written_externals, analysis.overwritten_externals,
     )
 }
 

@@ -202,11 +202,14 @@ units and returns a `Splice` like the others. A splice does not skip readers:
 it re-executes from the rewind point as appends, so every unit from the
 provider on runs again.
 
-A write counts the same whether it reads the binding first or not, so a unit
-that only overwrites a `var` rewinds to it when it is redone, which it does not
-need to. Telling the two apart needs the ownership analysis to say that the
-write certainly happens before anything reads the old value, early returns
-included; see `mandocs/drafts/reactive-script-semantics.md`.
+A write counts the same in the reach whether it reads the binding first or
+not, so a unit that only overwrites a `var` rewinds to it when it is redone,
+which it does not need to. The record does tell the two apart:
+`UnitLowerRecord::overwritten` is the part of `written` the unit writes on
+every way through it before reading what the binding held, early returns
+included. Ownership analysis decides it with the machinery that checks an `out`
+parameter is written, an earlier unit's `var` starting out "not yet replaced".
+The reach does not use it yet; see `mandocs/drafts/reactive-script-semantics.md`.
 
 This is rewind and replay, and it is what makes the reach sound without
 copying anything. The cost is running the provider again, which may be the
@@ -312,6 +315,7 @@ suites missed.
 | `script_const_tests` | 11 | consts across units and into function bodies |
 | `script_splice_tests` | 14 | truncate, remove and insert: the suffix, the values, a suffix that stops compiling |
 | `datalove-repl/engine_edit_tests` | 21 | the shipped entry points end to end, failed units going green, rewinding |
+| `datalove-repl/reactive_tests` | 2 | step tables in `tests/fixtures/reactive/`: what each unit should do per step, with the engine's known extra work annotated. A unit recompiled if salsa ran its typecheck, or ran an ownership analysis while compiling it (`query_events::compiling_unit`); and that `mandocs/drafts/reactive-script-semantics.md` shows them as rendered |
 
 **Falsification, which is the part that makes it evidence.** Every stage was
 checked by injecting a fault into the shipped code and confirming the tests

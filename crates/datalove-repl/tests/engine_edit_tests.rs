@@ -15,7 +15,7 @@ use rmx::prelude::*;
 use datalove_datafun::pipeline::{
     ModuleDescriptor, PackageDescriptor, PackageLibrary, WorkspaceDescriptor,
 };
-use datalove_repl::{Engine, Eval};
+use datalove_repl::{Command, Engine, Eval};
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
 const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
@@ -690,4 +690,60 @@ fn truncating_the_unit_that_required_a_module_leaves_the_rest_running() {
 
     assert!(!bound(&mut engine, "b"));
     assert_eq!(value_of(&mut engine, "c"), "2");
+}
+
+// ============================================================================
+// What a unit does to earlier units' bindings
+// ============================================================================
+
+/// **A write is an overwrite only if it happens on every way through the unit
+/// before anything reads what the binding held.** Otherwise it is an update:
+/// running the unit again needs the binding as it was. Each case is a unit
+/// after a session that makes the `var`s, and says which of them it
+/// overwrites and which it updates.
+#[test]
+fn a_write_is_an_overwrite_only_when_it_needs_nothing_the_binding_held() {
+    let mut engine = engine();
+    let setup = [
+        "var b = 125",
+        "var p = (1, \"a\")",
+        "let flag = true",
+        "let d = 0",
+        "fun fill(out n: int)\n  set n = 42\nend fun\n\
+         fun bump(mut n: int)\n  set n = n + 1\nend fun\n\
+         fun do_nothing()\nend fun",
+        "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom Yes",
+    ];
+    for source in setup {
+        let eval = engine.eval(Command::ScriptStatement(source.S()));
+        assert!(!matches!(eval, Eval::Error(_)), "{source} compiles: {eval:?}");
+    }
+    let setup = setup.len();
+
+    let cases: &[(&str, &[&str], &[&str])] = &[
+        ("set b = 500", &["b"], &[]),
+        ("set b = b * 2", &[], &["b"]),
+        ("set b += 1", &[], &["b"]),
+        ("set b = 500\nlet c = b + 1", &["b"], &[]),
+        ("let c = b + 1\nset b = 500", &[], &["b"]),
+        ("set p.1 = \"b\"", &[], &["p"]),
+        ("call fill(out b)", &["b"], &[]),
+        ("call bump(mut b)", &[], &["b"]),
+        ("if flag\n  set b = 500\nend if", &[], &["b"]),
+        ("if flag\n  set b = 500\nelse\n  set b = 600\nend if", &["b"], &[]),
+        ("match f\ncase atom Yes\n  set b = 500\ncase atom No\n  set b = 600\nend match", &["b"], &[]),
+        ("match f\ncase atom Yes\n  set b = 500\ncase atom No\n  call do_nothing()\nend match", &[], &["b"]),
+        ("var i = 0\nloop while i .< 3\n  set b = 500\n  set i = i + 1\nend loop", &[], &["b"]),
+        // Leaving early, before the write, leaves `b` as it was.
+        ("let q = 10 /! d\nset b = 500", &[], &["b"]),
+        ("set b = 500\nlet q = 10 /! d", &["b"], &[]),
+    ];
+    for (source, overwritten, updated) in cases {
+        let eval = engine.eval(Command::ScriptStatement(source.S()));
+        assert!(!matches!(eval, Eval::Error(_)), "{source} compiles: {eval:?}");
+        let effects = engine.unit_effects(setup);
+        assert_eq!(effects.overwritten, *overwritten, "overwritten by: {source}");
+        assert_eq!(effects.updated, *updated, "updated by: {source}");
+        engine.truncate_units(setup);
+    }
 }

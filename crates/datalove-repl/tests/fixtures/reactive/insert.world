@@ -1,0 +1,44 @@
+----------
+scriptunit-fragment
+----------
+
+let a = 1000
+
+----------
+scriptunit-fragment
+----------
+
+let a_moved = a
+
+----------
+expect both units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` moved |
+| 2 | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
+
+----------
+scriptunit-insert 1a after 1
+----------
+
+let c = a + 1
+
+----------
+expect a unit reading `a` is inserted before the take
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 1a reads `a`, which unit 2 took after it | `a` moved |
+| 1a | reads `a` (1) | compiles, runs | inserted | `c` = 1001 |
+| 2 | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 2 | recompiles, runs | an insert renumbers every later unit, so they are typechecked under new keys |
