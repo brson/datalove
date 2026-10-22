@@ -1,0 +1,52 @@
+----------
+scriptunit-fragment
+----------
+
+var p = (1, "a")
+
+----------
+scriptunit-fragment
+----------
+
+let n = p.0 + 1
+
+----------
+scriptunit-fragment
+----------
+
+set p.1 = "b"
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `p` = (1, "b") |
+| 2 | reads `p` (1) | compiles, runs | new | `n` = 2 |
+| 3 | updates `p` (1) | compiles, runs | new | - |
+
+----------
+scriptunit-edit 2
+----------
+
+let n = p.0 + 2
+
+----------
+expect unit 2 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 2 reads only `p.0`, which unit 3 does not write | `p` = (1, "b") |
+| 2 | reads `p` (1) | recompiles, runs | edited | `n` = 3 |
+| 3 | updates `p` (1) | untouched | nothing it uses changed | - |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 1 | reruns | tracks bindings by name, so the write to `p.1` counts as a write to all of `p` |
+| 3 | reruns | replays its write after rerunning unit 1 |

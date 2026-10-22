@@ -563,8 +563,8 @@ and disagree on redo and on what they pass forward.
 
 <!--
 Note: the engine follows this table for edits, overwrites included.
-It treats a revival like an update, and the splices (delete, insert,
-truncate) rerun every unit from the rewind point on.
+It reruns to undo a revival where a fixup would do, and the splices
+(delete, insert, truncate) rerun every unit from the rewind point on.
 -->
 
 
@@ -1255,12 +1255,6 @@ as it would after any overwrite.
 | 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
 | 3 | `set b = 600` | revives `b` (1) | recompiles, runs | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | reruns | reads `b` after unit 3, which now writes 600 | `c` = 601 |
-
-<!--
-Engine today, more than the rule asks:
-unit 1 reruns: treats the overwrite like an update, and reruns from the maker
-unit 2 reruns: replays the take after rerunning unit 1
--->
 <!-- end world -->
 
 _Undoing is where a revival differs from every other write_.
@@ -1350,7 +1344,6 @@ so it is left alone.
 <!--
 Engine today, more than the rule asks:
 unit 3 recompiles, runs: `b` is no longer given away before it, so its ownership analysis runs again, though its lowered code is the same
-unit 4 reruns: counts unit 2's old take as providing `b`, so the edit reaches unit 4
 -->
 <!-- end world -->
 
@@ -1527,8 +1520,7 @@ is an undo and a redo of the same code, and cascades the same way.
 
 <!--
 Note: the engine today differs from this section in two places.
-It treats a revival like an update, so it reruns to undo one where a
-fixup would do.
+It reruns to undo a revival where a fixup would do.
 And the splices, delete among them, start a rerun at the unit that made
 the binding rather than a nearer overwrite (`rewind_point` in
 `crates/datalove-datafun/src/pipeline/script_compiler.rs`), and rerun

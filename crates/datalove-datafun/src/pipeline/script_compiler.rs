@@ -757,11 +757,19 @@ impl<'db> ScriptCompiler<'db> {
             (0..unit).rev().find(|earlier| provides[*earlier].contains(name))
         };
 
+        // Whether `unit` writes the binding `name` without reading what it
+        // held, as it does now: an overwrite, or a revival, which cannot read
+        // a binding that was given away.
+        let writes_without_reading = |unit: usize, name: &String| {
+            let record = &self.unit_records[unit];
+            record.overwritten.contains(name) || record.revived.contains(name)
+        };
+
         // The nearest unit before `unit` that set the binding `name` without
         // reading it, as the units do now.
         let setter = |unit: usize, name: &String| {
             (0..unit).rev().find(|earlier| {
-                provides[*earlier].contains(name) || self.unit_records[*earlier].overwritten.contains(name)
+                provides[*earlier].contains(name) || writes_without_reading(*earlier, name)
             })
         };
 
@@ -778,9 +786,17 @@ impl<'db> ScriptCompiler<'db> {
             let mut rederived = vec![false; count];
             let mut replayed = vec![false; count];
             for unit in 0..count {
+                // A unit that writes a binding without reading it does not
+                // care how an earlier unit left it, only what the binding is,
+                // which its provider says. If its write was undone it is
+                // replayed.
                 rederived[unit] = seeds.contains(&unit)
-                    || uses[unit].iter()
-                        .any(|name| source(unit, name).is_some_and(|source| rederived[source]));
+                    || uses[unit].iter().any(|name| {
+                        source(unit, name).is_some_and(|source| {
+                            rederived[source]
+                                && (provides[source].contains(name) || !writes_without_reading(unit, name))
+                        })
+                    });
                 replayed[unit] = !rederived[unit]
                     && (rewound.contains(&unit)
                         || changed[unit].iter().any(|name| {
@@ -808,7 +824,7 @@ impl<'db> ScriptCompiler<'db> {
                     // A unit that overwrites the binding needs nothing of what
                     // it held, so it does not matter what changed it. The
                     // units after it that changed it are replayed from it.
-                    if self.unit_records[unit].overwritten.contains(name) {
+                    if writes_without_reading(unit, name) {
                         continue;
                     }
                     let since = (unit..count)

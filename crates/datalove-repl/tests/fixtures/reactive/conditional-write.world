@@ -1,0 +1,54 @@
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let flag = true
+
+----------
+scriptunit-fragment
+----------
+
+if flag
+  set b = 500
+end if
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 500 |
+| 2 | - | compiles, runs | new | `flag` = true |
+| 3 | reads `flag` (2), updates `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 501 |
+
+----------
+scriptunit-edit 2
+----------
+
+let flag = false
+
+----------
+expect unit 2 is edited so the write does not happen
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 may not write `b`, so it needs `b` as unit 1 made it | `b` = 125 |
+| 2 | - | recompiles, runs | edited | `flag` = false |
+| 3 | reads `flag` (2), updates `b` (1) | reruns | reads `flag` from unit 2 | - |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3, which no longer writes it | `c` = 126 |
+

@@ -1,0 +1,60 @@
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+var total = 0
+
+----------
+scriptunit-fragment
+----------
+
+let d = b * 2
+
+----------
+scriptunit-fragment
+----------
+
+set total = d + 1
+
+----------
+scriptunit-fragment
+----------
+
+let shown = total * 10
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 125 |
+| 2 | - | compiles, runs | new | `total` = 251 |
+| 3 | reads `b` (1) | compiles, runs | new | `d` = 250 |
+| 4 | overwrites `total` (2), reads `d` (3) | compiles, runs | new | - |
+| 5 | reads `total` (2) | compiles, runs | new | `shown` = 2510 |
+
+----------
+scriptunit-edit 1
+----------
+
+var b = 50
+
+----------
+expect unit 1 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `b` = 50 |
+| 2 | - | untouched | unit 4 overwrites `total` without reading it | `total` = 101 |
+| 3 | reads `b` (1) | reruns | reads `b` from unit 1 | `d` = 100 |
+| 4 | overwrites `total` (2), reads `d` (3) | reruns | reads `d` from unit 3 | - |
+| 5 | reads `total` (2) | reruns | reads `total` after unit 4, which wrote a new value | `shown` = 1010 |
+

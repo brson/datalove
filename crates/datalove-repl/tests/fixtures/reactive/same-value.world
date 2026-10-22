@@ -1,0 +1,51 @@
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let big = b .> 100
+
+----------
+scriptunit-fragment
+----------
+
+let shown = big
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 125 |
+| 2 | reads `b` (1) | compiles, runs | new | `big` = true |
+| 3 | reads `big` (2) | compiles, runs | new | `shown` = true |
+
+----------
+scriptunit-edit 1
+----------
+
+var b = 126
+
+----------
+expect unit 1 is edited, and `big` comes out the same
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `b` = 126 |
+| 2 | reads `b` (1) | reruns | reads `b` from unit 1 | `big` = true |
+| 3 | reads `big` (2) | untouched | `big` is what it was | `shown` = true |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 3 | reruns | does not compare a rerun unit's values with what they were |

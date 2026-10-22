@@ -50,14 +50,6 @@ expect unit 3 is edited to write 600
 | 3 | revives `b` (1) | recompiles, runs | edited | - |
 | 4 | reads `b` (1) | reruns | reads `b` after unit 3, which now writes 600 | `c` = 601 |
 
-----------
-engine
-----------
-
-| unit | this step | note |
-|------|-----------|------|
-| 1 | reruns | treats the overwrite like an update, and reruns from the maker |
-| 2 | reruns | replays the take after rerunning unit 1 |
 
 ----------
 scriptunit-edit 3
@@ -127,4 +119,3 @@ engine
 | unit | this step | note |
 |------|-----------|------|
 | 3 | recompiles, runs | `b` is no longer given away before it, so its ownership analysis runs again, though its lowered code is the same |
-| 4 | reruns | counts unit 2's old take as providing `b`, so the edit reaches unit 4 |

@@ -1,0 +1,56 @@
+----------
+scriptunit-fragment
+----------
+
+var b = 1
+
+----------
+scriptunit-fragment
+----------
+
+let n = 3
+
+----------
+scriptunit-fragment
+----------
+
+var i = 0
+loop while i .< n
+  set b = b * 2
+  set i = i + 1
+end loop
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 8 |
+| 2 | - | compiles, runs | new | `n` = 3 |
+| 3 | updates `b` (1), reads `n` (2) | compiles, runs | new | `i` = 3 |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 9 |
+
+----------
+scriptunit-edit 2
+----------
+
+let n = 4
+
+----------
+expect unit 2 is edited to loop once more
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 updates `b` when it last ran, and reruns | `b` = 16 |
+| 2 | - | recompiles, runs | edited | `n` = 4 |
+| 3 | updates `b` (1), reads `n` (2) | reruns | reads `n` from unit 2 | `i` = 4 |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3, which wrote a new value | `c` = 17 |
+
