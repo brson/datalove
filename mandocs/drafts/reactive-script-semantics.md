@@ -117,8 +117,6 @@ scriptunit-fragment
 let a_moved = a
 let b_moved = b
 let c = a_moved /! b_moved
-
-debuglog c
 ```
 
 > Worldfiles are chunks of text delimited by headers bound between `----------` lines.
@@ -133,7 +131,7 @@ Scripts and script units are allowed to return the type `!()`,
 "result of unit".
 
 In this example all three units compile and execute successfully.
-The third logs the value "10".
+The third binds `c` to 10.
 Previous units both compile and execute prior to subsequent units,
 as the results of execution may affect which bindings are subsequently available.
 
@@ -167,8 +165,6 @@ scriptunit-fragment
 let a_moved = a
 let b_moved = b
 let c = a_moved /! b_moved
-
-debuglog c
 ```
 
 The first unit will fail in name resolution with an error.
@@ -269,8 +265,6 @@ let a_moved = a
 // and now it doesn't compile, so it can't have.
 let b_moved = b
 let c = a_moved /! b_moved
-
-debuglog c
 ```
 
 We have to recognize that unit 3 moved a binding out of unit 2,
@@ -330,14 +324,12 @@ scriptunit-fragment
 
 set b = b * 2
 let c = a /! b
-
-debuglog c
 ```
 
 The third unit doubles `b` in place.
 Doubling is not idempotent:
 running it twice is not the same as running it once.
-On first run it mutates `b` from 125 to 250 and logs the value "4".
+On first run it mutates `b` from 125 to 250, and `c` is 4.
 
 **Step 1: all three units are entered.**
 
@@ -374,11 +366,11 @@ so we need to rerun unit 2 to put `b` back to 125.
 
 Now if we fix unit 1,
 unit 3 runs against `b` as unit 2 made it,
-doubling 125 to 250 and logging "4" again.
+doubling 125 to 250, and `c` is 4 again.
 Had we left unit 2 alone,
 unit 3 would have doubled the 250 it left behind last time,
 to 500,
-and logged "2".
+and `c` would have been 2.
 
 **Step 3: unit 1 is fixed.**
 
@@ -422,11 +414,9 @@ scriptunit-fragment
 
 set b = 500
 let c = a /! b
-
-debuglog c
 ```
 
-On first run unit 3 replaces 125 with 500 and logs "2".
+On first run unit 3 replaces 125 with 500, and `c` is 2.
 
 **Step 1: all three units are entered.**
 
