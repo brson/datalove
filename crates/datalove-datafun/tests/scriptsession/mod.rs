@@ -551,10 +551,13 @@ impl Graph {
     /// see it -- so the reach extends to a unit when one of the names it uses
     /// resolves to a unit already reached.
     ///
-    /// It also goes back. A reached unit that uses a binding some unit after
-    /// its provider took or wrote would read it changed, so the provider is
-    /// reached too, and everything that provider reaches. Repeated until no
-    /// provider is added.
+    /// It also goes back. A reached unit that uses a binding it or a unit
+    /// after it took or wrote would read it changed, so the provider is
+    /// reached too. Repeated until no provider is added.
+    ///
+    /// A provider reached that way builds what it built before, so the units
+    /// that only read it are not reached for its sake: only those that took or
+    /// wrote what it builds, which are replayed in turn.
     ///
     /// An edited unit is always in its own reach: `asked_names` records a name
     /// the unit binds itself, deliberately, and that over-reporting is what
@@ -564,35 +567,41 @@ impl Graph {
         let provider = |unit: usize, name: &String| {
             (0..unit).rev().find(|earlier| self.provides[*earlier].contains(name))
         };
-        let mut seeds = seeds.clone();
+        let source = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| {
+                self.provides[*earlier].contains(name) || self.changed[*earlier].contains(name)
+            })
+        };
+        let mut rewound = BTreeSet::new();
         loop {
-            let mut reached = vec![false; count];
+            let mut rederived = vec![false; count];
+            let mut replayed = vec![false; count];
             for unit in 0..count {
-                reached[unit] = seeds.contains(&unit)
-                    || self.uses[unit].iter().any(|name| {
-                        (0..unit)
-                            .rev()
-                            .find(|earlier| {
-                                self.provides[*earlier].contains(name)
-                                    || self.changed[*earlier].contains(name)
-                            })
-                            .is_some_and(|source| reached[source])
-                    });
+                rederived[unit] = seeds.contains(&unit)
+                    || self.uses[unit].iter()
+                        .any(|name| source(unit, name).is_some_and(|source| rederived[source]));
+                replayed[unit] = !rederived[unit]
+                    && (rewound.contains(&unit)
+                        || self.changed[unit].iter().any(|name| {
+                            source(unit, name)
+                                .is_some_and(|source| rederived[source] || replayed[source])
+                        }));
             }
-            let before = seeds.len();
-            for unit in (0..count).filter(|unit| reached[*unit]) {
+            let reached = |unit: usize| rederived[unit] || replayed[unit];
+            let mut added = false;
+            for unit in (0..count).filter(|unit| reached(*unit)) {
                 for name in &self.uses[unit] {
                     let Some(source) = provider(unit, name) else { continue };
-                    let changed_since = (source + 1..count)
+                    let changed_since = (unit..count)
                         .filter(|later| provider(*later, name) == Some(source))
                         .any(|later| self.changed[later].contains(name));
-                    if !reached[source] && changed_since {
-                        seeds.insert(source);
+                    if !reached(source) && changed_since {
+                        added |= rewound.insert(source);
                     }
                 }
             }
-            if seeds.len() == before {
-                return (0..count).filter(|unit| reached[*unit]).collect();
+            if !added {
+                return (0..count).filter(|unit| reached(*unit)).collect();
             }
         }
     }

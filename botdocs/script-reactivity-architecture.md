@@ -169,11 +169,22 @@ So `reach_from` is two rules, repeated until nothing is added:
   name it uses resolves to a reached unit, and a unit that took or wrote a
   name counts as providing it, since the units after it see the binding as it
   left it.
-- **Back.** A reached unit that uses a binding which some unit after its
-  provider took or wrote would read it changed, so the provider is reached
-  too. Running the provider again builds the binding again, and the forward
-  rule then runs everything that uses it, in index order: the taking and
-  writing units included, which take and write again.
+- **Back.** A reached unit that uses a binding which it, or a unit after it,
+  took or wrote would read it changed, so the provider is reached too. A unit
+  between the provider and the reader that changed the binding is left alone:
+  what it left is what the reader read. Running the provider again builds the
+  binding again.
+
+A provider reached by the back rule is **replayed**, not re-derived: its code
+and its inputs are the same, so it builds the values it built before. A unit
+that only reads them would compute what it already holds, so the forward rule
+does not reach it from a replayed unit. What does have to run again is every
+unit that took or wrote what the replayed unit builds, in index order, and those
+are replayed in turn. A unit reached both ways is re-derived. Leaving a reader's
+frame alone while its provider's is replaced is sound for the reason above, and
+because a borrow cannot outlive the expression it is in: a frame holds no
+pointer into another unit's frame. Tensor views alias their parent, but one
+cannot be bound with `let`, only by a `for` over the rows, inside the loop.
 
 The back rule is taken over what the units did *before* the edit, the records
 as `held_graph` finds them, because that is what the running session went
@@ -187,7 +198,15 @@ suffix, may have taken or written a binding before the splice point.
 `rewind_point` moves the start of the splice back to that binding's provider,
 and on back while the units in between changed something earlier still, and
 the splice re-derives from there. That is why `truncate_units` can re-derive
-units and returns a `Splice` like the others.
+units and returns a `Splice` like the others. A splice does not skip readers:
+it re-executes from the rewind point as appends, so every unit from the
+provider on runs again.
+
+A write counts the same whether it reads the binding first or not, so a unit
+that only overwrites a `var` rewinds to it when it is redone, which it does not
+need to. Telling the two apart needs the ownership analysis to say that the
+write certainly happens before anything reads the old value, early returns
+included; see `mandocs/drafts/reactive-script-semantics.md`.
 
 This is rewind and replay, and it is what makes the reach sound without
 copying anything. The cost is running the provider again, which may be the

@@ -545,11 +545,11 @@ and disagree on redo and on what they pass forward.
 
 <!--
 Note: the engine today treats take, overwrite and update all like take,
-and rewinds a read whenever any unit after the binding's provider took or
-wrote it. That is correct but rewinds more than this table says it needs to:
-`var v = 1` / `set v = 10` / `let b = v + 1`, editing the third unit,
-reruns all three. It also replays every unit after a rewound unit that
-uses anything it provides, readers included. A candidate for the last
+so it rewinds to redo an overwrite. Otherwise it follows this table:
+a read rewinds only when the reader or a unit after it took or wrote the
+binding, and a rewind replays only the units that took or wrote what it
+rebuilt, not the readers. The splices (delete, insert, truncate) still
+rerun every unit from the rewind point on. A candidate for the last
 section.
 -->
 
@@ -760,11 +760,8 @@ _after_ the reader last ran.
 Changes before it are just what it read.
 
 <!--
-Note: the engine today rewinds here too, rerunning units 2, 3 and 4 for
-the step 2 edit, because its rule is "changed by any unit after the
-binding's provider". Correct, but more than necessary. The D013 case also
-reruns units 2 and 3 for an edit to the failing unit 4. Candidates for the
-last section.
+Note: the engine today matches this, rerunning only unit 4, in the D013
+case too.
 -->
 
 
@@ -900,10 +897,7 @@ a take needs a rewind when the binding is not as its maker left it,
 and that is usually, but not always, because the unit took it itself.
 
 <!--
-Note: the engine today does all of this,
-but in step 3 and in the variant it also reruns unit 2,
-because it replays readers after a rewind.
-Same gap as noted under the hypothesis.
+Note: the engine today matches all three steps and the variant.
 -->
 
 

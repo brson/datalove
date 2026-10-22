@@ -662,13 +662,23 @@ impl<'db> ScriptCompiler<'db> {
     /// reach, because a unit's providers all sit before it.
     ///
     /// **And the reach goes back.** A unit runs again against the bindings it
-    /// reads as they are now, and they are not as it first found them if some
-    /// unit after their provider took or wrote them since: it would read a
-    /// moved-out value, or one a later `set` left. So the provider is reached
-    /// as well, which builds the binding again and runs everything that uses
-    /// it after it, in order. That is a pass over what the units did before
-    /// this edit, `held.changed`, which is what the running session went
-    /// through. It repeats until no provider is added.
+    /// uses as they are now, and they are not as it first found them if it,
+    /// or a unit after it, took or wrote them since: it would read a moved-out
+    /// value, or one a later `set` left. A change made before it, by a unit
+    /// between the provider and it, is just what it read, and stays. So the
+    /// provider is reached as well, which builds the binding again. That is a
+    /// pass over what the units did before this edit, `held.changed`, which is
+    /// what the running session went through. It repeats until no provider is
+    /// added.
+    ///
+    /// **A provider reached that way is only replayed.** Its code is the same
+    /// and so are its inputs, so it builds the values it built before, and a
+    /// unit that only read them would compute what it already holds. What has
+    /// to run again after it is the units that took or wrote what it builds,
+    /// which left the binding changed and have to change it again; those are
+    /// replayed in turn, and so on down. A unit is re-derived for its own sake
+    /// -- a seed, or a user of what such a unit provides -- or for a replay,
+    /// and the first wins.
     ///
     /// The graph is the union of what it was before the edit and what it is
     /// after, since either alone would miss a case: a binding the edit
@@ -702,42 +712,51 @@ impl<'db> ScriptCompiler<'db> {
             (0..unit).rev().find(|earlier| provides[*earlier].contains(name))
         };
 
-        let mut seeds = seeds.clone();
-        loop {
-            let mut reached = vec![false; count];
-            for unit in 0..count {
-                reached[unit] = seeds.contains(&unit)
-                    || uses[unit].iter().any(|name| {
-                        (0..unit)
-                            .rev()
-                            .find(|earlier| {
-                                provides[*earlier].contains(name) || changed[*earlier].contains(name)
-                            })
-                            .is_some_and(|source| reached[source])
-                    });
-            }
+        // The unit the binding `name` is as a unit at `unit` finds it: the
+        // nearest earlier one that provided, took or wrote it.
+        let source = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| {
+                provides[*earlier].contains(name) || changed[*earlier].contains(name)
+            })
+        };
 
-            let mut rewound = Vec::new();
-            for unit in (0..count).filter(|unit| reached[*unit]) {
+        let mut rewound = BTreeSet::new();
+        loop {
+            let mut rederived = vec![false; count];
+            let mut replayed = vec![false; count];
+            for unit in 0..count {
+                rederived[unit] = seeds.contains(&unit)
+                    || uses[unit].iter()
+                        .any(|name| source(unit, name).is_some_and(|source| rederived[source]));
+                replayed[unit] = !rederived[unit]
+                    && (rewound.contains(&unit)
+                        || changed[unit].iter().any(|name| {
+                            source(unit, name)
+                                .is_some_and(|source| rederived[source] || replayed[source])
+                        }));
+            }
+            let reached = |unit: usize| rederived[unit] || replayed[unit];
+
+            let mut added = false;
+            for unit in (0..count).filter(|unit| reached(*unit)) {
                 for name in &uses[unit] {
                     let Some(source) = provider(unit, name) else {
                         continue;
                     };
-                    if reached[source] {
+                    if reached(source) {
                         continue;
                     }
-                    let since = (source + 1..count)
+                    let since = (unit..count)
                         .take_while(|later| provider(*later, name) == Some(source))
                         .any(|later| held.changed[later].contains(name));
                     if since {
-                        rewound.push(source);
+                        added |= rewound.insert(source);
                     }
                 }
             }
-            if rewound.is_empty() {
-                return (0..count).filter(|unit| reached[*unit]).collect();
+            if !added {
+                return (0..count).filter(|unit| reached(*unit)).collect();
             }
-            seeds.extend(rewound);
         }
     }
 

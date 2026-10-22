@@ -986,6 +986,79 @@ fn re_running_an_increment_rewinds_to_what_it_increments() {
     }
 }
 
+/// A unit that reads a `var` **after** an earlier unit wrote it rewinds
+/// nothing: what the write left is what it read.
+#[test]
+fn reading_a_var_an_earlier_unit_wrote_rewinds_nothing() {
+    let mut session = Session::new();
+    session.append("var v = 1\ndebuglog \"ran A\"\n");
+    session.append("set v = 10\ndebuglog \"ran B\"\n");
+    session.append("let b = v + 1\ndebuglog \"ran C\"\n");
+    let _ = session.units_run();
+
+    let expected = session.graph().reach(2);
+    assert_eq!(expected, BTreeSet::from([2]), "nothing wrote `v` after C");
+
+    session.edit(2, "let b = v + 2\ndebuglog \"ran C\"\n");
+    assert_eq!(session.rederive(2), expected);
+    assert_eq!(session.units_run(), expected);
+    assert_eq!(session.binding("b"), "12");
+    assert_eq!(session.binding("v"), "10");
+}
+
+/// A rewind **replays the units that took or wrote what it rebuilt, and not
+/// the ones that only read it**, which would compute what they already hold.
+///
+/// C reads `a` and D takes it, so editing C rewinds to A. B reads `a` too,
+/// but before D took it, and it is left alone.
+#[test]
+fn a_rewind_replays_the_takers_and_not_the_readers() {
+    let mut session = Session::new();
+    session.append("let a = 1000\ndebuglog \"ran A\"\n");
+    session.append("let c = a /! 10\ndebuglog \"ran B\"\n");
+    session.append("let d = a + 1\ndebuglog \"ran C\"\n");
+    session.append("let m = a\ndebuglog \"ran D\"\n");
+    let _ = session.units_run();
+
+    let expected = session.graph().reach(2);
+    assert_eq!(expected, BTreeSet::from([0, 2, 3]));
+
+    session.edit(2, "let d = a + 2\ndebuglog \"ran C\"\n");
+    assert_eq!(session.rederive(2), expected);
+    assert_eq!(session.units_run(), expected);
+    assert_eq!(session.binding("c"), "100");
+    assert_eq!(session.binding("d"), "1002");
+    assert_eq!(session.binding("m"), "1000");
+    assert_eq!(session.binding("a"), "<moved>");
+}
+
+/// A rewind replays every write after the rebuilt binding, in order, and
+/// skips the reader between them.
+///
+/// D reads `v` after B incremented it and before E doubled it. Editing D
+/// rewinds to A, and B and E write again; C read `v` and is left alone.
+#[test]
+fn a_rewind_replays_each_write_and_not_the_readers_between() {
+    let mut session = Session::new();
+    session.append("var v = 1\ndebuglog \"ran A\"\n");
+    session.append("set v = v + 1\ndebuglog \"ran B\"\n");
+    session.append("let r = v + 0\ndebuglog \"ran C\"\n");
+    session.append("let s = v * 10\ndebuglog \"ran D\"\n");
+    session.append("set v = v * 2\ndebuglog \"ran E\"\n");
+    let _ = session.units_run();
+    assert_eq!(session.binding("v"), "4");
+
+    let expected = session.graph().reach(3);
+    assert_eq!(expected, BTreeSet::from([0, 1, 3, 4]));
+
+    session.edit(3, "let s = v * 100\ndebuglog \"ran D\"\n");
+    assert_eq!(session.rederive(3), expected);
+    assert_eq!(session.units_run(), expected);
+    assert_eq!(session.binding("r"), "2");
+    assert_eq!(session.binding("s"), "200", "D saw `v` as B left it");
+    assert_eq!(session.binding("v"), "4", "each write happened once");
+}
+
 /// An edit that makes a unit take an earlier binding reaches the later units
 /// that use it, which can no longer name it.
 ///
