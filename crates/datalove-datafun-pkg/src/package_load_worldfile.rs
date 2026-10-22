@@ -355,6 +355,12 @@ pub struct WorldfileWithScript {
 /// Result of parsing a worldfile into sections.
 pub struct ParsedWorldfile {
     pub sections: Vec<WorldfileSection>,
+    /// How many lines of the file come before each section's source, one
+    /// per section.
+    ///
+    /// A section's source is a text of its own, so what is said about a line
+    /// of it counts from the section; this is what makes it the file's line.
+    pub line_offsets: Vec<usize>,
 }
 
 // ============================================================================
@@ -422,8 +428,8 @@ pub fn parse_worldfile_sections(mut reader: impl Read) -> AnyResult<ParsedWorldf
     let mut content = String::new();
     reader.read_to_string(&mut content)?;
 
-    let sections = parse_worldfile_to_sections(&content)?;
-    Ok(ParsedWorldfile { sections })
+    let (sections, line_offsets) = parse_worldfile_with_offsets(&content)?;
+    Ok(ParsedWorldfile { sections, line_offsets })
 }
 
 /// Write sections out as a worldfile, the inverse of [`parse_worldfile_sections`].
@@ -658,18 +664,28 @@ impl<'a> Parser<'a> {
 
 /// Parse worldfile content into sections.
 fn parse_worldfile_to_sections(content: &str) -> AnyResult<Vec<WorldfileSection>> {
+    Ok(parse_worldfile_with_offsets(content)?.0)
+}
+
+/// The same, with how many lines of the file come before each section's
+/// source; see [`ParsedWorldfile::line_offsets`].
+fn parse_worldfile_with_offsets(content: &str) -> AnyResult<(Vec<WorldfileSection>, Vec<usize>)> {
     let mut parser = Parser::new(content);
     let mut sections = Vec::new();
+    let mut line_offsets = Vec::new();
 
     while parser.skip_to_separator()? {
         parser.expect_separator()?;
         let header = parser.read_header()?;
         parser.expect_separator()?;
+        // The source is the lines from here to the next separator, so its
+        // first line is the line after the `pos` lines before it.
+        line_offsets.push(parser.pos);
         let section = parser.parse_section(header)?;
         sections.push(section);
     }
 
-    Ok(sections)
+    Ok((sections, line_offsets))
 }
 
 fn is_separator(line: &str) -> bool {
@@ -680,6 +696,20 @@ fn is_separator(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_section_says_where_its_source_starts_in_the_file() {
+        let text = "// a comment\n----------\nmodule local/pkg/m\n----------\nfun f(): i32\n    ret 1\nend fun\n\n----------\nscriptunit-fragment\n----------\n\nlet x = 1\n";
+        let parsed = parse_worldfile_sections(text.as_bytes()).X();
+        assert_eq!(parsed.line_offsets, vec![4, 11]);
+
+        // Line 1 of each source is that line of the file.
+        let lines: Vec<&str> = text.lines().collect();
+        for (section, offset) in parsed.sections.iter().zip(&parsed.line_offsets) {
+            let first = section.source().X().lines().next().X();
+            assert_eq!(lines[*offset], first);
+        }
+    }
 
     #[test]
     fn comments_may_precede_a_section_and_nothing_else_may() {

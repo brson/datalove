@@ -23,17 +23,33 @@ use crate::diagnostic::{Diagnostic, DiagnosticLabel, LabelStyle, Severity};
 /// one that does not can use the functions below.
 pub struct Renderer {
     colors: ColorGenerator,
+    line_offsets: LineOffsets,
 }
+
+/// How many lines of its file come before each source's text, for sources
+/// that are a part of a file rather than the whole of one.
+///
+/// A worldfile is several modules and script units in one file, each a
+/// source of its own, so a diagnostic about one counts its lines from the
+/// section and not from the file. With the section's place in the file
+/// given here, the line numbers are the file's.
+pub type LineOffsets = HashMap<crate::input::Source, usize>;
 
 impl Default for Renderer {
     fn default() -> Self {
-        Renderer { colors: ColorGenerator::new() }
+        Renderer { colors: ColorGenerator::new(), line_offsets: LineOffsets::new() }
     }
 }
 
 impl Renderer {
     pub fn new() -> Self {
         Renderer::default()
+    }
+
+    /// A renderer numbering the lines of these sources from where they sit
+    /// in their files; see [`LineOffsets`].
+    pub fn with_line_offsets(line_offsets: LineOffsets) -> Self {
+        Renderer { colors: ColorGenerator::new(), line_offsets }
     }
 
     /// Print one diagnostic, quoting the one source it points into.
@@ -44,7 +60,7 @@ impl Renderer {
         file_path: &Path,
         cwd: &Path,
     ) {
-        render_one(db, diag, file_path, cwd, &mut self.colors, Sink::Stderr);
+        render_one(db, diag, file_path, cwd, &mut self.colors, &self.line_offsets, Sink::Stderr);
     }
 
     /// The same diagnostic as text, for a caller that is not a terminal.
@@ -61,7 +77,7 @@ impl Renderer {
         cwd: &Path,
     ) -> String {
         let mut out = String::new();
-        render_one(db, diag, file_path, cwd, &mut self.colors, Sink::Text(&mut out));
+        render_one(db, diag, file_path, cwd, &mut self.colors, &self.line_offsets, Sink::Text(&mut out));
         out
     }
 
@@ -77,7 +93,7 @@ impl Renderer {
         file_path: &Path,
         cwd: &Path,
     ) {
-        render_one_multi_source(db, diag, file_path, &|_| None, cwd, &mut self.colors);
+        render_one_multi_source(db, diag, file_path, &|_| None, cwd, &mut self.colors, &self.line_offsets);
     }
 
     /// Print one diagnostic whose labels may point into several files.
@@ -93,7 +109,7 @@ impl Renderer {
         locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
         cwd: &Path,
     ) {
-        render_one_multi_source(db, diag, file_path, locate, cwd, &mut self.colors);
+        render_one_multi_source(db, diag, file_path, locate, cwd, &mut self.colors, &self.line_offsets);
     }
 }
 
@@ -250,13 +266,18 @@ fn render_one<'db>(
     file_path: &Path,
     cwd: &Path,
     colors: &mut ColorGenerator,
+    line_offsets: &LineOffsets,
     sink: Sink<'_>,
 ) {
     let file_name = display_path(file_path, cwd);
 
+    // Every label is in the one source here, so the first of them says which.
+    let source = diag.labels.first().map(|l| l.source);
+    let lines = source.and_then(|source| line_offsets.get(&source).copied()).unwrap_or(0);
+
     // The frame is placed at the first label, and at the top where a
     // diagnostic carries none.
-    let offset = diag.labels.first().map(|l| l.span.start).unwrap_or(0);
+    let offset = diag.labels.first().map(|l| l.span.start + lines).unwrap_or(0);
 
     let mut builder = Report::build(report_kind(diag.severity), (&file_name, offset..offset))
         .with_config(sink.config())
@@ -277,7 +298,7 @@ fn render_one<'db>(
         // a few words on it than without, which is why rustc's carry them.
         let message = label.message.map(|m| m.as_str(db)).unwrap_or("");
         builder = builder.with_label(
-            Label::new((&file_name, label.span.C()))
+            Label::new((&file_name, shifted(&label.span, lines)))
                 .with_color(color)
                 .with_message(message),
         );
@@ -290,10 +311,9 @@ fn render_one<'db>(
         builder = builder.with_help(help.as_str(db));
     }
 
-    // Every label is in the one source here, so the first of them says which.
-    let source_text = diag.labels.first().map(|l| l.source.as_str(db)).unwrap_or("");
+    let source_text = source.map(|source| source.as_str(db)).unwrap_or("");
 
-    sink.emit(builder.finish(), (&file_name, Source::from(source_text)));
+    sink.emit(builder.finish(), (&file_name, Source::from(placed(source_text, lines))));
 }
 
 fn render_one_multi_source<'db>(
@@ -303,44 +323,59 @@ fn render_one_multi_source<'db>(
     locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
     cwd: &Path,
     colors: &mut ColorGenerator,
+    line_offsets: &LineOffsets,
 ) {
     let base_file_name = display_path(file_path, cwd);
 
-    // One id per source: the file `locate` names, or else one numbered after
-    // the first, since several sources came out of the same file.
+    // One id per source, and the name it is shown by: the file `locate` names,
+    // or else `file_path`, which a source whose place in it is known shares
+    // with the others there. One whose place is not known is numbered after
+    // the first, since several sources came out of the same file and the
+    // line numbers would not say which.
     let mut source_to_id: HashMap<String, String> = HashMap::new();
     let mut source_order: HashMap<String, usize> = HashMap::new();
+    let mut source_lines: HashMap<String, usize> = HashMap::new();
     let mut sources: HashMap<String, Source<String>> = HashMap::new();
+    let mut names: HashMap<String, String> = HashMap::new();
     let mut unlocated = 0usize;
 
     for label in &diag.labels {
         let source_text = label.source.as_str(db).S();
         if !source_to_id.contains_key(&source_text) {
-            let file_id = match locate(label.source) {
-                Some(path) => display_path(&path, cwd),
-                None => {
-                    let id = match unlocated {
+            let lines = line_offsets.get(&label.source).copied();
+            let name = match (locate(label.source), lines) {
+                (Some(path), _) => display_path(&path, cwd),
+                (None, Some(_)) => base_file_name.C(),
+                (None, None) => {
+                    let name = match unlocated {
                         0 => base_file_name.C(),
                         n => fmt!("{base_file_name}:{n}"),
                     };
                     unlocated += 1;
-                    id
+                    name
                 }
             };
+            let file_id = fmt!("{}#{}", name, source_order.len());
+            let lines = lines.unwrap_or(0);
             source_order.insert(source_text.C(), source_order.len());
             source_to_id.insert(source_text.C(), file_id.C());
-            sources.insert(file_id, Source::from(source_text));
+            source_lines.insert(source_text.C(), lines);
+            sources.insert(file_id.C(), Source::from(placed(&source_text, lines)));
+            names.insert(file_id, name);
         }
     }
 
     if diag.labels.is_empty() {
         sources.insert(base_file_name.C(), Source::from(String::new()));
+        names.insert(base_file_name.C(), base_file_name.C());
     }
 
     let primary_file_id = diag.labels.first()
         .map(|l| source_to_id.get(l.source.as_str(db)).X().C())
         .unwrap_or_else(|| base_file_name.C());
-    let offset = diag.labels.first().map(|l| l.span.start).unwrap_or(0);
+    let offset = diag.labels.first()
+        .map(|l| l.span.start + source_lines[l.source.as_str(db)])
+        .unwrap_or(0);
 
     let mut builder = Report::build(report_kind(diag.severity), (primary_file_id.C(), offset..offset))
         .with_config(byte_config())
@@ -355,7 +390,8 @@ fn render_one_multi_source<'db>(
     let labels = in_reading_order(&diag.labels, colors, |l| (source_index(l), l.span.start));
     for (label, color) in labels {
         let file_id = source_to_id.get(label.source.as_str(db)).X().C();
-        let mut ariadne_label = Label::new((file_id, label.span.C())).with_color(color);
+        let lines = source_lines[label.source.as_str(db)];
+        let mut ariadne_label = Label::new((file_id, shifted(&label.span, lines))).with_color(color);
         if let Some(message) = &label.message {
             ariadne_label = ariadne_label.with_message(message.as_str(db));
         }
@@ -369,12 +405,33 @@ fn render_one_multi_source<'db>(
         builder = builder.with_help(help.as_str(db));
     }
 
-    let _ = builder.finish().eprint(MultiSourceCache { sources });
+    let _ = builder.finish().eprint(MultiSourceCache { sources, names });
+}
+
+/// A source's text as ariadne is given it: after `lines` empty lines.
+///
+/// ariadne's own `with_display_line_offset` moves the line number in the
+/// frame's header and not the ones in its gutter, so the two disagreed. Lines
+/// put in front of the text move both, and the gutter's width with them.
+fn placed(text: &str, lines: usize) -> String {
+    let mut placed = "\n".repeat(lines);
+    placed.push_str(text);
+    placed
+}
+
+/// A span into a source's text, as a span into [`placed`] text.
+///
+/// Each line put in front is one byte, so a span moves by as many bytes as
+/// there are lines.
+fn shifted(span: &crate::text::ByteSpan, lines: usize) -> Range<usize> {
+    (span.start + lines)..(span.end + lines)
 }
 
 /// Several in-memory sources, looked up by the id a label was given.
 struct MultiSourceCache {
     sources: HashMap<String, Source<String>>,
+    /// The name each source is shown by, which several may share.
+    names: HashMap<String, String>,
 }
 
 impl Cache<String> for MultiSourceCache {
@@ -385,7 +442,7 @@ impl Cache<String> for MultiSourceCache {
     }
 
     fn display<'a>(&self, id: &'a String) -> Option<impl std::fmt::Display + 'a> {
-        Some(id)
+        Some(self.names.get(id).X().C())
     }
 }
 

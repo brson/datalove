@@ -189,9 +189,17 @@ Two things about how the CLI drives it:
   when its operation is over, so `Engine::eval_reporting` takes a callback
   that is handed the compiler while it is still alive.
 
-Locations in a unit's diagnostics are lines of that section, not of the
-worldfile, as they were when `script-world` ran one unit; the renderer has no
-way to offset them yet.
+**Locations are the worldfile's lines.** Each section is a source of its own,
+so a diagnostic counts its lines from the section. The parser records how many
+lines of the file come before each section (`ParsedWorldfile::line_offsets`),
+the CLI maps each section's `Source` to that, and the renderer is given the map
+(`bct::render::LineOffsets`). It puts that many empty lines in front of the
+text it hands ariadne and moves the spans to match, rather than using ariadne's
+`with_display_line_offset`, which moves the line number in a frame's header and
+not those in its gutter. A unit's source is made when it is compiled, so its
+entry is added in the `eval_reporting` callback, from `last_source`. Sources
+from one worldfile all show as that file, where the renderer used to tell them
+apart by naming the second `file:1`.
 
 ## Editing, not only appending
 

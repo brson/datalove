@@ -118,10 +118,11 @@ fn render_script_type_diagnostics<'db>(
     diagnostics: &[&datalove::diagnostic::TypeDiagnostic],
     files: &std::collections::HashMap<datalove::bct::input::Source, PathBuf>,
     script_path: &rmx::std::path::Path,
+    line_offsets: &datalove::bct::render::LineOffsets,
     cwd: &rmx::std::path::Path,
 ) {
     let locate = |source: datalove::bct::input::Source| files.get(&source).cloned();
-    render::render_module_diagnostics(db, &[], diagnostics, &locate, script_path, cwd);
+    render::render_module_diagnostics(db, &[], diagnostics, &locate, script_path, line_offsets, cwd);
 }
 
 /// Report what stopped the modules compiling, and fail, if anything did.
@@ -146,7 +147,7 @@ fn bail_on_module_errors<'db>(
 
     let parse = compiled.get_module_parse_diagnostics(db);
     let types = compiled.get_module_type_diagnostics(db);
-    render::render_module_diagnostics(db, &parse, &types, &locate, script_path, &cwd);
+    render::render_module_diagnostics(db, &parse, &types, &locate, script_path, &datalove::bct::render::LineOffsets::new(), &cwd);
 
     let unrendered: Vec<String> = compiled.all_ownership_errors().into_iter()
         .chain(compiled.all_lowering_errors())
@@ -395,6 +396,7 @@ fn bail_on_ownership_error(
     compiled_unit: &datalove::datafun::pipeline::ScriptCompilationResult,
     compiler: &datalove::datafun::pipeline::ScriptCompiler<'_>,
     file_path: &std::path::Path,
+    line_offsets: &datalove::bct::render::LineOffsets,
     cwd: &std::path::Path,
 ) -> AnyResult<()> {
     use datalove::datafun;
@@ -405,6 +407,7 @@ fn bail_on_ownership_error(
                 compiler.get_ownership_errors(),
                 spans,
                 file_path,
+                line_offsets,
                 cwd,
             );
         }
@@ -428,7 +431,7 @@ impl LitTycheckCommand {
         let ast = parse_result.expr(&db);
         let parse_diags = datalit::parser::parse::accumulated::<datalove::diagnostic::ParseDiagnostic>(&db, source);
         if !parse_diags.is_empty() {
-            render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &cwd);
+            render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
             bail!("Parse error");
         }
 
@@ -690,16 +693,16 @@ impl ScriptCommand {
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
             let parse_diags = compiler.get_parse_diagnostics();
-            render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, &cwd);
+            render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
             bail!("Parse error");
         }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
             render_script_type_diagnostics(
-                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), file_path, &cwd);
+                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
             return Err(type_error(&type_diags, errors));
         }
-        bail_on_ownership_error(&compiled_unit, &compiler, file_path, &cwd)?;
+        bail_on_ownership_error(&compiled_unit, &compiler, file_path, &datalove::bct::render::LineOffsets::new(), &cwd)?;
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
@@ -786,16 +789,16 @@ impl ScriptIrCommand {
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
             let parse_diags = compiler.get_parse_diagnostics();
-            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
+            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
             bail!("Parse error");
         }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
             render_script_type_diagnostics(
-                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &cwd);
+                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
             return Err(type_error(&type_diags, errors));
         }
-        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
+        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd)?;
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
@@ -908,16 +911,16 @@ impl AotCompileCommand {
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
             let parse_diags = compiler.get_parse_diagnostics();
-            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
+            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
             bail!("Parse error");
         }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
             render_script_type_diagnostics(
-                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &cwd);
+                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
             return Err(type_error(&type_diags, errors));
         }
-        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
+        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd)?;
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
@@ -1016,10 +1019,11 @@ impl ScriptWorldCommand {
         if parsed.sections.iter().any(|s| matches!(s, WorldfileSection::ReplCommand { .. })) {
             bail!("script-world does not run repl-command sections; `repl --load` does");
         }
-        let units: Vec<Command> = parsed.sections.iter()
-            .filter_map(|section| match section {
-                WorldfileSection::ScriptFragment { source } => Some(Command::ScriptStatement(source.C())),
-                WorldfileSection::ScriptExpr { source } => Some(Command::Expression(source.C())),
+        // Each unit with how many lines of the file come before it.
+        let units: Vec<(Command, usize)> = parsed.sections.iter().zip(&parsed.line_offsets)
+            .filter_map(|(section, offset)| match section {
+                WorldfileSection::ScriptFragment { source } => Some((Command::ScriptStatement(source.C()), *offset)),
+                WorldfileSection::ScriptExpr { source } => Some((Command::Expression(source.C()), *offset)),
                 _ => None,
             })
             .collect();
@@ -1057,11 +1061,29 @@ impl ScriptWorldCommand {
         let mut engine = Engine::with_options(
             sys, descriptor, datafun::DebugOutputMode::Stderr, worldfile_modules)?;
 
+        // Where each section's text sits in the worldfile, so that what is
+        // said about a line of it names the file's line. The units' sources
+        // are made as they are evaluated, and are added there.
+        let pipeline = engine.pipeline();
+        let line_offsets: datalove::bct::render::LineOffsets = parsed.sections.iter().zip(&parsed.line_offsets)
+            .filter_map(|(section, offset)| {
+                let source = match section {
+                    WorldfileSection::Module { library, package, module, .. } =>
+                        pipeline.module_source(&fmt!("{library}/{package}/{module}")),
+                    WorldfileSection::Data { library, package, name, .. } =>
+                        pipeline.data_source(&fmt!("{library}/{package}/{name}")),
+                    WorldfileSection::Rider { name, .. } => pipeline.rider_source(name),
+                    _ => None,
+                };
+                Some((source?, *offset))
+            })
+            .collect();
+
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         let module_errors = engine.module_errors();
         if !module_errors.is_empty() {
             render::render_module_type_diagnostics(
-                engine.db(), &module_errors.type_diagnostics, &self.file_path, &cwd);
+                engine.db(), &module_errors.type_diagnostics, &self.file_path, &line_offsets, &cwd);
             // Lowering errors have no spans yet, so they are printed as they are.
             for error in &module_errors.lowering_errors {
                 eprintln!("{}", error);
@@ -1073,10 +1095,13 @@ impl ScriptWorldCommand {
 
         let total = units.len();
         let mut failed: Vec<(usize, AnyError)> = Vec::new();
-        for (index, unit) in units.into_iter().enumerate() {
+        for (index, (unit, offset)) in units.into_iter().enumerate() {
             let mut compile_error = None;
             let eval = engine.eval_reporting(unit, &mut |compiler, compiled| {
-                compile_error = Some(script_world_error(compiler, compiled, &files, &self.file_path, &cwd));
+                let mut line_offsets = line_offsets.C();
+                line_offsets.insert(compiler.last_source().expect("a unit was compiled"), offset);
+                compile_error = Some(script_world_error(
+                    compiler, compiled, &files, &self.file_path, &line_offsets, &cwd));
             });
             let error = match eval {
                 Eval::Nothing | Eval::Success(_) => None,
@@ -1120,13 +1145,14 @@ fn script_world_error(
     compiled: &datalove::datafun::pipeline::ScriptCompilationResult,
     files: &std::collections::HashMap<datalove::bct::input::Source, PathBuf>,
     file_path: &std::path::Path,
+    line_offsets: &datalove::bct::render::LineOffsets,
     cwd: &std::path::Path,
 ) -> AnyError {
     use datalove::datafun::pipeline::{LoweringResult, TypecheckResult};
 
     if let TypecheckResult::ParseError { errors: _ } = &compiled.typecheck {
         let parse_diags = compiler.get_parse_diagnostics();
-        render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, cwd);
+        render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, line_offsets, cwd);
         return anyhow!("Parse error");
     }
     if let TypecheckResult::Error { errors } = &compiled.typecheck {
@@ -1141,10 +1167,10 @@ fn script_world_error(
                     || diag.labels.iter().any(|label| label.source == own || files.contains_key(&label.source))
             })
             .collect();
-        render_script_type_diagnostics(compiler.db(), &type_diags, files, file_path, cwd);
+        render_script_type_diagnostics(compiler.db(), &type_diags, files, file_path, line_offsets, cwd);
         return type_error(&type_diags, errors);
     }
-    if let Err(error) = bail_on_ownership_error(compiled, compiler, file_path, cwd) {
+    if let Err(error) = bail_on_ownership_error(compiled, compiler, file_path, line_offsets, cwd) {
         return error;
     }
     if let LoweringResult::Error { message } = &compiled.lowering {

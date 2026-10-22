@@ -5,7 +5,7 @@ use rmx::std::ops::Range;
 use rmx::std::path::Path;
 
 use datalove::bct::diagnostic::{Diagnostic, DiagnosticBuilder};
-use datalove::bct::render::{self, Renderer};
+use datalove::bct::render::{self, LineOffsets, Renderer};
 use datalove::bct::input::Source;
 use datalove::bct::text::TextSpan;
 
@@ -14,14 +14,20 @@ use datalove::datafun_ast::spans::DatafunSpans;
 use datalove::datafun_sema::{AnalysisError, OwnershipRecoveryHint};
 
 /// Render parse diagnostics to stderr.
+///
+/// `line_offsets` places sources that are part of `file_path` rather than the
+/// whole of it, as a worldfile's sections are; see [`LineOffsets`].
 pub fn render_parse_diagnostics<'db>(
     db: &'db dyn datalove::datafun::Db,
     diagnostics: &[&datalove::diagnostic::ParseDiagnostic],
     file_path: &Path,
+    line_offsets: &LineOffsets,
     cwd: &Path,
 ) {
-    let diagnostics = diagnostics.iter().map(|d| d.to_diagnostic(db));
-    render::render_diagnostics(db, diagnostics, file_path, cwd);
+    let mut renderer = Renderer::with_line_offsets(line_offsets.C());
+    for diagnostic in diagnostics {
+        renderer.diagnostic(db, &diagnostic.to_diagnostic(db), file_path, cwd);
+    }
 }
 
 /// Render type diagnostics to stderr.
@@ -44,10 +50,13 @@ pub fn render_module_type_diagnostics<'db>(
     db: &'db dyn datalove::datafun::Db,
     diagnostics: &[datalove::bct::diagnostic::StoredDiagnostic],
     worldfile_path: &Path,
+    line_offsets: &LineOffsets,
     cwd: &Path,
 ) {
-    let diagnostics = diagnostics.iter().map(|d| d.to_diagnostic(db));
-    render::render_multi_source_diagnostics(db, diagnostics, worldfile_path, cwd);
+    let mut renderer = Renderer::with_line_offsets(line_offsets.C());
+    for diagnostic in diagnostics {
+        renderer.multi_source_diagnostic(db, &diagnostic.to_diagnostic(db), worldfile_path, cwd);
+    }
 }
 
 /// Render the diagnostics that stopped modules compiling.
@@ -61,11 +70,15 @@ pub fn render_module_diagnostics<'db>(
     types: &[&datalove::diagnostic::TypeDiagnostic],
     locate: &dyn Fn(Source) -> Option<rmx::std::path::PathBuf>,
     file_path: &Path,
+    line_offsets: &LineOffsets,
     cwd: &Path,
 ) {
     let diagnostics = parse.iter().map(|d| d.to_diagnostic(db))
         .chain(types.iter().map(|d| d.to_diagnostic(db)));
-    render::render_located_diagnostics(db, diagnostics, file_path, locate, cwd);
+    let mut renderer = Renderer::with_line_offsets(line_offsets.C());
+    for diagnostic in diagnostics {
+        renderer.located_diagnostic(db, &diagnostic, file_path, locate, cwd);
+    }
 }
 
 /// Render ownership errors directly from structured AnalysisError and spans.
@@ -77,9 +90,10 @@ pub fn render_ownership_errors_direct<'db>(
     errors: &[AnalysisError<'db>],
     spans: &DatafunSpans<'db>,
     file_path: &Path,
+    line_offsets: &LineOffsets,
     cwd: &Path,
 ) {
-    let mut renderer = Renderer::new();
+    let mut renderer = Renderer::with_line_offsets(line_offsets.C());
 
     for error in errors {
         match ownership_diagnostic(db, error, spans) {
