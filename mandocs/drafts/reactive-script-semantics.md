@@ -43,7 +43,7 @@ Let's figure it out.
 - [What if an edit adds or removes a move?](#user-content-what-if-an-edit-adds-or-removes-a-move)
 - [What if an edit adds or removes a mutation?](#user-content-what-if-an-edit-adds-or-removes-a-mutation)
 - [What if a unit that moves or mutates is deleted?](#user-content-what-if-a-unit-that-moves-or-mutates-is-deleted)
-- What if a unit gives a moved `var` a value again?
+- [What if a unit gives a moved `var` a value again?](#user-content-what-if-a-unit-gives-a-moved-var-a-value-again)
 - What if rewinding one unit needs another rewound first?
 - What if a move or mutation is conditional, or in a loop?
 - What does rewinding cost?
@@ -1128,6 +1128,158 @@ every unit after it, and removal re-derives the whole suffix.
 It starts at the rewind point, unit 1 here, and reruns units 1, 2, 3 and 5.
 Unit 3 reruns for the renumbering, not for the rewind.
 A candidate for the last section.
+-->
+
+
+
+
+## What if a unit gives a moved `var` a value again?
+
+A `var` that was given away holds nothing,
+but it can still be assigned to.
+`set` on it doesn't read it, so it is an overwrite.
+It also gives the name back:
+the units after it can use the binding again.
+Call that _reviving_ the binding.
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let b_moved = b
+
+----------
+scriptunit-fragment
+----------
+
+set b = 500
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+```
+
+Unit 2 takes `b`, unit 3 revives it,
+and unit 4 reads what unit 3 put there.
+Without unit 3, unit 4 wouldn't compile.
+
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 500 |
+| 2 | `let b_moved = b` | takes `b` (1) | compiles, runs | new | `b_moved` = 125 |
+| 3 | `set b = 500` | revives `b` (1) | compiles, runs | new | - |
+| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
+
+Edit unit 3 to write a different value.
+Redoing an overwrite needs no rewind,
+and that holds for a revival too:
+it doesn't matter what `b` holds before the write.
+Unit 4 reruns by the forward rule,
+as it would after any overwrite.
+
+**Step 2: unit 3 is edited to write 600.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | untouched | unit 3 overwrites `b` without reading it | `b` = 600 |
+| 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 3 | `set b = 600` | revives `b` (1) | recompiles, runs | edited | - |
+| 4 | `let c = b + 1` | reads `b` (1) | reruns | reads `b` after unit 3, which now writes 600 | `c` = 601 |
+
+_Undoing is where a revival differs from every other write_.
+Break unit 3,
+and the session should look as if unit 3 never ran.
+The undo column says an overwrite needs a rewind,
+so that `b` is as it was before the write.
+But before this write `b` held nothing.
+Rerunning unit 1 would build 125,
+and replaying unit 2 would take it again,
+all to leave `b` empty.
+Dropping the 600 leaves it empty too,
+and runs nothing.
+
+Forward, it is a move added back.
+Unit 4 names `b`, which unit 2 gave away,
+and nothing gives it back now:
+
+```
+error[D013]: `b` was given away by an earlier input
+```
+
+**Step 3: unit 3 is broken.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | `b` dropped | unit 3 revived `b` when it last ran, and is undone | `b` moved |
+| 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 3 | `set b = 600; let x = y` | revives `b` (1) | recompile fails | edited | - |
+| 4 | `let c = b + 1` | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
+
+Fixing unit 3 again is a redo,
+and needs no rewind either.
+Unit 3 writes 600 into the empty `b`,
+and unit 4 compiles and runs.
+The session is back to how step 2 left it.
+
+Whether a write revives is not up to the writer.
+It depends on whether something before it gave the binding away.
+Edit unit 2 to read `b` instead of taking it.
+Undoing the take needs a rewind,
+so unit 1 reruns and builds 125.
+Unit 3 wrote `b` the last time it ran,
+so it replays,
+and now it overwrites a `b` that holds something.
+Its code is the same:
+writing a binding drops whatever it held,
+and here that is 125 rather than nothing.
+Unit 4 could name `b` before the edit and after it,
+and reads 600 both times,
+so it is left alone.
+
+**Step 4: unit 2 is edited to read `b`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rewind: unit 2 took `b` when it last ran, and the edit undoes that | `b` = 600 |
+| 2 | `let d = b + 1` | reads `b` (1) | recompiles, runs | edited | `d` = 126 |
+| 3 | `set b = 600` | overwrites `b` (1) | reruns | replay: overwrites `b` from unit 1, which reran | - |
+| 4 | `let c = b + 1` | reads `b` (1) | untouched | `b` is 600 after unit 3, as before | `c` = 601 |
+
+So a revival is an overwrite backward and an undone move forward,
+with one difference from both.
+Its undo needs no rewind,
+because what it overwrote was nothing,
+and nothing can be put back without running anything.
+That gives the table a fifth row:
+
+| a unit that ... an earlier binding | undo it | redo it | units after it |
+|------------|---------|----------------------------------------|--------------------------------------------|
+| revives    | empty it | nothing                               | can name it again, so recompile when that changes |
+
+<!--
+Note: the engine today rewinds in steps 2 and 3.
+For step 2 it treats the overwrite like an update, the same gap as the
+overwrite section, and reruns units 1, 2, 3 and 4.
+For step 3 it treats the revival like any other write, and reruns units 1
+and 2 to leave `b` empty, rather than dropping it. The result is the same.
+Fixing unit 3 again matches, rerunning units 3 and 4.
+For step 4 it reruns unit 4 as well: the forward rule counts unit 2's take
+as providing `b`, so the edit to unit 2 reaches unit 3, which it re-derives
+rather than replays, and unit 4 after it.
+The write's code does not depend on whether the binding was given away:
+lowering a store to an earlier unit's slot always emits `DropTracked`
+(`store_external_slot` in `crates/datalove-datafun-lower/src/stmt.rs`).
 -->
 
 
