@@ -26,15 +26,12 @@
 //!   reach rather than the same one.
 //!
 //! **A module edit is measured the same way**, with the units that import from
-//! the edited module as the seeds. It used to be the one row where analysis
-//! over-propagated -- `ScriptEnv` was interned over every module's spec, so
-//! editing any module gave every unit's typecheck a new key -- and the matrix
-//! asserted that outright. The env holds `Module` handles now, which survive a
-//! `set_text`, so the keys stay put and the reach is the importing units and
-//! their name-edge dependents. See `botdocs/plan-script-reactivity.md` section
-//! F, and the module cases below for what is still not narrow: a module *body*
-//! edit moves the spans in a `ModuleSpec`, so an importing unit re-typechecks
-//! even though no signature moved.
+//! the edited module as the seeds. The env holds `Module` handles, which
+//! survive a `set_text`, so the keys stay put and the reach is the importing
+//! units and their name-edge dependents. A unit reads only a module's
+//! declarations, so a module *body* edit re-typechecks no unit, though the
+//! importers still re-run for the values. See
+//! `botdocs/plan-script-reactivity.md` section F.
 //!
 //! See also the longer session and the removal and ownership cases at the foot
 //! of this file, which are the other holes the plan's confidence section names.

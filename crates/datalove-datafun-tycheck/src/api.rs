@@ -1169,7 +1169,7 @@ fn resolve_script_qualified_calls<'db>(
 ///
 /// Handles only, and deliberately: a module's path is its `ModuleId`'s interned
 /// content and a `Module` is interned over that and a `Source`, so building this
-/// reads no module's text. The content is [`script_module_spec`], asked for the
+/// reads no module's text. The content is [`script_module_names`], asked for the
 /// one module an import resolves into.
 fn script_modules_by_path<'db>(
     db: &'db dyn crate::Db,

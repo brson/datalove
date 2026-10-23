@@ -170,7 +170,7 @@ impl<'db> CompiledModules<'db> {
         }
 
         // The module *handles*, in the graph's dependency order. Nothing about a
-        // module's content is read here: a unit asks `script_module_spec` for
+        // module's content is read here: a unit asks `script_module_names` for
         // the modules its imports name, so building this compiler parses no
         // module and resolves no module's names.
         let modules: Vec<bct::module_graph::Module<'db>> =

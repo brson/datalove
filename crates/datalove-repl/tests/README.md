@@ -1,12 +1,12 @@
-# REPL Engine Tests
+# REPL Tests
 
-Example-based tests for the Datalove REPL engine.
+`botdocs/repl-architecture.md` under "Tests" says what each suite covers. This
+is how the two fixture suites are laid out and run.
 
-## Test Format
+## Engine fixtures
 
-Test files use the `.repl` extension and are located in `tests/fixtures/engine/`.
-
-Each test file contains multiple inputs separated by `---` on its own line:
+`engine_tests` runs each `.repl` file in `fixtures/engine/` through
+`Engine::run_source`. Inputs are separated by `---` on its own line:
 
 ```
 let x = 42
@@ -18,32 +18,31 @@ let y = x + 10
 y
 ```
 
-## Running Tests
+For each input it records the input, the parse result (`InputParse`), the
+eval result (`Eval`) if there is one, and the environment afterwards. The
+record is JSON, compared against `<name>.out.expected`. A run writes
+`<name>.out.actual` alongside, which git ignores.
 
-Run all engine tests:
 ```bash
 cargo test -p datalove-repl --test engine_tests
-```
-
-## Updating Expected Output
-
-When the engine behavior changes or new tests are added, update the expected output:
-```bash
 BLESS=1 cargo test -p datalove-repl --test engine_tests
 ```
 
-## Test Output
+`BLESS=1` rewrites the expected files from the actual ones. It also writes one
+for a new fixture that has none.
 
-For each input, the test records:
-- The input string
-- The parse result (InputParse)
-- The eval result (Eval), if applicable
-- The environment after the step (list of name, type, value bindings)
+## Reactive fixtures
 
-Output is serialized as JSON in `.out.expected` files.
+`reactive_tests` runs each `.world` file in `fixtures/reactive/`: script units,
+then steps that edit, delete, insert or append units, each with an `expect`
+table of what every unit should do. The module docs of `reactive_tests.rs` give
+the format. `botdocs/script-reactivity-cases.md` is rendered from these
+fixtures, and the test checks it matches.
 
-## Example Tests
+```bash
+cargo test -p datalove-repl --test reactive_tests
+BLESS=1 cargo test -p datalove-repl --test reactive_tests
+```
 
-- `basic.repl` - Simple let bindings and expressions
-- `simple.repl` - Multiple let bindings with expressions
-- `errors.repl` - Parse and type errors
+Here `BLESS=1` re-renders the document only. The step tables are never
+blessed, because they are the rules.
