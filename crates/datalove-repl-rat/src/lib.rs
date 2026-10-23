@@ -4,7 +4,7 @@
 use rmx::prelude::*;
 
 use datalove_repl as repl;
-pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus, Panel, Scroll};
+pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus, Panel, Scroll, Tab, UnitStep};
 pub use repl::ThreadedExecutor;
 pub use repl::{PackageLibrary, SystemLibrary};
 
@@ -114,8 +114,8 @@ impl<E: ReplExecutor> RatatuiApp<E> {
     pub fn handle_scroll_key(&mut self, scroll: Scroll, key: crossterm::event::KeyEvent) {
         let ctrl = key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL);
         match self.repl.scroll_target(ctrl) {
-            Panel::History => self.repl.scroll_history(scroll),
-            Panel::Environment => self.repl.scroll_environment(scroll),
+            Panel::Code => self.repl.scroll_code(scroll),
+            Panel::Bottom => self.repl.scroll_bottom(scroll),
             Panel::Input => {
                 self.textarea.input(key);
             }
@@ -128,6 +128,14 @@ impl<E: ReplExecutor> RatatuiApp<E> {
 
     pub fn focus_prev(&mut self) {
         self.repl.focus_prev();
+    }
+
+    pub fn next_tab(&mut self) {
+        self.repl.next_tab();
+    }
+
+    pub fn select_tab(&mut self, tab: Tab) {
+        self.repl.select_tab(tab);
     }
 
     pub fn focus(&self) -> Panel {

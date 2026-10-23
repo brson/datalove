@@ -12,23 +12,23 @@ use ratatui::{
     Frame,
 };
 
-use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel};
+use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStep};
 
 /// Render the UI.
 pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
-    // Three-panel layout: history (top), input (middle), debug (bottom).
+    // Three-panel layout: code (top), input (middle), tabs (bottom).
     // Single-line mode: Input centered like a Cylon visor.
     // Multi-line mode: Input grows downward from center to 1/3 screen.
 
     let screen_height = f.area().height;
 
     let constraints = if app.multiline_mode() {
-        // Multi-line mode: Keep history at same height, input grows to 1/3, debug compressed.
+        // Multi-line mode: Keep code at same height, input grows to 1/3, tabs compressed.
         let top_height = (screen_height.saturating_sub(3)) / 2;
         vec![
-            Constraint::Length(top_height),  // History (same as single-line center point)
+            Constraint::Length(top_height),  // Code (same as single-line center point)
             Constraint::Percentage(33),      // Input (1/3 of screen)
-            Constraint::Min(0),              // Debug (fills remaining space)
+            Constraint::Min(0),              // Tabs (fills remaining space)
         ]
     } else {
         // Single-line mode: Input centered vertically.
@@ -44,16 +44,25 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
         .constraints(constraints)
         .split(f.area());
 
-    // History panel - scrollable display of interactive cards.
-    let history_view = render_history(f, &app.repl, chunks[0]);
-    app.repl.record_history_view(history_view.pane_lines, history_view.scroll_back_limit);
+    let code_view = render_code(f, &app.repl, chunks[0]);
+    app.repl.record_code_view(code_view.pane_lines, code_view.scroll_back_limit);
 
     // Input panel - current text input with multiline indicators.
     render_input(f, app, chunks[1]);
 
-    // Debug panel - table of variables and values.
-    let environment_view = render_debug_pane(f, &app.repl, chunks[2]);
-    app.repl.record_environment_view(environment_view.pane_rows, environment_view.scroll_limit);
+    // Only the tab shown is laid out, so only its bounds are recorded; the
+    // other is recorded when it is shown, before a key can scroll it.
+    let bottom_block = bottom_block(&app.repl);
+    match app.repl.tab() {
+        Tab::Environment => {
+            let view = render_environment(f, &app.repl, chunks[2], bottom_block);
+            app.repl.record_environment_view(view.pane_rows, view.scroll_limit);
+        }
+        Tab::History => {
+            let view = render_history(f, &app.repl, chunks[2], bottom_block);
+            app.repl.record_history_view(view.pane_lines, view.scroll_back_limit);
+        }
+    }
 
     // Render menu if open.
     if app.menu_is_open() {
@@ -102,11 +111,12 @@ fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
     }
 }
 
-/// The shape of the history pane a frame laid out.
+/// The shape of a pane scrolled up from its bottom, the code or the history,
+/// as a frame laid it out.
 ///
 /// The renderer is the only thing that knows either number, and the app needs
 /// both to bound scrolling.
-struct HistoryView {
+struct ScrollBackView {
     /// Lines the pane showed.
     pane_lines: usize,
     /// The furthest up from the bottom the view can scroll.
@@ -121,17 +131,30 @@ struct EnvironmentView {
     scroll_limit: usize,
 }
 
-/// Render the history panel with interactive cards.
-fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) -> HistoryView {
-    let history_block = Block::default()
+/// The color of a unit's bar, for what it did in the last step.
+fn step_color(step: UnitStep) -> Color {
+    match step {
+        UnitStep::Pending => Color::Cyan,
+        UnitStep::Untouched => Color::DarkGray,
+        UnitStep::Ran => Color::Green,
+        UnitStep::Failed => Color::Red,
+        UnitStep::ReturnedEarly => Color::Yellow,
+        UnitStep::Blocked => Color::Magenta,
+    }
+}
+
+/// Render the code panel: every unit's source, in order, each beside a bar
+/// colored for what the last step did with it.
+fn render_code<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) -> ScrollBackView {
+    let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(panel_border(repl, Panel::History))
-        .title("History");
+        .border_style(panel_border(repl, Panel::Code))
+        .title("Code");
 
     let mut lines: Vec<Line> = Vec::new();
 
     // Startup compiles the system library and builds the native riders, which
-    // takes seconds at best; say so, or every entry just reads "parsing...".
+    // takes seconds at best; say so, or nothing seems to happen.
     if !repl.engine_is_ready() {
         lines.push(Line::from(vec![
             ratatui::text::Span::styled(
@@ -145,6 +168,61 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
         ]));
         lines.push(Line::from(""));
     }
+
+    let units = repl.code_units();
+    if units.is_empty() {
+        lines.push(Line::from(ratatui::text::Span::styled(
+            "(no code yet)",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    let separator = "─".repeat(area.width.saturating_sub(2) as usize);
+    for (index, unit) in units.iter().enumerate() {
+        if index > 0 {
+            lines.push(Line::from(ratatui::text::Span::styled(
+                separator.C(),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+        let bar = Style::default().fg(step_color(unit.step));
+        for line in unit.source.lines() {
+            lines.push(Line::from(vec![
+                ratatui::text::Span::styled("▌ ", bar),
+                ratatui::text::Span::raw(line),
+            ]));
+        }
+    }
+
+    render_scrolled_back(f, lines, block, area, repl.code_scroll_back())
+}
+
+/// The bottom panel's frame, whose title is its tabs.
+fn bottom_block<E: ReplExecutor>(repl: &ReplApp<E>) -> Block<'static> {
+    let mut tabs = vec![ratatui::text::Span::raw(" ")];
+    for (index, tab) in Tab::ALL.into_iter().enumerate() {
+        if index > 0 {
+            tabs.push(ratatui::text::Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+        }
+        let style = if tab == repl.tab() {
+            Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        tabs.push(ratatui::text::Span::styled(tab.title(), style));
+    }
+    tabs.push(ratatui::text::Span::raw(" "));
+
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(panel_border(repl, Panel::Bottom))
+        .title(Line::from(tabs))
+        .title(Line::from("[F2]").right_aligned())
+}
+
+/// Render the history tab: every input and what it came to.
+fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> ScrollBackView {
+    let mut lines: Vec<Line> = Vec::new();
 
     for entry in repl.history() {
         // Input line with prompt.
@@ -348,17 +426,28 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
         lines.push(Line::from(""));
     }
 
-    // The pane sits at the bottom of the history unless the user paged up.
+    render_scrolled_back(f, lines, block, area, repl.history_scroll_back())
+}
+
+/// Render lines that sit at the bottom of their pane unless the user paged up,
+/// `scroll_back` lines.
+fn render_scrolled_back(
+    f: &mut Frame,
+    lines: Vec<Line>,
+    block: Block,
+    area: Rect,
+    scroll_back: usize,
+) -> ScrollBackView {
     let content_height = lines.len();
     let viewport_height = area.height.saturating_sub(2) as usize; // Subtract borders.
     let bottom = content_height.saturating_sub(viewport_height);
-    let scroll_offset = (bottom - repl.history_scroll_back().min(bottom)) as u16;
+    let scroll_offset = (bottom - scroll_back.min(bottom)) as u16;
 
-    let history = Paragraph::new(lines)
-        .block(history_block)
+    let paragraph = Paragraph::new(lines)
+        .block(block)
         .scroll((scroll_offset, 0));
 
-    f.render_widget(history, area);
+    f.render_widget(paragraph, area);
 
     // Render scrollbar.
     let mut scrollbar_state = ScrollbarState::new(content_height)
@@ -374,7 +463,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
         &mut scrollbar_state,
     );
 
-    HistoryView { pane_lines: viewport_height, scroll_back_limit: bottom }
+    ScrollBackView { pane_lines: viewport_height, scroll_back_limit: bottom }
 }
 
 /// Render the input panel with multiline indicators.
@@ -412,12 +501,8 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
     f.render_widget(&textarea, area);
 }
 
-fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) -> EnvironmentView {
-    let debug_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(panel_border(repl, Panel::Environment))
-        .title("Environment");
-
+/// Render the environment tab: a table of the session's bindings.
+fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, debug_block: Block) -> EnvironmentView {
     if repl.environment().is_empty() {
         // Display empty state message as a paragraph.
         let lines = vec![

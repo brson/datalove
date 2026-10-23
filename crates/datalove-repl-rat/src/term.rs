@@ -4,9 +4,15 @@ use rmx::prelude::*;
 
 use crossterm::{
     cursor::Show,
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{
+        disable_raw_mode, enable_raw_mode, supports_keyboard_enhancement, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -16,7 +22,7 @@ use std::io;
 use std::fs::File;
 use std::path::Path;
 
-use crate::{repl, PackageLibrary, Panel, RatatuiApp, Scroll, ReplExecutor, SystemLibrary, ThreadedExecutor};
+use crate::{repl, PackageLibrary, Panel, RatatuiApp, Scroll, ReplExecutor, SystemLibrary, Tab, ThreadedExecutor};
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 
@@ -27,10 +33,15 @@ const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 /// nobody sees it.
 struct TerminalGuard {
     stderr_log_path: std::path::PathBuf,
+    /// Whether the keyboard enhancement flags were pushed, to be popped.
+    enhanced_keyboard: bool,
 }
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
+        if self.enhanced_keyboard {
+            let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+        }
         let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture, Show);
 
@@ -80,7 +91,17 @@ pub fn run(
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let guard = TerminalGuard { stderr_log_path: stderr_log_path.C() };
+    // Ctrl+Tab reaches the app as itself only through the kitty keyboard
+    // protocol. Without it the terminal sends a plain Tab, and F2 and Alt+1
+    // and Alt+2 are what change the tabs.
+    //
+    // A terminal that does not answer the query at all, which crossterm
+    // reports as an error, does not speak the protocol either.
+    let enhanced_keyboard = supports_keyboard_enhancement().unwrap_or(false);
+    if enhanced_keyboard {
+        execute!(stdout, PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES))?;
+    }
+    let guard = TerminalGuard { stderr_log_path: stderr_log_path.C(), enhanced_keyboard };
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -171,6 +192,15 @@ fn handle_key_event<E: ReplExecutor>(
         match key.code {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 app.set_should_exit(true);
+            }
+            // F2 reaches the app from any terminal; Ctrl+Tab only from those
+            // speaking the kitty keyboard protocol.
+            KeyCode::F(2) => app.next_tab(),
+            KeyCode::Tab if key.modifiers.contains(KeyModifiers::CONTROL) => app.next_tab(),
+            KeyCode::Char(digit @ '1'..='9') if key.modifiers.contains(KeyModifiers::ALT) => {
+                if let Some(tab) = Tab::ALL.get(digit as usize - '1' as usize) {
+                    app.select_tab(*tab);
+                }
             }
             KeyCode::Tab => app.focus_next(),
             KeyCode::BackTab => app.focus_prev(),

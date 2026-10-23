@@ -30,7 +30,7 @@ re-settled on every step. How an edit reaches the units that depend on it is
 ```
 datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
   src/lib.rs            RatatuiApp: ReplApp plus a TextArea
-  src/render.rs         The three-panel layout, history, menu, crash and engine modals
+  src/render.rs         The three-panel layout, code, tabs, menu, crash and engine modals
   src/term.rs           Terminal setup, event loop, key bindings
 
 datalove-repl/          The REPL's inputs and commands, and the UI-agnostic app
@@ -300,10 +300,47 @@ restored, so it survives in the scrollback.
 
 ## The terminal UI
 
-The screen has three panels: history, environment and input. `run()` redirects
-stderr to `datalove-repl.stderr` in the temp directory while the terminal is in
-raw mode, and a `TerminalGuard` restores the terminal on the way out, panics
-included.
+The screen has three panels: the code at the top, the input, and a tabbed
+panel at the bottom. `run()` redirects stderr to `datalove-repl.stderr` in the
+temp directory while the terminal is in raw mode, and a `TerminalGuard`
+restores the terminal on the way out, panics included.
+
+### Code, not a transcript
+
+**The top panel is the session's code, not what was typed.** A REPL's usual
+transcript interleaves code, slash commands, and their output, which reads as
+a log of the session rather than the program it has become. The code panel
+shows only the units, as their full source, with a rule between each. The
+transcript is still there, as the History tab.
+
+Each unit has a bar beside it colored for what the last step did with it:
+green if it ran, red if it did not compile, yellow if it returned early,
+magenta if it was blocked, and cyan while it waits on the engine. A unit the
+last step neither compiled nor ran is gray, whatever it did before. So the bar
+says what the last thing typed reached, which once units can be edited is the
+question the panel has to answer.
+
+`ReplApp::code_units` derives the units from the history rather than keeping
+them apart. The history already drops what a reset takes out of the engine's
+session, and a failed unit stays in both, so the history's code entries are
+the session's units with nothing to keep in step. The last step is the last
+unit the engine answered for.
+
+### Tabs
+
+The bottom panel has two tabs, Environment and History. F2 cycles them, and
+Alt+1 and Alt+2 select one. Input selects the tab it changes when it parses:
+code the Environment, a REPL command the History, which is the only place what
+a command did shows.
+
+**The keys are the ones every terminal sends.** The convention elsewhere,
+Ctrl+PgUp and Ctrl+PgDn, is taken by terminal emulators for their own tabs,
+and Ctrl+Tab reaches a program as itself only through the kitty keyboard
+protocol; most terminals send it as a plain Tab. `run()` turns on that
+protocol's escape-code disambiguation where the terminal supports it, so
+Ctrl+Tab cycles the tabs there too, and the guard turns it off again. One
+conflict remains: GNOME Terminal takes Alt+1 and Alt+2 for its own tabs when it
+has more than one open.
 
 ### Keys and focus
 
@@ -322,25 +359,28 @@ Down, Enter and Esc, and a modal only Enter.
 ### Scrolling
 
 The scroll keys are Up/Down, which move a line, and PageUp/PageDown, which
-move a page. `ReplApp::scroll_target` decides where they go. When History or
-Environment has focus, that pane takes the plain keys and the other pane takes
-them with Ctrl. The single-line input has no use for them, so it lends the
-plain keys to History and the Ctrl ones to Environment. Multiline input keeps
-all of them, Ctrl included, for moving its cursor, so neither pane scrolls
-from there until focus moves.
+move a page. `ReplApp::scroll_target` decides where they go. When the code or
+the bottom panel has focus, that panel takes the plain keys and the other
+takes them with Ctrl. The single-line input has no use for them, so it lends
+the plain keys to the code and the Ctrl ones to the bottom panel. Multiline
+input keeps all of them, Ctrl included, for moving its cursor, so neither
+panel scrolls from there until focus moves. The bottom panel scrolls the tab
+it shows, and each tab keeps its own place.
 
-The history pane follows the newest output, which is where a session spends
-nearly all of its time. So its scroll position is held as a distance *up from
-the bottom* rather than down from the top. Zero needs no maintenance as
-entries arrive, and submitting resets it: someone who submits wants to see
-what it did, wherever they had scrolled to read. The environment scrolls down
-from its first row.
+The code and the history follow the newest unit and the newest output, which
+is where a session spends nearly all of its time. So their scroll positions
+are held as a distance *up from the bottom* rather than down from the top.
+Zero needs no maintenance as entries arrive, and submitting resets both:
+someone who submits wants to see what it did, wherever they had scrolled to
+read. The environment scrolls down from its first row.
 
 Only the renderer knows how tall a pane is or how many lines its contents came
-to, and both change every frame. It returns them as a `HistoryView`, which is
-what `record_history_view` bounds the scroll against, so paging past the
-oldest entry lands on it. Both panes are a `ScrollState`, clamped when a key
-is pressed rather than on the next frame. The offsets live on `ReplApp`, out
+to, and both change every frame. It returns them as a `ScrollBackView` or an
+`EnvironmentView`, which the `record_*_view` methods bound the scroll against,
+so paging past the first unit or the oldest entry lands on it. Only the tab
+shown is laid out, so only its bounds are recorded, and a hidden tab's are
+recorded when it is shown, before a key can reach it. Each pane is a
+`ScrollState`, clamped when a key is pressed rather than on the next frame. The offsets live on `ReplApp`, out
 of the widgets, which is what lets `app_tests` page around with no terminal at
 all.
 
@@ -361,7 +401,8 @@ all.
 - **app_tests** -- the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
   arriving after a later input, a crash reset, the multiline round trip, the
-  engine reporting itself ready or dead, scrolling the history, and what
+  engine reporting itself ready or dead, the code units and what the last
+  step did with each, the tab input selects, scrolling each pane, and what
   `/save` writes.
 
 `crates/datalove-script-engine/tests/`:
@@ -397,6 +438,10 @@ setup and the loop together.
 - Mouse capture is enabled while only key events are read, which disables
   terminal text selection and drops the mouse wheel for no benefit.
 - Nothing scrolls a pane while the menu or a modal is open.
+- What a unit came to -- an expression's value, a compile error -- is shown
+  only in the History tab, and code selects the Environment tab. So typing
+  `x` to see its value shows nothing until the tab is changed, and a red bar
+  says a unit failed without saying why.
 - An edit to a module no unit requires reports nothing, since only required
   modules are compiled; see
   [issues.md](issues.md#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing).

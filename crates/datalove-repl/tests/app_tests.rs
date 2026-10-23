@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use datalove_repl as repl;
-use repl::app::{EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, WorkerResponse};
+use repl::app::{CodeUnit, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab, UnitStep, WorkerResponse};
 
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
@@ -218,16 +218,16 @@ fn focus_cycles_through_the_panels() {
     assert_eq!(app.focus(), Panel::Input);
 
     app.focus_next();
-    assert_eq!(app.focus(), Panel::Environment);
+    assert_eq!(app.focus(), Panel::Bottom);
     app.focus_next();
-    assert_eq!(app.focus(), Panel::History);
+    assert_eq!(app.focus(), Panel::Code);
     app.focus_next();
     assert_eq!(app.focus(), Panel::Input);
 
     app.focus_prev();
-    assert_eq!(app.focus(), Panel::History);
+    assert_eq!(app.focus(), Panel::Code);
     app.focus_prev();
-    assert_eq!(app.focus(), Panel::Environment);
+    assert_eq!(app.focus(), Panel::Bottom);
     app.focus_prev();
     assert_eq!(app.focus(), Panel::Input);
 }
@@ -577,18 +577,18 @@ fn scroll_keys_go_to_the_focused_pane_and_ctrl_to_its_opposite() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
 
-    assert_eq!(app.scroll_target(false), Panel::History);
-    assert_eq!(app.scroll_target(true), Panel::Environment);
+    assert_eq!(app.scroll_target(false), Panel::Code);
+    assert_eq!(app.scroll_target(true), Panel::Bottom);
 
     app.focus_next();
-    assert_eq!(app.focus(), Panel::Environment);
-    assert_eq!(app.scroll_target(false), Panel::Environment);
-    assert_eq!(app.scroll_target(true), Panel::History);
+    assert_eq!(app.focus(), Panel::Bottom);
+    assert_eq!(app.scroll_target(false), Panel::Bottom);
+    assert_eq!(app.scroll_target(true), Panel::Code);
 
     app.focus_next();
-    assert_eq!(app.focus(), Panel::History);
-    assert_eq!(app.scroll_target(false), Panel::History);
-    assert_eq!(app.scroll_target(true), Panel::Environment);
+    assert_eq!(app.focus(), Panel::Code);
+    assert_eq!(app.scroll_target(false), Panel::Code);
+    assert_eq!(app.scroll_target(true), Panel::Bottom);
 
     // Into multiline mode, with the input focused again.
     app.focus_next();
@@ -631,4 +631,145 @@ fn submitting_returns_to_the_newest_entry() {
     app.submit_input("let x = 1".to_string());
 
     assert_eq!(app.history_scroll_back(), 0);
+}
+
+fn evaluated(id: u64, eval: repl::script::Eval) -> WorkerResponse {
+    WorkerResponse::EvalResult { id, eval: repl::Eval::Unit(eval), environment: Vec::new() }
+}
+
+fn parsed_command(id: u64, command: repl::ReplCommand) -> WorkerResponse {
+    WorkerResponse::ParseResult {
+        id,
+        parse: repl::InputParse::Command(repl::Command::ReplCommand(command)),
+    }
+}
+
+/// The code panel is the session's units, without the REPL commands, each
+/// with what the last step did with it: only the unit answered last was
+/// touched, and one still waiting is pending.
+#[test]
+fn code_units_are_the_units_and_what_the_last_step_did() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    for (id, input) in ["let a = 1", "/help", "let b = c", "a"].into_iter().enumerate() {
+        app.submit_input(input.to_string());
+        if input == "/help" {
+            executor.queue(parsed_command(id as u64, repl::ReplCommand::Help));
+        } else {
+            executor.queue(parsed_statement(id as u64, input));
+        }
+    }
+    app.poll_results();
+
+    let pending: Vec<UnitStep> = app.code_units().iter().map(|unit| unit.step).collect();
+    assert_eq!(pending, vec![UnitStep::Pending; 3]);
+
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+    assert_eq!(app.code_units(), vec![
+        CodeUnit { source: "let a = 1", step: UnitStep::Ran },
+        CodeUnit { source: "let b = c", step: UnitStep::Pending },
+        CodeUnit { source: "a", step: UnitStep::Pending },
+    ]);
+
+    executor.queue(WorkerResponse::EvalResult {
+        id: 1,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Help),
+        environment: Vec::new(),
+    });
+    executor.queue(evaluated(2, repl::script::Eval::Error("no `c`".to_string())));
+    app.poll_results();
+    let steps: Vec<UnitStep> = app.code_units().iter().map(|unit| unit.step).collect();
+    assert_eq!(steps, vec![UnitStep::Untouched, UnitStep::Failed, UnitStep::Pending]);
+
+    executor.queue(evaluated(3, repl::script::Eval::Blocked { on: vec![1] }));
+    app.poll_results();
+    let steps: Vec<UnitStep> = app.code_units().iter().map(|unit| unit.step).collect();
+    assert_eq!(steps, vec![UnitStep::Untouched, UnitStep::Untouched, UnitStep::Blocked]);
+}
+
+/// A runtime error empties the session, and the code panel with it.
+#[test]
+fn a_runtime_error_clears_the_code() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("let a = 1".to_string());
+    executor.queue(parsed_statement(0, "let a = 1"));
+    executor.queue(evaluated_let(0, "a"));
+    app.submit_input("let b = f()".to_string());
+    executor.queue(parsed_statement(1, "let b = f()"));
+    executor.queue(evaluated(1, repl::script::Eval::ErrorReset("Error: stack overflow".to_string())));
+    app.poll_results();
+
+    assert!(app.code_units().is_empty());
+}
+
+/// Code shows the environment it changes, and a REPL command the history,
+/// which is the only place what it did is shown. The keys change them too.
+#[test]
+fn input_selects_the_tab_it_changes() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    assert_eq!(app.tab(), Tab::Environment);
+
+    app.submit_input("/help".to_string());
+    executor.queue(parsed_command(0, repl::ReplCommand::Help));
+    app.poll_results();
+    assert_eq!(app.tab(), Tab::History);
+
+    app.submit_input("let a = 1".to_string());
+    executor.queue(parsed_statement(1, "let a = 1"));
+    app.poll_results();
+    assert_eq!(app.tab(), Tab::Environment);
+
+    app.next_tab();
+    assert_eq!(app.tab(), Tab::History);
+    app.next_tab();
+    assert_eq!(app.tab(), Tab::Environment);
+    app.select_tab(Tab::History);
+    assert_eq!(app.tab(), Tab::History);
+
+    // A replayed session ends on the tab its last input selects.
+    app.replay(vec![repl::SavedInput {
+        input: "/help".to_string(),
+        command: repl::Command::ReplCommand(repl::ReplCommand::Help),
+    }]);
+    assert_eq!(app.tab(), Tab::History);
+}
+
+/// The bottom panel scrolls whichever tab it shows, and each keeps its place.
+#[test]
+fn the_bottom_panel_scrolls_the_tab_it_shows() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+    app.record_environment_view(5, 7);
+    app.record_history_view(10, 20);
+
+    app.scroll_bottom(Scroll::LineDown);
+    assert_eq!(app.environment_scroll(), 1);
+    assert_eq!(app.history_scroll_back(), 0);
+
+    app.next_tab();
+    app.scroll_bottom(Scroll::PageUp);
+    assert_eq!(app.history_scroll_back(), 9);
+    assert_eq!(app.environment_scroll(), 1);
+}
+
+/// The code scrolls up from its newest unit, within its bounds, and
+/// submitting returns to the newest.
+#[test]
+fn code_scrolls_back_from_the_newest_unit() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+    app.record_code_view(10, 12);
+
+    app.scroll_code(Scroll::PageUp);
+    assert_eq!(app.code_scroll_back(), 9);
+    app.scroll_code(Scroll::PageUp);
+    assert_eq!(app.code_scroll_back(), 12);
+    app.scroll_code(Scroll::LineDown);
+    assert_eq!(app.code_scroll_back(), 11);
+
+    app.submit_input("let x = 1".to_string());
+    assert_eq!(app.code_scroll_back(), 0);
 }

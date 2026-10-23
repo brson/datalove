@@ -20,29 +20,86 @@ pub enum UiAction {
 /// One of the panels the user can focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Panel {
-    History,
+    /// The session's code units.
+    Code,
     Input,
-    Environment,
+    /// The tabbed panel, showing whichever [`Tab`] is selected.
+    Bottom,
 }
 
 impl Panel {
     /// The next panel down, wrapping from the bottom to the top.
     fn next(self) -> Panel {
         match self {
-            Panel::History => Panel::Input,
-            Panel::Input => Panel::Environment,
-            Panel::Environment => Panel::History,
+            Panel::Code => Panel::Input,
+            Panel::Input => Panel::Bottom,
+            Panel::Bottom => Panel::Code,
         }
     }
 
     /// The next panel up, wrapping from the top to the bottom.
     fn prev(self) -> Panel {
         match self {
-            Panel::History => Panel::Environment,
-            Panel::Input => Panel::History,
-            Panel::Environment => Panel::Input,
+            Panel::Code => Panel::Bottom,
+            Panel::Input => Panel::Code,
+            Panel::Bottom => Panel::Input,
         }
     }
+}
+
+/// One of the tabs of the bottom panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tab {
+    /// The bindings the session has.
+    Environment,
+    /// Every input, code and REPL commands alike, with what it came to.
+    History,
+}
+
+impl Tab {
+    /// Every tab, in the order they are shown and cycled through.
+    pub const ALL: [Tab; 2] = [Tab::Environment, Tab::History];
+
+    fn next(self) -> Tab {
+        match self {
+            Tab::Environment => Tab::History,
+            Tab::History => Tab::Environment,
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Tab::Environment => "Environment",
+            Tab::History => "History",
+        }
+    }
+}
+
+/// What a code unit did in the session's last step.
+///
+/// A step is whatever the engine last did to the units. Units it did not
+/// compile or run are [`UnitStep::Untouched`], however they fared before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnitStep {
+    /// Submitted, and not yet answered.
+    Pending,
+    /// Neither compiled nor run by the last step.
+    Untouched,
+    /// Ran to its end.
+    Ran,
+    /// Did not compile.
+    Failed,
+    /// Returned early through `!` or `?`.
+    ReturnedEarly,
+    /// Compiled, and not run because it reads from a unit that did not finish.
+    Blocked,
+}
+
+/// One unit of the session, as the code panel shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeUnit<'a> {
+    pub source: &'a str,
+    pub step: UnitStep,
 }
 
 /// One step of scrolling, in the direction the user pressed.
@@ -189,18 +246,22 @@ pub struct ReplApp<E: ReplExecutor> {
     multiline_mode: bool,
     /// The panel keys go to.
     focus: Panel,
+    /// The tab the bottom panel shows.
+    tab: Tab,
     /// Whether the ESC menu is open.
     menu_open: bool,
     /// Selected menu item (0 = Resume, 1 = Exit).
     menu_selection: usize,
     /// Whether to exit the app.
     should_exit: bool,
-    /// How far up from the bottom of the history the view is scrolled, in
-    /// lines.
+    /// How far up from the bottom of the code the view is scrolled, in lines.
     ///
-    /// Zero keeps the newest output in sight, which is where a session spends
+    /// Zero keeps the newest unit in sight, which is where a session spends
     /// nearly all its time. Only the renderer knows how tall the pane is or
-    /// how many lines the entries came to, so it is what bounds this.
+    /// how many lines the units came to, so it is what bounds this.
+    code_scroll: ScrollState,
+    /// How far up from the bottom of the history the view is scrolled, in
+    /// lines, the same way.
     history_scroll: ScrollState,
     /// How far down from the top of the environment the view is scrolled, in
     /// rows.
@@ -236,9 +297,11 @@ impl<E: ReplExecutor> ReplApp<E> {
             environment: Vec::new(),
             multiline_mode: false,
             focus: Panel::Input,
+            tab: Tab::Environment,
             menu_open: false,
             menu_selection: 0,
             should_exit: false,
+            code_scroll: ScrollState::default(),
             history_scroll: ScrollState::default(),
             environment_scroll: ScrollState::default(),
             engine_ready: false,
@@ -279,6 +342,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         // Someone who submits wants to see what it did, wherever they had
         // scrolled to read.
+        self.code_scroll.offset = 0;
         self.history_scroll.offset = 0;
 
         self.executor.submit_parse(id, input);
@@ -301,6 +365,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             entry.status = EntryStatus::Evaluating { command: command.C() };
             self.history.push(entry);
 
+            self.show_tab_for(&command);
             self.executor.submit_eval(id, command);
         }
     }
@@ -355,10 +420,20 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::InputParse::Command(command) => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Evaluating { command: command.C() };
+                self.show_tab_for(&command);
                 self.executor.submit_eval(id, command);
                 UiAction::None
             }
         }
+    }
+
+    /// Show what a command will change: code changes the environment, and
+    /// what a REPL command did is only in the history.
+    fn show_tab_for(&mut self, command: &repl::Command) {
+        self.tab = match command {
+            repl::Command::Unit(_) => Tab::Environment,
+            repl::Command::ReplCommand(_) => Tab::History,
+        };
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<(String, String, String)>) {
@@ -568,15 +643,45 @@ impl<E: ReplExecutor> ReplApp<E> {
     ///
     /// A focused pane takes the plain keys and its opposite takes them with
     /// Ctrl. The single-line input has no use for them, so it passes them to
-    /// the history, and Ctrl to the environment. Multiline input keeps them
+    /// the code, and Ctrl to the bottom panel. Multiline input keeps them
     /// all, with and without Ctrl, for moving its cursor.
     pub fn scroll_target(&self, ctrl: bool) -> Panel {
         match (self.focus, ctrl) {
-            (Panel::History, false) | (Panel::Environment, true) => Panel::History,
-            (Panel::Environment, false) | (Panel::History, true) => Panel::Environment,
+            (Panel::Code, false) | (Panel::Bottom, true) => Panel::Code,
+            (Panel::Bottom, false) | (Panel::Code, true) => Panel::Bottom,
             (Panel::Input, _) if self.multiline_mode => Panel::Input,
-            (Panel::Input, false) => Panel::History,
-            (Panel::Input, true) => Panel::Environment,
+            (Panel::Input, false) => Panel::Code,
+            (Panel::Input, true) => Panel::Bottom,
+        }
+    }
+
+    /// The tab the bottom panel shows.
+    pub fn tab(&self) -> Tab {
+        self.tab
+    }
+
+    /// Show the next tab of the bottom panel, wrapping from the last to the
+    /// first.
+    pub fn next_tab(&mut self) {
+        self.tab = self.tab.next();
+    }
+
+    /// Show a tab of the bottom panel.
+    pub fn select_tab(&mut self, tab: Tab) {
+        self.tab = tab;
+    }
+
+    /// Scroll the code, where up is towards the first unit.
+    pub fn scroll_code(&mut self, scroll: Scroll) {
+        let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
+        self.code_scroll.step(scroll, up);
+    }
+
+    /// Scroll whichever tab the bottom panel shows.
+    pub fn scroll_bottom(&mut self, scroll: Scroll) {
+        match self.tab {
+            Tab::Environment => self.scroll_environment(scroll),
+            Tab::History => self.scroll_history(scroll),
         }
     }
 
@@ -592,6 +697,11 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.environment_scroll.step(scroll, !up);
     }
 
+    /// How far up from the bottom the code is scrolled.
+    pub fn code_scroll_back(&self) -> usize {
+        self.code_scroll.offset
+    }
+
     /// How far up from the bottom the history is scrolled.
     pub fn history_scroll_back(&self) -> usize {
         self.history_scroll.offset
@@ -600,6 +710,14 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// How far down from the top the environment is scrolled.
     pub fn environment_scroll(&self) -> usize {
         self.environment_scroll.offset
+    }
+
+    /// Tell the app the shape of the code the renderer just laid out.
+    ///
+    /// Scrolling past the first unit lands on it rather than running off into
+    /// nothing.
+    pub fn record_code_view(&mut self, pane_lines: usize, scroll_back_limit: usize) {
+        self.code_scroll.record(pane_lines, scroll_back_limit);
     }
 
     /// Tell the app the shape of the history the renderer just laid out.
@@ -648,5 +766,51 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Get the history entries for testing.
     pub fn history(&self) -> &[HistoryEntry] {
         &self.history
+    }
+
+    /// The session's units, in order, and what each did in the last step.
+    ///
+    /// **The units are the history's code entries.** The history drops what
+    /// a reset takes out of the engine's session -- everything before a
+    /// `/reset`, and everything at a runtime error or a crash -- and a unit
+    /// that fails stays in both, so the two hold the same units. A unit is
+    /// here from when it parses, before the engine has answered.
+    ///
+    /// The last step is the last unit the engine answered for, and every unit
+    /// before it was left alone by that step.
+    pub fn code_units(&self) -> Vec<CodeUnit<'_>> {
+        let units: Vec<&HistoryEntry> = self.history.iter()
+            .filter(|entry| matches!(
+                entry.parse_result,
+                Some(repl::InputParse::Command(repl::Command::Unit(_))),
+            ))
+            .collect();
+        let last_step = units.iter().rposition(|entry| entry.eval_result.is_some());
+
+        units.iter().enumerate()
+            .map(|(index, entry)| {
+                let Some(repl::InputParse::Command(repl::Command::Unit(unit))) = &entry.parse_result else {
+                    unreachable!("only code entries were kept");
+                };
+                let source = match unit {
+                    script::Unit::Fragment(source) | script::Unit::Expression(source) => source.as_str(),
+                };
+                let step = match &entry.eval_result {
+                    None => UnitStep::Pending,
+                    Some(_) if Some(index) != last_step => UnitStep::Untouched,
+                    Some(repl::Eval::Unit(eval)) => match eval {
+                        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_) => UnitStep::Ran,
+                        script::Eval::Error(_) => UnitStep::Failed,
+                        script::Eval::ReturnedEarly(_) => UnitStep::ReturnedEarly,
+                        script::Eval::Blocked { .. } => UnitStep::Blocked,
+                        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
+                            unreachable!("a reset clears the history it would be in")
+                        }
+                    },
+                    Some(other) => unreachable!("a unit was answered as a REPL command: {other:?}"),
+                };
+                CodeUnit { source, step }
+            })
+            .collect()
     }
 }
