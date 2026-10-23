@@ -101,6 +101,10 @@ pub struct CodeUnit<'a> {
     pub number: Option<u32>,
     pub source: &'a str,
     pub status: UnitStatus,
+    /// Whether the last step to change the session analyzed the unit again.
+    pub compiled: bool,
+    /// Whether the last step to change the session ran the unit.
+    pub ran: bool,
 }
 
 /// A unit of the session as the app keeps it, and its status.
@@ -239,6 +243,8 @@ pub enum WorkerResponse {
         environment: Vec<(String, String, String)>,
         /// The units in the engine's session once it had answered.
         session: Vec<repl::NumberedUnit>,
+        /// What the last step to change the session did to its units.
+        step: Vec<repl::Reaction>,
     },
 }
 
@@ -317,6 +323,12 @@ pub struct ReplApp<E: ReplExecutor> {
     units: Vec<SessionUnit>,
     /// The number the next unit made will have.
     next_number: u32,
+    /// What the last step to change the session did to its units, as the
+    /// engine reported it with its last answer.
+    ///
+    /// Shown as it is: what a step compiled is the engine's to know, and
+    /// nothing the app could keep by rule.
+    last_step: Vec<repl::Reaction>,
     /// How the app's units and the engine's session disagreed, if they did.
     ///
     /// A disagreement is a rule of the app's about what a command does gone
@@ -359,6 +371,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             crash_modal: None,
             units: Vec::new(),
             next_number: 1,
+            last_step: Vec::new(),
             session_mismatch: None,
             stderr_log_path: None,
             session_path: None,
@@ -439,9 +452,10 @@ impl<E: ReplExecutor> ReplApp<E> {
                     let action = self.handle_parse_result(id, parse);
                     actions.push(action);
                 }
-                WorkerResponse::EvalResult { id, eval, environment, session } => {
+                WorkerResponse::EvalResult { id, eval, environment, session, step } => {
                     self.handle_eval_result(id, eval, environment);
                     self.check_session(session);
+                    self.last_step = step;
                 }
             }
         }
@@ -1117,10 +1131,16 @@ impl<E: ReplExecutor> ReplApp<E> {
             Some(reset) => (&[][..], &self.history[reset + 1..]),
             None => (&self.units[..], &self.history[..]),
         };
-        let answered = answered.iter().map(|unit| CodeUnit {
-            number: Some(unit.numbered.number),
-            source: unit.numbered.unit.source(),
-            status: unit.status,
+        let answered = answered.iter().map(|unit| {
+            let number = unit.numbered.number;
+            let reaction = self.last_step.iter().find(|reaction| reaction.unit == number);
+            CodeUnit {
+                number: Some(number),
+                source: unit.numbered.unit.source(),
+                status: unit.status,
+                compiled: reaction.is_some_and(|reaction| reaction.compiled),
+                ran: reaction.is_some_and(|reaction| reaction.ran),
+            }
         });
         let waiting = waiting.iter()
             .filter(|entry| entry.eval_result.is_none())
@@ -1129,6 +1149,8 @@ impl<E: ReplExecutor> ReplApp<E> {
                     number: None,
                     source: unit.source(),
                     status: UnitStatus::Pending,
+                    compiled: false,
+                    ran: false,
                 }),
                 _ => None,
             });

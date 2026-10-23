@@ -20,7 +20,7 @@ mod batch;
 pub use batch::{EnvBinding, InputResult, run_script, run_source};
 
 mod session;
-pub use session::{NumberedUnit, Session};
+pub use session::{NumberedUnit, Reaction, Session};
 
 // The system library a driver supplies to the engine.
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};

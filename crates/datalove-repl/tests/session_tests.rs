@@ -212,3 +212,40 @@ fn edits_save_and_load_back() {
     loaded.sort();
     assert_eq!(loaded, environment);
 }
+
+/// What the last step did to each unit, from the real engine.
+fn marks(app: &App) -> Vec<(Option<u32>, bool, bool)> {
+    app.code_units().iter().map(|unit| (unit.number, unit.compiled, unit.ran)).collect()
+}
+
+/// A value-only edit reruns the units that read the value without compiling
+/// them again; an edit that changes a type compiles them again, and one that
+/// no longer compiles does not run.
+#[test]
+fn the_code_shows_what_each_step_compiled_and_ran() {
+    let dir = rmx::tempfile::tempdir().X();
+    let mut app = app(&dir.path().join("session.world"));
+    for unit in ["let a = 1", "let b = 2", "let c = 30", "let d = b + 5"] {
+        submit(&mut app, unit);
+    }
+    assert_eq!(marks(&app).last(), Some(&(Some(4), true, true)), "an appended unit compiles and runs");
+
+    submit(&mut app, "/edit 2 let b = 3");
+    assert_eq!(marks(&app), vec![
+        (Some(1), false, false),
+        (Some(2), true, true),
+        (Some(3), false, false),
+        (Some(4), false, true),
+    ]);
+
+    submit(&mut app, "/edit 2 let b = \"three\"");
+    assert_eq!(marks(&app), vec![
+        (Some(1), false, false),
+        (Some(2), true, true),
+        (Some(3), false, false),
+        (Some(4), true, false),
+    ]);
+
+    submit(&mut app, "/help");
+    assert_eq!(marks(&app)[3], (Some(4), true, false), "a command that changes nothing leaves the marks");
+}

@@ -152,6 +152,7 @@ fn worker_thread(
                     eval,
                     environment,
                     session: session.units().to_vec(),
+                    step: session.last_step().to_vec(),
                 });
             }
             Ok(WorkerRequest::Shutdown) => {

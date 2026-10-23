@@ -6,6 +6,18 @@ use serde::{Serialize, Deserialize};
 use crate::script::{self, Engine, Unit, UnitEdit};
 use crate::{Command, Eval, Place, ReplCommand, UnitReport};
 
+/// What the last step to change the session did to one unit: whether its
+/// analysis ran again, and whether it ran.
+///
+/// A unit the step left alone has no reaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reaction {
+    /// The unit's number.
+    pub unit: u32,
+    pub compiled: bool,
+    pub ran: bool,
+}
+
 /// A unit of the session, and its number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NumberedUnit {
@@ -26,11 +38,14 @@ pub struct Session {
     engine: Engine,
     units: Vec<NumberedUnit>,
     next: u32,
+    /// What the last command to change the session did to the units, by
+    /// number; see [`Session::last_step`].
+    last_step: Vec<Reaction>,
 }
 
 impl Session {
     pub fn new(engine: Engine) -> Session {
-        Session { engine, units: Vec::new(), next: 1 }
+        Session { engine, units: Vec::new(), next: 1, last_step: Vec::new() }
     }
 
     pub fn engine(&mut self) -> &mut Engine {
@@ -40,6 +55,17 @@ impl Session {
     /// The session's units, in order.
     pub fn units(&self) -> &[NumberedUnit] {
         &self.units
+    }
+
+    /// What the last command to change the session did to each unit it
+    /// compiled or ran, in the session's order.
+    ///
+    /// Only a unit, an edit, a delete or an insert that the engine carried
+    /// out is a step; a command that leaves the session alone, or one that
+    /// fails, leaves the last step as it was, and a reset leaves no units to
+    /// have done anything.
+    pub fn last_step(&self) -> &[Reaction] {
+        &self.last_step
     }
 
     /// Evaluate a command.
@@ -80,6 +106,17 @@ impl Session {
             self.engine.unit_count(), self.units.len(),
             "the engine's session and its numbers are the same length",
         );
+        if self.units.is_empty() {
+            self.last_step.clear();
+        } else if matches!(eval, Eval::Unit(_) | Eval::Edited(_)) {
+            self.last_step = self.engine.last_step().iter()
+                .map(|edit| Reaction {
+                    unit: self.units[edit.unit].number,
+                    compiled: edit.compiled.any(),
+                    ran: edit.eval.as_ref().is_some_and(executed),
+                })
+                .collect();
+        }
         eval
     }
 
@@ -204,6 +241,18 @@ impl Session {
 
     fn index_of(&self, number: u32) -> Option<usize> {
         self.units.iter().position(|unit| unit.number == number)
+    }
+}
+
+/// Whether a unit that came to this was run, if only to an early return.
+fn executed(eval: &script::Eval) -> bool {
+    match eval {
+        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_)
+        | script::Eval::ReturnedEarly(_) => true,
+        script::Eval::Error(_) | script::Eval::Blocked { .. } => false,
+        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
+            unreachable!("a runtime error or a crash leaves no units to report")
+        }
     }
 }
 

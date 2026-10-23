@@ -22,6 +22,8 @@ struct MockState {
     /// The units the pretend engine's session has, and the next number.
     session: Vec<repl::NumberedUnit>,
     next_number: u32,
+    /// What the pretend engine's last step did.
+    step: Vec<repl::Reaction>,
     /// Responses, each with whether its session is to be filled in.
     responses: VecDeque<(WorkerResponse, bool)>,
 }
@@ -52,22 +54,27 @@ impl ReplExecutor for MockExecutor {
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {
         let mut state = self.state.borrow_mut();
         let (mut response, fill) = state.responses.pop_front()?;
-        if let WorkerResponse::EvalResult { id, eval, session, .. } = &mut response {
+        if let WorkerResponse::EvalResult { id, eval, session, step, .. } = &mut response {
             if fill {
                 let command = state.submitted.get(id).cloned()
                     .unwrap_or_else(|| panic!("entry {id} was answered without being submitted"));
                 if eval.reset_the_session() || matches!(eval, repl::Eval::CallerInterpret(repl::ReplCommand::Reset)) {
                     state.session.clear();
                     state.next_number = 1;
-                } else if let (repl::Command::Unit(unit), repl::Eval::Unit(_)) = (command, &*eval) {
+                    state.step.clear();
+                } else if let (repl::Command::Unit(unit), repl::Eval::Unit(result)) = (command, &*eval) {
                     let number = state.next_number.max(1);
                     state.next_number = number + 1;
                     state.session.push(repl::NumberedUnit { number, unit });
+                    let ran = !matches!(result, repl::script::Eval::Error(_) | repl::script::Eval::Blocked { .. });
+                    state.step = vec![repl::Reaction { unit: number, compiled: true, ran }];
                 }
                 *session = state.session.clone();
+                *step = state.step.clone();
             } else {
                 state.next_number = session.iter().map(|unit| unit.number + 1).max().unwrap_or(1);
                 state.session = session.clone();
+                state.step = step.clone();
             }
         }
         Some(response)
@@ -126,6 +133,7 @@ fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
         }])),
         environment: vec![(name.to_string(), "int".to_string(), "1".to_string())],
         session: Vec::new(),
+        step: Vec::new(),
     }
 }
 
@@ -216,6 +224,7 @@ fn multiline_mode_spans_one_submission() {
         }])),
         environment: vec![("f".to_string(), "function".to_string(), "-".to_string())],
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -255,6 +264,7 @@ fn exit_command_asks_the_app_to_exit() {
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Exit),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -307,6 +317,7 @@ fn reset_command_clears_history_and_environment() {
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -386,6 +397,7 @@ fn save_writes_the_history_up_to_itself() {
         eval: repl::Eval::Unit(repl::script::Eval::Error("no such name".to_string())),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
 
     app.submit_input("/save".to_string());
@@ -400,6 +412,7 @@ fn save_writes_the_history_up_to_itself() {
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -447,6 +460,7 @@ fn save_without_a_path_is_an_error() {
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -471,6 +485,7 @@ fn input_after_a_crash_runs_in_the_new_session() {
         eval: repl::Eval::Unit(repl::script::Eval::CrashReset("boom".to_string())),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -509,6 +524,7 @@ fn a_runtime_error_reset_clears_the_session() {
         eval: repl::Eval::Unit(repl::script::Eval::ErrorReset("Error: stack overflow".to_string())),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -695,7 +711,7 @@ fn submitting_returns_to_the_newest_entry() {
 }
 
 fn evaluated(id: u64, eval: repl::script::Eval) -> WorkerResponse {
-    WorkerResponse::EvalResult { id, eval: repl::Eval::Unit(eval), environment: Vec::new(), session: Vec::new() }
+    WorkerResponse::EvalResult { id, eval: repl::Eval::Unit(eval), environment: Vec::new(), session: Vec::new(), step: Vec::new() }
 }
 
 fn parsed_command(id: u64, command: repl::ReplCommand) -> WorkerResponse {
@@ -729,9 +745,9 @@ fn code_units_are_the_units_and_their_statuses() {
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.code_units(), vec![
-        CodeUnit { number: Some(1), source: "let a = 1", status: UnitStatus::Ran },
-        CodeUnit { number: None, source: "let b = c", status: UnitStatus::Pending },
-        CodeUnit { number: None, source: "a", status: UnitStatus::Pending },
+        CodeUnit { number: Some(1), source: "let a = 1", status: UnitStatus::Ran, compiled: true, ran: true },
+        CodeUnit { number: None, source: "let b = c", status: UnitStatus::Pending, compiled: false, ran: false },
+        CodeUnit { number: None, source: "a", status: UnitStatus::Pending, compiled: false, ran: false },
     ]);
 
     executor.queue(WorkerResponse::EvalResult {
@@ -739,6 +755,7 @@ fn code_units_are_the_units_and_their_statuses() {
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Help),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     executor.queue(evaluated(2, repl::script::Eval::Error("no `c`".to_string())));
     app.poll_results();
@@ -903,6 +920,7 @@ fn a_reset_loses_the_selection() {
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     executor.queue(parsed_statement(2, "let b = 1"));
     executor.queue(evaluated_let(2, "b"));
@@ -981,6 +999,7 @@ repl-command
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
         environment: vec![("old".to_string(), "int".to_string(), "1".to_string())],
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -999,6 +1018,7 @@ repl-command
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     executor.queue(evaluated_let(3, "a"));
     app.poll_results();
@@ -1023,6 +1043,7 @@ fn load_without_a_saved_session_is_an_error() {
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
         environment: Vec::new(),
         session: Vec::new(),
+        step: Vec::new(),
     });
     app.poll_results();
 
@@ -1054,7 +1075,7 @@ fn a_pending_reset_takes_the_code_before_it() {
     executor.queue(parsed_statement(2, "let b = 2"));
     app.poll_results();
     let units = app.code_units();
-    assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", status: UnitStatus::Pending }]);
+    assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", status: UnitStatus::Pending, compiled: false, ran: false }]);
     // The history keeps the units the engine still has.
     assert_eq!(app.history().len(), 3);
 }
@@ -1081,7 +1102,7 @@ fn a_session_the_history_does_not_hold_is_reported() {
         unreachable!();
     };
     let b = repl::NumberedUnit { number: 2, unit: repl::script::Unit::Fragment("let b = 2".to_string()) };
-    executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![b] });
+    executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![b], step: Vec::new() });
     app.poll_results();
 
     let message = app.session_mismatch_message().expect("the mismatch is reported");
@@ -1103,6 +1124,7 @@ fn edited(id: u64, reports: Vec<(u32, repl::script::Eval)>, session: Vec<repl::N
         eval: repl::Eval::Edited(reports.into_iter().map(|(unit, eval)| repl::UnitReport { unit, eval }).collect()),
         environment: Vec::new(),
         session,
+        step: Vec::new(),
     }
 }
 
@@ -1247,4 +1269,45 @@ fn paging_code_that_fits_selects_the_end_unit() {
     assert_eq!(app.selected_unit(), Some(1));
     app.move_in_code(Scroll::PageDown);
     assert_eq!(app.selected_unit(), Some(3));
+}
+
+/// Each unit says what the last step to change the session did to it, as the
+/// engine reports: an appended unit is compiled and run, and the units an
+/// edit compiled or reran say so, the rest nothing. A command that leaves the
+/// session alone leaves the marks as they were.
+#[test]
+fn the_code_shows_what_the_last_step_did() {
+    let marks = |app: &ReplApp<MockExecutor>| -> Vec<(Option<u32>, bool, bool)> {
+        app.code_units().iter().map(|unit| (unit.number, unit.compiled, unit.ran)).collect()
+    };
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a", "let c = 3"]);
+    assert_eq!(marks(&app), vec![(Some(1), false, false), (Some(2), false, false), (Some(3), true, true)]);
+
+    app.submit_input("/edit 1 let a = 2".to_string());
+    executor.queue(parsed_command(3, command_named("/edit 1 let a = 2")));
+    let WorkerResponse::EvalResult { id, eval, environment, session, .. } = edited(
+        3, vec![(1, repl::script::Eval::Nothing), (2, repl::script::Eval::Nothing)],
+        vec![numbered(1, "let a = 2"), numbered(2, "let b = a"), numbered(3, "let c = 3")],
+    ) else {
+        unreachable!();
+    };
+    let step = vec![
+        repl::Reaction { unit: 1, compiled: true, ran: true },
+        repl::Reaction { unit: 2, compiled: false, ran: true },
+    ];
+    executor.queue_raw(WorkerResponse::EvalResult { id, eval, environment, session, step });
+    app.poll_results();
+    assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
+
+    app.submit_input("/help".to_string());
+    executor.queue(parsed_command(4, repl::ReplCommand::Help));
+    executor.queue(WorkerResponse::EvalResult {
+        id: 4,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Help),
+        environment: Vec::new(),
+        session: Vec::new(),
+        step: Vec::new(),
+    });
+    app.poll_results();
+    assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
 }

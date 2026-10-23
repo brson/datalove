@@ -12,7 +12,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStatus};
+use crate::{CodeUnit, RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStatus};
 
 /// The color of what is selected: the tab shown, and the code unit.
 const HIGHLIGHT: Color = Color::Yellow;
@@ -166,6 +166,23 @@ struct EnvironmentView {
     scroll_limit: usize,
 }
 
+/// One line of a unit's bar.
+///
+/// The left half, in the status color, is every line. The right half says
+/// what the last step did: its top on the unit's first line if the step
+/// compiled the unit, and its bottom on the unit's last line if it ran it. A
+/// one-line unit has both corners in its one cell.
+fn bar_glyph(unit: &CodeUnit<'_>, line: usize, last_line: usize) -> &'static str {
+    let compiled = unit.compiled && line == 0;
+    let ran = unit.ran && line == last_line;
+    match (compiled, ran) {
+        (false, false) => "▌ ",
+        (true, false) => "▛ ",
+        (false, true) => "▙ ",
+        (true, true) => "█ ",
+    }
+}
+
 /// The color of a unit's bar, for its status.
 fn status_color(status: UnitStatus) -> Color {
     match status {
@@ -243,6 +260,7 @@ fn render_code<E: ReplExecutor>(
             Style::default()
         };
         let start = lines.len();
+        let last_line = unit.source.lines().count().saturating_sub(1);
         for (line_index, line) in unit.source.lines().enumerate() {
             // The number on the unit's first line; a unit on its way to the
             // engine has none yet.
@@ -252,7 +270,7 @@ fn render_code<E: ReplExecutor>(
             };
             lines.push(Line::from(vec![
                 ratatui::text::Span::styled(number, Style::default().fg(Color::DarkGray)),
-                ratatui::text::Span::styled("▌ ", bar),
+                ratatui::text::Span::styled(bar_glyph(unit, line_index, last_line), bar),
                 ratatui::text::Span::styled(line, text),
             ]));
         }

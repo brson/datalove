@@ -384,8 +384,31 @@ time it was compiled or run: green if it ran, red if it did not compile,
 yellow if it returned early, magenta if it was blocked, and cyan while it
 waits on the engine. A step changes the status of the units it reaches and
 leaves the rest as they were, so the bars always say which units are broken.
-What the last step reached -- which units it compiled or reran -- is not shown
-yet; that wants an indication of its own, apart from the bars.
+
+**The bar's right half says what the last step did.** The left half, `▌`, is
+every line of every unit. A step that compiled the unit -- ran its parse, its
+typecheck or its ownership analysis -- fills the top right of its first line,
+and one that ran it fills the bottom right of its last line. So a one-line
+unit is `▌` if the step left it alone, `▛` if it compiled it and did not run
+it, `▙` if it reran it and did not compile it, and `█` if it did both, and a
+longer unit carries the same marks at its corners:
+
+```
+1 █ let b = 3          compiled and ran
+2 ▌ let e = b          ran, and not compiled: the value it reads changed
+  ▙ let g = e + 1
+```
+
+The corners are the unit's rather than each line's, because a mark on every
+line makes a striped column, and top stripes and bottom stripes look alike
+down a few rows. The marks are the status color, a cell having one. The last
+step is the last unit, edit, delete or insert the engine carried out; a
+command that changes nothing leaves the marks, and a reset leaves no units to
+mark. What a step compiled comes from the engine (see
+[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-what-a-step-reports)),
+and `Session` turns its positions into numbers and sends it with every answer;
+the app shows it as it comes, since nothing it could keep by rule would know
+what salsa ran.
 
 **The app keeps its own copy of the session's units**, numbered as the
 `Session` numbers them, and changes it as each answered command changed the
@@ -502,18 +525,19 @@ all.
   real engine on its worker thread: a saved history replays to the same
   outcomes and environment, saving it again writes the same file, and a
   session edited, inserted into and deleted from loads back to the same
-  numbered units. A mismatch between the app's units and the engine's fails
-  any of them.
+  numbered units, and the marks say what a real step compiled and ran. A
+  mismatch between the app's units and the engine's fails any of them.
 - **command_tests** -- how `/edit`, `/delete` and `/insert` are read, sources
   over several lines, comments before a command, and the usage of each.
 - **app_tests** -- the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
   arriving after a later input, a crash reset, the multiline round trip, the
-  engine reporting itself ready or dead, the code units and what the last
-  step did with each, edits applied when answered, a mismatch reported, the
-  tab input selects, scrolling each pane, and what `/save` writes. The mock
-  fills in the session an answer reports, as the engine would, for appends
-  and resets; a test that edits gives it explicitly.
+  engine reporting itself ready or dead, the code units and their statuses,
+  the marks of what the last step compiled and ran, edits applied when
+  answered, a mismatch reported, the tab input selects, scrolling each pane,
+  and what `/save` writes. The mock fills in the session and the last step an
+  answer reports, as the engine would, for appends and resets; a test that
+  edits gives them explicitly.
 
 `crates/datalove-script-engine/tests/`:
 
