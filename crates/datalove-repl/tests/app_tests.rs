@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use datalove_repl as repl;
-use repl::app::{CodeUnit, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab, UnitStatus, WorkerResponse};
+use repl::app::{CodeUnit, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab, UiAction, UnitStatus, WorkerResponse};
 
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
@@ -1310,4 +1310,51 @@ fn the_code_shows_what_the_last_step_did() {
     });
     app.poll_results();
     assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
+}
+
+/// Cancelling multiline input takes two asks, and the second leaves
+/// multiline mode and clears the input, submitting nothing; any other key
+/// between takes the first back.
+#[test]
+fn cancelling_multiline_input_takes_two() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    app.submit_input("fun f(): int".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 0,
+        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
+    });
+    app.poll_results();
+    assert!(app.multiline_mode());
+
+    assert!(matches!(app.cancel_multiline(), UiAction::None));
+    assert!(app.cancel_armed());
+    app.disarm_cancel();
+    assert!(!app.cancel_armed());
+    assert!(app.multiline_mode(), "a key between leaves the input as it was");
+
+    app.cancel_multiline();
+    assert!(matches!(app.cancel_multiline(), UiAction::ClearInput));
+    assert!(!app.multiline_mode());
+    assert!(!app.cancel_armed());
+    assert_eq!(executor.parse_count(), 1, "nothing was submitted");
+}
+
+/// An answer for an earlier input arriving while a multiline input is being
+/// typed leaves the input multiline: only submitting or cancelling ends it.
+#[test]
+fn an_answer_does_not_end_multiline_input() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    app.submit_input("let a = 1".to_string());
+    app.submit_input("fun f(): int".to_string());
+    executor.queue(parsed_statement(0, "let a = 1"));
+    executor.queue(WorkerResponse::ParseResult {
+        id: 1,
+        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
+    });
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+
+    assert!(app.multiline_mode());
 }

@@ -475,6 +475,20 @@ submits. Ctrl+D exits, and Esc opens a menu of Resume and Exit. Neither works
 while the menu or a modal is open: those take the keys first, the menu Up,
 Down, Enter and Esc, and a modal only Enter.
 
+**Ctrl+C twice cancels multiline input.** In multiline mode, with the input
+focused, the first Ctrl+C puts "Ctrl+C again to cancel" where the Alt+Enter
+reminder was, and the second leaves multiline mode and clears what was typed.
+Any other key takes the first back and does what it does. Twice, because a
+definition typed over several lines is a lot to lose to one stray key. Ctrl+C
+is what a shell or a REPL throws a line away with. Esc was tried first and
+does not work: a terminal multiplexer holds Esc back for its `escape-time`, to
+see whether an escape sequence follows, which delays it, and two Escs that
+arrive in one read are parsed by crossterm as one, which loses the second.
+Ctrl+C is one byte that starts no sequence. The line that opened the multiline
+input stays in the history as one that only read more lines. Multiline mode
+ends only by submitting or cancelling; an answer to an earlier input arriving
+meanwhile leaves it.
+
 ### Scrolling
 
 The scroll keys are Up/Down, which move a line, and PageUp/PageDown, which

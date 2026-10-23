@@ -133,6 +133,12 @@ impl<E: ReplExecutor> RatatuiApp<E> {
         self.repl.focus_prev();
     }
 
+    /// Ask to throw away a multiline input; see [`ReplApp::cancel_multiline`].
+    pub fn cancel_multiline(&mut self) {
+        let action = self.repl.cancel_multiline();
+        self.process_ui_action(action);
+    }
+
     pub fn next_tab(&mut self) {
         self.repl.next_tab();
     }

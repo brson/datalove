@@ -276,6 +276,9 @@ pub struct ReplApp<E: ReplExecutor> {
     environment: Vec<(String, String, String)>,
     /// Whether we're in multiline mode.
     multiline_mode: bool,
+    /// Whether a cancel was asked for in multiline input, so another
+    /// carries it out.
+    cancel_armed: bool,
     /// The panel keys go to.
     focus: Panel,
     /// The tab the bottom panel shows.
@@ -356,6 +359,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             history: Vec::new(),
             environment: Vec::new(),
             multiline_mode: false,
+            cancel_armed: false,
             focus: Panel::Input,
             tab: Tab::Environment,
             menu_open: false,
@@ -520,7 +524,6 @@ impl<E: ReplExecutor> ReplApp<E> {
             self.history.retain(|entry| entry.id > id);
             self.crash_modal = Some(reset_message(&eval));
             self.environment = environment;
-            self.multiline_mode = false;
             return;
         }
 
@@ -562,8 +565,6 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         // Update environment from the eval response.
         self.environment = environment;
-
-        self.multiline_mode = false;
     }
 
     fn handle_caller_interpret(&mut self, id: u64, cmd: &repl::ReplCommand) {
@@ -948,6 +949,31 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     pub fn multiline_mode(&self) -> bool {
         self.multiline_mode
+    }
+
+    /// Ask to cancel multiline input: the first asks for another, and the
+    /// second leaves multiline mode and throws away what was typed.
+    ///
+    /// What was entered before the input went multiline stays in the
+    /// history, as an input that only read more lines.
+    pub fn cancel_multiline(&mut self) -> UiAction {
+        if !self.cancel_armed {
+            self.cancel_armed = true;
+            return UiAction::None;
+        }
+        self.cancel_armed = false;
+        self.multiline_mode = false;
+        UiAction::ClearInput
+    }
+
+    /// Whether one more cancel throws away the multiline input.
+    pub fn cancel_armed(&self) -> bool {
+        self.cancel_armed
+    }
+
+    /// Any other key takes back the first half of a cancel.
+    pub fn disarm_cancel(&mut self) {
+        self.cancel_armed = false;
     }
 
     pub fn should_exit(&self) -> bool {

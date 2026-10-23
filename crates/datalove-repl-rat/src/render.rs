@@ -563,7 +563,9 @@ fn render_scrolled_back(
 
 /// Render the input panel with multiline indicators.
 fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect) {
-    let title = if app.multiline_mode() {
+    let title = if app.repl.cancel_armed() {
+        "Input [Ctrl+C again to cancel]"
+    } else if app.multiline_mode() {
         "Input [Alt+Enter]"
     } else {
         "Input [Enter]"

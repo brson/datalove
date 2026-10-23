@@ -195,6 +195,10 @@ fn handle_key_event<E: ReplExecutor>(
         }
     } else {
         // Normal input mode.
+        let cancel = key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
+        if !cancel {
+            app.repl.disarm_cancel();
+        }
         match key.code {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 app.set_should_exit(true);
@@ -210,6 +214,14 @@ fn handle_key_event<E: ReplExecutor>(
             }
             KeyCode::Tab => app.focus_next(),
             KeyCode::BackTab => app.focus_prev(),
+            // Ctrl+C twice throws away multiline input, as shells and REPLs
+            // throw away a line, twice so a stray one loses nothing. Esc would
+            // be the obvious key, but a terminal multiplexer holds it back to
+            // see whether a sequence follows, and two in one read are parsed
+            // as one.
+            KeyCode::Char('c') if cancel && app.focus() == Panel::Input && app.multiline_mode() => {
+                app.cancel_multiline();
+            }
             KeyCode::Esc => app.open_menu(),
             // Ahead of the textarea, which only gets these in multiline mode.
             KeyCode::Up => app.handle_scroll_key(Scroll::LineUp, key),
