@@ -24,7 +24,7 @@ use std::path::Path;
 
 use crate::RatatuiApp;
 use crate::repl::{self, PackageLibrary, SystemLibrary, ThreadedExecutor};
-use crate::repl::app::{Panel, ReplExecutor, Scroll, Tab};
+use crate::repl::app::{Panel, ReplExecutor, Scroll};
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 
@@ -203,10 +203,11 @@ fn handle_key_event<E: ReplExecutor>(
             KeyCode::F(2) => app.repl.next_tab(),
             KeyCode::Tab if key.modifiers.contains(KeyModifiers::CONTROL) => app.repl.next_tab(),
             KeyCode::Char(digit @ '1'..='9') if key.modifiers.contains(KeyModifiers::ALT) => {
-                if let Some(tab) = Tab::ALL.get(digit as usize - '1' as usize) {
+                if let Some(tab) = app.repl.tabs().get(digit as usize - '1' as usize) {
                     app.repl.select_tab(*tab);
                 }
             }
+            KeyCode::F(1) => app.repl.show_help(),
             KeyCode::Tab => app.repl.focus_next(),
             KeyCode::BackTab => app.repl.focus_prev(),
             // Ctrl+C twice throws away multiline input, as shells and REPLs

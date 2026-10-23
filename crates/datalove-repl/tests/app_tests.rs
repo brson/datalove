@@ -703,7 +703,7 @@ fn input_selects_the_tab_it_changes() {
     let mut app = ReplApp::with_executor(executor.clone());
     assert_eq!(app.tab(), Tab::Environment);
 
-    app.submit_input("/help".to_string());
+    app.submit_input("/bogus".to_string());
     app.poll_results();
     assert_eq!(app.tab(), Tab::History);
 
@@ -720,10 +720,39 @@ fn input_selects_the_tab_it_changes() {
 
     // A replayed session ends on the tab its last input selects.
     app.replay(vec![repl::SavedInput {
-        input: "/help".to_string(),
-        command: repl::Command::ReplCommand(repl::ReplCommand::Help),
+        input: "/bogus".to_string(),
+        command: repl::Command::ReplCommand(repl::ReplCommand::Unknown),
     }]);
     assert_eq!(app.tab(), Tab::History);
+}
+
+/// The help has no tab until it is asked for. Asking adds the tab, shows it,
+/// and focuses the panel, and from then on it is cycled through with the
+/// others.
+#[test]
+fn asking_for_help_adds_its_tab() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+    assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History]);
+    app.select_tab(Tab::Help);
+    assert_eq!(app.tab(), Tab::Environment, "no tab to select yet");
+
+    app.submit_input("/help".to_string());
+    assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History, Tab::Help]);
+    assert_eq!(app.tab(), Tab::Help);
+    assert_eq!(app.focus(), Panel::Bottom);
+
+    app.next_tab();
+    assert_eq!(app.tab(), Tab::Environment);
+    app.next_tab();
+    app.next_tab();
+    assert_eq!(app.tab(), Tab::Help);
+
+    // Scrolled from the top, within what the renderer laid out.
+    app.record_help_view(10, 30);
+    app.scroll_bottom(Scroll::PageDown);
+    assert_eq!(app.help_scroll(), 9);
+    app.scroll_bottom(Scroll::LineUp);
+    assert_eq!(app.help_scroll(), 8);
 }
 
 /// The bottom panel scrolls whichever tab it shows, and each keeps its place.

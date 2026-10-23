@@ -30,8 +30,10 @@ re-settled on every step. How an edit reaches the units that depend on it is
 
 ```
 datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
+  help.md               The help, read into the binary as it is built
   src/lib.rs            RatatuiApp: ReplApp plus a TextArea
   src/render.rs         The three-panel layout, code, tabs, exit dialog, crash and engine modals
+  src/help.rs           The help, parsed from markdown and flowed for the pane's width
   src/term.rs           Terminal setup, event loop, key bindings
 
 datalove-repl/          The REPL's inputs and commands, and the UI-agnostic app
@@ -478,10 +480,23 @@ what Delete, Enter and Insert act on; see
 
 ### Tabs
 
-The bottom panel has two tabs, Environment and History. F2 cycles them, and
-Alt+1 and Alt+2 select one. Input selects the tab it changes when submitted:
-code the Environment, a REPL command the History, which is the only place what
-a command did shows.
+The bottom panel has two tabs, Environment and History, and a third, Help,
+once help has been asked for. F2 cycles them, and Alt+1, Alt+2 and Alt+3 select
+one. Input selects the tab it changes when submitted: code the Environment, a
+REPL command the History, which is the only place what a command did shows.
+
+**Help is found by asking for it.** `/help` or F1 adds the Help tab, shows it,
+and focuses the bottom panel, so the scroll keys move through it. Until then
+the panel shows only what the session has. The help is `help.md`, at the root
+of `datalove-repl-rat` so that it is packaged with the crate, and read into the
+binary with `include_str!`. `help.rs` parses it once with comrak into blocks
+of styled text -- headings, paragraphs, lists, code -- and every frame wraps
+them again for the pane's width, a list item's lines after the first lined up
+under its text. Markdown it does not lay out is a `todo!`, and its tests lay
+the help out at several widths, so a construct added to `help.md` that the
+layout does not know fails there and not in a session. A saved `/help` is not
+replayed: it would show the help to someone loading the session who did not
+ask.
 
 **The keys are the ones every terminal sends.** The convention elsewhere,
 Ctrl+PgUp and Ctrl+PgDn, is taken by terminal emulators for their own tabs,
@@ -502,9 +517,9 @@ input panel stays yellow while it has focus in multiline mode. Focus lives on
 
 Typing only reaches the textarea while the input has focus. In single-line
 mode Enter submits. In multiline mode Enter inserts a newline and Alt+Enter
-submits. Ctrl+D exits. Neither works while a dialog or a modal is open: those
-take the keys first, the exit dialog Ctrl+C and anything else, and a modal
-only Enter. Esc does nothing.
+submits. Ctrl+D exits, and F1 shows the help. Neither works while a dialog or
+a modal is open: those take the keys first, the exit dialog Ctrl+C and
+anything else, and a modal only Enter. Esc does nothing.
 
 **Ctrl+C twice cancels multiline input.** In multiline mode, with the input
 focused, the first Ctrl+C puts "Ctrl+C again to cancel" where the Alt+Enter
@@ -617,7 +632,7 @@ setup and the loop together.
 - No cancellation. The worker has no way to be interrupted, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
 - `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete` and
-  `/insert` are the only commands, and help prints the word "help".
+  `/insert` are the only commands.
 - A command whose source spans lines cannot be typed: an input starting with
   the sigil is a command on its first line. Only a replay, or an edit from
   the code panel, gives one over several lines.

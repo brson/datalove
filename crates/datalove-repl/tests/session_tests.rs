@@ -59,7 +59,6 @@ fn a_saved_history_loads_back_to_the_same_session() {
     submit(&mut first, "fun double(x: int): int");
     submit(&mut first, "fun double(x: int): int\n    ret x * 2\nend fun");
     submit(&mut first, "let b = nope");
-    submit(&mut first, "/help");
     submit(&mut first, "/bogus");
     submit(&mut first, "double(a)");
     submit(&mut first, "/save");
@@ -74,7 +73,6 @@ fn a_saved_history_loads_back_to_the_same_session() {
         Command::Unit(Unit::Fragment(_)),
         Command::Unit(Unit::Fragment(_)),
         Command::Unit(Unit::Fragment(_)),
-        Command::ReplCommand(ReplCommand::Help),
         Command::ReplCommand(ReplCommand::Unknown),
         Command::Unit(Unit::Expression(_)),
     ]), "the save itself is not replayed: {kinds:?}");
@@ -259,4 +257,17 @@ fn a_script_splits_at_its_separator_lines() {
     let results = datalove_repl::run_source(&mut session, "---\r\nlet a = 1\r\n---\r\nlet b = a + 1\r\n  ---  \r\nb\r\n");
     let inputs: Vec<&str> = results.iter().map(|result| result.input.as_str()).collect();
     assert_eq!(inputs, vec!["let a = 1", "let b = a + 1", "b"]);
+}
+
+/// A saved `/help` is not replayed: it changes nothing in the session, and
+/// would show the help to someone loading it who did not ask.
+#[test]
+fn a_saved_help_is_not_replayed() {
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("help.world");
+    std::fs::write(&path, "----------\nrepl-command\n----------\n\n/help\n\n\
+        ----------\nscriptunit-fragment\n----------\n\nlet a = 1\n").X();
+    let inputs = load_session(&path).X();
+    let kinds: Vec<&Command> = inputs.iter().map(|saved| &saved.command).collect();
+    assert!(matches!(kinds[..], [Command::Unit(Unit::Fragment(_))]), "{kinds:?}");
 }

@@ -43,7 +43,8 @@ pub struct SavedInput {
 /// worldfile with modules, data, or riders in it is not one. Its `/save`s are
 /// left out: replaying one would overwrite the file being loaded with only
 /// the part of it read so far. So are its `/load`s, which would load the file
-/// again, and again.
+/// again, and again, and its `/help`s, which change nothing but what is shown,
+/// and would show the help to someone who did not ask.
 pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
     use datalove_datafun::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 
@@ -62,7 +63,7 @@ pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
                     bail!("{} holds a REPL command that is not one: '{input}'", path.display());
                 }
                 match ReplCommand::named(&input) {
-                    ReplCommand::Save | ReplCommand::Load => continue,
+                    ReplCommand::Save | ReplCommand::Load | ReplCommand::Help => continue,
                     command => Command::ReplCommand(command),
                 }
             }

@@ -57,6 +57,10 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
             let view = render_history(f, &app.repl, chunks[2], bottom_block);
             app.repl.record_history_view(view.pane_lines, view.scroll_back_limit);
         }
+        Tab::Help => {
+            let view = render_help(f, &app.repl, chunks[2], bottom_block);
+            app.repl.record_help_view(view.pane_rows, view.scroll_limit);
+        }
     }
 
     // Each over the one before: a crash over the exit dialog, a bug in the
@@ -171,7 +175,7 @@ fn eval_lines(eval: &repl::Eval) -> Vec<Line<'_>> {
         }
         repl::Eval::CommandError(e) => vec![marked("✗", Color::Red, fmt!("error: {e}"))],
         repl::Eval::Saved { path, inputs } => vec![marked("✓", Color::Green, fmt!("saved {inputs} inputs to {path}"))],
-        repl::Eval::CallerInterpret(repl::ReplCommand::Help) => vec![marked("ℹ", Color::Blue, "help")],
+        repl::Eval::CallerInterpret(repl::ReplCommand::Help) => vec![marked("ℹ", Color::Blue, "shown in the Help tab")],
         repl::Eval::CallerInterpret(_) => vec![marked("ℹ", Color::Blue, "(repl command)")],
     }
 }
@@ -188,9 +192,10 @@ struct ScrollBackView {
     scroll_back_limit: usize,
 }
 
-/// The shape of the environment pane a frame laid out.
-struct EnvironmentView {
-    /// Rows of bindings the pane showed, not counting the header.
+/// The shape of a pane scrolled down from its top, the environment or the
+/// help, as a frame laid it out.
+struct ScrollDownView {
+    /// Rows the pane showed: of bindings, not counting the header, or of help.
     pane_rows: usize,
     /// The furthest down from the top the view can scroll.
     scroll_limit: usize,
@@ -307,7 +312,7 @@ fn render_code<E: ReplExecutor>(
 /// The bottom panel's frame, whose title is its tabs.
 fn bottom_block<E: ReplExecutor>(repl: &ReplApp<E>) -> Block<'static> {
     let mut tabs = vec![Span::raw(" ")];
-    for (index, tab) in Tab::ALL.into_iter().enumerate() {
+    for (index, tab) in repl.tabs().into_iter().enumerate() {
         if index > 0 {
             tabs.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
         }
@@ -441,7 +446,7 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
 }
 
 /// Render the environment tab: a table of the session's bindings.
-fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> EnvironmentView {
+fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> ScrollDownView {
     // The rows below the borders and the header.
     let pane_rows = area.height.saturating_sub(BORDERS + 1) as usize;
     let environment = repl.environment();
@@ -449,7 +454,7 @@ fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: R
         let empty = Paragraph::new(Line::from(Span::styled("(no variables defined)", Style::default().fg(Color::DarkGray))))
             .block(block);
         f.render_widget(empty, area);
-        return EnvironmentView { pane_rows, scroll_limit: 0 };
+        return ScrollDownView { pane_rows, scroll_limit: 0 };
     }
 
     let scroll_limit = environment.len().saturating_sub(pane_rows);
@@ -480,7 +485,35 @@ fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: R
     let scrollbar_area = Rect { y: area.y + 2, height: pane_rows as u16, ..area };
     f.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
 
-    EnvironmentView { pane_rows, scroll_limit }
+    ScrollDownView { pane_rows, scroll_limit }
+}
+
+/// Render the help tab: the help flowed for the pane's width, scrolled down
+/// from its top.
+fn render_help<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> ScrollDownView {
+    // A margin either side of the text, inside the borders.
+    let width = area.width.saturating_sub(BORDERS + 2) as usize;
+    let lines = crate::help::lines(width);
+    let pane_rows = area.height.saturating_sub(BORDERS) as usize;
+    let scroll_limit = lines.len().saturating_sub(pane_rows);
+    let offset = repl.help_scroll().min(scroll_limit);
+
+    let paragraph = Paragraph::new(lines)
+        .block(block.padding(ratatui::widgets::Padding::horizontal(1)))
+        .scroll((offset as u16, 0));
+    f.render_widget(paragraph, area);
+
+    let mut scrollbar_state = ScrollbarState::new(scroll_limit + 1).position(offset);
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(None)
+        .end_symbol(None);
+    f.render_stateful_widget(
+        scrollbar,
+        area.inner(ratatui::layout::Margin { vertical: 1, horizontal: 0 }),
+        &mut scrollbar_state,
+    );
+
+    ScrollDownView { pane_rows, scroll_limit }
 }
 
 /// Render the dialog asking whether to exit.

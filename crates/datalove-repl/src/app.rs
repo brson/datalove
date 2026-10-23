@@ -65,23 +65,16 @@ pub enum Tab {
     Environment,
     /// Every input, code and REPL commands alike, with what it came to.
     History,
+    /// How the REPL is used, once it has been asked for.
+    Help,
 }
 
 impl Tab {
-    /// Every tab, in the order they are shown and cycled through.
-    pub const ALL: [Tab; 2] = [Tab::Environment, Tab::History];
-
-    fn next(self) -> Tab {
-        match self {
-            Tab::Environment => Tab::History,
-            Tab::History => Tab::Environment,
-        }
-    }
-
     pub fn title(self) -> &'static str {
         match self {
             Tab::Environment => "Environment",
             Tab::History => "History",
+            Tab::Help => "Help",
         }
     }
 }
@@ -313,6 +306,13 @@ pub struct ReplApp<E: ReplExecutor> {
     /// How far down from the top of the environment the view is scrolled, in
     /// rows.
     environment_scroll: ScrollState,
+    /// Whether the help has been asked for, which adds its tab.
+    ///
+    /// The tab is not there until then, so that the bottom panel shows what
+    /// the session has, and help is found by asking for it.
+    help_shown: bool,
+    /// How far down from the top of the help the view is scrolled, in lines.
+    help_scroll: ScrollState,
     /// Whether the engine has reported itself ready.
     ///
     /// The engine compiles the system library before it can answer anything,
@@ -375,6 +375,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             selected_unit: None,
             history_scroll: ScrollState::default(),
             environment_scroll: ScrollState::default(),
+            help_shown: false,
+            help_scroll: ScrollState::default(),
             engine_ready: false,
             engine_dead: None,
             crash_modal: None,
@@ -610,11 +612,22 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     /// Show what a command will change: code changes the environment, and
     /// what a REPL command did is only in the history.
+    ///
+    /// `/help` shows the help instead, which is what it asks for.
     fn show_tab_for(&mut self, command: &repl::Command) {
-        self.tab = match command {
-            repl::Command::Unit(_) => Tab::Environment,
-            repl::Command::ReplCommand(_) => Tab::History,
-        };
+        match command {
+            repl::Command::Unit(_) => self.tab = Tab::Environment,
+            repl::Command::ReplCommand(repl::ReplCommand::Help) => self.show_help(),
+            repl::Command::ReplCommand(_) => self.tab = Tab::History,
+        }
+    }
+
+    /// Show the help: its tab joins the bottom panel, if it has not already,
+    /// and is shown, and the panel takes focus so the keys scroll it.
+    pub fn show_help(&mut self) {
+        self.help_shown = true;
+        self.tab = Tab::Help;
+        self.focus = Panel::Bottom;
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<script::EnvBinding>) {
@@ -671,7 +684,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.should_exit = true;
                 EntryStatus::Success
             }
-            // todo: say something.
+            // The help was shown when it was entered.
             repl::ReplCommand::Help => EntryStatus::Success,
             repl::ReplCommand::Reset => {
                 // Input submitted after the reset was evaluated in the new
@@ -1101,15 +1114,29 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.tab
     }
 
+    /// The tabs of the bottom panel, in the order they are shown and cycled
+    /// through.
+    pub fn tabs(&self) -> Vec<Tab> {
+        let mut tabs = vec![Tab::Environment, Tab::History];
+        if self.help_shown {
+            tabs.push(Tab::Help);
+        }
+        tabs
+    }
+
     /// Show the next tab of the bottom panel, wrapping from the last to the
     /// first.
     pub fn next_tab(&mut self) {
-        self.tab = self.tab.next();
+        let tabs = self.tabs();
+        let index = tabs.iter().position(|tab| *tab == self.tab).expect("the tab shown is one there is");
+        self.tab = tabs[(index + 1) % tabs.len()];
     }
 
-    /// Show a tab of the bottom panel.
+    /// Show a tab of the bottom panel, if it is there.
     pub fn select_tab(&mut self, tab: Tab) {
-        self.tab = tab;
+        if self.tabs().contains(&tab) {
+            self.tab = tab;
+        }
     }
 
     /// Scroll the code, where up is towards the first unit.
@@ -1123,6 +1150,10 @@ impl<E: ReplExecutor> ReplApp<E> {
         match self.tab {
             Tab::Environment => self.scroll_environment(scroll),
             Tab::History => self.scroll_history(scroll),
+            Tab::Help => {
+                let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
+                self.help_scroll.step(scroll, !up);
+            }
         }
     }
 
@@ -1153,6 +1184,11 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.environment_scroll.offset
     }
 
+    /// How far down from the top the help is scrolled.
+    pub fn help_scroll(&self) -> usize {
+        self.help_scroll.offset
+    }
+
     /// Tell the app the shape of the code the renderer just laid out.
     ///
     /// Scrolling past the first unit lands on it rather than running off into
@@ -1181,6 +1217,12 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Tell the app the shape of the environment the renderer just laid out.
     pub fn record_environment_view(&mut self, pane_rows: usize, scroll_limit: usize) {
         self.environment_scroll.record(pane_rows, scroll_limit);
+    }
+
+    /// Tell the app the shape of the help the renderer just laid out, which
+    /// it flows again for the pane's width.
+    pub fn record_help_view(&mut self, pane_lines: usize, scroll_limit: usize) {
+        self.help_scroll.record(pane_lines, scroll_limit);
     }
 
     /// Whether the engine has finished starting.
