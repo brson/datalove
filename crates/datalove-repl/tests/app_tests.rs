@@ -64,18 +64,18 @@ impl MockExecutor {
 fn parsed_statement(id: u64, source: &str) -> WorkerResponse {
     WorkerResponse::ParseResult {
         id,
-        parse: repl::InputParse::Command(repl::Command::ScriptStatement(source.to_string())),
+        parse: repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Fragment(source.to_string()))),
     }
 }
 
 fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
-        eval: repl::Eval::Success(vec![repl::EvalBinding::Value {
+        eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Value {
             name: name.to_string(),
             ty: "int".to_string(),
             value: "1".to_string(),
-        }]),
+        }])),
         environment: vec![(name.to_string(), "int".to_string(), "1".to_string())],
     }
 }
@@ -104,7 +104,7 @@ fn results_land_on_their_own_entry() {
     assert!(matches!(history[0].status, EntryStatus::Success));
     assert!(matches!(
         history[0].eval_result,
-        Some(repl::Eval::Success(_))
+        Some(repl::Eval::Unit(repl::script::Eval::Success(_)))
     ));
     assert!(matches!(history[1].status, EntryStatus::Evaluating { .. }));
     assert_eq!(executor.evals(), vec![0, 1]);
@@ -162,9 +162,9 @@ fn multiline_mode_spans_one_submission() {
     app.poll_results();
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::Success(vec![repl::EvalBinding::Function {
+        eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Function {
             name: "f".to_string(),
-        }]),
+        }])),
         environment: vec![("f".to_string(), "function".to_string(), "-".to_string())],
     });
     app.poll_results();
@@ -278,10 +278,10 @@ fn a_replayed_session_is_evaluated_without_parsing() {
 
     let fun = "fun f(): int\n    ret 1\nend fun".to_string();
     app.replay(vec![
-        repl::SavedInput { input: fun.clone(), command: repl::Command::ScriptStatement(fun) },
+        repl::SavedInput { input: fun.clone(), command: repl::Command::Unit(repl::script::Unit::Fragment(fun)) },
         repl::SavedInput {
             input: "f()".to_string(),
-            command: repl::Command::Expression("f()".to_string()),
+            command: repl::Command::Unit(repl::script::Unit::Expression("f()".to_string())),
         },
     ]);
 
@@ -291,7 +291,7 @@ fn a_replayed_session_is_evaluated_without_parsing() {
     assert_eq!(app.history()[1].input, "f()");
     assert!(matches!(
         app.history()[1].status,
-        EntryStatus::Evaluating { command: repl::Command::Expression(_) },
+        EntryStatus::Evaluating { command: repl::Command::Unit(repl::script::Unit::Expression(_)) },
     ));
 
     executor.queue(evaluated_let(0, "a"));
@@ -327,11 +327,11 @@ fn save_writes_the_history_up_to_itself() {
     app.submit_input("nope".to_string());
     executor.queue(WorkerResponse::ParseResult {
         id: 2,
-        parse: repl::InputParse::Command(repl::Command::Expression("nope".to_string())),
+        parse: repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Expression("nope".to_string()))),
     });
     executor.queue(WorkerResponse::EvalResult {
         id: 2,
-        eval: repl::Eval::Error("no such name".to_string()),
+        eval: repl::Eval::Unit(repl::script::Eval::Error("no such name".to_string())),
         environment: Vec::new(),
     });
 
@@ -396,7 +396,7 @@ fn save_without_a_path_is_an_error() {
     app.poll_results();
 
     assert!(matches!(app.history()[0].status, EntryStatus::Error));
-    assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::Error(_))));
+    assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::CommandError(_))));
 }
 
 /// A crash reset clears the history, so responses for requests that were in
@@ -409,9 +409,11 @@ fn results_from_before_a_crash_reset_are_dropped() {
     app.submit_input("let x = 1".to_string());
     app.submit_input("let y = 2".to_string());
 
-    executor.queue(WorkerResponse::ParseResult {
+    executor.queue(parsed_statement(0, "let x = 1"));
+    executor.queue(WorkerResponse::EvalResult {
         id: 0,
-        parse: repl::InputParse::CrashReset("boom".to_string()),
+        eval: repl::Eval::Unit(repl::script::Eval::CrashReset("boom".to_string())),
+        environment: Vec::new(),
     });
     app.poll_results();
 
@@ -444,7 +446,7 @@ fn a_runtime_error_reset_clears_the_session() {
     executor.queue(parsed_statement(1, "let y = f()"));
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::ErrorReset("Error: stack overflow".to_string()),
+        eval: repl::Eval::Unit(repl::script::Eval::ErrorReset("Error: stack overflow".to_string())),
         environment: Vec::new(),
     });
     app.poll_results();

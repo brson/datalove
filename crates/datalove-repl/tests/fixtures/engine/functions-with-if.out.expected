@@ -3,11 +3,15 @@
     "input": "fun abs(x: i32): i32\n  if x .< 0\n    ret 0 - x\n  else\n    ret x\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun abs(x: i32): i32\n  if x .< 0\n    ret 0 - x\n  else\n    ret x\n  end if\nend fun"
+        "Unit": {
+          "Fragment": "fun abs(x: i32): i32\n  if x .< 0\n    ret 0 - x\n  else\n    ret x\n  end if\nend fun"
+        }
       }
     },
     "eval": {
-      "Error": "InvalidOperandType { op: \"-\", ty: \"i32\" }"
+      "Unit": {
+        "Error": "InvalidOperandType { op: \"-\", ty: \"i32\" }"
+      }
     },
     "environment": []
   },
@@ -15,11 +19,15 @@
     "input": "abs(5)",
     "parse": {
       "Command": {
-        "Expression": "abs(5)"
+        "Unit": {
+          "Expression": "abs(5)"
+        }
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"abs\")"
+      "Unit": {
+        "Error": "UnresolvedName(\"abs\")"
+      }
     },
     "environment": []
   },
@@ -27,11 +35,15 @@
     "input": "abs(-5)",
     "parse": {
       "Command": {
-        "Expression": "abs(-5)"
+        "Unit": {
+          "Expression": "abs(-5)"
+        }
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"abs\")"
+      "Unit": {
+        "Error": "UnresolvedName(\"abs\")"
+      }
     },
     "environment": []
   },
@@ -39,17 +51,21 @@
     "input": "fun classify(x: u32): u32\n  if x .< 10\n    ret 1\n  else\n    if x .< 20\n      ret 2\n    else\n      ret 3\n    end if\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun classify(x: u32): u32\n  if x .< 10\n    ret 1\n  else\n    if x .< 20\n      ret 2\n    else\n      ret 3\n    end if\n  end if\nend fun"
+        "Unit": {
+          "Fragment": "fun classify(x: u32): u32\n  if x .< 10\n    ret 1\n  else\n    if x .< 20\n      ret 2\n    else\n      ret 3\n    end if\n  end if\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "classify"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "classify"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -63,13 +79,17 @@
     "input": "classify(5)",
     "parse": {
       "Command": {
-        "Expression": "classify(5)"
+        "Unit": {
+          "Expression": "classify(5)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "1"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "1"
+        }
       }
     },
     "environment": [
@@ -84,13 +104,17 @@
     "input": "classify(15)",
     "parse": {
       "Command": {
-        "Expression": "classify(15)"
+        "Unit": {
+          "Expression": "classify(15)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "2"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "2"
+        }
       }
     },
     "environment": [
@@ -105,13 +129,17 @@
     "input": "classify(25)",
     "parse": {
       "Command": {
-        "Expression": "classify(25)"
+        "Unit": {
+          "Expression": "classify(25)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "3"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "3"
+        }
       }
     },
     "environment": [
@@ -126,17 +154,21 @@
     "input": "fun grade(score: u32): u32\n  if score >= 90\n    ret 4\n  else\n    if score >= 80\n      ret 3\n    else\n      if score >= 70\n        ret 2\n      else\n        ret 1\n      end if\n    end if\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun grade(score: u32): u32\n  if score >= 90\n    ret 4\n  else\n    if score >= 80\n      ret 3\n    else\n      if score >= 70\n        ret 2\n      else\n        ret 1\n      end if\n    end if\n  end if\nend fun"
+        "Unit": {
+          "Fragment": "fun grade(score: u32): u32\n  if score >= 90\n    ret 4\n  else\n    if score >= 80\n      ret 3\n    else\n      if score >= 70\n        ret 2\n      else\n        ret 1\n      end if\n    end if\n  end if\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "grade"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "grade"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -155,13 +187,17 @@
     "input": "grade(95)",
     "parse": {
       "Command": {
-        "Expression": "grade(95)"
+        "Unit": {
+          "Expression": "grade(95)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "4"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "4"
+        }
       }
     },
     "environment": [
@@ -181,13 +217,17 @@
     "input": "grade(85)",
     "parse": {
       "Command": {
-        "Expression": "grade(85)"
+        "Unit": {
+          "Expression": "grade(85)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "3"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "3"
+        }
       }
     },
     "environment": [
@@ -207,13 +247,17 @@
     "input": "grade(75)",
     "parse": {
       "Command": {
-        "Expression": "grade(75)"
+        "Unit": {
+          "Expression": "grade(75)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "2"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "2"
+        }
       }
     },
     "environment": [
@@ -233,13 +277,17 @@
     "input": "grade(65)",
     "parse": {
       "Command": {
-        "Expression": "grade(65)"
+        "Unit": {
+          "Expression": "grade(65)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "1"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "1"
+        }
       }
     },
     "environment": [

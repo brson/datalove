@@ -3,19 +3,23 @@
     "input": "let x: int = 42",
     "parse": {
       "Command": {
-        "ScriptStatement": "let x: int = 42"
+        "Unit": {
+          "Fragment": "let x: int = 42"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "x",
-            "ty": "int",
-            "value": "42"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "x",
+              "ty": "int",
+              "value": "42"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,13 +33,17 @@
     "input": "x",
     "parse": {
       "Command": {
-        "Expression": "x"
+        "Unit": {
+          "Expression": "x"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "42"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "42"
+        }
       }
     },
     "environment": [
@@ -50,19 +58,23 @@
     "input": "let y: int = 52",
     "parse": {
       "Command": {
-        "ScriptStatement": "let y: int = 52"
+        "Unit": {
+          "Fragment": "let y: int = 52"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "y",
-            "ty": "int",
-            "value": "52"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "y",
+              "ty": "int",
+              "value": "52"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -81,13 +93,17 @@
     "input": "y",
     "parse": {
       "Command": {
-        "Expression": "y"
+        "Unit": {
+          "Expression": "y"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "52"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "52"
+        }
       }
     },
     "environment": [

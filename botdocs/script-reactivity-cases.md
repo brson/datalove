@@ -2,9 +2,10 @@
 
 What an edit to a REPL session should recompile and rerun, worked through as
 cases, with the rules they add up to. Every table here is rendered from a
-fixture in `crates/datalove-repl/tests/fixtures/reactive/` and checked against
-the engine by `crates/datalove-repl/tests/reactive_tests.rs`, so this is a
-literate test suite: what it says about the engine is true or the build fails.
+fixture in `crates/datalove-script-engine/tests/fixtures/reactive/` and
+checked against the engine by
+`crates/datalove-script-engine/tests/reactive_tests.rs`, so this is a literate
+test suite: what it says about the engine is true or the build fails.
 Started October 2026 from `mandocs/drafts/reactive-script-semantics.md`, which
 is the narrative version. How the engine does it is
 [script-reactivity-architecture.md](script-reactivity-architecture.md).
@@ -67,8 +68,9 @@ To add a case, write a fixture (the format is at the top of
 `reactive_tests.rs`), add regions for it here --
 `<!-- world NAME code -->` and `<!-- world NAME step N -->`, each closed by
 `<!-- end world -->` -- and render them with
-`BLESS=1 cargo test -p datalove-repl --test reactive_tests`. The test fails if
-a fixture has a step not shown here, or this file differs from its fixtures.
+`BLESS=1 cargo test -p datalove-script-engine --test reactive_tests`. The
+test fails if a fixture has a step not shown here, or this file differs from
+its fixtures.
 
 ## The algebra
 

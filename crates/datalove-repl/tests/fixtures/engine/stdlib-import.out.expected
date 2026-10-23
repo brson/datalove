@@ -3,39 +3,51 @@
     "input": "require module sys/std/string",
     "parse": {
       "Command": {
-        "ScriptStatement": "require module sys/std/string"
+        "Unit": {
+          "Fragment": "require module sys/std/string"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   },
   {
     "input": "import string.len",
     "parse": {
       "Command": {
-        "ScriptStatement": "import string.len"
+        "Unit": {
+          "Fragment": "import string.len"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   },
   {
     "input": "let s = \"hello\"",
     "parse": {
       "Command": {
-        "ScriptStatement": "let s = \"hello\""
+        "Unit": {
+          "Fragment": "let s = \"hello\""
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "s",
-            "ty": "string",
-            "value": "\"hello\""
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "s",
+              "ty": "string",
+              "value": "\"hello\""
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -49,13 +61,17 @@
     "input": "len(ref s)",
     "parse": {
       "Command": {
-        "Expression": "len(ref s)"
+        "Unit": {
+          "Expression": "len(ref s)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "index",
-        "value": "5"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "index",
+          "value": "5"
+        }
       }
     },
     "environment": [
@@ -70,10 +86,14 @@
     "input": "import string.to_ascii_uppercase",
     "parse": {
       "Command": {
-        "ScriptStatement": "import string.to_ascii_uppercase"
+        "Unit": {
+          "Fragment": "import string.to_ascii_uppercase"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "s",
@@ -86,13 +106,17 @@
     "input": "to_ascii_uppercase(ref s)",
     "parse": {
       "Command": {
-        "Expression": "to_ascii_uppercase(ref s)"
+        "Unit": {
+          "Expression": "to_ascii_uppercase(ref s)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "string",
-        "value": "\"HELLO\""
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "string",
+          "value": "\"HELLO\""
+        }
       }
     },
     "environment": [
@@ -107,10 +131,14 @@
     "input": "import string.contains",
     "parse": {
       "Command": {
-        "ScriptStatement": "import string.contains"
+        "Unit": {
+          "Fragment": "import string.contains"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "s",
@@ -123,13 +151,17 @@
     "input": "contains(ref s, ref \"ell\")",
     "parse": {
       "Command": {
-        "Expression": "contains(ref s, ref \"ell\")"
+        "Unit": {
+          "Expression": "contains(ref s, ref \"ell\")"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "bool",
-        "value": "true"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "bool",
+          "value": "true"
+        }
       }
     },
     "environment": [
@@ -144,10 +176,14 @@
     "input": "require module sys/std/option",
     "parse": {
       "Command": {
-        "ScriptStatement": "require module sys/std/option"
+        "Unit": {
+          "Fragment": "require module sys/std/option"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "s",
@@ -160,10 +196,14 @@
     "input": "import option.unwrap_or",
     "parse": {
       "Command": {
-        "ScriptStatement": "import option.unwrap_or"
+        "Unit": {
+          "Fragment": "import option.unwrap_or"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "s",
@@ -176,13 +216,17 @@
     "input": "unwrap_or(some 3, 7)",
     "parse": {
       "Command": {
-        "Expression": "unwrap_or(some 3, 7)"
+        "Unit": {
+          "Expression": "unwrap_or(some 3, 7)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "3"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "3"
+        }
       }
     },
     "environment": [

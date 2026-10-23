@@ -15,19 +15,23 @@
     "input": "let x = 1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let x = 1"
+        "Unit": {
+          "Fragment": "let x = 1"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "x",
-            "ty": "int",
-            "value": "1"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "x",
+              "ty": "int",
+              "value": "1"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -41,13 +45,17 @@
     "input": "// A note above an expression leaves the expression what it was.\nx + 1",
     "parse": {
       "Command": {
-        "Expression": "// A note above an expression leaves the expression what it was.\nx + 1"
+        "Unit": {
+          "Expression": "// A note above an expression leaves the expression what it was.\nx + 1"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "2"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "2"
+        }
       }
     },
     "environment": [
@@ -62,17 +70,21 @@
     "input": "// The same above a definition, which is read from its first line of code.\nfun double(n: int): int\n  ret n + n\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "// The same above a definition, which is read from its first line of code.\nfun double(n: int): int\n  ret n + n\nend fun"
+        "Unit": {
+          "Fragment": "// The same above a definition, which is read from its first line of code.\nfun double(n: int): int\n  ret n + n\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "double"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "double"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -91,13 +103,17 @@
     "input": "double(21)",
     "parse": {
       "Command": {
-        "Expression": "double(21)"
+        "Unit": {
+          "Expression": "double(21)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "42"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "42"
+        }
       }
     },
     "environment": [
@@ -121,7 +137,7 @@
       }
     },
     "eval": {
-      "Error": "unknown command"
+      "CommandError": "unknown command"
     },
     "environment": [
       {

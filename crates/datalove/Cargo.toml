@@ -20,6 +20,7 @@ datalove-diagnostic.workspace = true
 datalove-paths.workspace = true
 datalove-repl.workspace = true
 datalove-rt.workspace = true
+datalove-script-engine.workspace = true
 datalove-sys-packages.workspace = true
 
 # Wasm cannot map memory executable, so there is no JIT there.

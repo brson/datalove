@@ -5,7 +5,7 @@ use crate::app::{ReplExecutor, WorkerResponse};
 use crate::{Input, Command};
 use datalove_datafun as datafun;
 use datafun::pipeline::{PackageLibrary, SystemLibrary};
-use crate::engine::Engine;
+use crate::script::Engine;
 use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 use std::thread;
 
@@ -133,7 +133,7 @@ fn worker_thread(
         match rx.recv() {
             Ok(WorkerRequest::Parse { id, input }) => {
                 // Parse the input.
-                let parse = engine.parse_input(input);
+                let parse = crate::parse_input(input);
                 let _ = tx.send(WorkerResponse::ParseResult {
                     id,
                     parse,
@@ -141,7 +141,7 @@ fn worker_thread(
             }
             Ok(WorkerRequest::Eval { id, command }) => {
                 // Evaluate the command.
-                let eval = engine.eval(command);
+                let eval = crate::eval(&mut engine, command);
 
                 // Get updated environment.
                 let environment = engine.get_environment();

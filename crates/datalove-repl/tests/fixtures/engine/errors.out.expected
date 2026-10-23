@@ -3,11 +3,15 @@
     "input": "let x =",
     "parse": {
       "Command": {
-        "ScriptStatement": "let x ="
+        "Unit": {
+          "Fragment": "let x ="
+        }
       }
     },
     "eval": {
-      "Error": "expected expression"
+      "Unit": {
+        "Error": "expected expression"
+      }
     },
     "environment": []
   },
@@ -15,19 +19,23 @@
     "input": "let x = 42",
     "parse": {
       "Command": {
-        "ScriptStatement": "let x = 42"
+        "Unit": {
+          "Fragment": "let x = 42"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "x",
-            "ty": "int",
-            "value": "42"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "x",
+              "ty": "int",
+              "value": "42"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -41,11 +49,15 @@
     "input": "x + y",
     "parse": {
       "Command": {
-        "Expression": "x + y"
+        "Unit": {
+          "Expression": "x + y"
+        }
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"y\")"
+      "Unit": {
+        "Error": "UnresolvedName(\"y\")"
+      }
     },
     "environment": [
       {

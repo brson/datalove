@@ -3,19 +3,23 @@
     "input": "var b = 125",
     "parse": {
       "Command": {
-        "ScriptStatement": "var b = 125"
+        "Unit": {
+          "Fragment": "var b = 125"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "b",
-            "ty": "int",
-            "value": "125"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "b",
+              "ty": "int",
+              "value": "125"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,19 +33,23 @@
     "input": "let flag = true",
     "parse": {
       "Command": {
-        "ScriptStatement": "let flag = true"
+        "Unit": {
+          "Fragment": "let flag = true"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "flag",
-            "ty": "bool",
-            "value": "true"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "flag",
+              "ty": "bool",
+              "value": "true"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -60,10 +68,14 @@
     "input": "if flag\n  set b = 500\nend if",
     "parse": {
       "Command": {
-        "ScriptStatement": "if flag\n  set b = 500\nend if"
+        "Unit": {
+          "Fragment": "if flag\n  set b = 500\nend if"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "b",
@@ -81,19 +93,23 @@
     "input": "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom No",
     "parse": {
       "Command": {
-        "ScriptStatement": "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom No"
+        "Unit": {
+          "Fragment": "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom No"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "f",
-            "ty": "enum{No, Yes}",
-            "value": "enum { atom No }"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "f",
+              "ty": "enum{No, Yes}",
+              "value": "enum { atom No }"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -117,10 +133,14 @@
     "input": "match f\ncase atom Yes\n  set b = 1\ncase atom No\n  set b = 2\nend match",
     "parse": {
       "Command": {
-        "ScriptStatement": "match f\ncase atom Yes\n  set b = 1\ncase atom No\n  set b = 2\nend match"
+        "Unit": {
+          "Fragment": "match f\ncase atom Yes\n  set b = 1\ncase atom No\n  set b = 2\nend match"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "b",
@@ -143,19 +163,23 @@
     "input": "var i = 0",
     "parse": {
       "Command": {
-        "ScriptStatement": "var i = 0"
+        "Unit": {
+          "Fragment": "var i = 0"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "i",
-            "ty": "int",
-            "value": "0"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "i",
+              "ty": "int",
+              "value": "0"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -184,10 +208,14 @@
     "input": "loop while i .< 3\n  set i = i + 1\nend loop",
     "parse": {
       "Command": {
-        "ScriptStatement": "loop while i .< 3\n  set i = i + 1\nend loop"
+        "Unit": {
+          "Fragment": "loop while i .< 3\n  set i = i + 1\nend loop"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "b",
@@ -215,10 +243,14 @@
     "input": "loop\n  set i = i + 1\n  break\nend loop",
     "parse": {
       "Command": {
-        "ScriptStatement": "loop\n  set i = i + 1\n  break\nend loop"
+        "Unit": {
+          "Fragment": "loop\n  set i = i + 1\n  break\nend loop"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "b",
@@ -246,10 +278,14 @@
     "input": "debuglog b",
     "parse": {
       "Command": {
-        "ScriptStatement": "debuglog b"
+        "Unit": {
+          "Fragment": "debuglog b"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "b",
@@ -277,13 +313,17 @@
     "input": "b",
     "parse": {
       "Command": {
-        "Expression": "b"
+        "Unit": {
+          "Expression": "b"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "2"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "2"
+        }
       }
     },
     "environment": [
@@ -313,13 +353,17 @@
     "input": "i",
     "parse": {
       "Command": {
-        "Expression": "i"
+        "Unit": {
+          "Expression": "i"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "4"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "4"
+        }
       }
     },
     "environment": [

@@ -3,19 +3,23 @@
     "input": "var p = (1, \"a\")",
     "parse": {
       "Command": {
-        "ScriptStatement": "var p = (1, \"a\")"
+        "Unit": {
+          "Fragment": "var p = (1, \"a\")"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "p",
-            "ty": "(int, string)",
-            "value": "(1, \"a\")"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "p",
+              "ty": "(int, string)",
+              "value": "(1, \"a\")"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,10 +33,14 @@
     "input": "set p.0 = 5",
     "parse": {
       "Command": {
-        "ScriptStatement": "set p.0 = 5"
+        "Unit": {
+          "Fragment": "set p.0 = 5"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "p",
@@ -45,10 +53,14 @@
     "input": "set p.1 = \"b\"",
     "parse": {
       "Command": {
-        "ScriptStatement": "set p.1 = \"b\""
+        "Unit": {
+          "Fragment": "set p.1 = \"b\""
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "p",
@@ -61,13 +73,17 @@
     "input": "p",
     "parse": {
       "Command": {
-        "Expression": "p"
+        "Unit": {
+          "Expression": "p"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "(int, string)",
-        "value": "(5, \"b\")"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "(int, string)",
+          "value": "(5, \"b\")"
+        }
       }
     },
     "environment": [
@@ -82,19 +98,23 @@
     "input": "var q = ((1, \"x\"), \"y\")",
     "parse": {
       "Command": {
-        "ScriptStatement": "var q = ((1, \"x\"), \"y\")"
+        "Unit": {
+          "Fragment": "var q = ((1, \"x\"), \"y\")"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "q",
-            "ty": "((int, string), string)",
-            "value": "((1, \"x\"), \"y\")"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "q",
+              "ty": "((int, string), string)",
+              "value": "((1, \"x\"), \"y\")"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -113,10 +133,14 @@
     "input": "set q.0.1 = \"z\"",
     "parse": {
       "Command": {
-        "ScriptStatement": "set q.0.1 = \"z\""
+        "Unit": {
+          "Fragment": "set q.0.1 = \"z\""
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "p",
@@ -134,13 +158,17 @@
     "input": "q",
     "parse": {
       "Command": {
-        "Expression": "q"
+        "Unit": {
+          "Expression": "q"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "((int, string), string)",
-        "value": "((1, \"z\"), \"y\")"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "((int, string), string)",
+          "value": "((1, \"z\"), \"y\")"
+        }
       }
     },
     "environment": [
@@ -160,19 +188,23 @@
     "input": "var r = {name = \"Alice\", age = 30}",
     "parse": {
       "Command": {
-        "ScriptStatement": "var r = {name = \"Alice\", age = 30}"
+        "Unit": {
+          "Fragment": "var r = {name = \"Alice\", age = 30}"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "r",
-            "ty": "{name: string, age: int}",
-            "value": "{name = \"Alice\", age = 30}"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "r",
+              "ty": "{name: string, age: int}",
+              "value": "{name = \"Alice\", age = 30}"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -196,10 +228,14 @@
     "input": "set r.name = \"Bob\"",
     "parse": {
       "Command": {
-        "ScriptStatement": "set r.name = \"Bob\""
+        "Unit": {
+          "Fragment": "set r.name = \"Bob\""
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "p",
@@ -222,13 +258,17 @@
     "input": "r",
     "parse": {
       "Command": {
-        "Expression": "r"
+        "Unit": {
+          "Expression": "r"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "{name: string, age: int}",
-        "value": "{name = \"Bob\", age = 30}"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "{name: string, age: int}",
+          "value": "{name = \"Bob\", age = 30}"
+        }
       }
     },
     "environment": [
@@ -253,19 +293,23 @@
     "input": "var s = (1, \"a\")",
     "parse": {
       "Command": {
-        "ScriptStatement": "var s = (1, \"a\")"
+        "Unit": {
+          "Fragment": "var s = (1, \"a\")"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "s",
-            "ty": "(int, string)",
-            "value": "(1, \"a\")"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "s",
+              "ty": "(int, string)",
+              "value": "(1, \"a\")"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -294,19 +338,23 @@
     "input": "let t = s",
     "parse": {
       "Command": {
-        "ScriptStatement": "let t = s"
+        "Unit": {
+          "Fragment": "let t = s"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "t",
-            "ty": "(int, string)",
-            "value": "(1, \"a\")"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "t",
+              "ty": "(int, string)",
+              "value": "(1, \"a\")"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -340,11 +388,15 @@
     "input": "set s.1 = \"c\"",
     "parse": {
       "Command": {
-        "ScriptStatement": "set s.1 = \"c\""
+        "Unit": {
+          "Fragment": "set s.1 = \"c\""
+        }
       }
     },
     "eval": {
-      "Error": "error[D013]: `s` was given away by an earlier input\n  help: use `@` to clone `s` where it was given away"
+      "Unit": {
+        "Error": "error[D013]: `s` was given away by an earlier input\n  help: use `@` to clone `s` where it was given away"
+      }
     },
     "environment": [
       {
@@ -378,13 +430,17 @@
     "input": "t",
     "parse": {
       "Command": {
-        "Expression": "t"
+        "Unit": {
+          "Expression": "t"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "(int, string)",
-        "value": "(1, \"a\")"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "(int, string)",
+          "value": "(1, \"a\")"
+        }
       }
     },
     "environment": [

@@ -427,7 +427,7 @@ tested -- but it is the one asymmetry left in the design.
 
 ### D. The edit itself -- done
 
-Done as `Engine::edit_unit` (`crates/datalove-repl/src/engine.rs`), over
+Done as `Engine::edit_unit` (`crates/datalove-script-engine/src/engine.rs`), over
 `ScriptSession::unit_sources`, `set_text` and `ScriptCompiler::relower_reach`;
 `engine_edit_tests` holds it. What follows was the plan. The replay row and the
 input leak it mentions are still open: `compile_fragment` mints a `Source` per

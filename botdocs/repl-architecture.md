@@ -3,8 +3,8 @@
 How the REPL is put together, and the decisions that shaped it. Explanation;
 describes the REPL as of October 2026.
 
-Every line typed at the REPL is a script unit, compiled and run by an `Engine`
-on a worker thread, and the terminal UI talks to that engine only through
+Every line typed at the REPL is a script unit, compiled and run by the script
+engine's `Engine` on a worker thread, and the terminal UI talks to that engine only through
 requests and the responses keyed to them. The engine keeps the session as a
 list of units that can be edited, spliced, saved and replayed. A unit that
 fails stays in the list. The modules compiled are the ones the units require,
@@ -33,17 +33,35 @@ datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
   src/render.rs         The three-panel layout, history, menu, crash and engine modals
   src/term.rs           Terminal setup, event loop, key bindings
 
-datalove-repl/          Engine and the UI-agnostic app
-  src/lib.rs            Input classification, the wire types, load_session
-  src/engine.rs         Engine: compiles and evaluates; run_source
+datalove-repl/          The REPL's inputs and commands, and the UI-agnostic app
+  src/lib.rs            Input classification, REPL commands, the wire types,
+                        eval, load_session
+  src/batch.rs          run_source and run_script, over `---`-separated inputs
   src/app.rs            ReplApp state machine, ReplExecutor trait
   src/executor_threaded.rs  The one executor: a worker thread owning an Engine
+
+datalove-script-engine/ The engine, which knows nothing of the REPL
+  src/lib.rs            Unit, Eval, and the bindings an Eval reports
+  src/engine.rs         Engine: compiles, evaluates and re-derives units
 ```
 
+**The engine is a crate of its own because the REPL is only one way to drive
+it.** It takes a `Unit`, a fragment or an expression, and answers with an
+`Eval`. How a unit came to be typed, that the session has slash commands, and
+what the history shows are the REPL's, in `datalove-repl`. So
+`datalove script-world` and the engine's own tests use the engine with no
+REPL in sight, and a notebook or an embedding would too.
+
+The REPL wraps the engine's types rather than adding to them. Its `Command` is
+a `ReplCommand` or a `Unit`, and its `Eval` is the engine's `Eval` for a unit,
+or what a REPL command came to. `datalove_repl::eval` is where the two meet.
+It hands a unit to the engine and a command back to the app, resetting the
+engine first for a `/reset`.
+
 `datalove-cli` calls `datalove_repl_rat::run()` for the interactive REPL and
-`Engine::run_script` for `repl --script`. Both take the system library, and
-the workspace's own `local` library if it has one, from the caller; see
-[The engine](#user-content-the-engine).
+`datalove_repl::run_script` for `repl --script`. Both take the system library,
+and the workspace's own `local` library if it has one, from the caller; see
+[The engine](#user-content-the-engine). `script-world` uses `Engine` directly.
 
 ## The request/response shape
 
@@ -100,7 +118,7 @@ path and kept for the pipeline's life.
 
 **A required module that does not compile is left out**, with every required
 module that reaches it, and the rest of the roots stay (`settle_roots` in
-`crates/datalove-repl/src/engine.rs`). The unit that requires it fails on its
+`crates/datalove-script-engine/src/engine.rs`). The unit that requires it fails on its
 `require`, and the engine replaces that error with the module's own. One
 broken module costs only the units that require it, as one failed unit costs
 only the units that read it. So the engine holds modules with errors outside
@@ -115,9 +133,10 @@ lifetime, so a caller in the same process renders them against `Engine::db`.
 A caller across a thread, as the interactive REPL is, has only the messages,
 for now.
 
-`Engine::run_source` is the one loop over a `---`-separated script. Both
-`repl --script` and the fixture tests use it, so the driver and the tests
-cannot drift.
+`datalove_repl::run_source` is the one loop over a `---`-separated script.
+It reads each input as the prompt would, so it is the REPL's rather than the
+engine's. Both `repl --script` and the fixture tests use it, so the driver and
+the tests cannot drift.
 
 ## What a line does
 
@@ -157,12 +176,13 @@ compiled session again and reports `Eval::ErrorReset`, which the app treats
 like a crash reset. Re-running the earlier units to bring the session back
 was considered and not done: a unit that fails again would loop.
 
-A panic inside the engine, while parsing or evaluating, is caught and reported
-as `CrashReset`. The engine rebuilds its compiler and executor, and the app
+A panic inside the engine while evaluating is caught and reported as
+`CrashReset`. The engine rebuilds its compiler and executor, and the app
 clears the history and shows the crash modal.
 
-`/reset` asks for the same reset on purpose. The engine resets before it
-answers, so the environment that comes back with the answer is already empty.
+`/reset` asks for the same reset on purpose. `datalove_repl::eval` resets the
+engine on the worker thread before it answers, in turn with the units around
+it, so the environment that comes back with the answer is already empty.
 The app then drops only the history entries up to and including the
 `/reset`. Anything typed while the reset was running was evaluated in the new
 session, so it stays.
@@ -204,7 +224,7 @@ prompt.
 **What is saved is the app's history, not the engine's session.** The
 engine's session holds the script units. The history also has the slash
 commands and whatever a reset took out of the session. So the app writes the
-file when the engine hands `/save` back to it as `CallerInterpret`. A few
+file when `datalove_repl::eval` hands `/save` back to it as `CallerInterpret`. A few
 things are left out:
 
 - Anything typed after the `/save`. Those lines can still be waiting on a
@@ -329,21 +349,12 @@ all.
 `crates/datalove-repl/tests/`:
 
 - **engine_tests** -- the `.repl` fixtures in `fixtures/engine/` through
-  `Engine::run_source`, snapshotting the parse, eval, and environment after
+  `run_source`, snapshotting the parse, eval, and environment after
   every input as JSON. They run against
   `datalove_sys_packages::system_library()`, so the suite covers the library
   and the linked riders the binary actually ships. `BLESS=1` updates them.
-- **engine_edit_tests** -- the edit path: `edit_unit`, `edit_module` and the
-  splices, the units each reaches, and the environment afterwards; modules
-  joining, leaving and breaking; and units that did not compile, parse, or run
-  to their end staying and going green. Separate from `engine_tests` because
-  that one is `harness = false` and has a `main` of its own, so `#[test]`
-  functions cannot live beside it. The reach itself is measured in
-  `datalove-datafun`'s `script_exec_reactivity_tests` and
-  `script_scenario_tests`; these say the engine wires it up.
-- **reactive_tests** -- the step tables in `fixtures/reactive/` against the
-  engine, and [script-reactivity-cases.md](script-reactivity-cases.md) against
-  the tables. `BLESS=1` re-renders the doc.
+  They are the engine's behaviour as typed at the REPL, slash commands and
+  all, which is why they stay here.
 - **session_tests** -- `/save` and `--load` through the app and a real
   engine on its worker thread: a saved history replays to the same outcomes
   and environment, and saving it again writes the same file.
@@ -352,6 +363,18 @@ all.
   arriving after a later input, a crash reset, the multiline round trip, the
   engine reporting itself ready or dead, scrolling the history, and what
   `/save` writes.
+
+`crates/datalove-script-engine/tests/`:
+
+- **engine_edit_tests** -- the edit path: `edit_unit`, `edit_module` and the
+  splices, the units each reaches, and the environment afterwards; modules
+  joining, leaving and breaking; and units that did not compile, parse, or run
+  to their end staying and going green. The reach itself is measured in
+  `datalove-datafun`'s `script_exec_reactivity_tests` and
+  `script_scenario_tests`; these say the engine wires it up.
+- **reactive_tests** -- the step tables in `fixtures/reactive/` against the
+  engine, and [script-reactivity-cases.md](script-reactivity-cases.md) against
+  the tables. `BLESS=1` re-renders the doc.
 
 Neither the rendering nor the key bindings have tests. `render.rs` would take
 ratatui's `TestBackend`; `term.rs` has no seam, since `run()` does terminal

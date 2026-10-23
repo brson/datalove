@@ -3,17 +3,21 @@
     "input": "fun compute(x: int): int\n  let a = x + :int/1\n  let b = a * :int/2\n  ret b - :int/1\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun compute(x: int): int\n  let a = x + :int/1\n  let b = a * :int/2\n  ret b - :int/1\nend fun"
+        "Unit": {
+          "Fragment": "fun compute(x: int): int\n  let a = x + :int/1\n  let b = a * :int/2\n  ret b - :int/1\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "compute"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "compute"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -27,13 +31,17 @@
     "input": "compute(5)",
     "parse": {
       "Command": {
-        "Expression": "compute(5)"
+        "Unit": {
+          "Expression": "compute(5)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "11"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "11"
+        }
       }
     },
     "environment": [
@@ -48,17 +56,21 @@
     "input": "fun fib(n: int): int\n  if n <= :int/1\n    ret :int/1\n  else\n    let a = fib(n - :int/1)\n    let b = fib(n - :int/2)\n    ret a + b\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun fib(n: int): int\n  if n <= :int/1\n    ret :int/1\n  else\n    let a = fib(n - :int/1)\n    let b = fib(n - :int/2)\n    ret a + b\n  end if\nend fun"
+        "Unit": {
+          "Fragment": "fun fib(n: int): int\n  if n <= :int/1\n    ret :int/1\n  else\n    let a = fib(n - :int/1)\n    let b = fib(n - :int/2)\n    ret a + b\n  end if\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "fib"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "fib"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -77,13 +89,17 @@
     "input": "fib(6)",
     "parse": {
       "Command": {
-        "Expression": "fib(6)"
+        "Unit": {
+          "Expression": "fib(6)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "13"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "13"
+        }
       }
     },
     "environment": [
@@ -103,17 +119,21 @@
     "input": "fun shadow(x: int): int\n  let y = x + :int/1\n  let y = y * :int/2\n  ret y\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun shadow(x: int): int\n  let y = x + :int/1\n  let y = y * :int/2\n  ret y\nend fun"
+        "Unit": {
+          "Fragment": "fun shadow(x: int): int\n  let y = x + :int/1\n  let y = y * :int/2\n  ret y\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "shadow"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "shadow"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -137,13 +157,17 @@
     "input": "shadow(5)",
     "parse": {
       "Command": {
-        "Expression": "shadow(5)"
+        "Unit": {
+          "Expression": "shadow(5)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "12"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "12"
+        }
       }
     },
     "environment": [

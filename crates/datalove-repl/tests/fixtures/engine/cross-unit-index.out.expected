@@ -3,19 +3,23 @@
     "input": "let W: [u32] = [: u32 / 7, : u32 / 8]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let W: [u32] = [: u32 / 7, : u32 / 8]"
+        "Unit": {
+          "Fragment": "let W: [u32] = [: u32 / 7, : u32 / 8]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "W",
-            "ty": "list<u32>",
-            "value": "[7, 8]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "W",
+              "ty": "list<u32>",
+              "value": "[7, 8]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,19 +33,23 @@
     "input": "let v = W[(: index / 1)]!",
     "parse": {
       "Command": {
-        "ScriptStatement": "let v = W[(: index / 1)]!"
+        "Unit": {
+          "Fragment": "let v = W[(: index / 1)]!"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "v",
-            "ty": "u32",
-            "value": "8"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "v",
+              "ty": "u32",
+              "value": "8"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -60,13 +68,17 @@
     "input": "v",
     "parse": {
       "Command": {
-        "Expression": "v"
+        "Unit": {
+          "Expression": "v"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "8"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "8"
+        }
       }
     },
     "environment": [
@@ -86,19 +98,23 @@
     "input": "const C: [u32] = [: u32 / 9]",
     "parse": {
       "Command": {
-        "ScriptStatement": "const C: [u32] = [: u32 / 9]"
+        "Unit": {
+          "Fragment": "const C: [u32] = [: u32 / 9]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "C",
-            "ty": "list<u32>",
-            "value": "[9]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "C",
+              "ty": "list<u32>",
+              "value": "[9]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -122,19 +138,23 @@
     "input": "let c = C[(: index / 0)]!",
     "parse": {
       "Command": {
-        "ScriptStatement": "let c = C[(: index / 0)]!"
+        "Unit": {
+          "Fragment": "let c = C[(: index / 0)]!"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "c",
-            "ty": "u32",
-            "value": "9"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "c",
+              "ty": "u32",
+              "value": "9"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -163,13 +183,17 @@
     "input": "c",
     "parse": {
       "Command": {
-        "Expression": "c"
+        "Unit": {
+          "Expression": "c"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "9"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "9"
+        }
       }
     },
     "environment": [
@@ -199,19 +223,23 @@
     "input": "var s: [u32] = [: u32 / 3]",
     "parse": {
       "Command": {
-        "ScriptStatement": "var s: [u32] = [: u32 / 3]"
+        "Unit": {
+          "Fragment": "var s: [u32] = [: u32 / 3]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "s",
-            "ty": "list<u32>",
-            "value": "[3]"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "s",
+              "ty": "list<u32>",
+              "value": "[3]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -245,19 +273,23 @@
     "input": "let t = s[(: index / 0)]!",
     "parse": {
       "Command": {
-        "ScriptStatement": "let t = s[(: index / 0)]!"
+        "Unit": {
+          "Fragment": "let t = s[(: index / 0)]!"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "t",
-            "ty": "u32",
-            "value": "3"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "t",
+              "ty": "u32",
+              "value": "3"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -296,13 +328,17 @@
     "input": "t",
     "parse": {
       "Command": {
-        "Expression": "t"
+        "Unit": {
+          "Expression": "t"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "3"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "3"
+        }
       }
     },
     "environment": [
@@ -342,19 +378,23 @@
     "input": "let p = ([: u32 / 4, : u32 / 5], \"a\")",
     "parse": {
       "Command": {
-        "ScriptStatement": "let p = ([: u32 / 4, : u32 / 5], \"a\")"
+        "Unit": {
+          "Fragment": "let p = ([: u32 / 4, : u32 / 5], \"a\")"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "p",
-            "ty": "(list<u32>, string)",
-            "value": "([4, 5], \"a\")"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "p",
+              "ty": "(list<u32>, string)",
+              "value": "([4, 5], \"a\")"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -398,19 +438,23 @@
     "input": "let q = p.0[(: index / 1)]!",
     "parse": {
       "Command": {
-        "ScriptStatement": "let q = p.0[(: index / 1)]!"
+        "Unit": {
+          "Fragment": "let q = p.0[(: index / 1)]!"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "q",
-            "ty": "u32",
-            "value": "5"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "q",
+              "ty": "u32",
+              "value": "5"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -459,13 +503,17 @@
     "input": "q",
     "parse": {
       "Command": {
-        "Expression": "q"
+        "Unit": {
+          "Expression": "q"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "5"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "5"
+        }
       }
     },
     "environment": [

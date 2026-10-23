@@ -3,17 +3,21 @@
     "input": "fun double(x: int): int\n  ret x + x\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun double(x: int): int\n  ret x + x\nend fun"
+        "Unit": {
+          "Fragment": "fun double(x: int): int\n  ret x + x\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "double"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "double"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -27,13 +31,17 @@
     "input": "double(21)",
     "parse": {
       "Command": {
-        "Expression": "double(21)"
+        "Unit": {
+          "Expression": "double(21)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "42"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "42"
+        }
       }
     },
     "environment": [
@@ -48,17 +56,21 @@
     "input": "fun add(a: int, b: int): int\n  ret a + b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun add(a: int, b: int): int\n  ret a + b\nend fun"
+        "Unit": {
+          "Fragment": "fun add(a: int, b: int): int\n  ret a + b\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "add"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "add"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -77,13 +89,17 @@
     "input": "add(10, 20)",
     "parse": {
       "Command": {
-        "Expression": "add(10, 20)"
+        "Unit": {
+          "Expression": "add(10, 20)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "30"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "30"
+        }
       }
     },
     "environment": [
@@ -103,17 +119,21 @@
     "input": "fun get_five(): int\n  ret 5\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun get_five(): int\n  ret 5\nend fun"
+        "Unit": {
+          "Fragment": "fun get_five(): int\n  ret 5\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "get_five"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "get_five"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -137,13 +157,17 @@
     "input": "get_five()",
     "parse": {
       "Command": {
-        "Expression": "get_five()"
+        "Unit": {
+          "Expression": "get_five()"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "5"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "5"
+        }
       }
     },
     "environment": [

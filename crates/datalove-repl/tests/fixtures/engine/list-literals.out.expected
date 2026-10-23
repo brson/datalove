@@ -3,19 +3,23 @@
     "input": "let nums = [1, 2, 3]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let nums = [1, 2, 3]"
+        "Unit": {
+          "Fragment": "let nums = [1, 2, 3]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "nums",
-            "ty": "list<int>",
-            "value": "[1, 2, 3]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "nums",
+              "ty": "list<int>",
+              "value": "[1, 2, 3]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,13 +33,17 @@
     "input": "nums",
     "parse": {
       "Command": {
-        "Expression": "nums"
+        "Unit": {
+          "Expression": "nums"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "list<int>",
-        "value": "[1, 2, 3]"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "list<int>",
+          "value": "[1, 2, 3]"
+        }
       }
     },
     "environment": [
@@ -50,19 +58,23 @@
     "input": "let words = [\"hello\", \"world\"]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let words = [\"hello\", \"world\"]"
+        "Unit": {
+          "Fragment": "let words = [\"hello\", \"world\"]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "words",
-            "ty": "list<string>",
-            "value": "[\"hello\", \"world\"]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "words",
+              "ty": "list<string>",
+              "value": "[\"hello\", \"world\"]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -81,13 +93,17 @@
     "input": "words",
     "parse": {
       "Command": {
-        "Expression": "words"
+        "Unit": {
+          "Expression": "words"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "list<string>",
-        "value": "[\"hello\", \"world\"]"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "list<string>",
+          "value": "[\"hello\", \"world\"]"
+        }
       }
     },
     "environment": [
@@ -107,19 +123,23 @@
     "input": "let bigger = [10, 20, 30, 40, 50]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let bigger = [10, 20, 30, 40, 50]"
+        "Unit": {
+          "Fragment": "let bigger = [10, 20, 30, 40, 50]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "bigger",
-            "ty": "list<int>",
-            "value": "[10, 20, 30, 40, 50]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "bigger",
+              "ty": "list<int>",
+              "value": "[10, 20, 30, 40, 50]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -143,13 +163,17 @@
     "input": "bigger",
     "parse": {
       "Command": {
-        "Expression": "bigger"
+        "Unit": {
+          "Expression": "bigger"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "list<int>",
-        "value": "[10, 20, 30, 40, 50]"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "list<int>",
+          "value": "[10, 20, 30, 40, 50]"
+        }
       }
     },
     "environment": [

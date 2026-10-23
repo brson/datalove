@@ -3,17 +3,21 @@
     "input": "fun inc(x: int): int\n  ret x + :int/1\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun inc(x: int): int\n  ret x + :int/1\nend fun"
+        "Unit": {
+          "Fragment": "fun inc(x: int): int\n  ret x + :int/1\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "inc"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "inc"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -27,17 +31,21 @@
     "input": "fun double(x: int): int\n  ret x + x\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun double(x: int): int\n  ret x + x\nend fun"
+        "Unit": {
+          "Fragment": "fun double(x: int): int\n  ret x + x\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "double"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "double"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -56,13 +64,17 @@
     "input": "inc(5)",
     "parse": {
       "Command": {
-        "Expression": "inc(5)"
+        "Unit": {
+          "Expression": "inc(5)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "6"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "6"
+        }
       }
     },
     "environment": [
@@ -82,13 +94,17 @@
     "input": "double(5)",
     "parse": {
       "Command": {
-        "Expression": "double(5)"
+        "Unit": {
+          "Expression": "double(5)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "10"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "10"
+        }
       }
     },
     "environment": [
@@ -108,13 +124,17 @@
     "input": "double(inc(5))",
     "parse": {
       "Command": {
-        "Expression": "double(inc(5))"
+        "Unit": {
+          "Expression": "double(inc(5))"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "12"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "12"
+        }
       }
     },
     "environment": [
@@ -134,13 +154,17 @@
     "input": "inc(double(5))",
     "parse": {
       "Command": {
-        "Expression": "inc(double(5))"
+        "Unit": {
+          "Expression": "inc(double(5))"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "11"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "11"
+        }
       }
     },
     "environment": [
@@ -160,17 +184,21 @@
     "input": "fun multiply(a: int, b: int): int\n  ret a * b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun multiply(a: int, b: int): int\n  ret a * b\nend fun"
+        "Unit": {
+          "Fragment": "fun multiply(a: int, b: int): int\n  ret a * b\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "multiply"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "multiply"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -194,17 +222,21 @@
     "input": "fun add(a: int, b: int): int\n  ret a + b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun add(a: int, b: int): int\n  ret a + b\nend fun"
+        "Unit": {
+          "Fragment": "fun add(a: int, b: int): int\n  ret a + b\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "add"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "add"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -233,17 +265,21 @@
     "input": "fun compute(x: int, y: int): int\n  let a = add(x, y)\n  let b = multiply(a, :int/2)\n  ret b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun compute(x: int, y: int): int\n  let a = add(x, y)\n  let b = multiply(a, :int/2)\n  ret b\nend fun"
+        "Unit": {
+          "Fragment": "fun compute(x: int, y: int): int\n  let a = add(x, y)\n  let b = multiply(a, :int/2)\n  ret b\nend fun"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Function": {
-            "name": "compute"
+      "Unit": {
+        "Success": [
+          {
+            "Function": {
+              "name": "compute"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -277,13 +313,17 @@
     "input": "compute(3, 4)",
     "parse": {
       "Command": {
-        "Expression": "compute(3, 4)"
+        "Unit": {
+          "Expression": "compute(3, 4)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "14"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "14"
+        }
       }
     },
     "environment": [

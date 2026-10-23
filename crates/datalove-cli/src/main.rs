@@ -599,7 +599,7 @@ impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         if let Some(script_path) = &self.script {
             let local = command_local_library(Some(script_path))?;
-            datalove::repl::Engine::run_script(datalove::sys_packages::system_library(), local, script_path)
+            datalove::repl::run_script(datalove::sys_packages::system_library(), local, script_path)
         } else {
             let local = command_local_library(None)?;
             // The workspace is the directory `local` is looked for in.
@@ -999,7 +999,7 @@ impl AotCompileCommand {
 }
 
 impl ScriptWorldCommand {
-    /// Run a worldfile's script units in order, in one REPL session.
+    /// Run a worldfile's script units in order, in one engine session.
     ///
     /// A unit that fails to compile, returns early, or reads from one that did
     /// stays in the session and the units after it still run, as they would at
@@ -1008,7 +1008,7 @@ impl ScriptWorldCommand {
         use datalove::datafun;
         use datafun::pipeline::WorkspaceDescriptor;
         use datalove::datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
-        use datalove::repl::{Command, Engine, Eval};
+        use datalove::script_engine::{Engine, Eval, Unit};
 
         // Read and parse the worldfile.
         let file_contents = rmx::std::fs::read_to_string(&self.file_path)
@@ -1020,10 +1020,10 @@ impl ScriptWorldCommand {
             bail!("script-world does not run repl-command sections; `repl --load` does");
         }
         // Each unit with how many lines of the file come before it.
-        let units: Vec<(Command, usize)> = parsed.sections.iter().zip(&parsed.line_offsets)
+        let units: Vec<(Unit, usize)> = parsed.sections.iter().zip(&parsed.line_offsets)
             .filter_map(|(section, offset)| match section {
-                WorldfileSection::ScriptFragment { source } => Some((Command::ScriptStatement(source.C()), *offset)),
-                WorldfileSection::ScriptExpr { source } => Some((Command::Expression(source.C()), *offset)),
+                WorldfileSection::ScriptFragment { source } => Some((Unit::Fragment(source.C()), *offset)),
+                WorldfileSection::ScriptExpr { source } => Some((Unit::Expression(source.C()), *offset)),
                 _ => None,
             })
             .collect();
@@ -1121,7 +1121,6 @@ impl ScriptWorldCommand {
                 // The session is gone, so nothing is left for the rest to run against.
                 Eval::ErrorReset(output) => bail!("{}", output.strip_prefix("Error: ").unwrap_or(&output)),
                 Eval::CrashReset(message) => bail!("{}", message),
-                Eval::CallerInterpret(_) | Eval::Saved { .. } => unreachable!("only script units are evaluated"),
             };
             if let Some(error) = error {
                 if total > 1 {

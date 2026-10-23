@@ -82,6 +82,7 @@ datalove-rider-sys-std = { version = "0.1.0", path = "sys/std/rider" }
 datalove-rt = { version = "0.1.0", path = "crates/datalove-rt" }
 datalove-rtdt = { version = "0.1.0", path = "crates/datalove-rtdt" }
 datalove-rti = { version = "0.1.0", path = "crates/datalove-rti" }
+datalove-script-engine = { version = "0.1.0", path = "crates/datalove-script-engine" }
 datalove-sys-packages = { version = "0.1.0", path = "sys" }
 datalove-worldgen = { version = "0.1.0", path = "crates/datalove-worldgen" }
 

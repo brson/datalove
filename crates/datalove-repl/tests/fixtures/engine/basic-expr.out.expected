@@ -3,19 +3,23 @@
     "input": "let x = 42",
     "parse": {
       "Command": {
-        "ScriptStatement": "let x = 42"
+        "Unit": {
+          "Fragment": "let x = 42"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "x",
-            "ty": "int",
-            "value": "42"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "x",
+              "ty": "int",
+              "value": "42"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,13 +33,17 @@
     "input": "x",
     "parse": {
       "Command": {
-        "Expression": "x"
+        "Unit": {
+          "Expression": "x"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "42"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "42"
+        }
       }
     },
     "environment": [

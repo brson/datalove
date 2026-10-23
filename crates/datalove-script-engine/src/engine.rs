@@ -1,11 +1,11 @@
-//! REPL engine for evaluating Datalove expressions and statements.
+//! The engine, and how it settles the modules a session compiles against.
 
 use rmx::prelude::*;
 use salsa::Setter as _;
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
+use crate::{Unit, Eval, EvalBinding, EvalExpr};
 use datalove_datafun as datafun;
 use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
@@ -209,29 +209,12 @@ fn module_reach(db: &datafun::Database, compiled: &datafun::pipeline::CompiledMo
 pub type OnCompileError<'a> =
     &'a mut dyn FnMut(&ScriptCompiler<'_>, &datafun::pipeline::ScriptCompilationResult);
 
-/// One input's parse and eval, and the environment it left behind.
-#[derive(Debug, Serialize)]
-pub struct InputResult {
-    pub input: String,
-    pub parse: InputParse,
-    pub eval: Option<Eval>,
-    pub environment: Vec<EnvBinding>,
-}
-
 /// What re-deriving one unit after an edit came to.
 #[derive(Debug, Serialize)]
 pub struct UnitEdit {
     /// The unit's index in the session.
     pub unit: usize,
     pub eval: Eval,
-}
-
-/// An environment binding as reported after an input.
-#[derive(Debug, Serialize)]
-pub struct EnvBinding {
-    pub name: String,
-    pub ty: String,
-    pub value: String,
 }
 
 /// A fresh session: everything the engine rebuilds when it resets.
@@ -381,7 +364,10 @@ impl Engine {
         &self.pipeline
     }
 
-    fn reset(&mut self) {
+    /// Start the session again, forgetting every unit in it.
+    ///
+    /// The modules stay compiled, and the riders built and loaded.
+    pub fn reset(&mut self) {
         // Cleanup the current executor.
         self.executor.destroy_live_values();
         // An empty session requires nothing, so the roots go back to what they
@@ -463,64 +449,17 @@ impl Engine {
         self.script.as_ref().expect("a session").unit_sources()
     }
 
-    pub fn parse_input(&mut self, input: Input) -> InputParse {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.parse_input_impl(input.C())
-        }));
-
-        match result {
-            Ok(parse_result) => parse_result,
-            Err(panic_info) => {
-                self.reset();
-                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                    s.S()
-                } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                    s.C()
-                } else {
-                    "Unknown panic".S()
-                };
-                InputParse::CrashReset(format!("Parse panic: {}", panic_msg))
-            }
-        }
-    }
-
-    fn parse_input_impl(&mut self, input: Input) -> InputParse {
-        match input {
-            Input::Input(s) => self.parse_input_oneline(&s),
-            Input::Multiline(s) => self.parse_input_multiline(&s),
-        }
-    }
-
-    fn parse_input_oneline(&mut self, input: &str) -> InputParse {
-        match crate::classify_input(input) {
-            crate::InputKind::Whitespace => InputParse::Empty,
-            crate::InputKind::ReplCommand => Command::repl_command(input),
-            crate::InputKind::OnelineStatement => Command::script_statement(input),
-            crate::InputKind::MultilineStatement => InputParse::ReadMultiline(S(input)),
-            crate::InputKind::OpenBraceTree => InputParse::ReadMultiline(S(input)),
-            crate::InputKind::Expression => Command::expression(input),
-        }
-    }
-
-    fn parse_input_multiline(&mut self, input: &str) -> InputParse {
-        match crate::classify_input(input) {
-            crate::InputKind::Whitespace => InputParse::Empty,
-            crate::InputKind::ReplCommand => Command::repl_command(input),
-            crate::InputKind::OnelineStatement => Command::script_statement(input),
-            crate::InputKind::MultilineStatement => Command::script_statement(input),
-            crate::InputKind::OpenBraceTree => todo!(),
-            crate::InputKind::Expression => Command::expression(input),
-        }
-    }
-
-    pub fn eval(&mut self, command: Command) -> Eval {
-        self.eval_reporting(command, &mut |_, _| {})
+    /// Compile and run a unit as the session's next.
+    ///
+    /// A panic resets the session, and is reported as [`Eval::CrashReset`].
+    pub fn eval(&mut self, unit: Unit) -> Eval {
+        self.eval_reporting(unit, &mut |_, _| {})
     }
 
     /// The same, showing `on_error` a unit that does not compile.
-    pub fn eval_reporting(&mut self, command: Command, on_error: OnCompileError<'_>) -> Eval {
+    pub fn eval_reporting(&mut self, unit: Unit, on_error: OnCompileError<'_>) -> Eval {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.eval_impl(command.C(), on_error)
+            self.eval_impl(unit, on_error)
         }));
 
         match result {
@@ -539,32 +478,10 @@ impl Engine {
         }
     }
 
-    fn eval_impl(&mut self, command: Command, on_error: OnCompileError<'_>) -> Eval {
-        match command {
-            Command::ReplCommand(repl_command) => self.eval_repl_command(repl_command),
-            Command::ScriptStatement(source) => self.eval_script_statement(source, on_error),
-            Command::Expression(source) => self.eval_expression(source, on_error),
-        }
-    }
-
-    fn eval_repl_command(&mut self, command: ReplCommand) -> Eval {
-        match command {
-            ReplCommand::Unknown => {
-                Eval::Error("unknown command".S())
-            }
-            ReplCommand::Help => {
-                Eval::CallerInterpret(command)
-            }
-            ReplCommand::Exit => {
-                Eval::CallerInterpret(command)
-            }
-            ReplCommand::Reset => {
-                self.reset();
-                Eval::CallerInterpret(command)
-            }
-            ReplCommand::Save => {
-                Eval::CallerInterpret(command)
-            }
+    fn eval_impl(&mut self, unit: Unit, on_error: OnCompileError<'_>) -> Eval {
+        match unit {
+            Unit::Fragment(source) => self.eval_script_statement(source, on_error),
+            Unit::Expression(source) => self.eval_expression(source, on_error),
         }
     }
 
@@ -971,63 +888,6 @@ impl Engine {
     /// binding of each name.
     pub fn unit_bindings(&mut self, unit: usize) -> Vec<(String, Option<String>)> {
         self.executor.unit_bindings(unit)
-    }
-
-    /// Evaluate a script of inputs, one result per input.
-    ///
-    /// Inputs are separated by a line holding only `---`. An input spanning
-    /// several lines is submitted the way the UI submits a multiline entry, so
-    /// definitions that span lines are evaluated rather than left waiting for
-    /// more input.
-    pub fn run_source(&mut self, source: &str) -> Vec<InputResult> {
-        let mut results = Vec::new();
-
-        for section in source.split("\n---\n") {
-            let input = section.trim();
-            if input.is_empty() {
-                continue;
-            }
-
-            let repl_input = if input.contains('\n') {
-                Input::Multiline(input.S())
-            } else {
-                Input::Input(input.S())
-            };
-
-            let parse = self.parse_input(repl_input);
-            let eval = match &parse {
-                InputParse::Command(command) => Some(self.eval(command.C())),
-                _ => None,
-            };
-            let environment = self.get_environment()
-                .into_iter()
-                .map(|(name, ty, value)| EnvBinding { name, ty, value })
-                .collect();
-
-            results.push(InputResult { input: input.S(), parse, eval, environment });
-        }
-
-        results
-    }
-
-    /// Execute a script file and print one JSON result per input.
-    ///
-    /// `local` is the workspace's own library, if it has one.
-    pub fn run_script(
-        sys: SystemLibrary,
-        local: Option<PackageLibrary>,
-        script_path: &std::path::Path,
-    ) -> AnyResult<()> {
-        let mut engine = Self::with_local(sys, local)?;
-        let contents = std::fs::read_to_string(script_path)
-            .context("failed to read script file")?;
-
-        for result in engine.run_source(&contents) {
-            println!("{}", rmx::serde_json::to_string(&result)?);
-        }
-
-        // Engine's Drop impl will call destroy_all().
-        Ok(())
     }
 }
 

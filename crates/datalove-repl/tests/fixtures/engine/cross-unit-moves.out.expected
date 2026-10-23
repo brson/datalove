@@ -3,19 +3,23 @@
     "input": "let a = [1, 2]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let a = [1, 2]"
+        "Unit": {
+          "Fragment": "let a = [1, 2]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "a",
-            "ty": "list<int>",
-            "value": "[1, 2]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "a",
+              "ty": "list<int>",
+              "value": "[1, 2]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,19 +33,23 @@
     "input": "let b = a",
     "parse": {
       "Command": {
-        "ScriptStatement": "let b = a"
+        "Unit": {
+          "Fragment": "let b = a"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "b",
-            "ty": "list<int>",
-            "value": "[1, 2]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "b",
+              "ty": "list<int>",
+              "value": "[1, 2]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -60,11 +68,15 @@
     "input": "let c = a",
     "parse": {
       "Command": {
-        "ScriptStatement": "let c = a"
+        "Unit": {
+          "Fragment": "let c = a"
+        }
       }
     },
     "eval": {
-      "Error": "error[D013]: `a` was given away by an earlier input\n  help: use `@` to clone `a` where it was given away"
+      "Unit": {
+        "Error": "error[D013]: `a` was given away by an earlier input\n  help: use `@` to clone `a` where it was given away"
+      }
     },
     "environment": [
       {
@@ -83,13 +95,17 @@
     "input": "b",
     "parse": {
       "Command": {
-        "Expression": "b"
+        "Unit": {
+          "Expression": "b"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "list<int>",
-        "value": "[1, 2]"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "list<int>",
+          "value": "[1, 2]"
+        }
       }
     },
     "environment": [
@@ -109,26 +125,30 @@
     "input": "let d = [3, 4]\nlet e = d",
     "parse": {
       "Command": {
-        "ScriptStatement": "let d = [3, 4]\nlet e = d"
+        "Unit": {
+          "Fragment": "let d = [3, 4]\nlet e = d"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "d",
-            "ty": "list<int>",
-            "value": "[3, 4]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "d",
+              "ty": "list<int>",
+              "value": "[3, 4]"
+            }
+          },
+          {
+            "Value": {
+              "name": "e",
+              "ty": "list<int>",
+              "value": "[3, 4]"
+            }
           }
-        },
-        {
-          "Value": {
-            "name": "e",
-            "ty": "list<int>",
-            "value": "[3, 4]"
-          }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -157,11 +177,15 @@
     "input": "d",
     "parse": {
       "Command": {
-        "Expression": "d"
+        "Unit": {
+          "Expression": "d"
+        }
       }
     },
     "eval": {
-      "Error": "error[D013]: `d` was given away by an earlier input\n  help: use `@` to clone `d` where it was given away"
+      "Unit": {
+        "Error": "error[D013]: `d` was given away by an earlier input\n  help: use `@` to clone `d` where it was given away"
+      }
     },
     "environment": [
       {
@@ -190,19 +214,23 @@
     "input": "var v = [5]",
     "parse": {
       "Command": {
-        "ScriptStatement": "var v = [5]"
+        "Unit": {
+          "Fragment": "var v = [5]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "v",
-            "ty": "list<int>",
-            "value": "[5]"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "v",
+              "ty": "list<int>",
+              "value": "[5]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -236,19 +264,23 @@
     "input": "let w = v",
     "parse": {
       "Command": {
-        "ScriptStatement": "let w = v"
+        "Unit": {
+          "Fragment": "let w = v"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "w",
-            "ty": "list<int>",
-            "value": "[5]"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "w",
+              "ty": "list<int>",
+              "value": "[5]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -287,11 +319,15 @@
     "input": "v",
     "parse": {
       "Command": {
-        "Expression": "v"
+        "Unit": {
+          "Expression": "v"
+        }
       }
     },
     "eval": {
-      "Error": "error[D013]: `v` was given away by an earlier input\n  help: use `@` to clone `v` where it was given away"
+      "Unit": {
+        "Error": "error[D013]: `v` was given away by an earlier input\n  help: use `@` to clone `v` where it was given away"
+      }
     },
     "environment": [
       {
@@ -330,10 +366,14 @@
     "input": "set v = [6]",
     "parse": {
       "Command": {
-        "ScriptStatement": "set v = [6]"
+        "Unit": {
+          "Fragment": "set v = [6]"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "a",
@@ -371,13 +411,17 @@
     "input": "v",
     "parse": {
       "Command": {
-        "Expression": "v"
+        "Unit": {
+          "Expression": "v"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "list<int>",
-        "value": "[6]"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "list<int>",
+          "value": "[6]"
+        }
       }
     },
     "environment": [

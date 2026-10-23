@@ -3,33 +3,45 @@
     "input": "require module sys/std/u8",
     "parse": {
       "Command": {
-        "ScriptStatement": "require module sys/std/u8"
+        "Unit": {
+          "Fragment": "require module sys/std/u8"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   },
   {
     "input": "require module sys/std/i8",
     "parse": {
       "Command": {
-        "ScriptStatement": "require module sys/std/i8"
+        "Unit": {
+          "Fragment": "require module sys/std/i8"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   },
   {
     "input": "u8.max_value()",
     "parse": {
       "Command": {
-        "Expression": "u8.max_value()"
+        "Unit": {
+          "Expression": "u8.max_value()"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u8",
-        "value": "255"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u8",
+          "value": "255"
+        }
       }
     },
     "environment": []
@@ -38,19 +50,23 @@
     "input": "let a: ?i8 = i8.from_int(ref 300)",
     "parse": {
       "Command": {
-        "ScriptStatement": "let a: ?i8 = i8.from_int(ref 300)"
+        "Unit": {
+          "Fragment": "let a: ?i8 = i8.from_int(ref 300)"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "a",
-            "ty": "option<i8>",
-            "value": "none"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "a",
+              "ty": "option<i8>",
+              "value": "none"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -64,13 +80,17 @@
     "input": "a",
     "parse": {
       "Command": {
-        "Expression": "a"
+        "Unit": {
+          "Expression": "a"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "option<i8>",
-        "value": "none"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "option<i8>",
+          "value": "none"
+        }
       }
     },
     "environment": [
@@ -85,19 +105,23 @@
     "input": "var xs: [u32] = [1]",
     "parse": {
       "Command": {
-        "ScriptStatement": "var xs: [u32] = [1]"
+        "Unit": {
+          "Fragment": "var xs: [u32] = [1]"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Slot": {
-            "name": "xs",
-            "ty": "list<u32>",
-            "value": "[1]"
+      "Unit": {
+        "Success": [
+          {
+            "Slot": {
+              "name": "xs",
+              "ty": "list<u32>",
+              "value": "[1]"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -116,10 +140,14 @@
     "input": "require module sys/std/list",
     "parse": {
       "Command": {
-        "ScriptStatement": "require module sys/std/list"
+        "Unit": {
+          "Fragment": "require module sys/std/list"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "a",
@@ -137,10 +165,14 @@
     "input": "call list.push(mut xs, 2)",
     "parse": {
       "Command": {
-        "ScriptStatement": "call list.push(mut xs, 2)"
+        "Unit": {
+          "Fragment": "call list.push(mut xs, 2)"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": [
       {
         "name": "a",
@@ -158,13 +190,17 @@
     "input": "xs",
     "parse": {
       "Command": {
-        "Expression": "xs"
+        "Unit": {
+          "Expression": "xs"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "list<u32>",
-        "value": "[1, 2]"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "list<u32>",
+          "value": "[1, 2]"
+        }
       }
     },
     "environment": [

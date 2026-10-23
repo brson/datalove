@@ -5,6 +5,7 @@ use rmx::prelude::*;
 
 use datalove_repl::app::{EntryStatus, ReplApp};
 use datalove_repl::{Command, ReplCommand, ThreadedExecutor, load_session};
+use datalove_repl::script::Unit;
 
 type App = ReplApp<ThreadedExecutor>;
 
@@ -69,12 +70,12 @@ fn a_saved_history_loads_back_to_the_same_session() {
     let inputs = load_session(&first_path).X();
     let kinds: Vec<&Command> = inputs.iter().map(|saved| &saved.command).collect();
     assert!(matches!(kinds[..], [
-        Command::ScriptStatement(_),
-        Command::ScriptStatement(_),
-        Command::ScriptStatement(_),
+        Command::Unit(Unit::Fragment(_)),
+        Command::Unit(Unit::Fragment(_)),
+        Command::Unit(Unit::Fragment(_)),
         Command::ReplCommand(ReplCommand::Help),
         Command::ReplCommand(ReplCommand::Unknown),
-        Command::Expression(_),
+        Command::Unit(Unit::Expression(_)),
     ]), "the save itself is not replayed: {kinds:?}");
 
     let mut second = app(&second_path);

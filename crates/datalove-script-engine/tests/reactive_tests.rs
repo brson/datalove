@@ -37,7 +37,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use datalove_ct::query_events::QueryRecorder;
-use datalove_repl::{Command, Engine, Eval};
+use datalove_script_engine::{Engine, Eval, Unit};
 
 const SEPARATOR: &str = "----------";
 
@@ -496,7 +496,7 @@ impl Session {
         recompiled
     }
 
-    fn reported(&self, reports: Vec<datalove_repl::UnitEdit>) -> Vec<(String, Ran)> {
+    fn reported(&self, reports: Vec<datalove_script_engine::UnitEdit>) -> Vec<(String, Ran)> {
         reports.iter()
             .map(|report| (self.units[report.unit].C(), ran(&report.eval)))
             .collect()
@@ -509,7 +509,7 @@ impl Session {
             .unwrap_or(0) + 1;
         let unit = next.to_string();
         self.units.push(unit.C());
-        let eval = self.engine.eval(Command::ScriptStatement(source.S()));
+        let eval = self.engine.eval(Unit::Fragment(source.S()));
         (unit, ran(&eval))
     }
 }

@@ -2,6 +2,7 @@
 
 use rmx::prelude::*;
 use datalove_repl as repl;
+use repl::script;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -80,17 +81,17 @@ fn panel_border<E: ReplExecutor>(repl: &ReplApp<E>, panel: Panel) -> Style {
 }
 
 /// Render one binding a fragment defined.
-fn binding_line(binding: &repl::EvalBinding) -> Line<'_> {
+fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
     let check = ratatui::text::Span::styled("  ✓ ", Style::default().fg(Color::Green));
 
     match binding {
-        repl::EvalBinding::Function { name } => Line::from(vec![
+        script::EvalBinding::Function { name } => Line::from(vec![
             check,
             ratatui::text::Span::raw("fun "),
             ratatui::text::Span::styled(name, Style::default().fg(Color::Cyan)),
         ]),
-        repl::EvalBinding::Value { name, ty, value }
-        | repl::EvalBinding::Slot { name, ty, value } => Line::from(vec![
+        script::EvalBinding::Value { name, ty, value }
+        | script::EvalBinding::Slot { name, ty, value } => Line::from(vec![
             check,
             ratatui::text::Span::styled(name, Style::default().fg(Color::Cyan)),
             ratatui::text::Span::raw(": "),
@@ -192,7 +193,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
             EntryStatus::Success => {
                 if let Some(eval) = &entry.eval_result {
                     match eval {
-                        repl::Eval::Nothing => {
+                        repl::Eval::Unit(script::Eval::Nothing) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
                                     "  ✓ ",
@@ -201,12 +202,12 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 ratatui::text::Span::raw("nothing"),
                             ]));
                         }
-                        repl::Eval::Success(bindings) => {
+                        repl::Eval::Unit(script::Eval::Success(bindings)) => {
                             for binding in bindings {
                                 lines.push(binding_line(binding));
                             }
                         }
-                        repl::Eval::SuccessExpr(eval_expr) => {
+                        repl::Eval::Unit(script::Eval::SuccessExpr(eval_expr)) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
                                     "  ⇒ ",
@@ -229,7 +230,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 ratatui::text::Span::raw(format!("saved {inputs} inputs to {path}")),
                             ]));
                         }
-                        repl::Eval::Error(e) => {
+                        repl::Eval::Unit(script::Eval::Error(e)) | repl::Eval::CommandError(e) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
                                     "  ✗ ",
@@ -263,7 +264,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 }
                             }
                         }
-                        repl::Eval::ErrorReset(e) => {
+                        repl::Eval::Unit(script::Eval::ErrorReset(e)) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
                                     "  ✗ ",
@@ -275,10 +276,10 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 ),
                             ]));
                         }
-                        repl::Eval::ReturnedEarly(_) | repl::Eval::Blocked { .. } => {
+                        repl::Eval::Unit(script::Eval::ReturnedEarly(_) | script::Eval::Blocked { .. }) => {
                             unreachable!("the app reports a unit that did not run as an error")
                         }
-                        repl::Eval::CrashReset(_msg) => {
+                        repl::Eval::Unit(script::Eval::CrashReset(_msg)) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
                                     "  💥 ",
@@ -296,11 +297,11 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
             EntryStatus::Error => {
                 // Try to extract error message from eval_result.
                 let error_msg = match &entry.eval_result {
-                    Some(repl::Eval::Error(e)) => format!("error: {}", e),
-                    Some(repl::Eval::ReturnedEarly(returned)) => {
+                    Some(repl::Eval::Unit(script::Eval::Error(e)) | repl::Eval::CommandError(e)) => format!("error: {}", e),
+                    Some(repl::Eval::Unit(script::Eval::ReturnedEarly(returned))) => {
                         format!("returned early: {returned}")
                     }
-                    Some(repl::Eval::Blocked { on }) => {
+                    Some(repl::Eval::Unit(script::Eval::Blocked { on })) => {
                         format!("not run: it reads from units {on:?}, which did not finish")
                     }
                     _ => "error".S(),

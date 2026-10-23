@@ -3,19 +3,23 @@
     "input": "let a: int = 100",
     "parse": {
       "Command": {
-        "ScriptStatement": "let a: int = 100"
+        "Unit": {
+          "Fragment": "let a: int = 100"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "a",
-            "ty": "int",
-            "value": "100"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "a",
+              "ty": "int",
+              "value": "100"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,19 +33,23 @@
     "input": "let b: int = 200",
     "parse": {
       "Command": {
-        "ScriptStatement": "let b: int = 200"
+        "Unit": {
+          "Fragment": "let b: int = 200"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "b",
-            "ty": "int",
-            "value": "200"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "b",
+              "ty": "int",
+              "value": "200"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -60,13 +68,17 @@
     "input": "a + b",
     "parse": {
       "Command": {
-        "Expression": "a + b"
+        "Unit": {
+          "Expression": "a + b"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "300"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "300"
+        }
       }
     },
     "environment": [

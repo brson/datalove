@@ -3,11 +3,15 @@
     "input": "let u8_overflow: u8 = 256",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u8_overflow: u8 = 256"
+        "Unit": {
+          "Fragment": "let u8_overflow: u8 = 256"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -15,11 +19,15 @@
     "input": "let u8_negative: u8 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u8_negative: u8 = -1"
+        "Unit": {
+          "Fragment": "let u8_negative: u8 = -1"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -27,11 +35,15 @@
     "input": "let i8_overflow: i8 = 128",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i8_overflow: i8 = 128"
+        "Unit": {
+          "Fragment": "let i8_overflow: i8 = 128"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -39,11 +51,15 @@
     "input": "let i8_underflow: i8 = -129",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i8_underflow: i8 = -129"
+        "Unit": {
+          "Fragment": "let i8_underflow: i8 = -129"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -51,11 +67,15 @@
     "input": "let u16_overflow: u16 = 65536",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u16_overflow: u16 = 65536"
+        "Unit": {
+          "Fragment": "let u16_overflow: u16 = 65536"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -63,11 +83,15 @@
     "input": "let u16_negative: u16 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u16_negative: u16 = -1"
+        "Unit": {
+          "Fragment": "let u16_negative: u16 = -1"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -75,11 +99,15 @@
     "input": "let i16_overflow: i16 = 32768",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i16_overflow: i16 = 32768"
+        "Unit": {
+          "Fragment": "let i16_overflow: i16 = 32768"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -87,11 +115,15 @@
     "input": "let i16_underflow: i16 = -32769",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i16_underflow: i16 = -32769"
+        "Unit": {
+          "Fragment": "let i16_underflow: i16 = -32769"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -99,11 +131,15 @@
     "input": "let u32_overflow: u32 = 4294967296",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u32_overflow: u32 = 4294967296"
+        "Unit": {
+          "Fragment": "let u32_overflow: u32 = 4294967296"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -111,11 +147,15 @@
     "input": "let u32_negative: u32 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u32_negative: u32 = -1"
+        "Unit": {
+          "Fragment": "let u32_negative: u32 = -1"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -123,11 +163,15 @@
     "input": "let i32_overflow: i32 = 2147483648",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i32_overflow: i32 = 2147483648"
+        "Unit": {
+          "Fragment": "let i32_overflow: i32 = 2147483648"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -135,11 +179,15 @@
     "input": "let i32_underflow: i32 = -2147483649",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i32_underflow: i32 = -2147483649"
+        "Unit": {
+          "Fragment": "let i32_underflow: i32 = -2147483649"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -147,11 +195,15 @@
     "input": "let u64_overflow: u64 = 18446744073709551616",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u64_overflow: u64 = 18446744073709551616"
+        "Unit": {
+          "Fragment": "let u64_overflow: u64 = 18446744073709551616"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -159,11 +211,15 @@
     "input": "let u64_negative: u64 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u64_negative: u64 = -1"
+        "Unit": {
+          "Fragment": "let u64_negative: u64 = -1"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -171,11 +227,15 @@
     "input": "let i64_overflow: i64 = 9223372036854775808",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i64_overflow: i64 = 9223372036854775808"
+        "Unit": {
+          "Fragment": "let i64_overflow: i64 = 9223372036854775808"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   },
@@ -183,11 +243,15 @@
     "input": "let i64_underflow: i64 = -9223372036854775809",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i64_underflow: i64 = -9223372036854775809"
+        "Unit": {
+          "Fragment": "let i64_underflow: i64 = -9223372036854775809"
+        }
       }
     },
     "eval": {
-      "Error": "IntOutOfRange"
+      "Unit": {
+        "Error": "IntOutOfRange"
+      }
     },
     "environment": []
   }

@@ -3,41 +3,57 @@
     "input": "require module sys/std/int",
     "parse": {
       "Command": {
-        "ScriptStatement": "require module sys/std/int"
+        "Unit": {
+          "Fragment": "require module sys/std/int"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   },
   {
     "input": "require module sys/std/i32",
     "parse": {
       "Command": {
-        "ScriptStatement": "require module sys/std/i32"
+        "Unit": {
+          "Fragment": "require module sys/std/i32"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   },
   {
     "input": "import int.abs",
     "parse": {
       "Command": {
-        "ScriptStatement": "import int.abs"
+        "Unit": {
+          "Fragment": "import int.abs"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   },
   {
     "input": "import i32.abs",
     "parse": {
       "Command": {
-        "ScriptStatement": "import i32.abs"
+        "Unit": {
+          "Fragment": "import i32.abs"
+        }
       }
     },
     "eval": {
-      "Error": "DuplicateImport { name: \"abs\", first: \"sys/std/int\", second: \"sys/std/i32\" }"
+      "Unit": {
+        "Error": "DuplicateImport { name: \"abs\", first: \"sys/std/int\", second: \"sys/std/i32\" }"
+      }
     },
     "environment": []
   },
@@ -45,13 +61,17 @@
     "input": "abs(-5)",
     "parse": {
       "Command": {
-        "Expression": "abs(-5)"
+        "Unit": {
+          "Expression": "abs(-5)"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "int",
-        "value": "5"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "int",
+          "value": "5"
+        }
       }
     },
     "environment": []
@@ -60,10 +80,14 @@
     "input": "import int.abs",
     "parse": {
       "Command": {
-        "ScriptStatement": "import int.abs"
+        "Unit": {
+          "Fragment": "import int.abs"
+        }
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Unit": "Nothing"
+    },
     "environment": []
   }
 ]

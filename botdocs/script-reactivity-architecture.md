@@ -418,8 +418,8 @@ separate test pins that the fixture has the shape the claim is about.
 | `datalove-datafun/tests/script_scenario_tests` | the edit-kind matrix, the module cases, a twelve-unit session, blanking, ownership and rewinding |
 | `datalove-datafun/tests/script_const_tests` | consts across units and into function bodies |
 | `datalove-datafun/tests/script_splice_tests` | truncate, remove and insert: the suffix, the values, a suffix that stops compiling |
-| `datalove-repl/tests/engine_edit_tests` | the shipped entry points end to end, failed units going green, modules joining and breaking, rewinding |
-| `datalove-repl/tests/reactive_tests` | the step tables in `tests/fixtures/reactive/`, and that [script-reactivity-cases.md](script-reactivity-cases.md) shows them as rendered |
+| `datalove-script-engine/tests/engine_edit_tests` | the shipped entry points end to end, failed units going green, modules joining and breaking, rewinding |
+| `datalove-script-engine/tests/reactive_tests` | the step tables in `tests/fixtures/reactive/`, and that [script-reactivity-cases.md](script-reactivity-cases.md) shows them as rendered |
 
 A step table says what each unit should do per step, with the engine's known
 extra work annotated. There, a unit counts as recompiled if salsa ran its

@@ -101,7 +101,8 @@ Reference for the datalove-datafun compiler architecture.
 | Crate | Responsibility |
 |-------|----------------|
 | `datalove-cli` | Command line driver: build, run, AOT, native component linking |
-| `datalove-repl` | REPL evaluation engine |
+| `datalove-repl` | REPL inputs, commands and UI-agnostic app |
+| `datalove-script-engine` | Interactive scripting engine: script units in a session |
 | `datalove-repl-rat` | Ratatui REPL application and terminal |
 | `datalove-sys-packages` (`sys/`) | The system library as the binary carries it: embedded sources, linked riders. The library is the crate root, so it can be packaged |
 | `datalove-rider-sys-std` (`sys/std/rider`) | Native rider implementations for `sys/std` |

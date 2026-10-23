@@ -3,19 +3,23 @@
     "input": "let u8_min: u8 = 0",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u8_min: u8 = 0"
+        "Unit": {
+          "Fragment": "let u8_min: u8 = 0"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u8_min",
-            "ty": "u8",
-            "value": "0"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u8_min",
+              "ty": "u8",
+              "value": "0"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -29,13 +33,17 @@
     "input": "u8_min",
     "parse": {
       "Command": {
-        "Expression": "u8_min"
+        "Unit": {
+          "Expression": "u8_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u8",
-        "value": "0"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u8",
+          "value": "0"
+        }
       }
     },
     "environment": [
@@ -50,19 +58,23 @@
     "input": "let u8_max: u8 = 255",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u8_max: u8 = 255"
+        "Unit": {
+          "Fragment": "let u8_max: u8 = 255"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u8_max",
-            "ty": "u8",
-            "value": "255"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u8_max",
+              "ty": "u8",
+              "value": "255"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -81,13 +93,17 @@
     "input": "u8_max",
     "parse": {
       "Command": {
-        "Expression": "u8_max"
+        "Unit": {
+          "Expression": "u8_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u8",
-        "value": "255"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u8",
+          "value": "255"
+        }
       }
     },
     "environment": [
@@ -107,19 +123,23 @@
     "input": "let i8_min: i8 = -128",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i8_min: i8 = -128"
+        "Unit": {
+          "Fragment": "let i8_min: i8 = -128"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i8_min",
-            "ty": "i8",
-            "value": "-128"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i8_min",
+              "ty": "i8",
+              "value": "-128"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -143,13 +163,17 @@
     "input": "i8_min",
     "parse": {
       "Command": {
-        "Expression": "i8_min"
+        "Unit": {
+          "Expression": "i8_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i8",
-        "value": "-128"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i8",
+          "value": "-128"
+        }
       }
     },
     "environment": [
@@ -174,19 +198,23 @@
     "input": "let i8_max: i8 = 127",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i8_max: i8 = 127"
+        "Unit": {
+          "Fragment": "let i8_max: i8 = 127"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i8_max",
-            "ty": "i8",
-            "value": "127"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i8_max",
+              "ty": "i8",
+              "value": "127"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -215,13 +243,17 @@
     "input": "i8_max",
     "parse": {
       "Command": {
-        "Expression": "i8_max"
+        "Unit": {
+          "Expression": "i8_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i8",
-        "value": "127"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i8",
+          "value": "127"
+        }
       }
     },
     "environment": [
@@ -251,19 +283,23 @@
     "input": "let u16_min: u16 = 0",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u16_min: u16 = 0"
+        "Unit": {
+          "Fragment": "let u16_min: u16 = 0"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u16_min",
-            "ty": "u16",
-            "value": "0"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u16_min",
+              "ty": "u16",
+              "value": "0"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -297,13 +333,17 @@
     "input": "u16_min",
     "parse": {
       "Command": {
-        "Expression": "u16_min"
+        "Unit": {
+          "Expression": "u16_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u16",
-        "value": "0"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u16",
+          "value": "0"
+        }
       }
     },
     "environment": [
@@ -338,19 +378,23 @@
     "input": "let u16_max: u16 = 65535",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u16_max: u16 = 65535"
+        "Unit": {
+          "Fragment": "let u16_max: u16 = 65535"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u16_max",
-            "ty": "u16",
-            "value": "65535"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u16_max",
+              "ty": "u16",
+              "value": "65535"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -389,13 +433,17 @@
     "input": "u16_max",
     "parse": {
       "Command": {
-        "Expression": "u16_max"
+        "Unit": {
+          "Expression": "u16_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u16",
-        "value": "65535"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u16",
+          "value": "65535"
+        }
       }
     },
     "environment": [
@@ -435,19 +483,23 @@
     "input": "let i16_min: i16 = -32768",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i16_min: i16 = -32768"
+        "Unit": {
+          "Fragment": "let i16_min: i16 = -32768"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i16_min",
-            "ty": "i16",
-            "value": "-32768"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i16_min",
+              "ty": "i16",
+              "value": "-32768"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -491,13 +543,17 @@
     "input": "i16_min",
     "parse": {
       "Command": {
-        "Expression": "i16_min"
+        "Unit": {
+          "Expression": "i16_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i16",
-        "value": "-32768"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i16",
+          "value": "-32768"
+        }
       }
     },
     "environment": [
@@ -542,19 +598,23 @@
     "input": "let i16_max: i16 = 32767",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i16_max: i16 = 32767"
+        "Unit": {
+          "Fragment": "let i16_max: i16 = 32767"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i16_max",
-            "ty": "i16",
-            "value": "32767"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i16_max",
+              "ty": "i16",
+              "value": "32767"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -603,13 +663,17 @@
     "input": "i16_max",
     "parse": {
       "Command": {
-        "Expression": "i16_max"
+        "Unit": {
+          "Expression": "i16_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i16",
-        "value": "32767"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i16",
+          "value": "32767"
+        }
       }
     },
     "environment": [
@@ -659,19 +723,23 @@
     "input": "let u32_min: u32 = 0",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u32_min: u32 = 0"
+        "Unit": {
+          "Fragment": "let u32_min: u32 = 0"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u32_min",
-            "ty": "u32",
-            "value": "0"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u32_min",
+              "ty": "u32",
+              "value": "0"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -725,13 +793,17 @@
     "input": "u32_min",
     "parse": {
       "Command": {
-        "Expression": "u32_min"
+        "Unit": {
+          "Expression": "u32_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "0"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "0"
+        }
       }
     },
     "environment": [
@@ -786,19 +858,23 @@
     "input": "let u32_max: u32 = 4294967295",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u32_max: u32 = 4294967295"
+        "Unit": {
+          "Fragment": "let u32_max: u32 = 4294967295"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u32_max",
-            "ty": "u32",
-            "value": "4294967295"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u32_max",
+              "ty": "u32",
+              "value": "4294967295"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -857,13 +933,17 @@
     "input": "u32_max",
     "parse": {
       "Command": {
-        "Expression": "u32_max"
+        "Unit": {
+          "Expression": "u32_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u32",
-        "value": "4294967295"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u32",
+          "value": "4294967295"
+        }
       }
     },
     "environment": [
@@ -923,19 +1003,23 @@
     "input": "let i32_min: i32 = -2147483648",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i32_min: i32 = -2147483648"
+        "Unit": {
+          "Fragment": "let i32_min: i32 = -2147483648"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i32_min",
-            "ty": "i32",
-            "value": "-2147483648"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i32_min",
+              "ty": "i32",
+              "value": "-2147483648"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -999,13 +1083,17 @@
     "input": "i32_min",
     "parse": {
       "Command": {
-        "Expression": "i32_min"
+        "Unit": {
+          "Expression": "i32_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i32",
-        "value": "-2147483648"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i32",
+          "value": "-2147483648"
+        }
       }
     },
     "environment": [
@@ -1070,19 +1158,23 @@
     "input": "let i32_max: i32 = 2147483647",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i32_max: i32 = 2147483647"
+        "Unit": {
+          "Fragment": "let i32_max: i32 = 2147483647"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i32_max",
-            "ty": "i32",
-            "value": "2147483647"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i32_max",
+              "ty": "i32",
+              "value": "2147483647"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -1151,13 +1243,17 @@
     "input": "i32_max",
     "parse": {
       "Command": {
-        "Expression": "i32_max"
+        "Unit": {
+          "Expression": "i32_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i32",
-        "value": "2147483647"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i32",
+          "value": "2147483647"
+        }
       }
     },
     "environment": [
@@ -1227,19 +1323,23 @@
     "input": "let u64_min: u64 = 0",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u64_min: u64 = 0"
+        "Unit": {
+          "Fragment": "let u64_min: u64 = 0"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u64_min",
-            "ty": "u64",
-            "value": "0"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u64_min",
+              "ty": "u64",
+              "value": "0"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -1313,13 +1413,17 @@
     "input": "u64_min",
     "parse": {
       "Command": {
-        "Expression": "u64_min"
+        "Unit": {
+          "Expression": "u64_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u64",
-        "value": "0"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u64",
+          "value": "0"
+        }
       }
     },
     "environment": [
@@ -1394,19 +1498,23 @@
     "input": "let u64_max: u64 = 18446744073709551615",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u64_max: u64 = 18446744073709551615"
+        "Unit": {
+          "Fragment": "let u64_max: u64 = 18446744073709551615"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "u64_max",
-            "ty": "u64",
-            "value": "18446744073709551615"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "u64_max",
+              "ty": "u64",
+              "value": "18446744073709551615"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -1485,13 +1593,17 @@
     "input": "u64_max",
     "parse": {
       "Command": {
-        "Expression": "u64_max"
+        "Unit": {
+          "Expression": "u64_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "u64",
-        "value": "18446744073709551615"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "u64",
+          "value": "18446744073709551615"
+        }
       }
     },
     "environment": [
@@ -1571,19 +1683,23 @@
     "input": "let i64_min: i64 = -9223372036854775808",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i64_min: i64 = -9223372036854775808"
+        "Unit": {
+          "Fragment": "let i64_min: i64 = -9223372036854775808"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i64_min",
-            "ty": "i64",
-            "value": "-9223372036854775808"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i64_min",
+              "ty": "i64",
+              "value": "-9223372036854775808"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -1667,13 +1783,17 @@
     "input": "i64_min",
     "parse": {
       "Command": {
-        "Expression": "i64_min"
+        "Unit": {
+          "Expression": "i64_min"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i64",
-        "value": "-9223372036854775808"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i64",
+          "value": "-9223372036854775808"
+        }
       }
     },
     "environment": [
@@ -1758,19 +1878,23 @@
     "input": "let i64_max: i64 = 9223372036854775807",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i64_max: i64 = 9223372036854775807"
+        "Unit": {
+          "Fragment": "let i64_max: i64 = 9223372036854775807"
+        }
       }
     },
     "eval": {
-      "Success": [
-        {
-          "Value": {
-            "name": "i64_max",
-            "ty": "i64",
-            "value": "9223372036854775807"
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "i64_max",
+              "ty": "i64",
+              "value": "9223372036854775807"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "environment": [
       {
@@ -1859,13 +1983,17 @@
     "input": "i64_max",
     "parse": {
       "Command": {
-        "Expression": "i64_max"
+        "Unit": {
+          "Expression": "i64_max"
+        }
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "ty": "i64",
-        "value": "9223372036854775807"
+      "Unit": {
+        "SuccessExpr": {
+          "ty": "i64",
+          "value": "9223372036854775807"
+        }
       }
     },
     "environment": [

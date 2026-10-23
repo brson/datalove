@@ -9,10 +9,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let mut engine = repl::Engine::new(datalove_sys_packages::system_library())
+    let mut engine = repl::script::Engine::new(datalove_sys_packages::system_library())
         .map_err(|e| format!("Failed to create engine: {}", e))?;
 
-    let results = engine.run_source(&source_text);
+    let results = repl::run_source(&mut engine, &source_text);
 
     // Serialize results to pretty JSON.
     rmx::serde_json::to_string_pretty(&results)

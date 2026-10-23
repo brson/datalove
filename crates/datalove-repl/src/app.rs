@@ -4,6 +4,7 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use crate as repl;
+use repl::script;
 
 /// Actions that the core app requests from the UI layer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -357,19 +358,6 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.executor.submit_eval(id, command);
                 UiAction::None
             }
-            repl::InputParse::CrashReset(msg) => {
-                // Engine crashed and reset during parse.
-                // Set the entry status before clearing history.
-                entry.parse_result = Some(parse);
-                entry.status = EntryStatus::Error;
-                // Drop the mutable reference to entry.
-                let _ = entry;
-                // Now we can clear history and set the modal.
-                self.history.clear();
-                self.environment.clear();
-                self.crash_modal = Some(msg);
-                UiAction::ClearInput
-            }
         }
     }
 
@@ -383,16 +371,21 @@ impl<E: ReplExecutor> ReplApp<E> {
         match &eval {
             // A unit that did not run to its end stays in the session, so
             // nothing is cleared; it is reported as the error it is.
-            repl::Eval::Error(_) | repl::Eval::ReturnedEarly(_) | repl::Eval::Blocked { .. } => {
+            repl::Eval::Unit(
+                script::Eval::Error(_) | script::Eval::ReturnedEarly(_) | script::Eval::Blocked { .. }
+            ) => {
                 entry.status = EntryStatus::Error;
             }
-            repl::Eval::Nothing => {
+            repl::Eval::CommandError(_) => {
+                entry.status = EntryStatus::Error;
+            }
+            repl::Eval::Unit(script::Eval::Nothing) => {
                 entry.status = EntryStatus::Success;
             }
-            repl::Eval::Success(_) => {
+            repl::Eval::Unit(script::Eval::Success(_)) => {
                 entry.status = EntryStatus::Success;
             }
-            repl::Eval::SuccessExpr(_) => {
+            repl::Eval::Unit(script::Eval::SuccessExpr(_)) => {
                 entry.status = EntryStatus::Success;
             }
             repl::Eval::Saved { .. } => {
@@ -401,7 +394,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::Eval::CallerInterpret(cmd) => {
                 self.handle_caller_interpret(id, cmd);
             }
-            repl::Eval::ErrorReset(msg) => {
+            repl::Eval::Unit(script::Eval::ErrorReset(msg)) => {
                 // A runtime error emptied the session, so what the history
                 // and environment show of it is gone, as after a crash.
                 entry.status = EntryStatus::Error;
@@ -410,7 +403,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.environment.clear();
                 self.crash_modal = Some(format!("{msg}\nThe session was reset."));
             }
-            repl::Eval::CrashReset(msg) => {
+            repl::Eval::Unit(script::Eval::CrashReset(msg)) => {
                 // Engine crashed and reset during eval.
                 // Set the entry status before clearing history.
                 entry.status = EntryStatus::Error;
@@ -451,10 +444,10 @@ impl<E: ReplExecutor> ReplApp<E> {
             }
             repl::ReplCommand::Save => {
                 let _ = entry;
-                let eval = self.save(id).unwrap_or_else(|e| repl::Eval::Error(fmt!("{e:#}")));
+                let eval = self.save(id).unwrap_or_else(|e| repl::Eval::CommandError(fmt!("{e:#}")));
                 let entry = find_entry(&mut self.history, id).expect("the entry is still there");
                 entry.status = match eval {
-                    repl::Eval::Error(_) => EntryStatus::Error,
+                    repl::Eval::CommandError(_) => EntryStatus::Error,
                     _ => EntryStatus::Success,
                 };
                 entry.eval_result = Some(eval);
@@ -484,17 +477,14 @@ impl<E: ReplExecutor> ReplApp<E> {
                 .expect("the engine parsed everything before the save");
             let section = match parse {
                 repl::InputParse::Empty | repl::InputParse::ReadMultiline(_) => continue,
-                repl::InputParse::Command(repl::Command::ScriptStatement(source)) => {
+                repl::InputParse::Command(repl::Command::Unit(script::Unit::Fragment(source))) => {
                     WorldfileSection::ScriptFragment { source: source.C() }
                 }
-                repl::InputParse::Command(repl::Command::Expression(source)) => {
+                repl::InputParse::Command(repl::Command::Unit(script::Unit::Expression(source))) => {
                     WorldfileSection::ScriptExpr { source: source.C() }
                 }
                 repl::InputParse::Command(repl::Command::ReplCommand(_)) => {
                     WorldfileSection::ReplCommand { source: entry.input.trim().S() }
-                }
-                repl::InputParse::CrashReset(_) => {
-                    unreachable!("a crash reset clears the history it would be in")
                 }
             };
             sections.push(section);

@@ -1,10 +1,13 @@
-//! The Datalove REPL evaluation engine.
+//! The Datalove REPL: what is typed at it, and the app that shows what it did.
+//!
+//! The units it evaluates are run by the script engine, which knows nothing
+//! of the prompt, REPL commands, or the history.
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
-mod engine;
-pub use engine::{Engine, EnvBinding, InputResult, ModuleErrors, OnCompileError, UnitEdit};
+pub use datalove_script_engine as script;
+use script::{Engine, Unit};
 
 pub mod app;
 
@@ -12,6 +15,9 @@ pub mod app;
 mod executor_threaded;
 
 pub use executor_threaded::ThreadedExecutor;
+
+mod batch;
+pub use batch::{EnvBinding, InputResult, run_script, run_source};
 
 // The system library a driver supplies to the engine.
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
@@ -45,8 +51,8 @@ pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
     for section in parsed.sections {
         let input = section.source().unwrap_or_default().trim().S();
         let command = match section {
-            WorldfileSection::ScriptFragment { .. } => Command::ScriptStatement(input.C()),
-            WorldfileSection::ScriptExpr { .. } => Command::Expression(input.C()),
+            WorldfileSection::ScriptFragment { .. } => Command::Unit(Unit::Fragment(input.C())),
+            WorldfileSection::ScriptExpr { .. } => Command::Unit(Unit::Expression(input.C())),
             WorldfileSection::ReplCommand { .. } => {
                 if !input.starts_with(REPL_COMMAND_SIGIL) {
                     bail!("{} holds a REPL command that is not one: '{input}'", path.display());
@@ -79,14 +85,13 @@ pub enum InputParse {
     Empty,
     ReadMultiline(String),
     Command(Command),
-    CrashReset(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     ReplCommand(ReplCommand),
-    ScriptStatement(String),
-    Expression(String),
+    /// A script unit, for the engine.
+    Unit(Unit),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,53 +105,65 @@ pub enum ReplCommand {
     Save,
 }
 
-/// A binding a script fragment defined.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum EvalBinding {
-    /// A `let` or `const` binding.
-    Value { name: String, ty: String, value: String },
-    /// A `var` binding.
-    Slot { name: String, ty: String, value: String },
-    /// A function definition.
-    Function { name: String },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvalExpr {
-    pub ty: String,
-    pub value: String,
-}
-
+/// What evaluating a command came to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
-    Nothing,
-    /// The bindings a script fragment defined, in source order.
-    Success(Vec<EvalBinding>),
-    SuccessExpr(EvalExpr),
-    Error(String),
+    /// What the engine made of a script unit.
+    Unit(script::Eval),
+    /// A REPL command, for the app to carry out.
     CallerInterpret(ReplCommand),
-    CrashReset(String),
-    /// A runtime error, after which the session is empty.
-    ///
-    /// An error frees everything the runtime allocated rather than unwinding
-    /// a value at a time, and every binding the session had was a value the
-    /// runtime allocated, so the session starts again.
-    ErrorReset(String),
+    /// A REPL command that could not be carried out.
+    CommandError(String),
     /// The history was saved, as this many inputs, to this path.
     Saved { path: String, inputs: usize },
-    /// The unit returned early through `!` or `?`, with what it returned.
-    ///
-    /// It stays in the session, offering none of its bindings, and runs again
-    /// when an edit reaches it.
-    ReturnedEarly(String),
-    /// The unit compiled and was not run, because it reads from these units
-    /// and they did not run to their end. Units are named by their index in
-    /// the session.
-    ///
-    /// It stays in the session too, and runs when an edit lets them finish.
-    Blocked { on: Vec<usize> },
 }
 
+/// Evaluate a command against the engine.
+///
+/// A REPL command is the app's to carry out, except for what it asks of the
+/// engine: a `/reset` empties the session here, in the order the commands
+/// came in, so a unit submitted after it runs in the new session.
+pub fn eval(engine: &mut Engine, command: Command) -> Eval {
+    match command {
+        Command::Unit(unit) => Eval::Unit(engine.eval(unit)),
+        Command::ReplCommand(ReplCommand::Unknown) => Eval::CommandError("unknown command".S()),
+        Command::ReplCommand(ReplCommand::Reset) => {
+            engine.reset();
+            Eval::CallerInterpret(ReplCommand::Reset)
+        }
+        Command::ReplCommand(command) => Eval::CallerInterpret(command),
+    }
+}
+
+/// Read what an input is.
+pub fn parse_input(input: Input) -> InputParse {
+    match input {
+        Input::Input(s) => parse_input_oneline(&s),
+        Input::Multiline(s) => parse_input_multiline(&s),
+    }
+}
+
+fn parse_input_oneline(input: &str) -> InputParse {
+    match classify_input(input) {
+        InputKind::Whitespace => InputParse::Empty,
+        InputKind::ReplCommand => Command::repl_command(input),
+        InputKind::OnelineStatement => Command::script_statement(input),
+        InputKind::MultilineStatement => InputParse::ReadMultiline(S(input)),
+        InputKind::OpenBraceTree => InputParse::ReadMultiline(S(input)),
+        InputKind::Expression => Command::expression(input),
+    }
+}
+
+fn parse_input_multiline(input: &str) -> InputParse {
+    match classify_input(input) {
+        InputKind::Whitespace => InputParse::Empty,
+        InputKind::ReplCommand => Command::repl_command(input),
+        InputKind::OnelineStatement => Command::script_statement(input),
+        InputKind::MultilineStatement => Command::script_statement(input),
+        InputKind::OpenBraceTree => todo!(),
+        InputKind::Expression => Command::expression(input),
+    }
+}
 
 impl ReplCommand {
     /// The command an input starting with the sigil names.
@@ -162,21 +179,21 @@ impl ReplCommand {
 }
 
 impl Command {
-    pub(crate) fn repl_command(command: &str) -> InputParse {
+    fn repl_command(command: &str) -> InputParse {
         InputParse::Command(Command::ReplCommand(ReplCommand::named(command)))
     }
 
-    pub(crate) fn script_statement(input: &str) -> InputParse {
-        InputParse::Command(Command::ScriptStatement(S(input)))
+    fn script_statement(input: &str) -> InputParse {
+        InputParse::Command(Command::Unit(Unit::Fragment(S(input))))
     }
 
-    pub(crate) fn expression(input: &str) -> InputParse {
-        InputParse::Command(Command::Expression(S(input)))
+    fn expression(input: &str) -> InputParse {
+        InputParse::Command(Command::Unit(Unit::Expression(S(input))))
     }
 }
 
 
-pub(crate) enum InputKind {
+enum InputKind {
     Whitespace,
     ReplCommand,
     OnelineStatement,
@@ -185,7 +202,7 @@ pub(crate) enum InputKind {
     Expression,
 }
 
-pub(crate) fn classify_input(input: &str) -> InputKind {
+fn classify_input(input: &str) -> InputKind {
     // A comment is not a command. Both begin with the sigil, and the one a
     // reader means by `// note to self` is the comment.
     let code = first_code_line(input);

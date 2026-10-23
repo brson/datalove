@@ -1149,6 +1149,7 @@ dependencies = [
  "datalove-paths",
  "datalove-repl",
  "datalove-rt",
+ "datalove-script-engine",
  "datalove-sys-packages",
 ]
 
@@ -1547,15 +1548,11 @@ dependencies = [
 name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
- "bcts",
- "datalove-ct",
  "datalove-datafun",
- "datalove-datafun-ir",
  "datalove-exampletest",
- "datalove-paths",
+ "datalove-script-engine",
  "datalove-sys-packages",
  "rustmax",
- "salsa",
  "serde",
 ]
 
@@ -1610,6 +1607,21 @@ name = "datalove-rti"
 version = "0.1.0"
 dependencies = [
  "datalove-rtdt",
+]
+
+[[package]]
+name = "datalove-script-engine"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-ct",
+ "datalove-datafun",
+ "datalove-datafun-ir",
+ "datalove-paths",
+ "datalove-sys-packages",
+ "rustmax",
+ "salsa",
+ "serde",
 ]
 
 [[package]]
