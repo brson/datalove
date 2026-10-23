@@ -19,6 +19,7 @@ re-settled on every step. How an edit reaches the units that depend on it is
 - [What a line does](#user-content-what-a-line-does)
 - [Editing, not only appending](#user-content-editing-not-only-appending)
 - [Editing at the prompt](#user-content-editing-at-the-prompt)
+- [Undo and redo](#user-content-undo-and-redo)
 - [Saving and loading a session](#user-content-saving-and-loading-a-session)
 - [`script-world` runs through the engine](#user-content-script-world-runs-through-the-engine)
 - [When there is no engine](#user-content-when-there-is-no-engine)
@@ -300,6 +301,45 @@ time among them empties the session, as one appended does, and the app treats
 the answer as that reset.
 
 
+## Undo and redo
+
+`/undo` takes back the last change to the session and `/redo` makes it again.
+They move through the history rather than adding to it, so neither is
+entered, and they show the History tab, leaving focus where it was. What was
+undone stays there, grayed out: it is the redo stack, always the end of the
+history. Entering anything new drops it.
+
+**Each entry keeps what undoing and redoing it takes**, as a `Change`, kept
+when the engine answers the command that made it, from the app's units as the
+change left them: a unit made, by an append or an insert, with the unit before
+it and its source; a unit edited, with its old and new source; a unit
+deleted, with the unit before it and its source. Undo turns a change into the
+command that takes it back -- a delete, an edit back, or a `Restore`, which
+puts a unit back with the number it had -- and redo into the one that makes it
+again. Undo is last in, first out, so a change is only ever undone or redone
+against the session it was made to, and the unit it names its place by is
+there. An entry that made no change -- `/help`, `/save`, `/load`, a failed
+command, an empty line -- has none, and goes back and forth with the change
+before it. A `/reset` forgets the history before it, so nothing before one
+can be undone.
+
+The commands undo and redo send are not entered either. They go to the
+engine like any other, under ids with no entry, which `ReplApp::unrecorded`
+keeps until they are answered, and their answers change the app's units and
+are checked against the engine's like any other. Undo and redo wait for
+nothing: with a command still to be answered, whose change is not known yet,
+they do nothing.
+
+**Dropping the redo stack gives its numbers back.** A saved session is
+replayed from the history it keeps, which numbers its units in the order they
+were made, and the units the dropped changes made are not among them. So the
+session numbers its next unit as that replay would: the smallest number a
+dropped change made, which a `Renumber` sends the engine. Units are numbered
+in order and undo is last in, first out, so those numbers are the highest
+given and none of them is in the session.
+
+## Saving and loading a session
+
 `/save` writes the history to `repl-session.world` in the workspace root,
 which is the directory the REPL was started in, the one it looks for `local`
 in. Script units are `scriptunit-fragment` and `scriptunit-expr` sections,
@@ -310,12 +350,10 @@ prompt, and `/load` replays `repl-session.world` in place of the session.
 **What is saved is the app's history, not the engine's session.** The
 engine's session holds the script units. The history also has the slash
 commands and whatever a reset took out of the session. So the app writes the
-file when `datalove_repl::eval` hands `/save` back to it as `CallerInterpret`. A few
+file when the session hands `/save` back to it as `CallerInterpret`. A few
 things are left out:
 
-- Anything typed after the `/save`. Those lines can still be waiting on a
-  parse, while everything before it has been answered, because the engine
-  answers in order.
+- Anything typed after the `/save`.
 - The line that only opened a multiline input. The input it opened holds it
   again.
 - Empty inputs.
@@ -328,10 +366,11 @@ and `/load` with an error.
 though they had been typed. `ReplApp::replay` sends each one straight to
 evaluation rather than through parsing. The file already says what each input
 is, and parsing a `fun` on its own would ask for more lines. A failure fails
-again and a command runs again. The exceptions are `/save` and `/load`, which
-`load_session` drops: replaying a `/save` would overwrite the file being
-loaded with only the part of it read so far, and replaying a `/load` would
-load it again, without end. For `--load` the file is read before the terminal
+again and a command runs again. The exceptions are `/save`, `/load` and
+`/help`, which `load_session` drops: replaying a `/save` would overwrite the
+file being loaded with only the part of it read so far, replaying a `/load`
+would load it again, without end, and replaying a `/help` would show the help
+to someone who did not ask. For `--load` the file is read before the terminal
 is set up, so a bad one is reported on the ordinary screen. A worldfile with
 module, data or rider sections is refused.
 
@@ -595,6 +634,9 @@ all.
   session edited, inserted into and deleted from loads back to the same
   numbered units, and the marks say what a real step compiled and ran. A
   mismatch between the app's units and the engine's fails any of them.
+- **session_tests** also undo and redo every kind of change against a real
+  engine, to the session as it was before each, and drop the redo stack and
+  load the session saved after it back to the same numbers.
 - **command_tests** -- how `/edit`, `/delete` and `/insert` are read, sources
   over several lines, comments before a command, and the usage of each.
 - **app_tests** -- the state machine against a scripted `MockExecutor`, with no
@@ -631,8 +673,9 @@ setup and the loop together.
   [issues.md](issues.md#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines).
 - No cancellation. The worker has no way to be interrupted, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
-- `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete` and
-  `/insert` are the only commands.
+- `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete`,
+  `/insert`, `/undo` and `/redo` are the only commands.
+- Undo and redo have no key; they are typed.
 - A command whose source spans lines cannot be typed: an input starting with
   the sigil is a command on its first line. Only a replay, or an edit from
   the code panel, gives one over several lines.

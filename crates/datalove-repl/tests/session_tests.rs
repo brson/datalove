@@ -23,10 +23,7 @@ fn settle(app: &mut App) {
         app.poll_results();
         assert!(app.engine_dead_message().is_none(), "{:?}", app.engine_dead_message());
         assert!(app.session_mismatch_message().is_none(), "{:?}", app.session_mismatch_message());
-        let waiting = app.history().iter().any(|entry| {
-            matches!(entry.status, EntryStatus::Evaluating)
-        });
-        if app.engine_is_ready() && !waiting {
+        if app.engine_is_ready() && app.settled() {
             return;
         }
         assert!(std::time::Instant::now() < deadline, "the engine never answered");
@@ -270,4 +267,90 @@ fn a_saved_help_is_not_replayed() {
     let inputs = load_session(&path).X();
     let kinds: Vec<&Command> = inputs.iter().map(|saved| &saved.command).collect();
     assert!(matches!(kinds[..], [Command::Unit(Unit::Fragment(_))]), "{kinds:?}");
+}
+
+/// The environment, sorted, for comparing.
+fn bindings(app: &App) -> Vec<(String, String)> {
+    let mut bindings: Vec<(String, String)> = app.environment().iter()
+        .map(|binding| (binding.name.C(), binding.value.C()))
+        .collect();
+    bindings.sort();
+    bindings
+}
+
+fn undo(app: &mut App) {
+    app.undo();
+    settle(app);
+}
+
+fn redo(app: &mut App) {
+    app.redo();
+    settle(app);
+}
+
+/// Undo takes back each change in turn, to the session as it was before
+/// it, and redo makes them again, through a real engine; the app's units are
+/// checked against the engine's after every step.
+#[test]
+fn undo_and_redo_go_back_and_forth() {
+    let dir = rmx::tempfile::tempdir().X();
+    let mut app = app(&dir.path().join("session.world"));
+    for unit in ["let a = 1", "let b = a + 1", "let c = 30"] {
+        submit(&mut app, unit);
+    }
+    let before = (code(&app), bindings(&app));
+
+    let changes = ["/edit 1 let a = 10", "/help", "/delete 3", "/insert before 2 let d = a * 2"];
+    let mut states = vec![before.clone()];
+    for change in changes {
+        submit(&mut app, change);
+        states.push((code(&app), bindings(&app)));
+    }
+    let after = states.last().X().clone();
+
+    // Each undo goes back one change; the `/help` between made none, and goes
+    // back with the change before it.
+    for state in [&states[3], &states[2], &states[0]] {
+        undo(&mut app);
+        assert_eq!(&(code(&app), bindings(&app)), state);
+    }
+    assert!(app.history().iter().skip(3).all(|entry| entry.undone), "the changes are the redo stack");
+
+    // An appended unit is a change too.
+    undo(&mut app);
+    assert_eq!(code(&app), vec![(Some(1), "let a = 1".S()), (Some(2), "let b = a + 1".S())]);
+
+    for _ in 0..4 {
+        redo(&mut app);
+    }
+    assert_eq!((code(&app), bindings(&app)), after);
+    assert!(app.history().iter().all(|entry| !entry.undone));
+    let inputs: Vec<&str> = app.history().iter().map(|entry| entry.input.as_str()).collect();
+    assert!(!inputs.contains(&"/undo"), "undo and redo are not entered: {inputs:?}");
+}
+
+/// Entering anything new forgets what was undone, and numbers the next unit
+/// as a replay of the history would, so a saved session loads back to the
+/// same numbers.
+#[test]
+fn new_input_drops_the_redo_stack() {
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("session.world");
+    let mut app = app(&path);
+    for unit in ["let a = 1", "let b = 2", "let c = 3"] {
+        submit(&mut app, unit);
+    }
+    submit(&mut app, "/undo");
+    submit(&mut app, "/undo");
+    assert_eq!(code(&app), vec![(Some(1), "let a = 1".S())]);
+
+    submit(&mut app, "let e = 5");
+    assert_eq!(code(&app), vec![(Some(1), "let a = 1".S()), (Some(2), "let e = 5".S())]);
+    assert!(app.history().iter().all(|entry| !entry.undone), "the redo stack is gone");
+    redo(&mut app);
+    assert_eq!(code(&app).len(), 2, "with nothing left to redo");
+
+    submit(&mut app, "/save");
+    submit(&mut app, "/load");
+    assert_eq!(code(&app), vec![(Some(1), "let a = 1".S()), (Some(2), "let e = 5".S())]);
 }

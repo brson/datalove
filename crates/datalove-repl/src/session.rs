@@ -85,6 +85,14 @@ impl Session {
                 ReplCommand::Edit { unit, source } => self.edit(unit, source),
                 ReplCommand::Delete { unit } => self.delete(unit),
                 ReplCommand::Insert { place, unit, source } => self.insert(place, unit, source),
+                ReplCommand::Restore { unit, after, source } => self.restore(unit, after, source),
+                ReplCommand::Renumber { next } => {
+                    self.next = next;
+                    Eval::Edited(Vec::new())
+                }
+                ReplCommand::Undo | ReplCommand::Redo => {
+                    Eval::CommandError("undo and redo are the app's, which keeps the history".S())
+                }
                 command @ (ReplCommand::Exit | ReplCommand::Help | ReplCommand::Save | ReplCommand::Load) => {
                     Eval::CallerInterpret(command)
                 }
@@ -136,6 +144,24 @@ impl Session {
             self.next += 1;
         }
         eval
+    }
+
+    /// Put a unit back with its number, as it was before it was deleted, or
+    /// before the append or insert that made it was taken back.
+    fn restore(&mut self, number: u32, after: Option<u32>, source: Unit) -> Eval {
+        let index = match after {
+            Some(after) => match self.index_of(after) {
+                Some(index) => index + 1,
+                None => return no_unit(after),
+            },
+            None => 0,
+        };
+        assert!(self.index_of(number).is_none(), "unit {number} is restored while it is there");
+        let step = self.guarded(number, "restoring", |engine| {
+            engine.insert_unit(index, source.source(), source.is_expression())
+        });
+        let made = NumberedUnit { number, unit: source };
+        self.splice(step, |units| units.insert(index, made))
     }
 
     /// Change the numbers as the engine changed its units, and say what the

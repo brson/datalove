@@ -342,18 +342,25 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect,
             Some((first, _)) => fmt!("{first}…"),
             None => entry.input.C(),
         };
-        lines.push(Line::from(vec![Span::styled("> ", Style::default().fg(Color::Cyan)), Span::raw(input)]));
+        let mut entry_lines = vec![Line::from(vec![Span::styled("> ", Style::default().fg(Color::Cyan)), Span::raw(input)])];
 
         match &entry.status {
-            EntryStatus::Evaluating => lines.push(marked("…", Color::Yellow, "evaluating")),
-            EntryStatus::Empty => lines.push(marked("·", Color::DarkGray, "(empty)")),
-            EntryStatus::ReadMultiline => lines.push(marked("→", Color::DarkGray, "read more lines")),
+            EntryStatus::Evaluating => entry_lines.push(marked("…", Color::Yellow, "evaluating")),
+            EntryStatus::Empty => entry_lines.push(marked("·", Color::DarkGray, "(empty)")),
+            EntryStatus::ReadMultiline => entry_lines.push(marked("→", Color::DarkGray, "read more lines")),
             EntryStatus::Success | EntryStatus::Error => {
                 let eval = entry.eval_result.as_ref().expect("an answered entry has what it came to");
-                lines.extend(eval_lines(eval));
+                entry_lines.extend(eval_lines(eval));
             }
         }
 
+        // What was undone is the redo stack, and grayed out.
+        if entry.undone {
+            for span in entry_lines.iter_mut().flat_map(|line| line.spans.iter_mut()) {
+                span.style = Style::default().fg(Color::DarkGray);
+            }
+        }
+        lines.extend(entry_lines);
         lines.push(Line::from(""));
     }
 

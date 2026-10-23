@@ -54,6 +54,10 @@ rest are left as they were. The same changes can be typed as commands:
 ## Commands
 
 - `/help` -- this help; **F1** too.
+- `/undo` -- take back the last change to the code; what is taken back is
+  grayed out in the History tab.
+- `/redo` -- make again the change last taken back. Entering anything new
+  forgets what was taken back.
 - `/reset` -- start the session again, empty.
 - `/save` -- save everything entered to `repl-session.world`.
 - `/load` -- start the session again as `repl-session.world` has it.

@@ -121,6 +121,22 @@ pub enum ReplCommand {
     /// Add a unit before or after the one with this number:
     /// `/insert before N <source>` or `/insert after N <source>`.
     Insert { place: Place, unit: u32, source: Unit },
+    /// Take back the last change to the session: `/undo`.
+    Undo,
+    /// Make again the last change taken back: `/redo`.
+    Redo,
+    /// Put a unit back with the number it had, after the unit with the
+    /// number `after`, or first.
+    ///
+    /// What undoing a delete, or redoing an append or an insert, asks of the
+    /// session. Nothing reads it from input.
+    Restore { unit: u32, after: Option<u32>, source: Unit },
+    /// Number the next unit made `next`.
+    ///
+    /// What dropping changes taken back asks of the session, so the numbers
+    /// they took are given again, as a replay of the history would. Nothing
+    /// reads it from input.
+    Renumber { next: u32 },
 }
 
 /// Which side of a unit `/insert` puts the new one.
@@ -239,6 +255,8 @@ impl ReplCommand {
             "reset" => bare(ReplCommand::Reset),
             "save" => bare(ReplCommand::Save),
             "load" => bare(ReplCommand::Load),
+            "undo" => bare(ReplCommand::Undo),
+            "redo" => bare(ReplCommand::Redo),
             "edit" => match numbered_source(args) {
                 Some((unit, source)) => ReplCommand::Edit { unit, source },
                 None => usage("/edit N <source>"),

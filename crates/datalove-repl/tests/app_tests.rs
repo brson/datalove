@@ -1405,3 +1405,21 @@ fn inserting_before_the_selected_unit() {
     assert_eq!(app.focus(), Panel::Code);
     assert_eq!(app.selected_unit(), Some(2));
 }
+
+/// `/undo` and `/redo` show the history, where what they did is grayed out or
+/// not, and are not entered in it.
+#[test]
+fn undo_and_redo_show_the_history() {
+    let (mut app, _executor) = app_and_executor_with_units(&["let a = 1"]);
+    assert_eq!(app.tab(), Tab::Environment);
+    let entries = app.history().len();
+
+    app.submit_input("/undo".to_string());
+    assert_eq!(app.tab(), Tab::History);
+    assert_eq!(app.history().len(), entries);
+    assert!(app.history()[0].undone);
+
+    app.select_tab(Tab::Environment);
+    app.submit_input("/redo".to_string());
+    assert_eq!(app.tab(), Tab::History);
+}

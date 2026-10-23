@@ -188,6 +188,48 @@ pub struct HistoryEntry {
     pub eval_result: Option<repl::Eval>,
     /// Entry status (lifecycle and outcome).
     pub status: EntryStatus,
+    /// How to take back the change the entry made to the session, and make it
+    /// again; `None` for one that made none.
+    pub change: Option<Change>,
+    /// Whether the change was taken back, so the entry is on the redo stack.
+    pub undone: bool,
+}
+
+/// A change an entry made to the session, as much of it as undoing and redoing
+/// it needs.
+///
+/// Each is kept when the engine answers the command that made it, from the
+/// app's units as the change left them. Undo is last in, first out, so a
+/// change is only ever undone or redone against the session it was made to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Change {
+    /// A unit appended or inserted, after the unit with the number `after`,
+    /// or first.
+    Made { unit: u32, after: Option<u32>, source: script::Unit },
+    /// A unit's source replaced.
+    Edited { unit: u32, old: script::Unit, new: script::Unit },
+    /// A unit deleted, from after the unit with the number `after`, or first.
+    Deleted { unit: u32, after: Option<u32>, source: script::Unit },
+}
+
+impl Change {
+    /// The command that takes the change back.
+    fn undo(&self) -> repl::ReplCommand {
+        match self.C() {
+            Change::Made { unit, .. } => repl::ReplCommand::Delete { unit },
+            Change::Edited { unit, old, .. } => repl::ReplCommand::Edit { unit, source: old },
+            Change::Deleted { unit, after, source } => repl::ReplCommand::Restore { unit, after, source },
+        }
+    }
+
+    /// The command that makes the change again.
+    fn redo(&self) -> repl::ReplCommand {
+        match self.C() {
+            Change::Made { unit, after, source } => repl::ReplCommand::Restore { unit, after, source },
+            Change::Edited { unit, new, .. } => repl::ReplCommand::Edit { unit, source: new },
+            Change::Deleted { unit, .. } => repl::ReplCommand::Delete { unit },
+        }
+    }
 }
 
 /// Status of a REPL history entry.
@@ -220,7 +262,7 @@ fn find_entry(history: &mut [HistoryEntry], id: u64) -> &mut HistoryEntry {
 
 impl HistoryEntry {
     fn new(id: u64, input: String, parse_result: repl::InputParse, status: EntryStatus) -> Self {
-        Self { id, input, parse_result, eval_result: None, status }
+        Self { id, input, parse_result, eval_result: None, status, change: None, undone: false }
     }
 }
 
@@ -275,6 +317,9 @@ pub struct ReplApp<E: ReplExecutor> {
     cancel_armed: bool,
     /// What the input is editing, if it is.
     editing: Option<Editing>,
+    /// The commands submitted for undo and redo, and to renumber, by id,
+    /// which have no entries in the history and are not yet answered.
+    unrecorded: std::collections::HashMap<u64, repl::Command>,
     /// What was typed when the edit began, and whether it was multiline, to
     /// be put back when the edit ends.
     stashed: Option<(String, bool)>,
@@ -365,6 +410,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             multiline_mode: false,
             cancel_armed: false,
             editing: None,
+            unrecorded: std::collections::HashMap::new(),
             stashed: None,
             focus: Panel::Input,
             tab: Tab::Environment,
@@ -447,11 +493,100 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     /// Enter an input in the history, and say which entry it is.
+    ///
+    /// A new entry drops the redo stack: what was undone is gone for good.
     fn push_entry(&mut self, input: String, parse: repl::InputParse, status: EntryStatus) -> u64 {
-        let id = self.next_id;
-        self.next_id += 1;
+        self.drop_redo();
+        let id = self.next_id();
         self.history.push(HistoryEntry::new(id, input, parse, status));
         id
+    }
+
+    fn next_id(&mut self) -> u64 {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
+    }
+
+    /// Forget the changes taken back, which can no longer be redone.
+    ///
+    /// **The numbers they gave units are given again.** A saved session is
+    /// replayed from the history it keeps, which numbers its units in the
+    /// order they were made, and the units the dropped changes made are not
+    /// among them; so the session numbers the next unit as the replay would.
+    /// Undo is last in, first out and units are numbered in order, so the
+    /// numbers of the units the dropped changes made are the highest given,
+    /// and none of them is in the session.
+    fn drop_redo(&mut self) {
+        let dropped: Vec<HistoryEntry> = self.history.iter().filter(|entry| entry.undone).cloned().collect();
+        if dropped.is_empty() {
+            return;
+        }
+        self.history.retain(|entry| !entry.undone);
+        let made = dropped.iter().filter_map(|entry| match entry.change {
+            Some(Change::Made { unit, .. }) => Some(unit),
+            _ => None,
+        }).min();
+        if let Some(next) = made {
+            self.submit_unrecorded(repl::ReplCommand::Renumber { next });
+        }
+    }
+
+    /// Submit a command that has no entry in the history.
+    fn submit_unrecorded(&mut self, command: repl::ReplCommand) {
+        let id = self.next_id();
+        let command = repl::Command::ReplCommand(command);
+        self.unrecorded.insert(id, command.C());
+        self.executor.submit_eval(id, command);
+    }
+
+    /// Take back the last change to the session.
+    ///
+    /// The entries after it that made no change are taken back with it, so
+    /// the redo stack is always the end of the history. Nothing happens with
+    /// a command still to be answered, whose change is not known yet, or with
+    /// no change to take back.
+    pub fn undo(&mut self) {
+        if !self.settled() {
+            return;
+        }
+        let Some(index) = self.history.iter().rposition(|entry| !entry.undone && entry.change.is_some()) else {
+            return;
+        };
+        for entry in &mut self.history[index..] {
+            entry.undone = true;
+        }
+        let command = self.history[index].change.as_ref().expect("the entry made a change").undo();
+        self.submit_unrecorded(command);
+    }
+
+    /// Make again the change last taken back.
+    ///
+    /// The entries before it on the redo stack that made no change come back
+    /// with it. Nothing happens with a command still to be answered, or with
+    /// nothing taken back.
+    pub fn redo(&mut self) {
+        if !self.settled() {
+            return;
+        }
+        let Some(first) = self.history.iter().position(|entry| entry.undone) else {
+            return;
+        };
+        let change = self.history[first..].iter().position(|entry| entry.change.is_some());
+        let end = change.map_or(self.history.len(), |change| first + change + 1);
+        for entry in &mut self.history[first..end] {
+            entry.undone = false;
+        }
+        if let Some(change) = change {
+            let command = self.history[first + change].change.as_ref().expect("the entry made a change").redo();
+            self.submit_unrecorded(command);
+        }
+    }
+
+    /// Whether every command submitted has been answered, those for undo and
+    /// redo included.
+    pub fn settled(&self) -> bool {
+        self.unrecorded.is_empty() && self.history.iter().all(|entry| !matches!(entry.status, EntryStatus::Evaluating))
     }
 
     /// Replay a saved session's inputs, as if each had been submitted.
@@ -466,7 +601,22 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     /// Submit a command already read, entered in the history as `input`.
+    ///
+    /// `/undo` and `/redo` are carried out instead, and are not entered: they
+    /// move through the history rather than adding to it, and show it, where
+    /// what they did is grayed out or not.
     fn submit_command(&mut self, input: String, command: repl::Command) {
+        match command {
+            repl::Command::ReplCommand(repl::ReplCommand::Undo) => {
+                self.tab = Tab::History;
+                return self.undo();
+            }
+            repl::Command::ReplCommand(repl::ReplCommand::Redo) => {
+                self.tab = Tab::History;
+                return self.redo();
+            }
+            _ => {}
+        }
         let id = self.push_entry(input, repl::InputParse::Command(command.C()), EntryStatus::Evaluating);
         self.show_tab_for(&command);
         self.executor.submit_eval(id, command);
@@ -631,10 +781,20 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<script::EnvBinding>) {
+        if let Some(command) = self.unrecorded.remove(&id) {
+            self.apply(&command, &eval);
+            self.environment = environment;
+            if eval.reset_the_session() {
+                self.history.retain(|entry| entry.id > id);
+                self.crash_modal = Some(reset_message(&eval));
+            }
+            return;
+        }
         let repl::InputParse::Command(command) = find_entry(&mut self.history, id).parse_result.C() else {
             unreachable!("only a command is evaluated");
         };
-        self.apply(&command, &eval);
+        let change = self.apply(&command, &eval);
+        find_entry(&mut self.history, id).change = change;
         self.environment = environment;
 
         if eval.reset_the_session() {
@@ -677,8 +837,13 @@ impl<E: ReplExecutor> ReplApp<E> {
             | repl::ReplCommand::Usage(_)
             | repl::ReplCommand::Edit { .. }
             | repl::ReplCommand::Delete { .. }
-            | repl::ReplCommand::Insert { .. } => {
+            | repl::ReplCommand::Insert { .. }
+            | repl::ReplCommand::Restore { .. }
+            | repl::ReplCommand::Renumber { .. } => {
                 unreachable!("the session answers {command:?} itself")
+            }
+            repl::ReplCommand::Undo | repl::ReplCommand::Redo => {
+                unreachable!("the app carries out {command:?} without entering it")
             }
             repl::ReplCommand::Exit => {
                 self.should_exit = true;
@@ -722,13 +887,14 @@ impl<E: ReplExecutor> ReplApp<E> {
         find_entry(&mut self.history, id).status = status;
     }
 
-    /// Change the app's units as an answered command changed the engine's.
+    /// Change the app's units as an answered command changed the engine's,
+    /// and say how to undo the change, if it made one.
     ///
     /// A command the engine did not carry out, or one that leaves the session
     /// alone, changes nothing. A unit a command names and the app does not
     /// have is a disagreement with the engine, which the report that came
     /// with the answer shows.
-    fn apply(&mut self, command: &repl::Command, eval: &repl::Eval) {
+    fn apply(&mut self, command: &repl::Command, eval: &repl::Eval) -> Option<Change> {
         use repl::ReplCommand as R;
         if eval.empties_session() {
             self.units.clear();
@@ -736,51 +902,74 @@ impl<E: ReplExecutor> ReplApp<E> {
             // The new session numbers its units from 1 again, so a selection
             // kept would land on a different unit with the old one's number.
             self.selected_unit = None;
-            return;
+            return None;
         }
-        match (command, eval) {
+        let change = match (command, eval) {
             (repl::Command::Unit(unit), repl::Eval::Unit(eval)) => {
                 let number = self.take_number();
+                let after = self.units.last().map(|unit| unit.numbered.number);
                 self.units.push(SessionUnit {
                     numbered: repl::NumberedUnit { number, unit: unit.C() },
                     status: status_of(eval),
                 });
+                return Some(Change::Made { unit: number, after, source: unit.C() });
             }
-            (repl::Command::ReplCommand(command), repl::Eval::Edited(step)) => {
-                match command {
-                    R::Edit { unit, source } => {
-                        if let Some(index) = self.index_of(*unit) {
-                            self.units[index].numbered.unit = source.C();
-                        }
+            (repl::Command::ReplCommand(R::Renumber { next }), _) => {
+                self.next_number = *next;
+                return None;
+            }
+            (repl::Command::ReplCommand(command), repl::Eval::Edited(_)) => match command {
+                R::Edit { unit, source } => self.index_of(*unit).map(|index| {
+                    let old = std::mem::replace(&mut self.units[index].numbered.unit, source.C());
+                    Change::Edited { unit: *unit, old, new: source.C() }
+                }),
+                R::Delete { unit } => self.index_of(*unit).map(|index| {
+                    let removed = self.units.remove(index);
+                    Change::Deleted { unit: *unit, after: self.number_before(index), source: removed.numbered.unit }
+                }),
+                R::Insert { place, unit, source } => self.index_of(*unit).map(|index| {
+                    let index = place.index(index);
+                    let number = self.take_number();
+                    self.make(index, number, source.C());
+                    Change::Made { unit: number, after: self.number_before(index), source: source.C() }
+                }),
+                R::Restore { unit, after, source } => {
+                    let index = match after {
+                        Some(after) => self.index_of(*after).map(|index| index + 1),
+                        None => Some(0),
+                    };
+                    if let Some(index) = index {
+                        self.make(index, *unit, source.C());
                     }
-                    R::Delete { unit } => {
-                        if let Some(index) = self.index_of(*unit) {
-                            self.units.remove(index);
-                        }
-                    }
-                    R::Insert { place, unit, source } => {
-                        if let Some(index) = self.index_of(*unit) {
-                            let index = place.index(index);
-                            // The engine reports every unit from the insert
-                            // on, this one first, so its status is set below.
-                            let number = self.take_number();
-                            self.units.insert(index, SessionUnit {
-                                numbered: repl::NumberedUnit { number, unit: source.C() },
-                                status: UnitStatus::Pending,
-                            });
-                        }
-                    }
-                    other => unreachable!("{other:?} was answered as an edit"),
+                    None
                 }
-                // A unit only analyzed keeps its status.
-                for unit in step {
-                    if let (Some(index), Some(eval)) = (self.index_of(unit.unit), &unit.eval) {
-                        self.units[index].status = status_of(eval);
-                    }
+                other => unreachable!("{other:?} was answered as an edit"),
+            },
+            _ => None,
+        };
+        // A unit only analyzed keeps its status.
+        if let repl::Eval::Edited(step) = eval {
+            for unit in step {
+                if let (Some(index), Some(eval)) = (self.index_of(unit.unit), &unit.eval) {
+                    self.units[index].status = status_of(eval);
                 }
             }
-            _ => {}
         }
+        change
+    }
+
+    /// Put a unit made by an insert or a restore in, whose status the step
+    /// that made it reports.
+    fn make(&mut self, index: usize, number: u32, source: script::Unit) {
+        self.units.insert(index, SessionUnit {
+            numbered: repl::NumberedUnit { number, unit: source },
+            status: UnitStatus::Pending,
+        });
+    }
+
+    /// The number of the unit before the one at `index`, if one is.
+    fn number_before(&self, index: usize) -> Option<u32> {
+        index.checked_sub(1).map(|before| self.units[before].numbered.number)
     }
 
     /// The numbers of the units the code shows that have them, in order.
