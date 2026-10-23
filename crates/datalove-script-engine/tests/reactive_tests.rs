@@ -337,6 +337,9 @@ struct Session {
     /// The salsa key of each unit's typecheck, which is how a typecheck salsa
     /// ran is attributed to a unit.
     keys: Vec<(salsa::Id, String)>,
+    /// The units the engine says it typechecked or analyzed for ownership in
+    /// the step just applied, which the recorder checks.
+    analyzed: Vec<String>,
 }
 
 impl Session {
@@ -346,7 +349,7 @@ impl Session {
         let engine = Engine::in_database(db, datalove_sys_packages::system_library())
             .expect("the engine starts");
         recorder.clear();
-        Session { engine, units: Vec::new(), failed: Vec::new(), recorder, keys: Vec::new() }
+        Session { engine, units: Vec::new(), failed: Vec::new(), recorder, keys: Vec::new(), analyzed: Vec::new() }
     }
 
     /// What unit `index` does to earlier units' bindings, as a step table's
@@ -383,6 +386,7 @@ impl Session {
 
     /// Make a step's change, and say what each unit did.
     fn apply(&mut self, change: &Change) -> Vec<(String, Outcome)> {
+        self.analyzed.clear();
         let mut ran: Vec<(String, Ran)> = Vec::new();
         // Where the units from on get keys they did not have: the appended
         // units, or the suffix of a splice, which is chained anew.
@@ -458,6 +462,11 @@ impl Session {
     /// are attributed in the order they were first seen.
     fn recompiled(&mut self, rekeyed_from: Option<usize>) -> Vec<String> {
         let events = self.recorder.take();
+        // The engine hears which units it analyzed only on its own thread.
+        for event in &events {
+            let analysis = event.query == "typecheck_script_unit" || event.query.starts_with("analyze_script_");
+            assert!(!(analysis && event.on_worker), "{} ran on a worker, where the engine cannot see it", event.query);
+        }
         let mut seen: Vec<salsa::Id> = Vec::new();
         for event in &events {
             if event.query == "typecheck_script_unit" && !seen.contains(&event.key) {
@@ -496,10 +505,28 @@ impl Session {
         recompiled
     }
 
-    fn reported(&self, reports: Vec<datalove_script_engine::UnitEdit>) -> Vec<(String, Ran)> {
+    /// What each unit the engine reports came to, and the units it says it
+    /// analyzed, for the recorder to check.
+    ///
+    /// A unit analyzed and not re-derived did not run.
+    fn reported(&mut self, reports: Vec<datalove_script_engine::UnitEdit>) -> Vec<(String, Ran)> {
+        self.note_analyzed();
         reports.iter()
-            .map(|report| (self.units[report.unit].C(), ran(&report.eval)))
+            .map(|report| (self.units[report.unit].C(), report.eval.as_ref().map_or(Ran::No, ran)))
             .collect()
+    }
+
+    /// Note the units the engine's last step says it typechecked or analyzed
+    /// for ownership; the recorder sees only those two passes.
+    fn note_analyzed(&mut self) {
+        for report in self.engine.last_step() {
+            if report.compiled.typecheck || report.compiled.ownership {
+                let unit = self.units[report.unit].C();
+                if !self.analyzed.contains(&unit) {
+                    self.analyzed.push(unit);
+                }
+            }
+        }
     }
 
     fn append(&mut self, source: &str) -> (String, Ran) {
@@ -510,6 +537,7 @@ impl Session {
         let unit = next.to_string();
         self.units.push(unit.C());
         let eval = self.engine.eval(Unit::Fragment(source.S()));
+        self.note_analyzed();
         (unit, ran(&eval))
     }
 }
@@ -522,6 +550,18 @@ fn run(fixture: &Fixture) -> Vec<String> {
     for (number, step) in fixture.steps.iter().enumerate() {
         let at = fmt!("{} step {} ({})", fixture.name, number + 1, step.title);
         let touched = session.apply(&step.change);
+        let mut recompiled: Vec<&String> = touched.iter()
+            .filter(|(_, outcome)| outcome.recompiles)
+            .map(|(name, _)| name)
+            .collect();
+        recompiled.sort();
+        let mut analyzed: Vec<&String> = session.analyzed.iter().collect();
+        analyzed.sort();
+        if recompiled != analyzed {
+            failures.push(fmt!(
+                "{at}: salsa recompiled units {recompiled:?}, and the engine says it analyzed {analyzed:?}",
+            ));
+        }
         let observed = |unit: &str| {
             touched.iter().find(|(name, _)| name == unit).map(|(_, outcome)| *outcome)
                 .unwrap_or(Outcome { recompiles: false, ran: Ran::No })

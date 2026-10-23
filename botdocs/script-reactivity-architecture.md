@@ -32,6 +32,7 @@ it, with the designs that were tried and rejected.
 - [Splices](#user-content-splices)
 - [Crossing a mutation](#user-content-crossing-a-mutation)
 - [Units that did not run to their end](#user-content-units-that-did-not-run-to-their-end)
+- [What a step reports](#user-content-what-a-step-reports)
 - [How it is validated](#user-content-how-it-is-validated)
 - [What is not covered, and what is known wrong](#user-content-what-is-not-covered-and-what-is-known-wrong)
 
@@ -401,6 +402,45 @@ the wrong frames rather than panic.
 A runtime error is not one of these. The runtime discards all of its memory
 (`IrInterpreter::discard_runtime_state`), so the session starts again.
 
+## What a step reports
+
+Every operation on the units -- an append, an edit, a splice, a module edit --
+says what it did to each unit it touched, in a `UnitEdit` per unit:
+`compiled`, which analysis passes salsa ran for the unit, and `eval`, what
+re-deriving it came to, or `None` if it was not re-derived. The edits return
+these, and `Engine::last_step` holds them for any operation, the append
+included. The two halves are independent. A unit can be analyzed and not
+re-derived: its typecheck runs again because what it is checked against moved,
+and comes out the same. And one can be re-derived and not analyzed: a rerun
+for a rewind or a replay, or one whose input values changed and whose types did
+not. So a step leaves each unit unchanged, compiled and not run, compiled and
+run, or run.
+
+**Compiled means the parse, the typecheck or the ownership analysis ran.**
+Lowering is re-derivation and not counted. An ownership analysis can run with
+no typecheck before it, since it is keyed on what earlier units left behind as
+well as on the unit's types: edit a unit so that it no longer gives a binding
+away, and a later unit that writes the binding is analyzed again while its
+typecheck is memoized.
+
+**The engine hears it from the queries themselves.** The entry query of each
+pass records itself at the top of its body, through
+`datalove-ct/src/unit_analysis.rs`, which salsa only runs when it executes the
+query: the parser's `parse` and `parse_expr`, `typecheck_script_unit`, and the
+two ownership queries. Each names its unit by `Source`: the parse by its key,
+the typecheck by its `Script` argument, since a unit is typechecked outside its
+own compile too, and the ownership analysis by the unit being compiled, since
+nothing it is keyed on names the unit. The engine collects them around each
+operation and maps the sources to the units after it. The log is a
+thread-local and no salsa event callback is installed, so a query nothing
+records costs nothing, and a recorded one a thread-local read. It sees only
+the engine's thread, which is where script units are analyzed.
+
+The parse is recorded in the parser and not in the typechecker's
+`unit_parses`, because salsa runs `unit_parses` again for every unit on every
+edit -- it reads the parse's accumulated diagnostics -- while the parse itself
+runs only for the unit whose text changed.
+
 ## How it is validated
 
 **The technique.** Ask how far downstream a change travelled and compare it
@@ -424,7 +464,12 @@ separate test pins that the fixture has the shape the claim is about.
 A step table says what each unit should do per step, with the engine's known
 extra work annotated. There, a unit counts as recompiled if salsa ran its
 typecheck, or ran an ownership analysis while compiling it
-(`query_events::compiling_unit`).
+(`query_events::compiling_unit`). Every step also checks the engine's own
+account of what it analyzed against that, so a pass whose entry query does not
+record itself fails the fixtures it changes; removing the ownership hook fails
+every step where a unit is analyzed for ownership and not typechecked. And it
+checks that no script unit's typecheck or ownership analysis ran on a worker
+thread, where the engine's log cannot see it.
 
 **Falsification is what makes it evidence.** Each piece was checked by
 injecting a fault into the shipped code and confirming the tests reported the

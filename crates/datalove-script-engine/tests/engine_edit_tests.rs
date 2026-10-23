@@ -12,7 +12,7 @@ use rmx::prelude::*;
 use datalove_datafun::pipeline::{
     ModuleDescriptor, PackageDescriptor, PackageLibrary, WorkspaceDescriptor,
 };
-use datalove_script_engine::{Engine, Eval, Unit};
+use datalove_script_engine::{Engine, Eval, Unit, UnitEdit};
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
 const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
@@ -26,6 +26,11 @@ fn value_of(engine: &mut Engine, name: &str) -> String {
         .find(|(bound, _, _)| bound == name)
         .map(|(_, _, value)| value)
         .unwrap_or_else(|| panic!("no binding named {name}"))
+}
+
+/// The units a step re-derived, leaving out those it only analyzed.
+fn rederived(reports: &[UnitEdit]) -> Vec<usize> {
+    reports.iter().filter(|report| report.eval.is_some()).map(|report| report.unit).collect()
 }
 
 /// Evaluate each `---`-separated fragment of `source`, in order.
@@ -91,7 +96,7 @@ fn editing_a_unit_rederives_what_it_reaches() {
         "B and D; C uses nothing B provides",
     );
     assert!(
-        reports.iter().all(|report| !matches!(report.eval, Eval::Error(_))),
+        reports.iter().all(|report| !matches!(report.eval, Some(Eval::Error(_)))),
         "both units re-derive cleanly: {reports:?}",
     );
     assert_eq!(value_of(&mut engine, "b"), "3");
@@ -108,7 +113,7 @@ fn an_edit_that_breaks_a_later_unit_says_which() {
     let reports = engine.edit_unit(1, "let b = \"two\"");
 
     let failed: Vec<usize> = reports.iter()
-        .filter(|report| matches!(report.eval, Eval::Error(_)))
+        .filter(|report| matches!(report.eval, Some(Eval::Error(_))))
         .map(|report| report.unit)
         .collect();
     assert_eq!(failed, vec![3], "`\"two\" + 5` is D's error to report");
@@ -194,7 +199,7 @@ fn removing_a_unit_a_later_unit_depends_on_leaves_it_failing() {
     let reports = engine.remove_unit(1);
 
     let failed: Vec<usize> = reports.iter()
-        .filter(|report| matches!(report.eval, Eval::Error(_)))
+        .filter(|report| matches!(report.eval, Some(Eval::Error(_))))
         .map(|report| report.unit)
         .collect();
     assert_eq!(failed, vec![2], "D, at the index it now has, reads the `b` that went");
@@ -239,7 +244,7 @@ fn an_inserted_expression_unit_reports_its_value() {
 
     assert_eq!(reports.len(), 2, "the expression and the unit it moved up");
     assert!(
-        matches!(&reports[0].eval, Eval::SuccessExpr(expr) if expr.value == "101"),
+        matches!(&reports[0].eval, Some(Eval::SuccessExpr(expr)) if expr.value == "101"),
         "the inserted expression's value: {:?}", reports[0].eval,
     );
     assert_eq!(value_of(&mut engine, "b"), "2", "B is re-derived at its new index");
@@ -255,7 +260,7 @@ fn an_insertion_that_breaks_a_later_unit_leaves_it_failing() {
     let reports = engine.insert_unit(1, "let n = \"five\"", false);
 
     assert!(
-        reports.iter().any(|report| report.unit == 2 && matches!(report.eval, Eval::Error(_))),
+        reports.iter().any(|report| report.unit == 2 && matches!(report.eval, Some(Eval::Error(_)))),
         "B would add 1 to a string: {reports:?}",
     );
     assert!(!bound(&mut engine, "b"));
@@ -412,8 +417,8 @@ fn a_unit_that_returned_early_goes_green_when_an_edit_lets_it() {
     assert_eq!(value_of(&mut engine, "y"), "7");
 
     let reports = engine.edit_unit(0, "let xs: [u32] = [1]");
-    assert!(matches!(reports[1].eval, Eval::ReturnedEarly(_)), "{:?}", reports[1].eval);
-    assert!(matches!(&reports[2].eval, Eval::Blocked { on } if *on == vec![1]), "{:?}", reports[2].eval);
+    assert!(matches!(reports[1].eval, Some(Eval::ReturnedEarly(_))), "{:?}", reports[1].eval);
+    assert!(matches!(&reports[2].eval, Some(Eval::Blocked { on }) if *on == vec![1]), "{:?}", reports[2].eval);
     assert!(!bound(&mut engine, "x"), "and back again: B's frame was destroyed");
     assert!(!bound(&mut engine, "y"));
 }
@@ -486,7 +491,7 @@ fn editing_a_module_rederives_the_units_that_import_from_it() {
         "the importing unit, and not the unit that imports nothing",
     );
     assert!(
-        reports.iter().all(|report| !matches!(report.eval, Eval::Error(_))),
+        reports.iter().all(|report| !matches!(report.eval, Some(Eval::Error(_)))),
         "it re-derives cleanly: {reports:?}",
     );
     assert_eq!(value_of(&mut engine, "a"), "42", "the call landed on the new body");
@@ -525,8 +530,12 @@ fn a_module_edit_that_does_not_compile_fails_its_units_until_fixed() {
     run(&mut engine, "require module local/test/m\nimport m.f\nlet a = f(1)\n---\nlet b = 20");
 
     let reports = engine.edit_module("local", "test", "m", "fun f(x: int): int\n    ret \"nope\"\nend fun\n");
-    assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
-    let Eval::Error(error) = &reports[0].eval else {
+    assert_eq!(rederived(&reports), vec![0]);
+    // The module leaving the compile changes what every unit is typechecked
+    // against, so the other unit is typechecked again, and comes out the
+    // same.
+    assert!(reports[1].compiled.typecheck && reports[1].eval.is_none(), "{:?}", reports[1]);
+    let Some(Eval::Error(error)) = &reports[0].eval else {
         panic!("the importing unit fails: {reports:?}");
     };
     assert!(error.starts_with("module `local/test/m` does not compile: "), "{error}");
@@ -537,7 +546,7 @@ fn a_module_edit_that_does_not_compile_fails_its_units_until_fixed() {
     assert_eq!(value_of(&mut engine, "c"), "21", "and new lines still compile");
 
     let reports = engine.edit_module("local", "test", "m", "fun f(x: int): int\n    ret x + 1\nend fun\n");
-    assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
+    assert_eq!(rederived(&reports), vec![0]);
     assert!(engine.module_errors().is_empty());
     assert_eq!(value_of(&mut engine, "a"), "2", "the unit is back, calling the fixed module");
 }
@@ -588,7 +597,7 @@ fn breaking_a_module_fails_the_units_of_the_modules_requiring_it() {
 
     let reports = engine.edit_module("local", "test", "m", "fun f(): int\n    ret \"nope\"\nend fun\n");
     assert_eq!(reports.iter().map(|report| report.unit).collect::<Vec<_>>(), vec![0]);
-    let Eval::Error(error) = &reports[0].eval else {
+    let Some(Eval::Error(error)) = &reports[0].eval else {
         panic!("the unit importing from `n` fails: {reports:?}");
     };
     assert!(error.starts_with("module `local/test/n` does not compile: "), "{error}");
@@ -764,7 +773,7 @@ fn a_runtime_error_in_a_rerun_empties_the_session() {
 
     let last = reports.last().expect("the edited unit is reported");
     assert_eq!(last.unit, 1);
-    assert!(matches!(last.eval, Eval::ErrorReset(_)), "{:?}", last.eval);
+    assert!(matches!(last.eval, Some(Eval::ErrorReset(_))), "{:?}", last.eval);
     assert_eq!(engine.unit_count(), 0);
     run(&mut engine, "let c = 3");
     assert_eq!(value_of(&mut engine, "c"), "3");

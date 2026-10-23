@@ -2,3 +2,4 @@
 
 pub mod query_events;
 pub mod query_log;
+pub mod unit_analysis;

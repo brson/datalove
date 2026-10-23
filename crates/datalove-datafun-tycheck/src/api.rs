@@ -300,6 +300,9 @@ pub fn typecheck_script_unit<'db>(
     script: Script<'db>,
     env: ScriptEnv<'db>,
 ) -> ScriptUnitTypecheckOutput<'db> {
+    // By the unit's own source, since a unit is typechecked outside its own
+    // compile too.
+    datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Typecheck, script.unit(db).source(db));
     // Handles only. A module's parse and name resolution are asked for one
     // module at a time, where an import names it.
     let modules_by_path = script_modules_by_path(db, env);

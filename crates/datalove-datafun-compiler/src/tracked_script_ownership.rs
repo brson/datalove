@@ -127,6 +127,9 @@ pub fn analyze_script_fragment_tracked<'db>(
     externals: Vec<ExternalBinding>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
+    // Nothing this is keyed on names its unit, and it only runs inside the
+    // unit's compile.
+    datalove_ct::unit_analysis::record_compiling(datalove_ct::unit_analysis::Pass::Ownership);
     let expr_types = typecheck_result.expr_types(db);
     let body = top.body(db);
 
@@ -243,6 +246,7 @@ pub fn analyze_script_expr_tracked<'db>(
     externals: Vec<ExternalBinding>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
+    datalove_ct::unit_analysis::record_compiling(datalove_ct::unit_analysis::Pass::Ownership);
     let expr_types = typecheck_result.expr_types(db);
 
     let analysis = ownership_analysis::analyze_expr_with_externals(

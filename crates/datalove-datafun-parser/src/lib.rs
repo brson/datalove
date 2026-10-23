@@ -34,6 +34,7 @@ pub fn parse<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParseResult<'db> {
+    datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Parse, source);
     parse_with_module_id(db, source, None)
 }
 
@@ -91,6 +92,7 @@ pub fn parse_expr<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedExpr<'db> {
+    datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Parse, source);
     let bracer = bracer::bracer(db, lexer::lex(db, source));
     datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, "P050", "P051");
     emit_non_ascii_name_errors(db, bracer, source);

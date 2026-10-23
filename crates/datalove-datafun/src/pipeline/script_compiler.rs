@@ -1183,9 +1183,13 @@ impl<'db> ScriptCompiler<'db> {
             return self.parse_failure_at(index);
         }
         let unit = self.parsed_unit_at(index);
-        // Marked for a recorder: ownership analysis is keyed on what the
-        // earlier units left behind, so its key alone does not say whose it is.
-        let mut result = datalove_ct::query_events::compiling_unit(index, || self.run_phases(index, &unit));
+        // Marked for a recorder and for the engine's account of what it
+        // compiled: ownership analysis is keyed on what the earlier units left
+        // behind, so its key alone does not say whose it is.
+        let source = self.scripts[index].unit(self.db).source(self.db);
+        let mut result = datalove_ct::unit_analysis::compiling(source, || {
+            datalove_ct::query_events::compiling_unit(index, || self.run_phases(index, &unit))
+        });
         match &mut result.ir_unit {
             None => self.unit_records[index] = UnitLowerRecord::default(),
             Some(ir_unit) => {

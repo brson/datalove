@@ -9,7 +9,7 @@
 use serde::{Serialize, Deserialize};
 
 mod engine;
-pub use engine::{Engine, ModuleErrors, OnCompileError, UnitEdit};
+pub use engine::{Compiled, Engine, ModuleErrors, OnCompileError, UnitEdit};
 
 // The system library a driver supplies to the engine.
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};

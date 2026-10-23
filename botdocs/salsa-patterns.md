@@ -471,6 +471,21 @@ time the window opened every parse was a memo hit and all 16 fixtures reported
 every module as unparsed. Again nothing had regressed; the work had moved out of
 the window.
 
+**What a step analyzed, while running.** `datalove-ct/src/unit_analysis.rs` is a
+third mechanism, and the one the script engine ships with: the entry query of
+each of a script unit's analysis passes records itself, with the unit's
+`Source`, into a thread-local the engine collects around each step. It is
+hand-placed and thread-local like `log_query`, which is what lets it run in
+production without a salsa event callback; see
+[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-what-a-step-reports).
+Its hand-placing is checked rather than trusted: the reactive tests compare
+it with `QueryRecorder` on every step.
+
+Placing one has a trap of its own. A query running is evidence of its pass only
+if salsa runs it exactly when the pass's input changed. `unit_parses` reads
+the parse's accumulated diagnostics, and salsa runs it again for every unit on
+every edit, though the parse below it runs once.
+
 **If the fixtures move as a group after a refactor, check the instrumentation
 before believing them**, and check where the window starts as well as where the
 `log_query` calls are. A hand-placed log measures a *place*, so it breaks when

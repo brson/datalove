@@ -147,11 +147,13 @@ impl Session {
             }
         };
         change(&mut self.units);
+        // Only the units re-derived, for now: what the step analyzed is not
+        // shown yet.
         let reports: Vec<UnitReport> = reports.into_iter()
-            .map(|UnitEdit { unit, eval }| UnitReport {
+            .filter_map(|UnitEdit { unit, eval, .. }| Some(UnitReport {
                 unit: self.units[unit].number,
-                eval: self.numbered(eval),
-            })
+                eval: self.numbered(eval?),
+            }))
             .collect();
         let eval = Eval::Edited(reports);
         if eval.reset_the_session() {
