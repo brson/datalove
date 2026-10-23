@@ -197,10 +197,17 @@ pub enum EntryStatus {
 
 /// Find the history entry a worker response belongs to.
 ///
-/// Returns `None` when the entry is gone, which happens to requests that were
-/// still in flight when a crash reset cleared the history.
-fn find_entry(history: &mut [HistoryEntry], id: u64) -> Option<&mut HistoryEntry> {
+/// It is always there. The engine answers in order, and the history only
+/// forgets the entries up to one whose answer reset the session, by which
+/// time everything before that one has been answered.
+fn find_entry(history: &mut [HistoryEntry], id: u64) -> &mut HistoryEntry {
     history.iter_mut().rev().find(|entry| entry.id == id)
+        .unwrap_or_else(|| panic!("a response for entry {id}, which the history has forgotten"))
+}
+
+/// Whether an entry is a script unit.
+fn is_code(entry: &HistoryEntry) -> bool {
+    matches!(entry.parse_result, Some(repl::InputParse::Command(repl::Command::Unit(_))))
 }
 
 impl HistoryEntry {
@@ -225,7 +232,14 @@ pub enum WorkerResponse {
     /// Nothing the user submits will ever be answered after this.
     EngineDead { message: String },
     ParseResult { id: u64, parse: repl::InputParse },
-    EvalResult { id: u64, eval: repl::Eval, environment: Vec<(String, String, String)> },
+    EvalResult {
+        id: u64,
+        eval: repl::Eval,
+        environment: Vec<(String, String, String)>,
+        /// The units in the engine's session once it had answered, by the
+        /// ids of the entries they were typed as.
+        session: Vec<u64>,
+    },
 }
 
 /// Trait for executing REPL parse and eval operations.
@@ -294,10 +308,21 @@ pub struct ReplApp<E: ReplExecutor> {
     engine_dead: Option<String>,
     /// Crash modal state (contains crash message if open).
     crash_modal: Option<String>,
+    /// The units in the engine's session as it last reported them, by the
+    /// ids of their entries.
+    ///
+    /// The code shows these, and the history is checked against them.
+    session: Vec<u64>,
+    /// How the history and the engine's session disagreed, if they did.
+    ///
+    /// The app keeps its history by rules about what each answer did to the
+    /// session, so a disagreement is a rule gone wrong: a bug, shown as one.
+    session_mismatch: Option<String>,
     /// Path to stderr log file (for displaying in crash modal).
     stderr_log_path: Option<std::path::PathBuf>,
-    /// Where `/save` writes the history, if it has anywhere to.
-    save_path: Option<std::path::PathBuf>,
+    /// Where `/save` writes the history and `/load` reads it back, if they
+    /// have anywhere to.
+    session_path: Option<std::path::PathBuf>,
 }
 
 impl<E: ReplExecutor> ReplApp<E> {
@@ -328,14 +353,16 @@ impl<E: ReplExecutor> ReplApp<E> {
             engine_ready: false,
             engine_dead: None,
             crash_modal: None,
+            session: Vec::new(),
+            session_mismatch: None,
             stderr_log_path: None,
-            save_path: None,
+            session_path: None,
         }
     }
 
-    /// Have `/save` write the history to this path.
-    pub fn set_save_path(&mut self, path: std::path::PathBuf) {
-        self.save_path = Some(path);
+    /// Have `/save` write the history to this path, and `/load` read it.
+    pub fn set_session_path(&mut self, path: std::path::PathBuf) {
+        self.session_path = Some(path);
     }
 
     /// Submit input text for processing.
@@ -407,8 +434,9 @@ impl<E: ReplExecutor> ReplApp<E> {
                     let action = self.handle_parse_result(id, parse);
                     actions.push(action);
                 }
-                WorkerResponse::EvalResult { id, eval, environment } => {
+                WorkerResponse::EvalResult { id, eval, environment, session } => {
                     self.handle_eval_result(id, eval, environment);
+                    self.check_session(session);
                 }
             }
         }
@@ -417,9 +445,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_parse_result(&mut self, id: u64, parse: repl::InputParse) -> UiAction {
-        let Some(entry) = find_entry(&mut self.history, id) else {
-            return UiAction::None;
-        };
+        let entry = find_entry(&mut self.history, id);
 
         match parse.C() {
             repl::InputParse::Empty => {
@@ -458,9 +484,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<(String, String, String)>) {
-        let Some(entry) = find_entry(&mut self.history, id) else {
-            return;
-        };
+        let entry = find_entry(&mut self.history, id);
 
         entry.eval_result = Some(eval.C());
 
@@ -490,25 +514,18 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::Eval::CallerInterpret(cmd) => {
                 self.handle_caller_interpret(id, cmd);
             }
+            // A runtime error or a crash empties the session, as a `/reset`
+            // does, and what came after it runs in the new one; so the history
+            // forgets the same entries a `/reset` would.
             repl::Eval::Unit(script::Eval::ErrorReset(msg)) => {
-                // A runtime error emptied the session, so what the history
-                // and environment show of it is gone, as after a crash.
-                entry.status = EntryStatus::Error;
                 let _ = entry;
-                self.history.clear();
-                self.environment.clear();
-                self.crash_modal = Some(format!("{msg}\nThe session was reset."));
+                self.history.retain(|entry| entry.id > id);
+                self.crash_modal = Some(fmt!("A runtime error: {msg}"));
             }
             repl::Eval::Unit(script::Eval::CrashReset(msg)) => {
-                // Engine crashed and reset during eval.
-                // Set the entry status before clearing history.
-                entry.status = EntryStatus::Error;
-                // Drop the mutable reference to entry.
                 let _ = entry;
-                // Now we can clear history and set the modal.
-                self.history.clear();
-                self.environment.clear();
-                self.crash_modal = Some(msg.C());
+                self.history.retain(|entry| entry.id > id);
+                self.crash_modal = Some(fmt!("The engine panicked: {msg}"));
             }
         }
 
@@ -519,8 +536,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_caller_interpret(&mut self, id: u64, cmd: &repl::ReplCommand) {
-        let entry = find_entry(&mut self.history, id)
-            .expect("the entry was found by the caller");
+        let entry = find_entry(&mut self.history, id);
 
         match cmd {
             repl::ReplCommand::Unknown => bug!(),
@@ -541,14 +557,65 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::ReplCommand::Save => {
                 let _ = entry;
                 let eval = self.save(id).unwrap_or_else(|e| repl::Eval::CommandError(fmt!("{e:#}")));
-                let entry = find_entry(&mut self.history, id).expect("the entry is still there");
+                let entry = find_entry(&mut self.history, id);
                 entry.status = match eval {
                     repl::Eval::CommandError(_) => EntryStatus::Error,
                     _ => EntryStatus::Success,
                 };
                 entry.eval_result = Some(eval);
             }
+            repl::ReplCommand::Load => {
+                let _ = entry;
+                let loaded = self.load();
+                let entry = find_entry(&mut self.history, id);
+                match loaded {
+                    Ok(inputs) => {
+                        entry.status = EntryStatus::Success;
+                        // A reset first, so the session is the one saved and
+                        // not the saved one on top of this. It forgets this
+                        // `/load` too, as `/reset` forgets itself.
+                        let reset = repl::SavedInput {
+                            input: "/reset".S(),
+                            command: repl::Command::ReplCommand(repl::ReplCommand::Reset),
+                        };
+                        self.replay(std::iter::once(reset).chain(inputs).collect());
+                    }
+                    Err(e) => {
+                        entry.status = EntryStatus::Error;
+                        entry.eval_result = Some(repl::Eval::CommandError(fmt!("{e:#}")));
+                    }
+                }
+            }
         }
+    }
+
+    /// Take the engine's report of its session, and check the history holds
+    /// the same units.
+    ///
+    /// The units the history thinks the engine has are its code entries the
+    /// engine has answered for: the engine answers in order, so every unit it
+    /// has answered for is in the session unless an answer since took it out,
+    /// and the history forgets those.
+    fn check_session(&mut self, session: Vec<u64>) {
+        let expected: Vec<u64> = self.history.iter()
+            .filter(|entry| entry.eval_result.is_some() && is_code(entry))
+            .map(|entry| entry.id)
+            .collect();
+        if expected != session && self.session_mismatch.is_none() {
+            self.session_mismatch = Some(fmt!(
+                "The engine's session holds the units typed as entries {session:?}, \
+                 and the history expected {expected:?}.",
+            ));
+        }
+        self.session = session;
+    }
+
+    /// Read the session `/save` writes, for `/load`.
+    fn load(&self) -> AnyResult<Vec<repl::SavedInput>> {
+        let Some(path) = &self.session_path else {
+            bail!("this session was not given anywhere to load from");
+        };
+        repl::load_session(path)
     }
 
     /// Write the history up to and including the `/save` with this id.
@@ -563,7 +630,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     fn save(&self, save_id: u64) -> AnyResult<repl::Eval> {
         use datalove_datafun::package_load_worldfile::{WorldfileSection, write_worldfile};
 
-        let Some(path) = &self.save_path else {
+        let Some(path) = &self.session_path else {
             bail!("this session was not given anywhere to save to");
         };
 
@@ -727,6 +794,15 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.should_exit = val;
     }
 
+    /// How the history and the engine's session disagreed, if they did.
+    pub fn session_mismatch_message(&self) -> Option<&str> {
+        self.session_mismatch.as_deref()
+    }
+
+    pub fn dismiss_session_mismatch(&mut self) {
+        self.session_mismatch = None;
+    }
+
     pub fn crash_modal_is_open(&self) -> bool {
         self.crash_modal.is_some()
     }
@@ -872,20 +948,40 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// The session's units, in order, and what each did in the last step.
     ///
     /// **The units are the history's code entries.** The history drops what
-    /// a reset takes out of the engine's session -- everything before a
-    /// `/reset`, and everything at a runtime error or a crash -- and a unit
-    /// that fails stays in both, so the two hold the same units. A unit is
-    /// here from when it parses, before the engine has answered.
+    /// a reset takes out of the engine's session -- everything up to a
+    /// `/reset`, a runtime error, or a crash -- and a unit that fails stays in
+    /// both, so the two hold the same units.
+    ///
+    /// **The engine says which units it has**, with every answer, and the
+    /// units on their way to it follow them. The history is checked against
+    /// what the engine says; see [`Self::session_mismatch_message`].
+    ///
+    /// **They are the session as it will be once everything submitted has
+    /// been answered.** A unit is here from when it parses, before the engine
+    /// has answered, and so a `/reset` takes the units before it from when it
+    /// parses too. The history keeps them until the reset is answered, since
+    /// they are still the session until then, but no unit after the reset
+    /// will see them.
     ///
     /// The last step is the last unit the engine answered for, and every unit
     /// before it was left alone by that step.
     pub fn code_units(&self) -> Vec<CodeUnit<'_>> {
-        let units: Vec<&HistoryEntry> = self.history.iter()
-            .filter(|entry| matches!(
-                entry.parse_result,
-                Some(repl::InputParse::Command(repl::Command::Unit(_))),
-            ))
-            .collect();
+        // A reset still in the history is one the engine has not answered.
+        let pending_reset = self.history.iter().rposition(|entry| matches!(
+            entry.parse_result,
+            Some(repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Reset))),
+        ));
+        let waiting = |entry: &&HistoryEntry| entry.eval_result.is_none() && is_code(entry);
+        let units: Vec<&HistoryEntry> = match pending_reset {
+            Some(reset) => self.history[reset + 1..].iter().filter(waiting).collect(),
+            // The units the engine has, then the ones on their way to it.
+            // An entry the engine has and the history does not is a
+            // mismatch, already reported, and can only be left out.
+            None => self.session.iter()
+                .filter_map(|id| self.history.iter().find(|entry| entry.id == *id))
+                .chain(self.history.iter().filter(waiting))
+                .collect(),
+        };
         let last_step = units.iter().rposition(|entry| entry.eval_result.is_some());
 
         units.iter().enumerate()

@@ -81,8 +81,10 @@ boundary is `Serialize`/`Deserialize`.
 pushes an entry when input is submitted, which can be before the previous
 entry's evaluation has answered. So "the last entry" is not necessarily the
 entry a result belongs to, and someone typing during an evaluation would
-otherwise get the result attached to the wrong line. Results for entries a
-crash reset cleared are dropped.
+otherwise get the result attached to the wrong line. A result always has its
+entry: the engine answers in order, and the history only forgets entries up
+to one whose answer reset the session, by which time all of them have been
+answered.
 
 Executors are constructed by the caller and handed to `ReplApp`, which is
 what lets the tests drive the state machine with a scripted mock.
@@ -172,20 +174,24 @@ has how the layers keep a failed unit's names from the units after it.
 owned is not destroyed a value at a time. The runtime discards all its memory
 instead (`IrInterpreter::discard_runtime_state`), and every binding the
 session had was in it. The executor drops its units, and the engine starts its
-compiled session again and reports `Eval::ErrorReset`, which the app treats
-like a crash reset. Re-running the earlier units to bring the session back
-was considered and not done: a unit that fails again would loop.
+compiled session again and reports `Eval::ErrorReset`. Re-running the
+earlier units to bring the session back was considered and not done: a unit
+that fails again would loop.
 
 A panic inside the engine while evaluating is caught and reported as
-`CrashReset`. The engine rebuilds its compiler and executor, and the app
-clears the history and shows the crash modal.
+`CrashReset`, and the engine rebuilds its compiler and executor.
 
 `/reset` asks for the same reset on purpose. `datalove_repl::eval` resets the
 engine on the worker thread before it answers, in turn with the units around
 it, so the environment that comes back with the answer is already empty.
-The app then drops only the history entries up to and including the
-`/reset`. Anything typed while the reset was running was evaluated in the new
-session, so it stays.
+
+**All three resets forget the same history**: the entries up to and including
+the one that reset, and no more. Anything typed while it was running was
+evaluated in the new session, so it stays, and its results land. A runtime
+error or a crash also opens a modal saying what happened. This matters most
+for a replay, which submits every saved input before the engine has answered
+any: everything after a unit that fails at run time still runs, and still
+shows.
 
 ## Editing, not only appending
 
@@ -219,7 +225,7 @@ which is the directory the REPL was started in, the one it looks for `local`
 in. Script units are `scriptunit-fragment` and `scriptunit-expr` sections,
 and REPL commands are `repl-command` sections. `repl-command` exists only for
 this. `repl --load <worldfile>` replays a saved history before the first
-prompt.
+prompt, and `/load` replays `repl-session.world` in place of the session.
 
 **What is saved is the app's history, not the engine's session.** The
 engine's session holds the script units. The history also has the slash
@@ -235,18 +241,27 @@ things are left out:
 - Empty inputs.
 - Whatever a reset already took out of the history.
 
-An app given no path with `set_save_path`, as in the tests, answers `/save`
-with an error.
+An app given no path with `set_session_path`, as in the tests, answers `/save`
+and `/load` with an error.
 
 **A load replays through the app,** so the inputs show up in the history as
 though they had been typed. `ReplApp::replay` sends each one straight to
 evaluation rather than through parsing. The file already says what each input
 is, and parsing a `fun` on its own would ask for more lines. A failure fails
-again and a command runs again. The exception is `/save`, which `load_session`
-drops: replaying one would overwrite the file being loaded with only the part
-of it read so far. The file is read before the terminal is set up, so a bad
-one is reported on the ordinary screen. A worldfile with module, data or
-rider sections is refused.
+again and a command runs again. The exceptions are `/save` and `/load`, which
+`load_session` drops: replaying a `/save` would overwrite the file being
+loaded with only the part of it read so far, and replaying a `/load` would
+load it again, without end. For `--load` the file is read before the terminal
+is set up, so a bad one is reported on the ordinary screen. A worldfile with
+module, data or rider sections is refused.
+
+**`/load` resets before it replays**, so the session becomes the one saved
+rather than the saved one on top of what is there. The app reads the file when
+the engine hands `/load` back, and replays a `/reset` ahead of the saved
+inputs. That reset is ordered with everything else the engine is asked, and
+forgets the history up to itself as `/reset` does, the `/load` included. A file
+that cannot be read is an error on the `/load`, and the session is left
+alone.
 
 ## `script-world` runs through the engine
 
@@ -320,11 +335,31 @@ last step neither compiled nor ran is gray, whatever it did before. So the bar
 says what the last thing typed reached, which once units can be edited is the
 question the panel has to answer.
 
-`ReplApp::code_units` derives the units from the history rather than keeping
-them apart. The history already drops what a reset takes out of the engine's
-session, and a failed unit stays in both, so the history's code entries are
-the session's units with nothing to keep in step. The last step is the last
-unit the engine answered for.
+**The engine says which units it has.** Every eval answer carries the
+session as the ids of the entries its units were typed as. The worker keeps
+those ids beside the engine and goes by the engine's own count of its units:
+a command adds one, empties the session, or leaves it alone, and anything else
+stops the worker. The code is the units the engine reports, then the units on
+their way to it. The last step is the last unit the engine answered for.
+
+**The history is checked against it.** The app keeps its history by rules
+about what each answer did to the session: a reset forgets what came before
+it, and a failed unit stays. The units the history expects the engine to have
+are its code entries the engine has answered for. When that differs from what
+the engine reports, a rule is wrong, which is a bug in the app. So it is shown
+as one, in a modal with both lists, rather than mended quietly; the code goes
+on showing the engine's units. The session tests fail on any mismatch, so a
+rule that a new command breaks shows up there first.
+
+**The code is the session as it will be once everything submitted is
+answered**, not as the engine has it now. A unit shows from when it parses,
+before it runs, so a `/reset` has to take the units before it from when it
+parses too, or the units typed after it show appended to the session they will
+never see. The history keeps the old units until the engine answers the reset,
+since they are the engine's session until then, and `code_units` shows only
+the units after the last reset still in it. That is the one guess the code
+makes, and the answer to the reset settles it. `/load` gets this for nothing: it is a `/reset`
+and the saved units, replayed together.
 
 **While the code panel has focus, one unit is selected**, its source in the
 yellow that marks the tab shown, and Up and Down move between units. Focusing
@@ -439,8 +474,8 @@ setup and the loop together.
   [issues.md](issues.md#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines).
 - No cancellation. `WorkerRequest::Shutdown` is never sent, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
-- `/exit`, `/help`, `/reset` and `/save` are the only commands, and help
-  prints the word "help".
+- `/exit`, `/help`, `/reset`, `/save` and `/load` are the only commands, and
+  help prints the word "help".
 - Errors are plain strings with no rendered diagnostics, and type errors are
   their `Debug` form, though `ScriptCompiler` exposes the spans needed for
   better. See

@@ -129,6 +129,8 @@ fn worker_thread(
     rx: Receiver<WorkerRequest>,
     tx: Sender<WorkerResponse>,
 ) {
+    // The ids of the entries the engine's units were typed as, in order.
+    let mut session: Vec<u64> = Vec::new();
     loop {
         match rx.recv() {
             Ok(WorkerRequest::Parse { id, input }) => {
@@ -146,8 +148,18 @@ fn worker_thread(
                 // Get updated environment.
                 let environment = engine.get_environment();
 
-                // Send eval result with environment.
-                let _ = tx.send(WorkerResponse::EvalResult { id, eval, environment });
+                // A command adds a unit, empties the session, or leaves it
+                // alone, and the engine's count says which.
+                let units = engine.unit_count();
+                if units == 0 {
+                    session.clear();
+                } else if units == session.len() + 1 {
+                    session.push(id);
+                } else {
+                    assert_eq!(units, session.len(), "entry {id} took the session from {} units to {units}", session.len());
+                }
+
+                let _ = tx.send(WorkerResponse::EvalResult { id, eval, environment, session: session.C() });
             }
             Ok(WorkerRequest::Shutdown) => {
                 // todo actually send this

@@ -1,5 +1,5 @@
-//! Saving the history with `/save` and loading it back, as `repl --load` does,
-//! through the app and a real engine on its worker thread.
+//! Saving the history with `/save` and loading it back, as `repl --load` and
+//! `/load` do, through the app and a real engine on its worker thread.
 
 use rmx::prelude::*;
 
@@ -12,7 +12,7 @@ type App = ReplApp<ThreadedExecutor>;
 fn app(save_path: &std::path::Path) -> App {
     let executor = ThreadedExecutor::spawn(datalove_sys_packages::system_library, None);
     let mut app = ReplApp::with_executor(executor);
-    app.set_save_path(save_path.to_path_buf());
+    app.set_session_path(save_path.to_path_buf());
     app
 }
 
@@ -22,6 +22,7 @@ fn settle(app: &mut App) {
     loop {
         app.poll_results();
         assert!(app.engine_dead_message().is_none(), "{:?}", app.engine_dead_message());
+        assert!(app.session_mismatch_message().is_none(), "{:?}", app.session_mismatch_message());
         let waiting = app.history().iter().any(|entry| {
             matches!(entry.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. })
         });
@@ -108,4 +109,56 @@ fn a_repl_command_section_has_to_hold_one() {
     let path = dir.path().join("bad.world");
     std::fs::write(&path, "----------\nrepl-command\n----------\n\nlet a = 1\n").X();
     assert!(load_session(&path).is_err());
+}
+
+/// `/load` takes the session back to what was saved, whatever was done since.
+#[test]
+fn load_returns_to_the_saved_session() {
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("session.world");
+
+    let mut app = app(&path);
+    submit(&mut app, "let a: int = 2");
+    submit(&mut app, "let b = a + 1");
+    submit(&mut app, "/save");
+    let saved = app.environment().to_vec();
+
+    submit(&mut app, "let c = 10");
+    submit(&mut app, "/reset");
+    submit(&mut app, "let d = 20");
+    submit(&mut app, "/load");
+
+    assert_eq!(app.environment(), &saved[..]);
+    assert_eq!(outcomes(&app), vec![
+        ("let a: int = 2".S(), true),
+        ("let b = a + 1".S(), true),
+    ], "the saved `/save` is not replayed, and the `/load` forgets itself");
+}
+
+/// A runtime error with input already on its way: the engine runs that input
+/// in the new session, and the app keeps it.
+#[test]
+fn input_queued_behind_a_runtime_error_is_kept() {
+    let dir = rmx::tempfile::tempdir().X();
+    let mut app = app(&dir.path().join("session.world"));
+
+    let unit = |source: &str| datalove_repl::SavedInput {
+        input: source.S(),
+        command: Command::Unit(Unit::Fragment(source.S())),
+    };
+    // Replayed, so all four are submitted before the engine answers any.
+    app.replay(vec![
+        unit("fun down(s: string): u32\n  let t = s@\n  ret icall add_wrapping_u32(down(t), : u32 / 1)\nend fun"),
+        unit("let keep = \"kept\""),
+        unit("let x = down(\"abc\")"),
+        unit("let z = 4"),
+    ]);
+    settle(&mut app);
+
+    assert!(app.crash_modal_message().is_some(), "the runtime error is reported");
+    assert_eq!(outcomes(&app), vec![("let z = 4".S(), true)]);
+    let names: Vec<&str> = app.environment().iter().map(|(name, _, _)| name.as_str()).collect();
+    assert_eq!(names, vec!["z"]);
+    let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
+    assert_eq!(sources, vec!["let z = 4"]);
 }

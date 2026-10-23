@@ -876,6 +876,11 @@ impl Engine {
             .collect()
     }
 
+    /// How many units the session has, failed ones included.
+    pub fn unit_count(&self) -> usize {
+        self.unit_sources().len()
+    }
+
     /// What unit `unit` provides and does to earlier units' bindings.
     pub fn unit_effects(&self, unit: usize) -> datafun::pipeline::UnitEffects {
         self.script.as_ref().expect("a session").unit_effects(unit)

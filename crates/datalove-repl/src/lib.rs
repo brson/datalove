@@ -39,7 +39,8 @@ pub struct SavedInput {
 /// A session is script units and REPL commands and nothing else, so a
 /// worldfile with modules, data, or riders in it is not one. Its `/save`s are
 /// left out: replaying one would overwrite the file being loaded with only
-/// the part of it read so far.
+/// the part of it read so far. So are its `/load`s, which would load the file
+/// again, and again.
 pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
     use datalove_datafun::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 
@@ -58,7 +59,7 @@ pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
                     bail!("{} holds a REPL command that is not one: '{input}'", path.display());
                 }
                 match ReplCommand::named(&input) {
-                    ReplCommand::Save => continue,
+                    ReplCommand::Save | ReplCommand::Load => continue,
                     command => Command::ReplCommand(command),
                 }
             }
@@ -103,6 +104,9 @@ pub enum ReplCommand {
     Reset,
     /// Write the history to [`SESSION_FILE_NAME`] in the workspace root.
     Save,
+    /// Start the session again as [`SESSION_FILE_NAME`] has it, as
+    /// `repl --load` does.
+    Load,
 }
 
 /// What evaluating a command came to.
@@ -173,6 +177,7 @@ impl ReplCommand {
             "help" => ReplCommand::Help,
             "reset" => ReplCommand::Reset,
             "save" => ReplCommand::Save,
+            "load" => ReplCommand::Load,
             _ => ReplCommand::Unknown,
         }
     }

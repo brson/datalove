@@ -57,8 +57,9 @@ impl Drop for TerminalGuard {
 /// Run the ratatui-based REPL against the caller's system library.
 ///
 /// `local` is the workspace's own library, if it has one. `/save` writes
-/// the history to [`repl::SESSION_FILE_NAME`] in `workspace_root`, and `load`
-/// is a session saved earlier to replay before the first prompt.
+/// the history to [`repl::SESSION_FILE_NAME`] in `workspace_root`, and
+/// `/load` reads it back. `load` is a session saved earlier to replay before
+/// the first prompt.
 pub fn run(
     sys: fn() -> SystemLibrary,
     local: Option<PackageLibrary>,
@@ -108,7 +109,7 @@ pub fn run(
     // Create app and run it, passing the stderr log path.
     let executor = ThreadedExecutor::spawn(sys, local);
     let mut app = RatatuiApp::with_stderr_log(executor, stderr_log_path);
-    app.repl.set_save_path(workspace_root.join(repl::SESSION_FILE_NAME));
+    app.repl.set_session_path(workspace_root.join(repl::SESSION_FILE_NAME));
     if let Some(inputs) = replayed {
         app.repl.replay(inputs);
     }
@@ -170,6 +171,11 @@ fn handle_key_event<E: ReplExecutor>(
         // Nothing works without an engine; Enter leaves.
         match key.code {
             KeyCode::Enter => app.set_should_exit(true),
+            _ => {}
+        }
+    } else if app.repl.session_mismatch_message().is_some() {
+        match key.code {
+            KeyCode::Enter => app.repl.dismiss_session_mismatch(),
             _ => {}
         }
     } else if app.crash_modal_is_open() {

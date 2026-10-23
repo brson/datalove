@@ -77,6 +77,11 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
         render_crash_modal(f, &app.repl, msg);
     }
 
+    // A bug in the app's bookkeeping, over the reset that may have caused it.
+    if let Some(msg) = app.repl.session_mismatch_message() {
+        render_session_mismatch_modal(f, msg);
+    }
+
     // A dead engine outranks everything: nothing else can make progress.
     if let Some(msg) = app.repl.engine_dead_message() {
         render_engine_dead_modal(f, &app.repl, msg);
@@ -637,15 +642,13 @@ fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &s
     // Crash modal block.
     let modal_block = Block::default()
         .borders(Borders::ALL)
-        .title("💥 Engine Crash - Press Enter to Continue")
+        .title("Session Reset - Press Enter to Continue")
         .style(Style::default().fg(Color::Red));
 
     let mut lines = vec![
         Line::from(""),
-        Line::from("The REPL engine encountered a panic and has been reset."),
-        Line::from("All history and environment has been cleared."),
-        Line::from(""),
-        Line::from("Crash details:"),
+        Line::from("The session was reset, forgetting everything entered up to"),
+        Line::from("this input. Anything entered after it runs in the new session."),
         Line::from(""),
         Line::from(msg).style(Style::default().fg(Color::Yellow)),
     ];
@@ -654,12 +657,38 @@ fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &s
     if let Some(log_path) = repl.stderr_log_path() {
         lines.push(Line::from(""));
         lines.push(Line::from(""));
-        lines.push(Line::from("Full panic trace written to:"));
+        lines.push(Line::from("Engine output, and a panic's trace, were written to:"));
         lines.push(Line::from(log_path.display().S()).style(Style::default().fg(Color::Cyan)));
     }
 
     let modal = Paragraph::new(lines)
         .block(modal_block);
+
+    f.render_widget(modal, area);
+}
+
+/// Render the modal shown when the history and the engine's session disagree.
+fn render_session_mismatch_modal(f: &mut Frame, msg: &str) {
+    let area = centered_rect(70, 40, f.area());
+
+    f.render_widget(Clear, area);
+
+    let modal_block = Block::default()
+        .borders(Borders::ALL)
+        .title("REPL Bug - Press Enter to Continue")
+        .style(Style::default().fg(Color::Red));
+
+    let lines = vec![
+        Line::from(""),
+        Line::from("The REPL lost track of which code units the engine has."),
+        Line::from("The code shown is the engine's; the history may not match it."),
+        Line::from(""),
+        Line::from(msg).style(Style::default().fg(Color::Yellow)),
+    ];
+
+    let modal = Paragraph::new(lines)
+        .block(modal_block)
+        .wrap(ratatui::widgets::Wrap { trim: false });
 
     f.render_widget(modal, area);
 }

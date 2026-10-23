@@ -16,6 +16,9 @@ use repl::app::{CodeUnit, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab
 struct MockState {
     parses: Vec<(u64, repl::Input)>,
     evals: Vec<u64>,
+    commands: Vec<repl::Command>,
+    /// The units the pretend engine's session has, by entry id.
+    session: Vec<u64>,
     responses: VecDeque<WorkerResponse>,
 }
 
@@ -30,8 +33,10 @@ impl ReplExecutor for MockExecutor {
         self.state.borrow_mut().parses.push((id, input));
     }
 
-    fn submit_eval(&mut self, id: u64, _command: repl::Command) {
-        self.state.borrow_mut().evals.push(id);
+    fn submit_eval(&mut self, id: u64, command: repl::Command) {
+        let mut state = self.state.borrow_mut();
+        state.evals.push(id);
+        state.commands.push(command);
     }
 
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {
@@ -40,12 +45,34 @@ impl ReplExecutor for MockExecutor {
 }
 
 impl MockExecutor {
-    fn queue(&self, response: WorkerResponse) {
+    /// Queue a response, with the session an engine would report in an eval
+    /// result: a unit is added to it, and a reset of any kind empties it.
+    fn queue(&self, mut response: WorkerResponse) {
+        let mut state = self.state.borrow_mut();
+        if let WorkerResponse::EvalResult { id, eval, session, .. } = &mut response {
+            match eval {
+                repl::Eval::Unit(repl::script::Eval::ErrorReset(_) | repl::script::Eval::CrashReset(_))
+                | repl::Eval::CallerInterpret(repl::ReplCommand::Reset) => state.session.clear(),
+                repl::Eval::Unit(_) => state.session.push(*id),
+                _ => {}
+            }
+            *session = state.session.clone();
+        }
+        state.responses.push_back(response);
+    }
+
+    /// Queue a response as it is, session and all.
+    fn queue_raw(&self, response: WorkerResponse) {
         self.state.borrow_mut().responses.push_back(response);
     }
 
     fn evals(&self) -> Vec<u64> {
         self.state.borrow().evals.clone()
+    }
+
+    /// What each eval submission was, in order.
+    fn commands(&self) -> Vec<repl::Command> {
+        self.state.borrow().commands.clone()
     }
 
     fn parse_count(&self) -> usize {
@@ -77,6 +104,7 @@ fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
             value: "1".to_string(),
         }])),
         environment: vec![(name.to_string(), "int".to_string(), "1".to_string())],
+        session: Vec::new(),
     }
 }
 
@@ -166,6 +194,7 @@ fn multiline_mode_spans_one_submission() {
             name: "f".to_string(),
         }])),
         environment: vec![("f".to_string(), "function".to_string(), "-".to_string())],
+        session: Vec::new(),
     });
     app.poll_results();
 
@@ -204,6 +233,7 @@ fn exit_command_asks_the_app_to_exit() {
         id: 0,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Exit),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     app.poll_results();
 
@@ -255,6 +285,7 @@ fn reset_command_clears_history_and_environment() {
         id: 1,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     app.poll_results();
 
@@ -310,7 +341,7 @@ fn save_writes_the_history_up_to_itself() {
     let path = dir.path().join("session.world");
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
-    app.set_save_path(path.clone());
+    app.set_session_path(path.clone());
 
     app.submit_input("fun f(): int".to_string());
     executor.queue(WorkerResponse::ParseResult {
@@ -333,6 +364,7 @@ fn save_writes_the_history_up_to_itself() {
         id: 2,
         eval: repl::Eval::Unit(repl::script::Eval::Error("no such name".to_string())),
         environment: Vec::new(),
+        session: Vec::new(),
     });
 
     app.submit_input("/save".to_string());
@@ -346,6 +378,7 @@ fn save_writes_the_history_up_to_itself() {
         id: 3,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     app.poll_results();
 
@@ -392,6 +425,7 @@ fn save_without_a_path_is_an_error() {
         id: 0,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     app.poll_results();
 
@@ -399,10 +433,11 @@ fn save_without_a_path_is_an_error() {
     assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::CommandError(_))));
 }
 
-/// A crash reset clears the history, so responses for requests that were in
-/// flight at the time have nowhere to land and are dropped.
+/// A crash forgets the history up to the input that crashed, as `/reset`
+/// does. Input submitted while it was running runs in the new session, and
+/// its results land.
 #[test]
-fn results_from_before_a_crash_reset_are_dropped() {
+fn input_after_a_crash_runs_in_the_new_session() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
 
@@ -414,19 +449,23 @@ fn results_from_before_a_crash_reset_are_dropped() {
         id: 0,
         eval: repl::Eval::Unit(repl::script::Eval::CrashReset("boom".to_string())),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     app.poll_results();
 
     assert!(app.crash_modal_is_open());
-    assert_eq!(app.history().len(), 0);
+    assert_eq!(app.history().len(), 1);
 
     // The second line's parse was submitted before the reset.
     executor.queue(parsed_statement(1, "let y = 2"));
     executor.queue(evaluated_let(1, "y"));
     app.poll_results();
 
-    assert_eq!(app.history().len(), 0);
-    assert!(app.environment().is_empty());
+    assert!(matches!(app.history()[0].status, EntryStatus::Success));
+    assert_eq!(app.environment().len(), 1);
+    let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
+    assert_eq!(sources, vec!["let y = 2"]);
+    assert_eq!(app.session_mismatch_message(), None);
 }
 
 /// A runtime error empties the session, so the app forgets the history and
@@ -448,13 +487,14 @@ fn a_runtime_error_reset_clears_the_session() {
         id: 1,
         eval: repl::Eval::Unit(repl::script::Eval::ErrorReset("Error: stack overflow".to_string())),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     app.poll_results();
 
     assert_eq!(app.history().len(), 0);
     assert!(app.environment().is_empty());
     let message = app.crash_modal_message().expect("the reset is explained");
-    assert!(message.contains("stack overflow") && message.contains("reset"), "{message}");
+    assert!(message.contains("stack overflow"), "{message}");
 }
 
 /// The engine reports when it is ready, so the UI can say it is starting.
@@ -634,7 +674,7 @@ fn submitting_returns_to_the_newest_entry() {
 }
 
 fn evaluated(id: u64, eval: repl::script::Eval) -> WorkerResponse {
-    WorkerResponse::EvalResult { id, eval: repl::Eval::Unit(eval), environment: Vec::new() }
+    WorkerResponse::EvalResult { id, eval: repl::Eval::Unit(eval), environment: Vec::new(), session: Vec::new() }
 }
 
 fn parsed_command(id: u64, command: repl::ReplCommand) -> WorkerResponse {
@@ -677,6 +717,7 @@ fn code_units_are_the_units_and_what_the_last_step_did() {
         id: 1,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Help),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     executor.queue(evaluated(2, repl::script::Eval::Error("no `c`".to_string())));
     app.poll_results();
@@ -833,6 +874,7 @@ fn a_reset_loses_the_selection() {
         id: 1,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
         environment: Vec::new(),
+        session: Vec::new(),
     });
     executor.queue(parsed_statement(2, "let b = 1"));
     executor.queue(evaluated_let(2, "b"));
@@ -873,4 +915,150 @@ fn the_selected_unit_is_scrolled_into_view() {
     app.move_in_code(Scroll::PageDown);
     assert_eq!(app.code_scroll_back(), 0);
     assert_eq!(app.selected_unit(), Some(2));
+}
+
+/// `/load` starts the session again as the saved one: a reset, then the saved
+/// inputs, evaluated without parsing. The reset forgets what came before,
+/// the `/load` included.
+#[test]
+fn load_resets_and_replays_the_saved_session() {
+    let dir = rmx::tempfile::tempdir().unwrap();
+    let path = dir.path().join("session.world");
+    std::fs::write(&path, "\
+----------
+scriptunit-fragment
+----------
+
+let a = 1
+
+----------
+repl-command
+----------
+
+/load
+").unwrap();
+
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    app.set_session_path(path);
+
+    app.submit_input("let old = 1".to_string());
+    executor.queue(parsed_statement(0, "let old = 1"));
+    executor.queue(evaluated_let(0, "old"));
+    app.submit_input("/load".to_string());
+    executor.queue(parsed_command(1, repl::ReplCommand::Load));
+    executor.queue(WorkerResponse::EvalResult {
+        id: 1,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
+        environment: vec![("old".to_string(), "int".to_string(), "1".to_string())],
+        session: Vec::new(),
+    });
+    app.poll_results();
+
+    // The saved `/load` is not replayed, or it would load forever.
+    assert_eq!(executor.evals(), vec![0, 1, 2, 3]);
+    // The code is the loaded session's from the start, with the reset
+    // still to be answered.
+    let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
+    assert_eq!(sources, vec!["let a = 1"]);
+    let commands = executor.commands();
+    assert!(matches!(commands[2], repl::Command::ReplCommand(repl::ReplCommand::Reset)), "{commands:?}");
+    assert!(matches!(&commands[3], repl::Command::Unit(repl::script::Unit::Fragment(source)) if source == "let a = 1"));
+
+    executor.queue(WorkerResponse::EvalResult {
+        id: 2,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
+        environment: Vec::new(),
+        session: Vec::new(),
+    });
+    executor.queue(evaluated_let(3, "a"));
+    app.poll_results();
+
+    let inputs: Vec<&str> = app.history().iter().map(|entry| entry.input.as_str()).collect();
+    assert_eq!(inputs, vec!["let a = 1"]);
+    assert_eq!(app.environment().len(), 1);
+}
+
+/// With nothing saved, `/load` is an error and the session is left alone.
+#[test]
+fn load_without_a_saved_session_is_an_error() {
+    let dir = rmx::tempfile::tempdir().unwrap();
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    app.set_session_path(dir.path().join("missing.world"));
+
+    app.submit_input("/load".to_string());
+    executor.queue(parsed_command(0, repl::ReplCommand::Load));
+    executor.queue(WorkerResponse::EvalResult {
+        id: 0,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
+        environment: Vec::new(),
+        session: Vec::new(),
+    });
+    app.poll_results();
+
+    assert_eq!(executor.evals(), vec![0]);
+    assert!(matches!(app.history()[0].status, EntryStatus::Error));
+    assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::CommandError(_))));
+}
+
+/// The code is the session as it will be: a `/reset` the engine has not
+/// answered already takes the units before it, and units typed after it are
+/// the new session's.
+#[test]
+fn a_pending_reset_takes_the_code_before_it() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("let a = 1".to_string());
+    executor.queue(parsed_statement(0, "let a = 1"));
+    executor.queue(evaluated_let(0, "a"));
+    app.submit_input("/reset".to_string());
+    app.submit_input("let b = 2".to_string());
+    app.poll_results();
+
+    // Not parsed yet, the reset is not known to be one.
+    let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
+    assert_eq!(sources, vec!["let a = 1"]);
+
+    executor.queue(parsed_command(1, repl::ReplCommand::Reset));
+    executor.queue(parsed_statement(2, "let b = 2"));
+    app.poll_results();
+    let units = app.code_units();
+    assert_eq!(units, vec![CodeUnit { id: 2, source: "let b = 2", step: UnitStep::Pending }]);
+    // The history keeps the units the engine still has.
+    assert_eq!(app.history().len(), 3);
+}
+
+/// An engine that reports a session the history does not hold is a bug in
+/// the app's bookkeeping, and is shown as one; the code shown is the
+/// engine's.
+#[test]
+fn a_session_the_history_does_not_hold_is_reported() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("let a = 1".to_string());
+    app.submit_input("let b = 2".to_string());
+    executor.queue(parsed_statement(0, "let a = 1"));
+    executor.queue(parsed_statement(1, "let b = 2"));
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+    assert_eq!(app.session_mismatch_message(), None);
+
+    // The engine says it lost `a` while adding `b`, which nothing the app
+    // knows of does.
+    let WorkerResponse::EvalResult { eval, environment, .. } = evaluated_let(1, "b") else {
+        unreachable!();
+    };
+    executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![1] });
+    app.poll_results();
+
+    let message = app.session_mismatch_message().expect("the mismatch is reported");
+    assert!(message.contains("[1]") && message.contains("[0, 1]"), "{message}");
+    let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
+    assert_eq!(sources, vec!["let b = 2"]);
+
+    app.dismiss_session_mismatch();
+    assert_eq!(app.session_mismatch_message(), None);
 }
