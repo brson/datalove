@@ -808,13 +808,14 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     /// Act on a scroll key the focused code panel takes: the arrows move the
-    /// selection a unit, and the page keys scroll a page.
+    /// selection a unit, and the page keys scroll a page; see
+    /// [`Self::page_in_code`].
     pub fn move_in_code(&mut self, scroll: Scroll) {
         let step: isize = match scroll {
             Scroll::LineUp => -1,
             Scroll::LineDown => 1,
             Scroll::PageUp | Scroll::PageDown => {
-                self.scroll_code(scroll);
+                self.page_in_code(scroll);
                 return;
             }
         };
@@ -830,6 +831,45 @@ impl<E: ReplExecutor> ReplApp<E> {
         };
         self.selected_unit = Some(numbers[index]);
         self.reveal_selected_unit();
+    }
+
+    /// Scroll the code a page, keeping the selection on screen.
+    ///
+    /// A selected unit still on screen, if only partly, stays selected. One
+    /// the page scrolled off gives way to the nearest unit left on it: the
+    /// bottom one going up, the top one going down. With nowhere left to
+    /// scroll, the key selects the first unit or the last, so paging to the
+    /// end of the code ends on its end unit.
+    fn page_in_code(&mut self, scroll: Scroll) {
+        let up = scroll == Scroll::PageUp;
+        let offset = self.code_scroll.offset;
+        self.scroll_code(scroll);
+
+        // A unit on its way to the engine has no number to select it by yet.
+        let numbers: Vec<u32> = self.code_units().iter().filter_map(|unit| unit.number).collect();
+        if numbers.is_empty() {
+            return;
+        }
+        if self.code_scroll.offset == offset {
+            self.selected_unit = if up { numbers.first() } else { numbers.last() }.copied();
+            self.reveal_selected_unit();
+            return;
+        }
+
+        let layout = &self.code_layout;
+        let limit = self.code_scroll.limit;
+        let top = limit - self.code_scroll.offset.min(limit);
+        let bottom = top + layout.pane_lines;
+        let on_screen = |lines: &std::ops::Range<usize>| lines.start < bottom && lines.end > top;
+        let selected = self.selected_unit();
+        if layout.units.iter().any(|(number, lines)| Some(*number) == selected && on_screen(lines)) {
+            return;
+        }
+        let mut showing = layout.units.iter().filter(|(_, lines)| on_screen(lines));
+        let nearest = if up { showing.last() } else { showing.next() };
+        if let Some((number, _)) = nearest {
+            self.selected_unit = Some(*number);
+        }
     }
 
     /// Scroll the code just far enough to show the selected unit, or its

@@ -463,8 +463,12 @@ input keeps all of them, Ctrl included, for moving its cursor, so neither
 panel scrolls from there until focus moves. The bottom panel scrolls the tab
 it shows, and each tab keeps its own place. The focused code panel's arrows
 move the selection rather than scrolling a line, and the view moves just far
-enough to show the selected unit, using where each unit was last laid out;
-its page keys still scroll a page.
+enough to show the selected unit, using where each unit was last laid out.
+Its page keys scroll a page and keep the selection on screen: a selected unit
+the page scrolls off gives way to the nearest unit left showing, and a page
+key with nowhere left to scroll selects the first unit or the last. So paging
+to either end of the code ends on its end unit, one key after the view gets
+there.
 
 The code and the history follow the newest unit and the newest output, which
 is where a session spends nearly all of its time. So their scroll positions

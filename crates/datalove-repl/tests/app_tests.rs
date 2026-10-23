@@ -1200,3 +1200,50 @@ fn command_named(input: &str) -> repl::ReplCommand {
         other => panic!("{input:?} is not a REPL command: {other:?}"),
     }
 }
+
+/// The page keys scroll the code and keep the selection on screen: a unit
+/// scrolled off gives way to the nearest one left, and paging with nowhere
+/// left to scroll selects the end unit.
+#[test]
+fn paging_keeps_the_selection_on_screen() {
+    let mut app = app_with_units(&["a", "b", "c", "d"]);
+    // Four three-line units with a rule between each, in a five-line pane: a
+    // page is four lines, and ten can be scrolled.
+    app.record_code_view(5, 10, vec![(1, 0..3), (2, 4..7), (3, 8..11), (4, 12..15)]);
+    app.focus_prev();
+    assert_eq!(app.selected_unit(), Some(4));
+
+    let mut page = |scroll| {
+        app.move_in_code(scroll);
+        (app.code_scroll_back(), app.selected_unit())
+    };
+    // Lines 6 to 10 show units 2 and 3; unit 4 is gone, and 3 is nearest.
+    assert_eq!(page(Scroll::PageUp), (4, Some(3)));
+    // Lines 2 to 6 show 1 and 2.
+    assert_eq!(page(Scroll::PageUp), (8, Some(2)));
+    // Lines 0 to 4 still show 2, so it stays.
+    assert_eq!(page(Scroll::PageUp), (10, Some(2)));
+    // Nowhere left to scroll: the first unit.
+    assert_eq!(page(Scroll::PageUp), (10, Some(1)));
+    assert_eq!(page(Scroll::PageUp), (10, Some(1)));
+
+    // Lines 4 to 8 show 2 and 3; unit 1 is gone, and 2 is nearest.
+    assert_eq!(page(Scroll::PageDown), (6, Some(2)));
+    assert_eq!(page(Scroll::PageDown), (2, Some(3)));
+    assert_eq!(page(Scroll::PageDown), (0, Some(3)));
+    assert_eq!(page(Scroll::PageDown), (0, Some(4)));
+}
+
+/// Code that fits in the pane has nowhere to scroll, so a page key goes
+/// straight to the end unit.
+#[test]
+fn paging_code_that_fits_selects_the_end_unit() {
+    let mut app = app_with_units(&["a", "b", "c"]);
+    app.record_code_view(20, 0, vec![(1, 0..1), (2, 2..3), (3, 4..5)]);
+    app.focus_prev();
+
+    app.move_in_code(Scroll::PageUp);
+    assert_eq!(app.selected_unit(), Some(1));
+    app.move_in_code(Scroll::PageDown);
+    assert_eq!(app.selected_unit(), Some(3));
+}
