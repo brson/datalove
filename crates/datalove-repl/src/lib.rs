@@ -161,8 +161,13 @@ impl Place {
 pub enum Eval {
     /// What the engine made of a script unit.
     Unit(script::Eval),
-    /// A REPL command, for the app to carry out.
-    CallerInterpret(ReplCommand),
+    /// The session was reset by `/reset`.
+    Reset,
+    /// The help was shown.
+    Help,
+    /// A saved session was read, and these many of its inputs are to be
+    /// replayed.
+    Loaded { inputs: usize },
     /// A REPL command that could not be carried out.
     CommandError(String),
     /// The history was saved, as this many inputs, to this path.
@@ -185,7 +190,7 @@ impl Eval {
     /// Whether the session is empty after this: a `/reset`, or a runtime
     /// error or a crash.
     pub fn empties_session(&self) -> bool {
-        self.reset_the_session() || matches!(self, Eval::CallerInterpret(ReplCommand::Reset))
+        self.reset_the_session() || matches!(self, Eval::Reset)
     }
 }
 

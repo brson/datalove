@@ -175,8 +175,9 @@ fn eval_lines(eval: &repl::Eval) -> Vec<Line<'_>> {
         }
         repl::Eval::CommandError(e) => vec![marked("✗", Color::Red, fmt!("error: {e}"))],
         repl::Eval::Saved { path, inputs } => vec![marked("✓", Color::Green, fmt!("saved {inputs} inputs to {path}"))],
-        repl::Eval::CallerInterpret(repl::ReplCommand::Help) => vec![marked("ℹ", Color::Blue, "shown in the Help tab")],
-        repl::Eval::CallerInterpret(_) => vec![marked("ℹ", Color::Blue, "(repl command)")],
+        repl::Eval::Help => vec![marked("ℹ", Color::Blue, "shown in the Help tab")],
+        repl::Eval::Loaded { inputs } => vec![marked("✓", Color::Green, fmt!("loaded {inputs} inputs"))],
+        repl::Eval::Reset => unreachable!("a reset takes its own entry"),
     }
 }
 
@@ -346,8 +347,6 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect,
 
         match &entry.status {
             EntryStatus::Evaluating => entry_lines.push(marked("…", Color::Yellow, "evaluating")),
-            EntryStatus::Empty => entry_lines.push(marked("·", Color::DarkGray, "(empty)")),
-            EntryStatus::ReadMultiline => entry_lines.push(marked("→", Color::DarkGray, "read more lines")),
             EntryStatus::Success | EntryStatus::Error => {
                 let eval = entry.eval_result.as_ref().expect("an answered entry has what it came to");
                 entry_lines.extend(eval_lines(eval));
@@ -362,6 +361,23 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect,
         }
         lines.extend(entry_lines);
         lines.push(Line::from(""));
+    }
+
+    // The commands waiting to run, after everything that has, the redo stack
+    // included.
+    let mut queued = repl.queued().peekable();
+    if queued.peek().is_some() {
+        lines.push(Line::from(Span::styled("── queued ──", Style::default().fg(Color::DarkGray))));
+        for input in queued {
+            let input = match input.split_once('\n') {
+                Some((first, _)) => fmt!("{first}…"),
+                None => input.S(),
+            };
+            lines.push(Line::from(vec![
+                Span::styled("  … ", Style::default().fg(Color::DarkGray)),
+                Span::styled(input, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]));
+        }
     }
 
     render_scrolled_back(f, lines, block, area, repl.history_scroll_back())

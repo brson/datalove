@@ -39,7 +39,6 @@ fn submit(app: &mut App, input: &str) {
 /// Each entry's input and whether it succeeded.
 fn outcomes(app: &App) -> Vec<(String, bool)> {
     app.history().iter()
-        .filter(|entry| !matches!(entry.status, EntryStatus::ReadMultiline))
         .map(|entry| (entry.input.C(), matches!(entry.status, EntryStatus::Success)))
         .collect()
 }
@@ -279,13 +278,11 @@ fn bindings(app: &App) -> Vec<(String, String)> {
 }
 
 fn undo(app: &mut App) {
-    app.undo();
-    settle(app);
+    submit(app, "/undo");
 }
 
 fn redo(app: &mut App) {
-    app.redo();
-    settle(app);
+    submit(app, "/redo");
 }
 
 /// Undo takes back each change in turn, to the session as it was before
@@ -353,4 +350,27 @@ fn new_input_drops_the_redo_stack() {
     submit(&mut app, "/save");
     submit(&mut app, "/load");
     assert_eq!(code(&app), vec![(Some(1), "let a = 1".S()), (Some(2), "let e = 5".S())]);
+}
+
+/// Commands typed without waiting run as if each waited for the one before:
+/// an undo takes back the unit typed just before it, and what follows a
+/// `/load` runs in the session it loads, after its units.
+#[test]
+fn commands_typed_without_waiting_run_in_order() {
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("session.world");
+    let mut app = app(&path);
+    submit(&mut app, "let a = 1");
+    submit(&mut app, "/save");
+
+    // None of these waits for an answer.
+    for input in ["let x = 1", "/undo", "let y = 2", "/load", "let z = a + 1"] {
+        app.submit_input(input.S());
+    }
+    settle(&mut app);
+
+    assert_eq!(code(&app), vec![(Some(1), "let a = 1".S()), (Some(2), "let z = a + 1".S())]);
+    assert_eq!(bindings(&app), vec![("a".S(), "1".S()), ("z".S(), "2".S())]);
+    let inputs: Vec<&str> = app.history().iter().map(|entry| entry.input.as_str()).collect();
+    assert_eq!(inputs, vec!["let a = 1", "let z = a + 1"], "the load forgot what came before it");
 }

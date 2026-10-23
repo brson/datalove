@@ -58,10 +58,9 @@ impl Session {
 
     /// Evaluate a command.
     ///
-    /// A REPL command that does not change the session is the app's to carry
-    /// out, and is handed back to it. One that does is done here, in the
-    /// order the commands came in, so a unit submitted after a `/reset` runs
-    /// in the new session.
+    /// Only units and the commands that change the session come here; the
+    /// rest are the REPL app's, which carries them out itself, and are an
+    /// error here, as in a script run without the app.
     pub fn eval(&mut self, command: Command) -> Eval {
         let eval = match command {
             Command::Unit(unit) => {
@@ -80,7 +79,7 @@ impl Session {
                 ReplCommand::Reset => {
                     self.engine.reset();
                     self.forget();
-                    Eval::CallerInterpret(ReplCommand::Reset)
+                    Eval::Reset
                 }
                 ReplCommand::Edit { unit, source } => self.edit(unit, source),
                 ReplCommand::Delete { unit } => self.delete(unit),
@@ -90,11 +89,9 @@ impl Session {
                     self.next = next;
                     Eval::Edited(Vec::new())
                 }
-                ReplCommand::Undo | ReplCommand::Redo => {
-                    Eval::CommandError("undo and redo are the app's, which keeps the history".S())
-                }
-                command @ (ReplCommand::Exit | ReplCommand::Help | ReplCommand::Save | ReplCommand::Load) => {
-                    Eval::CallerInterpret(command)
+                ReplCommand::Exit | ReplCommand::Help | ReplCommand::Save | ReplCommand::Load
+                | ReplCommand::Undo | ReplCommand::Redo => {
+                    Eval::CommandError(fmt!("{command:?} is the REPL app's, which keeps the history"))
                 }
             },
         };

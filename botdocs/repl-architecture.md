@@ -15,6 +15,7 @@ re-settled on every step. How an edit reaches the units that depend on it is
 
 - [Crates](#user-content-crates)
 - [The request/response shape](#user-content-the-requestresponse-shape)
+- [The command queue](#user-content-the-command-queue)
 - [The engine](#user-content-the-engine)
 - [What a line does](#user-content-what-a-line-does)
 - [Editing, not only appending](#user-content-editing-not-only-appending)
@@ -59,9 +60,10 @@ REPL in sight, and a notebook or an embedding would too.
 
 The REPL wraps the engine's types rather than adding to them. Its `Command` is
 a `ReplCommand` or a `Unit`, and its `Eval` is the engine's `Eval` for a unit,
-or what a REPL command came to. `datalove_repl::eval` is where the two meet.
-It hands a unit to the engine and a command back to the app, resetting the
-engine first for a `/reset`.
+or what a REPL command came to. `Session` is where the two meet, on the
+worker: it carries out units and the commands that change the session. The
+rest of the commands are the app's, which carries them out itself; see
+[The command queue](#user-content-the-command-queue).
 
 `datalove-cli` calls `datalove_repl_rat::run()` for the interactive REPL and
 `datalove_repl::run_script` for `repl --script`. Both take the system library,
@@ -75,8 +77,9 @@ results come back keyed by id:
 
 ```
 submit_input(text) -> parse_input -> ReadMultiline: more lines
-                                  -> Empty: an entry, nothing else
-                                  -> Command: submit_eval(id) -> Eval, environment, session, step
+                                  -> Empty: nothing
+                                  -> Command: the queue -> submit_eval(id) -> Eval, environment, session, step
+                                                       -> carried out in the app
 ```
 
 **Reading an input does not ask the engine.** `parse_input` is a function of
@@ -103,6 +106,43 @@ which time all of them have been answered.
 
 Executors are constructed by the caller and handed to `ReplApp`, which is
 what lets the tests drive the state machine with a scripted mock.
+
+## The command queue
+
+Some commands are the engine's: units, and the commands that change the
+session, `/reset`, `/edit`, `/delete` and `/insert`. The rest are the app's:
+`/undo`, `/redo`, `/save`, `/load`, `/help` and `/exit`, which read the history
+and the app's units, and may send the engine commands of their own. Each runs
+against what every command entered before it leaves, however fast they were
+typed, and **the queue is what makes it so**. Every command entered goes into
+it, typed, from the code panel, or replayed, and `ReplApp::dispatch` runs
+what can run from its front, after every answer and every entry:
+
+- A command for the engine is sent as soon as everything before it has been,
+  since the engine answers in order. Units typed or replayed one after
+  another are not held back for each other's answers, which at the app's
+  10ms poll would cost a long `/load` seconds.
+- A command for the app waits until everything sent before it is answered,
+  and then runs, in the app, against the history as that leaves it. What it
+  sends the engine is sent before anything after it in the queue: an undo
+  takes back the change entered just before it, and the units a `/load`
+  replays, which it puts at the front of the queue, go ahead of what was typed
+  after the `/load`.
+
+The app's commands once went to the worker too, for the session to hand back
+as `CallerInterpret` once everything before them had been answered. That
+ordered what they read, and not what they sent: by the time the answer came
+back, what was typed after them was already on its way to the engine, so a
+`/load` replayed its units after a line typed behind it, and an `/undo` could
+not have taken back the right change.
+
+**A command enters the history when it runs, not when it is typed**, and
+drops the redo stack then, so a line typed behind an `/undo` drops the stack
+that undo leaves, as it would have typed after it. What waits is shown in the
+History tab, after a divider below everything that has run, the redo stack
+included, and the code panel shows the units among it as on their way. An
+empty input and a line that only opens a multiline input are not commands,
+and enter nothing.
 
 ## The engine
 
@@ -326,9 +366,9 @@ can be undone.
 The commands undo and redo send are not entered either. They go to the
 engine like any other, under ids with no entry, which `ReplApp::unrecorded`
 keeps until they are answered, and their answers change the app's units and
-are checked against the engine's like any other. Undo and redo wait for
-nothing: with a command still to be answered, whose change is not known yet,
-they do nothing.
+are checked against the engine's like any other. The queue runs undo and
+redo once everything before them is answered, so the change they take back
+or make again is known.
 
 **Dropping the redo stack gives its numbers back.** A saved session is
 replayed from the history it keeps, which numbers its units in the order they
@@ -350,13 +390,11 @@ prompt, and `/load` replays `repl-session.world` in place of the session.
 **What is saved is the app's history, not the engine's session.** The
 engine's session holds the script units. The history also has the slash
 commands and whatever a reset took out of the session. So the app writes the
-file when the session hands `/save` back to it as `CallerInterpret`. A few
-things are left out:
+file, when the queue runs the `/save`, from the history up to it. A few things
+are left out:
 
 - Anything typed after the `/save`.
-- The line that only opened a multiline input. The input it opened holds it
-  again.
-- Empty inputs.
+- What was undone, which the `/save` dropped when it was entered.
 - Whatever a reset already took out of the history.
 
 An app given no path with `set_session_path`, as in the tests, answers `/save`
@@ -376,8 +414,9 @@ module, data or rider sections is refused.
 
 **`/load` resets before it replays**, so the session becomes the one saved
 rather than the saved one on top of what is there. The app reads the file when
-the engine hands `/load` back, and replays a `/reset` ahead of the saved
-inputs. That reset is ordered with everything else the engine is asked, and
+the queue runs the `/load`, and puts a `/reset` and the saved inputs at the
+front of the queue. That reset is ordered with everything else the engine is
+asked, and
 forgets the history up to itself as `/reset` does, the `/load` included. A file
 that cannot be read is an error on the `/load`, and the session is left
 alone.
@@ -569,10 +608,9 @@ is what a shell or a REPL throws a line away with. Esc was tried first and
 does not work: a terminal multiplexer holds Esc back for its `escape-time`, to
 see whether an escape sequence follows, which delays it, and two Escs that
 arrive in one read are parsed by crossterm as one, which loses the second.
-Ctrl+C is one byte that starts no sequence. The line that opened the multiline
-input stays in the history as one that only read more lines. Multiline mode
-ends only by submitting or cancelling; an answer to an earlier input arriving
-meanwhile leaves it.
+Ctrl+C is one byte that starts no sequence. Multiline mode ends only by
+submitting or cancelling; an answer to an earlier input arriving meanwhile
+leaves it.
 
 **Ctrl+C anywhere else asks whether to exit.** It opens a dialog saying
 "Ctrl+C again to exit"; another Ctrl+C exits, and any other key closes it and

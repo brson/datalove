@@ -173,17 +173,15 @@ impl ScrollState {
     }
 }
 
-/// A single REPL history entry.
-///
-/// There is one of these for every line/multiline sent to the repl engine.
+/// A single REPL history entry: a command, from when it ran.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
     /// Request ID for this entry.
     pub id: u64,
     /// The input text submitted.
     pub input: String,
-    /// What the input was read as.
-    pub parse_result: repl::InputParse,
+    /// The command the input was read as.
+    pub command: repl::Command,
     /// Evaluation result if available.
     pub eval_result: Option<repl::Eval>,
     /// Entry status (lifecycle and outcome).
@@ -237,16 +235,12 @@ impl Change {
 /// Tracks both the processing lifecycle and the outcome.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EntryStatus {
-    /// Request is being evaluated; its command is the entry's parse.
+    /// Request is being evaluated.
     Evaluating,
     /// Request completed successfully.
     Success,
     /// Request completed with an error.
     Error,
-    /// Request completed with empty input.
-    Empty,
-    /// Read a multiline input.
-    ReadMultiline,
 }
 
 /// Find the history entry a worker response belongs to.
@@ -261,8 +255,8 @@ fn find_entry(history: &mut [HistoryEntry], id: u64) -> &mut HistoryEntry {
 }
 
 impl HistoryEntry {
-    fn new(id: u64, input: String, parse_result: repl::InputParse, status: EntryStatus) -> Self {
-        Self { id, input, parse_result, eval_result: None, status, change: None, undone: false }
+    fn new(id: u64, input: String, command: repl::Command, status: EntryStatus) -> Self {
+        Self { id, input, command, eval_result: None, status, change: None, undone: false }
     }
 }
 
@@ -320,6 +314,9 @@ pub struct ReplApp<E: ReplExecutor> {
     /// The commands submitted for undo and redo, and to renumber, by id,
     /// which have no entries in the history and are not yet answered.
     unrecorded: std::collections::HashMap<u64, repl::Command>,
+    /// Commands entered and not yet run, with what was typed for each; see
+    /// [`ReplApp::dispatch`].
+    queue: std::collections::VecDeque<(String, repl::Command)>,
     /// What was typed when the edit began, and whether it was multiline, to
     /// be put back when the edit ends.
     stashed: Option<(String, bool)>,
@@ -411,6 +408,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             cancel_armed: false,
             editing: None,
             unrecorded: std::collections::HashMap::new(),
+            queue: std::collections::VecDeque::new(),
             stashed: None,
             focus: Panel::Input,
             tab: Tab::Environment,
@@ -460,18 +458,14 @@ impl<E: ReplExecutor> ReplApp<E> {
         match self.read(&input_text) {
             repl::InputParse::Command(command) => {
                 self.multiline_mode = false;
-                self.submit_command(input_text, command);
+                self.enqueue(input_text, command);
                 UiAction::ClearInput
             }
-            parse @ repl::InputParse::Empty => {
+            repl::InputParse::Empty => {
                 self.multiline_mode = false;
-                self.push_entry(input_text, parse, EntryStatus::Empty);
                 UiAction::ClearInput
             }
-            repl::InputParse::ReadMultiline(text) => {
-                self.push_entry(input_text, repl::InputParse::ReadMultiline(text.C()), EntryStatus::ReadMultiline);
-                self.read_more(&text)
-            }
+            repl::InputParse::ReadMultiline(text) => self.read_more(&text),
         }
     }
 
@@ -492,13 +486,13 @@ impl<E: ReplExecutor> ReplApp<E> {
         UiAction::SetMultilineInput { lines }
     }
 
-    /// Enter an input in the history, and say which entry it is.
+    /// Enter a command in the history, as it runs, and say which entry it is.
     ///
     /// A new entry drops the redo stack: what was undone is gone for good.
-    fn push_entry(&mut self, input: String, parse: repl::InputParse, status: EntryStatus) -> u64 {
+    fn push_entry(&mut self, input: String, command: repl::Command, status: EntryStatus) -> u64 {
         self.drop_redo();
         let id = self.next_id();
-        self.history.push(HistoryEntry::new(id, input, parse, status));
+        self.history.push(HistoryEntry::new(id, input, command, status));
         id
     }
 
@@ -544,12 +538,9 @@ impl<E: ReplExecutor> ReplApp<E> {
     ///
     /// The entries after it that made no change are taken back with it, so
     /// the redo stack is always the end of the history. Nothing happens with
-    /// a command still to be answered, whose change is not known yet, or with
     /// no change to take back.
-    pub fn undo(&mut self) {
-        if !self.settled() {
-            return;
-        }
+    fn undo(&mut self) {
+        assert!(self.sent_answered(), "undo runs once every change before it is answered");
         let Some(index) = self.history.iter().rposition(|entry| !entry.undone && entry.change.is_some()) else {
             return;
         };
@@ -563,12 +554,9 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Make again the change last taken back.
     ///
     /// The entries before it on the redo stack that made no change come back
-    /// with it. Nothing happens with a command still to be answered, or with
-    /// nothing taken back.
-    pub fn redo(&mut self) {
-        if !self.settled() {
-            return;
-        }
+    /// with it. Nothing happens with nothing taken back.
+    fn redo(&mut self) {
+        assert!(self.sent_answered(), "redo runs once every change before it is answered");
         let Some(first) = self.history.iter().position(|entry| entry.undone) else {
             return;
         };
@@ -583,43 +571,129 @@ impl<E: ReplExecutor> ReplApp<E> {
         }
     }
 
-    /// Whether every command submitted has been answered, those for undo and
-    /// redo included.
+    /// Whether every command sent to the engine has been answered, those for
+    /// undo and redo included, and none is waiting to be sent.
     pub fn settled(&self) -> bool {
-        self.unrecorded.is_empty() && self.history.iter().all(|entry| !matches!(entry.status, EntryStatus::Evaluating))
+        self.queue.is_empty() && self.sent_answered()
     }
 
     /// Replay a saved session's inputs, as if each had been submitted.
     ///
-    /// They go straight to evaluation, since a saved input already says what
+    /// They go straight to the queue, since a saved input already says what
     /// it is, and reading a unit's text again would ask for more input on a
     /// definition that spans lines.
     pub fn replay(&mut self, inputs: Vec<repl::SavedInput>) {
         for repl::SavedInput { input, command } in inputs {
-            self.submit_command(input, command);
+            self.enqueue(input, command);
         }
     }
 
-    /// Submit a command already read, entered in the history as `input`.
+    /// Enter a command, typed as `input`, to run after every command before
+    /// it; see [`Self::dispatch`].
     ///
-    /// `/undo` and `/redo` are carried out instead, and are not entered: they
-    /// move through the history rather than adding to it, and show it, where
-    /// what they did is grayed out or not.
-    fn submit_command(&mut self, input: String, command: repl::Command) {
-        match command {
-            repl::Command::ReplCommand(repl::ReplCommand::Undo) => {
-                self.tab = Tab::History;
-                return self.undo();
-            }
-            repl::Command::ReplCommand(repl::ReplCommand::Redo) => {
-                self.tab = Tab::History;
-                return self.redo();
-            }
-            _ => {}
-        }
-        let id = self.push_entry(input, repl::InputParse::Command(command.C()), EntryStatus::Evaluating);
+    /// The tab it changes is shown now, as it is entered.
+    fn enqueue(&mut self, input: String, command: repl::Command) {
         self.show_tab_for(&command);
-        self.executor.submit_eval(id, command);
+        self.queue.push_back((input, command));
+        self.dispatch();
+    }
+
+    /// Run the commands at the front of the queue that can run now.
+    ///
+    /// **A command runs against the session every command before it leaves.**
+    /// One for the engine is sent as soon as everything before it has been,
+    /// since the engine answers in order. One the app carries out -- `/undo`,
+    /// `/redo`, `/save`, `/load`, `/help`, `/exit` -- waits until everything
+    /// before it has been answered, reads the history as that leaves it, and
+    /// sends what it sends the engine before anything after it is sent. So
+    /// an undo takes back the change entered just before it, and the units a
+    /// load replays go ahead of what was typed after the `/load`.
+    fn dispatch(&mut self) {
+        while let Some((_, command)) = self.queue.front() {
+            let local = runs_in_app(command);
+            if local && !self.sent_answered() {
+                return;
+            }
+            let (input, command) = self.queue.pop_front().expect("the front was looked at");
+            match local {
+                true => self.run_in_app(input, command),
+                false => {
+                    let id = self.push_entry(input, command.C(), EntryStatus::Evaluating);
+                    self.executor.submit_eval(id, command);
+                }
+            }
+        }
+    }
+
+    /// Whether everything sent to the engine has been answered, whatever is
+    /// still queued.
+    fn sent_answered(&self) -> bool {
+        self.unrecorded.is_empty() && self.history.iter().all(|entry| !matches!(entry.status, EntryStatus::Evaluating))
+    }
+
+    /// Carry out a command the engine has no part in, with everything before
+    /// it answered.
+    ///
+    /// `/undo` and `/redo` are not entered: they move through the history
+    /// rather than adding to it. `/exit` is not either, since nothing is shown
+    /// after it.
+    fn run_in_app(&mut self, input: String, command: repl::Command) {
+        let repl::Command::ReplCommand(repl_command) = &command else {
+            unreachable!("a unit is the engine's");
+        };
+        match repl_command {
+            repl::ReplCommand::Undo => self.undo(),
+            repl::ReplCommand::Redo => self.redo(),
+            repl::ReplCommand::Exit => self.should_exit = true,
+            repl::ReplCommand::Help => {
+                let id = self.push_entry(input, command, EntryStatus::Success);
+                find_entry(&mut self.history, id).eval_result = Some(repl::Eval::Help);
+            }
+            repl::ReplCommand::Save => {
+                let id = self.push_entry(input, command, EntryStatus::Evaluating);
+                let eval = self.save(id).unwrap_or_else(|e| repl::Eval::CommandError(fmt!("{e:#}")));
+                self.finish_in_app(id, eval);
+            }
+            repl::ReplCommand::Load => {
+                let id = self.push_entry(input, command, EntryStatus::Evaluating);
+                match self.load() {
+                    Ok(inputs) => {
+                        self.finish_in_app(id, repl::Eval::Loaded { inputs: inputs.len() });
+                        // A reset first, so the session is the one saved and
+                        // not the saved one on top of this, and all of it
+                        // ahead of what was entered after the `/load`. The
+                        // reset forgets this `/load` too, as `/reset`
+                        // forgets itself.
+                        let reset = (
+                            "/reset".S(),
+                            repl::Command::ReplCommand(repl::ReplCommand::Reset),
+                        );
+                        let replayed = std::iter::once(reset)
+                            .chain(inputs.into_iter().map(|saved| (saved.input, saved.command)));
+                        for (index, item) in replayed.enumerate() {
+                            self.queue.insert(index, item);
+                        }
+                    }
+                    Err(e) => self.finish_in_app(id, repl::Eval::CommandError(fmt!("{e:#}"))),
+                }
+            }
+            other => unreachable!("{other:?} is the engine's"),
+        }
+    }
+
+    /// What a command carried out in the app came to.
+    fn finish_in_app(&mut self, id: u64, eval: repl::Eval) {
+        let entry = find_entry(&mut self.history, id);
+        entry.status = match eval {
+            repl::Eval::CommandError(_) => EntryStatus::Error,
+            _ => EntryStatus::Success,
+        };
+        entry.eval_result = Some(eval);
+    }
+
+    /// The commands entered and not yet run, as they were typed.
+    pub fn queued(&self) -> impl Iterator<Item = &str> {
+        self.queue.iter().map(|(input, _)| input.as_str())
     }
 
     /// Delete the selected unit, as `/delete` would, and select the one after
@@ -634,7 +708,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         let numbers: Vec<u32> = self.numbers();
         let index = numbers.iter().position(|number| *number == unit).expect("the selected unit is shown");
         self.selected_unit = numbers.get(index + 1).or(index.checked_sub(1).map(|before| &numbers[before])).copied();
-        self.submit_command(
+        self.enqueue(
             fmt!("/delete {unit}"),
             repl::Command::ReplCommand(repl::ReplCommand::Delete { unit }),
         );
@@ -712,11 +786,11 @@ impl<E: ReplExecutor> ReplApp<E> {
                         repl::ReplCommand::Insert { place: repl::Place::Before, unit, source },
                     ),
                 };
-                self.submit_command(input, repl::Command::ReplCommand(command));
+                self.enqueue(input, repl::Command::ReplCommand(command));
                 self.end_edit()
             }
             repl::InputParse::Command(command @ repl::Command::ReplCommand(_)) => {
-                self.submit_command(text, command);
+                self.enqueue(text, command);
                 UiAction::ClearInput
             }
         }
@@ -758,6 +832,8 @@ impl<E: ReplExecutor> ReplApp<E> {
                 }
             }
         }
+        // What waited on those answers can run now.
+        self.dispatch();
     }
 
     /// Show what a command will change: code changes the environment, and
@@ -790,13 +866,18 @@ impl<E: ReplExecutor> ReplApp<E> {
             }
             return;
         }
-        let repl::InputParse::Command(command) = find_entry(&mut self.history, id).parse_result.C() else {
-            unreachable!("only a command is evaluated");
-        };
+        let command = find_entry(&mut self.history, id).command.C();
         let change = self.apply(&command, &eval);
         find_entry(&mut self.history, id).change = change;
         self.environment = environment;
 
+        if let repl::Eval::Reset = eval {
+            // Input submitted after the reset was evaluated in the new
+            // session, so only what came before it is forgotten, the reset
+            // with it.
+            self.history.retain(|entry| entry.id > id);
+            return;
+        }
         if eval.reset_the_session() {
             // A runtime error or a crash empties the session, as a `/reset`
             // does, and what came after it runs in the new one; so the history
@@ -814,11 +895,12 @@ impl<E: ReplExecutor> ReplApp<E> {
             // What each unit an edit reached came to is the units' to show;
             // the edit itself was made.
             repl::Eval::Unit(script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_))
-            | repl::Eval::Saved { .. } | repl::Eval::Edited(_) => Some(EntryStatus::Success),
-            // The command says.
-            repl::Eval::CallerInterpret(_) => None,
-            repl::Eval::Unit(script::Eval::ErrorReset(_) | script::Eval::CrashReset(_)) => {
+            | repl::Eval::Edited(_) => Some(EntryStatus::Success),
+            repl::Eval::Unit(script::Eval::ErrorReset(_) | script::Eval::CrashReset(_)) | repl::Eval::Reset => {
                 unreachable!("a reset was handled above")
+            }
+            repl::Eval::Help | repl::Eval::Saved { .. } | repl::Eval::Loaded { .. } => {
+                unreachable!("the app carries out {command:?} itself")
             }
         };
         let entry = find_entry(&mut self.history, id);
@@ -826,65 +908,6 @@ impl<E: ReplExecutor> ReplApp<E> {
         if let Some(status) = status {
             entry.status = status;
         }
-        if let repl::Eval::CallerInterpret(command) = &eval {
-            self.handle_caller_interpret(id, command);
-        }
-    }
-
-    fn handle_caller_interpret(&mut self, id: u64, command: &repl::ReplCommand) {
-        let status = match command {
-            repl::ReplCommand::Unknown
-            | repl::ReplCommand::Usage(_)
-            | repl::ReplCommand::Edit { .. }
-            | repl::ReplCommand::Delete { .. }
-            | repl::ReplCommand::Insert { .. }
-            | repl::ReplCommand::Restore { .. }
-            | repl::ReplCommand::Renumber { .. } => {
-                unreachable!("the session answers {command:?} itself")
-            }
-            repl::ReplCommand::Undo | repl::ReplCommand::Redo => {
-                unreachable!("the app carries out {command:?} without entering it")
-            }
-            repl::ReplCommand::Exit => {
-                self.should_exit = true;
-                EntryStatus::Success
-            }
-            // The help was shown when it was entered.
-            repl::ReplCommand::Help => EntryStatus::Success,
-            repl::ReplCommand::Reset => {
-                // Input submitted after the reset was evaluated in the new
-                // session, so only what came before it is forgotten.
-                self.history.retain(|entry| entry.id > id);
-                return;
-            }
-            repl::ReplCommand::Save => {
-                let eval = self.save(id).unwrap_or_else(|e| repl::Eval::CommandError(fmt!("{e:#}")));
-                let status = match eval {
-                    repl::Eval::CommandError(_) => EntryStatus::Error,
-                    _ => EntryStatus::Success,
-                };
-                find_entry(&mut self.history, id).eval_result = Some(eval);
-                status
-            }
-            repl::ReplCommand::Load => match self.load() {
-                Ok(inputs) => {
-                    // A reset first, so the session is the one saved and not
-                    // the saved one on top of this. It forgets this `/load`
-                    // too, as `/reset` forgets itself.
-                    let reset = repl::SavedInput {
-                        input: "/reset".S(),
-                        command: repl::Command::ReplCommand(repl::ReplCommand::Reset),
-                    };
-                    self.replay(std::iter::once(reset).chain(inputs).collect());
-                    EntryStatus::Success
-                }
-                Err(e) => {
-                    find_entry(&mut self.history, id).eval_result = Some(repl::Eval::CommandError(fmt!("{e:#}")));
-                    EntryStatus::Error
-                }
-            },
-        };
-        find_entry(&mut self.history, id).status = status;
     }
 
     /// Change the app's units as an answered command changed the engine's,
@@ -1035,8 +1058,6 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// included, as it was typed. What was typed after the `/save` is left
     /// out.
     ///
-    /// A line that only opened a multiline input is left out too, since the
-    /// input it opened holds it again.
     fn save(&self, save_id: u64) -> AnyResult<repl::Eval> {
         use datalove_datafun::package_load_worldfile::{WorldfileSection, write_worldfile};
 
@@ -1046,15 +1067,14 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         let mut sections = Vec::new();
         for entry in self.history.iter().filter(|entry| entry.id <= save_id) {
-            let section = match &entry.parse_result {
-                repl::InputParse::Empty | repl::InputParse::ReadMultiline(_) => continue,
-                repl::InputParse::Command(repl::Command::Unit(script::Unit::Fragment(source))) => {
+            let section = match &entry.command {
+                repl::Command::Unit(script::Unit::Fragment(source)) => {
                     WorldfileSection::ScriptFragment { source: source.C() }
                 }
-                repl::InputParse::Command(repl::Command::Unit(script::Unit::Expression(source))) => {
+                repl::Command::Unit(script::Unit::Expression(source)) => {
                     WorldfileSection::ScriptExpr { source: source.C() }
                 }
-                repl::InputParse::Command(repl::Command::ReplCommand(_)) => {
+                repl::Command::ReplCommand(_) => {
                     WorldfileSection::ReplCommand { source: entry.input.trim().S() }
                 }
             };
@@ -1448,23 +1468,27 @@ impl<E: ReplExecutor> ReplApp<E> {
     ///
     /// **They are the session as it will be once everything submitted has
     /// been answered**: the units the answers so far leave, then the units on
-    /// their way to the engine, which has not numbered them yet. A `/reset`
-    /// takes the units before it from when it parses, so the units typed
-    /// after it do not show appended to a session they will never see. The
-    /// history keeps those units until the reset is answered, since they are
-    /// the engine's session until then.
+    /// their way to the engine, sent or queued, which it has not numbered
+    /// yet. A `/reset` takes the units before it from when it is entered, so
+    /// the units typed after it do not show appended to a session they will
+    /// never see. The history keeps those units until the reset is answered,
+    /// since they are the engine's session until then.
     ///
     /// Only appended units are guessed at. An edit, a delete or an insert
     /// shows once the engine has answered it.
     pub fn code_units(&self) -> Vec<CodeUnit<'_>> {
-        // A reset still in the history is one the engine has not answered.
-        let pending_reset = self.history.iter().rposition(|entry| matches!(
-            entry.parse_result,
-            repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Reset)),
-        ));
-        let (answered, waiting) = match pending_reset {
-            Some(reset) => (&[][..], &self.history[reset + 1..]),
-            None => (&self.units[..], &self.history[..]),
+        // The commands on their way: sent and unanswered, then queued. A
+        // reset in the history is one the engine has not answered.
+        let pending: Vec<&repl::Command> = self.history.iter()
+            .filter(|entry| entry.eval_result.is_none())
+            .map(|entry| &entry.command)
+            .chain(self.queue.iter().map(|(_, command)| command))
+            .collect();
+        let reset = pending.iter()
+            .rposition(|command| matches!(command, repl::Command::ReplCommand(repl::ReplCommand::Reset)));
+        let (answered, waiting) = match reset {
+            Some(reset) => (&[][..], &pending[reset + 1..]),
+            None => (&self.units[..], &pending[..]),
         };
         let answered = answered.iter().map(|unit| {
             let number = unit.numbered.number;
@@ -1478,9 +1502,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             }
         });
         let waiting = waiting.iter()
-            .filter(|entry| entry.eval_result.is_none())
-            .filter_map(|entry| match &entry.parse_result {
-                repl::InputParse::Command(repl::Command::Unit(unit)) => Some(CodeUnit {
+            .filter_map(|command| match command {
+                repl::Command::Unit(unit) => Some(CodeUnit {
                     number: None,
                     source: unit.source(),
                     status: UnitStatus::Pending,
@@ -1521,4 +1544,10 @@ fn reset_message(eval: &repl::Eval) -> String {
         _ => None,
     }
     .expect("only an answer that reset the session is explained")
+}
+
+/// Whether the app carries a command out itself, rather than the engine.
+fn runs_in_app(command: &repl::Command) -> bool {
+    use repl::ReplCommand as R;
+    matches!(command, repl::Command::ReplCommand(R::Undo | R::Redo | R::Save | R::Load | R::Help | R::Exit))
 }

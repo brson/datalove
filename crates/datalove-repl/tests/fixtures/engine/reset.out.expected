@@ -36,9 +36,7 @@
         "ReplCommand": "Reset"
       }
     },
-    "eval": {
-      "CallerInterpret": "Reset"
-    },
+    "eval": "Reset",
     "environment": []
   },
   {

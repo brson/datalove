@@ -174,7 +174,7 @@ fn multiline_mode_spans_one_submission() {
     ));
 
     executor.queue(WorkerResponse::EvalResult {
-        id: 1,
+        id: 0,
         eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Function {
             name: "f".to_string(),
         }])),
@@ -184,7 +184,7 @@ fn multiline_mode_spans_one_submission() {
     });
     app.poll_results();
 
-    assert!(matches!(app.history()[1].status, EntryStatus::Success));
+    assert!(matches!(app.history()[0].status, EntryStatus::Success));
     assert_eq!(app.environment().len(), 1);
 }
 
@@ -201,27 +201,61 @@ fn empty_input_is_not_submitted() {
     assert!(app.history().is_empty());
 }
 
-/// Commands the engine hands back for the UI to interpret take effect.
+/// A command the app carries out waits for what was entered before it to be
+/// answered, and then runs: `/exit` exits once the unit before it is done.
 #[test]
-fn exit_command_asks_the_app_to_exit() {
+fn exit_waits_for_what_came_before() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
 
+    app.submit_input("let a = 1".to_string());
     app.submit_input("/exit".to_string());
-    app.poll_results();
     assert!(!app.should_exit());
+    assert_eq!(app.queued().collect::<Vec<_>>(), vec!["/exit"]);
 
-    executor.queue(WorkerResponse::EvalResult {
-        id: 0,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Exit),
-        environment: Vec::new(),
-        session: Vec::new(),
-        step: Vec::new(),
-    });
+    executor.queue(evaluated_let(0, "a"));
     app.poll_results();
-
     assert!(app.should_exit());
-    assert!(matches!(app.history()[0].status, EntryStatus::Success));
+    assert_eq!(executor.evals(), vec![0], "the app's own commands never reach the engine");
+}
+
+/// With nothing before it, a command the app carries out runs at once.
+#[test]
+fn exit_with_nothing_before_it_exits_at_once() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+    app.submit_input("/exit".to_string());
+    assert!(app.should_exit());
+}
+
+/// Engine commands behind one the app carries out wait for it, so they go to
+/// the engine after whatever it sends: `/undo` typed between two units takes
+/// back the first, before the second is sent.
+#[test]
+fn what_follows_an_app_command_waits_for_it() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("let x = 1".to_string());
+    app.submit_input("/undo".to_string());
+    app.submit_input("let y = 2".to_string());
+    assert_eq!(executor.evals(), vec![0], "the undo waits for `let x`, and `let y` for the undo");
+    assert_eq!(app.queued().collect::<Vec<_>>(), vec!["/undo", "let y = 2"]);
+
+    executor.queue(evaluated_let(0, "x"));
+    app.poll_results();
+    // `let y`, running after the undo, drops the redo stack it left, and the
+    // number `let x` had is given again.
+    let commands = executor.commands();
+    assert!(matches!(
+        &commands[1..],
+        [
+            repl::Command::ReplCommand(repl::ReplCommand::Delete { unit: 1 }),
+            repl::Command::ReplCommand(repl::ReplCommand::Renumber { next: 1 }),
+            repl::Command::Unit(_),
+        ]
+    ), "{commands:?}");
+    let inputs: Vec<&str> = app.history().iter().map(|entry| entry.input.as_str()).collect();
+    assert_eq!(inputs, vec!["let y = 2"]);
 }
 
 /// Focus starts on the input and cycles through the panels both ways.
@@ -261,7 +295,7 @@ fn reset_command_clears_history_and_environment() {
     app.submit_input("let b = 1".to_string());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
+        eval: repl::Eval::Reset,
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -302,8 +336,8 @@ fn a_replayed_session_is_evaluated_without_parsing() {
         EntryStatus::Evaluating,
     ));
     assert!(matches!(
-        app.history()[1].parse_result,
-        repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Expression(_))),
+        app.history()[1].command,
+        repl::Command::Unit(repl::script::Unit::Expression(_)),
     ));
 
     executor.queue(evaluated_let(0, "a"));
@@ -315,7 +349,8 @@ fn a_replayed_session_is_evaluated_without_parsing() {
 }
 
 /// `/save` writes the whole history up to itself, failures and commands
-/// included, and leaves out the line that only opened a multiline input.
+/// included, once everything before it is answered, and nothing typed after
+/// it.
 #[test]
 fn save_writes_the_history_up_to_itself() {
     let dir = rmx::tempfile::tempdir().unwrap();
@@ -325,27 +360,17 @@ fn save_writes_the_history_up_to_itself() {
     app.set_session_path(path.clone());
 
     app.submit_input("fun f(): int".to_string());
-    app.poll_results();
-
     let fun = "fun f(): int\n    ret 1\nend fun";
     app.submit_input(fun.to_string());
-    executor.queue(evaluated_let(1, "f"));
-
     app.submit_input("nope".to_string());
-    executor.queue(WorkerResponse::EvalResult {
-        id: 2,
-        eval: repl::Eval::Unit(repl::script::Eval::Error("no such name".to_string())),
-        environment: Vec::new(),
-        session: Vec::new(),
-        step: Vec::new(),
-    });
-
     app.submit_input("/save".to_string());
-    // Typed while the save was on its way, and not saved.
+    // Typed while the save waited, and not saved.
     app.submit_input("let late = 1".to_string());
+
+    executor.queue(evaluated_let(0, "f"));
     executor.queue(WorkerResponse::EvalResult {
-        id: 3,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
+        id: 1,
+        eval: repl::Eval::Unit(repl::script::Eval::Error("no such name".to_string())),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -353,9 +378,9 @@ fn save_writes_the_history_up_to_itself() {
     app.poll_results();
 
     assert!(matches!(
-        app.history()[3].eval_result,
+        app.history()[2].eval_result,
         Some(repl::Eval::Saved { inputs: 3, .. }),
-    ), "{:?}", app.history()[3]);
+    ), "{:?}", app.history()[2]);
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "\
 ----------
 scriptunit-fragment
@@ -387,14 +412,6 @@ fn save_without_a_path_is_an_error() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("/save".to_string());
-    executor.queue(WorkerResponse::EvalResult {
-        id: 0,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
-        environment: Vec::new(),
-        session: Vec::new(),
-        step: Vec::new(),
-    });
-    app.poll_results();
 
     assert!(matches!(app.history()[0].status, EntryStatus::Error));
     assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::CommandError(_))));
@@ -661,13 +678,6 @@ fn code_units_are_the_units_and_their_statuses() {
         CodeUnit { number: None, source: "a", status: UnitStatus::Pending, compiled: false, ran: false },
     ]);
 
-    executor.queue(WorkerResponse::EvalResult {
-        id: 1,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Help),
-        environment: Vec::new(),
-        session: Vec::new(),
-        step: Vec::new(),
-    });
     executor.queue(evaluated(2, repl::script::Eval::Error("no `c`".to_string())));
     app.poll_results();
     let statuses: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
@@ -854,7 +864,7 @@ fn a_reset_loses_the_selection() {
     app.submit_input("let b = 1".to_string());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
+        eval: repl::Eval::Reset,
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -928,28 +938,22 @@ repl-command
     app.submit_input("let old = 1".to_string());
     executor.queue(evaluated_let(0, "old"));
     app.submit_input("/load".to_string());
-    executor.queue(WorkerResponse::EvalResult {
-        id: 1,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
-        environment: vec![binding("old", "int", "1")],
-        session: Vec::new(),
-        step: Vec::new(),
-    });
     app.poll_results();
 
-    // The saved `/load` is not replayed, or it would load forever.
-    assert_eq!(executor.evals(), vec![0, 1, 2, 3]);
+    // The `/load` is the app's, and the saved one is not replayed, or it
+    // would load forever.
+    assert_eq!(executor.evals(), vec![0, 2, 3]);
     // The code is the loaded session's from the start, with the reset
     // still to be answered.
     let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
     assert_eq!(sources, vec!["let a = 1"]);
     let commands = executor.commands();
-    assert!(matches!(commands[2], repl::Command::ReplCommand(repl::ReplCommand::Reset)), "{commands:?}");
-    assert!(matches!(&commands[3], repl::Command::Unit(repl::script::Unit::Fragment(source)) if source == "let a = 1"));
+    assert!(matches!(commands[1], repl::Command::ReplCommand(repl::ReplCommand::Reset)), "{commands:?}");
+    assert!(matches!(&commands[2], repl::Command::Unit(repl::script::Unit::Fragment(source)) if source == "let a = 1"));
 
     executor.queue(WorkerResponse::EvalResult {
         id: 2,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
+        eval: repl::Eval::Reset,
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -971,16 +975,8 @@ fn load_without_a_saved_session_is_an_error() {
     app.set_session_path(dir.path().join("missing.world"));
 
     app.submit_input("/load".to_string());
-    executor.queue(WorkerResponse::EvalResult {
-        id: 0,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
-        environment: Vec::new(),
-        session: Vec::new(),
-        step: Vec::new(),
-    });
-    app.poll_results();
 
-    assert_eq!(executor.evals(), vec![0]);
+    assert!(executor.evals().is_empty(), "nothing is sent the engine");
     assert!(matches!(app.history()[0].status, EntryStatus::Error));
     assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::CommandError(_))));
 }
@@ -1210,13 +1206,6 @@ fn the_code_shows_what_the_last_step_did() {
     assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
 
     app.submit_input("/help".to_string());
-    executor.queue(WorkerResponse::EvalResult {
-        id: 4,
-        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Help),
-        environment: Vec::new(),
-        session: Vec::new(),
-        step: Vec::new(),
-    });
     app.poll_results();
     assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
 }
