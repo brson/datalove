@@ -90,26 +90,6 @@ impl<E: ReplExecutor> RatatuiApp<E> {
     }
 
     // Delegated methods.
-    pub fn open_menu(&mut self) {
-        self.repl.open_menu();
-    }
-
-    pub fn close_menu(&mut self) {
-        self.repl.close_menu();
-    }
-
-    pub fn menu_up(&mut self) {
-        self.repl.menu_up();
-    }
-
-    pub fn menu_down(&mut self) {
-        self.repl.menu_down();
-    }
-
-    pub fn execute_menu_action(&mut self) {
-        self.repl.execute_menu_action();
-    }
-
     /// Scroll whichever pane a scroll key goes to, which may be the input.
     pub fn handle_scroll_key(&mut self, scroll: Scroll, key: crossterm::event::KeyEvent) {
         let ctrl = key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL);
@@ -157,10 +137,6 @@ impl<E: ReplExecutor> RatatuiApp<E> {
 
     pub fn set_should_exit(&mut self, val: bool) {
         self.repl.set_should_exit(val);
-    }
-
-    pub fn menu_is_open(&self) -> bool {
-        self.repl.menu_is_open()
     }
 
     pub fn multiline_mode(&self) -> bool {

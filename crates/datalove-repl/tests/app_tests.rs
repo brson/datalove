@@ -1358,3 +1358,21 @@ fn an_answer_does_not_end_multiline_input() {
 
     assert!(app.multiline_mode());
 }
+
+/// Asking to exit opens a dialog; asking again exits, and going on closes
+/// it.
+#[test]
+fn asking_twice_exits() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+
+    app.ask_to_exit();
+    assert!(app.exit_asked());
+    assert!(!app.should_exit());
+    app.resume();
+    assert!(!app.exit_asked());
+    assert!(!app.should_exit());
+
+    app.ask_to_exit();
+    app.ask_to_exit();
+    assert!(app.should_exit());
+}

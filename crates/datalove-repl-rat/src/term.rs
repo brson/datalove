@@ -184,14 +184,11 @@ fn handle_key_event<E: ReplExecutor>(
             KeyCode::Enter => app.dismiss_crash_modal(),
             _ => {}
         }
-    } else if app.menu_is_open() {
-        // Menu is open - handle menu navigation.
+    } else if app.repl.exit_asked() {
+        // Another Ctrl+C exits; any other key goes on, and does nothing else.
         match key.code {
-            KeyCode::Up => app.menu_up(),
-            KeyCode::Down => app.menu_down(),
-            KeyCode::Enter => app.execute_menu_action(),
-            KeyCode::Esc => app.close_menu(),
-            _ => {}
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => app.repl.ask_to_exit(),
+            _ => app.repl.resume(),
         }
     } else {
         // Normal input mode.
@@ -222,7 +219,8 @@ fn handle_key_event<E: ReplExecutor>(
             KeyCode::Char('c') if cancel && app.focus() == Panel::Input && app.multiline_mode() => {
                 app.cancel_multiline();
             }
-            KeyCode::Esc => app.open_menu(),
+            // Anywhere else Ctrl+C asks whether to exit, and another exits.
+            KeyCode::Char('c') if cancel => app.repl.ask_to_exit(),
             // Ahead of the textarea, which only gets these in multiline mode.
             KeyCode::Up => app.handle_scroll_key(Scroll::LineUp, key),
             KeyCode::Down => app.handle_scroll_key(Scroll::LineDown, key),

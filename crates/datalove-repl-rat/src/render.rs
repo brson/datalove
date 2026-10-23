@@ -67,12 +67,11 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
         }
     }
 
-    // Render menu if open.
-    if app.menu_is_open() {
-        render_menu(f, &app.repl);
+    if app.repl.exit_asked() {
+        render_exit_dialog(f);
     }
 
-    // Render crash modal if present (takes priority over menu).
+    // Render crash modal if present (takes priority over the exit dialog).
     if let Some(msg) = app.repl.crash_modal_message() {
         render_crash_modal(f, &app.repl, msg);
     }
@@ -670,35 +669,29 @@ fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: R
     }
 }
 
-/// Render the ESC menu popup.
-fn render_menu<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>) {
-    let area = centered_rect(20, 20, f.area());
-
-    // Clear the background.
-    f.render_widget(Clear, area);
-
-    // Menu block.
-    let menu_block = Block::default()
-        .borders(Borders::ALL)
-        .title("Menu");
-
-    let menu_items = vec![
-        if repl.menu_selection() == 0 {
-            Line::from("> Resume").style(Style::default().fg(Color::Yellow))
-        } else {
-            Line::from("  Resume")
-        },
-        if repl.menu_selection() == 1 {
-            Line::from("> Exit").style(Style::default().fg(Color::Yellow))
-        } else {
-            Line::from("  Exit")
-        },
+/// Render the dialog asking whether to exit.
+fn render_exit_dialog(f: &mut Frame) {
+    let lines = vec![
+        Line::from(""),
+        Line::from("Ctrl+C again to exit").style(Style::default().fg(HIGHLIGHT)),
+        Line::from(""),
+        Line::from("Any other key to go on").style(Style::default().fg(Color::DarkGray)),
     ];
+    let width = 28;
+    let height = lines.len() as u16 + 2;
+    let screen = f.area();
+    let area = Rect {
+        x: screen.x + screen.width.saturating_sub(width) / 2,
+        y: screen.y + screen.height.saturating_sub(height) / 2,
+        width: width.min(screen.width),
+        height: height.min(screen.height),
+    };
 
-    let menu = Paragraph::new(menu_items)
-        .block(menu_block);
-
-    f.render_widget(menu, area);
+    f.render_widget(Clear, area);
+    let dialog = Paragraph::new(lines)
+        .alignment(ratatui::layout::Alignment::Center)
+        .block(Block::default().borders(Borders::ALL).title("Exit"));
+    f.render_widget(dialog, area);
 }
 
 /// Render the crash modal popup.

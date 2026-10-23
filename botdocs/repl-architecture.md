@@ -31,7 +31,7 @@ re-settled on every step. How an edit reaches the units that depend on it is
 ```
 datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
   src/lib.rs            RatatuiApp: ReplApp plus a TextArea
-  src/render.rs         The three-panel layout, code, tabs, menu, crash and engine modals
+  src/render.rs         The three-panel layout, code, tabs, exit dialog, crash and engine modals
   src/term.rs           Terminal setup, event loop, key bindings
 
 datalove-repl/          The REPL's inputs and commands, and the UI-agnostic app
@@ -467,13 +467,13 @@ One of the three panels has focus, and the input panel has it at the start.
 Tab moves focus down through the panels and Shift+Tab moves it up; both wrap
 around. The focused panel has a white border and the others dark gray. The
 input panel stays yellow while it has focus in multiline mode. Focus lives on
-`ReplApp` as a `Panel`, alongside the menu state.
+`ReplApp` as a `Panel`, alongside the dialogs' state.
 
 Typing only reaches the textarea while the input has focus. In single-line
 mode Enter submits. In multiline mode Enter inserts a newline and Alt+Enter
-submits. Ctrl+D exits, and Esc opens a menu of Resume and Exit. Neither works
-while the menu or a modal is open: those take the keys first, the menu Up,
-Down, Enter and Esc, and a modal only Enter.
+submits. Ctrl+D exits. Neither works while a dialog or a modal is open: those
+take the keys first, the exit dialog Ctrl+C and anything else, and a modal
+only Enter. Esc does nothing.
 
 **Ctrl+C twice cancels multiline input.** In multiline mode, with the input
 focused, the first Ctrl+C puts "Ctrl+C again to cancel" where the Alt+Enter
@@ -488,6 +488,14 @@ Ctrl+C is one byte that starts no sequence. The line that opened the multiline
 input stays in the history as one that only read more lines. Multiline mode
 ends only by submitting or cancelling; an answer to an earlier input arriving
 meanwhile leaves it.
+
+**Ctrl+C anywhere else asks whether to exit.** It opens a dialog saying
+"Ctrl+C again to exit"; another Ctrl+C exits, and any other key closes it and
+does nothing else, so the key that dismisses it is not typed into the input.
+This replaced a menu of Resume and Exit that Esc opened, for the reason Esc
+does not cancel: it is slow, and loses a key, behind a multiplexer. Ctrl+C
+twice to exit is what the Node.js REPL does. After a cancel, a third Ctrl+C
+asks to exit.
 
 ### Scrolling
 
@@ -589,7 +597,7 @@ setup and the loop together.
   [issues.md](issues.md#user-content-the-repl-prints-errors-as-rust-values).
 - Mouse capture is enabled while only key events are read, which disables
   terminal text selection and drops the mouse wheel for no benefit.
-- Nothing scrolls a pane while the menu or a modal is open.
+- Nothing scrolls a pane while a dialog or a modal is open.
 - What a unit came to -- an expression's value, a compile error -- is shown
   only in the History tab, and code selects the Environment tab. So typing
   `x` to see its value shows nothing until the tab is changed, and a red bar

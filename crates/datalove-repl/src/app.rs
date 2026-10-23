@@ -283,10 +283,8 @@ pub struct ReplApp<E: ReplExecutor> {
     focus: Panel,
     /// The tab the bottom panel shows.
     tab: Tab,
-    /// Whether the ESC menu is open.
-    menu_open: bool,
-    /// Selected menu item (0 = Resume, 1 = Exit).
-    menu_selection: usize,
+    /// Whether the dialog asking whether to exit is open.
+    exit_asked: bool,
     /// Whether to exit the app.
     should_exit: bool,
     /// How far up from the bottom of the code the view is scrolled, in lines.
@@ -362,8 +360,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             cancel_armed: false,
             focus: Panel::Input,
             tab: Tab::Environment,
-            menu_open: false,
-            menu_selection: 0,
+            exit_asked: false,
             should_exit: false,
             code_scroll: ScrollState::default(),
             code_layout: CodeLayout::default(),
@@ -909,42 +906,28 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.focus
     }
 
-    /// Open the ESC menu.
-    pub fn open_menu(&mut self) {
-        self.menu_open = true;
-        self.menu_selection = 0;
-    }
-
-    /// Close the ESC menu.
-    pub fn close_menu(&mut self) {
-        self.menu_open = false;
-    }
-
-    /// Move menu selection up.
-    pub fn menu_up(&mut self) {
-        self.menu_selection = self.menu_selection.saturating_sub(1);
-    }
-
-    /// Move menu selection down.
-    pub fn menu_down(&mut self) {
-        self.menu_selection = (self.menu_selection + 1).min(1);
-    }
-
-    /// Execute the selected menu action.
-    pub fn execute_menu_action(&mut self) {
-        match self.menu_selection {
-            0 => self.close_menu(), // Resume
-            1 => self.should_exit = true, // Exit
-            _ => {}
+    /// Ask whether to exit: the first time opens the dialog asking, and the
+    /// second, with it open, exits.
+    pub fn ask_to_exit(&mut self) {
+        if self.exit_asked {
+            self.should_exit = true;
+        } else {
+            self.exit_asked = true;
         }
+    }
+
+    /// Close the dialog asking whether to exit, and go on.
+    pub fn resume(&mut self) {
+        self.exit_asked = false;
+    }
+
+    /// Whether the dialog asking whether to exit is open.
+    pub fn exit_asked(&self) -> bool {
+        self.exit_asked
     }
 
     pub fn dismiss_crash_modal(&mut self) {
         self.crash_modal = None;
-    }
-
-    pub fn menu_is_open(&self) -> bool {
-        self.menu_open
     }
 
     pub fn multiline_mode(&self) -> bool {
@@ -1113,11 +1096,6 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Get the crash modal message if present.
     pub fn crash_modal_message(&self) -> Option<&str> {
         self.crash_modal.as_deref()
-    }
-
-    /// Get the menu selection index.
-    pub fn menu_selection(&self) -> usize {
-        self.menu_selection
     }
 
     /// Get the environment variables.
