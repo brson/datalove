@@ -12,6 +12,7 @@
 - [Generics: how it works](generics.md)
 - [REPL Architecture](repl-architecture.md)
 - [The Responsive Scripting Environment](script-reactivity-architecture.md)
+- [Script Reactivity, Case by Case](script-reactivity-cases.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datafun Grammar (EBNF)](datafun-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)

@@ -6,7 +6,8 @@ and no others. This is the map of the machinery and how it is held to its claim.
 [plan-script-reactivity.md](plan-script-reactivity.md) is the plan that built it,
 organised by stage and keeping the wrong turns; read it for *why* things are
 shaped this way and what was tried and rejected. This document is what the code
-is. [repl-architecture.md](repl-architecture.md) has the crates, the UI and the
+is. [script-reactivity-cases.md](script-reactivity-cases.md) is what it should
+do, as rules and as worked cases the engine is tested against. [repl-architecture.md](repl-architecture.md) has the crates, the UI and the
 request/response shape around it.
 
 ## The claim
@@ -232,7 +233,7 @@ compiled. `rederive_reach` takes the reach again until it settles, either way.
 The splices do not use any of this yet: `rewind_point` still starts at the
 provider. And undoing a revival reruns the provider and the take after it,
 where emptying the binding would do; see
-`mandocs/drafts/reactive-script-semantics.md`.
+[script-reactivity-cases.md](script-reactivity-cases.md).
 
 This is rewind and replay, and it is what makes the reach sound without
 copying anything. The cost is running the provider again, which may be the
@@ -338,7 +339,7 @@ suites missed.
 | `script_const_tests` | 11 | consts across units and into function bodies |
 | `script_splice_tests` | 14 | truncate, remove and insert: the suffix, the values, a suffix that stops compiling |
 | `datalove-repl/engine_edit_tests` | 21 | the shipped entry points end to end, failed units going green, rewinding |
-| `datalove-repl/reactive_tests` | 2 | step tables in `tests/fixtures/reactive/`: what each unit should do per step, with the engine's known extra work annotated. A unit recompiled if salsa ran its typecheck, or ran an ownership analysis while compiling it (`query_events::compiling_unit`); and that `mandocs/drafts/reactive-script-semantics.md` shows them as rendered |
+| `datalove-repl/reactive_tests` | 2 | step tables in `tests/fixtures/reactive/`: what each unit should do per step, with the engine's known extra work annotated. A unit recompiled if salsa ran its typecheck, or ran an ownership analysis while compiling it (`query_events::compiling_unit`); and that [script-reactivity-cases.md](script-reactivity-cases.md) shows every one of them as rendered |
 
 **Falsification, which is the part that makes it evidence.** Every stage was
 checked by injecting a fault into the shipped code and confirming the tests

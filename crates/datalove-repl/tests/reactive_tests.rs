@@ -3,9 +3,9 @@
 //! Each fixture in `fixtures/reactive/` is a worldfile of script units followed
 //! by steps. A step is one modification -- an edit, a delete, an insert or an
 //! append -- and an `expect` table saying what each unit should do in that
-//! step and what its bindings should hold after it. The tables are the rules
-//! of `mandocs/drafts/reactive-script-semantics.md`, written down per step,
-//! and that document's examples are rendered from these fixtures.
+//! step and what its bindings should hold after it. Every fixture is shown in
+//! `botdocs/script-reactivity-cases.md`, rendered from here, which is where
+//! the rules they check are written down.
 //!
 //! An `expect` table states the rule, and the engine may do more work than it
 //! asks for: rerun a unit the rule leaves alone, or recompile one the rule
@@ -41,8 +41,8 @@ use datalove_repl::{Command, Engine, Eval};
 
 const SEPARATOR: &str = "----------";
 
-/// The document whose examples are rendered from the fixtures.
-const DOC: &str = "mandocs/drafts/reactive-script-semantics.md";
+/// The document whose examples are rendered from the fixtures, all of them.
+const DOC: &str = "botdocs/script-reactivity-cases.md";
 
 fn fixture_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/reactive")
@@ -725,11 +725,34 @@ fn rerender(doc: &str, fixtures: &[Fixture]) -> String {
     out
 }
 
+/// The regions a document shows, as `(fixture, what)`.
+fn regions(doc: &str) -> Vec<(String, String)> {
+    doc.lines()
+        .filter_map(|line| line.trim().strip_prefix("<!-- world ")?.strip_suffix(" -->"))
+        .filter_map(|marker| marker.split_once(' '))
+        .map(|(name, what)| (name.S(), what.S()))
+        .collect()
+}
+
 #[test]
 fn the_document_shows_the_fixtures() {
     let path = workspace_dir().join(DOC);
     let doc = std::fs::read_to_string(&path).X();
-    let rendered = rerender(&doc, &fixtures());
+    let fixtures = fixtures();
+
+    let shown = regions(&doc);
+    let missing: Vec<String> = fixtures.iter()
+        .flat_map(|fixture| {
+            std::iter::once("code".S())
+                .chain((1..=fixture.steps.len()).map(|number| fmt!("step {number}")))
+                .filter(|what| !shown.contains(&(fixture.name.C(), what.C())))
+                .map(|what| fmt!("{} {what}", fixture.name))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(missing.is_empty(), "{DOC} does not show: {}", missing.join(", "));
+
+    let rendered = rerender(&doc, &fixtures);
     if rendered == doc {
         return;
     }
