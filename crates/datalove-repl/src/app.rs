@@ -98,8 +98,20 @@ pub enum UnitStep {
 /// One unit of the session, as the code panel shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodeUnit<'a> {
+    /// The id of the history entry the unit was typed as.
+    pub id: u64,
     pub source: &'a str,
     pub step: UnitStep,
+}
+
+/// Where the renderer last put each code unit, so the selection can be
+/// scrolled into view.
+#[derive(Debug, Default)]
+struct CodeLayout {
+    /// Lines the pane showed.
+    pane_lines: usize,
+    /// Each unit's id and the lines of the content it took, from the top.
+    units: Vec<(u64, std::ops::Range<usize>)>,
 }
 
 /// One step of scrolling, in the direction the user pressed.
@@ -260,6 +272,13 @@ pub struct ReplApp<E: ReplExecutor> {
     /// nearly all its time. Only the renderer knows how tall the pane is or
     /// how many lines the units came to, so it is what bounds this.
     code_scroll: ScrollState,
+    /// The code as the renderer last laid it out.
+    code_layout: CodeLayout,
+    /// The code unit selected, by its id, while the code panel has focus.
+    ///
+    /// Kept by id rather than position so it stays on its unit as units are
+    /// added, and is lost with the unit when a reset takes it.
+    selected_unit: Option<u64>,
     /// How far up from the bottom of the history the view is scrolled, in
     /// lines, the same way.
     history_scroll: ScrollState,
@@ -302,6 +321,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             menu_selection: 0,
             should_exit: false,
             code_scroll: ScrollState::default(),
+            code_layout: CodeLayout::default(),
+            selected_unit: None,
             history_scroll: ScrollState::default(),
             environment_scroll: ScrollState::default(),
             engine_ready: false,
@@ -573,11 +594,82 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Move focus to the next panel down.
     pub fn focus_next(&mut self) {
         self.focus = self.focus.next();
+        self.enter_code();
     }
 
     /// Move focus to the next panel up.
     pub fn focus_prev(&mut self) {
         self.focus = self.focus.prev();
+        self.enter_code();
+    }
+
+    /// Focus moving to the code selects a unit, if none still is, and shows
+    /// it.
+    ///
+    /// The newest unit is the one selected, since that is where the view
+    /// usually is.
+    fn enter_code(&mut self) {
+        if self.focus != Panel::Code {
+            return;
+        }
+        if self.selected_unit().is_none() {
+            self.selected_unit = self.code_units().last().map(|unit| unit.id);
+        }
+        self.reveal_selected_unit();
+    }
+
+    /// The code unit selected, if the unit is still in the session.
+    pub fn selected_unit(&self) -> Option<u64> {
+        let id = self.selected_unit?;
+        self.code_units().iter().any(|unit| unit.id == id).then_some(id)
+    }
+
+    /// Act on a scroll key the focused code panel takes: the arrows move the
+    /// selection a unit, and the page keys scroll a page.
+    pub fn move_in_code(&mut self, scroll: Scroll) {
+        let step: isize = match scroll {
+            Scroll::LineUp => -1,
+            Scroll::LineDown => 1,
+            Scroll::PageUp | Scroll::PageDown => {
+                self.scroll_code(scroll);
+                return;
+            }
+        };
+        let ids: Vec<u64> = self.code_units().iter().map(|unit| unit.id).collect();
+        let Some(last) = ids.len().checked_sub(1) else {
+            return;
+        };
+        // A selection a reset took starts again from the newest unit.
+        let index = match self.selected_unit().and_then(|id| ids.iter().position(|unit| *unit == id)) {
+            Some(index) => index.saturating_add_signed(step).min(last),
+            None => last,
+        };
+        self.selected_unit = Some(ids[index]);
+        self.reveal_selected_unit();
+    }
+
+    /// Scroll the code just far enough to show the selected unit, or its
+    /// start when it is taller than the pane.
+    fn reveal_selected_unit(&mut self) {
+        let Some(id) = self.selected_unit else {
+            return;
+        };
+        let layout = &self.code_layout;
+        // Not laid out yet: the frame that lays it out shows the newest
+        // units, and a key cannot arrive before it.
+        let Some((_, lines)) = layout.units.iter().find(|(unit, _)| *unit == id) else {
+            return;
+        };
+        let limit = self.code_scroll.limit;
+        let top = limit - self.code_scroll.offset.min(limit);
+        let top = if lines.start < top || lines.len() > layout.pane_lines {
+            lines.start
+        } else if lines.end > top + layout.pane_lines {
+            lines.end - layout.pane_lines
+        } else {
+            top
+        };
+        self.code_scroll.offset = limit - top.min(limit);
     }
 
     /// The panel keys go to.
@@ -716,8 +808,17 @@ impl<E: ReplExecutor> ReplApp<E> {
     ///
     /// Scrolling past the first unit lands on it rather than running off into
     /// nothing.
-    pub fn record_code_view(&mut self, pane_lines: usize, scroll_back_limit: usize) {
+    ///
+    /// `units` is each unit's id and the lines it took, counted from the top
+    /// of the content.
+    pub fn record_code_view(
+        &mut self,
+        pane_lines: usize,
+        scroll_back_limit: usize,
+        units: Vec<(u64, std::ops::Range<usize>)>,
+    ) {
         self.code_scroll.record(pane_lines, scroll_back_limit);
+        self.code_layout = CodeLayout { pane_lines, units };
     }
 
     /// Tell the app the shape of the history the renderer just laid out.
@@ -809,7 +910,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                     },
                     Some(other) => unreachable!("a unit was answered as a REPL command: {other:?}"),
                 };
-                CodeUnit { source, step }
+                CodeUnit { id: entry.id, source, step }
             })
             .collect()
     }

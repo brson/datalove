@@ -668,9 +668,9 @@ fn code_units_are_the_units_and_what_the_last_step_did() {
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.code_units(), vec![
-        CodeUnit { source: "let a = 1", step: UnitStep::Ran },
-        CodeUnit { source: "let b = c", step: UnitStep::Pending },
-        CodeUnit { source: "a", step: UnitStep::Pending },
+        CodeUnit { id: 0, source: "let a = 1", step: UnitStep::Ran },
+        CodeUnit { id: 2, source: "let b = c", step: UnitStep::Pending },
+        CodeUnit { id: 3, source: "a", step: UnitStep::Pending },
     ]);
 
     executor.queue(WorkerResponse::EvalResult {
@@ -761,7 +761,7 @@ fn the_bottom_panel_scrolls_the_tab_it_shows() {
 #[test]
 fn code_scrolls_back_from_the_newest_unit() {
     let mut app = ReplApp::with_executor(MockExecutor::default());
-    app.record_code_view(10, 12);
+    app.record_code_view(10, 12, Vec::new());
 
     app.scroll_code(Scroll::PageUp);
     assert_eq!(app.code_scroll_back(), 9);
@@ -772,4 +772,105 @@ fn code_scrolls_back_from_the_newest_unit() {
 
     app.submit_input("let x = 1".to_string());
     assert_eq!(app.code_scroll_back(), 0);
+}
+
+/// An app holding these units, all run.
+fn app_with_units(sources: &[&str]) -> ReplApp<MockExecutor> {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    for (id, source) in sources.iter().enumerate() {
+        app.submit_input(source.to_string());
+        executor.queue(parsed_statement(id as u64, source));
+        executor.queue(evaluated_let(id as u64, "x"));
+    }
+    app.poll_results();
+    app
+}
+
+/// Focusing the code selects its newest unit, and the arrows move between
+/// units, stopping at the first and the last.
+#[test]
+fn the_arrows_move_between_code_units() {
+    let mut app = app_with_units(&["let a = 1", "let b = 2", "let c = 3"]);
+    assert_eq!(app.selected_unit(), None);
+
+    app.focus_prev();
+    assert_eq!(app.focus(), Panel::Code);
+    assert_eq!(app.selected_unit(), Some(2));
+
+    app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.selected_unit(), Some(1));
+    app.move_in_code(Scroll::LineUp);
+    app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.selected_unit(), Some(0));
+
+    app.move_in_code(Scroll::LineDown);
+    assert_eq!(app.selected_unit(), Some(1));
+
+    // Leaving and coming back keeps the unit selected.
+    app.focus_next();
+    app.focus_prev();
+    assert_eq!(app.selected_unit(), Some(1));
+}
+
+/// A reset takes the selected unit with it, and the arrows start again from
+/// the newest unit.
+#[test]
+fn a_reset_loses_the_selection() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    app.submit_input("let a = 1".to_string());
+    executor.queue(parsed_statement(0, "let a = 1"));
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+    app.focus_prev();
+    assert_eq!(app.selected_unit(), Some(0));
+
+    app.submit_input("/reset".to_string());
+    app.submit_input("let b = 1".to_string());
+    executor.queue(parsed_command(1, repl::ReplCommand::Reset));
+    executor.queue(WorkerResponse::EvalResult {
+        id: 1,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
+        environment: Vec::new(),
+    });
+    executor.queue(parsed_statement(2, "let b = 1"));
+    executor.queue(evaluated_let(2, "b"));
+    app.poll_results();
+    assert_eq!(app.selected_unit(), None);
+
+    app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.selected_unit(), Some(2));
+}
+
+/// Moving the selection scrolls the code just far enough to show the unit,
+/// and the page keys still scroll a page.
+#[test]
+fn the_selected_unit_is_scrolled_into_view() {
+    let mut app = app_with_units(&["a", "b", "c", "d"]);
+    // Four three-line units with a rule between each, fifteen lines, in a
+    // five-line pane: ten lines can be scrolled.
+    app.record_code_view(5, 10, vec![(0, 0..3), (1, 4..7), (2, 8..11), (3, 12..15)]);
+    app.focus_prev();
+    assert_eq!(app.selected_unit(), Some(3));
+    assert_eq!(app.code_scroll_back(), 0);
+
+    // Unit 2 ends at line 11, inside the view of lines 10 to 15; its start
+    // is not, so the view moves up to it.
+    app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.code_scroll_back(), 2);
+
+    app.move_in_code(Scroll::LineUp);
+    app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.selected_unit(), Some(0));
+    assert_eq!(app.code_scroll_back(), 10);
+
+    // Back down, the view follows the unit's end.
+    app.move_in_code(Scroll::LineDown);
+    app.move_in_code(Scroll::LineDown);
+    assert_eq!(app.code_scroll_back(), 4);
+
+    app.move_in_code(Scroll::PageDown);
+    assert_eq!(app.code_scroll_back(), 0);
+    assert_eq!(app.selected_unit(), Some(2));
 }

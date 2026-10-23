@@ -14,6 +14,9 @@ use ratatui::{
 
 use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStep};
 
+/// The color of what is selected: the tab shown, and the code unit.
+const HIGHLIGHT: Color = Color::Yellow;
+
 /// Render the UI.
 pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
     // Three-panel layout: code (top), input (middle), tabs (bottom).
@@ -44,8 +47,8 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
         .constraints(constraints)
         .split(f.area());
 
-    let code_view = render_code(f, &app.repl, chunks[0]);
-    app.repl.record_code_view(code_view.pane_lines, code_view.scroll_back_limit);
+    let (code_view, unit_lines) = render_code(f, &app.repl, chunks[0]);
+    app.repl.record_code_view(code_view.pane_lines, code_view.scroll_back_limit, unit_lines);
 
     // Input panel - current text input with multiline indicators.
     render_input(f, app, chunks[1]);
@@ -144,8 +147,15 @@ fn step_color(step: UnitStep) -> Color {
 }
 
 /// Render the code panel: every unit's source, in order, each beside a bar
-/// colored for what the last step did with it.
-fn render_code<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) -> ScrollBackView {
+/// colored for what the last step did with it, and the selected unit
+/// highlighted while the panel has focus.
+///
+/// Returns the lines each unit took, for scrolling the selection into view.
+fn render_code<E: ReplExecutor>(
+    f: &mut Frame,
+    repl: &ReplApp<E>,
+    area: Rect,
+) -> (ScrollBackView, Vec<(u64, std::ops::Range<usize>)>) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(panel_border(repl, Panel::Code))
@@ -177,7 +187,12 @@ fn render_code<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) ->
         )));
     }
 
+    let selected = match repl.focus() {
+        Panel::Code => repl.selected_unit(),
+        _ => None,
+    };
     let separator = "─".repeat(area.width.saturating_sub(2) as usize);
+    let mut unit_lines = Vec::new();
     for (index, unit) in units.iter().enumerate() {
         if index > 0 {
             lines.push(Line::from(ratatui::text::Span::styled(
@@ -186,15 +201,23 @@ fn render_code<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) ->
             )));
         }
         let bar = Style::default().fg(step_color(unit.step));
+        let text = if selected == Some(unit.id) {
+            Style::default().fg(HIGHLIGHT)
+        } else {
+            Style::default()
+        };
+        let start = lines.len();
         for line in unit.source.lines() {
             lines.push(Line::from(vec![
                 ratatui::text::Span::styled("▌ ", bar),
-                ratatui::text::Span::raw(line),
+                ratatui::text::Span::styled(line, text),
             ]));
         }
+        unit_lines.push((unit.id, start..lines.len()));
     }
 
-    render_scrolled_back(f, lines, block, area, repl.code_scroll_back())
+    let view = render_scrolled_back(f, lines, block, area, repl.code_scroll_back());
+    (view, unit_lines)
 }
 
 /// The bottom panel's frame, whose title is its tabs.
@@ -205,7 +228,7 @@ fn bottom_block<E: ReplExecutor>(repl: &ReplApp<E>) -> Block<'static> {
             tabs.push(ratatui::text::Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
         }
         let style = if tab == repl.tab() {
-            Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)
+            Style::default().fg(HIGHLIGHT).add_modifier(ratatui::style::Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         };

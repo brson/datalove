@@ -326,6 +326,13 @@ session, and a failed unit stays in both, so the history's code entries are
 the session's units with nothing to keep in step. The last step is the last
 unit the engine answered for.
 
+**While the code panel has focus, one unit is selected**, its source in the
+yellow that marks the tab shown, and Up and Down move between units. Focusing
+the panel selects the newest unit, or the one selected before if it is still
+there. The selection is kept by the unit's history id, so units added after
+it leave it where it was and a reset that takes the unit takes the selection
+too. It is what an edit to a unit will act on.
+
 ### Tabs
 
 The bottom panel has two tabs, Environment and History. F2 cycles them, and
@@ -365,7 +372,10 @@ takes them with Ctrl. The single-line input has no use for them, so it lends
 the plain keys to the code and the Ctrl ones to the bottom panel. Multiline
 input keeps all of them, Ctrl included, for moving its cursor, so neither
 panel scrolls from there until focus moves. The bottom panel scrolls the tab
-it shows, and each tab keeps its own place.
+it shows, and each tab keeps its own place. The focused code panel's arrows
+move the selection rather than scrolling a line, and the view moves just far
+enough to show the selected unit, using where each unit was last laid out;
+its page keys still scroll a page.
 
 The code and the history follow the newest unit and the newest output, which
 is where a session spends nearly all of its time. So their scroll positions

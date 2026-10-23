@@ -114,6 +114,9 @@ impl<E: ReplExecutor> RatatuiApp<E> {
     pub fn handle_scroll_key(&mut self, scroll: Scroll, key: crossterm::event::KeyEvent) {
         let ctrl = key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL);
         match self.repl.scroll_target(ctrl) {
+            // The plain keys of the focused code panel move between units;
+            // lent from the input, or with Ctrl from the bottom, they scroll.
+            Panel::Code if self.repl.focus() == Panel::Code => self.repl.move_in_code(scroll),
             Panel::Code => self.repl.scroll_code(scroll),
             Panel::Bottom => self.repl.scroll_bottom(scroll),
             Panel::Input => {
