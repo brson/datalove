@@ -12,7 +12,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::{CodeUnit, RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStatus};
+use crate::{CodeUnit, Editing, RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStatus};
 
 /// The color of what is selected: the tab shown, and the code unit.
 const HIGHLIGHT: Color = Color::Yellow;
@@ -562,18 +562,28 @@ fn render_scrolled_back(
 
 /// Render the input panel with multiline indicators.
 fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect) {
-    let title = if app.repl.cancel_armed() {
-        "Input [Ctrl+C again to cancel]"
-    } else if app.multiline_mode() {
-        "Input [Alt+Enter]"
-    } else {
-        "Input [Enter]"
+    let name = match app.repl.editing() {
+        Some(Editing::Unit(unit)) => fmt!("Edit unit {unit}"),
+        Some(Editing::Before(unit)) => fmt!("Insert before unit {unit}"),
+        None => "Input".S(),
     };
+    let keys = if app.repl.cancel_armed() {
+        "Ctrl+C again to cancel"
+    } else if app.multiline_mode() {
+        "Alt+Enter"
+    } else {
+        "Enter"
+    };
+    let title = fmt!("{name} [{keys}]");
 
     let focused = app.focus() == Panel::Input;
 
-    // Multiline mode keeps its yellow while the panel has focus.
-    let border_style = if !focused {
+    // An edit or an insert is magenta wherever the focus is, so the input is
+    // not mistaken for a line to append. Otherwise multiline mode keeps its yellow while the
+    // panel has focus.
+    let border_style = if app.repl.editing().is_some() {
+        Style::default().fg(Color::Magenta)
+    } else if !focused {
         panel_border(&app.repl, Panel::Input)
     } else if app.multiline_mode() {
         Style::default().fg(Color::Yellow)

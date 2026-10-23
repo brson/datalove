@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use datalove_repl as repl;
-use repl::app::{CodeUnit, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab, UiAction, UnitStatus, WorkerResponse};
+use repl::app::{CodeUnit, Editing, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab, UiAction, UnitStatus, WorkerResponse};
 
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
@@ -1327,14 +1327,14 @@ fn cancelling_multiline_input_takes_two() {
     app.poll_results();
     assert!(app.multiline_mode());
 
-    assert!(matches!(app.cancel_multiline(), UiAction::None));
+    assert!(matches!(app.cancel_input(), UiAction::None));
     assert!(app.cancel_armed());
     app.disarm_cancel();
     assert!(!app.cancel_armed());
     assert!(app.multiline_mode(), "a key between leaves the input as it was");
 
-    app.cancel_multiline();
-    assert!(matches!(app.cancel_multiline(), UiAction::ClearInput));
+    app.cancel_input();
+    assert!(matches!(app.cancel_input(), UiAction::ClearInput));
     assert!(!app.multiline_mode());
     assert!(!app.cancel_armed());
     assert_eq!(executor.parse_count(), 1, "nothing was submitted");
@@ -1375,4 +1375,133 @@ fn asking_twice_exits() {
     app.ask_to_exit();
     app.ask_to_exit();
     assert!(app.should_exit());
+}
+
+/// The last command submitted for evaluation.
+fn last_command(executor: &MockExecutor) -> repl::Command {
+    executor.commands().pop().expect("a command was submitted")
+}
+
+/// Delete in the code panel deletes the selected unit by the command, which
+/// the history shows, and selects the next unit, or the one before the last.
+#[test]
+fn deleting_the_selected_unit() {
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = 2", "let c = 3"]);
+    app.focus_prev();
+    app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.selected_unit(), Some(2));
+
+    app.delete_selected();
+    assert!(matches!(last_command(&executor), repl::Command::ReplCommand(repl::ReplCommand::Delete { unit: 2 })));
+    assert_eq!(app.history().last().map(|entry| entry.input.as_str()), Some("/delete 2"));
+    assert_eq!(app.selected_unit(), Some(3));
+    assert_eq!(app.focus(), Panel::Code);
+    assert_eq!(app.tab(), Tab::History);
+
+    app.delete_selected();
+    assert!(matches!(last_command(&executor), repl::Command::ReplCommand(repl::ReplCommand::Delete { unit: 3 })));
+    assert_eq!(app.selected_unit(), Some(2), "the last unit gives way to the one before it");
+}
+
+/// Enter in the code panel edits the selected unit in the input, and
+/// submitting sends `/edit`, puts back what the input held, and returns to
+/// the unit.
+#[test]
+fn editing_the_selected_unit() {
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = 2"]);
+    app.focus_prev();
+    app.move_in_code(Scroll::LineUp);
+
+    let action = app.begin_edit("half typed".to_string());
+    assert!(matches!(action, UiAction::SetInput { text } if text == "let a = 1"));
+    assert_eq!(app.editing(), Some(Editing::Unit(1)));
+    assert_eq!(app.focus(), Panel::Input);
+    assert!(!app.multiline_mode());
+    assert!(app.input_cancels(), "Ctrl+C cancels an edit, single-line too");
+
+    let action = app.submit_input("let a = 5".to_string());
+    assert!(matches!(action, UiAction::SetInput { text } if text == "half typed"));
+    assert!(matches!(
+        last_command(&executor),
+        repl::Command::ReplCommand(repl::ReplCommand::Edit { unit: 1, source: repl::script::Unit::Fragment(source) })
+            if source == "let a = 5"
+    ));
+    assert_eq!(app.history().last().map(|entry| entry.input.as_str()), Some("/edit 1 let a = 5"));
+    assert_eq!(app.editing(), None);
+    assert_eq!(app.focus(), Panel::Code);
+    assert_eq!(app.selected_unit(), Some(1));
+}
+
+/// A unit over several lines is edited multiline, and a single-line edit
+/// that opens a definition goes multiline, as the prompt would.
+#[test]
+fn editing_goes_multiline_as_needed() {
+    let fun = "fun f(): int\n  ret 1\nend fun";
+    let (mut app, executor) = app_and_executor_with_units(&[fun, "let b = 2"]);
+    app.focus_prev();
+    app.move_in_code(Scroll::LineUp);
+
+    let action = app.begin_edit(String::new());
+    assert!(matches!(&action, UiAction::SetMultilineInput { lines } if lines.join("\n") == fun));
+    assert!(app.multiline_mode());
+    let edited = "fun f(): int\n  ret 2\nend fun";
+    assert!(matches!(app.submit_input(edited.to_string()), UiAction::ClearInput));
+    assert!(matches!(
+        last_command(&executor),
+        repl::Command::ReplCommand(repl::ReplCommand::Edit { unit: 1, source }) if source.source() == edited
+    ));
+    assert!(!app.multiline_mode());
+
+    // Back on the code, on unit 1; down to unit 2.
+    assert_eq!(app.focus(), Panel::Code);
+    app.move_in_code(Scroll::LineDown);
+    app.begin_edit(String::new());
+    let action = app.submit_input("fun g(): int".to_string());
+    assert!(matches!(action, UiAction::SetMultilineInput { .. }));
+    assert!(app.multiline_mode());
+    assert_eq!(app.editing(), Some(Editing::Unit(2)), "still editing, now over several lines");
+}
+
+/// Ctrl+C twice cancels an edit, submitting nothing, and puts back what the
+/// input held.
+#[test]
+fn cancelling_an_edit() {
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1"]);
+    app.focus_prev();
+    let evals = executor.evals().len();
+
+    app.begin_edit("half typed".to_string());
+    assert!(matches!(app.cancel_input(), UiAction::None));
+    assert!(matches!(app.cancel_input(), UiAction::SetInput { text } if text == "half typed"));
+    assert_eq!(app.editing(), None);
+    assert_eq!(app.focus(), Panel::Code);
+    assert_eq!(app.selected_unit(), Some(1));
+    assert_eq!(executor.evals().len(), evals, "nothing was submitted");
+}
+
+/// Insert in the code panel writes a new unit in the input, to go before the
+/// selected one, sent as `/insert before`; focus comes back to the unit it
+/// went before.
+#[test]
+fn inserting_before_the_selected_unit() {
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = 2"]);
+    app.focus_prev();
+    assert_eq!(app.selected_unit(), Some(2));
+
+    assert!(matches!(app.begin_insert("half typed".to_string()), UiAction::ClearInput));
+    assert_eq!(app.editing(), Some(Editing::Before(2)));
+    assert_eq!(app.focus(), Panel::Input);
+
+    let action = app.submit_input("x".to_string());
+    assert!(matches!(action, UiAction::SetInput { text } if text == "half typed"));
+    assert!(matches!(
+        last_command(&executor),
+        repl::Command::ReplCommand(repl::ReplCommand::Insert {
+            place: repl::Place::Before, unit: 2, source: repl::script::Unit::Expression(source),
+        }) if source == "x"
+    ));
+    assert_eq!(app.history().last().map(|entry| entry.input.as_str()), Some("/insert before 2 x"));
+    assert_eq!(app.editing(), None);
+    assert_eq!(app.focus(), Panel::Code);
+    assert_eq!(app.selected_unit(), Some(2));
 }

@@ -216,8 +216,8 @@ fn handle_key_event<E: ReplExecutor>(
             // be the obvious key, but a terminal multiplexer holds it back to
             // see whether a sequence follows, and two in one read are parsed
             // as one.
-            KeyCode::Char('c') if cancel && app.focus() == Panel::Input && app.multiline_mode() => {
-                app.cancel_multiline();
+            KeyCode::Char('c') if cancel && app.focus() == Panel::Input && app.repl.input_cancels() => {
+                app.cancel_input();
             }
             // Anywhere else Ctrl+C asks whether to exit, and another exits.
             KeyCode::Char('c') if cancel => app.repl.ask_to_exit(),
@@ -226,6 +226,11 @@ fn handle_key_event<E: ReplExecutor>(
             KeyCode::Down => app.handle_scroll_key(Scroll::LineDown, key),
             KeyCode::PageUp => app.handle_scroll_key(Scroll::PageUp, key),
             KeyCode::PageDown => app.handle_scroll_key(Scroll::PageDown, key),
+            // The focused code panel deletes its selected unit, edits it in
+            // the input, and writes a new one to go before it.
+            KeyCode::Delete if app.focus() == Panel::Code => app.repl.delete_selected(),
+            KeyCode::Enter if app.focus() == Panel::Code => app.begin_edit(),
+            KeyCode::Insert if app.focus() == Panel::Code => app.begin_insert(),
             // The rest are typing, which only the input panel takes.
             _ if app.focus() != Panel::Input => {}
             KeyCode::Enter => {

@@ -4,7 +4,7 @@
 use rmx::prelude::*;
 
 use datalove_repl as repl;
-pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus, Panel, Scroll, Tab, UnitStatus, CodeUnit};
+pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus, Panel, Scroll, Tab, UnitStatus, CodeUnit, Editing};
 pub use repl::ThreadedExecutor;
 pub use repl::{PackageLibrary, SystemLibrary};
 
@@ -82,6 +82,10 @@ impl<E: ReplExecutor> RatatuiApp<E> {
                 self.textarea = TextArea::from(lines);
                 self.textarea.move_cursor(tui_textarea::CursorMove::Bottom);
             }
+            UiAction::SetInput { text } => {
+                self.textarea = TextArea::from([text]);
+                self.textarea.move_cursor(tui_textarea::CursorMove::End);
+            }
             UiAction::ClearInput => {
                 self.textarea = TextArea::default();
             }
@@ -113,9 +117,25 @@ impl<E: ReplExecutor> RatatuiApp<E> {
         self.repl.focus_prev();
     }
 
-    /// Ask to throw away a multiline input; see [`ReplApp::cancel_multiline`].
-    pub fn cancel_multiline(&mut self) {
-        let action = self.repl.cancel_multiline();
+    /// Ask to throw away a multiline input or an edit; see
+    /// [`ReplApp::cancel_input`].
+    pub fn cancel_input(&mut self) {
+        let action = self.repl.cancel_input();
+        self.process_ui_action(action);
+    }
+
+    /// Edit the selected unit in the input; see [`ReplApp::begin_edit`].
+    pub fn begin_edit(&mut self) {
+        let typed = self.textarea.lines().join("\n");
+        let action = self.repl.begin_edit(typed);
+        self.process_ui_action(action);
+    }
+
+    /// Write a unit to go before the selected one; see
+    /// [`ReplApp::begin_insert`].
+    pub fn begin_insert(&mut self) {
+        let typed = self.textarea.lines().join("\n");
+        let action = self.repl.begin_insert(typed);
         self.process_ui_action(action);
     }
 

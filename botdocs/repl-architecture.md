@@ -265,6 +265,23 @@ it and the engine hold the same number of units. Both the worker and
 unlike evaluating a unit, the engine does not catch itself, and reports it as
 a crash that reset the session.
 
+**From the code panel, Delete, Enter and Insert make the same commands.**
+With a unit selected, Delete submits `/delete N`, shows the History tab where its answer
+goes, and selects the unit after it, or the one before if it was the last;
+focus stays on the code. Enter edits it: the unit's source goes into the
+input, which takes focus, multiline if the unit spans lines, with a magenta
+border and "Edit unit N" in its title. The input is the prompt otherwise: a
+single line that opens a definition goes multiline, Ctrl+C twice cancels, and
+a REPL command typed there runs as one. Submitting sends `/edit N <source>`,
+entered in the history as that command, so a session edited from the panel
+saves and replays the same as one edited at the prompt. When the edit is
+submitted or cancelled, focus goes back to the code on the same unit, and the
+input gets back whatever was typed in it before the edit began. Insert is the
+same with an empty input, titled "Insert before unit N", and sends
+`/insert before N <source>`. The new unit goes before the selected one, which
+stays selected, so inserting again puts the next one after it, above the same
+unit. There is no key for inserting after; appending is typing at the prompt.
+
 An edit, a delete or an insert answers with `Eval::Edited`: what each unit it
 reached came to, by number, in the session's order. A unit that fails at run
 time among them empties the session, as one appended does, and the app treats
@@ -443,7 +460,8 @@ the panel selects the newest unit, or the one selected before if it is still
 there. The selection is kept by the unit's number, so units added or removed
 around it leave it where it was. A reset clears it, since the new session
 numbers from 1 again and the old number would land on a different unit. It is
-what an edit made from the panel will act on.
+what Delete, Enter and Insert act on; see
+[Editing at the prompt](#user-content-editing-at-the-prompt).
 
 ### Tabs
 
@@ -588,8 +606,8 @@ setup and the loop together.
 - `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete` and
   `/insert` are the only commands, and help prints the word "help".
 - A command whose source spans lines cannot be typed: an input starting with
-  the sigil is a command on its first line. Only a replay gives one over
-  several lines.
+  the sigil is a command on its first line. Only a replay, or an edit from
+  the code panel, gives one over several lines.
 - An edit cannot change a unit from statements to an expression or back.
 - Errors are plain strings with no rendered diagnostics, and type errors are
   their `Debug` form, though `ScriptCompiler` exposes the spans needed for

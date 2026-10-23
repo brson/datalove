@@ -13,6 +13,8 @@ pub enum UiAction {
     None,
     /// Set the input widget to multiline mode with the given lines.
     SetMultilineInput { lines: Vec<String> },
+    /// Set the input widget to single-line mode with the given text.
+    SetInput { text: String },
     /// Clear the input widget.
     ClearInput,
 }
@@ -45,6 +47,15 @@ impl Panel {
             Panel::Bottom => Panel::Input,
         }
     }
+}
+
+/// What the input is writing, when it is not a new line at the end.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Editing {
+    /// The source of the unit with this number.
+    Unit(u32),
+    /// A new unit, to go before the one with this number.
+    Before(u32),
 }
 
 /// One of the tabs of the bottom panel.
@@ -276,9 +287,14 @@ pub struct ReplApp<E: ReplExecutor> {
     environment: Vec<(String, String, String)>,
     /// Whether we're in multiline mode.
     multiline_mode: bool,
-    /// Whether a cancel was asked for in multiline input, so another
-    /// carries it out.
+    /// Whether a cancel was asked for in multiline input, or in an edit, so
+    /// another carries it out.
     cancel_armed: bool,
+    /// What the input is editing, if it is.
+    editing: Option<Editing>,
+    /// What was typed when the edit began, and whether it was multiline, to
+    /// be put back when the edit ends.
+    stashed: Option<(String, bool)>,
     /// The panel keys go to.
     focus: Panel,
     /// The tab the bottom panel shows.
@@ -358,6 +374,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             environment: Vec::new(),
             multiline_mode: false,
             cancel_armed: false,
+            editing: None,
+            stashed: None,
             focus: Panel::Input,
             tab: Tab::Environment,
             exit_asked: false,
@@ -392,6 +410,9 @@ impl<E: ReplExecutor> ReplApp<E> {
         if input_text.is_empty() {
             return UiAction::None;
         }
+        if let Some(editing) = self.editing {
+            return self.submit_edit(editing, input_text);
+        }
 
         let input = if !self.multiline_mode {
             repl::Input::Input(input_text.C())
@@ -424,16 +445,150 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// definition that spans lines.
     pub fn replay(&mut self, inputs: Vec<repl::SavedInput>) {
         for repl::SavedInput { input, command } in inputs {
-            let id = self.next_id;
-            self.next_id += 1;
+            self.submit_command(input, command);
+        }
+    }
 
-            let mut entry = HistoryEntry::new(input, id);
-            entry.parse_result = Some(repl::InputParse::Command(command.C()));
-            entry.status = EntryStatus::Evaluating { command: command.C() };
-            self.history.push(entry);
+    /// Submit a command already read, entered in the history as `input`.
+    fn submit_command(&mut self, input: String, command: repl::Command) {
+        let id = self.next_id;
+        self.next_id += 1;
 
-            self.show_tab_for(&command);
-            self.executor.submit_eval(id, command);
+        let mut entry = HistoryEntry::new(input, id);
+        entry.parse_result = Some(repl::InputParse::Command(command.C()));
+        entry.status = EntryStatus::Evaluating { command: command.C() };
+        self.history.push(entry);
+
+        self.show_tab_for(&command);
+        self.executor.submit_eval(id, command);
+    }
+
+    /// Delete the selected unit, as `/delete` would, and select the one after
+    /// it, or before it if it is the last.
+    ///
+    /// The command goes into the history as though it had been typed, so it
+    /// is saved and replayed with the rest.
+    pub fn delete_selected(&mut self) {
+        let Some(unit) = self.selected_unit() else {
+            return;
+        };
+        let numbers: Vec<u32> = self.code_units().iter().filter_map(|unit| unit.number).collect();
+        let index = numbers.iter().position(|number| *number == unit).expect("the selected unit is shown");
+        self.selected_unit = numbers.get(index + 1).or(index.checked_sub(1).map(|before| &numbers[before])).copied();
+        self.submit_command(
+            fmt!("/delete {unit}"),
+            repl::Command::ReplCommand(repl::ReplCommand::Delete { unit }),
+        );
+        self.reveal_selected_unit();
+    }
+
+    /// Edit the selected unit in the input, which takes focus, multiline if
+    /// the unit spans lines.
+    ///
+    /// `typed` is what the input held, which is put back when the edit ends.
+    pub fn begin_edit(&mut self, typed: String) -> UiAction {
+        let Some(unit) = self.selected_unit() else {
+            return UiAction::None;
+        };
+        let source = self.code_units().into_iter()
+            .find(|code| code.number == Some(unit))
+            .expect("the selected unit is shown")
+            .source
+            .S();
+        self.stash(typed, Editing::Unit(unit));
+        self.multiline_mode = source.contains('\n');
+        if self.multiline_mode {
+            UiAction::SetMultilineInput { lines: source.lines().map(S).collect() }
+        } else {
+            UiAction::SetInput { text: source }
+        }
+    }
+
+    /// Write a new unit in the input, which takes focus, to go before the
+    /// selected unit, as `/insert before` would.
+    ///
+    /// `typed` is what the input held, which is put back when the insert
+    /// ends.
+    pub fn begin_insert(&mut self, typed: String) -> UiAction {
+        let Some(unit) = self.selected_unit() else {
+            return UiAction::None;
+        };
+        self.stash(typed, Editing::Before(unit));
+        self.multiline_mode = false;
+        UiAction::ClearInput
+    }
+
+    /// Put what the input holds aside, and give the input to an edit.
+    fn stash(&mut self, typed: String, editing: Editing) {
+        self.stashed = Some((typed, self.multiline_mode));
+        self.editing = Some(editing);
+        self.cancel_armed = false;
+        self.focus = Panel::Input;
+    }
+
+    /// What the input is editing, if it is.
+    pub fn editing(&self) -> Option<Editing> {
+        self.editing
+    }
+
+    /// Submit an edit's text, read as a unit typed at the prompt is.
+    ///
+    /// A line that opens a multiline definition makes the edit multiline, as
+    /// it would the prompt; a unit is sent as `/edit` or `/insert before`,
+    /// entered in the history as the command it is; and anything else, which
+    /// is a REPL command, is submitted as any input is, leaving the edit as
+    /// it was.
+    fn submit_edit(&mut self, editing: Editing, text: String) -> UiAction {
+        let input = if self.multiline_mode {
+            repl::Input::Multiline(text.C())
+        } else {
+            repl::Input::Input(text.C())
+        };
+        match repl::parse_input(input) {
+            repl::InputParse::Empty => UiAction::None,
+            repl::InputParse::ReadMultiline(text) => {
+                self.multiline_mode = true;
+                let mut lines: Vec<String> = text.lines().map(S).collect();
+                lines.push(String::new());
+                UiAction::SetMultilineInput { lines }
+            }
+            repl::InputParse::Command(repl::Command::Unit(source)) => {
+                let (input, command) = match editing {
+                    Editing::Unit(unit) => (
+                        fmt!("/edit {unit} {}", source.source()),
+                        repl::ReplCommand::Edit { unit, source },
+                    ),
+                    Editing::Before(unit) => (
+                        fmt!("/insert before {unit} {}", source.source()),
+                        repl::ReplCommand::Insert { place: repl::Place::Before, unit, source },
+                    ),
+                };
+                self.submit_command(input, repl::Command::ReplCommand(command));
+                self.end_edit()
+            }
+            repl::InputParse::Command(command @ repl::Command::ReplCommand(_)) => {
+                self.submit_command(text, command);
+                UiAction::ClearInput
+            }
+        }
+    }
+
+    /// Stop editing: focus goes back to the code, on the unit edited or
+    /// inserted before, and the input gets back what it held when the edit
+    /// began.
+    fn end_edit(&mut self) -> UiAction {
+        self.editing = None;
+        self.cancel_armed = false;
+        self.focus = Panel::Code;
+        self.reveal_selected_unit();
+        let (typed, multiline) = self.stashed.take().expect("an edit stashes what was typed");
+        self.multiline_mode = multiline;
+        if multiline {
+            UiAction::SetMultilineInput { lines: typed.lines().map(S).collect() }
+        } else if typed.is_empty() {
+            UiAction::ClearInput
+        } else {
+            UiAction::SetInput { text: typed }
         }
     }
 
@@ -934,19 +1089,28 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.multiline_mode
     }
 
-    /// Ask to cancel multiline input: the first asks for another, and the
-    /// second leaves multiline mode and throws away what was typed.
+    /// Ask to cancel multiline input or an edit: the first asks for another,
+    /// and the second throws away what was typed and leaves multiline mode,
+    /// or the edit, which puts back what the input held before it.
     ///
     /// What was entered before the input went multiline stays in the
     /// history, as an input that only read more lines.
-    pub fn cancel_multiline(&mut self) -> UiAction {
+    pub fn cancel_input(&mut self) -> UiAction {
         if !self.cancel_armed {
             self.cancel_armed = true;
             return UiAction::None;
         }
         self.cancel_armed = false;
+        if self.editing.is_some() {
+            return self.end_edit();
+        }
         self.multiline_mode = false;
         UiAction::ClearInput
+    }
+
+    /// Whether Ctrl+C in the input cancels it rather than asking to exit.
+    pub fn input_cancels(&self) -> bool {
+        self.multiline_mode || self.editing.is_some()
     }
 
     /// Whether one more cancel throws away the multiline input.
