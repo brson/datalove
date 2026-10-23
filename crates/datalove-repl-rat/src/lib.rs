@@ -45,12 +45,6 @@ impl<E: ReplExecutor> RatatuiApp<E> {
         self.process_ui_action(action);
     }
 
-    fn poll_results(&mut self) {
-        for action in self.repl.poll_results() {
-            self.process_ui_action(action);
-        }
-    }
-
     fn process_ui_action(&mut self, action: UiAction) {
         match action {
             UiAction::SetMultilineInput { lines } => {

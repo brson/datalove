@@ -14,7 +14,6 @@ use repl::app::{CodeUnit, Editing, EntryStatus, Panel, ReplApp, Scroll, ReplExec
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
 struct MockState {
-    parses: Vec<(u64, repl::Input)>,
     evals: Vec<u64>,
     commands: Vec<repl::Command>,
     /// Each command submitted for evaluation, by entry id.
@@ -35,10 +34,6 @@ struct MockExecutor {
 }
 
 impl ReplExecutor for MockExecutor {
-    fn submit_parse(&mut self, id: u64, input: repl::Input) {
-        self.state.borrow_mut().parses.push((id, input));
-    }
-
     fn submit_eval(&mut self, id: u64, command: repl::Command) {
         let mut state = self.state.borrow_mut();
         state.evals.push(id);
@@ -102,24 +97,6 @@ impl MockExecutor {
         self.state.borrow().commands.clone()
     }
 
-    fn parse_count(&self) -> usize {
-        self.state.borrow().parses.len()
-    }
-
-    /// The input of the nth parse submission, rendered for comparison.
-    fn parse_input(&self, index: usize) -> (&'static str, String) {
-        match &self.state.borrow().parses[index].1 {
-            repl::Input::Input(text) => ("Input", text.clone()),
-            repl::Input::Multiline(text) => ("Multiline", text.clone()),
-        }
-    }
-}
-
-fn parsed_statement(id: u64, source: &str) -> WorkerResponse {
-    WorkerResponse::ParseResult {
-        id,
-        parse: repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Fragment(source.to_string()))),
-    }
 }
 
 fn binding(name: &str, ty: &str, value: &str) -> repl::script::EnvBinding {
@@ -150,13 +127,9 @@ fn results_land_on_their_own_entry() {
     // The user submits a second line while the first is still being handled.
     app.submit_input("let x = 1".to_string());
     app.submit_input("let y = 2".to_string());
-
-    executor.queue(parsed_statement(0, "let x = 1"));
-    app.poll_results();
-    assert_eq!(executor.evals(), vec![0]);
+    assert_eq!(executor.evals(), vec![0, 1], "each goes to the engine as it is submitted");
 
     executor.queue(evaluated_let(0, "x"));
-    executor.queue(parsed_statement(1, "let y = 2"));
     app.poll_results();
 
     let history = app.history();
@@ -166,60 +139,40 @@ fn results_land_on_their_own_entry() {
         history[0].eval_result,
         Some(repl::Eval::Unit(repl::script::Eval::Success(_)))
     ));
-    assert!(matches!(history[1].status, EntryStatus::Evaluating { .. }));
-    assert_eq!(executor.evals(), vec![0, 1]);
+    assert!(matches!(history[1].status, EntryStatus::Evaluating));
 }
 
-/// Multiline mode loads whatever the engine read, however many lines it is.
+/// Input that opens a block goes multiline at once, with every line it was
+/// given.
 #[test]
 fn read_multiline_loads_every_line_it_was_given() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
 
-    app.submit_input("fun double(x: int): int\n  ret x + x".to_string());
-
-    executor.queue(WorkerResponse::ParseResult {
-        id: 0,
-        parse: repl::InputParse::ReadMultiline("fun double(x: int): int\n  ret x + x".to_string()),
-    });
-    let actions = app.poll_results();
+    let action = app.submit_input("fun double(x: int): int\n  ret x + x".to_string());
 
     assert!(app.multiline_mode());
-    assert_eq!(actions.len(), 1);
-    match &actions[0] {
-        repl::app::UiAction::SetMultilineInput { lines } => {
-            assert_eq!(lines, &["fun double(x: int): int", "  ret x + x", ""]);
-        }
-        other => panic!("expected SetMultilineInput, got {:?}", other),
-    }
+    assert!(matches!(&action, UiAction::SetMultilineInput { lines } if lines == &["fun double(x: int): int", "  ret x + x", ""]));
+    assert!(executor.evals().is_empty(), "nothing is evaluated until the definition is whole");
 }
 
-/// The submission after a ReadMultiline is sent as multiline input, and the
-/// mode ends when the engine answers.
+/// The submission after an input went multiline is read as the whole unit,
+/// and the mode ends with it.
 #[test]
 fn multiline_mode_spans_one_submission() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("fun f(): int".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 0,
-        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
-    });
-    app.poll_results();
     assert!(app.multiline_mode());
-    assert_eq!(executor.parse_input(0), ("Input", "fun f(): int".to_string()));
 
-    // The continued fragment goes to the engine as one multiline input.
     app.submit_input("fun f(): int\n  ret 1\nend fun".to_string());
     assert!(!app.multiline_mode());
-    assert_eq!(
-        executor.parse_input(1),
-        ("Multiline", "fun f(): int\n  ret 1\nend fun".to_string())
-    );
+    assert!(matches!(
+        &executor.commands()[..],
+        [repl::Command::Unit(repl::script::Unit::Fragment(source))] if source == "fun f(): int\n  ret 1\nend fun"
+    ));
 
-    executor.queue(parsed_statement(1, "fun f(): int\n  ret 1\nend fun"));
-    app.poll_results();
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Function {
@@ -244,7 +197,7 @@ fn empty_input_is_not_submitted() {
     let action = app.submit_input(String::new());
 
     assert!(matches!(action, repl::app::UiAction::None));
-    assert_eq!(executor.parse_count(), 0);
+    assert!(executor.evals().is_empty());
     assert!(app.history().is_empty());
 }
 
@@ -255,10 +208,6 @@ fn exit_command_asks_the_app_to_exit() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("/exit".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 0,
-        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Exit)),
-    });
     app.poll_results();
     assert!(!app.should_exit());
 
@@ -304,17 +253,12 @@ fn reset_command_clears_history_and_environment() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("let a = 1".to_string());
-    executor.queue(parsed_statement(0, "let a = 1"));
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.environment().len(), 1);
 
     app.submit_input("/reset".to_string());
     app.submit_input("let b = 1".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 1,
-        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Reset)),
-    });
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
@@ -328,7 +272,6 @@ fn reset_command_clears_history_and_environment() {
     assert_eq!(app.history().len(), 1);
     assert_eq!(app.history()[0].id, 2);
 
-    executor.queue(parsed_statement(2, "let b = 1"));
     executor.queue(evaluated_let(2, "b"));
     app.poll_results();
     assert!(matches!(app.history()[0].status, EntryStatus::Success));
@@ -351,7 +294,6 @@ fn a_replayed_session_is_evaluated_without_parsing() {
         },
     ]);
 
-    assert_eq!(executor.parse_count(), 0);
     assert_eq!(executor.evals(), vec![0, 1]);
     assert_eq!(app.history().len(), 2);
     assert_eq!(app.history()[1].input, "f()");
@@ -361,7 +303,7 @@ fn a_replayed_session_is_evaluated_without_parsing() {
     ));
     assert!(matches!(
         app.history()[1].parse_result,
-        Some(repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Expression(_)))),
+        repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Expression(_))),
     ));
 
     executor.queue(evaluated_let(0, "a"));
@@ -383,22 +325,13 @@ fn save_writes_the_history_up_to_itself() {
     app.set_session_path(path.clone());
 
     app.submit_input("fun f(): int".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 0,
-        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
-    });
     app.poll_results();
 
     let fun = "fun f(): int\n    ret 1\nend fun";
     app.submit_input(fun.to_string());
-    executor.queue(parsed_statement(1, fun));
     executor.queue(evaluated_let(1, "f"));
 
     app.submit_input("nope".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 2,
-        parse: repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Expression("nope".to_string()))),
-    });
     executor.queue(WorkerResponse::EvalResult {
         id: 2,
         eval: repl::Eval::Unit(repl::script::Eval::Error("no such name".to_string())),
@@ -410,10 +343,6 @@ fn save_writes_the_history_up_to_itself() {
     app.submit_input("/save".to_string());
     // Typed while the save was on its way, and not saved.
     app.submit_input("let late = 1".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 3,
-        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Save)),
-    });
     executor.queue(WorkerResponse::EvalResult {
         id: 3,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
@@ -458,10 +387,6 @@ fn save_without_a_path_is_an_error() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("/save".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 0,
-        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Save)),
-    });
     executor.queue(WorkerResponse::EvalResult {
         id: 0,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
@@ -486,7 +411,6 @@ fn input_after_a_crash_runs_in_the_new_session() {
     app.submit_input("let x = 1".to_string());
     app.submit_input("let y = 2".to_string());
 
-    executor.queue(parsed_statement(0, "let x = 1"));
     executor.queue(WorkerResponse::EvalResult {
         id: 0,
         eval: repl::Eval::Unit(repl::script::Eval::CrashReset("boom".to_string())),
@@ -500,7 +424,6 @@ fn input_after_a_crash_runs_in_the_new_session() {
     assert_eq!(app.history().len(), 1);
 
     // The second line's parse was submitted before the reset.
-    executor.queue(parsed_statement(1, "let y = 2"));
     executor.queue(evaluated_let(1, "y"));
     app.poll_results();
 
@@ -519,13 +442,11 @@ fn a_runtime_error_reset_clears_the_session() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("let x = 1".to_string());
-    executor.queue(parsed_statement(0, "let x = 1"));
     executor.queue(evaluated_let(0, "x"));
     app.poll_results();
     assert_eq!(app.environment().len(), 1);
 
     app.submit_input("let y = f()".to_string());
-    executor.queue(parsed_statement(1, "let y = f()"));
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Eval::Unit(repl::script::Eval::ErrorReset("Error: stack overflow".to_string())),
@@ -571,7 +492,7 @@ fn a_dead_engine_is_reported() {
     app.poll_results();
 
     assert_eq!(app.engine_dead_message(), Some("cargo is not installed"));
-    assert!(matches!(app.history()[0].status, EntryStatus::Parsing));
+    assert!(matches!(app.history()[0].status, EntryStatus::Evaluating));
 }
 
 /// Paging through the history stops at the oldest entry and at the newest,
@@ -677,11 +598,6 @@ fn scroll_keys_go_to_the_focused_pane_and_ctrl_to_its_opposite() {
     // Into multiline mode, with the input focused again.
     app.focus_next();
     app.submit_input("fun f() {".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 0,
-        parse: repl::InputParse::ReadMultiline("fun f() {".to_string()),
-    });
-    app.poll_results();
     assert!(app.multiline_mode());
 
     assert_eq!(app.scroll_target(false), Panel::Input);
@@ -721,13 +637,6 @@ fn evaluated(id: u64, eval: repl::script::Eval) -> WorkerResponse {
     WorkerResponse::EvalResult { id, eval: repl::Eval::Unit(eval), environment: Vec::new(), session: Vec::new(), step: Vec::new() }
 }
 
-fn parsed_command(id: u64, command: repl::ReplCommand) -> WorkerResponse {
-    WorkerResponse::ParseResult {
-        id,
-        parse: repl::InputParse::Command(repl::Command::ReplCommand(command)),
-    }
-}
-
 /// The code panel is the session's units, without the REPL commands, each
 /// with its status: how it fared when it was last answered, or pending while
 /// it waits.
@@ -736,13 +645,8 @@ fn code_units_are_the_units_and_their_statuses() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
 
-    for (id, input) in ["let a = 1", "/help", "let b = c", "a"].into_iter().enumerate() {
+    for input in ["let a = 1", "/help", "let b = c", "a"] {
         app.submit_input(input.to_string());
-        if input == "/help" {
-            executor.queue(parsed_command(id as u64, repl::ReplCommand::Help));
-        } else {
-            executor.queue(parsed_statement(id as u64, input));
-        }
     }
     app.poll_results();
 
@@ -783,10 +687,8 @@ fn a_runtime_error_clears_the_code() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("let a = 1".to_string());
-    executor.queue(parsed_statement(0, "let a = 1"));
     executor.queue(evaluated_let(0, "a"));
     app.submit_input("let b = f()".to_string());
-    executor.queue(parsed_statement(1, "let b = f()"));
     executor.queue(evaluated(1, repl::script::Eval::ErrorReset("Error: stack overflow".to_string())));
     app.poll_results();
 
@@ -802,12 +704,10 @@ fn input_selects_the_tab_it_changes() {
     assert_eq!(app.tab(), Tab::Environment);
 
     app.submit_input("/help".to_string());
-    executor.queue(parsed_command(0, repl::ReplCommand::Help));
     app.poll_results();
     assert_eq!(app.tab(), Tab::History);
 
     app.submit_input("let a = 1".to_string());
-    executor.queue(parsed_statement(1, "let a = 1"));
     app.poll_results();
     assert_eq!(app.tab(), Tab::Environment);
 
@@ -872,8 +772,11 @@ fn app_and_executor_with_units(sources: &[&str]) -> (ReplApp<MockExecutor>, Mock
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
     for (id, source) in sources.iter().enumerate() {
-        app.submit_input(source.to_string());
-        executor.queue(parsed_statement(id as u64, source));
+        // Whole, as a definition over several lines is submitted.
+        let repl::InputParse::Command(command) = repl::parse_input(repl::Input::Multiline(source.to_string())) else {
+            panic!("{source:?} is a unit");
+        };
+        app.replay(vec![repl::SavedInput { input: source.to_string(), command }]);
         executor.queue(evaluated_let(id as u64, "x"));
     }
     app.poll_results();
@@ -913,7 +816,6 @@ fn a_reset_loses_the_selection() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
     app.submit_input("let a = 1".to_string());
-    executor.queue(parsed_statement(0, "let a = 1"));
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     app.focus_prev();
@@ -921,7 +823,6 @@ fn a_reset_loses_the_selection() {
 
     app.submit_input("/reset".to_string());
     app.submit_input("let b = 1".to_string());
-    executor.queue(parsed_command(1, repl::ReplCommand::Reset));
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
@@ -929,7 +830,6 @@ fn a_reset_loses_the_selection() {
         session: Vec::new(),
         step: Vec::new(),
     });
-    executor.queue(parsed_statement(2, "let b = 1"));
     executor.queue(evaluated_let(2, "b"));
     app.poll_results();
     assert_eq!(app.selected_unit(), None);
@@ -997,10 +897,8 @@ repl-command
     app.set_session_path(path);
 
     app.submit_input("let old = 1".to_string());
-    executor.queue(parsed_statement(0, "let old = 1"));
     executor.queue(evaluated_let(0, "old"));
     app.submit_input("/load".to_string());
-    executor.queue(parsed_command(1, repl::ReplCommand::Load));
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
@@ -1044,7 +942,6 @@ fn load_without_a_saved_session_is_an_error() {
     app.set_session_path(dir.path().join("missing.world"));
 
     app.submit_input("/load".to_string());
-    executor.queue(parsed_command(0, repl::ReplCommand::Load));
     executor.queue(WorkerResponse::EvalResult {
         id: 0,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
@@ -1068,19 +965,11 @@ fn a_pending_reset_takes_the_code_before_it() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.submit_input("let a = 1".to_string());
-    executor.queue(parsed_statement(0, "let a = 1"));
     executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
     app.submit_input("/reset".to_string());
     app.submit_input("let b = 2".to_string());
-    app.poll_results();
 
-    // Not parsed yet, the reset is not known to be one.
-    let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
-    assert_eq!(sources, vec!["let a = 1"]);
-
-    executor.queue(parsed_command(1, repl::ReplCommand::Reset));
-    executor.queue(parsed_statement(2, "let b = 2"));
-    app.poll_results();
     let units = app.code_units();
     assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", status: UnitStatus::Pending, compiled: false, ran: false }]);
     // The history keeps the units the engine still has.
@@ -1097,8 +986,6 @@ fn a_session_the_history_does_not_hold_is_reported() {
 
     app.submit_input("let a = 1".to_string());
     app.submit_input("let b = 2".to_string());
-    executor.queue(parsed_statement(0, "let a = 1"));
-    executor.queue(parsed_statement(1, "let b = 2"));
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.session_mismatch_message(), None);
@@ -1150,7 +1037,6 @@ fn edits_change_the_code_when_answered() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a", "let c = 3"]);
 
     app.submit_input("/edit 1 let a = 2".to_string());
-    executor.queue(parsed_command(3, command_named("/edit 1 let a = 2")));
     app.poll_results();
     // Not answered yet, so not shown.
     assert_eq!(statuses(&app)[0], (Some(1), "let a = 1", UnitStatus::Ran));
@@ -1166,11 +1052,9 @@ fn edits_change_the_code_when_answered() {
     assert_eq!(app.tab(), Tab::History);
 
     app.submit_input("/insert before 2 let d = 4".to_string());
-    executor.queue(parsed_command(4, command_named("/insert before 2 let d = 4")));
     executor.queue_raw(edited(4, vec![(4, ran()), (2, ran()), (3, ran())],
         vec![numbered(1, "let a = 2"), numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
     app.submit_input("/delete 1".to_string());
-    executor.queue(parsed_command(5, command_named("/delete 1")));
     executor.queue_raw(edited(5, vec![(2, repl::script::Eval::Error("no `a`".to_string()))],
         vec![numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
     app.poll_results();
@@ -1184,7 +1068,6 @@ fn edits_change_the_code_when_answered() {
 
     // The next unit appended is numbered after the inserted one.
     app.submit_input("let e = 5".to_string());
-    executor.queue(parsed_statement(6, "let e = 5"));
     executor.queue(evaluated_let(6, "e"));
     app.poll_results();
     assert_eq!(statuses(&app).last(), Some(&(Some(5), "let e = 5", UnitStatus::Ran)));
@@ -1198,7 +1081,6 @@ fn an_edit_that_resets_the_session_clears_the_code() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a"]);
 
     app.submit_input("/edit 1 let a = f()".to_string());
-    executor.queue(parsed_command(2, command_named("/edit 1 let a = f()")));
     executor.queue_raw(edited(2, vec![(1, repl::script::Eval::ErrorReset("Error: stack overflow".to_string()))], Vec::new()));
     app.poll_results();
 
@@ -1216,21 +1098,12 @@ fn a_session_with_different_source_is_reported() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1"]);
 
     app.submit_input("/edit 1 let a = 2".to_string());
-    executor.queue(parsed_command(1, command_named("/edit 1 let a = 2")));
     executor.queue_raw(edited(1, vec![(1, repl::script::Eval::Nothing)], vec![numbered(1, "let a = 3")]));
     app.poll_results();
 
     let message = app.session_mismatch_message().expect("the mismatch is reported");
     assert!(message.contains("different sources"), "{message}");
     assert_eq!(statuses(&app), vec![(Some(1), "let a = 3", UnitStatus::Ran)]);
-}
-
-/// The command an input names, as the parser reads it.
-fn command_named(input: &str) -> repl::ReplCommand {
-    match repl::parse_input(repl::Input::Input(input.to_string())) {
-        repl::InputParse::Command(repl::Command::ReplCommand(command)) => command,
-        other => panic!("{input:?} is not a REPL command: {other:?}"),
-    }
 }
 
 /// The page keys scroll the code and keep the selection on screen: a unit
@@ -1293,7 +1166,6 @@ fn the_code_shows_what_the_last_step_did() {
     assert_eq!(marks(&app), vec![(Some(1), false, false), (Some(2), false, false), (Some(3), true, true)]);
 
     app.submit_input("/edit 1 let a = 2".to_string());
-    executor.queue(parsed_command(3, command_named("/edit 1 let a = 2")));
     let WorkerResponse::EvalResult { id, eval, environment, session, .. } = edited(
         3, vec![(1, repl::script::Eval::Nothing), (2, repl::script::Eval::Nothing)],
         vec![numbered(1, "let a = 2"), numbered(2, "let b = a"), numbered(3, "let c = 3")],
@@ -1309,7 +1181,6 @@ fn the_code_shows_what_the_last_step_did() {
     assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
 
     app.submit_input("/help".to_string());
-    executor.queue(parsed_command(4, repl::ReplCommand::Help));
     executor.queue(WorkerResponse::EvalResult {
         id: 4,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Help),
@@ -1329,10 +1200,6 @@ fn cancelling_multiline_input_takes_two() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
     app.submit_input("fun f(): int".to_string());
-    executor.queue(WorkerResponse::ParseResult {
-        id: 0,
-        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
-    });
     app.poll_results();
     assert!(app.multiline_mode());
 
@@ -1346,7 +1213,7 @@ fn cancelling_multiline_input_takes_two() {
     assert!(matches!(app.cancel_input(), UiAction::ClearInput));
     assert!(!app.multiline_mode());
     assert!(!app.cancel_armed());
-    assert_eq!(executor.parse_count(), 1, "nothing was submitted");
+    assert!(executor.evals().is_empty(), "nothing was submitted");
 }
 
 /// An answer for an earlier input arriving while a multiline input is being
@@ -1357,11 +1224,6 @@ fn an_answer_does_not_end_multiline_input() {
     let mut app = ReplApp::with_executor(executor.clone());
     app.submit_input("let a = 1".to_string());
     app.submit_input("fun f(): int".to_string());
-    executor.queue(parsed_statement(0, "let a = 1"));
-    executor.queue(WorkerResponse::ParseResult {
-        id: 1,
-        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
-    });
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
 

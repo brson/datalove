@@ -340,7 +340,6 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect,
         lines.push(Line::from(vec![Span::styled("> ", Style::default().fg(Color::Cyan)), Span::raw(input)]));
 
         match &entry.status {
-            EntryStatus::Parsing => lines.push(marked("…", Color::Yellow, "parsing")),
             EntryStatus::Evaluating => lines.push(marked("…", Color::Yellow, "evaluating")),
             EntryStatus::Empty => lines.push(marked("·", Color::DarkGray, "(empty)")),
             EntryStatus::ReadMultiline => lines.push(marked("→", Color::DarkGray, "read more lines")),

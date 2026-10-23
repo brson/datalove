@@ -189,8 +189,8 @@ pub struct HistoryEntry {
     pub id: u64,
     /// The input text submitted.
     pub input: String,
-    /// Parse result if available.
-    pub parse_result: Option<repl::InputParse>,
+    /// What the input was read as.
+    pub parse_result: repl::InputParse,
     /// Evaluation result if available.
     pub eval_result: Option<repl::Eval>,
     /// Entry status (lifecycle and outcome).
@@ -202,8 +202,6 @@ pub struct HistoryEntry {
 /// Tracks both the processing lifecycle and the outcome.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EntryStatus {
-    /// Request is being parsed.
-    Parsing,
     /// Request is being evaluated; its command is the entry's parse.
     Evaluating,
     /// Request completed successfully.
@@ -218,23 +216,18 @@ pub enum EntryStatus {
 
 /// Find the history entry a worker response belongs to.
 ///
-/// It is always there. The engine answers in order, and the history only
-/// forgets the entries up to one whose answer reset the session, by which
-/// time everything before that one has been answered.
+/// It is always there. Commands go to the engine in the order they were
+/// entered and it answers them in that order, and the history only forgets
+/// the entries up to one whose answer reset the session, by which time
+/// everything before that one has been answered.
 fn find_entry(history: &mut [HistoryEntry], id: u64) -> &mut HistoryEntry {
     history.iter_mut().rev().find(|entry| entry.id == id)
         .unwrap_or_else(|| panic!("a response for entry {id}, which the history has forgotten"))
 }
 
 impl HistoryEntry {
-    fn new(input: String, id: u64) -> Self {
-        Self {
-            id,
-            input,
-            parse_result: None,
-            eval_result: None,
-            status: EntryStatus::Parsing,
-        }
+    fn new(id: u64, input: String, parse_result: repl::InputParse, status: EntryStatus) -> Self {
+        Self { id, input, parse_result, eval_result: None, status }
     }
 }
 
@@ -247,7 +240,6 @@ pub enum WorkerResponse {
     ///
     /// Nothing the user submits will ever be answered after this.
     EngineDead { message: String },
-    ParseResult { id: u64, parse: repl::InputParse },
     EvalResult {
         id: u64,
         eval: repl::Eval,
@@ -259,14 +251,12 @@ pub enum WorkerResponse {
     },
 }
 
-/// Trait for executing REPL parse and eval operations.
+/// What evaluates commands for the app, and answers in the order they were
+/// submitted.
 ///
 /// Implementations can be synchronous or asynchronous,
 /// single-threaded or multi-threaded.
 pub trait ReplExecutor {
-    /// Submit a parse request.
-    fn submit_parse(&mut self, id: u64, input: repl::Input);
-
     /// Submit an eval request.
     fn submit_eval(&mut self, id: u64, command: repl::Command);
 
@@ -277,7 +267,7 @@ pub trait ReplExecutor {
 
 /// Core REPL application state, completely UI-agnostic.
 pub struct ReplApp<E: ReplExecutor> {
-    /// Executor for parse and eval operations.
+    /// What evaluates the commands.
     executor: E,
     /// Next request ID.
     next_id: u64,
@@ -414,28 +404,52 @@ impl<E: ReplExecutor> ReplApp<E> {
             return self.submit_edit(editing, input_text);
         }
 
-        let input = if !self.multiline_mode {
-            repl::Input::Input(input_text.C())
-        } else {
-            repl::Input::Multiline(input_text.C())
-        };
-
-        self.multiline_mode = false;
-
-        let id = self.next_id;
-        self.next_id += 1;
-
-        let entry = HistoryEntry::new(input_text, id);
-        self.history.push(entry);
-
         // Someone who submits wants to see what it did, wherever they had
         // scrolled to read.
         self.code_scroll.offset = 0;
         self.history_scroll.offset = 0;
 
-        self.executor.submit_parse(id, input);
+        match self.read(&input_text) {
+            repl::InputParse::Command(command) => {
+                self.multiline_mode = false;
+                self.submit_command(input_text, command);
+                UiAction::ClearInput
+            }
+            parse @ repl::InputParse::Empty => {
+                self.multiline_mode = false;
+                self.push_entry(input_text, parse, EntryStatus::Empty);
+                UiAction::ClearInput
+            }
+            repl::InputParse::ReadMultiline(text) => {
+                self.push_entry(input_text, repl::InputParse::ReadMultiline(text.C()), EntryStatus::ReadMultiline);
+                self.read_more(&text)
+            }
+        }
+    }
 
-        UiAction::ClearInput
+    /// Read what typed text is, single-line or multiline as the input is.
+    fn read(&self, text: &str) -> repl::InputParse {
+        repl::parse_input(match self.multiline_mode {
+            false => repl::Input::Input(text.S()),
+            true => repl::Input::Multiline(text.S()),
+        })
+    }
+
+    /// Go multiline, with the lines typed so far and an empty one after them
+    /// to go on in.
+    fn read_more(&mut self, text: &str) -> UiAction {
+        self.multiline_mode = true;
+        let mut lines: Vec<String> = text.lines().map(S).collect();
+        lines.push(String::new());
+        UiAction::SetMultilineInput { lines }
+    }
+
+    /// Enter an input in the history, and say which entry it is.
+    fn push_entry(&mut self, input: String, parse: repl::InputParse, status: EntryStatus) -> u64 {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.history.push(HistoryEntry::new(id, input, parse, status));
+        id
     }
 
     /// Replay a saved session's inputs, as if each had been submitted.
@@ -451,14 +465,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     /// Submit a command already read, entered in the history as `input`.
     fn submit_command(&mut self, input: String, command: repl::Command) {
-        let id = self.next_id;
-        self.next_id += 1;
-
-        let mut entry = HistoryEntry::new(input, id);
-        entry.parse_result = Some(repl::InputParse::Command(command.C()));
-        entry.status = EntryStatus::Evaluating;
-        self.history.push(entry);
-
+        let id = self.push_entry(input, repl::InputParse::Command(command.C()), EntryStatus::Evaluating);
         self.show_tab_for(&command);
         self.executor.submit_eval(id, command);
     }
@@ -539,19 +546,9 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// is a REPL command, is submitted as any input is, leaving the edit as
     /// it was.
     fn submit_edit(&mut self, editing: Editing, text: String) -> UiAction {
-        let input = if self.multiline_mode {
-            repl::Input::Multiline(text.C())
-        } else {
-            repl::Input::Input(text.C())
-        };
-        match repl::parse_input(input) {
+        match self.read(&text) {
             repl::InputParse::Empty => UiAction::None,
-            repl::InputParse::ReadMultiline(text) => {
-                self.multiline_mode = true;
-                let mut lines: Vec<String> = text.lines().map(S).collect();
-                lines.push(String::new());
-                UiAction::SetMultilineInput { lines }
-            }
+            repl::InputParse::ReadMultiline(text) => self.read_more(&text),
             repl::InputParse::Command(repl::Command::Unit(source)) => {
                 let (input, command) = match editing {
                     Editing::Unit(unit) => (
@@ -592,10 +589,8 @@ impl<E: ReplExecutor> ReplApp<E> {
         }
     }
 
-    /// Poll for results from executor and return UI actions to process.
-    pub fn poll_results(&mut self) -> Vec<UiAction> {
-        let mut actions = Vec::new();
-
+    /// Take in whatever the executor has answered.
+    pub fn poll_results(&mut self) {
         while let Some(response) = self.executor.try_recv_response() {
             match response {
                 WorkerResponse::EngineReady => {
@@ -604,47 +599,11 @@ impl<E: ReplExecutor> ReplApp<E> {
                 WorkerResponse::EngineDead { message } => {
                     self.engine_dead = Some(message);
                 }
-                WorkerResponse::ParseResult { id, parse } => {
-                    let action = self.handle_parse_result(id, parse);
-                    actions.push(action);
-                }
                 WorkerResponse::EvalResult { id, eval, environment, session, step } => {
                     self.handle_eval_result(id, eval, environment);
                     self.check_session(session);
                     self.last_step = step;
                 }
-            }
-        }
-
-        actions
-    }
-
-    fn handle_parse_result(&mut self, id: u64, parse: repl::InputParse) -> UiAction {
-        let entry = find_entry(&mut self.history, id);
-
-        match parse.C() {
-            repl::InputParse::Empty => {
-                entry.parse_result = Some(parse);
-                entry.status = EntryStatus::Empty;
-                UiAction::None
-            }
-            repl::InputParse::ReadMultiline(input) => {
-                entry.parse_result = Some(parse);
-                entry.status = EntryStatus::ReadMultiline;
-                self.multiline_mode = true;
-
-                // The input carries however many lines the user submitted at
-                // once; the empty line at the end is where they continue.
-                let mut lines: Vec<String> = input.lines().map(S).collect();
-                lines.push(String::new());
-                UiAction::SetMultilineInput { lines }
-            }
-            repl::InputParse::Command(command) => {
-                entry.parse_result = Some(parse);
-                entry.status = EntryStatus::Evaluating;
-                self.show_tab_for(&command);
-                self.executor.submit_eval(id, command);
-                UiAction::None
             }
         }
     }
@@ -659,7 +618,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<script::EnvBinding>) {
-        let Some(repl::InputParse::Command(command)) = find_entry(&mut self.history, id).parse_result.C() else {
+        let repl::InputParse::Command(command) = find_entry(&mut self.history, id).parse_result.C() else {
             unreachable!("only a command is evaluated");
         };
         self.apply(&command, &eval);
@@ -872,8 +831,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     ///
     /// Everything the history holds goes in, failures and REPL commands
     /// included, as it was typed. What was typed after the `/save` is left
-    /// out, and is the only part of the history that can still be waiting to
-    /// be parsed: the engine answers in order.
+    /// out.
     ///
     /// A line that only opened a multiline input is left out too, since the
     /// input it opened holds it again.
@@ -886,9 +844,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         let mut sections = Vec::new();
         for entry in self.history.iter().filter(|entry| entry.id <= save_id) {
-            let parse = entry.parse_result.as_ref()
-                .expect("the engine parsed everything before the save");
-            let section = match parse {
+            let section = match &entry.parse_result {
                 repl::InputParse::Empty | repl::InputParse::ReadMultiline(_) => continue,
                 repl::InputParse::Command(repl::Command::Unit(script::Unit::Fragment(source))) => {
                     WorldfileSection::ScriptFragment { source: source.C() }
@@ -1273,7 +1229,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         // A reset still in the history is one the engine has not answered.
         let pending_reset = self.history.iter().rposition(|entry| matches!(
             entry.parse_result,
-            Some(repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Reset))),
+            repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Reset)),
         ));
         let (answered, waiting) = match pending_reset {
             Some(reset) => (&[][..], &self.history[reset + 1..]),
@@ -1293,7 +1249,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         let waiting = waiting.iter()
             .filter(|entry| entry.eval_result.is_none())
             .filter_map(|entry| match &entry.parse_result {
-                Some(repl::InputParse::Command(repl::Command::Unit(unit))) => Some(CodeUnit {
+                repl::InputParse::Command(repl::Command::Unit(unit)) => Some(CodeUnit {
                     number: None,
                     source: unit.source(),
                     status: UnitStatus::Pending,

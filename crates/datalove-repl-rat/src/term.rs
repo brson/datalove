@@ -140,7 +140,7 @@ where
 {
     loop {
         // Poll for worker results before drawing.
-        app.poll_results();
+        app.repl.poll_results();
 
         terminal.draw(|f| crate::render::ui(f, app))?;
 

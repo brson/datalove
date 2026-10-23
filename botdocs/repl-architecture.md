@@ -67,15 +67,25 @@ and the workspace's own `local` library if it has one, from the caller; see
 
 ## The request/response shape
 
-Input flows one way and results come back keyed by id:
+Input is read in the app, and only commands cross to the engine, whose
+results come back keyed by id:
 
 ```
-submit_input(text) -> Input -> submit_parse(id) -> InputParse
-                                     |
-                            (if Command) submit_eval(id) -> Eval + environment
+submit_input(text) -> parse_input -> ReadMultiline: more lines
+                                  -> Empty: an entry, nothing else
+                                  -> Command: submit_eval(id) -> Eval, environment, session, step
 ```
 
-`ReplExecutor` abstracts where that happens. `ThreadedExecutor` puts the
+**Reading an input does not ask the engine.** `parse_input` is a function of
+the text: the sigil and a few keywords on its first line of code say whether
+it is a command, a statement, or the start of a block that reads on to its
+`end`. It used to run on the worker, from when it was a method of the engine,
+and an input waited for its parse to come back before its eval was sent, so a
+later input's parse could overtake an earlier one's eval. Read in the app,
+commands go to the engine in the order they were typed, and an input that
+opens a block goes multiline as Enter is pressed.
+
+`ReplExecutor` abstracts where evaluation happens. `ThreadedExecutor` puts the
 engine on a worker thread so the UI stays responsive. Everything crossing the
 boundary is `Serialize`/`Deserialize`.
 
@@ -84,9 +94,9 @@ pushes an entry when input is submitted, which can be before the previous
 entry's evaluation has answered. So "the last entry" is not necessarily the
 entry a result belongs to, and someone typing during an evaluation would
 otherwise get the result attached to the wrong line. A result always has its
-entry: the engine answers in order, and the history only forgets entries up
-to one whose answer reset the session, by which time all of them have been
-answered.
+entry: commands go to the engine in order and it answers in order, and the
+history only forgets entries up to one whose answer reset the session, by
+which time all of them have been answered.
 
 Executors are constructed by the caller and handed to `ReplApp`, which is
 what lets the tests drive the state machine with a scripted mock.
@@ -367,7 +377,7 @@ it is compiled, so its entry is added in the `eval_reporting` callback, from
 
 Everything above assumes the engine started. When it does not, the app has to
 say so, because the request/response shape hides the failure completely: input
-is submitted, an entry is pushed as `Parsing`, and a response never comes.
+is submitted, an entry is pushed as `Evaluating`, and a response never comes.
 Startup can fail on a rider interface error, or on building the riders when
 `DATALOVE_BUILD_SYS_RIDERS` asks for them to be built rather than taken from
 the binary.
@@ -447,9 +457,9 @@ fail on any mismatch, so a rule that a new command breaks shows up there
 first.
 
 **The code is the session as it will be once everything submitted is
-answered**, not as the engine has it now. A unit shows from when it parses,
-before it runs, so a `/reset` has to take the units before it from when it
-parses too, or the units typed after it show appended to the session they will
+answered**, not as the engine has it now. A unit shows from when it is
+submitted, before it runs, so a `/reset` has to take the units before it from
+when it is submitted too, or the units typed after it show appended to the session they will
 never see. The history keeps the old units until the engine answers the reset,
 since they are the engine's session until then, and `code_units` shows only
 the units after the last reset still in it. Appended units and resets are the
@@ -469,7 +479,7 @@ what Delete, Enter and Insert act on; see
 ### Tabs
 
 The bottom panel has two tabs, Environment and History. F2 cycles them, and
-Alt+1 and Alt+2 select one. Input selects the tab it changes when it parses:
+Alt+1 and Alt+2 select one. Input selects the tab it changes when submitted:
 code the Environment, a REPL command the History, which is the only place what
 a command did shows.
 
@@ -574,7 +584,7 @@ all.
   over several lines, comments before a command, and the usage of each.
 - **app_tests** -- the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
-  arriving after a later input, a crash reset, the multiline round trip, the
+  arriving after a later input, a crash reset, going multiline and back, the
   engine reporting itself ready or dead, the code units and their statuses,
   the marks of what the last step compiled and ran, edits applied when
   answered, a mismatch reported, the tab input selects, scrolling each pane,

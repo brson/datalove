@@ -2,21 +2,21 @@
 
 use rmx::prelude::*;
 use crate::app::{ReplExecutor, WorkerResponse};
-use crate::{Command, Input, PackageLibrary, Session, SystemLibrary};
+use crate::{Command, PackageLibrary, Session, SystemLibrary};
 use crate::script::{self, Engine};
 use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 use std::thread;
 
-/// Request sent to the worker thread.
+/// A command for the worker thread to evaluate, and the entry it is for.
 #[derive(Debug)]
-enum WorkerRequest {
-    Parse { id: u64, input: Input },
-    Eval { id: u64, command: Command },
+struct WorkerRequest {
+    id: u64,
+    command: Command,
 }
 
 /// Multi-threaded executor for native platforms.
 ///
-/// Spawns a worker thread to handle parse and eval operations,
+/// Spawns a worker thread to evaluate commands,
 /// keeping the UI thread responsive.
 pub struct ThreadedExecutor {
     worker_tx: Sender<WorkerRequest>,
@@ -77,12 +77,8 @@ fn start_engine(sys: SystemLibrary, local: Option<PackageLibrary>) -> Result<Eng
 }
 
 impl ReplExecutor for ThreadedExecutor {
-    fn submit_parse(&mut self, id: u64, input: Input) {
-        let _ = self.worker_tx.send(WorkerRequest::Parse { id, input });
-    }
-
     fn submit_eval(&mut self, id: u64, command: Command) {
-        let _ = self.worker_tx.send(WorkerRequest::Eval { id, command });
+        let _ = self.worker_tx.send(WorkerRequest { id, command });
     }
 
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {
@@ -110,7 +106,7 @@ impl ReplExecutor for ThreadedExecutor {
     }
 }
 
-/// Worker thread that handles parse and eval operations.
+/// Worker thread that evaluates commands, in the order they come.
 fn worker_thread(
     mut session: Session,
     rx: Receiver<WorkerRequest>,
@@ -118,22 +114,14 @@ fn worker_thread(
 ) {
     // The requests end when the executor is dropped, and the thread with
     // them. A send fails only once the executor is gone too.
-    while let Ok(request) = rx.recv() {
-        let response = match request {
-            WorkerRequest::Parse { id, input } => {
-                WorkerResponse::ParseResult { id, parse: crate::parse_input(input) }
-            }
-            WorkerRequest::Eval { id, command } => {
-                let eval = session.eval(command);
-                WorkerResponse::EvalResult {
-                    id,
-                    eval,
-                    environment: session.engine().get_environment(),
-                    session: session.units().to_vec(),
-                    step: session.last_step().to_vec(),
-                }
-            }
-        };
-        let _ = tx.send(response);
+    while let Ok(WorkerRequest { id, command }) = rx.recv() {
+        let eval = session.eval(command);
+        let _ = tx.send(WorkerResponse::EvalResult {
+            id,
+            eval,
+            environment: session.engine().get_environment(),
+            session: session.units().to_vec(),
+            step: session.last_step().to_vec(),
+        });
     }
 }

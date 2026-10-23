@@ -24,7 +24,7 @@ fn settle(app: &mut App) {
         assert!(app.engine_dead_message().is_none(), "{:?}", app.engine_dead_message());
         assert!(app.session_mismatch_message().is_none(), "{:?}", app.session_mismatch_message());
         let waiting = app.history().iter().any(|entry| {
-            matches!(entry.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. })
+            matches!(entry.status, EntryStatus::Evaluating)
         });
         if app.engine_is_ready() && !waiting {
             return;
