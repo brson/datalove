@@ -509,7 +509,7 @@ impl Session {
     /// analyzed, for the recorder to check.
     ///
     /// A unit analyzed and not re-derived did not run.
-    fn reported(&mut self, reports: Vec<datalove_script_engine::UnitEdit>) -> Vec<(String, Ran)> {
+    fn reported(&mut self, reports: Vec<datalove_script_engine::UnitStep>) -> Vec<(String, Ran)> {
         self.note_analyzed();
         reports.iter()
             .map(|report| (self.units[report.unit].C(), report.eval.as_ref().map_or(Ran::No, ran)))

@@ -23,7 +23,7 @@ struct MockState {
     session: Vec<repl::NumberedUnit>,
     next_number: u32,
     /// What the pretend engine's last step did.
-    step: Vec<repl::Reaction>,
+    step: Vec<repl::UnitStep>,
     /// Responses, each with whether its session is to be filled in.
     responses: VecDeque<(WorkerResponse, bool)>,
 }
@@ -58,7 +58,7 @@ impl ReplExecutor for MockExecutor {
             if fill {
                 let command = state.submitted.get(id).cloned()
                     .unwrap_or_else(|| panic!("entry {id} was answered without being submitted"));
-                if eval.reset_the_session() || matches!(eval, repl::Eval::CallerInterpret(repl::ReplCommand::Reset)) {
+                if eval.empties_session() {
                     state.session.clear();
                     state.next_number = 1;
                     state.step.clear();
@@ -66,8 +66,7 @@ impl ReplExecutor for MockExecutor {
                     let number = state.next_number.max(1);
                     state.next_number = number + 1;
                     state.session.push(repl::NumberedUnit { number, unit });
-                    let ran = !matches!(result, repl::script::Eval::Error(_) | repl::script::Eval::Blocked { .. });
-                    state.step = vec![repl::Reaction { unit: number, compiled: true, ran }];
+                    state.step = vec![repl::UnitStep { unit: number, compiled: true, eval: Some(result.clone()) }];
                 }
                 *session = state.session.clone();
                 *step = state.step.clone();
@@ -123,6 +122,10 @@ fn parsed_statement(id: u64, source: &str) -> WorkerResponse {
     }
 }
 
+fn binding(name: &str, ty: &str, value: &str) -> repl::script::EnvBinding {
+    repl::script::EnvBinding { name: name.to_string(), ty: ty.to_string(), value: value.to_string() }
+}
+
 fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
@@ -131,7 +134,7 @@ fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
             ty: "int".to_string(),
             value: "1".to_string(),
         }])),
-        environment: vec![(name.to_string(), "int".to_string(), "1".to_string())],
+        environment: vec![binding(name, "int", "1")],
         session: Vec::new(),
         step: Vec::new(),
     }
@@ -222,7 +225,7 @@ fn multiline_mode_spans_one_submission() {
         eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Function {
             name: "f".to_string(),
         }])),
-        environment: vec![("f".to_string(), "function".to_string(), "-".to_string())],
+        environment: vec![binding("f", "function", "-")],
         session: Vec::new(),
         step: Vec::new(),
     });
@@ -354,7 +357,11 @@ fn a_replayed_session_is_evaluated_without_parsing() {
     assert_eq!(app.history()[1].input, "f()");
     assert!(matches!(
         app.history()[1].status,
-        EntryStatus::Evaluating { command: repl::Command::Unit(repl::script::Unit::Expression(_)) },
+        EntryStatus::Evaluating,
+    ));
+    assert!(matches!(
+        app.history()[1].parse_result,
+        Some(repl::InputParse::Command(repl::Command::Unit(repl::script::Unit::Expression(_)))),
     ));
 
     executor.queue(evaluated_let(0, "a"));
@@ -997,7 +1004,7 @@ repl-command
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Eval::CallerInterpret(repl::ReplCommand::Load),
-        environment: vec![("old".to_string(), "int".to_string(), "1".to_string())],
+        environment: vec![binding("old", "int", "1")],
         session: Vec::new(),
         step: Vec::new(),
     });
@@ -1121,7 +1128,9 @@ fn numbered(number: u32, source: &str) -> repl::NumberedUnit {
 fn edited(id: u64, reports: Vec<(u32, repl::script::Eval)>, session: Vec<repl::NumberedUnit>) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
-        eval: repl::Eval::Edited(reports.into_iter().map(|(unit, eval)| repl::UnitReport { unit, eval }).collect()),
+        eval: repl::Eval::Edited(reports.into_iter()
+            .map(|(unit, eval)| repl::UnitStep { unit, compiled: false, eval: Some(eval) })
+            .collect()),
         environment: Vec::new(),
         session,
         step: Vec::new(),
@@ -1292,8 +1301,8 @@ fn the_code_shows_what_the_last_step_did() {
         unreachable!();
     };
     let step = vec![
-        repl::Reaction { unit: 1, compiled: true, ran: true },
-        repl::Reaction { unit: 2, compiled: false, ran: true },
+        repl::UnitStep { unit: 1, compiled: true, eval: Some(repl::script::Eval::Nothing) },
+        repl::UnitStep { unit: 2, compiled: false, eval: Some(repl::script::Eval::Nothing) },
     ];
     executor.queue_raw(WorkerResponse::EvalResult { id, eval, environment, session, step });
     app.poll_results();

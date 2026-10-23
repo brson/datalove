@@ -12,24 +12,24 @@ use rmx::prelude::*;
 use datalove_datafun::pipeline::{
     ModuleDescriptor, PackageDescriptor, PackageLibrary, WorkspaceDescriptor,
 };
-use datalove_script_engine::{Engine, Eval, Unit, UnitEdit};
+use datalove_script_engine::{Engine, Eval, Unit, UnitStep};
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
 const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
 
 fn bound(engine: &mut Engine, name: &str) -> bool {
-    engine.get_environment().iter().any(|(bound, _, _)| bound == name)
+    engine.get_environment().iter().any(|binding| binding.name == name)
 }
 
 fn value_of(engine: &mut Engine, name: &str) -> String {
     engine.get_environment().into_iter()
-        .find(|(bound, _, _)| bound == name)
-        .map(|(_, _, value)| value)
+        .find(|binding| binding.name == name)
+        .map(|binding| binding.value)
         .unwrap_or_else(|| panic!("no binding named {name}"))
 }
 
 /// The units a step re-derived, leaving out those it only analyzed.
-fn rederived(reports: &[UnitEdit]) -> Vec<usize> {
+fn rederived(reports: &[UnitStep]) -> Vec<usize> {
     reports.iter().filter(|report| report.eval.is_some()).map(|report| report.unit).collect()
 }
 
@@ -155,7 +155,7 @@ fn truncating_drops_the_units_from_n_on() {
     engine.truncate_units(2);
 
     let bound: Vec<String> = engine.get_environment().into_iter()
-        .map(|(name, _, _)| name).collect();
+        .map(|binding| binding.name).collect();
     assert_eq!(bound, vec!["a".S(), "b".S()], "C and D are gone with their units");
 
     run(&mut engine, "let e = b + 1");
@@ -184,7 +184,7 @@ fn removing_a_unit_rederives_the_suffix() {
     assert_eq!(value_of(&mut engine, "c"), "30");
     assert_eq!(value_of(&mut engine, "d"), "6", "D still reads A's `a`");
     assert!(
-        !engine.get_environment().iter().any(|(name, _, _)| name == "b"),
+        !engine.get_environment().iter().any(|binding| binding.name == "b"),
         "`b` went with the unit that bound it",
     );
 }

@@ -204,8 +204,8 @@ pub struct HistoryEntry {
 pub enum EntryStatus {
     /// Request is being parsed.
     Parsing,
-    /// Request is being evaluated.
-    Evaluating { command: repl::Command },
+    /// Request is being evaluated; its command is the entry's parse.
+    Evaluating,
     /// Request completed successfully.
     Success,
     /// Request completed with an error.
@@ -251,11 +251,11 @@ pub enum WorkerResponse {
     EvalResult {
         id: u64,
         eval: repl::Eval,
-        environment: Vec<(String, String, String)>,
+        environment: Vec<script::EnvBinding>,
         /// The units in the engine's session once it had answered.
         session: Vec<repl::NumberedUnit>,
         /// What the last step to change the session did to its units.
-        step: Vec<repl::Reaction>,
+        step: Vec<repl::UnitStep>,
     },
 }
 
@@ -283,8 +283,8 @@ pub struct ReplApp<E: ReplExecutor> {
     next_id: u64,
     /// History of REPL entries (interactive cards).
     history: Vec<HistoryEntry>,
-    /// Current environment variables (for debug pane).
-    environment: Vec<(String, String, String)>,
+    /// The bindings the session offers, as the engine last reported them.
+    environment: Vec<script::EnvBinding>,
     /// Whether we're in multiline mode.
     multiline_mode: bool,
     /// Whether a cancel was asked for in multiline input, or in an edit, so
@@ -345,7 +345,7 @@ pub struct ReplApp<E: ReplExecutor> {
     ///
     /// Shown as it is: what a step compiled is the engine's to know, and
     /// nothing the app could keep by rule.
-    last_step: Vec<repl::Reaction>,
+    last_step: Vec<repl::UnitStep>,
     /// How the app's units and the engine's session disagreed, if they did.
     ///
     /// A disagreement is a rule of the app's about what a command does gone
@@ -456,7 +456,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         let mut entry = HistoryEntry::new(input, id);
         entry.parse_result = Some(repl::InputParse::Command(command.C()));
-        entry.status = EntryStatus::Evaluating { command: command.C() };
+        entry.status = EntryStatus::Evaluating;
         self.history.push(entry);
 
         self.show_tab_for(&command);
@@ -472,7 +472,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         let Some(unit) = self.selected_unit() else {
             return;
         };
-        let numbers: Vec<u32> = self.code_units().iter().filter_map(|unit| unit.number).collect();
+        let numbers: Vec<u32> = self.numbers();
         let index = numbers.iter().position(|number| *number == unit).expect("the selected unit is shown");
         self.selected_unit = numbers.get(index + 1).or(index.checked_sub(1).map(|before| &numbers[before])).copied();
         self.submit_command(
@@ -641,7 +641,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             }
             repl::InputParse::Command(command) => {
                 entry.parse_result = Some(parse);
-                entry.status = EntryStatus::Evaluating { command: command.C() };
+                entry.status = EntryStatus::Evaluating;
                 self.show_tab_for(&command);
                 self.executor.submit_eval(id, command);
                 UiAction::None
@@ -658,125 +658,96 @@ impl<E: ReplExecutor> ReplApp<E> {
         };
     }
 
-    fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<(String, String, String)>) {
-        let entry = find_entry(&mut self.history, id);
-        let Some(repl::InputParse::Command(command)) = entry.parse_result.C() else {
+    fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<script::EnvBinding>) {
+        let Some(repl::InputParse::Command(command)) = find_entry(&mut self.history, id).parse_result.C() else {
             unreachable!("only a command is evaluated");
         };
         self.apply(&command, &eval);
-        let entry = find_entry(&mut self.history, id);
-
-        entry.eval_result = Some(eval.C());
+        self.environment = environment;
 
         if eval.reset_the_session() {
             // A runtime error or a crash empties the session, as a `/reset`
             // does, and what came after it runs in the new one; so the history
             // forgets the same entries a `/reset` would.
-            let _ = entry;
             self.history.retain(|entry| entry.id > id);
             self.crash_modal = Some(reset_message(&eval));
-            self.environment = environment;
             return;
         }
 
-        match &eval {
+        let status = match &eval {
             // A unit that did not run to its end stays in the session, so
             // nothing is cleared; it is reported as the error it is.
-            repl::Eval::Unit(
-                script::Eval::Error(_) | script::Eval::ReturnedEarly(_) | script::Eval::Blocked { .. }
-            ) => {
-                entry.status = EntryStatus::Error;
-            }
-            repl::Eval::CommandError(_) => {
-                entry.status = EntryStatus::Error;
-            }
-            repl::Eval::Unit(script::Eval::Nothing) => {
-                entry.status = EntryStatus::Success;
-            }
-            repl::Eval::Unit(script::Eval::Success(_)) => {
-                entry.status = EntryStatus::Success;
-            }
-            repl::Eval::Unit(script::Eval::SuccessExpr(_)) => {
-                entry.status = EntryStatus::Success;
-            }
-            repl::Eval::Saved { .. } => {
-                entry.status = EntryStatus::Success;
-            }
-            repl::Eval::CallerInterpret(cmd) => {
-                self.handle_caller_interpret(id, cmd);
-            }
-            // What each unit came to is the units' to show; the edit itself
-            // was made.
-            repl::Eval::Edited(_) => {
-                entry.status = EntryStatus::Success;
-            }
+            repl::Eval::Unit(script::Eval::Error(_) | script::Eval::ReturnedEarly(_) | script::Eval::Blocked { .. })
+            | repl::Eval::CommandError(_) => Some(EntryStatus::Error),
+            // What each unit an edit reached came to is the units' to show;
+            // the edit itself was made.
+            repl::Eval::Unit(script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_))
+            | repl::Eval::Saved { .. } | repl::Eval::Edited(_) => Some(EntryStatus::Success),
+            // The command says.
+            repl::Eval::CallerInterpret(_) => None,
             repl::Eval::Unit(script::Eval::ErrorReset(_) | script::Eval::CrashReset(_)) => {
                 unreachable!("a reset was handled above")
             }
+        };
+        let entry = find_entry(&mut self.history, id);
+        entry.eval_result = Some(eval.C());
+        if let Some(status) = status {
+            entry.status = status;
         }
-
-        // Update environment from the eval response.
-        self.environment = environment;
+        if let repl::Eval::CallerInterpret(command) = &eval {
+            self.handle_caller_interpret(id, command);
+        }
     }
 
-    fn handle_caller_interpret(&mut self, id: u64, cmd: &repl::ReplCommand) {
-        let entry = find_entry(&mut self.history, id);
-
-        match cmd {
+    fn handle_caller_interpret(&mut self, id: u64, command: &repl::ReplCommand) {
+        let status = match command {
             repl::ReplCommand::Unknown
             | repl::ReplCommand::Usage(_)
             | repl::ReplCommand::Edit { .. }
             | repl::ReplCommand::Delete { .. }
             | repl::ReplCommand::Insert { .. } => {
-                unreachable!("the session answers {cmd:?} itself")
+                unreachable!("the session answers {command:?} itself")
             }
             repl::ReplCommand::Exit => {
-                entry.status = EntryStatus::Success;
                 self.should_exit = true;
+                EntryStatus::Success
             }
-            repl::ReplCommand::Help => {
-                // todo
-                entry.status = EntryStatus::Success;
-            },
+            // todo: say something.
+            repl::ReplCommand::Help => EntryStatus::Success,
             repl::ReplCommand::Reset => {
                 // Input submitted after the reset was evaluated in the new
                 // session, so only what came before it is forgotten.
-                let _ = entry;
                 self.history.retain(|entry| entry.id > id);
+                return;
             }
             repl::ReplCommand::Save => {
-                let _ = entry;
                 let eval = self.save(id).unwrap_or_else(|e| repl::Eval::CommandError(fmt!("{e:#}")));
-                let entry = find_entry(&mut self.history, id);
-                entry.status = match eval {
+                let status = match eval {
                     repl::Eval::CommandError(_) => EntryStatus::Error,
                     _ => EntryStatus::Success,
                 };
-                entry.eval_result = Some(eval);
+                find_entry(&mut self.history, id).eval_result = Some(eval);
+                status
             }
-            repl::ReplCommand::Load => {
-                let _ = entry;
-                let loaded = self.load();
-                let entry = find_entry(&mut self.history, id);
-                match loaded {
-                    Ok(inputs) => {
-                        entry.status = EntryStatus::Success;
-                        // A reset first, so the session is the one saved and
-                        // not the saved one on top of this. It forgets this
-                        // `/load` too, as `/reset` forgets itself.
-                        let reset = repl::SavedInput {
-                            input: "/reset".S(),
-                            command: repl::Command::ReplCommand(repl::ReplCommand::Reset),
-                        };
-                        self.replay(std::iter::once(reset).chain(inputs).collect());
-                    }
-                    Err(e) => {
-                        entry.status = EntryStatus::Error;
-                        entry.eval_result = Some(repl::Eval::CommandError(fmt!("{e:#}")));
-                    }
+            repl::ReplCommand::Load => match self.load() {
+                Ok(inputs) => {
+                    // A reset first, so the session is the one saved and not
+                    // the saved one on top of this. It forgets this `/load`
+                    // too, as `/reset` forgets itself.
+                    let reset = repl::SavedInput {
+                        input: "/reset".S(),
+                        command: repl::Command::ReplCommand(repl::ReplCommand::Reset),
+                    };
+                    self.replay(std::iter::once(reset).chain(inputs).collect());
+                    EntryStatus::Success
                 }
-            }
-        }
+                Err(e) => {
+                    find_entry(&mut self.history, id).eval_result = Some(repl::Eval::CommandError(fmt!("{e:#}")));
+                    EntryStatus::Error
+                }
+            },
+        };
+        find_entry(&mut self.history, id).status = status;
     }
 
     /// Change the app's units as an answered command changed the engine's.
@@ -787,7 +758,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// with the answer shows.
     fn apply(&mut self, command: &repl::Command, eval: &repl::Eval) {
         use repl::ReplCommand as R;
-        if eval.reset_the_session() || matches!(eval, repl::Eval::CallerInterpret(R::Reset)) {
+        if eval.empties_session() {
             self.units.clear();
             self.next_number = 1;
             // The new session numbers its units from 1 again, so a selection
@@ -803,7 +774,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                     status: status_of(eval),
                 });
             }
-            (repl::Command::ReplCommand(command), repl::Eval::Edited(reports)) => {
+            (repl::Command::ReplCommand(command), repl::Eval::Edited(step)) => {
                 match command {
                     R::Edit { unit, source } => {
                         if let Some(index) = self.index_of(*unit) {
@@ -817,10 +788,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                     }
                     R::Insert { place, unit, source } => {
                         if let Some(index) = self.index_of(*unit) {
-                            let index = match place {
-                                repl::Place::Before => index,
-                                repl::Place::After => index + 1,
-                            };
+                            let index = place.index(index);
                             // The engine reports every unit from the insert
                             // on, this one first, so its status is set below.
                             let number = self.take_number();
@@ -832,14 +800,20 @@ impl<E: ReplExecutor> ReplApp<E> {
                     }
                     other => unreachable!("{other:?} was answered as an edit"),
                 }
-                for report in reports {
-                    if let Some(index) = self.index_of(report.unit) {
-                        self.units[index].status = status_of(&report.eval);
+                // A unit only analyzed keeps its status.
+                for unit in step {
+                    if let (Some(index), Some(eval)) = (self.index_of(unit.unit), &unit.eval) {
+                        self.units[index].status = status_of(eval);
                     }
                 }
             }
             _ => {}
         }
+    }
+
+    /// The numbers of the units the code shows that have them, in order.
+    fn numbers(&self) -> Vec<u32> {
+        self.code_units().iter().filter_map(|unit| unit.number).collect()
     }
 
     fn take_number(&mut self) -> u32 {
@@ -980,7 +954,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             }
         };
         // A unit on its way to the engine has no number to select it by yet.
-        let numbers: Vec<u32> = self.code_units().iter().filter_map(|unit| unit.number).collect();
+        let numbers: Vec<u32> = self.numbers();
         let Some(last) = numbers.len().checked_sub(1) else {
             return;
         };
@@ -1006,7 +980,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.scroll_code(scroll);
 
         // A unit on its way to the engine has no number to select it by yet.
-        let numbers: Vec<u32> = self.code_units().iter().filter_map(|unit| unit.number).collect();
+        let numbers: Vec<u32> = self.numbers();
         if numbers.is_empty() {
             return;
         }
@@ -1127,8 +1101,14 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.should_exit
     }
 
-    pub fn set_should_exit(&mut self, val: bool) {
-        self.should_exit = val;
+    /// Exit, with nothing asked.
+    pub fn exit(&mut self) {
+        self.should_exit = true;
+    }
+
+    /// Whether the engine is gone; see [`Self::engine_dead_message`].
+    pub fn engine_is_dead(&self) -> bool {
+        self.engine_dead.is_some()
     }
 
     /// How the history and the engine's session disagreed, if they did.
@@ -1263,7 +1243,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     /// Get the environment variables.
-    pub fn environment(&self) -> &[(String, String, String)] {
+    pub fn environment(&self) -> &[script::EnvBinding] {
         &self.environment
     }
 
@@ -1272,7 +1252,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.stderr_log_path.as_deref()
     }
 
-    /// Get the history entries for testing.
+    /// Every input, and what it came to.
     pub fn history(&self) -> &[HistoryEntry] {
         &self.history
     }
@@ -1301,13 +1281,13 @@ impl<E: ReplExecutor> ReplApp<E> {
         };
         let answered = answered.iter().map(|unit| {
             let number = unit.numbered.number;
-            let reaction = self.last_step.iter().find(|reaction| reaction.unit == number);
+            let step = self.last_step.iter().find(|step| step.unit == number);
             CodeUnit {
                 number: Some(number),
                 source: unit.numbered.unit.source(),
                 status: unit.status,
-                compiled: reaction.is_some_and(|reaction| reaction.compiled),
-                ran: reaction.is_some_and(|reaction| reaction.ran),
+                compiled: step.is_some_and(|step| step.compiled),
+                ran: step.is_some_and(repl::UnitStep::ran),
             }
         });
         let waiting = waiting.iter()
@@ -1348,8 +1328,8 @@ fn reset_message(eval: &repl::Eval) -> String {
     };
     match eval {
         repl::Eval::Unit(eval) => say(eval),
-        repl::Eval::Edited(reports) => reports.iter().find_map(|report| {
-            say(&report.eval).map(|said| fmt!("Unit {}: {said}", report.unit))
+        repl::Eval::Edited(step) => step.iter().find_map(|unit| {
+            say(unit.eval.as_ref()?).map(|said| fmt!("Unit {}: {said}", unit.unit))
         }),
         _ => None,
     }

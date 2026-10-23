@@ -9,7 +9,7 @@
 use serde::{Serialize, Deserialize};
 
 mod engine;
-pub use engine::{Compiled, Engine, ModuleErrors, OnCompileError, UnitEdit};
+pub use engine::{Compiled, Engine, ModuleErrors, OnCompileError, UnitStep};
 
 // The system library a driver supplies to the engine.
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
@@ -32,6 +32,25 @@ impl Unit {
 
     pub fn is_expression(&self) -> bool {
         matches!(self, Unit::Expression(_))
+    }
+}
+
+/// A binding the session offers, as its environment lists it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct EnvBinding {
+    pub name: String,
+    pub ty: String,
+    pub value: String,
+}
+
+/// What a panic carried, as a message.
+pub fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = panic.downcast_ref::<&str>() {
+        message.to_string()
+    } else if let Some(message) = panic.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "Unknown panic".to_string()
     }
 }
 
@@ -78,4 +97,22 @@ pub enum Eval {
     ///
     /// It stays in the session too, and runs when an edit lets them finish.
     Blocked { on: Vec<usize> },
+}
+
+impl Eval {
+    /// Whether the unit took the session with it: a runtime error or a
+    /// crash, after which the session is empty.
+    pub fn resets(&self) -> bool {
+        matches!(self, Eval::ErrorReset(_) | Eval::CrashReset(_))
+    }
+
+    /// Whether the unit was run, if only to an early return or a runtime
+    /// error, rather than failing to compile or being blocked.
+    pub fn ran(&self) -> bool {
+        match self {
+            Eval::Nothing | Eval::Success(_) | Eval::SuccessExpr(_)
+            | Eval::ReturnedEarly(_) | Eval::ErrorReset(_) => true,
+            Eval::Error(_) | Eval::Blocked { .. } | Eval::CrashReset(_) => false,
+        }
+    }
 }

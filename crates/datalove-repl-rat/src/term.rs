@@ -22,7 +22,9 @@ use std::io;
 use std::fs::File;
 use std::path::Path;
 
-use crate::{repl, PackageLibrary, Panel, RatatuiApp, Scroll, ReplExecutor, SystemLibrary, Tab, ThreadedExecutor};
+use crate::RatatuiApp;
+use crate::repl::{self, PackageLibrary, SystemLibrary, ThreadedExecutor};
+use crate::repl::app::{Panel, ReplExecutor, Scroll, Tab};
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 
@@ -140,9 +142,9 @@ where
         // Poll for worker results before drawing.
         app.poll_results();
 
-        terminal.draw(|f| crate::ui(f, app))?;
+        terminal.draw(|f| crate::render::ui(f, app))?;
 
-        if app.should_exit() {
+        if app.repl.should_exit() {
             break;
         }
 
@@ -167,22 +169,20 @@ fn handle_key_event<E: ReplExecutor>(
         return;
     }
 
-    if app.engine_is_dead() {
-        // Nothing works without an engine; Enter leaves.
-        match key.code {
-            KeyCode::Enter => app.set_should_exit(true),
-            _ => {}
+    // A modal takes only Enter, which dismisses it; nothing works without an
+    // engine, so its modal's Enter leaves.
+    let enter = key.code == KeyCode::Enter;
+    if app.repl.engine_is_dead() {
+        if enter {
+            app.repl.exit();
         }
     } else if app.repl.session_mismatch_message().is_some() {
-        match key.code {
-            KeyCode::Enter => app.repl.dismiss_session_mismatch(),
-            _ => {}
+        if enter {
+            app.repl.dismiss_session_mismatch();
         }
-    } else if app.crash_modal_is_open() {
-        // Crash modal is open - wait for Enter to dismiss.
-        match key.code {
-            KeyCode::Enter => app.dismiss_crash_modal(),
-            _ => {}
+    } else if app.repl.crash_modal_is_open() {
+        if enter {
+            app.repl.dismiss_crash_modal();
         }
     } else if app.repl.exit_asked() {
         // Another Ctrl+C exits; any other key goes on, and does nothing else.
@@ -197,26 +197,24 @@ fn handle_key_event<E: ReplExecutor>(
             app.repl.disarm_cancel();
         }
         match key.code {
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                app.set_should_exit(true);
-            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => app.repl.exit(),
             // F2 reaches the app from any terminal; Ctrl+Tab only from those
             // speaking the kitty keyboard protocol.
-            KeyCode::F(2) => app.next_tab(),
-            KeyCode::Tab if key.modifiers.contains(KeyModifiers::CONTROL) => app.next_tab(),
+            KeyCode::F(2) => app.repl.next_tab(),
+            KeyCode::Tab if key.modifiers.contains(KeyModifiers::CONTROL) => app.repl.next_tab(),
             KeyCode::Char(digit @ '1'..='9') if key.modifiers.contains(KeyModifiers::ALT) => {
                 if let Some(tab) = Tab::ALL.get(digit as usize - '1' as usize) {
-                    app.select_tab(*tab);
+                    app.repl.select_tab(*tab);
                 }
             }
-            KeyCode::Tab => app.focus_next(),
-            KeyCode::BackTab => app.focus_prev(),
+            KeyCode::Tab => app.repl.focus_next(),
+            KeyCode::BackTab => app.repl.focus_prev(),
             // Ctrl+C twice throws away multiline input, as shells and REPLs
             // throw away a line, twice so a stray one loses nothing. Esc would
             // be the obvious key, but a terminal multiplexer holds it back to
             // see whether a sequence follows, and two in one read are parsed
             // as one.
-            KeyCode::Char('c') if cancel && app.focus() == Panel::Input && app.repl.input_cancels() => {
+            KeyCode::Char('c') if cancel && app.repl.focus() == Panel::Input && app.repl.input_cancels() => {
                 app.cancel_input();
             }
             // Anywhere else Ctrl+C asks whether to exit, and another exits.
@@ -228,33 +226,17 @@ fn handle_key_event<E: ReplExecutor>(
             KeyCode::PageDown => app.handle_scroll_key(Scroll::PageDown, key),
             // The focused code panel deletes its selected unit, edits it in
             // the input, and writes a new one to go before it.
-            KeyCode::Delete if app.focus() == Panel::Code => app.repl.delete_selected(),
-            KeyCode::Enter if app.focus() == Panel::Code => app.begin_edit(),
-            KeyCode::Insert if app.focus() == Panel::Code => app.begin_insert(),
+            KeyCode::Delete if app.repl.focus() == Panel::Code => app.repl.delete_selected(),
+            KeyCode::Enter if app.repl.focus() == Panel::Code => app.begin_edit(),
+            KeyCode::Insert if app.repl.focus() == Panel::Code => app.begin_insert(),
             // The rest are typing, which only the input panel takes.
-            _ if app.focus() != Panel::Input => {}
-            KeyCode::Enter => {
-                // In single-line mode: Enter submits.
-                // In multiline mode: Enter inserts newline, Alt+Enter submits.
-                let is_multiline = app.multiline_mode();
-                let has_alt = key.modifiers.contains(KeyModifiers::ALT);
-
-                let should_submit = if is_multiline {
-                    has_alt  // In multiline: Alt+Enter submits
-                } else {
-                    true // In single-line: Enter submits
-                };
-
-                if should_submit {
-                    app.submit_input();
-                } else {
-                    app.handle_input_key(key);
-                }
+            _ if app.repl.focus() != Panel::Input => {}
+            // Enter submits a single line; in multiline input it is a newline,
+            // and Alt+Enter submits.
+            KeyCode::Enter if !app.repl.multiline_mode() || key.modifiers.contains(KeyModifiers::ALT) => {
+                app.submit_input();
             }
-            _ => {
-                // Pass all other keys to the textarea for handling.
-                app.handle_input_key(key);
-            }
+            _ => app.handle_input_key(key),
         }
     }
 }

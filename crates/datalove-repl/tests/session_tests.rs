@@ -157,7 +157,7 @@ fn input_queued_behind_a_runtime_error_is_kept() {
 
     assert!(app.crash_modal_message().is_some(), "the runtime error is reported");
     assert_eq!(outcomes(&app), vec![("let z = 4".S(), true)]);
-    let names: Vec<&str> = app.environment().iter().map(|(name, _, _)| name.as_str()).collect();
+    let names: Vec<&str> = app.environment().iter().map(|binding| binding.name.as_str()).collect();
     assert_eq!(names, vec!["z"]);
     let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
     assert_eq!(sources, vec!["let z = 4"]);
@@ -194,7 +194,7 @@ fn edits_save_and_load_back() {
     ];
     assert_eq!(code(&app), expected);
     let environment = app.environment().to_vec();
-    let names: Vec<&str> = environment.iter().map(|(name, _, _)| name.as_str()).collect();
+    let names: Vec<&str> = environment.iter().map(|binding| binding.name.as_str()).collect();
     assert_eq!(names, vec!["a", "c", "z"]);
 
     submit(&mut app, "let late = 1");
@@ -206,7 +206,7 @@ fn edits_save_and_load_back() {
     expected.push((Some(6), "let late = 1".S()));
     assert_eq!(code(&app), expected, "the load numbers the units as they were");
     let mut environment = environment;
-    environment.push(("late".S(), "int".S(), "1".S()));
+    environment.push(datalove_repl::script::EnvBinding { name: "late".S(), ty: "int".S(), value: "1".S() });
     environment.sort();
     let mut loaded = app.environment().to_vec();
     loaded.sort();
@@ -248,4 +248,15 @@ fn the_code_shows_what_each_step_compiled_and_ran() {
 
     submit(&mut app, "/help");
     assert_eq!(marks(&app)[3], (Some(4), true, false), "a command that changes nothing leaves the marks");
+}
+
+/// A script's inputs are split at lines holding only `---`, whatever ends
+/// the lines and wherever the first comes.
+#[test]
+fn a_script_splits_at_its_separator_lines() {
+    let engine = datalove_repl::script::Engine::new(datalove_sys_packages::system_library()).X();
+    let mut session = datalove_repl::Session::new(engine);
+    let results = datalove_repl::run_source(&mut session, "---\r\nlet a = 1\r\n---\r\nlet b = a + 1\r\n  ---  \r\nb\r\n");
+    let inputs: Vec<&str> = results.iter().map(|result| result.input.as_str()).collect();
+    assert_eq!(inputs, vec!["let a = 1", "let b = a + 1", "b"]);
 }

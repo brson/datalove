@@ -77,3 +77,24 @@ fn malformed_commands_say_how_they_are_used() {
     }
     assert!(matches!(command("/bogus 1"), ReplCommand::Unknown));
 }
+
+fn unit(input: &str) -> Unit {
+    match parse_input(Input::Input(input.to_string())) {
+        InputParse::Command(Command::Unit(unit)) => unit,
+        other => panic!("{input:?} is not a unit: {other:?}"),
+    }
+}
+
+/// A name that starts with a keyword is a name: underscores go on with it,
+/// as the lexer's do.
+#[test]
+fn a_name_starting_with_a_keyword_is_not_the_keyword() {
+    assert!(matches!(unit("for_each(xs)"), Unit::Expression(_)));
+    assert!(matches!(unit("if_ready()"), Unit::Expression(_)));
+    assert!(matches!(unit("let_x"), Unit::Expression(_)));
+    assert!(matches!(unit("let x = 1"), Unit::Fragment(_)));
+    assert!(matches!(
+        parse_input(Input::Input("for x in xs".to_string())),
+        InputParse::ReadMultiline(_),
+    ));
+}

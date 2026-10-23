@@ -122,6 +122,7 @@
       "Edited": [
         {
           "unit": 1,
+          "compiled": true,
           "eval": {
             "Success": [
               {
@@ -136,6 +137,7 @@
         },
         {
           "unit": 2,
+          "compiled": false,
           "eval": {
             "Success": [
               {
@@ -187,6 +189,7 @@
       "Edited": [
         {
           "unit": 4,
+          "compiled": true,
           "eval": {
             "Success": [
               {
@@ -201,6 +204,7 @@
         },
         {
           "unit": 2,
+          "compiled": true,
           "eval": {
             "Success": [
               {
@@ -215,6 +219,7 @@
         },
         {
           "unit": 3,
+          "compiled": true,
           "eval": {
             "Success": [
               {
@@ -271,6 +276,7 @@
       "Edited": [
         {
           "unit": 5,
+          "compiled": true,
           "eval": {
             "SuccessExpr": {
               "ty": "int",
@@ -318,6 +324,7 @@
       "Edited": [
         {
           "unit": 5,
+          "compiled": true,
           "eval": {
             "Error": "UnresolvedName(\"c\")"
           }
@@ -360,6 +367,7 @@
       "Edited": [
         {
           "unit": 5,
+          "compiled": true,
           "eval": {
             "SuccessExpr": {
               "ty": "int",
@@ -405,6 +413,7 @@
       "Edited": [
         {
           "unit": 2,
+          "compiled": true,
           "eval": {
             "Success": [
               {

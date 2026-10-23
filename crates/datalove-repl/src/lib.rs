@@ -17,13 +17,13 @@ mod executor_threaded;
 pub use executor_threaded::ThreadedExecutor;
 
 mod batch;
-pub use batch::{EnvBinding, InputResult, run_script, run_source};
+pub use batch::{InputResult, run_script, run_source};
 
 mod session;
-pub use session::{NumberedUnit, Reaction, Session};
+pub use session::{NumberedUnit, Session};
 
 // The system library a driver supplies to the engine.
-pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
+pub use script::{PackageLibrary, SystemLibrary};
 
 const REPL_COMMAND_SIGIL: char = '/';
 
@@ -129,6 +129,16 @@ pub enum Place {
     After,
 }
 
+impl Place {
+    /// Where a unit inserted on this side of the unit at `index` goes.
+    pub fn index(self, index: usize) -> usize {
+        match self {
+            Place::Before => index,
+            Place::After => index + 1,
+        }
+    }
+}
+
 /// What evaluating a command came to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
@@ -140,62 +150,73 @@ pub enum Eval {
     CommandError(String),
     /// The history was saved, as this many inputs, to this path.
     Saved { path: String, inputs: usize },
-    /// What each unit an `/edit`, `/delete` or `/insert` reached came to, in
-    /// the session's order.
-    Edited(Vec<UnitReport>),
+    /// What an `/edit`, `/delete` or `/insert` did to each unit it analyzed
+    /// or re-derived, in the session's order.
+    Edited(Vec<UnitStep>),
 }
 
 impl Eval {
-    /// Whether the session is empty after this, as after a runtime error or
-    /// a crash.
+    /// Whether a runtime error or a crash emptied the session.
     pub fn reset_the_session(&self) -> bool {
-        let resets = |eval: &script::Eval| {
-            matches!(eval, script::Eval::ErrorReset(_) | script::Eval::CrashReset(_))
-        };
         match self {
-            Eval::Unit(eval) => resets(eval),
-            Eval::Edited(reports) => reports.iter().any(|report| resets(&report.eval)),
+            Eval::Unit(eval) => eval.resets(),
+            Eval::Edited(step) => step.iter().any(|unit| unit.eval.as_ref().is_some_and(script::Eval::resets)),
             _ => false,
         }
     }
+
+    /// Whether the session is empty after this: a `/reset`, or a runtime
+    /// error or a crash.
+    pub fn empties_session(&self) -> bool {
+        self.reset_the_session() || matches!(self, Eval::CallerInterpret(ReplCommand::Reset))
+    }
 }
 
-/// What one unit an edit reached came to.
+/// What a step did to one unit, which the REPL names by number.
+///
+/// The engine's [`script::UnitStep`], with the unit's number for its
+/// position, and the positions in a `Blocked` turned into numbers too.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct UnitReport {
+pub struct UnitStep {
     /// The unit's number.
     pub unit: u32,
-    /// What it came to. A `Blocked` names the units it waits on by number.
-    pub eval: script::Eval,
+    /// Whether the step analyzed the unit again.
+    pub compiled: bool,
+    /// What re-deriving the unit came to, if the step re-derived it.
+    pub eval: Option<script::Eval>,
+}
+
+impl UnitStep {
+    /// Whether the step ran the unit.
+    pub fn ran(&self) -> bool {
+        self.eval.as_ref().is_some_and(script::Eval::ran)
+    }
 }
 
 /// Read what an input is.
+///
+/// A single line that opens a block reads on to its `end`; the same line
+/// submitted as multiline input is the whole unit.
 pub fn parse_input(input: Input) -> InputParse {
-    match input {
-        Input::Input(s) => parse_input_oneline(&s),
-        Input::Multiline(s) => parse_input_multiline(&s),
+    let (text, multiline) = match input {
+        Input::Input(text) => (text, false),
+        Input::Multiline(text) => (text, true),
+    };
+    match classify_input(&text) {
+        InputKind::Whitespace => InputParse::Empty,
+        InputKind::ReplCommand => InputParse::Command(Command::ReplCommand(ReplCommand::named(&text))),
+        InputKind::MultilineStatement if !multiline => InputParse::ReadMultiline(text),
+        _ => InputParse::Command(Command::Unit(read_unit(&text).expect("the text is code"))),
     }
 }
 
-fn parse_input_oneline(input: &str) -> InputParse {
-    match classify_input(input) {
-        InputKind::Whitespace => InputParse::Empty,
-        InputKind::ReplCommand => Command::repl_command(input),
-        InputKind::OnelineStatement => Command::script_statement(input),
-        InputKind::MultilineStatement => InputParse::ReadMultiline(S(input)),
-        InputKind::OpenBraceTree => InputParse::ReadMultiline(S(input)),
-        InputKind::Expression => Command::expression(input),
-    }
-}
-
-fn parse_input_multiline(input: &str) -> InputParse {
-    match classify_input(input) {
-        InputKind::Whitespace => InputParse::Empty,
-        InputKind::ReplCommand => Command::repl_command(input),
-        InputKind::OnelineStatement => Command::script_statement(input),
-        InputKind::MultilineStatement => Command::script_statement(input),
-        InputKind::OpenBraceTree => todo!(),
-        InputKind::Expression => Command::expression(input),
+/// The unit a source is, a fragment or an expression, as typed input is
+/// read; `None` for one with no code in it, or a REPL command.
+fn read_unit(source: &str) -> Option<Unit> {
+    match classify_input(source) {
+        InputKind::Whitespace | InputKind::ReplCommand => None,
+        InputKind::Expression => Some(Unit::Expression(source.S())),
+        InputKind::OnelineStatement | InputKind::MultilineStatement => Some(Unit::Fragment(source.S())),
     }
 }
 
@@ -252,39 +273,14 @@ fn split_word(s: &str) -> (&str, &str) {
 /// A unit number and the source that follows it, read as a unit is.
 fn numbered_source(args: &str) -> Option<(u32, Unit)> {
     let (number, source) = split_word(args);
-    let number = number.parse().ok()?;
-    let source = source.trim_end();
-    let unit = match classify_input(source) {
-        InputKind::Whitespace | InputKind::ReplCommand => return None,
-        InputKind::Expression => Unit::Expression(source.S()),
-        InputKind::OnelineStatement | InputKind::MultilineStatement | InputKind::OpenBraceTree => {
-            Unit::Fragment(source.S())
-        }
-    };
-    Some((number, unit))
+    Some((number.parse().ok()?, read_unit(source.trim_end())?))
 }
-
-impl Command {
-    fn repl_command(command: &str) -> InputParse {
-        InputParse::Command(Command::ReplCommand(ReplCommand::named(command)))
-    }
-
-    fn script_statement(input: &str) -> InputParse {
-        InputParse::Command(Command::Unit(Unit::Fragment(S(input))))
-    }
-
-    fn expression(input: &str) -> InputParse {
-        InputParse::Command(Command::Unit(Unit::Expression(S(input))))
-    }
-}
-
 
 enum InputKind {
     Whitespace,
     ReplCommand,
     OnelineStatement,
     MultilineStatement,
-    OpenBraceTree,
     Expression,
 }
 
@@ -298,16 +294,11 @@ fn classify_input(input: &str) -> InputKind {
     // dispatch has them. None of them starts an expression, so an input
     // starting with one is a statement; one that opens a block reads on to
     // its `end`.
-    let is_oneline_statement_keyword = parse_ident(code).map(|ident| match ident {
-        "let" | "var" | "const" | "set" | "call" | "require" | "import"
-        | "ret" | "break" | "continue" | "debuglog" | "type" | "native" => true,
-        _ => false
-    }).unwrap_or(false);
-    let is_multiline_statement_keyword = parse_ident(code).map(|ident| match ident {
-        "fun" | "if" | "match" | "loop" | "for" => true,
-        _ => false
-    }).unwrap_or(false);
-    let is_open_brace_tree = false; // todo
+    let word = first_word(code);
+    let is_oneline_statement_keyword = matches!(word,
+        Some("let" | "var" | "const" | "set" | "call" | "require" | "import"
+            | "ret" | "break" | "continue" | "debuglog" | "type" | "native"));
+    let is_multiline_statement_keyword = matches!(word, Some("fun" | "if" | "match" | "loop" | "for"));
 
     if is_whitespace {
         InputKind::Whitespace
@@ -317,8 +308,6 @@ fn classify_input(input: &str) -> InputKind {
         InputKind::OnelineStatement
     } else if is_multiline_statement_keyword {
         InputKind::MultilineStatement
-    } else if is_open_brace_tree {
-        InputKind::OpenBraceTree
     } else {
         InputKind::Expression
     }
@@ -365,13 +354,13 @@ fn is_whole_line_comment(line: &str) -> bool {
     line.starts_with("//") || (line.starts_with("/*") && line.ends_with("*/"))
 }
 
-fn parse_ident(input: &str) -> Option<&str> {
-    alphanumeric_prefix(input.trim())
-}
-
-/// The word `s` starts with, which is all of it when it is one word: a bare
-/// `loop` opens a block as much as `loop while` does.
-fn alphanumeric_prefix(s: &str) -> Option<&str> {
-    let end = s.find(|c: char| !c.is_alphanumeric()).unwrap_or(s.len());
-    (end > 0).then(|| &s[..end])
+/// The name a line starts with, which is all of it when it is one word: a
+/// bare `loop` opens a block as much as `loop while` does.
+///
+/// A name goes on through underscores, as the lexer's do, so `for_each(xs)`
+/// is a call and not a `for`.
+fn first_word(line: &str) -> Option<&str> {
+    let line = line.trim();
+    let end = line.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(line.len());
+    (end > 0).then(|| &line[..end])
 }

@@ -1,45 +1,38 @@
 //! Ratatui rendering functions for the REPL UI.
 
 use rmx::prelude::*;
-use datalove_repl as repl;
-use repl::script;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::Line,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table},
     Frame,
 };
 
-use crate::{CodeUnit, Editing, RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStatus};
+use crate::RatatuiApp;
+use crate::repl::{self, script};
+use crate::repl::app::{CodeUnit, Editing, EntryStatus, Panel, ReplApp, ReplExecutor, Tab, UnitStatus};
 
 /// The color of what is selected: the tab shown, and the code unit.
 const HIGHLIGHT: Color = Color::Yellow;
 
+/// The rows a panel's borders take, top and bottom.
+const BORDERS: u16 = 2;
+
+/// The height of the single-line input: its line and its borders.
+const INPUT_HEIGHT: u16 = 1 + BORDERS;
+
 /// Render the UI.
 pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
-    // Three-panel layout: code (top), input (middle), tabs (bottom).
-    // Single-line mode: Input centered like a Cylon visor.
-    // Multi-line mode: Input grows downward from center to 1/3 screen.
-
-    let screen_height = f.area().height;
-
-    let constraints = if app.multiline_mode() {
-        // Multi-line mode: Keep code at same height, input grows to 1/3, tabs compressed.
-        let top_height = (screen_height.saturating_sub(3)) / 2;
-        vec![
-            Constraint::Length(top_height),  // Code (same as single-line center point)
-            Constraint::Percentage(33),      // Input (1/3 of screen)
-            Constraint::Min(0),              // Tabs (fills remaining space)
-        ]
+    // The code on top, the input, and the tabs below. A single line of input
+    // sits in the middle of the screen; multiline input grows down from
+    // there to a third of it, and the tabs give way.
+    let constraints = if app.repl.multiline_mode() {
+        let top_height = f.area().height.saturating_sub(INPUT_HEIGHT) / 2;
+        vec![Constraint::Length(top_height), Constraint::Percentage(33), Constraint::Min(0)]
     } else {
-        // Single-line mode: Input centered vertically.
-        vec![
-            Constraint::Fill(1),      // Top half (centers input)
-            Constraint::Length(3),    // Input (3 lines: 1 text + 2 borders)
-            Constraint::Fill(1),      // Bottom half (centers input)
-        ]
+        vec![Constraint::Fill(1), Constraint::Length(INPUT_HEIGHT), Constraint::Fill(1)]
     };
 
     let chunks = Layout::default()
@@ -50,7 +43,6 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
     let (code_view, unit_lines) = render_code(f, &app.repl, chunks[0]);
     app.repl.record_code_view(code_view.pane_lines, code_view.scroll_back_limit, unit_lines);
 
-    // Input panel - current text input with multiline indicators.
     render_input(f, app, chunks[1]);
 
     // Only the tab shown is laid out, so only its bounds are recorded; the
@@ -67,21 +59,18 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
         }
     }
 
+    // Each over the one before: a crash over the exit dialog, a bug in the
+    // app's bookkeeping over the reset that may have caused it, and a dead
+    // engine over everything, since nothing else can make progress.
     if app.repl.exit_asked() {
         render_exit_dialog(f);
     }
-
-    // Render crash modal if present (takes priority over the exit dialog).
     if let Some(msg) = app.repl.crash_modal_message() {
         render_crash_modal(f, &app.repl, msg);
     }
-
-    // A bug in the app's bookkeeping, over the reset that may have caused it.
     if let Some(msg) = app.repl.session_mismatch_message() {
         render_session_mismatch_modal(f, msg);
     }
-
-    // A dead engine outranks everything: nothing else can make progress.
     if let Some(msg) = app.repl.engine_dead_message() {
         render_engine_dead_modal(f, &app.repl, msg);
     }
@@ -96,31 +85,42 @@ fn panel_border<E: ReplExecutor>(repl: &ReplApp<E>, panel: Panel) -> Style {
     }
 }
 
-/// Render one binding a fragment defined.
-fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
-    let check = ratatui::text::Span::styled("  ✓ ", Style::default().fg(Color::Green));
+/// A line of the history after its input: a mark, and what it says, both in
+/// one color.
+fn marked<'a>(mark: &str, color: Color, text: impl Into<std::borrow::Cow<'a, str>>) -> Line<'a> {
+    let style = Style::default().fg(color);
+    Line::from(vec![Span::styled(fmt!("  {mark} "), style), Span::styled(text.into(), style)])
+}
 
+/// One binding a fragment defined, with its type.
+fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
+    let check = Span::styled("  ✓ ", Style::default().fg(Color::Green));
     match binding {
         script::EvalBinding::Function { name } => Line::from(vec![
             check,
-            ratatui::text::Span::raw("fun "),
-            ratatui::text::Span::styled(name, Style::default().fg(Color::Cyan)),
+            Span::raw("fun "),
+            Span::styled(name, Style::default().fg(Color::Cyan)),
         ]),
         script::EvalBinding::Value { name, ty, value }
         | script::EvalBinding::Slot { name, ty, value } => Line::from(vec![
             check,
-            ratatui::text::Span::styled(name, Style::default().fg(Color::Cyan)),
-            ratatui::text::Span::raw(": "),
-            ratatui::text::Span::styled(ty, Style::default().fg(Color::Yellow)),
-            ratatui::text::Span::raw(" = "),
-            ratatui::text::Span::raw(value),
+            Span::styled(name, Style::default().fg(Color::Cyan)),
+            Span::raw(": "),
+            Span::styled(ty, Style::default().fg(Color::Yellow)),
+            Span::raw(" = "),
+            Span::raw(value),
         ]),
     }
 }
 
-/// One line saying what a unit an edit reached came to.
-fn report_line(report: &repl::UnitReport) -> Line<'_> {
-    let (mark, color, said) = match &report.eval {
+/// What a unit came to, in a line's worth: its mark, its color, and what it
+/// says.
+///
+/// The colors are the bars': green for a unit that ran, red for one that did
+/// not compile, yellow for one that returned early, and magenta for one that
+/// was blocked.
+fn outcome(eval: &script::Eval) -> (&'static str, Color, String) {
+    match eval {
         script::Eval::Nothing => ("✓", Color::Green, "ran".S()),
         script::Eval::Success(bindings) => {
             let bound: Vec<String> = bindings.iter().map(|binding| match binding {
@@ -133,16 +133,47 @@ fn report_line(report: &repl::UnitReport) -> Line<'_> {
         script::Eval::SuccessExpr(expr) => ("⇒", Color::Green, fmt!("{} = {}", expr.ty, expr.value)),
         script::Eval::Error(e) => ("✗", Color::Red, fmt!("error: {e}")),
         script::Eval::ReturnedEarly(returned) => ("✗", Color::Yellow, fmt!("returned early: {returned}")),
-        script::Eval::Blocked { on } => ("✗", Color::Magenta, fmt!("not run: it reads from units {on:?}")),
-        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
-            unreachable!("a reset takes the entry with it")
+        script::Eval::Blocked { on } => {
+            let on: Vec<String> = on.iter().map(|unit| unit.to_string()).collect();
+            ("✗", Color::Magenta, fmt!("not run: it reads from units {}, which did not finish", on.join(", ")))
         }
-    };
-    Line::from(vec![
-        ratatui::text::Span::styled(fmt!("  {mark} "), Style::default().fg(color)),
-        ratatui::text::Span::styled(fmt!("unit {}: ", report.unit), Style::default().fg(Color::DarkGray)),
-        ratatui::text::Span::styled(said, Style::default().fg(color)),
-    ])
+        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
+            unreachable!("a reset takes the entry it would be shown in")
+        }
+    }
+}
+
+/// The lines saying what an answered input came to.
+fn eval_lines(eval: &repl::Eval) -> Vec<Line<'_>> {
+    match eval {
+        // A fragment's bindings, each with its type.
+        repl::Eval::Unit(script::Eval::Success(bindings)) => bindings.iter().map(binding_line).collect(),
+        repl::Eval::Unit(eval) => {
+            let (mark, color, said) = outcome(eval);
+            vec![marked(mark, color, said)]
+        }
+        repl::Eval::Edited(step) => {
+            let mut lines: Vec<Line> = step.iter().map(|unit| match &unit.eval {
+                Some(eval) => {
+                    let (mark, color, said) = outcome(eval);
+                    Line::from(vec![
+                        Span::styled(fmt!("  {mark} "), Style::default().fg(color)),
+                        Span::styled(fmt!("unit {}: ", unit.unit), Style::default().fg(Color::DarkGray)),
+                        Span::styled(said, Style::default().fg(color)),
+                    ])
+                }
+                None => marked("·", Color::DarkGray, fmt!("unit {}: analyzed again", unit.unit)),
+            }).collect();
+            if step.iter().all(|unit| unit.eval.is_none()) {
+                lines.insert(0, marked("✓", Color::Green, "no other unit reran"));
+            }
+            lines
+        }
+        repl::Eval::CommandError(e) => vec![marked("✗", Color::Red, fmt!("error: {e}"))],
+        repl::Eval::Saved { path, inputs } => vec![marked("✓", Color::Green, fmt!("saved {inputs} inputs to {path}"))],
+        repl::Eval::CallerInterpret(repl::ReplCommand::Help) => vec![marked("ℹ", Color::Blue, "help")],
+        repl::Eval::CallerInterpret(_) => vec![marked("ℹ", Color::Blue, "(repl command)")],
+    }
 }
 
 /// The shape of a pane scrolled up from its bottom, the code or the history,
@@ -194,8 +225,8 @@ fn status_color(status: UnitStatus) -> Color {
 }
 
 /// Render the code panel: every unit's source, in order, each beside a bar
-/// colored for its status, and the selected unit
-/// highlighted while the panel has focus.
+/// colored for its status, and the selected unit highlighted while the panel
+/// has focus.
 ///
 /// Returns the lines each unit took, for scrolling the selection into view.
 fn render_code<E: ReplExecutor>(
@@ -213,22 +244,13 @@ fn render_code<E: ReplExecutor>(
     // Startup compiles the system library and builds the native riders, which
     // takes seconds at best; say so, or nothing seems to happen.
     if !repl.engine_is_ready() {
-        lines.push(Line::from(vec![
-            ratatui::text::Span::styled(
-                "  ⏱ ",
-                Style::default().fg(Color::Yellow),
-            ),
-            ratatui::text::Span::styled(
-                "starting engine...",
-                Style::default().fg(Color::Yellow),
-            ),
-        ]));
+        lines.push(marked("…", Color::Yellow, "starting engine"));
         lines.push(Line::from(""));
     }
 
     let units = repl.code_units();
     if units.is_empty() {
-        lines.push(Line::from(ratatui::text::Span::styled(
+        lines.push(Line::from(Span::styled(
             "(no code yet)",
             Style::default().fg(Color::DarkGray),
         )));
@@ -238,7 +260,7 @@ fn render_code<E: ReplExecutor>(
         Panel::Code => repl.selected_unit(),
         _ => None,
     };
-    let separator = "─".repeat(area.width.saturating_sub(2) as usize);
+    let separator = "─".repeat(area.width.saturating_sub(BORDERS) as usize);
     // Every unit's number in a column as wide as the widest.
     let number_width = units.iter()
         .filter_map(|unit| unit.number)
@@ -247,7 +269,7 @@ fn render_code<E: ReplExecutor>(
     let mut unit_lines = Vec::new();
     for (index, unit) in units.iter().enumerate() {
         if index > 0 {
-            lines.push(Line::from(ratatui::text::Span::styled(
+            lines.push(Line::from(Span::styled(
                 separator.C(),
                 Style::default().fg(Color::DarkGray),
             )));
@@ -268,9 +290,9 @@ fn render_code<E: ReplExecutor>(
                 _ => " ".repeat(number_width + 1),
             };
             lines.push(Line::from(vec![
-                ratatui::text::Span::styled(number, Style::default().fg(Color::DarkGray)),
-                ratatui::text::Span::styled(bar_glyph(unit, line_index, last_line), bar),
-                ratatui::text::Span::styled(line, text),
+                Span::styled(number, Style::default().fg(Color::DarkGray)),
+                Span::styled(bar_glyph(unit, line_index, last_line), bar),
+                Span::styled(line, text),
             ]));
         }
         if let Some(number) = unit.number {
@@ -284,19 +306,19 @@ fn render_code<E: ReplExecutor>(
 
 /// The bottom panel's frame, whose title is its tabs.
 fn bottom_block<E: ReplExecutor>(repl: &ReplApp<E>) -> Block<'static> {
-    let mut tabs = vec![ratatui::text::Span::raw(" ")];
+    let mut tabs = vec![Span::raw(" ")];
     for (index, tab) in Tab::ALL.into_iter().enumerate() {
         if index > 0 {
-            tabs.push(ratatui::text::Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+            tabs.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
         }
         let style = if tab == repl.tab() {
-            Style::default().fg(HIGHLIGHT).add_modifier(ratatui::style::Modifier::BOLD)
+            Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         };
-        tabs.push(ratatui::text::Span::styled(tab.title(), style));
+        tabs.push(Span::styled(tab.title(), style));
     }
-    tabs.push(ratatui::text::Span::raw(" "));
+    tabs.push(Span::raw(" "));
 
     Block::default()
         .borders(Borders::ALL)
@@ -310,213 +332,24 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect,
     let mut lines: Vec<Line> = Vec::new();
 
     for entry in repl.history() {
-        // Input line with prompt.
-        // Truncate multiline input to first line with ellipsis.
-        let display_input = if entry.input.contains('\n') {
-            let first_line = entry.input.lines().next().unwrap_or("");
-            format!("{}…", first_line)
-        } else {
-            entry.input.C()
+        // An input over several lines shows its first.
+        let input = match entry.input.split_once('\n') {
+            Some((first, _)) => fmt!("{first}…"),
+            None => entry.input.C(),
         };
+        lines.push(Line::from(vec![Span::styled("> ", Style::default().fg(Color::Cyan)), Span::raw(input)]));
 
-        lines.push(Line::from(vec![
-            ratatui::text::Span::styled(
-                "> ",
-                Style::default().fg(Color::Cyan),
-            ),
-            ratatui::text::Span::raw(display_input),
-        ]));
-
-        // Output/status line.
         match &entry.status {
-            EntryStatus::Parsing => {
-                lines.push(Line::from(vec![
-                    ratatui::text::Span::styled(
-                        "  ⏱ ",
-                        Style::default().fg(Color::Yellow),
-                    ),
-                    ratatui::text::Span::styled(
-                        "parsing...",
-                        Style::default().fg(Color::Yellow),
-                    ),
-                ]));
-            }
-            EntryStatus::Evaluating { .. } => {
-                lines.push(Line::from(vec![
-                    ratatui::text::Span::styled(
-                        "  ⏱ ",
-                        Style::default().fg(Color::Yellow),
-                    ),
-                    ratatui::text::Span::styled(
-                        "evaluating...",
-                        Style::default().fg(Color::Yellow),
-                    ),
-                ]));
-            }
-            EntryStatus::Success => {
-                if let Some(eval) = &entry.eval_result {
-                    match eval {
-                        repl::Eval::Unit(script::Eval::Nothing) => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ✓ ",
-                                    Style::default().fg(Color::Green),
-                                ),
-                                ratatui::text::Span::raw("nothing"),
-                            ]));
-                        }
-                        repl::Eval::Unit(script::Eval::Success(bindings)) => {
-                            for binding in bindings {
-                                lines.push(binding_line(binding));
-                            }
-                        }
-                        repl::Eval::Unit(script::Eval::SuccessExpr(eval_expr)) => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ⇒ ",
-                                    Style::default().fg(Color::Green),
-                                ),
-                                ratatui::text::Span::styled(
-                                    &eval_expr.ty,
-                                    Style::default().fg(Color::Yellow),
-                                ),
-                                ratatui::text::Span::raw(" = "),
-                                ratatui::text::Span::raw(&eval_expr.value),
-                            ]));
-                        }
-                        repl::Eval::Edited(reports) => {
-                            if reports.is_empty() {
-                                lines.push(Line::from(vec![
-                                    ratatui::text::Span::styled("  ✓ ", Style::default().fg(Color::Green)),
-                                    ratatui::text::Span::raw("no other unit reran"),
-                                ]));
-                            }
-                            lines.extend(reports.iter().map(report_line));
-                        }
-                        repl::Eval::Saved { path, inputs } => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ✓ ",
-                                    Style::default().fg(Color::Green),
-                                ),
-                                ratatui::text::Span::raw(format!("saved {inputs} inputs to {path}")),
-                            ]));
-                        }
-                        repl::Eval::Unit(script::Eval::Error(e)) | repl::Eval::CommandError(e) => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ✗ ",
-                                    Style::default().fg(Color::Red),
-                                ),
-                                ratatui::text::Span::styled(
-                                    format!("error: {e}"),
-                                    Style::default().fg(Color::Red),
-                                ),
-                            ]));
-                        }
-                        repl::Eval::CallerInterpret(command) => {
-                            match command {
-                                repl::ReplCommand::Help => {
-                                    lines.push(Line::from(vec![
-                                        ratatui::text::Span::styled(
-                                            "  ℹ ",
-                                            Style::default().fg(Color::Blue),
-                                        ),
-                                        ratatui::text::Span::raw("help"),
-                                    ]));
-                                }
-                                _ => {
-                                    lines.push(Line::from(vec![
-                                        ratatui::text::Span::styled(
-                                            "  ℹ ",
-                                            Style::default().fg(Color::Blue),
-                                        ),
-                                        ratatui::text::Span::raw("(repl command)"),
-                                    ]));
-                                }
-                            }
-                        }
-                        repl::Eval::Unit(script::Eval::ErrorReset(e)) => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ✗ ",
-                                    Style::default().fg(Color::Red),
-                                ),
-                                ratatui::text::Span::styled(
-                                    format!("error: {e} (session reset)"),
-                                    Style::default().fg(Color::Red),
-                                ),
-                            ]));
-                        }
-                        repl::Eval::Unit(script::Eval::ReturnedEarly(_) | script::Eval::Blocked { .. }) => {
-                            unreachable!("the app reports a unit that did not run as an error")
-                        }
-                        repl::Eval::Unit(script::Eval::CrashReset(_msg)) => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  💥 ",
-                                    Style::default().fg(Color::Red),
-                                ),
-                                ratatui::text::Span::styled(
-                                    "crash reset",
-                                    Style::default().fg(Color::Red),
-                                ),
-                            ]));
-                        }
-                    }
-                }
-            }
-            EntryStatus::Error => {
-                // Try to extract error message from eval_result.
-                let error_msg = match &entry.eval_result {
-                    Some(repl::Eval::Unit(script::Eval::Error(e)) | repl::Eval::CommandError(e)) => format!("error: {}", e),
-                    Some(repl::Eval::Unit(script::Eval::ReturnedEarly(returned))) => {
-                        format!("returned early: {returned}")
-                    }
-                    Some(repl::Eval::Unit(script::Eval::Blocked { on })) => {
-                        format!("not run: it reads from units {on:?}, which did not finish")
-                    }
-                    _ => "error".S(),
-                };
-
-                lines.push(Line::from(vec![
-                    ratatui::text::Span::styled(
-                        "  ✗ ",
-                        Style::default().fg(Color::Red),
-                    ),
-                    ratatui::text::Span::styled(
-                        error_msg,
-                        Style::default().fg(Color::Red),
-                    ),
-                ]));
-            }
-            EntryStatus::Empty => {
-                lines.push(Line::from(vec![
-                    ratatui::text::Span::styled(
-                        "  · ",
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                    ratatui::text::Span::styled(
-                        "(empty)",
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                ]));
-            }
-            EntryStatus::ReadMultiline => {
-                lines.push(Line::from(vec![
-                    ratatui::text::Span::styled(
-                        "  → ",
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                    ratatui::text::Span::styled(
-                        "read-multiline",
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                ]));
+            EntryStatus::Parsing => lines.push(marked("…", Color::Yellow, "parsing")),
+            EntryStatus::Evaluating => lines.push(marked("…", Color::Yellow, "evaluating")),
+            EntryStatus::Empty => lines.push(marked("·", Color::DarkGray, "(empty)")),
+            EntryStatus::ReadMultiline => lines.push(marked("→", Color::DarkGray, "read more lines")),
+            EntryStatus::Success | EntryStatus::Error => {
+                let eval = entry.eval_result.as_ref().expect("an answered entry has what it came to");
+                lines.extend(eval_lines(eval));
             }
         }
 
-        // Separator between entries.
         lines.push(Line::from(""));
     }
 
@@ -533,7 +366,7 @@ fn render_scrolled_back(
     scroll_back: usize,
 ) -> ScrollBackView {
     let content_height = lines.len();
-    let viewport_height = area.height.saturating_sub(2) as usize; // Subtract borders.
+    let viewport_height = area.height.saturating_sub(BORDERS) as usize;
     let bottom = content_height.saturating_sub(viewport_height);
     let scroll_offset = (bottom - scroll_back.min(bottom)) as u16;
 
@@ -560,7 +393,8 @@ fn render_scrolled_back(
     ScrollBackView { pane_lines: viewport_height, scroll_back_limit: bottom }
 }
 
-/// Render the input panel with multiline indicators.
+/// Render the input panel, its title saying what it is writing and the key
+/// that submits it.
 fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect) {
     let name = match app.repl.editing() {
         Some(Editing::Unit(unit)) => fmt!("Edit unit {unit}"),
@@ -569,23 +403,23 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
     };
     let keys = if app.repl.cancel_armed() {
         "Ctrl+C again to cancel"
-    } else if app.multiline_mode() {
+    } else if app.repl.multiline_mode() {
         "Alt+Enter"
     } else {
         "Enter"
     };
     let title = fmt!("{name} [{keys}]");
 
-    let focused = app.focus() == Panel::Input;
+    let focused = app.repl.focus() == Panel::Input;
 
     // An edit or an insert is magenta wherever the focus is, so the input is
-    // not mistaken for a line to append. Otherwise multiline mode keeps its yellow while the
-    // panel has focus.
+    // not mistaken for a line to append. Otherwise multiline mode keeps its
+    // yellow while the panel has focus.
     let border_style = if app.repl.editing().is_some() {
         Style::default().fg(Color::Magenta)
     } else if !focused {
         panel_border(&app.repl, Panel::Input)
-    } else if app.multiline_mode() {
+    } else if app.repl.multiline_mode() {
         Style::default().fg(Color::Yellow)
     } else {
         Style::default().fg(Color::White)
@@ -608,75 +442,46 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
 }
 
 /// Render the environment tab: a table of the session's bindings.
-fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, debug_block: Block) -> EnvironmentView {
-    if repl.environment().is_empty() {
-        // Display empty state message as a paragraph.
-        let lines = vec![
-            Line::from(vec![
-                ratatui::text::Span::styled(
-                    "(no variables defined)",
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]),
-        ];
-        let debug = Paragraph::new(lines)
-            .block(debug_block);
-        f.render_widget(debug, area);
-
-        EnvironmentView { pane_rows: area.height.saturating_sub(3) as usize, scroll_limit: 0 }
-    } else {
-        // Less the borders and the header.
-        let pane_rows = area.height.saturating_sub(3) as usize;
-        let row_count = repl.environment().len();
-        let scroll_limit = row_count.saturating_sub(pane_rows);
-        let offset = repl.environment_scroll().min(scroll_limit);
-
-        // Create header row.
-        let header = Row::new(vec![
-            Cell::from("Name").style(Style::default().fg(Color::Yellow)),
-            Cell::from("Type").style(Style::default().fg(Color::Yellow)),
-            Cell::from("Value").style(Style::default().fg(Color::Yellow)),
-        ])
-        .height(1);
-
-        // Create data rows.
-        let rows = repl.environment().iter().skip(offset).map(|(name, ty, value)| {
-            Row::new(vec![
-                Cell::from(name.as_str()).style(Style::default().fg(Color::Cyan)),
-                Cell::from(ty.as_str()).style(Style::default().fg(Color::Yellow)),
-                Cell::from(value.as_str()),
-            ])
-            .height(1)
-        });
-
-        // Create table with column constraints.
-        let widths = [
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(50),
-        ];
-
-        let table = Table::new(rows, widths)
-            .header(header)
-            .block(debug_block);
-
-        f.render_widget(table, area);
-
-        let mut scrollbar_state = ScrollbarState::new(scroll_limit + 1).position(offset);
-        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None);
-
-        // Beside the bindings, below the top border and the header.
-        let scrollbar_area = Rect {
-            y: area.y + 2,
-            height: pane_rows as u16,
-            ..area
-        };
-        f.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
-
-        EnvironmentView { pane_rows, scroll_limit }
+fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> EnvironmentView {
+    // The rows below the borders and the header.
+    let pane_rows = area.height.saturating_sub(BORDERS + 1) as usize;
+    let environment = repl.environment();
+    if environment.is_empty() {
+        let empty = Paragraph::new(Line::from(Span::styled("(no variables defined)", Style::default().fg(Color::DarkGray))))
+            .block(block);
+        f.render_widget(empty, area);
+        return EnvironmentView { pane_rows, scroll_limit: 0 };
     }
+
+    let scroll_limit = environment.len().saturating_sub(pane_rows);
+    let offset = repl.environment_scroll().min(scroll_limit);
+
+    let heading = Style::default().fg(Color::Yellow);
+    let header = Row::new(vec![
+        Cell::from("Name").style(heading),
+        Cell::from("Type").style(heading),
+        Cell::from("Value").style(heading),
+    ]);
+    let rows = environment.iter().skip(offset).map(|binding| {
+        Row::new(vec![
+            Cell::from(binding.name.as_str()).style(Style::default().fg(Color::Cyan)),
+            Cell::from(binding.ty.as_str()).style(Style::default().fg(Color::Yellow)),
+            Cell::from(binding.value.as_str()),
+        ])
+    });
+    // A value is usually the longest of the three.
+    let widths = [Constraint::Percentage(25), Constraint::Percentage(25), Constraint::Percentage(50)];
+    f.render_widget(Table::new(rows, widths).header(header).block(block), area);
+
+    let mut scrollbar_state = ScrollbarState::new(scroll_limit + 1).position(offset);
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(None)
+        .end_symbol(None);
+    // Beside the bindings, below the top border and the header.
+    let scrollbar_area = Rect { y: area.y + 2, height: pane_rows as u16, ..area };
+    f.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+
+    EnvironmentView { pane_rows, scroll_limit }
 }
 
 /// Render the dialog asking whether to exit.
@@ -687,8 +492,9 @@ fn render_exit_dialog(f: &mut Frame) {
         Line::from(""),
         Line::from("Any other key to go on").style(Style::default().fg(Color::DarkGray)),
     ];
+    // Wide enough for its longest line, and its borders.
     let width = 28;
-    let height = lines.len() as u16 + 2;
+    let height = lines.len() as u16 + BORDERS;
     let screen = f.area();
     let area = Rect {
         x: screen.x + screen.width.saturating_sub(width) / 2,
@@ -707,11 +513,8 @@ fn render_exit_dialog(f: &mut Frame) {
 /// Render the crash modal popup.
 fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &str) {
     let area = centered_rect(60, 40, f.area());
-
-    // Clear the background.
     f.render_widget(Clear, area);
 
-    // Crash modal block.
     let modal_block = Block::default()
         .borders(Borders::ALL)
         .title("Session Reset - Press Enter to Continue")
@@ -725,9 +528,7 @@ fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &s
         Line::from(msg).style(Style::default().fg(Color::Yellow)),
     ];
 
-    // Add stderr log path if available.
     if let Some(log_path) = repl.stderr_log_path() {
-        lines.push(Line::from(""));
         lines.push(Line::from(""));
         lines.push(Line::from("Engine output, and a panic's trace, were written to:"));
         lines.push(Line::from(log_path.display().S()).style(Style::default().fg(Color::Cyan)));
@@ -799,7 +600,7 @@ fn render_engine_dead_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, m
     f.render_widget(modal, area);
 }
 
-/// Create a centered rectangle.
+/// A rectangle centered in `r`, these percentages of its width and height.
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)

@@ -206,10 +206,9 @@ aliases. Not looked into further.
 ### The REPL never reads a brace-delimited input over several lines
 
 **Reasoned about, not tried.** `classify_input` (`datalove-repl/src/lib.rs`)
-never produces `InputKind::OpenBraceTree` (`is_open_brace_tree = false; //
-todo`), and its multiline arm in the engine is `todo!()`. So a line that
-opens a brace, as a long `type` or a list literal would, is submitted on its
-own.
+opens multiline input only on a keyword that starts a block, and has no case
+for an open brace. So a line that opens a brace, as a long `type` or a list
+literal would, is submitted on its own.
 
 ### The REPL prints errors as Rust values
 

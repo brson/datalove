@@ -5,7 +5,7 @@ use salsa::Setter as _;
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::{Unit, Eval, EvalBinding, EvalExpr};
+use crate::{Unit, Eval, EvalBinding, EvalExpr, EnvBinding};
 use datalove_datafun as datafun;
 use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
@@ -67,7 +67,7 @@ pub struct Engine {
     module_errors: ModuleErrors,
     /// What the last operation on the units did to each unit it compiled or
     /// re-derived; see [`Engine::last_step`].
-    last_step: Vec<UnitEdit>,
+    last_step: Vec<UnitStep>,
 }
 
 /// The modules a session requires that do not compile, and what they said.
@@ -215,8 +215,10 @@ pub type OnCompileError<'a> =
 
 /// What one step did to one unit: which of its analysis passes ran again,
 /// and what re-deriving it came to, if it was re-derived.
+///
+/// A step is any operation on the units, an append included.
 #[derive(Debug, Clone, Serialize)]
-pub struct UnitEdit {
+pub struct UnitStep {
     /// The unit's index in the session.
     pub unit: usize,
     /// The analysis passes salsa ran for the unit in this step.
@@ -226,6 +228,13 @@ pub struct UnitEdit {
     /// analysis ran and whose lowering did not change, so it was left as it
     /// was.
     pub eval: Option<Eval>,
+}
+
+impl UnitStep {
+    /// A unit re-derived, before what ran for it is merged in.
+    fn rederived(unit: usize, eval: Eval) -> UnitStep {
+        UnitStep { unit, compiled: Compiled::default(), eval: Some(eval) }
+    }
 }
 
 /// Which analysis passes ran for a unit in a step.
@@ -398,7 +407,6 @@ impl Engine {
     ///
     /// The modules stay compiled, and the riders built and loaded.
     pub fn reset(&mut self) {
-        // Cleanup the current executor.
         self.executor.destroy_live_values();
         // An empty session requires nothing, so the roots go back to what they
         // were at startup, less any a module edit has broken since.
@@ -409,6 +417,8 @@ impl Engine {
         self.script = Some(started.script);
         self.executor = started.executor;
         self.natives = started.natives;
+        // No units are left to have done anything.
+        self.last_step.clear();
     }
 
     /// Build a compiler over the current module compilation, run `work` with
@@ -467,15 +477,15 @@ impl Engine {
     }
 
     /// The same for the reports of a re-derivation.
-    fn explain_all(&self, reports: Vec<UnitEdit>) -> Vec<UnitEdit> {
+    fn explain_all(&self, reports: Vec<UnitStep>) -> Vec<UnitStep> {
         // A unit that failed at run time took the session with it, so the
         // units reported before it have no sources left to explain against.
-        if reports.iter().any(|report| matches!(report.eval, Some(Eval::ErrorReset(_)))) {
+        if reports.iter().any(|report| report.eval.as_ref().is_some_and(Eval::resets)) {
             return reports;
         }
         let sources = self.unit_sources();
         reports.into_iter()
-            .map(|UnitEdit { unit, compiled, eval }| UnitEdit {
+            .map(|UnitStep { unit, compiled, eval }| UnitStep {
                 unit,
                 compiled,
                 eval: eval.map(|eval| self.explain(sources[unit], eval)),
@@ -503,28 +513,17 @@ impl Engine {
 
         let eval = match result {
             Ok(eval_result) => eval_result,
-            Err(panic_info) => {
+            Err(panic) => {
                 self.reset();
-                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                    s.S()
-                } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                    s.C()
-                } else {
-                    "Unknown panic".S()
-                };
-                Eval::CrashReset(format!("Eval panic: {}", panic_msg))
+                Eval::CrashReset(fmt!("Eval panic: {}", crate::panic_message(&*panic)))
             }
         };
         // The unit appended is the last, unless it took the session with it.
-        let reports = match &eval {
-            Eval::ErrorReset(_) | Eval::CrashReset(_) => Vec::new(),
-            eval => vec![UnitEdit {
-                unit: self.unit_count() - 1,
-                compiled: Compiled::default(),
-                eval: Some(eval.C()),
-            }],
+        let step = match eval.resets() {
+            true => Vec::new(),
+            false => vec![UnitStep::rederived(self.unit_count() - 1, eval.C())],
         };
-        self.record_step(reports, ran);
+        self.record_step(step, ran);
         eval
     }
 
@@ -535,13 +534,13 @@ impl Engine {
     /// appended unit the unit itself and any earlier unit whose analysis it
     /// made run again. A unit is named by its index after the operation, so a
     /// runtime error, which empties the session, leaves nothing to name.
-    pub fn last_step(&self) -> &[UnitEdit] {
+    pub fn last_step(&self) -> &[UnitStep] {
         &self.last_step
     }
 
     /// Run an operation on the units, and say which passes it ran for each
     /// unit beside what it re-derived.
-    fn step(&mut self, operation: impl FnOnce(&mut Engine) -> Vec<UnitEdit>) -> Vec<UnitEdit> {
+    fn step(&mut self, operation: impl FnOnce(&mut Engine) -> Vec<UnitStep>) -> Vec<UnitStep> {
         let (reports, ran) = unit_analysis::collect(|| operation(self));
         self.record_step(reports, ran);
         self.last_step.C()
@@ -553,7 +552,7 @@ impl Engine {
     /// The passes name units by source, and the sources are those after the
     /// step: an edited unit keeps its source, an inserted one is new, and a
     /// removed one names nothing any more.
-    fn record_step(&mut self, mut reports: Vec<UnitEdit>, ran: Vec<(Pass, Source)>) {
+    fn record_step(&mut self, mut reports: Vec<UnitStep>, ran: Vec<(Pass, Source)>) {
         let sources = self.unit_sources();
         for (pass, source) in ran {
             let Some(unit) = sources.iter().position(|unit| *unit == source) else {
@@ -562,7 +561,7 @@ impl Engine {
             let index = match reports.iter().position(|report| report.unit == unit) {
                 Some(index) => index,
                 None => {
-                    reports.push(UnitEdit { unit, compiled: Compiled::default(), eval: None });
+                    reports.push(UnitStep { unit, compiled: Compiled::default(), eval: None });
                     reports.len() - 1
                 }
             };
@@ -578,24 +577,25 @@ impl Engine {
     }
 
     fn eval_impl(&mut self, unit: Unit, on_error: OnCompileError<'_>) -> Eval {
-        match unit {
-            Unit::Fragment(source) => self.eval_script_statement(source, on_error),
-            Unit::Expression(source) => self.eval_expression(source, on_error),
-        }
+        let is_expr = unit.is_expression();
+        let source = match unit {
+            Unit::Fragment(source) | Unit::Expression(source) => source,
+        };
+        self.eval_new_unit(source, is_expr, on_error)
     }
 
-    /// Compile and run a fragment as the next unit.
+    /// Compile and run a fragment or an expression as the next unit.
     ///
     /// **A unit that fails stays in the session**, whether it did not compile,
     /// returned early, or read from a unit that did either, and offers no
     /// bindings until an edit makes it run to its end. Only a runtime error
     /// takes the session with it.
-    fn eval_script_statement(&mut self, source: String, on_error: OnCompileError<'_>) -> Eval {
+    fn eval_new_unit(&mut self, source: String, is_expr: bool, on_error: OnCompileError<'_>) -> Eval {
         let source = Source::new(&self.db, source);
         let mut units = self.unit_sources();
         units.push(source);
         let compiled = self.with_compiler(&units, |compiler| {
-            let compiled = compiler.compile_source(source, false);
+            let compiled = compiler.compile_source(source, is_expr);
             if compiled.first_error().is_some() {
                 on_error(compiler, &compiled);
             }
@@ -608,14 +608,22 @@ impl Engine {
         }
 
         let ir_unit = compiled.ir_unit.as_ref()
-            .expect("a fragment that compiled without errors has ir");
-        let output = self.executor.execute_fragment(ir_unit);
-
-        if output.starts_with("Error:") {
+            .expect("a unit that compiled without errors has ir");
+        let (ty, output) = self.execute(ir_unit, is_expr);
+        if is_runtime_error(&output) {
             return self.failed(output);
         }
+        self.outcome(ir_unit, ty, output)
+    }
 
-        self.outcome(ir_unit, None, output)
+    /// Run a unit as the session's next: an expression for its value, and a
+    /// fragment for what it binds.
+    fn execute(&mut self, ir_unit: &IrCodeUnit, is_expr: bool) -> (Option<String>, String) {
+        if is_expr {
+            self.executor.execute_expr(ir_unit)
+        } else {
+            (None, self.executor.execute_fragment(ir_unit))
+        }
     }
 
     /// A unit failed at run time: the executor has freed everything the
@@ -672,16 +680,17 @@ impl Engine {
     /// edited unit provides holds no reference into it. See
     /// `botdocs/plan-script-reactivity.md`.
     ///
-    /// Returns one report per unit re-derived, in index order, the edited unit
-    /// first. A unit whose re-lowering failed is reported as an error and
-    /// stays, with its frame destroyed and its bindings gone from the
-    /// environment, until an edit makes it compile again.
-    pub fn edit_unit(&mut self, unit: usize, source: &str) -> Vec<UnitEdit> {
+    /// Returns what the step did to each unit it analyzed or re-derived, in
+    /// index order; see [`Self::last_step`]. A unit whose re-lowering failed
+    /// is reported as an error and stays, with its frame destroyed and its
+    /// bindings gone from the environment, until an edit makes it compile
+    /// again.
+    pub fn edit_unit(&mut self, unit: usize, source: &str) -> Vec<UnitStep> {
         self.step(|engine| engine.edit_unit_in_step(unit, source))
     }
 
-    fn edit_unit_in_step(&mut self, unit: usize, source: &str) -> Vec<UnitEdit> {
-        let sources = self.script.as_ref().expect("a session").unit_sources();
+    fn edit_unit_in_step(&mut self, unit: usize, source: &str) -> Vec<UnitStep> {
+        let sources = self.unit_sources();
         assert!(
             unit < sources.len(),
             "unit {unit} was edited but the session has {} units",
@@ -703,11 +712,11 @@ impl Engine {
     /// index the first dropped unit had. A unit that goes having taken or
     /// written an earlier unit's binding rewinds the session to where that
     /// binding was made, and the units from there to `n` run again.
-    pub fn truncate_units(&mut self, n: usize) -> Vec<UnitEdit> {
+    pub fn truncate_units(&mut self, n: usize) -> Vec<UnitStep> {
         self.step(|engine| engine.truncate_units_in_step(n))
     }
 
-    fn truncate_units_in_step(&mut self, n: usize) -> Vec<UnitEdit> {
+    fn truncate_units_in_step(&mut self, n: usize) -> Vec<UnitStep> {
         let mut units = self.unit_sources();
         let count = units.len();
         assert!(n <= count, "cannot truncate to {n} units; the session has {count}");
@@ -727,11 +736,11 @@ impl Engine {
     ///
     /// A unit of the suffix that read what the removed unit provided stops
     /// compiling and stays, as any unit that fails does.
-    pub fn remove_unit(&mut self, unit: usize) -> Vec<UnitEdit> {
+    pub fn remove_unit(&mut self, unit: usize) -> Vec<UnitStep> {
         self.step(|engine| engine.remove_unit_in_step(unit))
     }
 
-    fn remove_unit_in_step(&mut self, unit: usize) -> Vec<UnitEdit> {
+    fn remove_unit_in_step(&mut self, unit: usize) -> Vec<UnitStep> {
         let mut units = self.unit_sources();
         assert!(unit < units.len(), "unit {unit} was removed but the session has {} units", units.len());
         units.remove(unit);
@@ -753,11 +762,11 @@ impl Engine {
         unit: usize,
         source: &str,
         is_expr: bool,
-    ) -> Vec<UnitEdit> {
+    ) -> Vec<UnitStep> {
         self.step(|engine| engine.insert_unit_in_step(unit, source, is_expr))
     }
 
-    fn insert_unit_in_step(&mut self, unit: usize, source: &str, is_expr: bool) -> Vec<UnitEdit> {
+    fn insert_unit_in_step(&mut self, unit: usize, source: &str, is_expr: bool) -> Vec<UnitStep> {
         let source = Source::new(&self.db, source.S());
         let mut units = self.unit_sources();
         assert!(unit <= units.len(), "unit {unit} was inserted but the session has {} units", units.len());
@@ -777,7 +786,8 @@ impl Engine {
     /// A unit is re-derived when one of its imports resolves into this module,
     /// when it requires a module that requires this one, when it requires a
     /// module the edit broke or fixed, or when it uses what such a unit
-    /// provides. Returns one report per unit re-derived, in index order.
+    /// provides. Returns what the step did to each unit it analyzed or
+    /// re-derived, in index order.
     ///
     /// **An edit that does not compile is kept.** The module is left out of
     /// the compile, with the modules that require it; the units requiring any
@@ -790,7 +800,7 @@ impl Engine {
         package: &str,
         module: &str,
         source: &str,
-    ) -> Vec<UnitEdit> {
+    ) -> Vec<UnitStep> {
         self.step(|engine| engine.edit_module_in_step(library, package, module, source))
     }
 
@@ -800,7 +810,7 @@ impl Engine {
         package: &str,
         module: &str,
         source: &str,
-    ) -> Vec<UnitEdit> {
+    ) -> Vec<UnitStep> {
         assert!(
             self.pipeline.contains_module(library, package, module),
             "no module {library}/{package}/{module} in this session",
@@ -872,7 +882,7 @@ impl Engine {
     fn rerun(
         &mut self,
         redone: Vec<(usize, datafun::pipeline::ScriptCompilationResult)>,
-    ) -> Vec<UnitEdit> {
+    ) -> Vec<UnitStep> {
         let mut reports = Vec::new();
         for (index, compiled) in redone {
             let eval = match (compiled.first_error(), &compiled.ir_unit) {
@@ -883,10 +893,10 @@ impl Engine {
                 (None, None) => unreachable!("a unit that compiled without errors has ir"),
                 (None, Some(ir_unit)) => {
                     let (ty, output) = self.executor.reexecute_unit(index, ir_unit);
-                    if output.starts_with("Error:") {
+                    if is_runtime_error(&output) {
                         // The session is gone, so there is nothing left
                         // for the rest to run against.
-                        reports.push(UnitEdit { unit: index, compiled: Compiled::default(), eval: Some(self.failed(output)) });
+                        reports.push(UnitStep::rederived(index, self.failed(output)));
                         break;
                     }
                     // An expression unit reports the value it now comes to;
@@ -894,7 +904,7 @@ impl Engine {
                     self.outcome(ir_unit, ty, output)
                 }
             };
-            reports.push(UnitEdit { unit: index, compiled: Compiled::default(), eval: Some(eval) });
+            reports.push(UnitStep::rederived(index, eval));
         }
         reports
     }
@@ -910,7 +920,7 @@ impl Engine {
     /// appends, each taking the next free index.
     ///
     /// A unit here that did not compile takes its index with no frame.
-    fn rerun_spliced(&mut self, splice: datafun::pipeline::Splice) -> Vec<UnitEdit> {
+    fn rerun_spliced(&mut self, splice: datafun::pipeline::Splice) -> Vec<UnitStep> {
         let datafun::pipeline::Splice { from, redone } = splice;
         self.executor.truncate_units(from);
         let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
@@ -919,23 +929,19 @@ impl Engine {
         for (index, compiled) in redone {
             if let Some(error) = compiled.first_error() {
                 self.executor.skip_unit();
-                reports.push(UnitEdit { unit: index, compiled: Compiled::default(), eval: Some(Eval::Error(error)) });
+                reports.push(UnitStep::rederived(index, Eval::Error(error)));
                 continue;
             }
             let ir_unit = compiled.ir_unit.as_ref()
                 .expect("a unit that compiled without errors has ir");
-            let (ty, output) = if is_expr[index] {
-                self.executor.execute_expr(ir_unit)
-            } else {
-                (None, self.executor.execute_fragment(ir_unit))
-            };
-            if output.starts_with("Error:") {
+            let (ty, output) = self.execute(ir_unit, is_expr[index]);
+            if is_runtime_error(&output) {
                 // As in `rerun`: nothing is left for the rest.
-                reports.push(UnitEdit { unit: index, compiled: Compiled::default(), eval: Some(self.failed(output)) });
+                reports.push(UnitStep::rederived(index, self.failed(output)));
                 break;
             }
             let eval = self.outcome(ir_unit, ty, output);
-            reports.push(UnitEdit { unit: index, compiled: Compiled::default(), eval: Some(eval) });
+            reports.push(UnitStep::rederived(index, eval));
         }
         reports
     }
@@ -960,44 +966,12 @@ impl Engine {
             .expect("the executor registered the unit's exports before executing it")
     }
 
-    /// Compile and run an expression as the next unit, which stays whatever
-    /// becomes of it, as a fragment does.
-    fn eval_expression(&mut self, source: String, on_error: OnCompileError<'_>) -> Eval {
-        let source = Source::new(&self.db, source);
-        let mut units = self.unit_sources();
-        units.push(source);
-        let compiled = self.with_compiler(&units, |compiler| {
-            let compiled = compiler.compile_source(source, true);
-            if compiled.first_error().is_some() {
-                on_error(compiler, &compiled);
-            }
-            compiled
-        });
-
-        if let Some(error) = compiled.first_error() {
-            self.executor.skip_unit();
-            return self.explain(source, Eval::Error(error));
-        }
-
-        let ir_unit = compiled.ir_unit.as_ref()
-            .expect("an expression that compiled without errors has ir");
-        let (ty, output) = self.executor.execute_expr(ir_unit);
-
-        if output.starts_with("Error:") {
-            return self.failed(output);
-        }
-
-        self.outcome(ir_unit, ty, output)
-    }
-
-    /// Get current environment bindings (functions and let statements).
-    ///
-    /// Returns a list of (name, type, value) triples, sorted by name.
-    pub fn get_environment(&mut self) -> Vec<(String, String, String)> {
-        // Delegate to the executor's get_environment method.
+    /// The bindings the session offers, the nearest of each name, sorted by
+    /// name.
+    pub fn get_environment(&mut self) -> Vec<EnvBinding> {
         self.executor.get_environment()
             .into_iter()
-            .map(|(name, _kind, ty, value)| (name, ty, value))
+            .map(|(name, _kind, ty, value)| EnvBinding { name, ty, value })
             .collect()
     }
 
@@ -1025,4 +999,10 @@ impl Drop for Engine {
     fn drop(&mut self) {
         self.executor.destroy_live_values();
     }
+}
+
+/// Whether what running a unit printed is a runtime error, which ends the
+/// session.
+fn is_runtime_error(output: &str) -> bool {
+    output.starts_with("Error:")
 }

@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use serde::Serialize;
 
-use crate::script::Engine;
+use crate::script::{Engine, EnvBinding};
 use crate::{Eval, Input, InputParse, PackageLibrary, Session, SystemLibrary};
 
 /// One input's parse and eval, and the environment it left behind.
@@ -15,24 +15,16 @@ pub struct InputResult {
     pub environment: Vec<EnvBinding>,
 }
 
-/// An environment binding as reported after an input.
-#[derive(Debug, Serialize)]
-pub struct EnvBinding {
-    pub name: String,
-    pub ty: String,
-    pub value: String,
-}
-
 /// Evaluate a script of inputs, one result per input.
 ///
-/// Inputs are separated by a line holding only `---`. An input spanning
+/// Inputs are separated by lines holding only `---`. An input spanning
 /// several lines is submitted the way the UI submits a multiline entry, so
 /// definitions that span lines are evaluated rather than left waiting for
 /// more input.
 pub fn run_source(session: &mut Session, source: &str) -> Vec<InputResult> {
     let mut results = Vec::new();
 
-    for section in source.split("\n---\n") {
+    for section in sections(source) {
         let input = section.trim();
         if input.is_empty() {
             continue;
@@ -49,10 +41,7 @@ pub fn run_source(session: &mut Session, source: &str) -> Vec<InputResult> {
             InputParse::Command(command) => Some(session.eval(command.C())),
             _ => None,
         };
-        let environment = session.engine().get_environment()
-            .into_iter()
-            .map(|(name, ty, value)| EnvBinding { name, ty, value })
-            .collect();
+        let environment = session.engine().get_environment();
 
         results.push(InputResult { input: input.S(), parse, eval, environment });
     }
@@ -75,7 +64,20 @@ pub fn run_script(
     for result in run_source(&mut session, &contents) {
         println!("{}", rmx::serde_json::to_string(&result)?);
     }
-
-    // Engine's Drop impl will call destroy_all().
     Ok(())
+}
+
+/// The inputs of a script, the text between lines holding only `---`.
+fn sections(source: &str) -> Vec<String> {
+    let mut sections = vec![String::new()];
+    for line in source.lines() {
+        if line.trim() == "---" {
+            sections.push(String::new());
+        } else {
+            let section = sections.last_mut().expect("there is always a section");
+            section.push_str(line);
+            section.push('\n');
+        }
+    }
+    sections
 }

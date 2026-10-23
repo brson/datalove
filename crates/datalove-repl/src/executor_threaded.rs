@@ -2,11 +2,8 @@
 
 use rmx::prelude::*;
 use crate::app::{ReplExecutor, WorkerResponse};
-use crate::{Input, Command};
-use datalove_datafun as datafun;
-use datafun::pipeline::{PackageLibrary, SystemLibrary};
-use crate::script::Engine;
-use crate::Session;
+use crate::{Command, Input, PackageLibrary, Session, SystemLibrary};
+use crate::script::{self, Engine};
 use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 use std::thread;
 
@@ -15,8 +12,6 @@ use std::thread;
 enum WorkerRequest {
     Parse { id: u64, input: Input },
     Eval { id: u64, command: Command },
-    #[allow(dead_code)]
-    Shutdown,
 }
 
 /// Multi-threaded executor for native platforms.
@@ -77,16 +72,7 @@ fn start_engine(sys: SystemLibrary, local: Option<PackageLibrary>) -> Result<Eng
     match result {
         Ok(Ok(engine)) => Ok(engine),
         Ok(Err(e)) => Err(fmt!("the engine failed to start: {e:#}")),
-        Err(panic_info) => {
-            let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                s.S()
-            } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                s.C()
-            } else {
-                "Unknown panic".S()
-            };
-            Err(fmt!("the engine panicked while starting: {panic_msg}"))
-        }
+        Err(panic) => Err(fmt!("the engine panicked while starting: {}", script::panic_message(&*panic))),
     }
 }
 
@@ -130,39 +116,24 @@ fn worker_thread(
     rx: Receiver<WorkerRequest>,
     tx: Sender<WorkerResponse>,
 ) {
-    loop {
-        match rx.recv() {
-            Ok(WorkerRequest::Parse { id, input }) => {
-                // Parse the input.
-                let parse = crate::parse_input(input);
-                let _ = tx.send(WorkerResponse::ParseResult {
-                    id,
-                    parse,
-                });
+    // The requests end when the executor is dropped, and the thread with
+    // them. A send fails only once the executor is gone too.
+    while let Ok(request) = rx.recv() {
+        let response = match request {
+            WorkerRequest::Parse { id, input } => {
+                WorkerResponse::ParseResult { id, parse: crate::parse_input(input) }
             }
-            Ok(WorkerRequest::Eval { id, command }) => {
-                // Evaluate the command.
+            WorkerRequest::Eval { id, command } => {
                 let eval = session.eval(command);
-
-                // Get updated environment.
-                let environment = session.engine().get_environment();
-
-                let _ = tx.send(WorkerResponse::EvalResult {
+                WorkerResponse::EvalResult {
                     id,
                     eval,
-                    environment,
+                    environment: session.engine().get_environment(),
                     session: session.units().to_vec(),
                     step: session.last_step().to_vec(),
-                });
+                }
             }
-            Ok(WorkerRequest::Shutdown) => {
-                // todo actually send this
-                unreachable!();
-            }
-            Err(_) => {
-                // todo shouldn't happen
-                break;
-            }
-        }
+        };
+        let _ = tx.send(response);
     }
 }

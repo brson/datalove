@@ -405,7 +405,7 @@ A runtime error is not one of these. The runtime discards all of its memory
 ## What a step reports
 
 Every operation on the units -- an append, an edit, a splice, a module edit --
-says what it did to each unit it touched, in a `UnitEdit` per unit:
+says what it did to each unit it touched, in a `UnitStep` per unit:
 `compiled`, which analysis passes salsa ran for the unit, and `eval`, what
 re-deriving it came to, or `None` if it was not re-derived. The edits return
 these, and `Engine::last_step` holds them for any operation, the append

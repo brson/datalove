@@ -3,20 +3,8 @@
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
-use crate::script::{self, Engine, Unit, UnitEdit};
-use crate::{Command, Eval, Place, ReplCommand, UnitReport};
-
-/// What the last step to change the session did to one unit: whether its
-/// analysis ran again, and whether it ran.
-///
-/// A unit the step left alone has no reaction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Reaction {
-    /// The unit's number.
-    pub unit: u32,
-    pub compiled: bool,
-    pub ran: bool,
-}
+use crate::script::{self, Engine, Unit};
+use crate::{Command, Eval, Place, ReplCommand, UnitStep};
 
 /// A unit of the session, and its number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,7 +28,7 @@ pub struct Session {
     next: u32,
     /// What the last command to change the session did to the units, by
     /// number; see [`Session::last_step`].
-    last_step: Vec<Reaction>,
+    last_step: Vec<UnitStep>,
 }
 
 impl Session {
@@ -64,7 +52,7 @@ impl Session {
     /// out is a step; a command that leaves the session alone, or one that
     /// fails, leaves the last step as it was, and a reset leaves no units to
     /// have done anything.
-    pub fn last_step(&self) -> &[Reaction] {
+    pub fn last_step(&self) -> &[UnitStep] {
         &self.last_step
     }
 
@@ -78,13 +66,13 @@ impl Session {
         let eval = match command {
             Command::Unit(unit) => {
                 let eval = self.engine.eval(unit.C());
-                let eval = self.numbered(eval);
-                if Eval::Unit(eval.C()).reset_the_session() {
+                if eval.resets() {
                     self.forget();
                 } else {
                     self.append(unit);
                 }
-                Eval::Unit(eval)
+                self.take_step(self.engine.last_step().to_vec());
+                Eval::Unit(self.numbered(eval))
             }
             Command::ReplCommand(command) => match command {
                 ReplCommand::Unknown => Eval::CommandError("unknown command".S()),
@@ -106,17 +94,6 @@ impl Session {
             self.engine.unit_count(), self.units.len(),
             "the engine's session and its numbers are the same length",
         );
-        if self.units.is_empty() {
-            self.last_step.clear();
-        } else if matches!(eval, Eval::Unit(_) | Eval::Edited(_)) {
-            self.last_step = self.engine.last_step().iter()
-                .map(|edit| Reaction {
-                    unit: self.units[edit.unit].number,
-                    compiled: edit.compiled.any(),
-                    ran: edit.eval.as_ref().is_some_and(executed),
-                })
-                .collect();
-        }
         eval
     }
 
@@ -131,16 +108,16 @@ impl Session {
                 kind(old), kind(&source),
             ));
         }
-        let reports = self.guarded(number, |engine| engine.edit_unit(index, source.source()));
-        self.splice(number, reports, |units| units[index].unit = source)
+        let step = self.guarded(number, "editing", |engine| engine.edit_unit(index, source.source()));
+        self.splice(step, |units| units[index].unit = source)
     }
 
     fn delete(&mut self, number: u32) -> Eval {
         let Some(index) = self.index_of(number) else {
             return no_unit(number);
         };
-        let reports = self.guarded(number, |engine| engine.remove_unit(index));
-        self.splice(number, reports, |units| {
+        let step = self.guarded(number, "deleting", |engine| engine.remove_unit(index));
+        self.splice(step, |units| {
             units.remove(index);
         })
     }
@@ -149,74 +126,72 @@ impl Session {
         let Some(index) = self.index_of(number) else {
             return no_unit(number);
         };
-        let index = match place {
-            Place::Before => index,
-            Place::After => index + 1,
-        };
-        let reports = self.guarded(number, |engine| {
+        let index = place.index(index);
+        let step = self.guarded(number, "inserting beside", |engine| {
             engine.insert_unit(index, source.source(), source.is_expression())
         });
         let made = NumberedUnit { number: self.next, unit: source };
-        let eval = self.splice(number, reports, |units| units.insert(index, made));
+        let eval = self.splice(step, |units| units.insert(index, made));
         if !eval.reset_the_session() {
             self.next += 1;
         }
         eval
     }
 
-    /// Change the numbers as the engine changed its units, and report what
-    /// the units it reached came to by number.
+    /// Change the numbers as the engine changed its units, and say what the
+    /// step did to each unit by number.
     ///
     /// `change` is not made if the engine panicked, which leaves an empty
-    /// session, and the panic is reported as unit `number`'s, the one the
-    /// command named. The reports name units by where they are after the
-    /// change, and a runtime error among them leaves the session empty too.
+    /// session. The step names units by where they are after the change, and
+    /// a runtime error in it leaves the session empty too.
     fn splice(
         &mut self,
-        number: u32,
-        reports: Result<Vec<UnitEdit>, String>,
+        step: Result<Vec<script::UnitStep>, UnitStep>,
         change: impl FnOnce(&mut Vec<NumberedUnit>),
     ) -> Eval {
-        let reports = match reports {
-            Ok(reports) => reports,
-            Err(crash) => {
-                return Eval::Edited(vec![UnitReport { unit: number, eval: script::Eval::CrashReset(crash) }]);
-            }
+        let step = match step {
+            Ok(step) => step,
+            Err(crash) => return Eval::Edited(vec![crash]),
         };
         change(&mut self.units);
-        // Only the units re-derived, for now: what the step analyzed is not
-        // shown yet.
-        let reports: Vec<UnitReport> = reports.into_iter()
-            .filter_map(|UnitEdit { unit, eval, .. }| Some(UnitReport {
-                unit: self.units[unit].number,
-                eval: self.numbered(eval?),
-            }))
-            .collect();
-        let eval = Eval::Edited(reports);
+        let eval = Eval::Edited(self.take_step(step));
         if eval.reset_the_session() {
             self.forget();
         }
         eval
     }
 
-    /// Run one of the engine's edits, resetting the session if it panics.
+    /// Run one of the engine's edits, resetting the session if it panics,
+    /// and reporting the panic as unit `number`'s, the one the command
+    /// named, while `doing` it.
     ///
     /// The engine catches a panic in evaluating a unit, and nothing else, so
     /// one here would take the worker with it.
     fn guarded(
         &mut self,
         number: u32,
-        edit: impl FnOnce(&mut Engine) -> Vec<UnitEdit>,
-    ) -> Result<Vec<UnitEdit>, String> {
+        doing: &str,
+        edit: impl FnOnce(&mut Engine) -> Vec<script::UnitStep>,
+    ) -> Result<Vec<script::UnitStep>, UnitStep> {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| edit(&mut self.engine)));
         result.map_err(|panic| {
             self.engine.reset();
             self.forget();
-            let message = panic.downcast_ref::<&str>().map(|s| s.S())
-                .or_else(|| panic.downcast_ref::<String>().cloned())
-                .unwrap_or_else(|| "Unknown panic".S());
-            fmt!("Edit panic, editing unit {number}: {message}")
+            let message = fmt!("Panic {doing} unit {number}: {}", script::panic_message(&*panic));
+            UnitStep { unit: number, compiled: false, eval: Some(script::Eval::CrashReset(message)) }
         })
+    }
+
+    /// Keep the engine's step as the last, by number, and return it.
+    fn take_step(&mut self, step: Vec<script::UnitStep>) -> Vec<UnitStep> {
+        self.last_step = step.into_iter()
+            .map(|script::UnitStep { unit, compiled, eval }| UnitStep {
+                unit: self.units[unit].number,
+                compiled: compiled.any(),
+                eval: eval.map(|eval| self.numbered(eval)),
+            })
+            .collect();
+        self.last_step.C()
     }
 
     /// Name the units a `Blocked` waits on by number rather than position.
@@ -237,22 +212,11 @@ impl Session {
     fn forget(&mut self) {
         self.units.clear();
         self.next = 1;
+        self.last_step.clear();
     }
 
     fn index_of(&self, number: u32) -> Option<usize> {
         self.units.iter().position(|unit| unit.number == number)
-    }
-}
-
-/// Whether a unit that came to this was run, if only to an early return.
-fn executed(eval: &script::Eval) -> bool {
-    match eval {
-        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_)
-        | script::Eval::ReturnedEarly(_) => true,
-        script::Eval::Error(_) | script::Eval::Blocked { .. } => false,
-        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
-            unreachable!("a runtime error or a crash leaves no units to report")
-        }
     }
 }
 

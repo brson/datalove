@@ -425,7 +425,10 @@ mark. What a step compiled comes from the engine (see
 [script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-what-a-step-reports)),
 and `Session` turns its positions into numbers and sends it with every answer;
 the app shows it as it comes, since nothing it could keep by rule would know
-what salsa ran.
+what salsa ran. A step is one type on both sides of the worker, `UnitStep`:
+the engine's names units by position, and the REPL's by number, with a
+`Blocked`'s positions turned into numbers too. An edit's `Eval::Edited` and
+the answer's `step` are the same list.
 
 **The app keeps its own copy of the session's units**, numbered as the
 `Session` numbers them, and changes it as each answered command changed the
@@ -599,9 +602,9 @@ setup and the loop together.
 
 - Multiline input opens on a leading `fun`, `if`, `match`, `loop` or `for`,
   and reads to its `end`. A brace-delimited input cannot be typed across
-  lines: `is_open_brace_tree` is hardcoded false. See
+  lines: `classify_input` has no case for one. See
   [issues.md](issues.md#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines).
-- No cancellation. `WorkerRequest::Shutdown` is never sent, and an infinite
+- No cancellation. The worker has no way to be interrupted, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
 - `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete` and
   `/insert` are the only commands, and help prints the word "help".
