@@ -162,3 +162,53 @@ fn input_queued_behind_a_runtime_error_is_kept() {
     let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
     assert_eq!(sources, vec!["let z = 4"]);
 }
+
+/// The units, as the code panel numbers and shows them.
+fn code(app: &App) -> Vec<(Option<u32>, String)> {
+    app.code_units().iter().map(|unit| (unit.number, unit.source.S())).collect()
+}
+
+/// Edits, inserts and deletes through the app and a real engine, with the
+/// app's units checked against the engine's after every one, and a session
+/// with them in it saved and loaded back to the same units.
+#[test]
+fn edits_save_and_load_back() {
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("session.world");
+
+    let mut app = app(&path);
+    submit(&mut app, "let a = 1");
+    submit(&mut app, "let b = a + 1");
+    submit(&mut app, "b");
+    submit(&mut app, "/edit 1 let a = 10");
+    submit(&mut app, "/insert after 1 let c = a * 2");
+    submit(&mut app, "/delete 2");
+    submit(&mut app, "/insert before 1 let z = 0");
+    submit(&mut app, "/edit 3 c");
+
+    let expected = vec![
+        (Some(5), "let z = 0".S()),
+        (Some(1), "let a = 10".S()),
+        (Some(4), "let c = a * 2".S()),
+        (Some(3), "c".S()),
+    ];
+    assert_eq!(code(&app), expected);
+    let environment = app.environment().to_vec();
+    let names: Vec<&str> = environment.iter().map(|(name, _, _)| name.as_str()).collect();
+    assert_eq!(names, vec!["a", "c", "z"]);
+
+    submit(&mut app, "let late = 1");
+    submit(&mut app, "/save");
+    submit(&mut app, "/delete 1");
+    submit(&mut app, "/load");
+
+    let mut expected = expected;
+    expected.push((Some(6), "let late = 1".S()));
+    assert_eq!(code(&app), expected, "the load numbers the units as they were");
+    let mut environment = environment;
+    environment.push(("late".S(), "int".S(), "1".S()));
+    environment.sort();
+    let mut loaded = app.environment().to_vec();
+    loaded.sort();
+    assert_eq!(loaded, environment);
+}

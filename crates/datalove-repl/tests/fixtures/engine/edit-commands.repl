@@ -1,0 +1,35 @@
+// Units are numbered as they are made, from 1, and keep their numbers.
+let a = 1
+---
+let b = a + 1
+---
+let c = 30
+---
+// Unit 2 reads `a`, so it reruns; unit 3 does not.
+/edit 1 let a = 10
+---
+// An inserted unit takes the next number, 4, wherever it goes.
+/insert before 2 let d = a * 2
+---
+/insert after 3 c + d
+---
+// Deleting unit 3 leaves unit 5 reading a `c` nothing binds.
+/delete 3
+---
+/edit 5 d + 1
+---
+/edit 2
+fun f(x: int): int
+  ret x + 1
+end fun
+---
+// A unit keeps its kind.
+/edit 5 let e = 1
+---
+/edit 9 let z = 1
+---
+/delete 0
+---
+/insert sideways 1 a
+---
+/edit 1

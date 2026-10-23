@@ -98,10 +98,19 @@ pub enum UnitStep {
 /// One unit of the session, as the code panel shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodeUnit<'a> {
-    /// The id of the history entry the unit was typed as.
-    pub id: u64,
+    /// The unit's number, or `None` for one on its way to the engine, which
+    /// numbers it when it gets there.
+    pub number: Option<u32>,
     pub source: &'a str,
     pub step: UnitStep,
+}
+
+/// A unit of the session as the app keeps it, and what the last step did
+/// with it.
+#[derive(Debug, Clone)]
+struct SessionUnit {
+    numbered: repl::NumberedUnit,
+    step: UnitStep,
 }
 
 /// Where the renderer last put each code unit, so the selection can be
@@ -110,8 +119,8 @@ pub struct CodeUnit<'a> {
 struct CodeLayout {
     /// Lines the pane showed.
     pane_lines: usize,
-    /// Each unit's id and the lines of the content it took, from the top.
-    units: Vec<(u64, std::ops::Range<usize>)>,
+    /// Each unit's number and the lines of the content it took, from the top.
+    units: Vec<(u32, std::ops::Range<usize>)>,
 }
 
 /// One step of scrolling, in the direction the user pressed.
@@ -205,11 +214,6 @@ fn find_entry(history: &mut [HistoryEntry], id: u64) -> &mut HistoryEntry {
         .unwrap_or_else(|| panic!("a response for entry {id}, which the history has forgotten"))
 }
 
-/// Whether an entry is a script unit.
-fn is_code(entry: &HistoryEntry) -> bool {
-    matches!(entry.parse_result, Some(repl::InputParse::Command(repl::Command::Unit(_))))
-}
-
 impl HistoryEntry {
     fn new(input: String, id: u64) -> Self {
         Self {
@@ -236,9 +240,8 @@ pub enum WorkerResponse {
         id: u64,
         eval: repl::Eval,
         environment: Vec<(String, String, String)>,
-        /// The units in the engine's session once it had answered, by the
-        /// ids of the entries they were typed as.
-        session: Vec<u64>,
+        /// The units in the engine's session once it had answered.
+        session: Vec<repl::NumberedUnit>,
     },
 }
 
@@ -288,11 +291,12 @@ pub struct ReplApp<E: ReplExecutor> {
     code_scroll: ScrollState,
     /// The code as the renderer last laid it out.
     code_layout: CodeLayout,
-    /// The code unit selected, by its id, while the code panel has focus.
+    /// The code unit selected, by its number, while the code panel has focus.
     ///
-    /// Kept by id rather than position so it stays on its unit as units are
-    /// added, and is lost with the unit when a reset takes it.
-    selected_unit: Option<u64>,
+    /// A unit keeps its number, so the selection stays on its unit as units
+    /// are added and removed, and is lost with the unit when it goes or the
+    /// session is reset.
+    selected_unit: Option<u32>,
     /// How far up from the bottom of the history the view is scrolled, in
     /// lines, the same way.
     history_scroll: ScrollState,
@@ -308,15 +312,18 @@ pub struct ReplApp<E: ReplExecutor> {
     engine_dead: Option<String>,
     /// Crash modal state (contains crash message if open).
     crash_modal: Option<String>,
-    /// The units in the engine's session as it last reported them, by the
-    /// ids of their entries.
+    /// The units of the engine's session as the answers so far leave it.
     ///
-    /// The code shows these, and the history is checked against them.
-    session: Vec<u64>,
-    /// How the history and the engine's session disagreed, if they did.
+    /// The app keeps these by applying each answered command, numbering the
+    /// units it makes as the engine's session does, and checks them against
+    /// the session the engine reports with every answer.
+    units: Vec<SessionUnit>,
+    /// The number the next unit made will have.
+    next_number: u32,
+    /// How the app's units and the engine's session disagreed, if they did.
     ///
-    /// The app keeps its history by rules about what each answer did to the
-    /// session, so a disagreement is a rule gone wrong: a bug, shown as one.
+    /// A disagreement is a rule of the app's about what a command does gone
+    /// wrong: a bug, and shown as one.
     session_mismatch: Option<String>,
     /// Path to stderr log file (for displaying in crash modal).
     stderr_log_path: Option<std::path::PathBuf>,
@@ -353,7 +360,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             engine_ready: false,
             engine_dead: None,
             crash_modal: None,
-            session: Vec::new(),
+            units: Vec::new(),
+            next_number: 1,
             session_mismatch: None,
             stderr_log_path: None,
             session_path: None,
@@ -485,8 +493,25 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<(String, String, String)>) {
         let entry = find_entry(&mut self.history, id);
+        let Some(repl::InputParse::Command(command)) = entry.parse_result.C() else {
+            unreachable!("only a command is evaluated");
+        };
+        self.apply(&command, &eval);
+        let entry = find_entry(&mut self.history, id);
 
         entry.eval_result = Some(eval.C());
+
+        if eval.reset_the_session() {
+            // A runtime error or a crash empties the session, as a `/reset`
+            // does, and what came after it runs in the new one; so the history
+            // forgets the same entries a `/reset` would.
+            let _ = entry;
+            self.history.retain(|entry| entry.id > id);
+            self.crash_modal = Some(reset_message(&eval));
+            self.environment = environment;
+            self.multiline_mode = false;
+            return;
+        }
 
         match &eval {
             // A unit that did not run to its end stays in the session, so
@@ -514,18 +539,13 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::Eval::CallerInterpret(cmd) => {
                 self.handle_caller_interpret(id, cmd);
             }
-            // A runtime error or a crash empties the session, as a `/reset`
-            // does, and what came after it runs in the new one; so the history
-            // forgets the same entries a `/reset` would.
-            repl::Eval::Unit(script::Eval::ErrorReset(msg)) => {
-                let _ = entry;
-                self.history.retain(|entry| entry.id > id);
-                self.crash_modal = Some(fmt!("A runtime error: {msg}"));
+            // What each unit came to is the units' to show; the edit itself
+            // was made.
+            repl::Eval::Edited(_) => {
+                entry.status = EntryStatus::Success;
             }
-            repl::Eval::Unit(script::Eval::CrashReset(msg)) => {
-                let _ = entry;
-                self.history.retain(|entry| entry.id > id);
-                self.crash_modal = Some(fmt!("The engine panicked: {msg}"));
+            repl::Eval::Unit(script::Eval::ErrorReset(_) | script::Eval::CrashReset(_)) => {
+                unreachable!("a reset was handled above")
             }
         }
 
@@ -539,7 +559,13 @@ impl<E: ReplExecutor> ReplApp<E> {
         let entry = find_entry(&mut self.history, id);
 
         match cmd {
-            repl::ReplCommand::Unknown => bug!(),
+            repl::ReplCommand::Unknown
+            | repl::ReplCommand::Usage(_)
+            | repl::ReplCommand::Edit { .. }
+            | repl::ReplCommand::Delete { .. }
+            | repl::ReplCommand::Insert { .. } => {
+                unreachable!("the session answers {cmd:?} itself")
+            }
             repl::ReplCommand::Exit => {
                 entry.status = EntryStatus::Success;
                 self.should_exit = true;
@@ -589,25 +615,115 @@ impl<E: ReplExecutor> ReplApp<E> {
         }
     }
 
-    /// Take the engine's report of its session, and check the history holds
-    /// the same units.
+    /// Change the app's units as an answered command changed the engine's.
     ///
-    /// The units the history thinks the engine has are its code entries the
-    /// engine has answered for: the engine answers in order, so every unit it
-    /// has answered for is in the session unless an answer since took it out,
-    /// and the history forgets those.
-    fn check_session(&mut self, session: Vec<u64>) {
-        let expected: Vec<u64> = self.history.iter()
-            .filter(|entry| entry.eval_result.is_some() && is_code(entry))
-            .map(|entry| entry.id)
-            .collect();
-        if expected != session && self.session_mismatch.is_none() {
+    /// A command the engine did not carry out, or one that leaves the session
+    /// alone, changes nothing. A unit a command names and the app does not
+    /// have is a disagreement with the engine, which the report that came
+    /// with the answer shows.
+    fn apply(&mut self, command: &repl::Command, eval: &repl::Eval) {
+        use repl::ReplCommand as R;
+        if eval.reset_the_session() || matches!(eval, repl::Eval::CallerInterpret(R::Reset)) {
+            self.units.clear();
+            self.next_number = 1;
+            // The new session numbers its units from 1 again, so a selection
+            // kept would land on a different unit with the old one's number.
+            self.selected_unit = None;
+            return;
+        }
+        match (command, eval) {
+            (repl::Command::Unit(unit), repl::Eval::Unit(eval)) => {
+                self.untouch();
+                let number = self.take_number();
+                self.units.push(SessionUnit {
+                    numbered: repl::NumberedUnit { number, unit: unit.C() },
+                    step: step_of(eval),
+                });
+            }
+            (repl::Command::ReplCommand(command), repl::Eval::Edited(reports)) => {
+                match command {
+                    R::Edit { unit, source } => {
+                        if let Some(index) = self.index_of(*unit) {
+                            self.units[index].numbered.unit = source.C();
+                        }
+                    }
+                    R::Delete { unit } => {
+                        if let Some(index) = self.index_of(*unit) {
+                            self.units.remove(index);
+                        }
+                    }
+                    R::Insert { place, unit, source } => {
+                        if let Some(index) = self.index_of(*unit) {
+                            let index = match place {
+                                repl::Place::Before => index,
+                                repl::Place::After => index + 1,
+                            };
+                            let number = self.take_number();
+                            self.units.insert(index, SessionUnit {
+                                numbered: repl::NumberedUnit { number, unit: source.C() },
+                                step: UnitStep::Untouched,
+                            });
+                        }
+                    }
+                    other => unreachable!("{other:?} was answered as an edit"),
+                }
+                self.untouch();
+                for report in reports {
+                    if let Some(index) = self.index_of(report.unit) {
+                        self.units[index].step = step_of(&report.eval);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Mark every unit as left alone, at the start of a step.
+    fn untouch(&mut self) {
+        for unit in &mut self.units {
+            unit.step = UnitStep::Untouched;
+        }
+    }
+
+    fn take_number(&mut self) -> u32 {
+        let number = self.next_number;
+        self.next_number += 1;
+        number
+    }
+
+    fn index_of(&self, number: u32) -> Option<usize> {
+        self.units.iter().position(|unit| unit.numbered.number == number)
+    }
+
+    /// Check the app's units against the engine's report of its session.
+    ///
+    /// When they disagree the engine's are taken, since they are what it
+    /// will run against, and the disagreement is shown as the bug it is.
+    fn check_session(&mut self, session: Vec<repl::NumberedUnit>) {
+        if self.units.iter().map(|unit| &unit.numbered).eq(session.iter()) {
+            return;
+        }
+        if self.session_mismatch.is_none() {
+            let reported: Vec<u32> = session.iter().map(|unit| unit.number).collect();
+            let expected: Vec<u32> = self.units.iter().map(|unit| unit.numbered.number).collect();
+            let sources = if reported == expected { ", with different sources" } else { "" };
             self.session_mismatch = Some(fmt!(
-                "The engine's session holds the units typed as entries {session:?}, \
-                 and the history expected {expected:?}.",
+                "The engine's session holds units {reported:?}, and the app expected {expected:?}{sources}.",
             ));
         }
-        self.session = session;
+        let steps: Vec<(u32, UnitStep)> = self.units.iter()
+            .map(|unit| (unit.numbered.number, unit.step))
+            .collect();
+        self.next_number = self.next_number
+            .max(session.iter().map(|unit| unit.number + 1).max().unwrap_or(1));
+        self.units = session.into_iter()
+            .map(|numbered| {
+                let step = steps.iter().find(|(number, _)| *number == numbered.number)
+                    .map(|(_, step)| *step)
+                    .unwrap_or(UnitStep::Untouched);
+                SessionUnit { numbered, step }
+            })
+            .collect();
     }
 
     /// Read the session `/save` writes, for `/load`.
@@ -680,15 +796,15 @@ impl<E: ReplExecutor> ReplApp<E> {
             return;
         }
         if self.selected_unit().is_none() {
-            self.selected_unit = self.code_units().last().map(|unit| unit.id);
+            self.selected_unit = self.code_units().iter().rev().find_map(|unit| unit.number);
         }
         self.reveal_selected_unit();
     }
 
-    /// The code unit selected, if the unit is still in the session.
-    pub fn selected_unit(&self) -> Option<u64> {
-        let id = self.selected_unit?;
-        self.code_units().iter().any(|unit| unit.id == id).then_some(id)
+    /// The number of the code unit selected, if the unit is still shown.
+    pub fn selected_unit(&self) -> Option<u32> {
+        let number = self.selected_unit?;
+        self.code_units().iter().any(|unit| unit.number == Some(number)).then_some(number)
     }
 
     /// Act on a scroll key the focused code panel takes: the arrows move the
@@ -702,29 +818,30 @@ impl<E: ReplExecutor> ReplApp<E> {
                 return;
             }
         };
-        let ids: Vec<u64> = self.code_units().iter().map(|unit| unit.id).collect();
-        let Some(last) = ids.len().checked_sub(1) else {
+        // A unit on its way to the engine has no number to select it by yet.
+        let numbers: Vec<u32> = self.code_units().iter().filter_map(|unit| unit.number).collect();
+        let Some(last) = numbers.len().checked_sub(1) else {
             return;
         };
-        // A selection a reset took starts again from the newest unit.
-        let index = match self.selected_unit().and_then(|id| ids.iter().position(|unit| *unit == id)) {
+        // A selection that went with its unit starts again from the newest.
+        let index = match self.selected_unit().and_then(|number| numbers.iter().position(|unit| *unit == number)) {
             Some(index) => index.saturating_add_signed(step).min(last),
             None => last,
         };
-        self.selected_unit = Some(ids[index]);
+        self.selected_unit = Some(numbers[index]);
         self.reveal_selected_unit();
     }
 
     /// Scroll the code just far enough to show the selected unit, or its
     /// start when it is taller than the pane.
     fn reveal_selected_unit(&mut self) {
-        let Some(id) = self.selected_unit else {
+        let Some(number) = self.selected_unit else {
             return;
         };
         let layout = &self.code_layout;
         // Not laid out yet: the frame that lays it out shows the newest
         // units, and a key cannot arrive before it.
-        let Some((_, lines)) = layout.units.iter().find(|(unit, _)| *unit == id) else {
+        let Some((_, lines)) = layout.units.iter().find(|(unit, _)| *unit == number) else {
             return;
         };
         let limit = self.code_scroll.limit;
@@ -885,13 +1002,13 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Scrolling past the first unit lands on it rather than running off into
     /// nothing.
     ///
-    /// `units` is each unit's id and the lines it took, counted from the top
-    /// of the content.
+    /// `units` is each numbered unit's number and the lines it took, counted
+    /// from the top of the content.
     pub fn record_code_view(
         &mut self,
         pane_lines: usize,
         scroll_back_limit: usize,
-        units: Vec<(u64, std::ops::Range<usize>)>,
+        units: Vec<(u32, std::ops::Range<usize>)>,
     ) {
         self.code_scroll.record(pane_lines, scroll_back_limit);
         self.code_layout = CodeLayout { pane_lines, units };
@@ -947,67 +1064,71 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     /// The session's units, in order, and what each did in the last step.
     ///
-    /// **The units are the history's code entries.** The history drops what
-    /// a reset takes out of the engine's session -- everything up to a
-    /// `/reset`, a runtime error, or a crash -- and a unit that fails stays in
-    /// both, so the two hold the same units.
-    ///
-    /// **The engine says which units it has**, with every answer, and the
-    /// units on their way to it follow them. The history is checked against
-    /// what the engine says; see [`Self::session_mismatch_message`].
-    ///
     /// **They are the session as it will be once everything submitted has
-    /// been answered.** A unit is here from when it parses, before the engine
-    /// has answered, and so a `/reset` takes the units before it from when it
-    /// parses too. The history keeps them until the reset is answered, since
-    /// they are still the session until then, but no unit after the reset
-    /// will see them.
+    /// been answered**: the units the answers so far leave, then the units on
+    /// their way to the engine, which has not numbered them yet. A `/reset`
+    /// takes the units before it from when it parses, so the units typed
+    /// after it do not show appended to a session they will never see. The
+    /// history keeps those units until the reset is answered, since they are
+    /// the engine's session until then.
     ///
-    /// The last step is the last unit the engine answered for, and every unit
-    /// before it was left alone by that step.
+    /// Only appended units are guessed at. An edit, a delete or an insert
+    /// shows once the engine has answered it.
     pub fn code_units(&self) -> Vec<CodeUnit<'_>> {
         // A reset still in the history is one the engine has not answered.
         let pending_reset = self.history.iter().rposition(|entry| matches!(
             entry.parse_result,
             Some(repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Reset))),
         ));
-        let waiting = |entry: &&HistoryEntry| entry.eval_result.is_none() && is_code(entry);
-        let units: Vec<&HistoryEntry> = match pending_reset {
-            Some(reset) => self.history[reset + 1..].iter().filter(waiting).collect(),
-            // The units the engine has, then the ones on their way to it.
-            // An entry the engine has and the history does not is a
-            // mismatch, already reported, and can only be left out.
-            None => self.session.iter()
-                .filter_map(|id| self.history.iter().find(|entry| entry.id == *id))
-                .chain(self.history.iter().filter(waiting))
-                .collect(),
+        let (answered, waiting) = match pending_reset {
+            Some(reset) => (&[][..], &self.history[reset + 1..]),
+            None => (&self.units[..], &self.history[..]),
         };
-        let last_step = units.iter().rposition(|entry| entry.eval_result.is_some());
-
-        units.iter().enumerate()
-            .map(|(index, entry)| {
-                let Some(repl::InputParse::Command(repl::Command::Unit(unit))) = &entry.parse_result else {
-                    unreachable!("only code entries were kept");
-                };
-                let source = match unit {
-                    script::Unit::Fragment(source) | script::Unit::Expression(source) => source.as_str(),
-                };
-                let step = match &entry.eval_result {
-                    None => UnitStep::Pending,
-                    Some(_) if Some(index) != last_step => UnitStep::Untouched,
-                    Some(repl::Eval::Unit(eval)) => match eval {
-                        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_) => UnitStep::Ran,
-                        script::Eval::Error(_) => UnitStep::Failed,
-                        script::Eval::ReturnedEarly(_) => UnitStep::ReturnedEarly,
-                        script::Eval::Blocked { .. } => UnitStep::Blocked,
-                        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
-                            unreachable!("a reset clears the history it would be in")
-                        }
-                    },
-                    Some(other) => unreachable!("a unit was answered as a REPL command: {other:?}"),
-                };
-                CodeUnit { id: entry.id, source, step }
-            })
-            .collect()
+        let answered = answered.iter().map(|unit| CodeUnit {
+            number: Some(unit.numbered.number),
+            source: unit.numbered.unit.source(),
+            step: unit.step,
+        });
+        let waiting = waiting.iter()
+            .filter(|entry| entry.eval_result.is_none())
+            .filter_map(|entry| match &entry.parse_result {
+                Some(repl::InputParse::Command(repl::Command::Unit(unit))) => Some(CodeUnit {
+                    number: None,
+                    source: unit.source(),
+                    step: UnitStep::Pending,
+                }),
+                _ => None,
+            });
+        answered.chain(waiting).collect()
     }
+}
+
+/// What a unit's step came to, as its bar shows it.
+fn step_of(eval: &script::Eval) -> UnitStep {
+    match eval {
+        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_) => UnitStep::Ran,
+        script::Eval::Error(_) => UnitStep::Failed,
+        script::Eval::ReturnedEarly(_) => UnitStep::ReturnedEarly,
+        script::Eval::Blocked { .. } => UnitStep::Blocked,
+        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
+            unreachable!("a reset leaves no units to have a step")
+        }
+    }
+}
+
+/// What the crash modal says of an answer that reset the session.
+fn reset_message(eval: &repl::Eval) -> String {
+    let say = |eval: &script::Eval| match eval {
+        script::Eval::ErrorReset(msg) => Some(fmt!("A runtime error: {msg}")),
+        script::Eval::CrashReset(msg) => Some(fmt!("The engine panicked: {msg}")),
+        _ => None,
+    };
+    match eval {
+        repl::Eval::Unit(eval) => say(eval),
+        repl::Eval::Edited(reports) => reports.iter().find_map(|report| {
+            say(&report.eval).map(|said| fmt!("Unit {}: {said}", report.unit))
+        }),
+        _ => None,
+    }
+    .expect("only an answer that reset the session is explained")
 }

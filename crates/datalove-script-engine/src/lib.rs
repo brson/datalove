@@ -15,7 +15,7 @@ pub use engine::{Engine, ModuleErrors, OnCompileError, UnitEdit};
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
 
 /// A script unit's source, and what kind of unit it is.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Unit {
     /// Statements, whose bindings the session keeps.
     Fragment(String),
@@ -23,8 +23,20 @@ pub enum Unit {
     Expression(String),
 }
 
+impl Unit {
+    pub fn source(&self) -> &str {
+        match self {
+            Unit::Fragment(source) | Unit::Expression(source) => source,
+        }
+    }
+
+    pub fn is_expression(&self) -> bool {
+        matches!(self, Unit::Expression(_))
+    }
+}
+
 /// A binding a script fragment defined.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EvalBinding {
     /// A `let` or `const` binding.
     Value { name: String, ty: String, value: String },
@@ -34,14 +46,14 @@ pub enum EvalBinding {
     Function { name: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EvalExpr {
     pub ty: String,
     pub value: String,
 }
 
 /// What evaluating a unit came to.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Eval {
     Nothing,
     /// The bindings a script fragment defined, in source order.

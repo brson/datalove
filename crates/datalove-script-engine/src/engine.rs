@@ -438,6 +438,11 @@ impl Engine {
 
     /// The same for the reports of a re-derivation.
     fn explain_all(&self, reports: Vec<UnitEdit>) -> Vec<UnitEdit> {
+        // A unit that failed at run time took the session with it, so the
+        // units reported before it have no sources left to explain against.
+        if reports.iter().any(|report| matches!(report.eval, Eval::ErrorReset(_))) {
+            return reports;
+        }
         let sources = self.unit_sources();
         reports.into_iter()
             .map(|UnitEdit { unit, eval }| UnitEdit { unit, eval: self.explain(sources[unit], eval) })

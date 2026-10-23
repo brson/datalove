@@ -18,6 +18,7 @@ re-settled on every step. How an edit reaches the units that depend on it is
 - [The engine](#user-content-the-engine)
 - [What a line does](#user-content-what-a-line-does)
 - [Editing, not only appending](#user-content-editing-not-only-appending)
+- [Editing at the prompt](#user-content-editing-at-the-prompt)
 - [Saving and loading a session](#user-content-saving-and-loading-a-session)
 - [`script-world` runs through the engine](#user-content-script-world-runs-through-the-engine)
 - [When there is no engine](#user-content-when-there-is-no-engine)
@@ -36,9 +37,10 @@ datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
 datalove-repl/          The REPL's inputs and commands, and the UI-agnostic app
   src/lib.rs            Input classification, REPL commands, the wire types,
                         eval, load_session
+  src/session.rs        Session: an Engine and the numbers of its units
   src/batch.rs          run_source and run_script, over `---`-separated inputs
   src/app.rs            ReplApp state machine, ReplExecutor trait
-  src/executor_threaded.rs  The one executor: a worker thread owning an Engine
+  src/executor_threaded.rs  The one executor: a worker thread owning a Session
 
 datalove-script-engine/ The engine, which knows nothing of the REPL
   src/lib.rs            Unit, Eval, and the bindings an Eval reports
@@ -218,7 +220,56 @@ back. A module no unit requires is not compiled, so an edit to one reports
 nothing until something requires it. Adding and removing modules mid-session
 is not offered.
 
-## Saving and loading a session
+## Editing at the prompt
+
+Units are edited, deleted and inserted by slash commands, so an edit is typed
+like anything else and goes into the history like anything else, to be saved
+and replayed:
+
+```
+/edit N <source>
+/delete N
+/insert before N <source>
+/insert after N <source>
+```
+
+The source is whatever follows `N`, on its line and the lines after it, each
+keeping its indentation. An inserted unit is a fragment or an expression as a
+typed one would be. An edit keeps the unit's kind, since the engine has no way
+to change it, and one that would change it is an error. So is a number no
+unit has, or arguments a command does not take. None of them changes the
+session.
+
+**`N` is a number the unit is given when it is made, and keeps.** Units are
+numbered from 1 as they are appended or inserted, a number is never reused,
+and any reset starts again at 1. Positions were the other choice, counted
+from either end, and both replay correctly, since a replay rebuilds the session
+a step at a time. But the commands stay in the history to be read, and a
+position goes stale there: counted from the newest unit it changes with every
+line typed, and counted from the first it changes with every insert and delete
+before it. A number does not, and nor does an error kept in the history
+naming one. The code panel shows each unit's number in a gutter, so a command
+can be typed from what is on screen. An inserted unit's number puts it out of
+order there, which is the cost: the order the panel shows is the session's,
+and the number only names the unit. The reactive fixtures name units the same
+way, and spell an inserted one `1a`; that keeps the order readable, until two
+are inserted in the same place.
+
+**The numbers are kept beside the engine, by `Session`**, since the engine
+knows units only by position. It wraps the `Engine` and carries out every
+command that changes the session, turning a number into a position for the
+engine and the positions in what comes back -- the units an edit reached, the
+ones a `Blocked` waits on -- into numbers. It asserts after every command that
+it and the engine hold the same number of units. Both the worker and
+`run_source` drive one. It also catches a panic in the engine's edits, which,
+unlike evaluating a unit, the engine does not catch itself, and reports it as
+a crash that reset the session.
+
+An edit, a delete or an insert answers with `Eval::Edited`: what each unit it
+reached came to, by number, in the session's order. A unit that fails at run
+time among them empties the session, as one appended does, and the app treats
+the answer as that reset.
+
 
 `/save` writes the history to `repl-session.world` in the workspace root,
 which is the directory the REPL was started in, the one it looks for `local`
@@ -335,21 +386,22 @@ last step neither compiled nor ran is gray, whatever it did before. So the bar
 says what the last thing typed reached, which once units can be edited is the
 question the panel has to answer.
 
-**The engine says which units it has.** Every eval answer carries the
-session as the ids of the entries its units were typed as. The worker keeps
-those ids beside the engine and goes by the engine's own count of its units:
-a command adds one, empties the session, or leaves it alone, and anything else
-stops the worker. The code is the units the engine reports, then the units on
-their way to it. The last step is the last unit the engine answered for.
+**The app keeps its own copy of the session's units**, numbered as the
+`Session` numbers them, and changes it as each answered command changed the
+engine's: an appended unit is added and numbered, an edit, a delete or an
+insert is made, and a reset empties it. The bars come from the same answers:
+each step marks every unit untouched, and then the one appended, or the ones
+an edit reached, with what they came to. The code is these units, then the
+units on their way to the engine, which shows them without numbers since it
+has not given them any yet.
 
-**The history is checked against it.** The app keeps its history by rules
-about what each answer did to the session: a reset forgets what came before
-it, and a failed unit stays. The units the history expects the engine to have
-are its code entries the engine has answered for. When that differs from what
-the engine reports, a rule is wrong, which is a bug in the app. So it is shown
-as one, in a modal with both lists, rather than mended quietly; the code goes
-on showing the engine's units. The session tests fail on any mismatch, so a
-rule that a new command breaks shows up there first.
+**It is checked against the engine's.** Every eval answer carries the
+`Session`'s units, numbers and sources. When the app's copy differs, a rule of
+the app's about what a command does is wrong, which is a bug in the app. So it
+is shown as one, in a modal with both lists of numbers, rather than mended
+quietly, and the app takes the engine's units from then on. The session tests
+fail on any mismatch, so a rule that a new command breaks shows up there
+first.
 
 **The code is the session as it will be once everything submitted is
 answered**, not as the engine has it now. A unit shows from when it parses,
@@ -357,16 +409,18 @@ before it runs, so a `/reset` has to take the units before it from when it
 parses too, or the units typed after it show appended to the session they will
 never see. The history keeps the old units until the engine answers the reset,
 since they are the engine's session until then, and `code_units` shows only
-the units after the last reset still in it. That is the one guess the code
-makes, and the answer to the reset settles it. `/load` gets this for nothing: it is a `/reset`
+the units after the last reset still in it. Appended units and resets are the
+only guesses the code makes: an edit, a delete or an insert shows once it is
+answered. `/load` gets this for nothing: it is a `/reset`
 and the saved units, replayed together.
 
 **While the code panel has focus, one unit is selected**, its source in the
 yellow that marks the tab shown, and Up and Down move between units. Focusing
 the panel selects the newest unit, or the one selected before if it is still
-there. The selection is kept by the unit's history id, so units added after
-it leave it where it was and a reset that takes the unit takes the selection
-too. It is what an edit to a unit will act on.
+there. The selection is kept by the unit's number, so units added or removed
+around it leave it where it was. A reset clears it, since the new session
+numbers from 1 again and the old number would land on a different unit. It is
+what an edit made from the panel will act on.
 
 ### Tabs
 
@@ -440,15 +494,22 @@ all.
   and the linked riders the binary actually ships. `BLESS=1` updates them.
   They are the engine's behaviour as typed at the REPL, slash commands and
   all, which is why they stay here.
-- **session_tests** -- `/save` and `--load` through the app and a real
-  engine on its worker thread: a saved history replays to the same outcomes
-  and environment, and saving it again writes the same file.
+- **session_tests** -- `/save`, `--load` and `/load` through the app and a
+  real engine on its worker thread: a saved history replays to the same
+  outcomes and environment, saving it again writes the same file, and a
+  session edited, inserted into and deleted from loads back to the same
+  numbered units. A mismatch between the app's units and the engine's fails
+  any of them.
+- **command_tests** -- how `/edit`, `/delete` and `/insert` are read, sources
+  over several lines, comments before a command, and the usage of each.
 - **app_tests** -- the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
   arriving after a later input, a crash reset, the multiline round trip, the
   engine reporting itself ready or dead, the code units and what the last
-  step did with each, the tab input selects, scrolling each pane, and what
-  `/save` writes.
+  step did with each, edits applied when answered, a mismatch reported, the
+  tab input selects, scrolling each pane, and what `/save` writes. The mock
+  fills in the session an answer reports, as the engine would, for appends
+  and resets; a test that edits gives it explicitly.
 
 `crates/datalove-script-engine/tests/`:
 
@@ -474,8 +535,12 @@ setup and the loop together.
   [issues.md](issues.md#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines).
 - No cancellation. `WorkerRequest::Shutdown` is never sent, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
-- `/exit`, `/help`, `/reset`, `/save` and `/load` are the only commands, and
-  help prints the word "help".
+- `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete` and
+  `/insert` are the only commands, and help prints the word "help".
+- A command whose source spans lines cannot be typed: an input starting with
+  the sigil is a command on its first line. Only a replay gives one over
+  several lines.
+- An edit cannot change a unit from statements to an expression or back.
 - Errors are plain strings with no rendered diagnostics, and type errors are
   their `Debug` form, though `ScriptCompiler` exposes the spans needed for
   better. See

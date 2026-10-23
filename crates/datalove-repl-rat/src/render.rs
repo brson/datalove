@@ -119,6 +119,33 @@ fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
     }
 }
 
+/// One line saying what a unit an edit reached came to.
+fn report_line(report: &repl::UnitReport) -> Line<'_> {
+    let (mark, color, said) = match &report.eval {
+        script::Eval::Nothing => ("✓", Color::Green, "ran".S()),
+        script::Eval::Success(bindings) => {
+            let bound: Vec<String> = bindings.iter().map(|binding| match binding {
+                script::EvalBinding::Function { name } => fmt!("fun {name}"),
+                script::EvalBinding::Value { name, value, .. }
+                | script::EvalBinding::Slot { name, value, .. } => fmt!("{name} = {value}"),
+            }).collect();
+            ("✓", Color::Green, bound.join(", "))
+        }
+        script::Eval::SuccessExpr(expr) => ("⇒", Color::Green, fmt!("{} = {}", expr.ty, expr.value)),
+        script::Eval::Error(e) => ("✗", Color::Red, fmt!("error: {e}")),
+        script::Eval::ReturnedEarly(returned) => ("✗", Color::Yellow, fmt!("returned early: {returned}")),
+        script::Eval::Blocked { on } => ("✗", Color::Magenta, fmt!("not run: it reads from units {on:?}")),
+        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
+            unreachable!("a reset takes the entry with it")
+        }
+    };
+    Line::from(vec![
+        ratatui::text::Span::styled(fmt!("  {mark} "), Style::default().fg(color)),
+        ratatui::text::Span::styled(fmt!("unit {}: ", report.unit), Style::default().fg(Color::DarkGray)),
+        ratatui::text::Span::styled(said, Style::default().fg(color)),
+    ])
+}
+
 /// The shape of a pane scrolled up from its bottom, the code or the history,
 /// as a frame laid it out.
 ///
@@ -160,7 +187,7 @@ fn render_code<E: ReplExecutor>(
     f: &mut Frame,
     repl: &ReplApp<E>,
     area: Rect,
-) -> (ScrollBackView, Vec<(u64, std::ops::Range<usize>)>) {
+) -> (ScrollBackView, Vec<(u32, std::ops::Range<usize>)>) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(panel_border(repl, Panel::Code))
@@ -197,6 +224,11 @@ fn render_code<E: ReplExecutor>(
         _ => None,
     };
     let separator = "─".repeat(area.width.saturating_sub(2) as usize);
+    // Every unit's number in a column as wide as the widest.
+    let number_width = units.iter()
+        .filter_map(|unit| unit.number)
+        .max()
+        .map_or(1, |number| number.to_string().len());
     let mut unit_lines = Vec::new();
     for (index, unit) in units.iter().enumerate() {
         if index > 0 {
@@ -206,19 +238,28 @@ fn render_code<E: ReplExecutor>(
             )));
         }
         let bar = Style::default().fg(step_color(unit.step));
-        let text = if selected == Some(unit.id) {
+        let text = if selected.is_some() && selected == unit.number {
             Style::default().fg(HIGHLIGHT)
         } else {
             Style::default()
         };
         let start = lines.len();
-        for line in unit.source.lines() {
+        for (line_index, line) in unit.source.lines().enumerate() {
+            // The number on the unit's first line; a unit on its way to the
+            // engine has none yet.
+            let number = match (line_index, unit.number) {
+                (0, Some(number)) => fmt!("{number:>number_width$} "),
+                _ => " ".repeat(number_width + 1),
+            };
             lines.push(Line::from(vec![
+                ratatui::text::Span::styled(number, Style::default().fg(Color::DarkGray)),
                 ratatui::text::Span::styled("▌ ", bar),
                 ratatui::text::Span::styled(line, text),
             ]));
         }
-        unit_lines.push((unit.id, start..lines.len()));
+        if let Some(number) = unit.number {
+            unit_lines.push((number, start..lines.len()));
+        }
     }
 
     let view = render_scrolled_back(f, lines, block, area, repl.code_scroll_back());
@@ -326,6 +367,15 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect,
                                 ratatui::text::Span::raw(" = "),
                                 ratatui::text::Span::raw(&eval_expr.value),
                             ]));
+                        }
+                        repl::Eval::Edited(reports) => {
+                            if reports.is_empty() {
+                                lines.push(Line::from(vec![
+                                    ratatui::text::Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+                                    ratatui::text::Span::raw("no other unit reran"),
+                                ]));
+                            }
+                            lines.extend(reports.iter().map(report_line));
                         }
                         repl::Eval::Saved { path, inputs } => {
                             lines.push(Line::from(vec![

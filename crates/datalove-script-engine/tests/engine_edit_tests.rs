@@ -751,3 +751,21 @@ fn a_write_is_an_overwrite_only_when_it_needs_nothing_the_binding_held() {
         engine.truncate_units(setup);
     }
 }
+
+/// **A runtime error in a rerun empties the session**, as one in an appended
+/// unit does, and the engine goes on from empty.
+#[test]
+fn a_runtime_error_in_a_rerun_empties_the_session() {
+    let mut engine = engine();
+    run(&mut engine, "fun down(s: string): u32\n  let t = s@\n  ret icall add_wrapping_u32(down(t), : u32 / 1)\nend fun\n\
+        ---\nlet a = 1\n---\nlet b = a");
+
+    let reports = engine.edit_unit(1, "let a = down(\"abc\")");
+
+    let last = reports.last().expect("the edited unit is reported");
+    assert_eq!(last.unit, 1);
+    assert!(matches!(last.eval, Eval::ErrorReset(_)), "{:?}", last.eval);
+    assert_eq!(engine.unit_count(), 0);
+    run(&mut engine, "let c = 3");
+    assert_eq!(value_of(&mut engine, "c"), "3");
+}

@@ -1,0 +1,600 @@
+[
+  {
+    "input": "// Units are numbered as they are made, from 1, and keep their numbers.\nlet a = 1",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "// Units are numbered as they are made, from 1, and keep their numbers.\nlet a = 1"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "a",
+              "ty": "int",
+              "value": "1"
+            }
+          }
+        ]
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "let b = a + 1",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "let b = a + 1"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "b",
+              "ty": "int",
+              "value": "2"
+            }
+          }
+        ]
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "1"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      }
+    ]
+  },
+  {
+    "input": "let c = 30",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "let c = 30"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Success": [
+          {
+            "Value": {
+              "name": "c",
+              "ty": "int",
+              "value": "30"
+            }
+          }
+        ]
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "1"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "30"
+      }
+    ]
+  },
+  {
+    "input": "// Unit 2 reads `a`, so it reruns; unit 3 does not.\n/edit 1 let a = 10",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Edit": {
+            "unit": 1,
+            "source": {
+              "Fragment": "let a = 10"
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "Edited": [
+        {
+          "unit": 1,
+          "eval": {
+            "Success": [
+              {
+                "Value": {
+                  "name": "a",
+                  "ty": "int",
+                  "value": "10"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "unit": 2,
+          "eval": {
+            "Success": [
+              {
+                "Value": {
+                  "name": "b",
+                  "ty": "int",
+                  "value": "11"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "11"
+      },
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "30"
+      }
+    ]
+  },
+  {
+    "input": "// An inserted unit takes the next number, 4, wherever it goes.\n/insert before 2 let d = a * 2",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Insert": {
+            "place": "Before",
+            "unit": 2,
+            "source": {
+              "Fragment": "let d = a * 2"
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "Edited": [
+        {
+          "unit": 4,
+          "eval": {
+            "Success": [
+              {
+                "Value": {
+                  "name": "d",
+                  "ty": "int",
+                  "value": "20"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "unit": 2,
+          "eval": {
+            "Success": [
+              {
+                "Value": {
+                  "name": "b",
+                  "ty": "int",
+                  "value": "11"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "unit": 3,
+          "eval": {
+            "Success": [
+              {
+                "Value": {
+                  "name": "c",
+                  "ty": "int",
+                  "value": "30"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "11"
+      },
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "30"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      }
+    ]
+  },
+  {
+    "input": "/insert after 3 c + d",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Insert": {
+            "place": "After",
+            "unit": 3,
+            "source": {
+              "Expression": "c + d"
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "Edited": [
+        {
+          "unit": 5,
+          "eval": {
+            "SuccessExpr": {
+              "ty": "int",
+              "value": "50"
+            }
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "11"
+      },
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "30"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      }
+    ]
+  },
+  {
+    "input": "// Deleting unit 3 leaves unit 5 reading a `c` nothing binds.\n/delete 3",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Delete": {
+            "unit": 3
+          }
+        }
+      }
+    },
+    "eval": {
+      "Edited": [
+        {
+          "unit": 5,
+          "eval": {
+            "Error": "UnresolvedName(\"c\")"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "11"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      }
+    ]
+  },
+  {
+    "input": "/edit 5 d + 1",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Edit": {
+            "unit": 5,
+            "source": {
+              "Expression": "d + 1"
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "Edited": [
+        {
+          "unit": 5,
+          "eval": {
+            "SuccessExpr": {
+              "ty": "int",
+              "value": "21"
+            }
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "11"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      }
+    ]
+  },
+  {
+    "input": "/edit 2\nfun f(x: int): int\n  ret x + 1\nend fun",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Edit": {
+            "unit": 2,
+            "source": {
+              "Fragment": "fun f(x: int): int\n  ret x + 1\nend fun"
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "Edited": [
+        {
+          "unit": 2,
+          "eval": {
+            "Success": [
+              {
+                "Function": {
+                  "name": "f"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  },
+  {
+    "input": "// A unit keeps its kind.\n/edit 5 let e = 1",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Edit": {
+            "unit": 5,
+            "source": {
+              "Fragment": "let e = 1"
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "CommandError": "unit 5 is an expression, and the edit is statements; a unit keeps its kind"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  },
+  {
+    "input": "/edit 9 let z = 1",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Edit": {
+            "unit": 9,
+            "source": {
+              "Fragment": "let z = 1"
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "CommandError": "there is no unit 9"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  },
+  {
+    "input": "/delete 0",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Delete": {
+            "unit": 0
+          }
+        }
+      }
+    },
+    "eval": {
+      "CommandError": "there is no unit 0"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  },
+  {
+    "input": "/insert sideways 1 a",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Usage": "usage: /insert before|after N <source>"
+        }
+      }
+    },
+    "eval": {
+      "CommandError": "usage: /insert before|after N <source>"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  },
+  {
+    "input": "/edit 1",
+    "parse": {
+      "Command": {
+        "ReplCommand": {
+          "Usage": "usage: /edit N <source>"
+        }
+      }
+    },
+    "eval": {
+      "CommandError": "usage: /edit N <source>"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "10"
+      },
+      {
+        "name": "d",
+        "ty": "int",
+        "value": "20"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  }
+]

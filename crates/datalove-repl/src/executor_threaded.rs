@@ -6,6 +6,7 @@ use crate::{Input, Command};
 use datalove_datafun as datafun;
 use datafun::pipeline::{PackageLibrary, SystemLibrary};
 use crate::script::Engine;
+use crate::Session;
 use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 use std::thread;
 
@@ -48,7 +49,7 @@ impl ThreadedExecutor {
             match start_engine(sys(), local) {
                 Ok(engine) => {
                     let _ = worker_tx.send(WorkerResponse::EngineReady);
-                    worker_thread(engine, worker_rx, worker_tx);
+                    worker_thread(Session::new(engine), worker_rx, worker_tx);
                 }
                 Err(message) => {
                     let _ = worker_tx.send(WorkerResponse::EngineDead { message });
@@ -125,12 +126,10 @@ impl ReplExecutor for ThreadedExecutor {
 
 /// Worker thread that handles parse and eval operations.
 fn worker_thread(
-    mut engine: Engine,
+    mut session: Session,
     rx: Receiver<WorkerRequest>,
     tx: Sender<WorkerResponse>,
 ) {
-    // The ids of the entries the engine's units were typed as, in order.
-    let mut session: Vec<u64> = Vec::new();
     loop {
         match rx.recv() {
             Ok(WorkerRequest::Parse { id, input }) => {
@@ -143,23 +142,17 @@ fn worker_thread(
             }
             Ok(WorkerRequest::Eval { id, command }) => {
                 // Evaluate the command.
-                let eval = crate::eval(&mut engine, command);
+                let eval = session.eval(command);
 
                 // Get updated environment.
-                let environment = engine.get_environment();
+                let environment = session.engine().get_environment();
 
-                // A command adds a unit, empties the session, or leaves it
-                // alone, and the engine's count says which.
-                let units = engine.unit_count();
-                if units == 0 {
-                    session.clear();
-                } else if units == session.len() + 1 {
-                    session.push(id);
-                } else {
-                    assert_eq!(units, session.len(), "entry {id} took the session from {} units to {units}", session.len());
-                }
-
-                let _ = tx.send(WorkerResponse::EvalResult { id, eval, environment, session: session.C() });
+                let _ = tx.send(WorkerResponse::EvalResult {
+                    id,
+                    eval,
+                    environment,
+                    session: session.units().to_vec(),
+                });
             }
             Ok(WorkerRequest::Shutdown) => {
                 // todo actually send this

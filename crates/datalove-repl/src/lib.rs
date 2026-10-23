@@ -7,7 +7,7 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 pub use datalove_script_engine as script;
-use script::{Engine, Unit};
+use script::Unit;
 
 pub mod app;
 
@@ -18,6 +18,9 @@ pub use executor_threaded::ThreadedExecutor;
 
 mod batch;
 pub use batch::{EnvBinding, InputResult, run_script, run_source};
+
+mod session;
+pub use session::{NumberedUnit, Session};
 
 // The system library a driver supplies to the engine.
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
@@ -55,7 +58,7 @@ pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
             WorldfileSection::ScriptFragment { .. } => Command::Unit(Unit::Fragment(input.C())),
             WorldfileSection::ScriptExpr { .. } => Command::Unit(Unit::Expression(input.C())),
             WorldfileSection::ReplCommand { .. } => {
-                if !input.starts_with(REPL_COMMAND_SIGIL) {
+                if !matches!(classify_input(&input), InputKind::ReplCommand) {
                     bail!("{} holds a REPL command that is not one: '{input}'", path.display());
                 }
                 match ReplCommand::named(&input) {
@@ -98,6 +101,8 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ReplCommand {
     Unknown,
+    /// A command named with arguments it does not take, and how it is used.
+    Usage(String),
     Exit,
     Help,
     /// Start the session again, forgetting everything it defined.
@@ -107,6 +112,21 @@ pub enum ReplCommand {
     /// Start the session again as [`SESSION_FILE_NAME`] has it, as
     /// `repl --load` does.
     Load,
+    /// Replace the source of the unit with this number, keeping its kind:
+    /// `/edit N <source>`.
+    Edit { unit: u32, source: Unit },
+    /// Remove the unit with this number: `/delete N`.
+    Delete { unit: u32 },
+    /// Add a unit before or after the one with this number:
+    /// `/insert before N <source>` or `/insert after N <source>`.
+    Insert { place: Place, unit: u32, source: Unit },
+}
+
+/// Which side of a unit `/insert` puts the new one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Place {
+    Before,
+    After,
 }
 
 /// What evaluating a command came to.
@@ -120,23 +140,33 @@ pub enum Eval {
     CommandError(String),
     /// The history was saved, as this many inputs, to this path.
     Saved { path: String, inputs: usize },
+    /// What each unit an `/edit`, `/delete` or `/insert` reached came to, in
+    /// the session's order.
+    Edited(Vec<UnitReport>),
 }
 
-/// Evaluate a command against the engine.
-///
-/// A REPL command is the app's to carry out, except for what it asks of the
-/// engine: a `/reset` empties the session here, in the order the commands
-/// came in, so a unit submitted after it runs in the new session.
-pub fn eval(engine: &mut Engine, command: Command) -> Eval {
-    match command {
-        Command::Unit(unit) => Eval::Unit(engine.eval(unit)),
-        Command::ReplCommand(ReplCommand::Unknown) => Eval::CommandError("unknown command".S()),
-        Command::ReplCommand(ReplCommand::Reset) => {
-            engine.reset();
-            Eval::CallerInterpret(ReplCommand::Reset)
+impl Eval {
+    /// Whether the session is empty after this, as after a runtime error or
+    /// a crash.
+    pub fn reset_the_session(&self) -> bool {
+        let resets = |eval: &script::Eval| {
+            matches!(eval, script::Eval::ErrorReset(_) | script::Eval::CrashReset(_))
+        };
+        match self {
+            Eval::Unit(eval) => resets(eval),
+            Eval::Edited(reports) => reports.iter().any(|report| resets(&report.eval)),
+            _ => false,
         }
-        Command::ReplCommand(command) => Eval::CallerInterpret(command),
     }
+}
+
+/// What one unit an edit reached came to.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnitReport {
+    /// The unit's number.
+    pub unit: u32,
+    /// What it came to. A `Blocked` names the units it waits on by number.
+    pub eval: script::Eval,
 }
 
 /// Read what an input is.
@@ -171,16 +201,67 @@ fn parse_input_multiline(input: &str) -> InputParse {
 
 impl ReplCommand {
     /// The command an input starting with the sigil names.
+    ///
+    /// A unit's source is whatever follows the unit's number, on that line
+    /// and the lines after it.
     fn named(input: &str) -> ReplCommand {
-        match &input.trim()[1..] {
-            "exit" => ReplCommand::Exit,
-            "help" => ReplCommand::Help,
-            "reset" => ReplCommand::Reset,
-            "save" => ReplCommand::Save,
-            "load" => ReplCommand::Load,
+        let (name, args) = split_word(&from_first_code_line(input)[1..]);
+        let usage = |usage: &str| ReplCommand::Usage(fmt!("usage: {usage}"));
+        let bare = |command: ReplCommand| match args.is_empty() {
+            true => command,
+            false => usage(&fmt!("/{name}")),
+        };
+        match name {
+            "exit" => bare(ReplCommand::Exit),
+            "help" => bare(ReplCommand::Help),
+            "reset" => bare(ReplCommand::Reset),
+            "save" => bare(ReplCommand::Save),
+            "load" => bare(ReplCommand::Load),
+            "edit" => match numbered_source(args) {
+                Some((unit, source)) => ReplCommand::Edit { unit, source },
+                None => usage("/edit N <source>"),
+            },
+            "delete" => match args.parse() {
+                Ok(unit) => ReplCommand::Delete { unit },
+                Err(_) => usage("/delete N"),
+            },
+            "insert" => {
+                let (place, rest) = split_word(args);
+                let place = match place {
+                    "before" => Place::Before,
+                    "after" => Place::After,
+                    _ => return usage("/insert before|after N <source>"),
+                };
+                match numbered_source(rest) {
+                    Some((unit, source)) => ReplCommand::Insert { place, unit, source },
+                    None => usage("/insert before|after N <source>"),
+                }
+            }
             _ => ReplCommand::Unknown,
         }
     }
+}
+
+/// The first word of `s`, and the rest after the whitespace following it.
+fn split_word(s: &str) -> (&str, &str) {
+    let s = s.trim_start();
+    let end = s.find(char::is_whitespace).unwrap_or(s.len());
+    (&s[..end], s[end..].trim_start())
+}
+
+/// A unit number and the source that follows it, read as a unit is.
+fn numbered_source(args: &str) -> Option<(u32, Unit)> {
+    let (number, source) = split_word(args);
+    let number = number.parse().ok()?;
+    let source = source.trim_end();
+    let unit = match classify_input(source) {
+        InputKind::Whitespace | InputKind::ReplCommand => return None,
+        InputKind::Expression => Unit::Expression(source.S()),
+        InputKind::OnelineStatement | InputKind::MultilineStatement | InputKind::OpenBraceTree => {
+            Unit::Fragment(source.S())
+        }
+    };
+    Some((number, unit))
 }
 
 impl Command {
@@ -212,8 +293,7 @@ fn classify_input(input: &str) -> InputKind {
     // reader means by `// note to self` is the comment.
     let code = first_code_line(input);
     let is_whitespace = code.is_empty();
-    let is_repl_command = !starts_a_comment(input.trim())
-        && input.trim().starts_with(REPL_COMMAND_SIGIL);
+    let is_repl_command = !starts_a_comment(code) && code.starts_with(REPL_COMMAND_SIGIL);
     // Every word a statement can start with, as the parser's statement
     // dispatch has them. None of them starts an expression, so an input
     // starting with one is a statement; one that opens a block reads on to
@@ -260,10 +340,24 @@ fn starts_a_comment(line: &str) -> bool {
 /// One spanning several would need the nesting the lexer tracks, and the
 /// answer for it is the same either way: whatever it is, it is not a command.
 fn first_code_line(input: &str) -> &str {
-    input.lines()
-        .map(|line| line.trim())
-        .find(|line| !line.is_empty() && !is_whole_line_comment(line))
-        .unwrap_or("")
+    from_first_code_line(input).lines().next().unwrap_or("").trim()
+}
+
+/// The input from its first line of code on, without the blank lines and
+/// comments before it; a command's arguments are read from here.
+fn from_first_code_line(input: &str) -> &str {
+    let mut rest = input;
+    loop {
+        let (line, after) = rest.split_once('\n').unwrap_or((rest, ""));
+        let line = line.trim();
+        if !line.is_empty() && !is_whole_line_comment(line) {
+            return rest.trim();
+        }
+        if after.is_empty() {
+            return "";
+        }
+        rest = after;
+    }
 }
 
 /// True if a line is a comment and nothing else.

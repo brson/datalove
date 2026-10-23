@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use serde::Serialize;
 
 use crate::script::Engine;
-use crate::{Eval, Input, InputParse, PackageLibrary, SystemLibrary};
+use crate::{Eval, Input, InputParse, PackageLibrary, Session, SystemLibrary};
 
 /// One input's parse and eval, and the environment it left behind.
 #[derive(Debug, Serialize)]
@@ -29,7 +29,7 @@ pub struct EnvBinding {
 /// several lines is submitted the way the UI submits a multiline entry, so
 /// definitions that span lines are evaluated rather than left waiting for
 /// more input.
-pub fn run_source(engine: &mut Engine, source: &str) -> Vec<InputResult> {
+pub fn run_source(session: &mut Session, source: &str) -> Vec<InputResult> {
     let mut results = Vec::new();
 
     for section in source.split("\n---\n") {
@@ -46,10 +46,10 @@ pub fn run_source(engine: &mut Engine, source: &str) -> Vec<InputResult> {
 
         let parse = crate::parse_input(repl_input);
         let eval = match &parse {
-            InputParse::Command(command) => Some(crate::eval(engine, command.C())),
+            InputParse::Command(command) => Some(session.eval(command.C())),
             _ => None,
         };
-        let environment = engine.get_environment()
+        let environment = session.engine().get_environment()
             .into_iter()
             .map(|(name, ty, value)| EnvBinding { name, ty, value })
             .collect();
@@ -68,11 +68,11 @@ pub fn run_script(
     local: Option<PackageLibrary>,
     script_path: &std::path::Path,
 ) -> AnyResult<()> {
-    let mut engine = Engine::with_local(sys, local)?;
+    let mut session = Session::new(Engine::with_local(sys, local)?);
     let contents = std::fs::read_to_string(script_path)
         .context("failed to read script file")?;
 
-    for result in run_source(&mut engine, &contents) {
+    for result in run_source(&mut session, &contents) {
         println!("{}", rmx::serde_json::to_string(&result)?);
     }
 

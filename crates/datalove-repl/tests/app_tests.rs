@@ -17,9 +17,13 @@ struct MockState {
     parses: Vec<(u64, repl::Input)>,
     evals: Vec<u64>,
     commands: Vec<repl::Command>,
-    /// The units the pretend engine's session has, by entry id.
-    session: Vec<u64>,
-    responses: VecDeque<WorkerResponse>,
+    /// Each command submitted for evaluation, by entry id.
+    submitted: std::collections::HashMap<u64, repl::Command>,
+    /// The units the pretend engine's session has, and the next number.
+    session: Vec<repl::NumberedUnit>,
+    next_number: u32,
+    /// Responses, each with whether its session is to be filled in.
+    responses: VecDeque<(WorkerResponse, bool)>,
 }
 
 /// Executor that records what the app submits and replays scripted responses.
@@ -36,34 +40,51 @@ impl ReplExecutor for MockExecutor {
     fn submit_eval(&mut self, id: u64, command: repl::Command) {
         let mut state = self.state.borrow_mut();
         state.evals.push(id);
-        state.commands.push(command);
+        state.commands.push(command.clone());
+        state.submitted.insert(id, command);
     }
 
+    /// The session a queued eval result reports is filled in here, when the
+    /// app takes it, since only by then has the app submitted the command it
+    /// answers. The pretend engine adds an appended unit, numbering it, and
+    /// empties the session at any reset. Anything else leaves it alone, and a
+    /// test that edits gives the session explicitly with `queue_raw`.
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {
-        self.state.borrow_mut().responses.pop_front()
+        let mut state = self.state.borrow_mut();
+        let (mut response, fill) = state.responses.pop_front()?;
+        if let WorkerResponse::EvalResult { id, eval, session, .. } = &mut response {
+            if fill {
+                let command = state.submitted.get(id).cloned()
+                    .unwrap_or_else(|| panic!("entry {id} was answered without being submitted"));
+                if eval.reset_the_session() || matches!(eval, repl::Eval::CallerInterpret(repl::ReplCommand::Reset)) {
+                    state.session.clear();
+                    state.next_number = 1;
+                } else if let (repl::Command::Unit(unit), repl::Eval::Unit(_)) = (command, &*eval) {
+                    let number = state.next_number.max(1);
+                    state.next_number = number + 1;
+                    state.session.push(repl::NumberedUnit { number, unit });
+                }
+                *session = state.session.clone();
+            } else {
+                state.next_number = session.iter().map(|unit| unit.number + 1).max().unwrap_or(1);
+                state.session = session.clone();
+            }
+        }
+        Some(response)
     }
 }
 
 impl MockExecutor {
-    /// Queue a response, with the session an engine would report in an eval
-    /// result: a unit is added to it, and a reset of any kind empties it.
-    fn queue(&self, mut response: WorkerResponse) {
-        let mut state = self.state.borrow_mut();
-        if let WorkerResponse::EvalResult { id, eval, session, .. } = &mut response {
-            match eval {
-                repl::Eval::Unit(repl::script::Eval::ErrorReset(_) | repl::script::Eval::CrashReset(_))
-                | repl::Eval::CallerInterpret(repl::ReplCommand::Reset) => state.session.clear(),
-                repl::Eval::Unit(_) => state.session.push(*id),
-                _ => {}
-            }
-            *session = state.session.clone();
-        }
-        state.responses.push_back(response);
+    /// Queue a response, an eval result's session to be filled in as the
+    /// pretend engine has it.
+    fn queue(&self, response: WorkerResponse) {
+        self.state.borrow_mut().responses.push_back((response, true));
     }
 
-    /// Queue a response as it is, session and all.
+    /// Queue a response as it is, session and all, which the pretend engine
+    /// then has.
     fn queue_raw(&self, response: WorkerResponse) {
-        self.state.borrow_mut().responses.push_back(response);
+        self.state.borrow_mut().responses.push_back((response, false));
     }
 
     fn evals(&self) -> Vec<u64> {
@@ -708,9 +729,9 @@ fn code_units_are_the_units_and_what_the_last_step_did() {
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.code_units(), vec![
-        CodeUnit { id: 0, source: "let a = 1", step: UnitStep::Ran },
-        CodeUnit { id: 2, source: "let b = c", step: UnitStep::Pending },
-        CodeUnit { id: 3, source: "a", step: UnitStep::Pending },
+        CodeUnit { number: Some(1), source: "let a = 1", step: UnitStep::Ran },
+        CodeUnit { number: None, source: "let b = c", step: UnitStep::Pending },
+        CodeUnit { number: None, source: "a", step: UnitStep::Pending },
     ]);
 
     executor.queue(WorkerResponse::EvalResult {
@@ -817,6 +838,12 @@ fn code_scrolls_back_from_the_newest_unit() {
 
 /// An app holding these units, all run.
 fn app_with_units(sources: &[&str]) -> ReplApp<MockExecutor> {
+    app_and_executor_with_units(sources).0
+}
+
+/// The same, and the executor to answer it with, whose next entry id is the
+/// number of units.
+fn app_and_executor_with_units(sources: &[&str]) -> (ReplApp<MockExecutor>, MockExecutor) {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
     for (id, source) in sources.iter().enumerate() {
@@ -825,7 +852,7 @@ fn app_with_units(sources: &[&str]) -> ReplApp<MockExecutor> {
         executor.queue(evaluated_let(id as u64, "x"));
     }
     app.poll_results();
-    app
+    (app, executor)
 }
 
 /// Focusing the code selects its newest unit, and the arrows move between
@@ -837,21 +864,21 @@ fn the_arrows_move_between_code_units() {
 
     app.focus_prev();
     assert_eq!(app.focus(), Panel::Code);
-    assert_eq!(app.selected_unit(), Some(2));
+    assert_eq!(app.selected_unit(), Some(3));
 
     app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.selected_unit(), Some(2));
+    app.move_in_code(Scroll::LineUp);
+    app.move_in_code(Scroll::LineUp);
     assert_eq!(app.selected_unit(), Some(1));
-    app.move_in_code(Scroll::LineUp);
-    app.move_in_code(Scroll::LineUp);
-    assert_eq!(app.selected_unit(), Some(0));
 
     app.move_in_code(Scroll::LineDown);
-    assert_eq!(app.selected_unit(), Some(1));
+    assert_eq!(app.selected_unit(), Some(2));
 
     // Leaving and coming back keeps the unit selected.
     app.focus_next();
     app.focus_prev();
-    assert_eq!(app.selected_unit(), Some(1));
+    assert_eq!(app.selected_unit(), Some(2));
 }
 
 /// A reset takes the selected unit with it, and the arrows start again from
@@ -865,7 +892,7 @@ fn a_reset_loses_the_selection() {
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     app.focus_prev();
-    assert_eq!(app.selected_unit(), Some(0));
+    assert_eq!(app.selected_unit(), Some(1));
 
     app.submit_input("/reset".to_string());
     app.submit_input("let b = 1".to_string());
@@ -881,8 +908,9 @@ fn a_reset_loses_the_selection() {
     app.poll_results();
     assert_eq!(app.selected_unit(), None);
 
+    // The new session numbers from 1 again.
     app.move_in_code(Scroll::LineUp);
-    assert_eq!(app.selected_unit(), Some(2));
+    assert_eq!(app.selected_unit(), Some(1));
 }
 
 /// Moving the selection scrolls the code just far enough to show the unit,
@@ -892,19 +920,19 @@ fn the_selected_unit_is_scrolled_into_view() {
     let mut app = app_with_units(&["a", "b", "c", "d"]);
     // Four three-line units with a rule between each, fifteen lines, in a
     // five-line pane: ten lines can be scrolled.
-    app.record_code_view(5, 10, vec![(0, 0..3), (1, 4..7), (2, 8..11), (3, 12..15)]);
+    app.record_code_view(5, 10, vec![(1, 0..3), (2, 4..7), (3, 8..11), (4, 12..15)]);
     app.focus_prev();
-    assert_eq!(app.selected_unit(), Some(3));
+    assert_eq!(app.selected_unit(), Some(4));
     assert_eq!(app.code_scroll_back(), 0);
 
-    // Unit 2 ends at line 11, inside the view of lines 10 to 15; its start
+    // Unit 3 ends at line 11, inside the view of lines 10 to 15; its start
     // is not, so the view moves up to it.
     app.move_in_code(Scroll::LineUp);
     assert_eq!(app.code_scroll_back(), 2);
 
     app.move_in_code(Scroll::LineUp);
     app.move_in_code(Scroll::LineUp);
-    assert_eq!(app.selected_unit(), Some(0));
+    assert_eq!(app.selected_unit(), Some(1));
     assert_eq!(app.code_scroll_back(), 10);
 
     // Back down, the view follows the unit's end.
@@ -914,7 +942,7 @@ fn the_selected_unit_is_scrolled_into_view() {
 
     app.move_in_code(Scroll::PageDown);
     assert_eq!(app.code_scroll_back(), 0);
-    assert_eq!(app.selected_unit(), Some(2));
+    assert_eq!(app.selected_unit(), Some(3));
 }
 
 /// `/load` starts the session again as the saved one: a reset, then the saved
@@ -1025,7 +1053,7 @@ fn a_pending_reset_takes_the_code_before_it() {
     executor.queue(parsed_statement(2, "let b = 2"));
     app.poll_results();
     let units = app.code_units();
-    assert_eq!(units, vec![CodeUnit { id: 2, source: "let b = 2", step: UnitStep::Pending }]);
+    assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", step: UnitStep::Pending }]);
     // The history keeps the units the engine still has.
     assert_eq!(app.history().len(), 3);
 }
@@ -1051,14 +1079,124 @@ fn a_session_the_history_does_not_hold_is_reported() {
     let WorkerResponse::EvalResult { eval, environment, .. } = evaluated_let(1, "b") else {
         unreachable!();
     };
-    executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![1] });
+    let b = repl::NumberedUnit { number: 2, unit: repl::script::Unit::Fragment("let b = 2".to_string()) };
+    executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![b] });
     app.poll_results();
 
     let message = app.session_mismatch_message().expect("the mismatch is reported");
-    assert!(message.contains("[1]") && message.contains("[0, 1]"), "{message}");
+    assert!(message.contains("[2]") && message.contains("[1, 2]"), "{message}");
     let sources: Vec<&str> = app.code_units().iter().map(|unit| unit.source).collect();
     assert_eq!(sources, vec!["let b = 2"]);
 
     app.dismiss_session_mismatch();
     assert_eq!(app.session_mismatch_message(), None);
+}
+
+fn numbered(number: u32, source: &str) -> repl::NumberedUnit {
+    repl::NumberedUnit { number, unit: repl::script::Unit::Fragment(source.to_string()) }
+}
+
+fn edited(id: u64, reports: Vec<(u32, repl::script::Eval)>, session: Vec<repl::NumberedUnit>) -> WorkerResponse {
+    WorkerResponse::EvalResult {
+        id,
+        eval: repl::Eval::Edited(reports.into_iter().map(|(unit, eval)| repl::UnitReport { unit, eval }).collect()),
+        environment: Vec::new(),
+        session,
+    }
+}
+
+fn steps(app: &ReplApp<MockExecutor>) -> Vec<(Option<u32>, &str, UnitStep)> {
+    app.code_units().into_iter().map(|unit| (unit.number, unit.source, unit.step)).collect()
+}
+
+/// The code follows an edit, an insert and a delete once the engine answers
+/// each, numbering an inserted unit next whatever its place, and each bar
+/// says what the step did: the units the engine reports, and no others.
+#[test]
+fn edits_change_the_code_when_answered() {
+    let ran = || repl::script::Eval::Nothing;
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a", "let c = 3"]);
+
+    app.submit_input("/edit 1 let a = 2".to_string());
+    executor.queue(parsed_command(3, command_named("/edit 1 let a = 2")));
+    app.poll_results();
+    // Not answered yet, so not shown.
+    assert_eq!(steps(&app)[0], (Some(1), "let a = 1", UnitStep::Untouched));
+
+    executor.queue_raw(edited(3, vec![(1, ran()), (2, ran())],
+        vec![numbered(1, "let a = 2"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
+    app.poll_results();
+    assert_eq!(steps(&app), vec![
+        (Some(1), "let a = 2", UnitStep::Ran),
+        (Some(2), "let b = a", UnitStep::Ran),
+        (Some(3), "let c = 3", UnitStep::Untouched),
+    ]);
+    assert_eq!(app.tab(), Tab::History);
+
+    app.submit_input("/insert before 2 let d = 4".to_string());
+    executor.queue(parsed_command(4, command_named("/insert before 2 let d = 4")));
+    executor.queue_raw(edited(4, vec![(4, ran()), (2, ran()), (3, ran())],
+        vec![numbered(1, "let a = 2"), numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
+    app.submit_input("/delete 1".to_string());
+    executor.queue(parsed_command(5, command_named("/delete 1")));
+    executor.queue_raw(edited(5, vec![(2, repl::script::Eval::Error("no `a`".to_string()))],
+        vec![numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
+    app.poll_results();
+
+    assert_eq!(steps(&app), vec![
+        (Some(4), "let d = 4", UnitStep::Untouched),
+        (Some(2), "let b = a", UnitStep::Failed),
+        (Some(3), "let c = 3", UnitStep::Untouched),
+    ]);
+    assert_eq!(app.session_mismatch_message(), None);
+
+    // The next unit appended is numbered after the inserted one.
+    app.submit_input("let e = 5".to_string());
+    executor.queue(parsed_statement(6, "let e = 5"));
+    executor.queue(evaluated_let(6, "e"));
+    app.poll_results();
+    assert_eq!(steps(&app).last(), Some(&(Some(5), "let e = 5", UnitStep::Ran)));
+    assert_eq!(app.session_mismatch_message(), None);
+}
+
+/// A runtime error in a unit an edit reran empties the session, as one in an
+/// appended unit does.
+#[test]
+fn an_edit_that_resets_the_session_clears_the_code() {
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a"]);
+
+    app.submit_input("/edit 1 let a = f()".to_string());
+    executor.queue(parsed_command(2, command_named("/edit 1 let a = f()")));
+    executor.queue_raw(edited(2, vec![(1, repl::script::Eval::ErrorReset("Error: stack overflow".to_string()))], Vec::new()));
+    app.poll_results();
+
+    assert!(app.code_units().is_empty());
+    assert!(app.history().is_empty());
+    let message = app.crash_modal_message().expect("the reset is explained");
+    assert!(message.contains("Unit 1") && message.contains("stack overflow"), "{message}");
+    assert_eq!(app.session_mismatch_message(), None);
+}
+
+/// An engine that keeps different source for a unit than the app expects is
+/// a mismatch too.
+#[test]
+fn a_session_with_different_source_is_reported() {
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1"]);
+
+    app.submit_input("/edit 1 let a = 2".to_string());
+    executor.queue(parsed_command(1, command_named("/edit 1 let a = 2")));
+    executor.queue_raw(edited(1, vec![(1, repl::script::Eval::Nothing)], vec![numbered(1, "let a = 3")]));
+    app.poll_results();
+
+    let message = app.session_mismatch_message().expect("the mismatch is reported");
+    assert!(message.contains("different sources"), "{message}");
+    assert_eq!(steps(&app), vec![(Some(1), "let a = 3", UnitStep::Ran)]);
+}
+
+/// The command an input names, as the parser reads it.
+fn command_named(input: &str) -> repl::ReplCommand {
+    match repl::parse_input(repl::Input::Input(input.to_string())) {
+        repl::InputParse::Command(repl::Command::ReplCommand(command)) => command,
+        other => panic!("{input:?} is not a REPL command: {other:?}"),
+    }
 }
