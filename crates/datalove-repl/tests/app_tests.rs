@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use datalove_repl as repl;
-use repl::app::{CodeUnit, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab, UnitStep, WorkerResponse};
+use repl::app::{CodeUnit, EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, Tab, UnitStatus, WorkerResponse};
 
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
@@ -706,10 +706,10 @@ fn parsed_command(id: u64, command: repl::ReplCommand) -> WorkerResponse {
 }
 
 /// The code panel is the session's units, without the REPL commands, each
-/// with what the last step did with it: only the unit answered last was
-/// touched, and one still waiting is pending.
+/// with its status: how it fared when it was last answered, or pending while
+/// it waits.
 #[test]
-fn code_units_are_the_units_and_what_the_last_step_did() {
+fn code_units_are_the_units_and_their_statuses() {
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
 
@@ -723,15 +723,15 @@ fn code_units_are_the_units_and_what_the_last_step_did() {
     }
     app.poll_results();
 
-    let pending: Vec<UnitStep> = app.code_units().iter().map(|unit| unit.step).collect();
-    assert_eq!(pending, vec![UnitStep::Pending; 3]);
+    let pending: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
+    assert_eq!(pending, vec![UnitStatus::Pending; 3]);
 
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.code_units(), vec![
-        CodeUnit { number: Some(1), source: "let a = 1", step: UnitStep::Ran },
-        CodeUnit { number: None, source: "let b = c", step: UnitStep::Pending },
-        CodeUnit { number: None, source: "a", step: UnitStep::Pending },
+        CodeUnit { number: Some(1), source: "let a = 1", status: UnitStatus::Ran },
+        CodeUnit { number: None, source: "let b = c", status: UnitStatus::Pending },
+        CodeUnit { number: None, source: "a", status: UnitStatus::Pending },
     ]);
 
     executor.queue(WorkerResponse::EvalResult {
@@ -742,13 +742,14 @@ fn code_units_are_the_units_and_what_the_last_step_did() {
     });
     executor.queue(evaluated(2, repl::script::Eval::Error("no `c`".to_string())));
     app.poll_results();
-    let steps: Vec<UnitStep> = app.code_units().iter().map(|unit| unit.step).collect();
-    assert_eq!(steps, vec![UnitStep::Untouched, UnitStep::Failed, UnitStep::Pending]);
+    let statuses: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
+    assert_eq!(statuses, vec![UnitStatus::Ran, UnitStatus::Failed, UnitStatus::Pending]);
 
     executor.queue(evaluated(3, repl::script::Eval::Blocked { on: vec![1] }));
     app.poll_results();
-    let steps: Vec<UnitStep> = app.code_units().iter().map(|unit| unit.step).collect();
-    assert_eq!(steps, vec![UnitStep::Untouched, UnitStep::Untouched, UnitStep::Blocked]);
+    let statuses: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
+    // Each unit keeps its status until a step reports it again.
+    assert_eq!(statuses, vec![UnitStatus::Ran, UnitStatus::Failed, UnitStatus::Blocked]);
 }
 
 /// A runtime error empties the session, and the code panel with it.
@@ -1053,7 +1054,7 @@ fn a_pending_reset_takes_the_code_before_it() {
     executor.queue(parsed_statement(2, "let b = 2"));
     app.poll_results();
     let units = app.code_units();
-    assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", step: UnitStep::Pending }]);
+    assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", status: UnitStatus::Pending }]);
     // The history keeps the units the engine still has.
     assert_eq!(app.history().len(), 3);
 }
@@ -1105,13 +1106,13 @@ fn edited(id: u64, reports: Vec<(u32, repl::script::Eval)>, session: Vec<repl::N
     }
 }
 
-fn steps(app: &ReplApp<MockExecutor>) -> Vec<(Option<u32>, &str, UnitStep)> {
-    app.code_units().into_iter().map(|unit| (unit.number, unit.source, unit.step)).collect()
+fn statuses(app: &ReplApp<MockExecutor>) -> Vec<(Option<u32>, &str, UnitStatus)> {
+    app.code_units().into_iter().map(|unit| (unit.number, unit.source, unit.status)).collect()
 }
 
 /// The code follows an edit, an insert and a delete once the engine answers
-/// each, numbering an inserted unit next whatever its place, and each bar
-/// says what the step did: the units the engine reports, and no others.
+/// each, numbering an inserted unit next whatever its place. A unit the
+/// engine reports takes the status it reports, and the rest keep theirs.
 #[test]
 fn edits_change_the_code_when_answered() {
     let ran = || repl::script::Eval::Nothing;
@@ -1121,15 +1122,15 @@ fn edits_change_the_code_when_answered() {
     executor.queue(parsed_command(3, command_named("/edit 1 let a = 2")));
     app.poll_results();
     // Not answered yet, so not shown.
-    assert_eq!(steps(&app)[0], (Some(1), "let a = 1", UnitStep::Untouched));
+    assert_eq!(statuses(&app)[0], (Some(1), "let a = 1", UnitStatus::Ran));
 
     executor.queue_raw(edited(3, vec![(1, ran()), (2, ran())],
         vec![numbered(1, "let a = 2"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
     app.poll_results();
-    assert_eq!(steps(&app), vec![
-        (Some(1), "let a = 2", UnitStep::Ran),
-        (Some(2), "let b = a", UnitStep::Ran),
-        (Some(3), "let c = 3", UnitStep::Untouched),
+    assert_eq!(statuses(&app), vec![
+        (Some(1), "let a = 2", UnitStatus::Ran),
+        (Some(2), "let b = a", UnitStatus::Ran),
+        (Some(3), "let c = 3", UnitStatus::Ran),
     ]);
     assert_eq!(app.tab(), Tab::History);
 
@@ -1143,10 +1144,10 @@ fn edits_change_the_code_when_answered() {
         vec![numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
     app.poll_results();
 
-    assert_eq!(steps(&app), vec![
-        (Some(4), "let d = 4", UnitStep::Untouched),
-        (Some(2), "let b = a", UnitStep::Failed),
-        (Some(3), "let c = 3", UnitStep::Untouched),
+    assert_eq!(statuses(&app), vec![
+        (Some(4), "let d = 4", UnitStatus::Ran),
+        (Some(2), "let b = a", UnitStatus::Failed),
+        (Some(3), "let c = 3", UnitStatus::Ran),
     ]);
     assert_eq!(app.session_mismatch_message(), None);
 
@@ -1155,7 +1156,7 @@ fn edits_change_the_code_when_answered() {
     executor.queue(parsed_statement(6, "let e = 5"));
     executor.queue(evaluated_let(6, "e"));
     app.poll_results();
-    assert_eq!(steps(&app).last(), Some(&(Some(5), "let e = 5", UnitStep::Ran)));
+    assert_eq!(statuses(&app).last(), Some(&(Some(5), "let e = 5", UnitStatus::Ran)));
     assert_eq!(app.session_mismatch_message(), None);
 }
 
@@ -1190,7 +1191,7 @@ fn a_session_with_different_source_is_reported() {
 
     let message = app.session_mismatch_message().expect("the mismatch is reported");
     assert!(message.contains("different sources"), "{message}");
-    assert_eq!(steps(&app), vec![(Some(1), "let a = 3", UnitStep::Ran)]);
+    assert_eq!(statuses(&app), vec![(Some(1), "let a = 3", UnitStatus::Ran)]);
 }
 
 /// The command an input names, as the parser reads it.

@@ -379,19 +379,19 @@ a log of the session rather than the program it has become. The code panel
 shows only the units, as their full source, with a rule between each. The
 transcript is still there, as the History tab.
 
-Each unit has a bar beside it colored for what the last step did with it:
-green if it ran, red if it did not compile, yellow if it returned early,
-magenta if it was blocked, and cyan while it waits on the engine. A unit the
-last step neither compiled nor ran is gray, whatever it did before. So the bar
-says what the last thing typed reached, which once units can be edited is the
-question the panel has to answer.
+Each unit has a bar beside it colored for its status, how it fared the last
+time it was compiled or run: green if it ran, red if it did not compile,
+yellow if it returned early, magenta if it was blocked, and cyan while it
+waits on the engine. A step changes the status of the units it reaches and
+leaves the rest as they were, so the bars always say which units are broken.
+What the last step reached -- which units it compiled or reran -- is not shown
+yet; that wants an indication of its own, apart from the bars.
 
 **The app keeps its own copy of the session's units**, numbered as the
 `Session` numbers them, and changes it as each answered command changed the
 engine's: an appended unit is added and numbered, an edit, a delete or an
 insert is made, and a reset empties it. The bars come from the same answers:
-each step marks every unit untouched, and then the one appended, or the ones
-an edit reached, with what they came to. The code is these units, then the
+the unit appended, or the ones an edit reached, take what they came to. The code is these units, then the
 units on their way to the engine, which shows them without numbers since it
 has not given them any yet.
 

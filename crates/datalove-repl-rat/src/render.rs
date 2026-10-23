@@ -12,7 +12,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStep};
+use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel, Tab, UnitStatus};
 
 /// The color of what is selected: the tab shown, and the code unit.
 const HIGHLIGHT: Color = Color::Yellow;
@@ -166,20 +166,19 @@ struct EnvironmentView {
     scroll_limit: usize,
 }
 
-/// The color of a unit's bar, for what it did in the last step.
-fn step_color(step: UnitStep) -> Color {
-    match step {
-        UnitStep::Pending => Color::Cyan,
-        UnitStep::Untouched => Color::DarkGray,
-        UnitStep::Ran => Color::Green,
-        UnitStep::Failed => Color::Red,
-        UnitStep::ReturnedEarly => Color::Yellow,
-        UnitStep::Blocked => Color::Magenta,
+/// The color of a unit's bar, for its status.
+fn status_color(status: UnitStatus) -> Color {
+    match status {
+        UnitStatus::Pending => Color::Cyan,
+        UnitStatus::Ran => Color::Green,
+        UnitStatus::Failed => Color::Red,
+        UnitStatus::ReturnedEarly => Color::Yellow,
+        UnitStatus::Blocked => Color::Magenta,
     }
 }
 
 /// Render the code panel: every unit's source, in order, each beside a bar
-/// colored for what the last step did with it, and the selected unit
+/// colored for its status, and the selected unit
 /// highlighted while the panel has focus.
 ///
 /// Returns the lines each unit took, for scrolling the selection into view.
@@ -237,7 +236,7 @@ fn render_code<E: ReplExecutor>(
                 Style::default().fg(Color::DarkGray),
             )));
         }
-        let bar = Style::default().fg(step_color(unit.step));
+        let bar = Style::default().fg(status_color(unit.status));
         let text = if selected.is_some() && selected == unit.number {
             Style::default().fg(HIGHLIGHT)
         } else {

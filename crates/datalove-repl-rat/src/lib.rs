@@ -4,7 +4,7 @@
 use rmx::prelude::*;
 
 use datalove_repl as repl;
-pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus, Panel, Scroll, Tab, UnitStep};
+pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus, Panel, Scroll, Tab, UnitStatus};
 pub use repl::ThreadedExecutor;
 pub use repl::{PackageLibrary, SystemLibrary};
 

@@ -75,16 +75,14 @@ impl Tab {
     }
 }
 
-/// What a code unit did in the session's last step.
+/// How a code unit fared the last time it was compiled or run.
 ///
-/// A step is whatever the engine last did to the units. Units it did not
-/// compile or run are [`UnitStep::Untouched`], however they fared before.
+/// A unit keeps its status until a step compiles or runs it again: one a
+/// step leaves alone is shown as it last was.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum UnitStep {
+pub enum UnitStatus {
     /// Submitted, and not yet answered.
     Pending,
-    /// Neither compiled nor run by the last step.
-    Untouched,
     /// Ran to its end.
     Ran,
     /// Did not compile.
@@ -102,15 +100,14 @@ pub struct CodeUnit<'a> {
     /// numbers it when it gets there.
     pub number: Option<u32>,
     pub source: &'a str,
-    pub step: UnitStep,
+    pub status: UnitStatus,
 }
 
-/// A unit of the session as the app keeps it, and what the last step did
-/// with it.
+/// A unit of the session as the app keeps it, and its status.
 #[derive(Debug, Clone)]
 struct SessionUnit {
     numbered: repl::NumberedUnit,
-    step: UnitStep,
+    status: UnitStatus,
 }
 
 /// Where the renderer last put each code unit, so the selection can be
@@ -633,11 +630,10 @@ impl<E: ReplExecutor> ReplApp<E> {
         }
         match (command, eval) {
             (repl::Command::Unit(unit), repl::Eval::Unit(eval)) => {
-                self.untouch();
                 let number = self.take_number();
                 self.units.push(SessionUnit {
                     numbered: repl::NumberedUnit { number, unit: unit.C() },
-                    step: step_of(eval),
+                    status: status_of(eval),
                 });
             }
             (repl::Command::ReplCommand(command), repl::Eval::Edited(reports)) => {
@@ -658,30 +654,24 @@ impl<E: ReplExecutor> ReplApp<E> {
                                 repl::Place::Before => index,
                                 repl::Place::After => index + 1,
                             };
+                            // The engine reports every unit from the insert
+                            // on, this one first, so its status is set below.
                             let number = self.take_number();
                             self.units.insert(index, SessionUnit {
                                 numbered: repl::NumberedUnit { number, unit: source.C() },
-                                step: UnitStep::Untouched,
+                                status: UnitStatus::Pending,
                             });
                         }
                     }
                     other => unreachable!("{other:?} was answered as an edit"),
                 }
-                self.untouch();
                 for report in reports {
                     if let Some(index) = self.index_of(report.unit) {
-                        self.units[index].step = step_of(&report.eval);
+                        self.units[index].status = status_of(&report.eval);
                     }
                 }
             }
             _ => {}
-        }
-    }
-
-    /// Mark every unit as left alone, at the start of a step.
-    fn untouch(&mut self) {
-        for unit in &mut self.units {
-            unit.step = UnitStep::Untouched;
         }
     }
 
@@ -711,17 +701,20 @@ impl<E: ReplExecutor> ReplApp<E> {
                 "The engine's session holds units {reported:?}, and the app expected {expected:?}{sources}.",
             ));
         }
-        let steps: Vec<(u32, UnitStep)> = self.units.iter()
-            .map(|unit| (unit.numbered.number, unit.step))
+        let statuses: Vec<(u32, UnitStatus)> = self.units.iter()
+            .map(|unit| (unit.numbered.number, unit.status))
             .collect();
         self.next_number = self.next_number
             .max(session.iter().map(|unit| unit.number + 1).max().unwrap_or(1));
         self.units = session.into_iter()
             .map(|numbered| {
-                let step = steps.iter().find(|(number, _)| *number == numbered.number)
-                    .map(|(_, step)| *step)
-                    .unwrap_or(UnitStep::Untouched);
-                SessionUnit { numbered, step }
+                // A unit the app did not know of has fared however it has,
+                // which nothing has said; it shows as waiting until a step
+                // reports it.
+                let status = statuses.iter().find(|(number, _)| *number == numbered.number)
+                    .map(|(_, status)| *status)
+                    .unwrap_or(UnitStatus::Pending);
+                SessionUnit { numbered, status }
             })
             .collect();
     }
@@ -1102,7 +1095,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         &self.history
     }
 
-    /// The session's units, in order, and what each did in the last step.
+    /// The session's units, in order, and the status of each.
     ///
     /// **They are the session as it will be once everything submitted has
     /// been answered**: the units the answers so far leave, then the units on
@@ -1127,7 +1120,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         let answered = answered.iter().map(|unit| CodeUnit {
             number: Some(unit.numbered.number),
             source: unit.numbered.unit.source(),
-            step: unit.step,
+            status: unit.status,
         });
         let waiting = waiting.iter()
             .filter(|entry| entry.eval_result.is_none())
@@ -1135,7 +1128,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 Some(repl::InputParse::Command(repl::Command::Unit(unit))) => Some(CodeUnit {
                     number: None,
                     source: unit.source(),
-                    step: UnitStep::Pending,
+                    status: UnitStatus::Pending,
                 }),
                 _ => None,
             });
@@ -1143,15 +1136,15 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 }
 
-/// What a unit's step came to, as its bar shows it.
-fn step_of(eval: &script::Eval) -> UnitStep {
+/// The status a unit's evaluation leaves it with, as its bar shows it.
+fn status_of(eval: &script::Eval) -> UnitStatus {
     match eval {
-        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_) => UnitStep::Ran,
-        script::Eval::Error(_) => UnitStep::Failed,
-        script::Eval::ReturnedEarly(_) => UnitStep::ReturnedEarly,
-        script::Eval::Blocked { .. } => UnitStep::Blocked,
+        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_) => UnitStatus::Ran,
+        script::Eval::Error(_) => UnitStatus::Failed,
+        script::Eval::ReturnedEarly(_) => UnitStatus::ReturnedEarly,
+        script::Eval::Blocked { .. } => UnitStatus::Blocked,
         script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
-            unreachable!("a reset leaves no units to have a step")
+            unreachable!("a reset leaves no units to have a status")
         }
     }
 }
