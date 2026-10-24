@@ -71,7 +71,7 @@ rest are left as they were. The same changes can be typed as commands:
 - `/reset` -- start the session again, empty.
 - `/save` -- save everything entered to `repl-session.world`.
 - `/load` -- start the session again as `repl-session.world` has it.
-- `/exit` -- leave; **Ctrl+D** too, or **Ctrl+C** twice.
+- `/exit` -- leave; **Ctrl+C** twice too.
 
 ## Moving around
 

@@ -636,9 +636,14 @@ input panel stays yellow while it has focus in multiline mode. Focus lives on
 
 Typing only reaches the textarea while the input has focus. In single-line
 mode Enter submits. In multiline mode Enter inserts a newline and Alt+Enter
-submits. Ctrl+D exits, and F1 shows the help. Neither works while a dialog or
-a modal is open: those take the keys first, the exit dialog Ctrl+C and
-anything else, and a modal only Enter. Esc does nothing.
+submits. F1 shows the help, and does nothing while a dialog or a modal is
+open: those take the keys first, the exit dialog Ctrl+C and anything else, and
+a modal only Enter. Esc does nothing.
+
+**Ctrl+D is the text area's.** In raw mode it is a key like any other, not
+the end of input, and tui-textarea's Emacs bindings delete the character after
+the cursor with it, as they move with Ctrl+F, Ctrl+B, Ctrl+A and Ctrl+E. So it
+does not exit; `/exit` and Ctrl+C twice do.
 
 **Ctrl+C twice cancels multiline input.** In multiline mode, with the input
 focused, the first Ctrl+C puts "Ctrl+C again to cancel" where the Alt+Enter

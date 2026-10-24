@@ -197,7 +197,6 @@ fn handle_key_event<E: ReplExecutor>(
             app.repl.disarm_cancel();
         }
         match key.code {
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => app.repl.exit(),
             // F2 reaches the app from any terminal; Ctrl+Tab only from those
             // speaking the kitty keyboard protocol.
             KeyCode::F(2) => app.repl.next_tab(),
