@@ -13,6 +13,8 @@ pub use engine::{Compiled, Engine, ModuleErrors, OnCompileError, UnitStep};
 
 // The system library a driver supplies to the engine.
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
+// How `Engine::unit_diagnostics` renders.
+pub use bct::render::TextStyle;
 
 /// A script unit's source, and what kind of unit it is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

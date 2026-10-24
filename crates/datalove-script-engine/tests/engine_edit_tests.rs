@@ -12,7 +12,7 @@ use rmx::prelude::*;
 use datalove_datafun::pipeline::{
     ModuleDescriptor, PackageDescriptor, PackageLibrary, WorkspaceDescriptor,
 };
-use datalove_script_engine::{Engine, Eval, Unit, UnitStep};
+use datalove_script_engine::{Engine, Eval, TextStyle, Unit, UnitStep};
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
 const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
@@ -786,11 +786,11 @@ fn a_unit_s_diagnostics_render_as_text() {
     let mut engine = engine();
     run(&mut engine, "let a = 1\n---\nlet b = nope + 1\n---\nlet c = a\n---\nlet = = =");
 
-    let type_error = engine.unit_diagnostics(1, "unit 2");
+    let type_error = engine.unit_diagnostics(1, "unit 2", TextStyle::Plain);
     assert!(type_error.contains("unit 2") && type_error.contains("nope"), "{type_error}");
-    assert_eq!(engine.unit_diagnostics(2, "unit 3"), "");
-    assert_eq!(engine.unit_diagnostics(0, "unit 1"), "");
-    let parse_error = engine.unit_diagnostics(3, "unit 4");
+    assert_eq!(engine.unit_diagnostics(2, "unit 3", TextStyle::Plain), "");
+    assert_eq!(engine.unit_diagnostics(0, "unit 1", TextStyle::Plain), "");
+    let parse_error = engine.unit_diagnostics(3, "unit 4", TextStyle::Plain);
     assert!(parse_error.contains("unit 4"), "{parse_error}");
 }
 
@@ -801,7 +801,7 @@ fn an_expression_unit_s_diagnostics_point_into_it() {
     let mut engine = engine();
     run(&mut engine, "let a = 1");
     engine.eval(Unit::Expression("a + nope".S()));
-    let type_error = engine.unit_diagnostics(1, "unit 2");
+    let type_error = engine.unit_diagnostics(1, "unit 2", TextStyle::Plain);
     assert!(type_error.contains("unit 2:1:5") && type_error.contains("a + nope"), "{type_error}");
 }
 
@@ -814,11 +814,11 @@ fn a_unit_s_ownership_errors_render_as_diagnostics() {
     engine.eval(Unit::Expression("L".S()));
     run(&mut engine, "let b = [1]\nlet c = b\nlet d = b");
 
-    let fragment = engine.unit_diagnostics(1, "unit 2");
+    let fragment = engine.unit_diagnostics(1, "unit 2", TextStyle::Plain);
     assert!(fragment.contains("[D003]") && fragment.contains("unit 2:1:9"), "{fragment}");
-    let expression = engine.unit_diagnostics(2, "unit 3");
+    let expression = engine.unit_diagnostics(2, "unit 3", TextStyle::Plain);
     assert!(expression.contains("[D003]") && expression.contains("unit 3:1:1"), "{expression}");
-    let moved = engine.unit_diagnostics(3, "unit 4");
+    let moved = engine.unit_diagnostics(3, "unit 4", TextStyle::Plain);
     assert!(moved.contains("[D001]") && moved.contains("unit 4:3:9"), "{moved}");
     assert!(!moved.contains("D003"), "{moved}");
 }

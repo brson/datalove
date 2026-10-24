@@ -1008,12 +1008,12 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     /// Unit `index`'s parse, type and ownership diagnostics as they stand,
-    /// rendered as plain text, quoting the unit as the file `name`.
+    /// rendered as text in `style`, quoting the unit as the file `name`.
     ///
     /// A unit's typecheck asks of the units before it, so its diagnostics
     /// include theirs; only those pointing into this unit, or nowhere, are
     /// its. Lowering errors are not diagnostics, and are not rendered.
-    pub fn render_unit_diagnostics(&self, index: usize, name: &str) -> String {
+    pub fn render_unit_diagnostics(&self, index: usize, name: &str, style: bct::render::TextStyle) -> String {
         let script = self.scripts[index];
         let unit = script.unit(self.db);
         let source = unit.source(self.db);
@@ -1036,7 +1036,7 @@ impl<'db> ScriptCompiler<'db> {
                 .map(|diagnostic| diagnostic.to_diagnostic(self.db)));
         }
         bct::render::render_diagnostics_to_string(
-            self.db, diagnostics, std::path::Path::new(name), std::path::Path::new(""))
+            self.db, diagnostics, std::path::Path::new(name), std::path::Path::new(""), style)
     }
 
     /// Get type diagnostics from the last compilation.

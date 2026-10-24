@@ -3,6 +3,7 @@
 use datalove_repl as repl;
 use repl::app::{Panel, ReplApp, ReplExecutor, Scroll, UiAction};
 
+mod ansi;
 mod detail;
 mod help;
 mod render;

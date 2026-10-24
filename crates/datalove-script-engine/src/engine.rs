@@ -980,11 +980,12 @@ impl Engine {
             .collect()
     }
 
-    /// Unit `unit`'s parse and type diagnostics as they stand, rendered as
-    /// plain text quoting the unit as `name`; empty for a unit with none.
-    pub fn unit_diagnostics(&mut self, unit: usize, name: &str) -> String {
+    /// Unit `unit`'s parse, type and ownership diagnostics as they stand,
+    /// rendered as text in `style` quoting the unit as `name`; empty for a
+    /// unit with none.
+    pub fn unit_diagnostics(&mut self, unit: usize, name: &str, style: bct::render::TextStyle) -> String {
         let units = self.unit_sources();
-        self.with_compiler(&units, |compiler| compiler.render_unit_diagnostics(unit, name))
+        self.with_compiler(&units, |compiler| compiler.render_unit_diagnostics(unit, name, style))
     }
 
     /// How many units the session has, failed ones included.

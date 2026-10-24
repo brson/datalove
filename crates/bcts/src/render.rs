@@ -76,8 +76,20 @@ impl Renderer {
         file_path: &Path,
         cwd: &Path,
     ) -> String {
+        self.to_text(db, diag, file_path, cwd, TextStyle::Plain)
+    }
+
+    /// The same diagnostic as text in `style`.
+    pub fn to_text<'db>(
+        &mut self,
+        db: &'db dyn crate::Db,
+        diag: &Diagnostic<'db>,
+        file_path: &Path,
+        cwd: &Path,
+        style: TextStyle,
+    ) -> String {
         let mut out = String::new();
-        render_one(db, diag, file_path, cwd, &mut self.colors, &self.line_offsets, Sink::Text(&mut out));
+        render_one(db, diag, file_path, cwd, &mut self.colors, &self.line_offsets, Sink::Text(&mut out, style));
         out
     }
 
@@ -126,21 +138,34 @@ pub fn render_diagnostics<'db>(
     }
 }
 
-/// The same run as one string, for a caller that is not a terminal.
+/// The same run as one string, for a caller that is not stderr.
 ///
-/// See [`Renderer::to_string`] for why it is plain.
+/// See [`Renderer::to_string`] for why it is usually plain.
 pub fn render_diagnostics_to_string<'db>(
     db: &'db dyn crate::Db,
     diagnostics: impl IntoIterator<Item = Diagnostic<'db>>,
     file_path: &Path,
     cwd: &Path,
+    style: TextStyle,
 ) -> String {
     let mut renderer = Renderer::new();
     let mut out = String::new();
     for diagnostic in diagnostics {
-        out.push_str(&renderer.to_string(db, &diagnostic, file_path, cwd));
+        out.push_str(&renderer.to_text(db, &diagnostic, file_path, cwd, style));
     }
     out
+}
+
+/// How a diagnostic rendered as text looks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextStyle {
+    /// ASCII with no escape sequences, for tests, logs and a window that
+    /// draws the text itself.
+    Plain,
+    /// As stderr has it -- colour as ANSI escape sequences, and the
+    /// box-drawing frame -- for a terminal program that draws the text into
+    /// a part of its screen, turning the escapes into its own styles.
+    Ansi,
 }
 
 /// Print diagnostics whose labels may point into more than one file.
@@ -217,19 +242,18 @@ fn label_color(style: LabelStyle, colors: &mut ColorGenerator) -> Color {
 
 /// Where a rendered diagnostic goes.
 ///
-/// A terminal gets colour and the box-drawing frame; a string gets neither,
-/// since the things that want a string are tests, logs and a window that draws
-/// the text itself.
+/// A terminal gets colour and the box-drawing frame; a string gets what its
+/// [`TextStyle`] says.
 enum Sink<'a> {
     Stderr,
-    Text(&'a mut String),
+    Text(&'a mut String, TextStyle),
 }
 
 impl Sink<'_> {
     fn config(&self) -> Config {
         match self {
-            Sink::Stderr => byte_config(),
-            Sink::Text(_) => byte_config().with_color(false).with_char_set(CharSet::Ascii),
+            Sink::Stderr | Sink::Text(_, TextStyle::Ansi) => byte_config(),
+            Sink::Text(_, TextStyle::Plain) => byte_config().with_color(false).with_char_set(CharSet::Ascii),
         }
     }
 }
@@ -251,7 +275,7 @@ impl Sink<'_> {
             Sink::Stderr => {
                 let _ = report.eprint(cache);
             }
-            Sink::Text(out) => {
+            Sink::Text(out, _) => {
                 let mut bytes = Vec::new();
                 let _ = report.write(cache, &mut bytes);
                 out.push_str(&String::from_utf8_lossy(&bytes));
@@ -556,7 +580,7 @@ mod tests {
             })
             .collect();
 
-        let out = render_diagnostics_to_string(db, diags, Path::new("t.fui"), Path::new(""));
+        let out = render_diagnostics_to_string(db, diags, Path::new("t.fui"), Path::new(""), TextStyle::Plain);
         for i in 0..3 {
             assert!(out.contains(&format!("problem {i}")), "{out}");
         }

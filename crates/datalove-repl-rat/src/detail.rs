@@ -55,7 +55,7 @@ pub(crate) fn lines<E: ReplExecutor>(repl: &ReplApp<E>, width: usize) -> Vec<Lin
     match (eval, diagnostics) {
         (Some(script::Eval::Error(_)), Some(diagnostics)) => {
             heading(&mut lines, "Diagnostics");
-            lines.extend(diagnostics.lines().map(|line| Line::from(line.S())));
+            lines.extend(crate::ansi::lines(diagnostics));
         }
         (Some(script::Eval::Success(_) | script::Eval::Nothing), _) | (None, _) => {}
         (Some(eval), _) => {

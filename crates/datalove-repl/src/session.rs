@@ -153,7 +153,7 @@ impl Session {
         let effects = self.engine.unit_effects(index);
         crate::UnitDetail {
             unit: number,
-            diagnostics: self.engine.unit_diagnostics(index, &fmt!("unit {number}")),
+            diagnostics: self.engine.unit_diagnostics(index, &fmt!("unit {number}"), script::TextStyle::Ansi),
             bindings: self.engine.unit_bindings(index),
             provides: effects.provides,
             uses: effects.uses,

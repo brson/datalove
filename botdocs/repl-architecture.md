@@ -36,6 +36,7 @@ datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
   src/lib.rs            RatatuiApp: ReplApp plus a TextArea
   src/render.rs         The three-panel layout, code, tabs, exit dialog, crash and engine modals
   src/detail.rs         The Detail tab: the selected unit, laid out
+  src/ansi.rs           Text with ANSI colour escapes, as styled lines
   src/help.rs           The help, parsed from markdown and flowed for the pane's width
   src/term.rs           Terminal setup, event loop, key bindings
 
@@ -589,7 +590,10 @@ only while it is of the selected unit; moving shows "asking the engine" until
 the next answer. The diagnostics are rendered by
 `ScriptCompiler::render_unit_diagnostics`: the unit's parse diagnostics, and,
 if it parses, the type checker's whose labels point into it and its ownership
-analysis's, as ariadne renders them for the CLI, without colour. Each pass files
+analysis's, as ariadne renders them for the CLI: in colour with the box-drawing
+frame, by `TextStyle::Ansi`. The escapes travel back as part of the text, and
+`ansi.rs` turns the SGR sequences into ratatui styles, dropping any other
+escape. Each pass files
 its diagnostics in a salsa accumulator from inside its query, and they are read
 back from the query; ownership analysis is keyed on what the units before it
 left as well as on the unit, so `unit_ownership_diagnostics` asks it again with
