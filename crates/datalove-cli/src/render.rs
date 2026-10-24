@@ -4,6 +4,7 @@ use rmx::prelude::*;
 use rmx::std::path::Path;
 
 use datalove::bct::render::{self, LineOffsets, Renderer};
+use datalove::bct::diagnostic::Diagnostic;
 use datalove::bct::input::Source;
 
 /// Render parse diagnostics to stderr.
@@ -34,12 +35,12 @@ pub fn render_type_diagnostics<'db>(
     render::render_diagnostics(db, diagnostics, file_path, cwd);
 }
 
-/// Render module type diagnostics to stderr.
+/// Render module diagnostics to stderr.
 ///
 /// A worldfile's modules are separate sources, and a diagnostic about one can
 /// point at another, so these are rendered against all of them at once. They
 /// come stored, as an engine keeps them, and are read back against `db`.
-pub fn render_module_type_diagnostics<'db>(
+pub fn render_stored_module_diagnostics<'db>(
     db: &'db dyn datalove::datafun::Db,
     diagnostics: &[datalove::bct::diagnostic::StoredDiagnostic],
     worldfile_path: &Path,
@@ -59,15 +60,12 @@ pub fn render_module_type_diagnostics<'db>(
 /// for one it does not know.
 pub fn render_module_diagnostics<'db>(
     db: &'db dyn datalove::datafun::Db,
-    parse: &[&datalove::diagnostic::ParseDiagnostic],
-    types: &[&datalove::diagnostic::TypeDiagnostic],
+    diagnostics: Vec<Diagnostic<'db>>,
     locate: &dyn Fn(Source) -> Option<rmx::std::path::PathBuf>,
     file_path: &Path,
     line_offsets: &LineOffsets,
     cwd: &Path,
 ) {
-    let diagnostics = parse.iter().map(|d| d.to_diagnostic(db))
-        .chain(types.iter().map(|d| d.to_diagnostic(db)));
     let mut renderer = Renderer::with_line_offsets(line_offsets.C());
     for diagnostic in diagnostics {
         renderer.located_diagnostic(db, &diagnostic, file_path, locate, cwd);

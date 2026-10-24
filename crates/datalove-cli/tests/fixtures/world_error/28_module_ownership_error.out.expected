@@ -1,0 +1,24 @@
+[31m[D001] Error:[0m use of moved value: `s`
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/world_error/28_module_ownership_error.world:10:11 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m 9 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[36ms[0m
+ [38;5;240m   │[0m           [36m┬[0m  
+ [38;5;240m   │[0m           [36m╰[0m[36m─[0m[36m─[0m value moved here
+ [38;5;246m10 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;201ms[0m
+ [38;5;240m   │[0m           [38;5;201m┬[0m  
+ [38;5;240m   │[0m           [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m value used after move
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: insert `@` to clone:
+ [38;5;240m   │[0m             let a = s@
+ [38;5;240m   │[0m                      +
+[38;5;246m────╯[0m
+[31m[D006] Error:[0m out parameter not initialized: `n`
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/world_error/28_module_ownership_error.world:16:5 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m16 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;155mr[0m[38;5;155me[0m[38;5;155mt[0m
+ [38;5;240m   │[0m     [38;5;155m─[0m[38;5;155m┬[0m[38;5;155m─[0m  
+ [38;5;240m   │[0m      [38;5;155m╰[0m[38;5;155m─[0m[38;5;155m─[0m[38;5;155m─[0m returns without writing `n`
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mNote[0m: an out parameter has to be written on every way out of its function
+[38;5;246m────╯[0m
+Error: Module compilation error

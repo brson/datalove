@@ -1,0 +1,5 @@
+// An ownership error in a local module is framed against that module's file,
+// as a type error is.
+require module local/broken/moves
+
+debuglog moves.twice("a")

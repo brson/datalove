@@ -15,7 +15,7 @@ use datalove_datafun_tycheck::{
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
 };
-use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis};
+use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, format_analysis_errors};
 
 
 /// Result of ownership analysis for a single function.
@@ -106,6 +106,8 @@ pub fn analyze_module<'db>(
 
     let mut function_analyses = BTreeMap::new();
     let mut all_errors = Vec::new();
+    // Only a module with errors needs its spans.
+    let spans = || datalove_datafun_parser::module_spans(db, module);
 
     for statement in parsed.statements(db).iter() {
         if let Statement::Fun(func) = statement {
@@ -121,14 +123,13 @@ pub fn analyze_module<'db>(
             let (opt_analysis, errors) = if analysis.errors.is_empty() {
                 (Some(analysis), Vec::new())
             } else {
-                // Format errors same as original: single error string with comma-separated errors.
-                let error_msgs: Vec<String> = analysis.errors.iter()
-                    .map(|e| format!("{:?}", e))
-                    .collect();
+                // Filed as diagnostics against the module's spans, which is
+                // how they are reported; the message says only what failed.
+                crate::ownership_diagnostics::emit_ownership_errors(db, spans(), &analysis.errors);
                 let formatted = format!(
                     "Ownership error in {}: {}",
                     func_name,
-                    error_msgs.join(", ")
+                    format_analysis_errors(&analysis.errors),
                 );
                 all_errors.push(formatted.clone());
                 (None, vec![formatted])

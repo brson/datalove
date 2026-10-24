@@ -279,8 +279,9 @@ with no span: `NonCopyIndexProjection { elem_ty: "string" }`,
 the engine's `Eval::Error` is the first of them. The CLI renders the same
 errors as diagnostics, and so does the REPL's Detail tab, from
 `ScriptCompiler::render_unit_diagnostics`; the History tab and the engine's
-error strings do not. A module's ownership errors have the same problem; see
-the store demo entry below.
+error strings do not. A module that does not compile reaches a unit as the
+module's error message, and the module's diagnostics, which the engine keeps in
+`ModuleErrors`, are rendered only by the CLI.
 
 ### Lowering errors say what, never where
 
@@ -550,10 +551,6 @@ data files. None stopped it; each cost a detour.
 
 - **Nothing prints a string as it is.** `debuglog` is the only output, and it
   quotes and escapes a string, so the report prints every line in quotes.
-- **A module's ownership errors are not rendered.** They print as the
-  `Debug` of the error (`Ownership error in by_tier: InconsistentBranchMove {
-  stmt_idx: 14, at: ExprKey(fn #66), ... }`), where a script's are rendered
-  with spans like any other diagnostic.
 - **A const cannot fail, and nothing can panic.** A module const built by a
   function that uses `!` has to unwrap the result itself, and the `else`
   branch needs a value it will never return. `db.product_slots` returns an

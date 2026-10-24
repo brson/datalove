@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in bad_function: OutParamNotInitialized { name: \"x\", exits: [Ret { local_index: 0 }] }",
+                message: "Ownership error in bad_function: error[D006]: out parameter not initialized: `x`",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

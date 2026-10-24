@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in outer: CannotMutFromRef { expr_key: ExprKey(fn #0), name: \"y\" }",
+                message: "Ownership error in outer: error[D004]: cannot get mutable reference from immutable: `y`",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

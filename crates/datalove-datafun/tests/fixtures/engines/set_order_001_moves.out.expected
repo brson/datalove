@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in key_moved: UseAfterMove { expr_key: ExprKey(fn #1), moved_at: ExprKey(fn #2), name: \"k\", recovery_hint: InsertAdapt { description: \"clone `k` before the earlier use\" } }\nOwnership error in root_moved: UseAfterMove { expr_key: ExprKey(fn #3), moved_at: ExprKey(fn #2), name: \"b\", recovery_hint: InsertAdapt { description: \"clone `b` before the earlier use\" } }\nOwnership error in compound_root_moved: UseAfterMove { expr_key: ExprKey(fn #2), moved_at: ExprKey(fn #1), name: \"x\", recovery_hint: InsertAdapt { description: \"clone `x` before the earlier use\" } }",
+                message: "Ownership error in key_moved: error[D001]: use of moved value: `k`\n  help: use `@` to clone `k` before the earlier use\nOwnership error in root_moved: error[D001]: use of moved value: `b`\n  help: use `@` to clone `b` before the earlier use\nOwnership error in compound_root_moved: error[D001]: use of moved value: `x`\n  help: use `@` to clone `x` before the earlier use",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

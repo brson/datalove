@@ -24,6 +24,9 @@ pub mod tracked_script_ownership;
 // Salsa-tracked ownership analysis functions.
 pub mod tracked_ownership_analysis;
 
+// Ownership errors as diagnostics, for scripts and modules alike.
+pub mod ownership_diagnostics;
+
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;
 

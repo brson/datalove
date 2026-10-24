@@ -1,0 +1,25 @@
+----------
+module local/test/main
+----------
+
+// A module's ownership errors are framed against the module, as a script's
+// are: here a use after move, and an out parameter a `ret` leaves unwritten.
+
+fun twice(s: string): (string, string)
+  let a = s
+  let b = s
+  ret (a, b)
+end fun
+
+fun fill(flag: bool, out n: int)
+  if flag
+    ret
+  end if
+  set n = 1
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

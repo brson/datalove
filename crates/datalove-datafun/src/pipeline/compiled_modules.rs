@@ -174,4 +174,10 @@ impl<'db> CompiledModules<'db> {
             .chain(riders)
             .collect()
     }
+
+    /// Get module ownership diagnostics with spans for rendering.
+    pub fn get_module_ownership_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::OwnershipDiagnostic> {
+        datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
+            db, self.shared.parsed_graph, self.shared.graph_typecheck)
+    }
 }

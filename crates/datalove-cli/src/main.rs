@@ -122,14 +122,14 @@ fn render_script_type_diagnostics<'db>(
     cwd: &rmx::std::path::Path,
 ) {
     let locate = |source: datalove::bct::input::Source| files.get(&source).cloned();
-    render::render_module_diagnostics(db, &[], diagnostics, &locate, script_path, line_offsets, cwd);
+    let diagnostics = diagnostics.iter().map(|d| d.to_diagnostic(db)).collect();
+    render::render_module_diagnostics(db, diagnostics, &locate, script_path, line_offsets, cwd);
 }
 
 /// Report what stopped the modules compiling, and fail, if anything did.
 ///
-/// Parse and type errors are framed against the file each module was read
-/// from. Ownership and lowering errors carry no spans yet and are printed as
-/// they are.
+/// Parse, type and ownership errors are framed against the file each module
+/// was read from. Lowering errors carry no spans and are printed as they are.
 fn bail_on_module_errors<'db>(
     db: &'db datalove::datafun::Database,
     compiled: &datalove::datafun::pipeline::CompiledModules<'db>,
@@ -145,18 +145,19 @@ fn bail_on_module_errors<'db>(
     let files = source_files(descriptor, pipeline);
     let locate = |source: datalove::bct::input::Source| files.get(&source).cloned();
 
-    let parse = compiled.get_module_parse_diagnostics(db);
-    let types = compiled.get_module_type_diagnostics(db);
-    render::render_module_diagnostics(db, &parse, &types, &locate, script_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-
-    let unrendered: Vec<String> = compiled.all_ownership_errors().into_iter()
-        .chain(compiled.all_lowering_errors())
+    let diagnostics: Vec<_> = compiled.get_module_parse_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db))
+        .chain(compiled.get_module_type_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
+        .chain(compiled.get_module_ownership_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
         .collect();
+    let rendered = !diagnostics.is_empty();
+    render::render_module_diagnostics(db, diagnostics, &locate, script_path, &datalove::bct::render::LineOffsets::new(), &cwd);
+
+    let unrendered = compiled.all_lowering_errors();
     for error in &unrendered {
         eprintln!("{error}");
     }
     // Nothing above says what went wrong, so the errors say it however they can.
-    if parse.is_empty() && types.is_empty() && unrendered.is_empty() {
+    if !rendered && unrendered.is_empty() {
         for error in compiled.all_errors() {
             eprintln!("{error}");
         }
@@ -1074,8 +1075,8 @@ impl ScriptWorldCommand {
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         let module_errors = engine.module_errors();
         if !module_errors.is_empty() {
-            render::render_module_type_diagnostics(
-                engine.db(), &module_errors.type_diagnostics, &self.file_path, &line_offsets, &cwd);
+            render::render_stored_module_diagnostics(
+                engine.db(), &module_errors.diagnostics, &self.file_path, &line_offsets, &cwd);
             // Lowering errors have no spans yet, so they are printed as they are.
             for error in &module_errors.lowering_errors {
                 eprintln!("{}", error);
