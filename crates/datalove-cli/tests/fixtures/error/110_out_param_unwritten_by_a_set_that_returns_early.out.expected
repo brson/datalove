@@ -1,0 +1,10 @@
+[31m[D006] Error:[0m out parameter not initialized: `s`
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/110_out_param_unwritten_by_a_set_that_returns_early.dfs:4:7 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m4 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;201mn[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m![0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m1[0m
+ [38;5;240m  │[0m       [38;5;201m┬[0m  
+ [38;5;240m  │[0m       [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m this `set` can return early, without writing `s`
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: an out parameter has to be written on every way out of its function
+[38;5;246m───╯[0m
+Error: Ownership error

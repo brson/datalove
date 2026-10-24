@@ -1,0 +1,14 @@
+// D014 on a bare `loop`, which is left only by its `break`s: one gives `kept`
+// away and the other does not.
+var kept = "held"
+var i = 0
+loop
+  set i = i + 1
+  if i == 3
+    let gone = kept
+    break
+  end if
+  if i == 5
+    break
+  end if
+end loop

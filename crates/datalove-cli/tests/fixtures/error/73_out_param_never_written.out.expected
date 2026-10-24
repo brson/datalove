@@ -1,2 +1,10 @@
 [31m[D006] Error:[0m out parameter not initialized: `n`
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/73_out_param_never_written.dfs:7:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m7 │[0m [38;5;201mf[0m[38;5;201mu[0m[38;5;201mn[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mv[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m_[0m[38;5;249mw[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249m([0m[38;5;249mo[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249mu[0m[38;5;249m3[0m[38;5;249m2[0m[38;5;249m)[0m
+ [38;5;240m  │[0m [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
+ [38;5;240m  │[0m  [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m the body can run to its end without writing `n`
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: an out parameter has to be written on every way out of its function
+[38;5;246m───╯[0m
 Error: Ownership error

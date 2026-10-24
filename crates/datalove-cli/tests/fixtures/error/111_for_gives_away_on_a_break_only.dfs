@@ -1,0 +1,10 @@
+// D014 on a `for`: the `break` gives `kept` away, and running out of
+// elements does not.
+var kept = "held"
+let xs = [1, 2, 3]
+for x in ref xs
+  if x == 2
+    let gone = kept
+    break
+  end if
+end for

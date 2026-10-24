@@ -493,6 +493,36 @@ pub enum OwnershipRecoveryHint {
     None,
 }
 
+/// A way out of a function, which every out parameter has to have been
+/// written by.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum FunctionExit<'db> {
+    /// A `ret`, by its index into the spans of `ret`s.
+    Ret { local_index: u32 },
+    /// A return from inside an expression: a `?` or `!`, a checked or
+    /// optional operator, or a place's index step.
+    Early { expr_key: ExprKey<'db> },
+    /// A return from a `set`, on the way to its place or from its operator,
+    /// by its index into the spans of `set`s.
+    Set { set_index: u32 },
+    /// The end of the body, which the function runs off, by the function's
+    /// index into the spans of functions.
+    End { fun_index: u32 },
+}
+
+/// A way out of a loop.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum LoopExit<'db> {
+    /// A `break`, by its index into the spans of `break`s.
+    Break { local_index: u32 },
+    /// A `loop while`'s condition failing.
+    ConditionFails { condition: ExprKey<'db> },
+    /// A `for` running out of the collection it walks.
+    WalkEnds { collection: ExprKey<'db> },
+}
+
 /// Error detected during ownership analysis.
 ///
 /// Each variant includes an `expr_key` for span lookup during diagnostic
@@ -572,9 +602,10 @@ pub enum AnalysisError<'db> {
     /// Function returns without initializing Out param.
     /// D006
     OutParamNotInitialized {
-        /// Statement index of return, or None for implicit return.
-        ret_stmt_idx: Option<usize>,
         name: String,
+        /// Each way out of the function that leaves it unwritten, in the
+        /// order the analysis met them.
+        exits: Vec<FunctionExit<'db>>,
     },
     /// Moving an outer-scoped value inside a loop body.
     /// D007 - Recoverable with @ (clone before entering loop)
@@ -620,9 +651,13 @@ pub enum AnalysisError<'db> {
     ///
     /// D014
     InconsistentLoopExit {
-        /// Statement index of the loop statement.
-        stmt_idx: usize,
         name: String,
+        /// The ways out of the loop that leave the binding given away.
+        given_away: Vec<LoopExit<'db>>,
+        /// The ways out that leave it held.
+        held: Vec<LoopExit<'db>>,
+        /// Where it was given away, on the first way out that leaves it so.
+        moved_at: Option<ExprKey<'db>>,
     },
     /// Partial field write to out param (must write whole value).
     /// D009
@@ -703,7 +738,7 @@ fn format_single_error(error: &AnalysisError) -> String {
         AnalysisError::ReadUninitialized { expr_key: _, name } => {
             format!("error[D005]: read of uninitialized binding: `{}`", name)
         }
-        AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
+        AnalysisError::OutParamNotInitialized { name, .. } => {
             format!("error[D006]: out parameter not initialized: `{}`", name)
         }
         AnalysisError::MoveInLoop { expr_key: _, name, recovery_hint } => {
@@ -713,7 +748,7 @@ fn format_single_error(error: &AnalysisError) -> String {
         AnalysisError::InconsistentBranchMove { .. } => {
             format!("error[D008]: {}", inconsistent_branch_message(error).expect("is D008"))
         }
-        AnalysisError::InconsistentLoopExit { stmt_idx: _, name } => {
+        AnalysisError::InconsistentLoopExit { name, .. } => {
             format!("error[D014]: `{}` is given away on one way out of this loop and not another", name)
         }
         AnalysisError::OutParamPartialWrite { expr_key: _, name } => {

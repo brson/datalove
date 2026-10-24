@@ -1,0 +1,19 @@
+[31m[D014] Error:[0m `kept` is given away on one way out of this loop and not another
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/112_loop_breaks_disagree.dfs:9:5 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m 8 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mg[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[36mk[0m[36me[0m[36mp[0m[36mt[0m
+ [38;5;240m   │[0m                [36m─[0m[36m─[0m[36m┬[0m[36m─[0m  
+ [38;5;240m   │[0m                  [36m╰[0m[36m─[0m[36m─[0m[36m─[0m `kept` given away here
+ [38;5;246m 9 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;201mb[0m[38;5;201mr[0m[38;5;201me[0m[38;5;201ma[0m[38;5;201mk[0m
+ [38;5;240m   │[0m     [38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m[38;5;201m─[0m  
+ [38;5;240m   │[0m       [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m this `break` leaves `kept` given away
+ [38;5;240m   │[0m 
+ [38;5;246m12 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[36mb[0m[36mr[0m[36me[0m[36ma[0m[36mk[0m
+ [38;5;240m   │[0m     [36m─[0m[36m─[0m[36m┬[0m[36m─[0m[36m─[0m  
+ [38;5;240m   │[0m       [36m╰[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m this `break` leaves `kept` still held
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: give it away on every way out, or clone it with `@` at the move
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mNote[0m: the move cannot happen twice, so it is not the problem. Whether `kept` is still held after the loop depends on which way out ran, and a drop has to be placed without knowing.
+[38;5;246m────╯[0m
+Error: Ownership error

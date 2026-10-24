@@ -1,0 +1,12 @@
+// D006 at a `set` whose compound operator can return early: `+!` on the
+// place itself, with the out parameter not yet written.
+fun bump(mut n: i32, out s: string): !()
+  set n +!= 1
+  set s = "written"
+  ret ok ()
+end fun
+
+var x: string
+var n: i32 = 2147483647
+let r = bump(mut n, out x)
+debuglog r

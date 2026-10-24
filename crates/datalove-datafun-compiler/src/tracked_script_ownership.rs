@@ -22,7 +22,7 @@ use datalove_datafun_ownership::{
     TrackingCategory, format_analysis_errors,
 };
 pub use datalove_datafun_sema::{
-    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint, ExternalBinding,
+    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint, ExternalBinding, FunctionExit, LoopExit,
 };
 
 /// Hashable wrapper for FunctionAnalysis.
@@ -302,6 +302,12 @@ fn error_span<'db>(spans: &DatafunSpans<'db>, expr_key: ExprKey<'db>) -> (Source
     expr_span(spans, expr_key).expect("an expression an ownership error points at has a span")
 }
 
+/// The span of a statement an error points at, which the parse that made the
+/// statement gave one.
+fn stmt_span(span: Option<&TextSpan>) -> TextSpan {
+    span.expect("a statement an ownership error points at has a span").C()
+}
+
 /// The help for an error a `@` would fix, showing the line as it would read.
 fn adapt_help<'db>(
     recovery_hint: &OwnershipRecoveryHint,
@@ -321,7 +327,6 @@ fn adapt_help<'db>(
 /// The diagnostic for one ownership error, against the spans of its unit or
 /// module.
 ///
-/// An error that points at no expression has no label, only its message.
 pub fn ownership_diagnostic<'db>(
     db: &'db dyn salsa::Database,
     error: &AnalysisError<'db>,
@@ -516,16 +521,68 @@ pub fn ownership_diagnostic<'db>(
                 ))
                 .help(&help)
         }
-        AnalysisError::OutParamNotInitialized { name, .. } => {
-            DiagnosticBuilder::error(db, &fmt!("out parameter not initialized: `{name}`"))
-                .code("D006")
+        AnalysisError::OutParamNotInitialized { name, exits } => {
+            let mut builder = DiagnosticBuilder::error(db, &fmt!("out parameter not initialized: `{name}`"))
+                .code("D006");
+            for (index, exit) in exits.iter().enumerate() {
+                let (span, label) = match exit {
+                    FunctionExit::Ret { local_index } => {
+                        (stmt_span(spans.lookup_ret(*local_index)), fmt!("returns without writing `{name}`"))
+                    }
+                    FunctionExit::Early { expr_key } => {
+                        let (text, span) = error_span(spans, *expr_key);
+                        (TextSpan::new(text, span), fmt!("can return early here, without writing `{name}`"))
+                    }
+                    FunctionExit::Set { set_index } => {
+                        (stmt_span(spans.lookup_set(*set_index)), fmt!("this `set` can return early, without writing `{name}`"))
+                    }
+                    FunctionExit::End { fun_index } => {
+                        (stmt_span(spans.lookup_fun(*fun_index)), fmt!("the body can run to its end without writing `{name}`"))
+                    }
+                };
+                builder = match index {
+                    0 => builder.primary_label(span, &label),
+                    _ => builder.secondary_label(span, &label),
+                };
+            }
+            builder.note("an out parameter has to be written on every way out of its function")
         }
-        AnalysisError::InconsistentLoopExit { name, .. } => {
-            DiagnosticBuilder::error(db, &fmt!("`{name}` is given away on one way out of this loop and not another"))
-                .code("D014")
-                .note("the move cannot happen twice, so it is not the problem. Whether it is still \
-                       held after the loop depends on which way out ran, and a drop has to be \
-                       placed without knowing.")
+        AnalysisError::InconsistentLoopExit { name, given_away, held, moved_at } => {
+            let mut builder = DiagnosticBuilder::error(db, &fmt!("`{name}` is given away on one way out of this loop and not another"))
+                .code("D014");
+            let exit_span = |exit: &LoopExit<'db>| match exit {
+                LoopExit::Break { local_index } => (stmt_span(spans.lookup_break(*local_index)), "this `break`"),
+                LoopExit::ConditionFails { condition } => {
+                    let (text, span) = error_span(spans, *condition);
+                    (TextSpan::new(text, span), "the condition failing")
+                }
+                LoopExit::WalkEnds { collection } => {
+                    let (text, span) = error_span(spans, *collection);
+                    (TextSpan::new(text, span), "running out of elements")
+                }
+            };
+            for (index, exit) in given_away.iter().enumerate() {
+                let (span, way) = exit_span(exit);
+                let label = fmt!("{way} leaves `{name}` given away");
+                builder = match index {
+                    0 => builder.primary_label(span, &label),
+                    _ => builder.secondary_label(span, &label),
+                };
+            }
+            for exit in held {
+                let (span, way) = exit_span(exit);
+                builder = builder.secondary_label(span, &fmt!("{way} leaves `{name}` still held"));
+            }
+            if let Some(moved_at) = moved_at {
+                let (text, span) = error_span(spans, *moved_at);
+                builder = builder.secondary_label(TextSpan::new(text, span), &fmt!("`{name}` given away here"));
+            }
+            builder
+                .note(&fmt!(
+                    "the move cannot happen twice, so it is not the problem. Whether `{name}` is \
+                     still held after the loop depends on which way out ran, and a drop has to be \
+                     placed without knowing."
+                ))
                 .help("give it away on every way out, or clone it with `@` at the move")
         }
     }

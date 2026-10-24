@@ -55,7 +55,7 @@ use datalove_datafun_sema::{BindingMap, Destructure};
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
-    ExprTypes, CallTargets, ExternalBinding,
+    ExprTypes, CallTargets, ExternalBinding, FunctionExit, LoopExit,
 };
 
 // ============================================================================
@@ -134,7 +134,7 @@ struct AnalysisCtx<'a, 'db> {
     ///
     /// `break` and `continue` carry no label, so both always belong to the
     /// innermost loop and this is a plain stack.
-    loop_exits: Vec<LoopExits>,
+    loop_exits: Vec<LoopExits<'db>>,
     /// The collections the `for` loops being analyzed walk, innermost last.
     /// Each is frozen for its loop's body: its cursor and its element bindings
     /// point into it.
@@ -161,11 +161,20 @@ enum Walked {
 /// loop and never returns to the head, so it cannot repeat, but it decides what
 /// is true afterwards along with every other exit.
 #[derive(Default)]
-struct LoopExits {
-    breaks: Vec<BindingMap<BindingState>>,
-    /// Which out parameters each `break` left with a value, beside `breaks`.
-    break_inits: Vec<BindingMap<OutParamInitState>>,
+struct LoopExits<'db> {
+    breaks: Vec<LoopBreak<'db>>,
     continues: Vec<BindingMap<BindingState>>,
+}
+
+/// How a `break` left the loop.
+struct LoopBreak<'db> {
+    /// The `break`'s index into the spans of `break`s.
+    local_index: u32,
+    state: BindingMap<BindingState>,
+    /// Which out parameters it left with a value.
+    inits: BindingMap<OutParamInitState>,
+    /// Where each binding it left given away was given away.
+    moved_at: BindingMap<ExprKey<'db>>,
 }
 
 /// A scope frame for tracking bindings.
@@ -614,20 +623,18 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// kept here is only what the loop has to know afterwards: which bindings it
     /// took with it. Bindings the loop body declared are left out -- they do not
     /// exist past the loop, and the exit dropped them on its way.
-    fn record_loop_exit(&mut self, is_continue: bool) {
-        let state = self.scope_stack.last()
-            .map(|frame| frame.current_state.C())
-            .unwrap_or_default();
-        let inits = self.scope_stack.last()
-            .map(|frame| frame.out_param_init.C())
-            .unwrap_or_default();
+    /// Record a way out of the innermost loop: the `break` with this index, or
+    /// a `continue` for `None`.
+    fn record_loop_exit(&mut self, break_index: Option<u32>) {
+        let frame = self.scope_stack.last().expect("a loop is analyzed inside a scope");
+        let state = frame.current_state.C();
+        let inits = frame.out_param_init.C();
+        let moved_at = frame.moved_at.C();
         let exits = self.loop_exits.last_mut()
             .expect("a `break` or `continue` outside a loop is F050/F051, which typecheck refuses");
-        if is_continue {
-            exits.continues.push(state);
-        } else {
-            exits.breaks.push(state);
-            exits.break_inits.push(inits);
+        match break_index {
+            Some(local_index) => exits.breaks.push(LoopBreak { local_index, state, inits, moved_at }),
+            None => exits.continues.push(state),
         }
     }
 
@@ -939,79 +946,66 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// Check if an expression contains early-return operators.
     fn expr_may_early_return(&self, expr: ExprFun<'db>) -> bool {
+        self.early_return_in(expr).is_some()
+    }
+
+    /// The first place, in the order it is evaluated, where `expr` can return
+    /// early: a `?` or `!`, a checked or optional operator, or an index step
+    /// of a place.
+    fn early_return_in(&self, expr: ExprFun<'db>) -> Option<ExprKey<'db>> {
+        let all = |ids: &mut dyn Iterator<Item = ExprId>| {
+            for id in ids {
+                if let Some(at) = self.early_return_in(expr.at(id)) {
+                    return Some(at);
+                }
+            }
+            None
+        };
+        let here = |leaves: bool| leaves.then(|| expr.key());
         match expr.kind() {
-            ExprFunKind::TryOption(_) | ExprFunKind::TryResult(_) => true,
+            ExprFunKind::TryOption(t) => self.early_return_in(self.expr(t.operand)).or(Some(expr.key())),
+            ExprFunKind::TryResult(t) => self.early_return_in(self.expr(t.operand)).or(Some(expr.key())),
             ExprFunKind::BinOp(binop) => {
                 let op_may_return = matches!(
                     binop.op,
                     BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional |
                     BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked
                 );
-                op_may_return
-                    || self.expr_may_early_return(self.expr(binop.lhs))
-                    || self.expr_may_early_return(self.expr(binop.rhs))
+                all(&mut [binop.lhs, binop.rhs].into_iter()).or_else(|| here(op_may_return))
             }
             ExprFunKind::UnaryOp(unary) => {
                 let op_may_return = matches!(
                     unary.op,
                     UnaryOp::NegOptional | UnaryOp::NegResult
                 );
-                op_may_return || self.expr_may_early_return(self.expr(unary.operand))
+                self.early_return_in(self.expr(unary.operand)).or_else(|| here(op_may_return))
             }
-            ExprFunKind::FunctionCall(call) => {
-                call.args.iter().any(|&arg| self.expr_may_early_return(expr.at(arg)))
-            }
-            ExprFunKind::IntrinsicCall(icall) => {
-                icall.args.iter().any(|&arg| self.expr_may_early_return(self.expr(arg)))
-            }
-            ExprFunKind::Tuple(tuple) => {
-                tuple.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
-            }
-            ExprFunKind::List(list) => {
-                list.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
-            }
-            ExprFunKind::Set(set) => {
-                set.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
-            }
-            ExprFunKind::Map(map) => {
-                map.entries.iter().any(|entry| {
-                    self.expr_may_early_return(self.expr(entry.key))
-                        || self.expr_may_early_return(self.expr(entry.value))
-                })
-            }
-            ExprFunKind::Tensor(tensor) => {
-                tensor.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
-            }
-            ExprFunKind::Table(table) => {
-                table.rows.iter()
-                    .flat_map(|row| &row.elements)
-                    .any(|elem| self.expr_may_early_return(self.expr(*elem)))
-            }
-            ExprFunKind::AnonTuple(tuple) => {
-                tuple.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
-            }
-            ExprFunKind::AnonStruct(s) => {
-                s.fields.iter().any(|f| self.expr_may_early_return(self.expr(f.value)))
-            }
-            ExprFunKind::Some(s) => self.expr_may_early_return(self.expr(s.payload)),
-            ExprFunKind::Ok(o) => self.expr_may_early_return(self.expr(o.payload)),
-            ExprFunKind::Er(e) => self.expr_may_early_return(self.expr(e.payload)),
-            ExprFunKind::Data(d) => self.expr_may_early_return(self.expr(d.value)),
-            ExprFunKind::Error(e) => self.expr_may_early_return(self.expr(e.value)),
-            ExprFunKind::Term(t) => self.expr_may_early_return(self.expr(t.payload)),
-            ExprFunKind::EnumLiteral(lit) => self.expr_may_early_return(self.expr(lit.variant)),
-            ExprFunKind::FieldProj(proj) => self.expr_may_early_return(self.expr(proj.base)),
-            ExprFunKind::Index(idx) => {
-                self.expr_may_early_return(self.expr(idx.base))
-                    || self.expr_may_early_return(self.expr(idx.index))
-            }
+            ExprFunKind::FunctionCall(call) => all(&mut call.args.iter().copied()),
+            ExprFunKind::IntrinsicCall(icall) => all(&mut icall.args.iter().copied()),
+            ExprFunKind::Tuple(tuple) => all(&mut tuple.elements.iter().copied()),
+            ExprFunKind::List(list) => all(&mut list.elements.iter().copied()),
+            ExprFunKind::Set(set) => all(&mut set.elements.iter().copied()),
+            ExprFunKind::Map(map) => all(&mut map.entries.iter().flat_map(|entry| [entry.key, entry.value])),
+            ExprFunKind::Tensor(tensor) => all(&mut tensor.elements.iter().copied()),
+            ExprFunKind::Table(table) => all(&mut table.rows.iter().flat_map(|row| row.elements.iter().copied())),
+            ExprFunKind::AnonTuple(tuple) => all(&mut tuple.elements.iter().copied()),
+            ExprFunKind::AnonStruct(s) => all(&mut s.fields.iter().map(|f| f.value)),
+            ExprFunKind::Some(s) => self.early_return_in(self.expr(s.payload)),
+            ExprFunKind::Ok(o) => self.early_return_in(self.expr(o.payload)),
+            ExprFunKind::Er(e) => self.early_return_in(self.expr(e.payload)),
+            ExprFunKind::Data(d) => self.early_return_in(self.expr(d.value)),
+            ExprFunKind::Error(e) => self.early_return_in(self.expr(e.value)),
+            ExprFunKind::Term(t) => self.early_return_in(self.expr(t.payload)),
+            ExprFunKind::EnumLiteral(lit) => self.early_return_in(self.expr(lit.variant)),
+            ExprFunKind::FieldProj(proj) => self.early_return_in(self.expr(proj.base)),
+            ExprFunKind::Index(idx) => all(&mut [idx.base, idx.index].into_iter()),
             ExprFunKind::Place(place) => {
                 // Place expressions with index steps always may early-return.
-                place.steps.iter().any(|s| matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(_)))
+                here(place.steps.iter().any(|s| matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(_))))
             }
-            ExprFunKind::CloneCoerce(cc) => self.expr_may_early_return(self.expr(cc.operand)),
-            ExprFunKind::Hinted(h) => self.expr_may_early_return(self.expr(h.inner)),
-            _ => false,
+            ExprFunKind::CloneCoerce(cc) => self.early_return_in(self.expr(cc.operand)),
+            ExprFunKind::Hinted(h) => self.early_return_in(self.expr(h.inner)),
+            _ => None,
         }
     }
 
@@ -1363,7 +1357,7 @@ pub fn analyze_function<'db>(
     // the usual way to write one -- promised an out parameter and delivered
     // nothing, and the caller read whatever was in the slot.
     if datalove_datafun_ast::reachable::body_completes(&body.statements) {
-        check_out_params_initialized(&mut ctx, None);
+        check_out_params_initialized(&mut ctx, FunctionExit::End { fun_index: func.local_index });
     }
 
     // Whatever is still owned where the body ends has to be let go there.
@@ -1669,13 +1663,13 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
             Statement::For(for_stmt) => {
                 analyze_for(ctx, for_stmt, stmt_id);
             }
-            Statement::Break(_) => {
+            Statement::Break(break_stmt) => {
                 // Drops before break: all live bindings in loop body.
                 let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
                 if !drops.is_empty() {
                     ctx.schedule.before_break.insert(stmt_id, drops);
                 }
-                ctx.record_loop_exit(false);
+                ctx.record_loop_exit(Some(break_stmt.local_index));
             }
             Statement::Continue(_) => {
                 // Drops before continue: all live bindings in loop body.
@@ -1683,7 +1677,7 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
                 if !drops.is_empty() {
                     ctx.schedule.before_continue.insert(stmt_id, drops);
                 }
-                ctx.record_loop_exit(true);
+                ctx.record_loop_exit(None);
             }
             Statement::Fun(_) => {
                 // Nested functions handled separately.
@@ -1811,12 +1805,10 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     // Then the keys, left to right. A bare index (upsert) consumes its key,
     // which goes into the map if it is absent; with `?` or `!` the key is
     // only looked up, and borrowed.
-    let mut keys_may_early_return = false;
-    for step in &place.steps {
-        if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-            keys_may_early_return |= ctx.expr_may_early_return(ctx.expr(idx.index));
-        }
-    }
+    let key_early_return = place.steps.iter().find_map(|step| match step {
+        datalove_datafun_ast::ast::PlaceStep::Index(idx) => ctx.early_return_in(ctx.expr(idx.index)),
+        _ => None,
+    });
 
     // An early return from inside the value or a key, or from a checked or
     // optional compound operator, drops what is live once the value has been
@@ -1824,8 +1816,13 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     // operator, which runs after the keys, it's the same, since a compound
     // assignment has no bare index to consume one.
     let op_may_early_return = stmt.op.is_some_and(|op| !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div));
-    if ctx.expr_may_early_return(expr) || keys_may_early_return || op_may_early_return {
-        let drops = early_return_drops(ctx, stmt_idx);
+    let leaves_at = ctx.early_return_in(expr).or(key_early_return);
+    if leaves_at.is_some() || op_may_early_return {
+        let exit = match leaves_at {
+            Some(expr_key) => FunctionExit::Early { expr_key },
+            None => FunctionExit::Set { set_index: stmt.local_index },
+        };
+        let drops = early_return_drops(ctx, exit);
         schedule_not_yet_moved(ctx, stmt_idx, &live_before_value, &drops);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
@@ -1856,7 +1853,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(idx) if idx.error_mode.is_some())
     });
     if target_may_early_return {
-        let drops = early_return_drops(ctx, stmt_idx);
+        let drops = early_return_drops(ctx, FunctionExit::Set { set_index: stmt.local_index });
         if !drops.is_empty() {
             ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
         }
@@ -1915,45 +1912,41 @@ fn check_compound_target_readable<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &St
     ctx.check_not_moved(id, expr_key);
 }
 
-/// Report every out parameter that has not been written by this exit.
+/// Report every out parameter that has not been written by `exit`.
 ///
-/// `ret_stmt_idx` is the `ret` the check is for, or `None` for the end of the
-/// body, which is a return the function did not write down.
+/// A parameter is reported once, with each exit that misses it.
 fn check_out_params_initialized<'db>(
     ctx: &mut AnalysisCtx<'_, 'db>,
-    ret_stmt_idx: Option<usize>,
+    exit: FunctionExit<'db>,
 ) {
     ctx.note_unit_exit();
     for (idx, info) in ctx.bindings.iter().enumerate() {
         if info.param_mode == Some(ParamMode::Out) {
             let id = BindingId(idx as u32);
             if ctx.get_out_param_init(id) != Some(OutParamInitState::Initialized) {
-                // The diagnostic carries no location, so a second exit missing
-                // the same parameter would only repeat it.
-                let reported = ctx.errors.iter().any(|e| matches!(
-                    e,
-                    AnalysisError::OutParamNotInitialized { name, .. } if *name == info.name
-                ));
-                if reported {
-                    continue;
-                }
-                let name = info.name.C();
-                ctx.errors.push(AnalysisError::OutParamNotInitialized {
-                    ret_stmt_idx,
-                    name,
+                let reported = ctx.errors.iter_mut().find_map(|error| match error {
+                    AnalysisError::OutParamNotInitialized { name, exits } if *name == info.name => Some(exits),
+                    _ => None,
                 });
+                match reported {
+                    Some(exits) => exits.push(exit.C()),
+                    None => ctx.errors.push(AnalysisError::OutParamNotInitialized {
+                        name: info.name.C(),
+                        exits: vec![exit.C()],
+                    }),
+                }
             }
         }
     }
 }
 
-/// Settle an early return from a `?`, a `!` or a checked operator in statement
-/// `stmt_idx`, returning what the function still owns there.
+/// Settle an early return from a `?`, a `!` or a checked operator, at
+/// `exit`, returning what the function still owns there.
 ///
 /// It leaves the function like a `ret`, so every out parameter must have been
 /// written by then: the caller treats its argument as initialized either way.
-fn early_return_drops<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt_idx: usize) -> Vec<BindingId> {
-    check_out_params_initialized(ctx, Some(stmt_idx));
+fn early_return_drops<'db>(ctx: &mut AnalysisCtx<'_, 'db>, exit: FunctionExit<'db>) -> Vec<BindingId> {
+    check_out_params_initialized(ctx, exit);
     ctx.live_bindings_for_return()
 }
 
@@ -1971,7 +1964,8 @@ fn analyze_leaving_expr<'db>(
     }
     let live_before = ctx.live_bindings_for_return();
     ctx.analyze_expr_moves(expr, is_consumed);
-    let drops = early_return_drops(ctx, stmt_idx);
+    let expr_key = ctx.early_return_in(expr).expect("it may return early");
+    let drops = early_return_drops(ctx, FunctionExit::Early { expr_key });
     schedule_not_yet_moved(ctx, stmt_idx, &live_before, &drops);
     if !drops.is_empty() {
         ctx.schedule.before_try_return.insert(stmt_idx, drops);
@@ -2006,7 +2000,7 @@ fn schedule_not_yet_moved<'db>(
 
 fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx: usize) {
     // Check that all Out params are initialized before return.
-    check_out_params_initialized(ctx, Some(stmt_idx));
+    check_out_params_initialized(ctx, FunctionExit::Ret { local_index: stmt.local_index });
 
     let may_early_return = stmt.value
         .map(|expr| ctx.expr_may_early_return(ctx.expr(expr)))
@@ -2436,7 +2430,8 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
         ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
     }
 
-    merge_loop_exits(ctx, stmt.condition.is_some(), stmt_idx, &exits, &entry);
+    let runs_out = stmt.condition.map(|condition| LoopExit::ConditionFails { condition: ctx.expr(condition).key() });
+    merge_loop_exits(ctx, runs_out, &exits, &entry);
 }
 
 /// Analyze a `for`: a loop that binds references into a collection, and so
@@ -2485,7 +2480,8 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
     }
 
     // A walk can always run out of elements, on the first look included.
-    merge_loop_exits(ctx, true, stmt_idx, &exits, &entry);
+    let runs_out = LoopExit::WalkEnds { collection: ctx.expr(stmt.iteratee).key() };
+    merge_loop_exits(ctx, Some(runs_out), &exits, &entry);
 }
 
 /// Analyze what a loop reads before its body: a `loop while` condition, or
@@ -2496,7 +2492,7 @@ fn analyze_read_before_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, expr: ExprFun<'
 }
 
 /// What is true as a loop is entered.
-struct LoopEntry {
+struct LoopEntry<'db> {
     /// The state the loop is entered with, which is also the state it is left
     /// with when it ends before its body runs, since nothing that changed a
     /// binding here survives the repeat check.
@@ -2507,10 +2503,12 @@ struct LoopEntry {
     /// Which out parameters have a value on entry, which is also which have
     /// one when the loop ends before its body runs.
     inits_before: BindingMap<OutParamInitState>,
+    /// Where each binding given away on entry was given away.
+    moved_at_before: BindingMap<ExprKey<'db>>,
 }
 
-impl LoopEntry {
-    fn of(ctx: &AnalysisCtx<'_, '_>) -> LoopEntry {
+impl<'db> LoopEntry<'db> {
+    fn of(ctx: &AnalysisCtx<'_, 'db>) -> LoopEntry<'db> {
         let state_before = ctx.scope_stack.last()
             .map(|frame| frame.current_state.C())
             .unwrap_or_default();
@@ -2523,7 +2521,10 @@ impl LoopEntry {
         let inits_before = ctx.scope_stack.last()
             .map(|frame| frame.out_param_init.C())
             .unwrap_or_default();
-        LoopEntry { state_before, outer_live, inits_before }
+        let moved_at_before = ctx.scope_stack.last()
+            .map(|frame| frame.moved_at.C())
+            .unwrap_or_default();
+        LoopEntry { state_before, outer_live, inits_before, moved_at_before }
     }
 }
 
@@ -2546,8 +2547,8 @@ impl LoopEntry {
 fn check_loop_repeats<'db>(
     ctx: &mut AnalysisCtx<'_, 'db>,
     body: &[Statement<'db>],
-    exits: &LoopExits,
-    entry: &LoopEntry,
+    exits: &LoopExits<'db>,
+    entry: &LoopEntry<'db>,
 ) {
     let body_reaches_head = body_completes(body);
     for id in &entry.outer_live {
@@ -2580,52 +2581,59 @@ fn check_loop_repeats<'db>(
 /// which exit ran. Drop points here are static, so that is refused.
 fn merge_loop_exits<'db>(
     ctx: &mut AnalysisCtx<'_, 'db>,
-    can_run_out: bool,
-    stmt_idx: usize,
-    exits: &LoopExits,
-    entry: &LoopEntry,
+    runs_out: Option<LoopExit<'db>>,
+    exits: &LoopExits<'db>,
+    entry: &LoopEntry<'db>,
 ) {
-    let state_before = &entry.state_before;
-    let mut exit_states: Vec<&BindingMap<BindingState>> = exits.breaks.iter().collect();
-    if can_run_out {
-        exit_states.push(state_before);
+    // Each way out, with the bindings, the out parameters, and where what it
+    // left given away was given away, as they are when it leaves. Running out
+    // leaves as the loop was entered.
+    let mut ways: Vec<(LoopExit<'db>, &BindingMap<BindingState>, &BindingMap<OutParamInitState>, &BindingMap<ExprKey<'db>>)> =
+        exits.breaks.iter()
+            .map(|exit| (LoopExit::Break { local_index: exit.local_index }, &exit.state, &exit.inits, &exit.moved_at))
+            .collect();
+    if let Some(runs_out) = runs_out {
+        ways.push((runs_out, &entry.state_before, &entry.inits_before, &entry.moved_at_before));
     }
 
     // A bare `loop` nothing breaks out of is left by returning or not at all, so
     // there is nothing after it for this to describe.
-    if exit_states.is_empty() {
+    if ways.is_empty() {
         return;
     }
 
     // An out parameter has a value after the loop only if every way out left
     // it one: a body that may not run, or a `break` before the `set`, does not.
-    let mut exit_inits: Vec<&BindingMap<OutParamInitState>> = exits.break_inits.iter().collect();
-    if can_run_out {
-        exit_inits.push(&entry.inits_before);
-    }
     for id in entry.inits_before.keys() {
-        let initialized = exit_inits.iter()
-            .all(|inits| inits.get(&id) == Some(&OutParamInitState::Initialized));
+        let initialized = ways.iter()
+            .all(|(_, _, inits, _)| inits.get(&id) == Some(&OutParamInitState::Initialized));
         let state = if initialized { OutParamInitState::Initialized } else { OutParamInitState::Uninitialized };
         ctx.set_out_param_init(id, state);
     }
 
-    for id in state_before.keys() {
+    for id in entry.state_before.keys() {
         if ctx.bindings[id.0 as usize].ty.is_copy() {
             continue;
         }
 
-        let mut states = exit_states.iter()
-            .map(|state| state.get(&id).copied().unwrap_or(BindingState::Live));
-        let first = states.next().X();
-
-        if states.all(|state| state == first) {
+        let state_on = |state: &BindingMap<BindingState>| state.get(&id).copied().unwrap_or(BindingState::Live);
+        let first = state_on(ways[0].1);
+        if ways.iter().all(|(_, state, _, _)| state_on(state) == first) {
             if let Some(frame) = ctx.scope_stack.last_mut() {
                 frame.current_state.insert(id, first);
             }
-        } else {
-            let name = ctx.bindings[id.0 as usize].name.C();
-            ctx.errors.push(AnalysisError::InconsistentLoopExit { stmt_idx, name });
+            continue;
         }
+
+        let (given_away, held): (Vec<_>, Vec<_>) = ways.iter()
+            .partition(|(_, state, _, _)| state_on(state) == BindingState::Moved);
+        let moved_at = given_away[0].3.get(&id).copied();
+        let name = ctx.bindings[id.0 as usize].name.C();
+        ctx.errors.push(AnalysisError::InconsistentLoopExit {
+            name,
+            given_away: given_away.iter().map(|way| way.0.C()).collect(),
+            held: held.iter().map(|way| way.0.C()).collect(),
+            moved_at,
+        });
     }
 }
