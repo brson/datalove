@@ -85,6 +85,10 @@ impl Session {
                 ReplCommand::Delete { unit } => self.delete(unit),
                 ReplCommand::Insert { place, unit, source } => self.insert(place, unit, source),
                 ReplCommand::Restore { unit, after, source } => self.restore(unit, after, source),
+                ReplCommand::Describe { unit } => match self.index_of(unit) {
+                    Some(index) => Eval::Detail(self.describe(index)),
+                    None => no_unit(unit),
+                },
                 ReplCommand::Renumber { next } => {
                     self.next = next;
                     Eval::Edited(Vec::new())
@@ -141,6 +145,22 @@ impl Session {
             self.next += 1;
         }
         eval
+    }
+
+    /// What the session has to say about the unit at `index`.
+    fn describe(&mut self, index: usize) -> crate::UnitDetail {
+        let number = self.units[index].number;
+        let effects = self.engine.unit_effects(index);
+        crate::UnitDetail {
+            unit: number,
+            diagnostics: self.engine.unit_diagnostics(index, &fmt!("unit {number}")),
+            bindings: self.engine.unit_bindings(index),
+            provides: effects.provides,
+            uses: effects.uses,
+            takes: effects.taken,
+            overwrites: effects.overwritten,
+            updates: effects.updated,
+        }
     }
 
     /// Put a unit back with its number, as it was before it was deleted, or

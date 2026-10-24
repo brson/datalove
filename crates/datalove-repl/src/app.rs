@@ -65,6 +65,8 @@ pub enum Tab {
     Environment,
     /// Every input, code and REPL commands alike, with what it came to.
     History,
+    /// What there is to know about the selected unit, while there are units.
+    Detail,
     /// How the REPL is used, once it has been asked for.
     Help,
 }
@@ -74,6 +76,7 @@ impl Tab {
         match self {
             Tab::Environment => "Environment",
             Tab::History => "History",
+            Tab::Detail => "Detail",
             Tab::Help => "Help",
         }
     }
@@ -116,6 +119,9 @@ pub struct CodeUnit<'a> {
 struct SessionUnit {
     numbered: repl::NumberedUnit,
     status: UnitStatus,
+    /// What it came to the last time it was re-derived, which its status
+    /// says in a word.
+    outcome: Option<script::Eval>,
 }
 
 /// Where the renderer last put each code unit, so the selection can be
@@ -294,6 +300,10 @@ pub trait ReplExecutor {
     fn try_recv_response(&mut self) -> Option<WorkerResponse>;
 }
 
+/// The first id the detail of a unit is asked for under, far past any id an
+/// entry will reach.
+pub const DESCRIBE_IDS: u64 = 1 << 62;
+
 /// Core REPL application state, completely UI-agnostic.
 pub struct ReplApp<E: ReplExecutor> {
     /// What evaluates the commands.
@@ -355,6 +365,22 @@ pub struct ReplApp<E: ReplExecutor> {
     help_shown: bool,
     /// How far down from the top of the help the view is scrolled, in lines.
     help_scroll: ScrollState,
+    /// How far down from the top of the detail the view is scrolled, in lines.
+    detail_scroll: ScrollState,
+    /// What the session last said about the selected unit.
+    detail: Option<repl::UnitDetail>,
+    /// The id the detail is next asked for under.
+    ///
+    /// These ids are counted from [`DESCRIBE_IDS`], apart from the entries',
+    /// so that asking leaves the entries' ids as they would be without it.
+    /// Asking only reads, so commands the app carries out do not wait for
+    /// these answers as they do for others.
+    next_describe: u64,
+    /// The unit the detail was last asked about, and how many answers had
+    /// changed the session then; it is asked about again when either moves.
+    described: Option<(u32, u64)>,
+    /// How many answers that could have changed the session have come.
+    answers: u64,
     /// Whether the engine has reported itself ready.
     ///
     /// The engine compiles the system library before it can answer anything,
@@ -421,6 +447,11 @@ impl<E: ReplExecutor> ReplApp<E> {
             environment_scroll: ScrollState::default(),
             help_shown: false,
             help_scroll: ScrollState::default(),
+            detail_scroll: ScrollState::default(),
+            detail: None,
+            next_describe: DESCRIBE_IDS,
+            described: None,
+            answers: 0,
             engine_ready: false,
             engine_dead: None,
             crash_modal: None,
@@ -825,15 +856,76 @@ impl<E: ReplExecutor> ReplApp<E> {
                 WorkerResponse::EngineDead { message } => {
                     self.engine_dead = Some(message);
                 }
+                WorkerResponse::EvalResult { id, eval, .. } if id >= DESCRIBE_IDS => {
+                    self.detail = match eval {
+                        repl::Eval::Detail(detail) => Some(detail),
+                        // Gone since it was asked about.
+                        _ => None,
+                    };
+                }
                 WorkerResponse::EvalResult { id, eval, environment, session, step } => {
+                    self.answers += 1;
                     self.handle_eval_result(id, eval, environment);
                     self.check_session(session);
                     self.last_step = step;
+                    if !self.tabs().contains(&self.tab) {
+                        self.tab = Tab::Environment;
+                    }
                 }
             }
         }
         // What waited on those answers can run now.
         self.dispatch();
+        self.ask_for_detail();
+    }
+
+    /// Ask the session about the selected unit, if it has not been asked
+    /// since the selection or the session last changed.
+    fn ask_for_detail(&mut self) {
+        let Some(unit) = self.selected_unit().filter(|unit| self.index_of(*unit).is_some()) else {
+            return;
+        };
+        if self.described == Some((unit, self.answers)) {
+            return;
+        }
+        self.described = Some((unit, self.answers));
+        let id = self.next_describe;
+        self.next_describe += 1;
+        self.executor.submit_eval(id, repl::Command::ReplCommand(repl::ReplCommand::Describe { unit }));
+    }
+
+    /// What the session last said about the selected unit, if it has said
+    /// anything about it.
+    pub fn detail(&self) -> Option<&repl::UnitDetail> {
+        self.detail.as_ref().filter(|detail| Some(detail.unit) == self.selected_unit())
+    }
+
+    /// What the unit with this number came to the last time it was
+    /// re-derived.
+    pub fn outcome(&self, number: u32) -> Option<&script::Eval> {
+        self.units.iter().find(|unit| unit.numbered.number == number)?.outcome.as_ref()
+    }
+
+    /// Show the Detail tab if this answer left the selected unit failed,
+    /// returned early, or blocked: what went wrong is told there.
+    ///
+    /// Only an answer that re-derived the unit does, so one that left it
+    /// alone, however it fared before, does not take the tab from what is
+    /// being looked at.
+    fn show_detail_if_broken(&mut self, eval: &repl::Eval) {
+        let Some(selected) = self.selected_unit() else {
+            return;
+        };
+        let reached = match eval {
+            repl::Eval::Unit(_) => self.units.last().is_some_and(|unit| unit.numbered.number == selected),
+            repl::Eval::Edited(step) => step.iter().any(|unit| unit.unit == selected && unit.eval.is_some()),
+            _ => false,
+        };
+        let broken = self.units.iter().find(|unit| unit.numbered.number == selected)
+            .is_some_and(|unit| matches!(unit.status, UnitStatus::Failed | UnitStatus::ReturnedEarly | UnitStatus::Blocked));
+        if reached && broken {
+            self.tab = Tab::Detail;
+        }
     }
 
     /// Show what a command will change: code changes the environment, and
@@ -864,12 +956,14 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.history.retain(|entry| entry.id > id);
                 self.crash_modal = Some(reset_message(&eval));
             }
+            self.show_detail_if_broken(&eval);
             return;
         }
         let command = find_entry(&mut self.history, id).command.C();
         let change = self.apply(&command, &eval);
         find_entry(&mut self.history, id).change = change;
         self.environment = environment;
+        self.show_detail_if_broken(&eval);
 
         if let repl::Eval::Reset = eval {
             // Input submitted after the reset was evaluated in the new
@@ -902,6 +996,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::Eval::Help | repl::Eval::Saved { .. } | repl::Eval::Loaded { .. } => {
                 unreachable!("the app carries out {command:?} itself")
             }
+            repl::Eval::Detail(_) => unreachable!("a detail answers a question, not an entry"),
         };
         let entry = find_entry(&mut self.history, id);
         entry.eval_result = Some(eval.C());
@@ -934,7 +1029,10 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.units.push(SessionUnit {
                     numbered: repl::NumberedUnit { number, unit: unit.C() },
                     status: status_of(eval),
+                    outcome: Some(eval.C()),
                 });
+                // A unit entered is the one to look at.
+                self.selected_unit = Some(number);
                 return Some(Change::Made { unit: number, after, source: unit.C() });
             }
             (repl::Command::ReplCommand(R::Renumber { next }), _) => {
@@ -975,6 +1073,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             for unit in step {
                 if let (Some(index), Some(eval)) = (self.index_of(unit.unit), &unit.eval) {
                     self.units[index].status = status_of(eval);
+                    self.units[index].outcome = Some(eval.C());
                 }
             }
         }
@@ -987,6 +1086,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.units.insert(index, SessionUnit {
             numbered: repl::NumberedUnit { number, unit: source },
             status: UnitStatus::Pending,
+            outcome: None,
         });
     }
 
@@ -1039,7 +1139,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 let status = statuses.iter().find(|(number, _)| *number == numbered.number)
                     .map(|(_, status)| *status)
                     .unwrap_or(UnitStatus::Pending);
-                SessionUnit { numbered, status }
+                SessionUnit { numbered, status, outcome: None }
             })
             .collect();
     }
@@ -1113,10 +1213,15 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.reveal_selected_unit();
     }
 
-    /// The number of the code unit selected, if the unit is still shown.
+    /// The number of the code unit selected.
+    ///
+    /// **There is always one, while there are units**: the one selected last,
+    /// if it is still shown, or the newest. `None` only with no numbered
+    /// units.
     pub fn selected_unit(&self) -> Option<u32> {
-        let number = self.selected_unit?;
-        self.code_units().iter().any(|unit| unit.number == Some(number)).then_some(number)
+        let numbers = self.numbers();
+        self.selected_unit.filter(|number| numbers.contains(number))
+            .or_else(|| numbers.last().copied())
     }
 
     /// Act on a scroll key the focused code panel takes: the arrows move the
@@ -1327,6 +1432,9 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// through.
     pub fn tabs(&self) -> Vec<Tab> {
         let mut tabs = vec![Tab::Environment, Tab::History];
+        if !self.units.is_empty() {
+            tabs.push(Tab::Detail);
+        }
         if self.help_shown {
             tabs.push(Tab::Help);
         }
@@ -1363,6 +1471,10 @@ impl<E: ReplExecutor> ReplApp<E> {
                 let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
                 self.help_scroll.step(scroll, !up);
             }
+            Tab::Detail => {
+                let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
+                self.detail_scroll.step(scroll, !up);
+            }
         }
     }
 
@@ -1391,6 +1503,16 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// How far down from the top the environment is scrolled.
     pub fn environment_scroll(&self) -> usize {
         self.environment_scroll.offset
+    }
+
+    /// How far down from the top the detail is scrolled.
+    pub fn detail_scroll(&self) -> usize {
+        self.detail_scroll.offset
+    }
+
+    /// Tell the app the shape of the detail the renderer just laid out.
+    pub fn record_detail_view(&mut self, pane_lines: usize, scroll_limit: usize) {
+        self.detail_scroll.record(pane_lines, scroll_limit);
     }
 
     /// How far down from the top the help is scrolled.

@@ -778,3 +778,18 @@ fn a_runtime_error_in_a_rerun_empties_the_session() {
     run(&mut engine, "let c = 3");
     assert_eq!(value_of(&mut engine, "c"), "3");
 }
+
+/// A unit's diagnostics render as text quoting the unit, and only its own:
+/// the unit after a failed one has none, though its typecheck asked of it.
+#[test]
+fn a_unit_s_diagnostics_render_as_text() {
+    let mut engine = engine();
+    run(&mut engine, "let a = 1\n---\nlet b = nope + 1\n---\nlet c = a\n---\nlet = = =");
+
+    let type_error = engine.unit_diagnostics(1, "unit 2");
+    assert!(type_error.contains("unit 2") && type_error.contains("nope"), "{type_error}");
+    assert_eq!(engine.unit_diagnostics(2, "unit 3"), "");
+    assert_eq!(engine.unit_diagnostics(0, "unit 1"), "");
+    let parse_error = engine.unit_diagnostics(3, "unit 4");
+    assert!(parse_error.contains("unit 4"), "{parse_error}");
+}

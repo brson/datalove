@@ -131,6 +131,11 @@ pub enum ReplCommand {
     /// What undoing a delete, or redoing an append or an insert, asks of the
     /// session. Nothing reads it from input.
     Restore { unit: u32, after: Option<u32>, source: Unit },
+    /// Say what the session has to say about the unit with this number.
+    ///
+    /// What the app asks to show the selected unit's detail. Nothing reads it
+    /// from input.
+    Describe { unit: u32 },
     /// Number the next unit made `next`.
     ///
     /// What dropping changes taken back asks of the session, so the numbers
@@ -168,6 +173,8 @@ pub enum Eval {
     /// A saved session was read, and these many of its inputs are to be
     /// replayed.
     Loaded { inputs: usize },
+    /// What the session has to say about a unit.
+    Detail(UnitDetail),
     /// A REPL command that could not be carried out.
     CommandError(String),
     /// The history was saved, as this many inputs, to this path.
@@ -192,6 +199,30 @@ impl Eval {
     pub fn empties_session(&self) -> bool {
         self.reset_the_session() || matches!(self, Eval::Reset)
     }
+}
+
+/// What the session has to say about one unit, beyond its source and how it
+/// fared, which the app keeps itself.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnitDetail {
+    /// The unit's number.
+    pub unit: u32,
+    /// Its parse and type diagnostics as they stand, rendered as text; empty
+    /// for a unit with none.
+    pub diagnostics: String,
+    /// What it binds, and what each binding holds now; `None` for one given
+    /// away since.
+    pub bindings: Vec<(String, Option<String>)>,
+    /// The names it provides the units after it.
+    pub provides: Vec<String>,
+    /// The names it asks the units before it for.
+    pub uses: Vec<String>,
+    /// The earlier units' bindings it gives away.
+    pub takes: Vec<String>,
+    /// The earlier units' bindings it writes over whatever they held.
+    pub overwrites: Vec<String>,
+    /// The earlier units' bindings it changes, needing what they held.
+    pub updates: Vec<String>,
 }
 
 /// What a step did to one unit, which the REPL names by number.

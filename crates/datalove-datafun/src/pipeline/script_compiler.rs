@@ -1015,6 +1015,37 @@ impl<'db> ScriptCompiler<'db> {
         }
     }
 
+    /// Unit `index`'s parse and type diagnostics as they stand, rendered as
+    /// plain text, quoting the unit as the file `name`.
+    ///
+    /// A unit's typecheck asks of the units before it, so its diagnostics
+    /// include theirs; only those pointing into this unit, or nowhere, are
+    /// its. Ownership and lowering errors are not diagnostics here, and are
+    /// not rendered.
+    pub fn render_unit_diagnostics(&self, index: usize, name: &str) -> String {
+        let script = self.scripts[index];
+        let unit = script.unit(self.db);
+        let source = unit.source(self.db);
+        let parse = if unit.is_expr(self.db) {
+            datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
+        } else {
+            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
+        };
+        let mut diagnostics: Vec<bct::diagnostic::Diagnostic<'db>> = parse.iter()
+            .map(|diagnostic| diagnostic.to_diagnostic(self.db))
+            .collect();
+        if unit_parses(self.db, unit) {
+            let types = typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, script, self.env);
+            diagnostics.extend(types.iter()
+                .map(|diagnostic| diagnostic.to_diagnostic(self.db))
+                .filter(|diagnostic| {
+                    diagnostic.labels.is_empty() || diagnostic.labels.iter().any(|label| label.source == source)
+                }));
+        }
+        bct::render::render_diagnostics_to_string(
+            self.db, diagnostics, std::path::Path::new(name), std::path::Path::new(""))
+    }
+
     /// Get type diagnostics from the last compilation.
     ///
     /// Those of the last unit and whatever its typechecking asked of the units

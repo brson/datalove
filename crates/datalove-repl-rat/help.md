@@ -10,7 +10,8 @@ number it keeps for as long as the session lasts.
 - **Code** -- the session's units, as their source, one after another.
 - **Input** -- where a new unit is typed, or a unit is edited.
 - **The tabs below** -- **Environment**, the bindings the session has;
-  **History**, everything entered and what it came to; and this **Help**.
+  **History**, everything entered and what it came to; **Detail**, all about
+  the selected unit; and this **Help**.
 
 The bar beside each unit says how it fared the last time it was compiled or
 run:
@@ -24,6 +25,15 @@ run:
 The right half of the bar says what the last change did to the unit: its top
 corner if the unit was compiled again, and its bottom corner if it ran again.
 A bar with no right half was left alone.
+
+## The selected unit
+
+One unit is always selected, its number in white: the one last entered, or
+the one moved to in the Code panel. The **Detail** tab says what there is to
+know about it -- how it fared and what the last change did to it, its errors,
+what its bindings hold now, the functions it defines, and the names it reads
+and writes. A change that leaves the selected unit broken shows the Detail
+tab.
 
 ## Typing
 
@@ -66,6 +76,6 @@ rest are left as they were. The same changes can be typed as commands:
 ## Moving around
 
 - **Tab** and **Shift+Tab** move focus between the panels.
-- **F2** cycles the tabs, and **Alt+1**, **Alt+2** and **Alt+3** pick one.
+- **F2** cycles the tabs, and **Alt+1** to **Alt+4** pick one.
 - **Up**, **Down**, **PageUp** and **PageDown** scroll the panel with focus;
   with **Ctrl** they scroll the other one.

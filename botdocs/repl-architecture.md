@@ -35,6 +35,7 @@ datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
   help.md               The help, read into the binary as it is built
   src/lib.rs            RatatuiApp: ReplApp plus a TextArea
   src/render.rs         The three-panel layout, code, tabs, exit dialog, crash and engine modals
+  src/detail.rs         The Detail tab: the selected unit, laid out
   src/help.rs           The help, parsed from markdown and flowed for the pane's width
   src/term.rs           Terminal setup, event loop, key bindings
 
@@ -547,21 +548,53 @@ only guesses the code makes: an edit, a delete or an insert shows once it is
 answered. `/load` gets this for nothing: it is a `/reset`
 and the saved units, replayed together.
 
-**While the code panel has focus, one unit is selected**, its source in the
-yellow that marks the tab shown, and Up and Down move between units. Focusing
-the panel selects the newest unit, or the one selected before if it is still
-there. The selection is kept by the unit's number, so units added or removed
-around it leave it where it was. A reset clears it, since the new session
-numbers from 1 again and the old number would land on a different unit. It is
-what Delete, Enter and Insert act on; see
+**One unit is always selected** while the session has units, its number in
+white. While the code panel has focus its source is in the yellow that marks
+the tab shown too, and Up and Down move between units. A unit entered is
+selected, and when the selected unit goes, the newest is. The selection is
+kept by the unit's number, so units added or removed around it leave it where
+it was. A reset clears it, since the new session numbers from 1 again and the
+old number would land on a different unit. It is what the Detail tab
+describes, and what Delete, Enter and Insert act on; see
 [Editing at the prompt](#user-content-editing-at-the-prompt).
 
 ### Tabs
 
-The bottom panel has two tabs, Environment and History, and a third, Help,
-once help has been asked for. F2 cycles them, and Alt+1, Alt+2 and Alt+3 select
-one. Input selects the tab it changes when submitted: code the Environment, a
-REPL command the History, which is the only place what a command did shows.
+The bottom panel has two tabs, Environment and History; Detail while the
+session has units; and Help, once help has been asked for. F2 cycles them, and
+Alt+1 to Alt+4 select one. Input selects the tab it changes when submitted:
+code the Environment, a REPL command the History, which is the only place what
+a command did shows. A tab that goes, as Detail does at a reset, leaves the
+Environment shown.
+
+**The Detail tab describes the selected unit.** Its header is the unit's bar
+beside its number and status, and, if the last step compiled or ran it, a
+second line saying which, so the corners of the bar are read out beside it.
+Below is what it came to, the diagnostics for one that did not compile, what
+it binds and what each binding holds now, the functions it defines, and the
+names it reads, provides, takes, overwrites and updates. `detail.rs` lays it
+out.
+
+What the app keeps -- the status, the marks, and each unit's last outcome,
+which `SessionUnit` holds -- shows at once. The rest only the session knows,
+so the app asks for it with an internal `Describe` command, answered with
+`Eval::Detail(UnitDetail)`. It asks whenever the selected unit or the number
+of answers that could have changed the session moves on, after dispatching the
+queue, so the question goes behind whatever was sent before it and is answered
+of the session that leaves. Describes take their ids from `DESCRIBE_IDS`, far
+past the entries', so an entry's id is the same whether or not a describe came
+between; an answer with such an id only sets the detail. Asking only reads, so
+it is not counted among what an app command waits for. The detail is shown
+only while it is of the selected unit; moving shows "asking the engine" until
+the next answer. The diagnostics are rendered by
+`ScriptCompiler::render_unit_diagnostics`: the unit's parse diagnostics, and,
+if it parses, the type checker's whose labels point into it, as ariadne
+renders them for the CLI, without colour.
+
+**A unit that breaks shows its detail.** When an answer re-derives the
+selected unit -- a new unit appended, or a step that ran or reported it -- and
+leaves it failed, returned early or blocked, the Detail tab is shown, and the
+focus stays where it was.
 
 **Help is found by asking for it.** `/help` or F1 adds the Help tab, shows it,
 and focuses the bottom panel, so the scroll keys move through it. Until then
@@ -683,7 +716,9 @@ all.
   engine reporting itself ready or dead, the code units and their statuses,
   the marks of what the last step compiled and ran, edits applied when
   answered, a mismatch reported, the tab input selects, scrolling each pane,
-  and what `/save` writes. The mock fills in the session and the last step an
+  the Detail tab coming and going and showing a broken unit, the detail asked
+  for the selected unit, and what `/save` writes. The mock keeps describes
+  apart from the commands it records, and fills in the session and the last step an
   answer reports, as the engine would, for appends and resets; a test that
   edits gives them explicitly.
 
@@ -718,17 +753,17 @@ setup and the loop together.
   the sigil is a command on its first line. Only a replay, or an edit from
   the code panel, gives one over several lines.
 - An edit cannot change a unit from statements to an expression or back.
-- Errors are plain strings with no rendered diagnostics, and type errors are
-  their `Debug` form, though `ScriptCompiler` exposes the spans needed for
-  better. See
+- Errors are plain strings in the History tab, and type errors are their
+  `Debug` form. The Detail tab renders parse and type diagnostics, but an
+  ownership or lowering error shows only as its message: their rendering is
+  only in the CLI's `render.rs`. See
   [issues.md](issues.md#user-content-the-repl-prints-errors-as-rust-values).
 - Mouse capture is enabled while only key events are read, which disables
   terminal text selection and drops the mouse wheel for no benefit.
 - Nothing scrolls a pane while a dialog or a modal is open.
-- What a unit came to -- an expression's value, a compile error -- is shown
-  only in the History tab, and code selects the Environment tab. So typing
-  `x` to see its value shows nothing until the tab is changed, and a red bar
-  says a unit failed without saying why.
+- An expression's value is shown in the History and Detail tabs, and code
+  selects the Environment tab. So typing `x` to see its value shows nothing
+  until the tab is changed.
 - An edit to a module no unit requires reports nothing, since only required
   modules are compiled; see
   [issues.md](issues.md#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing).

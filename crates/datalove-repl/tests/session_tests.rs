@@ -374,3 +374,45 @@ fn commands_typed_without_waiting_run_in_order() {
     let inputs: Vec<&str> = app.history().iter().map(|entry| entry.input.as_str()).collect();
     assert_eq!(inputs, vec!["let a = 1", "let z = a + 1"], "the load forgot what came before it");
 }
+
+/// Poll until the session has said what it knows of the selected unit.
+fn detail(app: &mut App) -> datalove_repl::UnitDetail {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    loop {
+        app.poll_results();
+        if let Some(detail) = app.detail() {
+            return detail.clone();
+        }
+        assert!(std::time::Instant::now() < deadline, "the engine never described the unit");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+/// The detail of a unit that ran is what it binds and what it holds now, and
+/// of one that failed, its diagnostics, which show the Detail tab.
+#[test]
+fn the_selected_unit_is_described() {
+    let dir = rmx::tempfile::tempdir().X();
+    let mut app = app(&dir.path().join("session.world"));
+    submit(&mut app, "var a = 1");
+    submit(&mut app, "set a = a + 1");
+
+    let read = detail(&mut app);
+    assert_eq!(read.unit, 2);
+    assert_eq!(read.updates, vec!["a"], "{read:?}");
+
+    submit(&mut app, "let b = nope");
+    assert_eq!(app.tab(), datalove_repl::app::Tab::Detail);
+    let failed = detail(&mut app);
+    assert_eq!(failed.unit, 3);
+    assert!(failed.diagnostics.contains("cannot find value `nope`"), "{}", failed.diagnostics);
+    assert!(failed.diagnostics.contains("unit 3"), "{}", failed.diagnostics);
+
+    app.focus_prev();
+    app.move_in_code(datalove_repl::app::Scroll::LineUp);
+    app.move_in_code(datalove_repl::app::Scroll::LineUp);
+    let first = detail(&mut app);
+    assert_eq!(first.unit, 1);
+    assert_eq!(first.bindings, vec![("a".S(), Some("2".S()))], "what it holds now");
+    assert_eq!(first.provides, vec!["a"]);
+}

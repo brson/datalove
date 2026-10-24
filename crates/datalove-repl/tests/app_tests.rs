@@ -16,6 +16,9 @@ use repl::app::{CodeUnit, Editing, EntryStatus, Panel, ReplApp, Scroll, ReplExec
 struct MockState {
     evals: Vec<u64>,
     commands: Vec<repl::Command>,
+    /// Each time the app asked for a unit's detail, with the id and the unit.
+    /// These are kept apart from the commands, which they come between.
+    described: Vec<(u64, u32)>,
     /// Each command submitted for evaluation, by entry id.
     submitted: std::collections::HashMap<u64, repl::Command>,
     /// The units the pretend engine's session has, and the next number.
@@ -36,6 +39,10 @@ struct MockExecutor {
 impl ReplExecutor for MockExecutor {
     fn submit_eval(&mut self, id: u64, command: repl::Command) {
         let mut state = self.state.borrow_mut();
+        if let repl::Command::ReplCommand(repl::ReplCommand::Describe { unit }) = command {
+            state.described.push((id, unit));
+            return;
+        }
         state.evals.push(id);
         state.commands.push(command.clone());
         state.submitted.insert(id, command);
@@ -45,12 +52,15 @@ impl ReplExecutor for MockExecutor {
     /// app takes it, since only by then has the app submitted the command it
     /// answers. The pretend engine adds an appended unit, numbering it, and
     /// empties the session at any reset. Anything else leaves it alone, and a
-    /// test that edits gives the session explicitly with `queue_raw`.
+    /// test that edits gives the session explicitly with `queue_raw`. A
+    /// unit's detail is passed on as it is.
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {
         let mut state = self.state.borrow_mut();
         let (mut response, fill) = state.responses.pop_front()?;
         if let WorkerResponse::EvalResult { id, eval, session, step, .. } = &mut response {
-            if fill {
+            if *id >= repl::app::DESCRIBE_IDS {
+                // A unit's detail, which says nothing of the session.
+            } else if fill {
                 let command = state.submitted.get(id).cloned()
                     .unwrap_or_else(|| panic!("entry {id} was answered without being submitted"));
                 if eval.empties_session() {
@@ -95,6 +105,11 @@ impl MockExecutor {
     /// What each eval submission was, in order.
     fn commands(&self) -> Vec<repl::Command> {
         self.state.borrow().commands.clone()
+    }
+
+    /// Each time the app asked for a unit's detail, with the id and the unit.
+    fn described(&self) -> Vec<(u64, u32)> {
+        self.state.borrow().described.clone()
     }
 
 }
@@ -822,12 +837,12 @@ fn app_and_executor_with_units(sources: &[&str]) -> (ReplApp<MockExecutor>, Mock
     (app, executor)
 }
 
-/// Focusing the code selects its newest unit, and the arrows move between
+/// The newest unit is selected until another is, and the arrows move between
 /// units, stopping at the first and the last.
 #[test]
 fn the_arrows_move_between_code_units() {
     let mut app = app_with_units(&["let a = 1", "let b = 2", "let c = 3"]);
-    assert_eq!(app.selected_unit(), None);
+    assert_eq!(app.selected_unit(), Some(3));
 
     app.focus_prev();
     assert_eq!(app.focus(), Panel::Code);
@@ -848,8 +863,8 @@ fn the_arrows_move_between_code_units() {
     assert_eq!(app.selected_unit(), Some(2));
 }
 
-/// A reset takes the selected unit with it, and the arrows start again from
-/// the newest unit.
+/// A reset takes the selected unit with it, and the unit entered after it is
+/// selected, numbered from 1 again.
 #[test]
 fn a_reset_loses_the_selection() {
     let executor = MockExecutor::default();
@@ -871,11 +886,8 @@ fn a_reset_loses_the_selection() {
     });
     executor.queue(evaluated_let(2, "b"));
     app.poll_results();
-    assert_eq!(app.selected_unit(), None);
-
-    // The new session numbers from 1 again.
-    app.move_in_code(Scroll::LineUp);
     assert_eq!(app.selected_unit(), Some(1));
+    assert_eq!(app.code_units()[0].source, "let b = 1");
 }
 
 /// Moving the selection scrolls the code just far enough to show the unit,
@@ -1411,4 +1423,105 @@ fn undo_and_redo_show_the_history() {
     app.select_tab(Tab::Environment);
     app.submit_input("/redo".to_string());
     assert_eq!(app.tab(), Tab::History);
+}
+
+fn detail_of(unit: u32) -> repl::UnitDetail {
+    repl::UnitDetail {
+        unit,
+        diagnostics: String::new(),
+        bindings: vec![("x".to_string(), Some("1".to_string()))],
+        provides: vec!["x".to_string()],
+        uses: Vec::new(),
+        takes: Vec::new(),
+        overwrites: Vec::new(),
+        updates: Vec::new(),
+    }
+}
+
+fn described(id: u64, unit: u32) -> WorkerResponse {
+    WorkerResponse::EvalResult {
+        id,
+        eval: repl::Eval::Detail(detail_of(unit)),
+        environment: Vec::new(),
+        session: Vec::new(),
+        step: Vec::new(),
+    }
+}
+
+/// The Detail tab is there while the session has units, and a reset that
+/// empties the session takes it.
+#[test]
+fn the_detail_tab_is_there_while_there_are_units() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History]);
+
+    app.submit_input("let a = 1".to_string());
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+    assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History, Tab::Detail]);
+    app.select_tab(Tab::Detail);
+
+    app.submit_input("/reset".to_string());
+    executor.queue(WorkerResponse::EvalResult {
+        id: 1,
+        eval: repl::Eval::Reset,
+        environment: Vec::new(),
+        session: Vec::new(),
+        step: Vec::new(),
+    });
+    app.poll_results();
+    assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History]);
+    assert_eq!(app.tab(), Tab::History);
+}
+
+/// A new unit that fails, returns early or is blocked shows its detail, and
+/// the focus stays where it was; one that runs shows the environment.
+#[test]
+fn a_broken_unit_shows_its_detail() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    app.submit_input("let a = 1".to_string());
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+    assert_eq!(app.tab(), Tab::Environment);
+
+    for (id, eval) in [
+        (1, repl::script::Eval::Error("no `c`".to_string())),
+        (2, repl::script::Eval::ReturnedEarly("none".to_string())),
+        (3, repl::script::Eval::Blocked { on: vec![2] }),
+    ] {
+        app.select_tab(Tab::History);
+        app.submit_input("let b = c".to_string());
+        executor.queue(evaluated(id, eval));
+        app.poll_results();
+        assert_eq!(app.tab(), Tab::Detail, "entry {id}");
+        assert_eq!(app.focus(), Panel::Input);
+    }
+}
+
+/// The detail is asked for the selected unit, once for each unit and each
+/// answer that changed the session, and is only shown for the unit it is of.
+#[test]
+fn the_detail_is_of_the_selected_unit() {
+    let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = 2"]);
+    let asked = executor.described();
+    assert_eq!(asked.iter().map(|(_, unit)| *unit).collect::<Vec<_>>(), vec![2]);
+    assert!(asked[0].0 >= repl::app::DESCRIBE_IDS);
+    assert_eq!(app.detail(), None);
+
+    executor.queue(described(asked[0].0, 2));
+    app.poll_results();
+    assert_eq!(app.detail(), Some(&detail_of(2)));
+    assert_eq!(executor.described().len(), 1, "nothing changed to ask again for");
+
+    app.focus_prev();
+    app.move_in_code(Scroll::LineUp);
+    assert_eq!(app.selected_unit(), Some(1));
+    assert_eq!(app.detail(), None, "the detail is of another unit");
+    app.poll_results();
+    assert_eq!(executor.described().last().map(|(_, unit)| *unit), Some(1));
+    // Asking takes none of the entries' ids.
+    app.submit_input("let c = 3".to_string());
+    assert_eq!(executor.evals(), vec![0, 1, 2]);
 }

@@ -975,6 +975,13 @@ impl Engine {
             .collect()
     }
 
+    /// Unit `unit`'s parse and type diagnostics as they stand, rendered as
+    /// plain text quoting the unit as `name`; empty for a unit with none.
+    pub fn unit_diagnostics(&mut self, unit: usize, name: &str) -> String {
+        let units = self.unit_sources();
+        self.with_compiler(&units, |compiler| compiler.render_unit_diagnostics(unit, name))
+    }
+
     /// How many units the session has, failed ones included.
     pub fn unit_count(&self) -> usize {
         self.unit_sources().len()

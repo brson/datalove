@@ -12,7 +12,7 @@ use ratatui::{
 
 use crate::RatatuiApp;
 use crate::repl::{self, script};
-use crate::repl::app::{CodeUnit, Editing, EntryStatus, Panel, ReplApp, ReplExecutor, Tab, UnitStatus};
+use crate::repl::app::{Editing, EntryStatus, Panel, ReplApp, ReplExecutor, Tab, UnitStatus};
 
 /// The color of what is selected: the tab shown, and the code unit.
 const HIGHLIGHT: Color = Color::Yellow;
@@ -61,6 +61,10 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
             let view = render_help(f, &app.repl, chunks[2], bottom_block);
             app.repl.record_help_view(view.pane_rows, view.scroll_limit);
         }
+        Tab::Detail => {
+            let view = render_detail(f, &app.repl, chunks[2], bottom_block);
+            app.repl.record_detail_view(view.pane_rows, view.scroll_limit);
+        }
     }
 
     // Each over the one before: a crash over the exit dialog, a bug in the
@@ -91,7 +95,7 @@ fn panel_border<E: ReplExecutor>(repl: &ReplApp<E>, panel: Panel) -> Style {
 
 /// A line of the history after its input: a mark, and what it says, both in
 /// one color.
-fn marked<'a>(mark: &str, color: Color, text: impl Into<std::borrow::Cow<'a, str>>) -> Line<'a> {
+pub(crate) fn marked<'a>(mark: &str, color: Color, text: impl Into<std::borrow::Cow<'a, str>>) -> Line<'a> {
     let style = Style::default().fg(color);
     Line::from(vec![Span::styled(fmt!("  {mark} "), style), Span::styled(text.into(), style)])
 }
@@ -123,7 +127,7 @@ fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
 /// The colors are the bars': green for a unit that ran, red for one that did
 /// not compile, yellow for one that returned early, and magenta for one that
 /// was blocked.
-fn outcome(eval: &script::Eval) -> (&'static str, Color, String) {
+pub(crate) fn outcome(eval: &script::Eval) -> (&'static str, Color, String) {
     match eval {
         script::Eval::Nothing => ("✓", Color::Green, "ran".S()),
         script::Eval::Success(bindings) => {
@@ -178,6 +182,7 @@ fn eval_lines(eval: &repl::Eval) -> Vec<Line<'_>> {
         repl::Eval::Help => vec![marked("ℹ", Color::Blue, "shown in the Help tab")],
         repl::Eval::Loaded { inputs } => vec![marked("✓", Color::Green, fmt!("loaded {inputs} inputs"))],
         repl::Eval::Reset => unreachable!("a reset takes its own entry"),
+        repl::Eval::Detail(_) => unreachable!("a detail answers a question, not an entry"),
     }
 }
 
@@ -208,9 +213,9 @@ struct ScrollDownView {
 /// what the last step did: its top on the unit's first line if the step
 /// compiled the unit, and its bottom on the unit's last line if it ran it. A
 /// one-line unit has both corners in its one cell.
-fn bar_glyph(unit: &CodeUnit<'_>, line: usize, last_line: usize) -> &'static str {
-    let compiled = unit.compiled && line == 0;
-    let ran = unit.ran && line == last_line;
+pub(crate) fn bar_glyph(compiled: bool, ran: bool, line: usize, last_line: usize) -> &'static str {
+    let compiled = compiled && line == 0;
+    let ran = ran && line == last_line;
     match (compiled, ran) {
         (false, false) => "▌ ",
         (true, false) => "▛ ",
@@ -220,7 +225,7 @@ fn bar_glyph(unit: &CodeUnit<'_>, line: usize, last_line: usize) -> &'static str
 }
 
 /// The color of a unit's bar, for its status.
-fn status_color(status: UnitStatus) -> Color {
+pub(crate) fn status_color(status: UnitStatus) -> Color {
     match status {
         UnitStatus::Pending => Color::Cyan,
         UnitStatus::Ran => Color::Green,
@@ -262,10 +267,10 @@ fn render_code<E: ReplExecutor>(
         )));
     }
 
-    let selected = match repl.focus() {
-        Panel::Code => repl.selected_unit(),
-        _ => None,
-    };
+    // A unit is always selected, its number white; its text is yellow while
+    // the panel has focus, and the keys go to it.
+    let selected = repl.selected_unit();
+    let focused = repl.focus() == Panel::Code;
     let separator = "─".repeat(area.width.saturating_sub(BORDERS) as usize);
     // Every unit's number in a column as wide as the widest.
     let number_width = units.iter()
@@ -281,10 +286,14 @@ fn render_code<E: ReplExecutor>(
             )));
         }
         let bar = Style::default().fg(status_color(unit.status));
-        let text = if selected.is_some() && selected == unit.number {
-            Style::default().fg(HIGHLIGHT)
-        } else {
-            Style::default()
+        let is_selected = selected.is_some() && selected == unit.number;
+        let text = match is_selected && focused {
+            true => Style::default().fg(HIGHLIGHT),
+            false => Style::default(),
+        };
+        let number_style = match is_selected {
+            true => Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            false => Style::default().fg(Color::DarkGray),
         };
         let start = lines.len();
         let last_line = unit.source.lines().count().saturating_sub(1);
@@ -296,8 +305,8 @@ fn render_code<E: ReplExecutor>(
                 _ => " ".repeat(number_width + 1),
             };
             lines.push(Line::from(vec![
-                Span::styled(number, Style::default().fg(Color::DarkGray)),
-                Span::styled(bar_glyph(unit, line_index, last_line), bar),
+                Span::styled(number, number_style),
+                Span::styled(bar_glyph(unit.compiled, unit.ran, line_index, last_line), bar),
                 Span::styled(line, text),
             ]));
         }
@@ -516,10 +525,22 @@ fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: R
 fn render_help<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> ScrollDownView {
     // A margin either side of the text, inside the borders.
     let width = area.width.saturating_sub(BORDERS + 2) as usize;
-    let lines = crate::help::lines(width);
+    render_document(f, crate::help::lines(width), repl.help_scroll(), area, block)
+}
+
+/// Render the detail tab: what there is to know about the selected unit,
+/// scrolled down from its top.
+fn render_detail<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> ScrollDownView {
+    let width = area.width.saturating_sub(BORDERS + 2) as usize;
+    render_document(f, crate::detail::lines(repl, width), repl.detail_scroll(), area, block)
+}
+
+/// Render lines flowed for the pane, with a margin either side, scrolled
+/// `scroll` lines down from the top.
+fn render_document(f: &mut Frame, lines: Vec<Line>, scroll: usize, area: Rect, block: Block) -> ScrollDownView {
     let pane_rows = area.height.saturating_sub(BORDERS) as usize;
     let scroll_limit = lines.len().saturating_sub(pane_rows);
-    let offset = repl.help_scroll().min(scroll_limit);
+    let offset = scroll.min(scroll_limit);
 
     let paragraph = Paragraph::new(lines)
         .block(block.padding(ratatui::widgets::Padding::horizontal(1)))

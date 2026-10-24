@@ -136,6 +136,14 @@ fn runs<'a>(node: Node<'a>, style: Style) -> Vec<Run> {
     runs
 }
 
+/// Text in one style wrapped at spaces to `width`, its first line after
+/// `first` and the rest after `rest`.
+pub(crate) fn wrapped(text: &str, style: Style, first: &str, rest: &str, width: usize) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    wrap(&[Run { text: text.S(), style }], first, rest, width, &mut lines);
+    lines
+}
+
 /// Wrap runs at spaces to `width`, each line after its prefix.
 ///
 /// A word longer than a whole line is broken where the line ends.
