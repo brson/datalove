@@ -63,8 +63,12 @@ We do not prove correctness.
   If one unit moves or mutates a binding how does that affect other units on replay?
 - <!-- therefore -->
   A naive algebra of recompiles and reruns for moves and mutations
-- <!-- but..therofore -->
-  But what about all these other cases?
+- <!-- but..therefore -->
+  But what about edits to units?
+- <!-- therefore -->
+  An ammended algebra of recompiles and reruns for moves and mutations
+- <!-- but..therefore -->
+  But what about units that mutate multiple bindings?
 - <!-- therefore -->
   A complete recursive algebra of recompiles and reruns for moves and mutations
 - <!-- but..therefore -->
@@ -101,6 +105,8 @@ _And_ these are the properties that will help us solve the problem.
 _But_ what about I/O?
 _Therefore_ here is how we model it.
 
+Motivating example to not solve here but show at the end.
+
 -->
 
 
@@ -113,6 +119,8 @@ _But_ need a simple clear example that shows the core problem.
 _Therefore_ what we decide to recompile and rerun.
 
 _But...therefore_ modest but succinct elaboration.
+
+Demonstrate read/take/overwrite/update
 -->
 
 
@@ -127,13 +135,29 @@ _Therefore_ we propose an algorithm.
 
 
 
-## But what about all these other cases?
+## But what about edits?
 
 <!--
 _But_ what about: todo
 _Therefore_ brief discussion.
+
+Editing changes _what_ a unit does.
+take->overwrite etc.
+fixups and revive.
+
+Also transitivity.
 -->
 
+
+## An ammended algebra of recompiles and reruns for moves and mutations
+
+
+
+## But what about units that mutate multiple bindings?
+
+<!--
+Transitivity, dataflow across multiple units, units touching multiple bindings.
+-->
 
 
 
@@ -150,7 +174,7 @@ _Therefore_ we propose an algorithm and suggest it is complete.
 
 <!--
 
-_But_ how do we know this is correct?
+_But_ no proof, how do we know this is correct?
 _Therefore_ all these examples and more are tests.
 
 -->
@@ -175,7 +199,7 @@ then do the upstream research and refine based on the literature.
 
 <!--
 _Therefore_ we implemented this.
-Here's a cool demo.
+Here's a cool demo. Use original motivating example.
 -->
 
 
