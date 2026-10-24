@@ -955,8 +955,8 @@ Script units accumulate via `AccumulatedLowerBindings`:
 A unit moves out of the bindings earlier units own as it would out of its
 own: lowering emits `Move` for a consuming use that resolves to an
 `ExternalValue`/`ExternalSlot`, and the interpreter marks the earlier frame's
-value as holding nothing. Every line of a REPL is a unit, so `let b = a` at
-the prompt empties `a`, and so does passing it to an `in` parameter. `int` is
+value as holding nothing. What is typed at the REPL is a unit, so `let b = a`
+at the prompt empties `a`, and so does passing it to an `in` parameter. `int` is
 a bigint and not copy, so that includes integers. Naming a binding as a bare
 expression reads it where it lives and takes nothing.
 
@@ -978,8 +978,9 @@ before anything read them), and
 `revived_exports` for the ones that held nothing and that it assigned to. A
 unit can also give away a binding it defined itself, which goes in
 `dead_exports`. `dead_externals_over` folds the records into the names a later
-unit may not use, and using one is D013. The reach of an edit needs `taken` and
-`written` too, for re-running a unit has to put back what it changed first;
+unit may not use, and using one is D013. The reach of an edit needs
+`UnitLowerRecord::takes` and `writes` too, for rerunning a unit has to put back
+what it changed first;
 see [script-reactivity-architecture.md](script-reactivity-architecture.md).
 `unit_end` covers every non-Copy slot rather than only live ones, because a
 later unit can assign to a slot this one gave away, and the cleanup list is

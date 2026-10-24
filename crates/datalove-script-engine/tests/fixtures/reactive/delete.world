@@ -51,9 +51,9 @@ expect unit 4 is deleted
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | reruns | rewind: unit 4 took `a` when it last ran, and is deleted | `a` = 1000 |
-| 2 | - | reruns | rewind: unit 4 updated `b` when it last ran, and is deleted | `b` = 125 |
-| 3 | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 built the same `a` and `b` | `c` = 8 |
+| 1 | - | reruns | rerun: unit 4 took `a` when it last ran, and is deleted | `a` = 1000 |
+| 2 | - | reruns | rerun: unit 4 updated `b` when it last ran, and is deleted | `b` = 125 |
+| 3 | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 provided the same `a` and `b` | `c` = 8 |
 | 4 | takes `a` (1), updates `b` (2) | deleted | deleted | - |
 | 5 | reads `b` (2) | reruns | reads `b` after unit 4, which no longer updates it | `d` = 126 |
 

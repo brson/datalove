@@ -3,13 +3,15 @@
 How the REPL is put together, and the decisions that shaped it. Explanation;
 describes the REPL as of October 2026.
 
-Every line typed at the REPL is a script unit, compiled and run by the script
-engine's `Engine` on a worker thread, and the terminal UI talks to that engine only through
-requests and the responses keyed to them. The engine keeps the session as a
-list of units that can be edited, spliced, saved and replayed. A unit that
-fails stays in the list. The modules compiled are the ones the units require,
-re-settled on every step. How an edit reaches the units that depend on it is
-[script-reactivity-architecture.md](script-reactivity-architecture.md).
+Every script unit typed at the REPL, a fragment of statements or an
+expression, is compiled and run by the script engine's `Engine` on a worker
+thread, and the terminal UI talks to that engine only through requests and the
+responses keyed to them. The engine keeps the session as a list of units that
+can be edited, spliced, saved and replayed. A unit that fails stays in the
+list. The modules compiled are the ones the units require, re-settled on every
+step. How an edit reaches the units that depend on it is
+[script-reactivity-architecture.md](script-reactivity-architecture.md), and
+[script-glossary.md](script-glossary.md) defines the terms.
 
 ## Contents
 
@@ -17,7 +19,7 @@ re-settled on every step. How an edit reaches the units that depend on it is
 - [The request/response shape](#user-content-the-requestresponse-shape)
 - [The command queue](#user-content-the-command-queue)
 - [The engine](#user-content-the-engine)
-- [What a line does](#user-content-what-a-line-does)
+- [What a unit does](#user-content-what-a-unit-does)
 - [Editing, not only appending](#user-content-editing-not-only-appending)
 - [Editing at the prompt](#user-content-editing-at-the-prompt)
 - [Undo and redo](#user-content-undo-and-redo)
@@ -61,8 +63,8 @@ what the history shows are the REPL's, in `datalove-repl`. So
 REPL in sight, and a notebook or an embedding would too.
 
 The REPL wraps the engine's types rather than adding to them. Its `Command` is
-a `ReplCommand` or a `Unit`, and its `Eval` is the engine's `Eval` for a unit,
-or what a REPL command came to. `Session` is where the two meet, on the
+a `ReplCommand` or a `Unit`, and its `Outcome` is the engine's `Eval` for a
+unit, or what a REPL command came to. `Session` is where the two meet, on the
 worker: it carries out units and the commands that change the session. The
 rest of the commands are the app's, which carries them out itself; see
 [The command queue](#user-content-the-command-queue).
@@ -80,7 +82,7 @@ results come back keyed by id:
 ```
 submit_input(text) -> parse_input -> ReadMultiline: more lines
                                   -> Empty: nothing
-                                  -> Command: the queue -> submit_eval(id) -> Eval, environment, session, step
+                                  -> Command: the queue -> submit_eval(id) -> Outcome, environment, session, step
                                                        -> carried out in the app
 ```
 
@@ -101,7 +103,7 @@ boundary is `Serialize`/`Deserialize`.
 pushes an entry when input is submitted, which can be before the previous
 entry's evaluation has answered. So "the last entry" is not necessarily the
 entry a result belongs to, and someone typing during an evaluation would
-otherwise get the result attached to the wrong line. A result always has its
+otherwise get the result attached to the wrong entry. A result always has its
 entry: commands go to the engine in order and it answers in order, and the
 history only forgets entries up to one whose answer reset the session, by
 which time all of them have been answered.
@@ -135,15 +137,15 @@ The app's commands once went to the worker too, for the session to hand back
 as `CallerInterpret` once everything before them had been answered. That
 ordered what they read, and not what they sent: by the time the answer came
 back, what was typed after them was already on its way to the engine, so a
-`/load` replayed its units after a line typed behind it, and an `/undo` could
+`/load` replayed its units after an input typed behind it, and an `/undo` could
 not have taken back the right change.
 
 **A command enters the history when it runs, not when it is typed**, and
-drops the redo stack then, so a line typed behind an `/undo` drops the stack
+drops the redo stack then, so an input typed behind an `/undo` drops the stack
 that undo leaves, as it would have typed after it. What waits is shown in the
 History tab, after a divider below everything that has run, the redo stack
 included, and the code panel shows the units among it as on their way. An
-empty input and a line that only opens a multiline input are not commands,
+empty input and one that only opens a multiline input are not commands,
 and enter nothing.
 
 ## The engine
@@ -207,7 +209,7 @@ It reads each input as the prompt would, so it is the REPL's rather than the
 engine's. Both `repl --script` and the fixture tests use it, so the driver and
 the tests cannot drift.
 
-## What a line does
+## What a unit does
 
 Evaluation reports what a fragment defined by reading the compiled unit's
 `script_context().exports` -- values, slots, and functions -- rather than by
@@ -216,23 +218,23 @@ included: an ownership error leaves lowering `Skipped`, so checking only
 lowering would let a use-after-move inside a fragment through as a successful
 binding.
 
-**Every line is a script unit, and follows the language's ownership rules
-across lines** as inside one. `let b = a` moves `a` out of the unit that bound
-it, and a later line that names `a` is D013. Naming a binding as a bare
+**Every unit follows the language's ownership rules across units** as inside
+one. `let b = a` moves `a` out of the unit that provides it, and a later unit
+that names `a` is D013. Naming a binding as a bare
 expression shows it without taking it. Units do not copy out of earlier
 bindings, both to keep script units as close to the language as possible and
 because copying stops being available once there are types that cannot be
 cloned. [compiler-guide.md](compiler-guide.md) under "Ownership across units"
-has how this is checked. Re-running a unit after an edit rewinds to the
-earlier bindings it took or wrote; see
-[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-5-the-reach-goes-back).
+has how this is checked. Rerunning a unit after an edit first reruns from the
+providers of the earlier bindings it took or wrote; see
+[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-5-the-reach-goes-backward).
 
-**A line that fails stays in the session** unless it fails with a runtime
-error. A line that does not compile reports `Eval::Error`. One that returns
-early through `!` or `?` reports `Eval::ReturnedEarly`. One that reads from
-either is compiled and not run, reporting `Eval::Blocked`. Each stays as a
+**A unit that fails stays in the session** unless it fails with a runtime
+error. A unit that does not compile reports `Eval::NotCompiled`. One that
+returns early through `!` or `?` reports `Eval::ReturnedEarly`. One that reads
+from either is compiled and not run, reporting `Eval::Blocked`. Each stays as a
 unit offering no bindings, so the history and the engine's units line up one
-to one for script inputs, and an edit upstream can make any of them go green.
+to one for script units, and an edit upstream can make any of them go green.
 The app shows all three as errors and clears nothing.
 [script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-units-that-did-not-run-to-their-end)
 has how the layers keep a failed unit's names from the units after it.
@@ -241,12 +243,12 @@ has how the layers keep a failed unit's names from the units after it.
 owned is not destroyed a value at a time. The runtime discards all its memory
 instead (`IrInterpreter::discard_runtime_state`), and every binding the
 session had was in it. The executor drops its units, and the engine starts its
-compiled session again and reports `Eval::ErrorReset`. Re-running the
+compiled session again and reports `Eval::RuntimeError`. Rerunning the
 earlier units to bring the session back was considered and not done: a unit
 that fails again would loop.
 
 A panic inside the engine while evaluating is caught and reported as
-`CrashReset`, and the engine rebuilds its compiler and executor.
+`Eval::Crashed`, and the engine rebuilds its compiler and executor.
 
 `/reset` asks for the same reset on purpose. `datalove_repl::eval` resets the
 engine on the worker thread before it answers, in turn with the units around
@@ -262,10 +264,11 @@ shows.
 
 ## Editing, not only appending
 
-`Engine::edit_unit(unit, source)` changes one line of the session and
+`Engine::edit_unit(unit, source)` changes one unit of the session and
 re-derives what the change reaches, leaving the rest of the session with the
-lowering and the frames it had. `Engine::truncate_units`, `remove_unit` and
-`insert_unit` splice the list and re-derive the whole suffix. A unit of the
+lowering and the frames it had. `Engine::truncate_units`, `delete_unit` and
+`insert_unit` splice the list and rerun the whole suffix after the splice,
+whether or not a unit in it uses what the splice changed. A unit of the
 suffix that stops compiling stays, as one appended does.
 [script-reactivity-architecture.md](script-reactivity-architecture.md) has how
 the reach is decided, and why the engine owns its database rather than
@@ -311,7 +314,7 @@ and any reset starts again at 1. Positions were the other choice, counted
 from either end, and both replay correctly, since a replay rebuilds the session
 a step at a time. But the commands stay in the history to be read, and a
 position goes stale there: counted from the newest unit it changes with every
-line typed, and counted from the first it changes with every insert and delete
+unit typed, and counted from the first it changes with every insert and delete
 before it. A number does not, and nor does an error kept in the history
 naming one. The code panel shows each unit's number in a gutter, so a command
 can be typed from what is on screen. An inserted unit's number puts it out of
@@ -347,7 +350,7 @@ same with an empty input, titled "Insert before unit N", and sends
 stays selected, so inserting again puts the next one after it, above the same
 unit. There is no key for inserting after; appending is typing at the prompt.
 
-An edit, a delete or an insert answers with `Eval::Edited`: what each unit it
+An edit, a delete or an insert answers with `Outcome::Edited`: what each unit it
 reached came to, by number, in the session's order. A unit that fails at run
 time among them empties the session, as one appended does, and the app treats
 the answer as that reset.
@@ -529,7 +532,7 @@ and `Session` turns its positions into numbers and sends it with every answer;
 the app shows it as it comes, since nothing it could keep by rule would know
 what salsa ran. A step is one type on both sides of the worker, `UnitStep`:
 the engine's names units by position, and the REPL's by number, with a
-`Blocked`'s positions turned into numbers too. An edit's `Eval::Edited` and
+`Blocked`'s positions turned into numbers too. An edit's `Outcome::Edited` and
 the answer's `step` are the same list.
 
 **The app keeps its own copy of the session's units**, numbered as the
@@ -582,14 +585,14 @@ Environment shown.
 beside its number and status, and, if the last step compiled or ran it, a
 second line saying which, so the corners of the bar are read out beside it.
 Below is what it came to, the diagnostics for one that did not compile, what
-it binds and what each binding holds now, the functions it defines, and the
-names it reads, provides, takes, overwrites and updates. `detail.rs` lays it
-out.
+it binds and what each binding holds now, the functions it defines, the names
+it provides, and the names it uses, each under the one kind of use it makes:
+reads, takes, overwrites, updates or revives. `detail.rs` lays it out.
 
 What the app keeps -- the status, the marks, and each unit's last outcome,
 which `SessionUnit` holds -- shows at once. The rest only the session knows,
 so the app asks for it with an internal `Describe` command, answered with
-`Eval::Detail(UnitDetail)`. It asks whenever the selected unit or the number
+`Outcome::Detail(UnitDetail)`. It asks whenever the selected unit or the number
 of answers that could have changed the session moves on, after dispatching the
 queue, so the question goes behind whatever was sent before it and is answered
 of the session that leaves. Describes take their ids from `DESCRIBE_IDS`, far
@@ -775,7 +778,7 @@ setup and the loop together.
 - A command whose source spans lines cannot be typed: an input starting with
   the sigil is a command on its first line. Only a replay, or an edit from
   the code panel, gives one over several lines.
-- An edit cannot change a unit from statements to an expression or back.
+- An edit cannot change a unit from a fragment to an expression unit or back.
 - Errors are plain messages in the History tab. The Detail tab renders parse,
   type and ownership diagnostics, but a lowering error shows only as its
   message, having no location; see

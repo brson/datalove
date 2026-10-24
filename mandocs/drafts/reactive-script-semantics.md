@@ -36,7 +36,7 @@ Let's figure it out.
 - [How is re-execution affected when subsequent units consume bindings from the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-consume-bindings-from-the-re-executed-unit)
 - [How is re-execution affected when subsequent units mutate the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-mutate-the-re-executed-unit)
 - [What if a unit overwrites a binding without reading it?](#user-content-what-if-a-unit-overwrites-a-binding-without-reading-it)
-- [Hypothesis: an algebra of rewind and replay for moves and mutations](#user-content-hypothesis-an-algebra-of-rewind-and-replay-for-moves-and-mutations)
+- [Hypothesis: an algebra of reruns for moves and mutations](#user-content-hypothesis-an-algebra-of-reruns-for-moves-and-mutations)
 - [What if a unit reads a binding before a later unit moves it?](#user-content-what-if-a-unit-reads-a-binding-before-a-later-unit-moves-it)
 - [What if a unit reads a binding before a later unit mutates it?](#user-content-what-if-a-unit-reads-a-binding-before-a-later-unit-mutates-it)
 - [What if a unit reads a binding after an earlier unit mutated it?](#user-content-what-if-a-unit-reads-a-binding-after-an-earlier-unit-mutated-it)
@@ -44,7 +44,7 @@ Let's figure it out.
 - [What if an edit adds or removes a mutation?](#user-content-what-if-an-edit-adds-or-removes-a-mutation)
 - [What if a unit that moves or mutates is deleted?](#user-content-what-if-a-unit-that-moves-or-mutates-is-deleted)
 - [What if a unit gives a moved `var` a value again?](#user-content-what-if-a-unit-gives-a-moved-var-a-value-again)
-- [An amended algebra of rewind and replay](#user-content-an-amended-algebra-of-rewind-and-replay)
+- [An amended algebra of reruns and fixups](#user-content-an-amended-algebra-of-reruns-and-fixups)
 - [Speculating about transitivity](#user-content-speculating-about-transitivity)
 - [What if a rerun needs another rerun first?](#user-content-what-if-a-rerun-needs-another-rerun-first)
 - [What if values flow through intermediate bindings?](#user-content-what-if-values-flow-through-intermediate-bindings)
@@ -279,7 +279,7 @@ let c = a_moved /! b_moved
 ```
 
 We have to recognize that unit 3 moved a binding out of unit 2,
-and that anything that undoes or redoes unit 3 has to build the binding again,
+and that anything that retracts or applies unit 3 has to build the binding again,
 by rerunning unit 2.
 
 <!-- world compile-failure step 3 -->
@@ -288,7 +288,7 @@ by rerunning unit 2.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
-| 2 | `let b = 100` | - | reruns | rewind: unit 3 took `b` when it last ran, and is undone | `b` = 100 |
+| 2 | `let b = 100` | - | reruns | rerun: unit 3 took `b` when it last ran, and is retracted | `b` = 100 |
 | 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 <!-- end world -->
 
@@ -381,7 +381,7 @@ so we need to rerun unit 2 to put `b` back to 125.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
-| 2 | `var b = 125` | - | reruns | rewind: unit 3 updated `b` when it last ran, and is undone | `b` = 125 |
+| 2 | `var b = 125` | - | reruns | rerun: unit 3 updated `b` when it last ran, and is retracted | `b` = 125 |
 | 3 | `set b = b * 2; let c = a /! b` | reads `a` (1), updates `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 <!-- end world -->
 
@@ -470,7 +470,7 @@ which is where an overwrite differs from an update.
 | 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompiles, runs | edited | `c` = 4 |
 <!-- end world -->
 
-Undoing the overwrite is a different story.
+Retracting the overwrite is a different story.
 Break unit 1 and unit 3 stops compiling,
 so the session should look like unit 3 never ran,
 and `b` should be 125 again.
@@ -484,12 +484,12 @@ exactly as it did for the move and for the update.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000; let x = y` | - | recompile fails | edited | - |
-| 2 | `var b = 125` | - | reruns | rewind: unit 3 overwrote `b` when it last ran, and is undone | `b` = 125 |
+| 2 | `var b = 125` | - | reruns | rerun: unit 3 overwrote `b` when it last ran, and is retracted | `b` = 125 |
 | 3 | `set b = 250; let c = a /! b` | reads `a` (1), overwrites `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 <!-- end world -->
 
 And fixing unit 1 reruns unit 3,
-which overwrites `b` again without anything to undo first.
+which overwrites `b` again without anything to retract first.
 
 <!-- world overwrite step 4 -->
 **Step 4: unit 1 is fixed.**
@@ -503,15 +503,15 @@ which overwrites `b` again without anything to undo first.
 
 So writes come in two kinds.
 An _update_ reads the binding first,
-and like a move it needs the binding rebuilt both to undo it and to redo it.
+and like a move it needs the binding rebuilt both to retract it and to apply it.
 An _overwrite_ doesn't read it,
-and needs the binding rebuilt only to undo it.
+and needs the binding rebuilt only to retract it.
 
 
 
 
 
-## Hypothesis: an algebra of rewind and replay for moves and mutations
+## Hypothesis: an algebra of reruns for moves and mutations
 
 After those examples a pattern shows.
 What matters about a unit is what it does to bindings
@@ -528,22 +528,22 @@ like reading `a` and updating `b`.
 The rules apply to each binding separately,
 and what the unit needs is all of them together.
 
-Each has effects in two directions.
+Each has consequences in two directions.
 
 _Backward_.
-To _undo_ a unit, because it was deleted or stopped compiling,
-or to _redo_ it, because it was edited or something it uses was,
+To _retract_ a unit, because it was deleted or stopped compiling,
+or to _apply_ it, because it was edited or something it uses was,
 the earlier bindings it touched have to be as they were before it first ran.
-When they aren't we _rewind_:
+When they aren't we _rerun_:
 rerun the unit that made the binding,
 which builds all of that unit's bindings again,
-then _replay_ the units after it that took or wrote any of them, in order.
-Units that only read them don't need to replay for the rewind's sake.
+then rerun the units after it that took or wrote any of them, in order.
+Units that only read them don't need to rerun for the rerun's sake.
 The rerun unit wasn't edited,
 so it builds the same values,
 and a reader would compute what it already holds.
 If what a reader sees does change,
-because the unit being undone or redone changed it,
+because the unit being retracted or applied changed it,
 that's the forward rule's business, below.
 
 _Forward_.
@@ -551,20 +551,20 @@ What a unit did to a binding is what the units after it see,
 so changing what it does reaches them,
 whether or not they use anything the unit itself defines.
 
-| a unit that ... an earlier binding | undo it | redo it | units after it |
+| a unit that ... an earlier binding | retract it | apply it | units after it |
 |------------|---------|----------------------------------------|--------------------------------------------|
-| reads      | nothing | rewind if a unit after it took or wrote it | nothing                                 |
-| takes      | rewind  | rewind                                  | can't name it, so recompile when that changes |
-| overwrites | rewind  | nothing                                 | read the new value, so rerun when it changes |
-| updates    | rewind  | rewind                                  | read the new value, so rerun when it changes |
+| reads      | nothing | rerun if a unit after it took or wrote it  | nothing                                 |
+| takes      | rerun   | rerun                                   | can't name it, so recompile when that changes |
+| overwrites | rerun   | nothing                                 | read the new value, so rerun when it changes |
+| updates    | rerun   | rerun                                   | read the new value, so rerun when it changes |
 
-Moves and mutations agree on undo,
-and disagree on redo and on what they pass forward.
+Moves and mutations agree on retract,
+and disagree on apply and on what they pass forward.
 
 <!--
 Note: the engine follows this table for edits, overwrites included.
-It reruns to undo a revival where a fixup would do, and the splices
-(delete, insert, truncate) rerun every unit from the rewind point on.
+It reruns to retract a revival where a fixup would do, and the splices
+(delete, insert, truncate) rerun every unit from the rerun start on.
 -->
 
 
@@ -572,7 +572,7 @@ It reruns to undo a revival where a fixup would do, and the splices
 
 ## What if a unit reads a binding before a later unit moves it?
 
-So far the unit being redone was the one doing the moving.
+So far the unit being applied was the one doing the moving.
 But a unit that only reads can be caught out too,
 if the binding it reads was taken _after_ it ran.
 
@@ -625,12 +625,12 @@ or `a` will be left holding a value nothing took.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rewind: unit 2 reads `a`, which unit 3 took after it | `a` moved |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reads `a`, which unit 3 took after it | `a` moved |
 | 2 | `let c = a /! 100` | reads `a` (1) | recompiles, runs | edited | `c` = 10 |
-| 3 | `let a_moved = a` | takes `a` (1) | reruns | replay: takes `a` from unit 1, which reran | `a_moved` = 1000 |
+| 3 | `let a_moved = a` | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
 <!-- end world -->
 
-So a read can need a rewind as much as a move can.
+So a read can need a rerun as much as a move can.
 What matters is not what the edited unit does to `a`,
 but whether anything changed `a` between when it was made and now.
 The behavior of units that are subsequent to the edit
@@ -698,17 +698,17 @@ and unit 4 doubles `b` again.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | untouched | nothing changed `a` | `a` = 1000 |
-| 2 | `var b = 125` | - | reruns | rewind: unit 3 reads `b`, which unit 4 updated after it | `b` = 250 |
+| 2 | `var b = 125` | - | reruns | rerun: unit 3 reads `b`, which unit 4 updated after it | `b` = 250 |
 | 3 | `let c = (a /! b) * 2` | reads `a` (1), reads `b` (2) | recompiles, runs | edited | `c` = 16 |
-| 4 | `set b = b * 2` | updates `b` (2) | reruns | replay: updates `b` from unit 2, which reran | - |
+| 4 | `set b = b * 2` | updates `b` (2) | reruns | rerun: updates `b` from unit 2, which reran | - |
 <!-- end world -->
 
 Here it doesn't matter what kind of write unit 4 makes.
 Had it been an overwrite, `set b = 500`,
 unit 3 would still have read the wrong `b`,
-so the rewind is the same.
-The kind of write decides whether redoing _the writer_ needs a rewind,
-not whether redoing a unit before it does.
+so the rerun is the same.
+The kind of write decides whether applying _the writer_ needs a rerun,
+not whether applying a unit before it does.
 
 Unit 1 is a useful control.
 Unit 3 reads `a` too, but nothing changed `a`,
@@ -783,11 +783,11 @@ If unit 3 had been `let b_moved = b`,
 unit 4 wouldn't compile at all:
 
 ```
-error[D013]: `b` was given away by an earlier input
+error[D013]: `b` was given away by an earlier unit
 ```
 
 So the rule for a reader is narrower than "anything changed the binding".
-A reader needs a rewind only if the binding was changed
+A reader needs a rerun only if the binding was changed
 _after_ the reader last ran.
 Changes before it are just what it read.
 
@@ -803,10 +803,10 @@ But an edit can change that too,
 and turn a read into a take, or a take into a read.
 
 Then the edit is two things at once.
-It undoes what the old code did the last time it ran,
-and it redoes what the new code does now.
-The bindings the old code touched need what the undo rules ask for,
-and the bindings the new code touches need what the redo rules ask for.
+It retracts what the old code did the last time it ran,
+and it applies what the new code does now.
+The bindings the old code touched need what the retract rules ask for,
+and the bindings the new code touches need what the apply rules ask for.
 Forward, the units after it see the difference between the two.
 
 <!-- world add-move code -->
@@ -851,9 +851,9 @@ Three units read `a`, and nothing takes it.
 <!-- end world -->
 
 Now edit unit 3 to take `a` instead of reading it.
-The old code only read `a`, so there is nothing to undo.
+The old code only read `a`, so there is nothing to retract.
 The new code takes `a`,
-and the redo rules say a take needs a rewind.
+and the apply rules say a take needs a rerun.
 But it doesn't need one here.
 That column assumed the unit took the binding the last time it ran too,
 so the binding would be empty.
@@ -869,7 +869,7 @@ and nothing it uses was rebuilt,
 but it no longer compiles:
 
 ```
-error[D013]: `a` was given away by an earlier input
+error[D013]: `a` was given away by an earlier unit
 ```
 
 <!-- world add-move step 2 -->
@@ -889,7 +889,7 @@ so what it read is still what's there.
 
 Now edit unit 3 back to a read.
 This time the old code took `a`,
-and undoing a take needs a rewind:
+and retracting a take needs a rerun:
 unit 1 reruns to build `a` again.
 The new code reads `a`, which is now there to read.
 And unit 4 can name `a` again,
@@ -900,17 +900,17 @@ so it recompiles and runs.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rewind: unit 3 took `a` when it last ran, and the edit undoes that | `a` = 1000 |
-| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 3 took `a` when it last ran, and the edit retracts that | `a` = 1000 |
+| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 100 |
 | 3 | `let d = a + 1` | reads `a` (1) | recompiles, runs | edited | `d` = 1001 |
 | 4 | `let e = a + 2` | reads `a` (1) | reruns | `a` can be named again, as it could in step 1, whose compile is still memoized | `e` = 1002 |
 <!-- end world -->
 
 Adding the move and removing it are not mirror images.
 Adding it cost nothing backward and broke a unit forward.
-Removing it needed a rewind backward, and fixed that unit forward.
+Removing it needed a rerun backward, and fixed that unit forward.
 
-The added move does need a rewind
+The added move does need a rerun
 if something after it already took the binding.
 Make unit 4 `let e = a`, so it is the one that takes `a`,
 and then edit unit 3 to take it instead.
@@ -920,18 +920,18 @@ and then edit unit 3 to take it instead.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rewind: unit 3 takes `a`, which unit 4 took after it | `a` moved |
-| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 3 takes `a`, which unit 4 took after it | `a` moved |
+| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 100 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a` | takes `a` (1) | recompile fails | `a` was given away by unit 3 | - |
 <!-- end world -->
 
 The take has moved from unit 4 to unit 3.
-The rewind is not because of anything unit 3 did.
+The rerun is not because of anything unit 3 did.
 Unit 4 emptied `a` after unit 3 last ran,
 the same case as a read before a later move.
-The redo rule holds if it is read that way:
-a take needs a rewind when the binding is not as its maker left it,
+The apply rule holds if it is read that way:
+a take needs a rerun when the binding is not as its provider left it,
 and that is usually, but not always, because the unit took it itself.
 
 
@@ -987,9 +987,9 @@ Unit 4 reads `b` as 125, so `c` is 8.
 <!-- end world -->
 
 Now edit unit 3 to double `b` in place.
-As with the added move, nothing needs to be undone,
+As with the added move, nothing needs to be retracted,
 and `b` still holds what unit 2 made,
-so the new update needs no rewind.
+so the new update needs no rerun.
 Unit 3 doubles `b` to 250.
 
 Unit 4 is where it differs from the move.
@@ -1015,13 +1015,13 @@ and `c` becomes 4.
 
 Now edit unit 3 back to a read.
 The old code updated `b`,
-and undoing an update needs a rewind,
+and retracting an update needs a rerun,
 so unit 2 reruns to put `b` back to 125.
 The new code reads that 125,
 and `d` is 250 again.
 
-Unit 4 reruns too, but not for the rewind's sake.
-A rewind replays only the units that took or wrote what was rebuilt,
+Unit 4 reruns too, but not for the rerun's sake.
+A rerun reruns only the units that took or wrote what was rebuilt,
 and unit 4 only reads.
 It reruns because the edit changed the `b` it sees,
 from the 250 unit 3 left
@@ -1034,15 +1034,15 @@ That's the forward rule.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | untouched | nothing changed `a` | `a` = 1000 |
-| 2 | `var b = 125` | - | reruns | rewind: unit 3 updated `b` when it last ran, and the edit undoes that | `b` = 125 |
+| 2 | `var b = 125` | - | reruns | rerun: unit 3 updated `b` when it last ran, and the edit retracts that | `b` = 125 |
 | 3 | `let d = b * 2` | reads `b` (2) | recompiles, runs | edited | `d` = 250 |
 | 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 8 |
 <!-- end world -->
 
 An overwrite in place of the update, `set b = 500`,
 reruns the same units in both steps.
-The kinds of write differ on redo,
-and a write that is new is never redone against its own result.
+The kinds of write differ on apply,
+and a write that is new is never applied against its own result.
 They come apart when something after already wrote the binding.
 Add a fifth unit, `set b = b + 1`,
 so `b` is 126 before the edit.
@@ -1066,7 +1066,7 @@ Their code alone doesn't tell it.
 
 <!--
 Note: the fifth-unit case is checked against the engine too, in
-`crates/datalove-repl/tests/fixtures/reactive/add-mutation-later-write.world`.
+`crates/datalove-script-engine/tests/fixtures/reactive/add-mutation-later-write.world`.
 -->
 
 
@@ -1074,9 +1074,9 @@ Note: the fifth-unit case is checked against the engine too, in
 
 ## What if a unit that moves or mutates is deleted?
 
-An edit that removes a move or a mutation undoes what the old code did
-and redoes what the new code does.
-Deleting the unit is the same edit with nothing to redo.
+An edit that removes a move or a mutation retracts what the old code did
+and applies what the new code does.
+Deleting the unit is the same edit with nothing to apply.
 
 <!-- world delete code -->
 ```datalove
@@ -1131,10 +1131,10 @@ Unit 5 reads `b` as unit 4 left it.
 
 Now delete unit 4.
 The session should look as if unit 4 had never been entered.
-That is the undo column of the table,
+That is the retract column of the table,
 once for each binding unit 4 touched.
-Undoing a take needs a rewind, so unit 1 reruns.
-Undoing an update needs a rewind, so unit 2 reruns.
+Retracting a take needs a rerun, so unit 1 reruns.
+Retracting an update needs a rerun, so unit 2 reruns.
 
 The rows below keep the numbers the units had before the deletion,
 so unit 5 is still called unit 5, though it is now the fourth.
@@ -1144,9 +1144,9 @@ so unit 5 is still called unit 5, though it is now the fourth.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rewind: unit 4 took `a` when it last ran, and is deleted | `a` = 1000 |
-| 2 | `var b = 125` | - | reruns | rewind: unit 4 updated `b` when it last ran, and is deleted | `b` = 125 |
-| 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 built the same `a` and `b` | `c` = 8 |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 4 took `a` when it last ran, and is deleted | `a` = 1000 |
+| 2 | `var b = 125` | - | reruns | rerun: unit 4 updated `b` when it last ran, and is deleted | `b` = 125 |
+| 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 provided the same `a` and `b` | `c` = 8 |
 | 4 | `let a_moved = a; set b = b * 2` | takes `a` (1), updates `b` (2) | deleted | deleted | - |
 | 5 | `let d = b + 1` | reads `b` (2) | reruns | reads `b` after unit 4, which no longer updates it | `d` = 126 |
 
@@ -1158,7 +1158,7 @@ unit 5 recompiles, runs: a removal renumbers every later unit, so they are typec
 <!-- end world -->
 
 Unit 3 read `a` and `b` before unit 4 changed them,
-and the rewind builds them again as they were,
+and the rerun builds them again as they were,
 so unit 3 is left alone.
 Unit 5 reruns by the forward rule,
 as it did when an edit removed the mutation:
@@ -1166,10 +1166,10 @@ the `b` it sees has gone from 250 back to 125.
 
 Had unit 4 overwritten `b` rather than updated it,
 the step would be the same.
-The two kinds of write differ only on redo,
-and a deleted unit is never redone.
+The two kinds of write differ only on apply,
+and a deleted unit is never applied.
 
-The other forward effects are the ones the earlier sections found.
+The other forward consequences are the ones the earlier sections found.
 A later unit that used `a_moved` would fail to compile,
 as it would if unit 4 had stopped compiling.
 A later unit that named `a`,
@@ -1240,7 +1240,7 @@ Without unit 3, unit 4 wouldn't compile.
 <!-- end world -->
 
 Edit unit 3 to write a different value.
-Redoing an overwrite needs no rewind,
+Applying an overwrite needs no rerun,
 and that holds for a revival too:
 it doesn't matter what `b` holds before the write.
 Unit 4 reruns by the forward rule,
@@ -1257,14 +1257,14 @@ as it would after any overwrite.
 | 4 | `let c = b + 1` | reads `b` (1) | reruns | reads `b` after unit 3, which now writes 600 | `c` = 601 |
 <!-- end world -->
 
-_Undoing is where a revival differs from every other write_.
+_Retracting is where a revival differs from every other write_.
 Break unit 3,
 and the session should look as if unit 3 never ran.
-The undo column says an overwrite needs a rewind,
+The retract column says an overwrite needs a rerun,
 so that `b` is as it was before the write.
 But before this write `b` held nothing.
 Rerunning unit 1 would build 125,
-and replaying unit 2 would take it again,
+and rerunning unit 2 would take it again,
 all to leave `b` empty.
 Dropping the 600 leaves it empty too,
 and runs nothing.
@@ -1274,7 +1274,7 @@ Unit 4 names `b`, which unit 2 gave away,
 and nothing gives it back now:
 
 ```
-error[D013]: `b` was given away by an earlier input
+error[D013]: `b` was given away by an earlier unit
 ```
 
 <!-- world revive step 3 -->
@@ -1282,7 +1282,7 @@ error[D013]: `b` was given away by an earlier input
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | _`b` dropped_ | unit 3 revived `b` when it last ran, and is undone | `b` moved |
+| 1 | `var b = 125` | - | _`b` dropped_ | fixup: unit 3 revived `b` when it last ran, and is retracted | `b` moved |
 | 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
 | 3 | `set b = 600; let x = y` | revives `b` (1) | recompile fails | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
@@ -1290,7 +1290,7 @@ error[D013]: `b` was given away by an earlier input
 <!--
 Engine today, more than the rule asks:
 unit 1 reruns: treats the revival like any other write, and reruns rather than dropping `b`
-unit 2 reruns: replays the take after rerunning unit 1
+unit 2 reruns: takes `b` again after unit 1 reruns
 -->
 <!-- end world -->
 
@@ -1299,8 +1299,8 @@ It is neither a recompile nor a rerun.
 It's just a cleanup to the frame of that unit
 to make a particular binding inaccessable again.
 
-Fixing unit 3 again is a redo,
-and needs no rewind either.
+Fixing unit 3 again is an apply,
+and needs no rerun either.
 Unit 3 writes 600 into the empty `b`,
 and unit 4 compiles and runs.
 The session is back to how step 2 left it.
@@ -1319,10 +1319,10 @@ The session is back to how step 2 left it.
 Whether a write revives is not up to the writer.
 It depends on whether something before it gave the binding away.
 Edit unit 2 to read `b` instead of taking it.
-Undoing the take needs a rewind,
+Retracting the take needs a rerun,
 so unit 1 reruns and builds 125.
 Unit 3 wrote `b` the last time it ran,
-so it replays,
+so it reruns,
 and now it overwrites a `b` that holds something.
 Its code is the same:
 writing a binding drops whatever it held,
@@ -1336,9 +1336,9 @@ so it is left alone.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | reruns | rewind: unit 2 took `b` when it last ran, and the edit undoes that | `b` = 600 |
+| 1 | `var b = 125` | - | reruns | rerun: unit 2 took `b` when it last ran, and the edit retracts that | `b` = 600 |
 | 2 | `let d = b + 1` | reads `b` (1) | recompiles, runs | edited | `d` = 126 |
-| 3 | `set b = 600` | overwrites `b` (1) | reruns | replay: overwrites `b` from unit 1, which reran | - |
+| 3 | `set b = 600` | overwrites `b` (1) | reruns | rerun: overwrites `b` from unit 1, which reran | - |
 | 4 | `let c = b + 1` | reads `b` (1) | untouched | `b` is 600 after unit 3, as before | `c` = 601 |
 
 <!--
@@ -1347,14 +1347,14 @@ unit 3 recompiles, runs: `b` is no longer given away before it, so its ownership
 -->
 <!-- end world -->
 
-So a revival is an overwrite backward and an undone move forward,
+So a revival is an overwrite backward and a retracted move forward,
 with one difference from both.
-Its undo needs no rewind,
+Its retract needs no rerun,
 because what it overwrote was nothing,
 and nothing can be put back without running anything.
 That gives the table a fifth row:
 
-| a unit that ... an earlier binding | undo it | redo it | units after it |
+| a unit that ... an earlier binding | retract it | apply it | units after it |
 |------------|---------|----------------------------------------|--------------------------------------------|
 | revives    | empty it | nothing                               | can name it again, so recompile when that changes |
 
@@ -1368,7 +1368,7 @@ lowering a store to an earlier unit's slot always emits `DropTracked`
 
 
 
-## An amended algebra of rewind and replay
+## An amended algebra of reruns and fixups
 
 > Note: istm that the terms rewind and replay are essentially interchangeable here.
 > Mostly we _rerun_ units to restore state.
@@ -1389,52 +1389,52 @@ Every modification triggers a _step_.
 The outcome of every modification depends on compiler analysis of both the current step
 and the previous step.
 
-Different modifications trigger _undo_ and/or _redo_ _actions_, and _forward_ actions.
+Different modifications trigger _retract_ and/or _apply_ _actions_, and _forward_ actions.
 
-- _Undo_ actions reverse what the triggering unit's previous-step code
+- _Retract_ actions reverse what the triggering unit's previous-step code
   did to bindings of earlier units.
   They rerun earlier units, or fix a binding up,
   to restore those bindings to the values they held before the triggering unit.
-- _Redo_ actions run the triggering unit's current-step code.
+- _Apply_ actions run the triggering unit's current-step code.
   The bindings it reads must hold what they held before it,
   so when a later unit has changed one,
   earlier units rerun first.
 - _Forward_ actions rerun units subsequent to the triggering unit.
   They update bindings to their current-step values.
 
-Both undo and redo can rerun units prior to the triggering unit.
+Both retract and apply can rerun units prior to the triggering unit.
 What separates them is which version of the triggering unit's code
 decides what has to be restored:
-the previous step's for undo, the current step's for redo.
+the previous step's for retract, the current step's for apply.
 
 Each modification is made of these actions:
 
-- _Edit_ => _undo_ + _redo_.
+- _Edit_ => _retract_ + _apply_.
   An edit that successfully compiles.
-- _Break_ => _undo_.
+- _Break_ => _retract_.
   An edit that fails to compile.
-- _Delete_ => _undo_.
+- _Delete_ => _retract_.
   Removing a unit completely.
-- _Fix_ => _redo_.
+- _Fix_ => _apply_.
   An edit that fixes a formerly broken compile.
-- _Add_ => _redo_.
+- _Add_ => _apply_.
   An insertion or append of a unit.
 
 A unit can perform five _operations_ on a binding of an earlier unit:
 _read_ it, _take_ it, _overwrite_ it, _update_ it,
 or _revive_ it, overwriting a binding that was given away.
-The undo, redo, and forward effects of a script unit
+The retract, apply, and forward consequences of a script unit
 are determined by the operation
 (actually the union of these operations over the bindings
 the unit operates on).
 
-_Undo and redo use the operation in different steps_.
-Undo looks up what the triggering unit did in the previous step,
-and redo what it does in the current step.
+_Retract and apply use the operation in different steps_.
+Retract looks up what the triggering unit did in the previous step,
+and apply what it does in the current step.
 An edit that turns a take into a read
-undoes a take and redoes a read.
+retracts a take and applies a read.
 
-| operation | undo | redo | forward |
+| operation | retract | apply | forward |
 |-----------|------|------|---------|
 | read      | nothing | rerun if a later unit took or wrote it | nothing |
 | take      | rerun   | rerun if it or a later unit took or wrote it | later units that name it break; removing the take fixes them |
@@ -1470,7 +1470,7 @@ which runs nothing.
 
 A _fixup_ is that case: it restores a binding without running anything.
 It happens when the nearest unit that set the binding was a take,
-which is always so when undoing a revival,
+which is always so when retracting a revival,
 because what a revival overwrote was nothing,
 and emptying the binding puts that back.
 
@@ -1483,14 +1483,14 @@ but a nearer start is more likely to be a unit that reads other bindings.
 That is where one rerun can need another first,
 a question for a later section.
 
-_Undo_ needs a rerun, or for a revival a fixup,
+_Retract_ needs a rerun, or for a revival a fixup,
 whenever the triggering unit changed the binding,
 since it then has to be put back as it was before it.
-Undoing a read changes nothing,
+Retracting a read changes nothing,
 even if a later unit took or wrote the binding:
 that later change would have happened anyway.
 
-_Redo_ needs a rerun only for the operations that read the binding,
+_Apply_ needs a rerun only for the operations that read the binding,
 which are read, take and update.
 The triggering unit has to find the binding as it was before it,
 and it won't if the triggering unit itself, in the previous step,
@@ -1498,7 +1498,7 @@ or a later unit, took or wrote it.
 A change made by a unit before the triggering unit is just what it found,
 and stays.
 An overwrite or a revival doesn't read the binding,
-so its redo needs nothing.
+so its apply needs nothing.
 
 _Forward_ actions follow from what the step changed.
 Units after the triggering unit rerun if they read
@@ -1510,19 +1510,19 @@ A take or a revival added or removed
 changes which names the later units can use,
 so it breaks or fixes them.
 Those breaks and fixes are modifications in their own right,
-with their own undo and redo,
-so the effects cascade.
+with their own retract and apply,
+so the consequences cascade.
 The first example in this document is one:
 breaking unit 1 broke unit 3,
-and undoing unit 3's take reran unit 2.
+and retracting unit 3's take reran unit 2.
 A forward rerun of a unit that takes or writes
-is an undo and a redo of the same code, and cascades the same way.
+is a retract and an apply of the same code, and cascades the same way.
 
 <!--
 Note: the engine today differs from this section in two places.
-It reruns to undo a revival where a fixup would do.
+It reruns to retract a revival where a fixup would do.
 And the splices, delete among them, start a rerun at the unit that made
-the binding rather than a nearer overwrite (`rewind_point` in
+the binding rather than a nearer overwrite (`rerun_start` in
 `crates/datalove-datafun/src/pipeline/script_compiler.rs`), and rerun
 every unit from there on, readers included, because a value is identified
 by its unit's index.
@@ -1538,14 +1538,14 @@ and reason about.
 Getting close to my personal reasoning frontier though.
 
 There's still an obvious omission.
-There are missing transitive properties in both the reverse and forward directions.
+There are missing transitive properties in both the backward and forward directions.
 
 The root of it is that the table is per binding,
 but a rerun reruns a whole unit.
 Everything else that unit reads has to be as it found it,
 and everything else it takes or writes gets done again.
 
-In the reverse direction,
+In the backward direction,
 there can be multiple bindings involved in the chain
 responsible for writing a particular target binding,
 and some of those other bindings might themselves
@@ -1554,7 +1554,7 @@ relation to the triggering unit.
 
 In the forward direction
 the units that rerun may themselves depend on other unrelated mutated bindings,
-forcing yet more undo operations in the reverse direction before they can rerun.
+forcing yet more retract operations in the backward direction before they can rerun.
 And as data flows through intermediate bindings subsequent readers and writers
 need themselves to rerun.
 
@@ -1564,7 +1564,7 @@ A recursive algorithm running backwards and forwards across units to a fixed poi
 
 <!--
 The engine already loops like this:
-`reach_from` repeats its back rule over every unit it reaches
+`reach_from` repeats its backward rule over every unit it reaches
 until no more providers are added.
 -->
 
@@ -2070,7 +2070,7 @@ By dataflow nothing else needs to run.
 <!--
 Engine today, more than the rule asks:
 unit 1 reruns: tracks bindings by name, so the write to `p.1` counts as a write to all of `p`
-unit 3 reruns: replays its write after rerunning unit 1
+unit 3 reruns: writes `p` again after unit 1 reruns
 -->
 <!-- end world -->
 
@@ -2079,7 +2079,7 @@ and that's what the engine goes by:
 a write to `p.1` counts as a write to all of `p`,
 and an update at that, since the rest of `p` is kept.
 So it reruns unit 1 to rebuild `p` and unit 3 to write it again.
-Sound, and a cost of one rerun of the maker and the writers per such edit.
+Sound, and a cost of one rerun of the provider and the writers per such edit.
 Tracking places instead of names would save it.
 Not done.
 
@@ -2379,9 +2379,9 @@ Sound, more than needed.
 ## Are the rules right, and what does the engine do today?
 
 Every step table in this document is a test case.
-Each lives as a fixture in `crates/datalove-repl/tests/fixtures/reactive/`,
+Each lives as a fixture in `crates/datalove-script-engine/tests/fixtures/reactive/`,
 is rendered into this document from there,
-and is checked against the engine by `crates/datalove-repl/tests/reactive_tests.rs`:
+and is checked against the engine by `crates/datalove-script-engine/tests/reactive_tests.rs`:
 which units recompile, which rerun,
 what each does to earlier bindings,
 and what each holds after.
@@ -2391,9 +2391,9 @@ the fixture says so,
 and it shows as a comment under the table.
 What's left of those:
 
-- Undoing a revival reruns the maker and the take, where a fixup would do.
+- Retracting a revival reruns the provider and the take, where a fixup would do.
 - The splices, delete and insert, rerun every unit from the rerun point on,
-  readers included, and start that point at the maker.
+  readers included, and start that point at the provider.
 - A write to part of a binding counts as a write to all of it.
 - A rerun that comes out the same still reruns its readers.
 - A unit that returned early is assumed to have done everything its code could.

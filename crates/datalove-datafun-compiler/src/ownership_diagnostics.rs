@@ -68,9 +68,9 @@ pub fn ownership_diagnostic<'db>(
         AnalysisError::UseAfterMoveInEarlierUnit { expr_key, name, recovery_hint } => {
             let (text, span) = error_span(spans, *expr_key);
             let mut builder =
-                DiagnosticBuilder::error(db, &fmt!("`{name}` was given away by an earlier input"))
+                DiagnosticBuilder::error(db, &fmt!("`{name}` was given away by an earlier unit"))
                     .code("D013")
-                    .primary_label(TextSpan::new(text, span), "value used after move");
+                    .primary_label(TextSpan::new(text, span), "used after it was given away");
             if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
                 builder = builder.help(&fmt!("use `@` to {description}"));
             }

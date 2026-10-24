@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "point",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "{ x: int, y: int }",
           "value": "{x = 10, y = 20}"
         }
@@ -65,7 +65,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "person",
@@ -100,7 +100,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "{ name: string, age: int }",
           "value": "{name = \"Alice\", age = 30}"
         }
@@ -130,7 +130,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "multifield",
@@ -170,7 +170,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "{ a: int, b: int, c: int, d: int }",
           "value": "{a = 1, b = 2, c = 3, d = 4}"
         }

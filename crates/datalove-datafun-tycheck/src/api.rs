@@ -120,15 +120,15 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     /// The other fields say what a unit *provides*; this says what it *uses*,
     /// and between them they are the dependency graph script reactivity is
     /// built on. Resolve a name here to the nearest earlier unit that provides
-    /// it and that is the edge. See `TypeContext::asked_names` for why a name
+    /// it and that is the edge. See `TypeContext::uses` for why a name
     /// the unit binds itself is in here too, and
     /// `botdocs/plan-script-reactivity.md` for what it is for.
     #[returns(ref)]
-    pub asked_names: Vec<InternedText<'db>>,
+    pub uses: Vec<InternedText<'db>>,
     /// The modules this unit's `import` statements resolve into, by path.
     ///
     /// The module-shaped half of the dependency graph, and the edge a module
-    /// edit is propagated along: `asked_names` reaches the units that use what
+    /// edit is propagated along: `uses` reaches the units that use what
     /// *another unit* provides, and says nothing about the modules, so editing
     /// a module has no edge to travel without this. Recorded here rather than
     /// recomputed where the reach is walked, because resolving an alias to a
@@ -309,7 +309,7 @@ pub fn typecheck_script_unit<'db>(
     let unit_spec = unit_ast(db, script.unit(db));
     let mut ctx = TypeContext::new(db, unit_spec.spans.clone());
     ctx.data_files = env.data(db).C();
-    ctx.record_asked_names();
+    ctx.record_uses();
 
     // The environment the earlier units left is read on a lookup miss rather
     // than seeded into the context, which is the whole of stage B.
@@ -500,7 +500,7 @@ pub fn typecheck_script_unit<'db>(
     ctx.emit_pending_diagnostics();
 
     // What this unit asked the environment for, taken before `ctx` is consumed.
-    let asked_names = ctx.asked_names();
+    let uses = ctx.uses();
 
     // Build result for this unit.
     let errors = ctx.errors.into_iter()
@@ -521,7 +521,7 @@ pub fn typecheck_script_unit<'db>(
 
     ScriptUnitTypecheckOutput::new(
         db, result, new_vars, new_fns, new_fn_asts, new_module_aliases, new_consts,
-        asked_names, imported_modules)
+        uses, imported_modules)
 }
 
 /// Typecheck every unit of `script`, oldest first.

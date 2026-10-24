@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "double"
@@ -38,7 +38,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "42"
         }
@@ -63,7 +63,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "add"
@@ -96,7 +96,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "30"
         }
@@ -126,7 +126,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "get_five"
@@ -164,7 +164,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "5"
         }

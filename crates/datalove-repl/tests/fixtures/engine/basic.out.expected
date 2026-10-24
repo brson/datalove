@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "x",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "42"
         }
@@ -65,7 +65,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "y",
@@ -100,7 +100,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "52"
         }

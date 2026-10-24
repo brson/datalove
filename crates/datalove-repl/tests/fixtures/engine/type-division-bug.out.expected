@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "1"
         }
@@ -29,7 +29,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "-5"
         }
@@ -48,7 +48,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "42"
         }
@@ -67,7 +67,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "30"
         }

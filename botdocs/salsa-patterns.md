@@ -471,7 +471,7 @@ time the window opened every parse was a memo hit and all 16 fixtures reported
 every module as unparsed. Again nothing had regressed; the work had moved out of
 the window.
 
-**What a step analyzed, while running.** `datalove-ct/src/unit_analysis.rs` is a
+**What a step compiled, while running.** `datalove-ct/src/unit_analysis.rs` is a
 third mechanism, and the one the script engine ships with: the entry query of
 each of a script unit's analysis passes records itself, with the unit's
 `Source`, into a thread-local the engine collects around each step. It is

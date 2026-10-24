@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "error[D001]: use of moved value: `a`\n  help: use `@` to clone `a` before the earlier use"
+        "NotCompiled": "error[D001]: use of moved value: `a`\n  help: use `@` to clone `a` before the earlier use"
       }
     },
     "environment": []
@@ -26,7 +26,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "d",

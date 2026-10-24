@@ -43,7 +43,7 @@ pub struct Engine {
     ///
     /// An `Option` only so that it can be handed to a compiler and taken back;
     /// it is `Some` between operations.
-    script: Option<ScriptSession>,
+    session: Option<ScriptSession>,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
     /// The natives `executor`'s native table points to, which `pipeline` was
@@ -218,19 +218,19 @@ fn module_reach(db: &datafun::Database, compiled: &datafun::pipeline::CompiledMo
 pub type OnCompileError<'a> =
     &'a mut dyn FnMut(&ScriptCompiler<'_>, &datafun::pipeline::ScriptCompilationResult);
 
-/// What one step did to one unit: which of its analysis passes ran again,
-/// and what re-deriving it came to, if it was re-derived.
+/// What one step did to one unit: which of the passes that compile it ran
+/// again, and what re-deriving it came to, if it was re-derived.
 ///
 /// A step is any operation on the units, an append included.
 #[derive(Debug, Clone, Serialize)]
 pub struct UnitStep {
     /// The unit's index in the session.
     pub unit: usize,
-    /// The analysis passes salsa ran for the unit in this step.
+    /// The passes salsa ran for the unit in this step.
     pub compiled: Compiled,
     /// What the unit came to, if the step re-derived it: lowered it again
     /// and ran it, or found it failed or blocked. `None` for a unit whose
-    /// analysis ran and whose lowering did not change, so it was left as it
+    /// passes ran and whose lowering did not change, so it was left as it
     /// was.
     pub eval: Option<Eval>,
 }
@@ -242,10 +242,11 @@ impl UnitStep {
     }
 }
 
-/// Which analysis passes ran for a unit in a step.
+/// Which of the passes that compile a unit ran for it in a step.
 ///
-/// Analysis is parse and name resolution, typecheck, and ownership; not
-/// lowering, which is what re-deriving a unit does.
+/// A unit is compiled again when any of them ran: parse and name resolution,
+/// typecheck, and ownership. Lowering is not one of them; it is what
+/// re-deriving a unit does.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Compiled {
     pub parse: bool,
@@ -262,7 +263,7 @@ impl Compiled {
 
 /// A fresh session: everything the engine rebuilds when it resets.
 struct Started {
-    script: ScriptSession,
+    session: ScriptSession,
     executor: ScriptExecutor,
     /// What the executor's natives were registered from. The table holds its
     /// own share, so this is the caller's copy rather than what keeps them.
@@ -280,14 +281,14 @@ impl Started {
         let compiled = pipeline.compile(db);
         assert!(!compiled.has_errors(), "the roots were settled on modules that compile");
 
-        let script = compiled.script_compiler_default(db)
+        let session = compiled.script_compiler_default(db)
             .expect("script_compiler should succeed after error check")
             .into_session();
         let mut executor = compiled.script_executor(debug_output, None)
             .expect("script_executor should succeed after error check");
         let natives = register_natives(natives, &compiled, &mut executor)?;
 
-        Ok(Started { script, executor, natives })
+        Ok(Started { session, executor, natives })
     }
 }
 
@@ -376,7 +377,7 @@ impl Engine {
             db,
             workspace,
             pipeline,
-            script: Some(started.script),
+            session: Some(started.session),
             executor: started.executor,
             natives: started.natives,
             debug_output,
@@ -419,7 +420,7 @@ impl Engine {
             .expect("errors no root reaches are a rider's, and the riders compiled at startup");
         let started = Started::compile(&self.db, &mut self.pipeline, &self.natives.natives, self.debug_output)
             .expect("the roots were settled on modules that compile");
-        self.script = Some(started.script);
+        self.session = Some(started.session);
         self.executor = started.executor;
         self.natives = started.natives;
         // No units are left to have done anything.
@@ -453,10 +454,10 @@ impl Engine {
             take_modules(&mut self.executor, &mut self.natives, &compiled);
         }
         let mut compiler = compiled
-            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+            .script_compiler_resumed(&self.db, self.session.take().expect("a session"))
             .expect("the roots were settled on modules that compile");
         let result = work(&mut compiler);
-        self.script = Some(compiler.into_session());
+        self.session = Some(compiler.into_session());
         result
     }
 
@@ -466,7 +467,7 @@ impl Engine {
     /// module did not exist, which is true of the compile and misleading to
     /// read, so its error becomes the module's.
     fn explain(&self, unit: Source, eval: Eval) -> Eval {
-        let Eval::Error(error) = eval else {
+        let Eval::NotCompiled(error) = eval else {
             return eval;
         };
         let reasons: Vec<String> = self.pipeline.required_modules(&self.db, unit).into_iter()
@@ -475,9 +476,9 @@ impl Engine {
             }))
             .collect();
         if reasons.is_empty() {
-            Eval::Error(error)
+            Eval::NotCompiled(error)
         } else {
-            Eval::Error(reasons.join("\n"))
+            Eval::NotCompiled(reasons.join("\n"))
         }
     }
 
@@ -500,12 +501,12 @@ impl Engine {
 
     /// The session's units' sources, in order.
     fn unit_sources(&self) -> Vec<Source> {
-        self.script.as_ref().expect("a session").unit_sources()
+        self.session.as_ref().expect("a session").unit_sources()
     }
 
     /// Compile and run a unit as the session's next.
     ///
-    /// A panic resets the session, and is reported as [`Eval::CrashReset`].
+    /// A panic resets the session, and is reported as [`Eval::Crashed`].
     pub fn eval(&mut self, unit: Unit) -> Eval {
         self.eval_reporting(unit, &mut |_, _| {})
     }
@@ -520,7 +521,7 @@ impl Engine {
             Ok(eval_result) => eval_result,
             Err(panic) => {
                 self.reset();
-                Eval::CrashReset(fmt!("Eval panic: {}", crate::panic_message(&*panic)))
+                Eval::Crashed(fmt!("Eval panic: {}", crate::panic_message(&*panic)))
             }
         };
         // The unit appended is the last, unless it took the session with it.
@@ -536,8 +537,8 @@ impl Engine {
     /// re-derived, in index order.
     ///
     /// The same as what an edit, a delete or an insert returns, and for an
-    /// appended unit the unit itself and any earlier unit whose analysis it
-    /// made run again. A unit is named by its index after the operation, so a
+    /// appended unit the unit itself and any earlier unit it made compile
+    /// again. A unit is named by its index after the operation, so a
     /// runtime error, which empties the session, leaves nothing to name.
     pub fn last_step(&self) -> &[UnitStep] {
         &self.last_step
@@ -552,7 +553,7 @@ impl Engine {
     }
 
     /// Merge the passes that ran into a step's reports, adding a report for
-    /// each unit analyzed and not re-derived, and keep the result.
+    /// each unit compiled again and not re-derived, and keep the result.
     ///
     /// The passes name units by source, and the sources are those after the
     /// step: an edited unit keeps its source, an inserted one is new, and a
@@ -609,7 +610,7 @@ impl Engine {
 
         if let Some(error) = compiled.first_error() {
             self.executor.skip_unit();
-            return self.explain(source, Eval::Error(error));
+            return self.explain(source, Eval::NotCompiled(error));
         }
 
         let ir_unit = compiled.ir_unit.as_ref()
@@ -636,7 +637,7 @@ impl Engine {
     /// `ScriptExecutor::failed`), so the compiled session starts again too.
     fn failed(&mut self, output: String) -> Eval {
         self.reset();
-        Eval::ErrorReset(output)
+        Eval::RuntimeError(output)
     }
 
     /// What a unit that has just been run, or not run, came to.
@@ -652,10 +653,10 @@ impl Engine {
             // language's, from the typechecker.
             UnitStatus::Ran => match ty {
                 Some(_) => {
-                    let ty = self.script.as_ref().expect("a session").value_type(index).S();
-                    Eval::SuccessExpr(EvalExpr { ty, value: output })
+                    let ty = self.session.as_ref().expect("a session").value_type(index).S();
+                    Eval::Value(EvalExpr { ty, value: output })
                 }
-                None => self.report_exports(ir_unit),
+                None => self.report_bindings(ir_unit),
             },
             UnitStatus::ReturnedEarly => Eval::ReturnedEarly(output),
             UnitStatus::Blocked { on } => Eval::Blocked { on },
@@ -663,24 +664,14 @@ impl Engine {
         }
     }
 
-    /// Report the bindings a fragment defined, as the compiler recorded them.
-    ///
-    /// A fragment that defines nothing, like a require or a set, exports
-    /// nothing.
-    fn report_exports(&mut self, ir_unit: &IrCodeUnit) -> Eval {
+    /// Report the bindings a fragment provides, as the compiler recorded
+    /// them.
+    fn report_bindings(&mut self, ir_unit: &IrCodeUnit) -> Eval {
         let exports = ir_unit.script_context()
             .expect("a compiled fragment is a script unit")
             .exports
             .clone();
-        let bindings: Vec<EvalBinding> = exports.iter()
-            .map(|(name, binding)| self.eval_binding(name, binding))
-            .collect();
-
-        if bindings.is_empty() {
-            Eval::Nothing
-        } else {
-            Eval::Success(bindings)
-        }
+        Eval::Ran(exports.iter().map(|(name, binding)| self.eval_binding(name, binding)).collect())
     }
 
     /// Change one unit's text and re-derive what the edit reaches.
@@ -690,7 +681,7 @@ impl Engine {
     /// edited unit provides holds no reference into it. See
     /// `botdocs/plan-script-reactivity.md`.
     ///
-    /// Returns what the step did to each unit it analyzed or re-derived, in
+    /// Returns what the step did to each unit it compiled or re-derived, in
     /// index order; see [`Self::last_step`]. A unit whose re-lowering failed
     /// is reported as an error and stays, with its frame destroyed and its
     /// bindings gone from the environment, until an edit makes it compile
@@ -708,8 +699,8 @@ impl Engine {
         );
         sources[unit].set_text(&mut self.db).to(source.S());
 
-        let redone = self.with_compiler(&sources, |compiler| compiler.relower_reach(unit));
-        let reports = self.rerun(redone);
+        let rederived = self.with_compiler(&sources, |compiler| compiler.relower_reach(unit));
+        let reports = self.rerun(rederived);
         self.explain_all(reports)
     }
 
@@ -718,9 +709,9 @@ impl Engine {
     /// The cheap one of the three splice verbs: nothing sits after what goes,
     /// so no surviving unit's values change identity, and usually nothing is
     /// re-derived or re-executed. Their bindings leave the environment and the
-    /// values they held are destroyed, and the next line appended takes the
+    /// values they held are destroyed, and the next unit appended takes the
     /// index the first dropped unit had. A unit that goes having taken or
-    /// written an earlier unit's binding rewinds the session to where that
+    /// written an earlier unit's binding reruns the session from where that
     /// binding was made, and the units from there to `n` run again.
     pub fn truncate_units(&mut self, n: usize) -> Vec<UnitStep> {
         self.step(|engine| engine.truncate_units_in_step(n))
@@ -746,15 +737,15 @@ impl Engine {
     ///
     /// A unit of the suffix that read what the removed unit provided stops
     /// compiling and stays, as any unit that fails does.
-    pub fn remove_unit(&mut self, unit: usize) -> Vec<UnitStep> {
-        self.step(|engine| engine.remove_unit_in_step(unit))
+    pub fn delete_unit(&mut self, unit: usize) -> Vec<UnitStep> {
+        self.step(|engine| engine.delete_unit_in_step(unit))
     }
 
-    fn remove_unit_in_step(&mut self, unit: usize) -> Vec<UnitStep> {
+    fn delete_unit_in_step(&mut self, unit: usize) -> Vec<UnitStep> {
         let mut units = self.unit_sources();
         assert!(unit < units.len(), "unit {unit} was removed but the session has {} units", units.len());
         units.remove(unit);
-        let splice = self.with_compiler(&units, |compiler| compiler.remove_unit(unit));
+        let splice = self.with_compiler(&units, |compiler| compiler.delete_unit(unit));
         let reports = self.rerun_spliced(splice);
         self.explain_all(reports)
     }
@@ -765,7 +756,7 @@ impl Engine {
     /// statements; nothing in the text decides it, which is why the appending
     /// path has two entry points rather than one.
     ///
-    /// The suffix is re-derived whole, for the reason [`Self::remove_unit`]
+    /// The suffix is re-derived whole, for the reason [`Self::delete_unit`]
     /// gives, and the new unit and the suffix stay whether or not they compile.
     pub fn insert_unit(
         &mut self,
@@ -796,7 +787,7 @@ impl Engine {
     /// A unit is re-derived when one of its imports resolves into this module,
     /// when it requires a module that requires this one, when it requires a
     /// module the edit broke or fixed, or when it uses what such a unit
-    /// provides. Returns what the step did to each unit it analyzed or
+    /// provides. Returns what the step did to each unit it compiled or
     /// re-derived, in index order.
     ///
     /// **An edit that does not compile is kept.** The module is left out of
@@ -852,12 +843,12 @@ impl Engine {
         let reached: Vec<String> = reached.into_iter().collect();
 
         let mut compiler = compiled
-            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+            .script_compiler_resumed(&self.db, self.session.take().expect("a session"))
             .expect("the roots were settled on modules that compile");
-        let redone = compiler.relower_module_reach(&reached);
-        self.script = Some(compiler.into_session());
+        let rederived = compiler.relower_module_reach(&reached);
+        self.session = Some(compiler.into_session());
 
-        let reports = self.rerun(redone);
+        let reports = self.rerun(rederived);
         self.explain_all(reports)
     }
 
@@ -891,18 +882,18 @@ impl Engine {
     /// Run each re-lowered unit again in place, reporting what it came to.
     fn rerun(
         &mut self,
-        redone: Vec<(usize, datafun::pipeline::ScriptCompilationResult)>,
+        rederived: Vec<(usize, datafun::pipeline::ScriptCompilationResult)>,
     ) -> Vec<UnitStep> {
         let mut reports = Vec::new();
-        for (index, compiled) in redone {
+        for (index, compiled) in rederived {
             let eval = match (compiled.first_error(), &compiled.ir_unit) {
                 (Some(error), _) => {
                     self.executor.clear_unit(index);
-                    Eval::Error(error)
+                    Eval::NotCompiled(error)
                 }
                 (None, None) => unreachable!("a unit that compiled without errors has ir"),
                 (None, Some(ir_unit)) => {
-                    let (ty, output) = self.executor.reexecute_unit(index, ir_unit);
+                    let (ty, output) = self.executor.rerun_unit(index, ir_unit);
                     if is_runtime_error(&output) {
                         // The session is gone, so there is nothing left
                         // for the rest to run against.
@@ -931,15 +922,15 @@ impl Engine {
     ///
     /// A unit here that did not compile takes its index with no frame.
     fn rerun_spliced(&mut self, splice: datafun::pipeline::Splice) -> Vec<UnitStep> {
-        let datafun::pipeline::Splice { from, redone } = splice;
+        let datafun::pipeline::Splice { from, rederived } = splice;
         self.executor.truncate_units(from);
-        let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
+        let is_expr = self.session.as_ref().expect("a session").unit_is_expr();
 
         let mut reports = Vec::new();
-        for (index, compiled) in redone {
+        for (index, compiled) in rederived {
             if let Some(error) = compiled.first_error() {
                 self.executor.skip_unit();
-                reports.push(UnitStep::rederived(index, Eval::Error(error)));
+                reports.push(UnitStep::rederived(index, Eval::NotCompiled(error)));
                 continue;
             }
             let ir_unit = compiled.ir_unit.as_ref()
@@ -972,7 +963,7 @@ impl Engine {
     }
 
     /// The type and value of the nearest binding of `name`.
-    fn binding_type_and_value(&mut self, name: &str) -> (String, String) {
+    fn binding_type_and_value(&mut self, name: &str) -> (String, Option<String>) {
         let (_, value) = self.executor.get_binding(name)
             .expect("the executor registered the unit's exports before executing it");
         (self.type_of(name), value)
@@ -985,7 +976,7 @@ impl Engine {
     /// the unit that provides the name.
     fn type_of(&self, name: &str) -> String {
         let unit = self.executor.provider_of(name).expect("a binding the executor offers has a provider");
-        self.script.as_ref().expect("a session").type_of(unit, name).S()
+        self.session.as_ref().expect("a session").type_of(unit, name).S()
     }
 
     /// The bindings the session offers, the nearest of each name, sorted by
@@ -1011,8 +1002,8 @@ impl Engine {
     }
 
     /// What unit `unit` provides and does to earlier units' bindings.
-    pub fn unit_effects(&self, unit: usize) -> datafun::pipeline::UnitEffects {
-        self.script.as_ref().expect("a session").unit_effects(unit)
+    pub fn unit_accesses(&self, unit: usize) -> datafun::pipeline::UnitAccesses {
+        self.session.as_ref().expect("a session").unit_accesses(unit)
     }
 
     /// What unit `unit` binds and what each binding holds now, `None` for one

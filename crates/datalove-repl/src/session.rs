@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use crate::script::{self, Engine, Unit};
-use crate::{Command, Eval, Place, ReplCommand, UnitStep};
+use crate::{Command, Outcome, Place, ReplCommand, UnitStep};
 
 /// A unit of the session, and its number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +61,7 @@ impl Session {
     /// Only units and the commands that change the session come here; the
     /// rest are the REPL app's, which carries them out itself, and are an
     /// error here, as in a script run without the app.
-    pub fn eval(&mut self, command: Command) -> Eval {
+    pub fn eval(&mut self, command: Command) -> Outcome {
         let eval = match command {
             Command::Unit(unit) => {
                 let eval = self.engine.eval(unit.C());
@@ -71,31 +71,31 @@ impl Session {
                     self.append(unit);
                 }
                 self.take_step(self.engine.last_step().to_vec());
-                Eval::Unit(self.numbered(eval))
+                Outcome::Unit(self.numbered(eval))
             }
             Command::ReplCommand(command) => match command {
-                ReplCommand::Unknown => Eval::CommandError("unknown command".S()),
-                ReplCommand::Usage(usage) => Eval::CommandError(usage),
+                ReplCommand::Unknown => Outcome::CommandError("unknown command".S()),
+                ReplCommand::Usage(usage) => Outcome::CommandError(usage),
                 ReplCommand::Reset => {
                     self.engine.reset();
                     self.forget();
-                    Eval::Reset
+                    Outcome::Reset
                 }
                 ReplCommand::Edit { unit, source } => self.edit(unit, source),
                 ReplCommand::Delete { unit } => self.delete(unit),
                 ReplCommand::Insert { place, unit, source } => self.insert(place, unit, source),
                 ReplCommand::Restore { unit, after, source } => self.restore(unit, after, source),
                 ReplCommand::Describe { unit } => match self.index_of(unit) {
-                    Some(index) => Eval::Detail(self.describe(index)),
+                    Some(index) => Outcome::Detail(self.describe(index)),
                     None => no_unit(unit),
                 },
                 ReplCommand::Renumber { next } => {
                     self.next = next;
-                    Eval::Edited(Vec::new())
+                    Outcome::Edited(Vec::new())
                 }
                 ReplCommand::Exit | ReplCommand::Help | ReplCommand::Save | ReplCommand::Load
                 | ReplCommand::Undo | ReplCommand::Redo => {
-                    Eval::CommandError(fmt!("{command:?} is the REPL app's, which keeps the history"))
+                    Outcome::CommandError(fmt!("{command:?} is the REPL app's, which keeps the history"))
                 }
             },
         };
@@ -106,13 +106,13 @@ impl Session {
         eval
     }
 
-    fn edit(&mut self, number: u32, source: Unit) -> Eval {
+    fn edit(&mut self, number: u32, source: Unit) -> Outcome {
         let Some(index) = self.index_of(number) else {
             return no_unit(number);
         };
         let old = &self.units[index].unit;
         if old.is_expression() != source.is_expression() {
-            return Eval::CommandError(fmt!(
+            return Outcome::CommandError(fmt!(
                 "unit {number} is {}, and the edit is {}; a unit keeps its kind",
                 kind(old), kind(&source),
             ));
@@ -121,17 +121,17 @@ impl Session {
         self.splice(step, |units| units[index].unit = source)
     }
 
-    fn delete(&mut self, number: u32) -> Eval {
+    fn delete(&mut self, number: u32) -> Outcome {
         let Some(index) = self.index_of(number) else {
             return no_unit(number);
         };
-        let step = self.guarded(number, "deleting", |engine| engine.remove_unit(index));
+        let step = self.guarded(number, "deleting", |engine| engine.delete_unit(index));
         self.splice(step, |units| {
             units.remove(index);
         })
     }
 
-    fn insert(&mut self, place: Place, number: u32, source: Unit) -> Eval {
+    fn insert(&mut self, place: Place, number: u32, source: Unit) -> Outcome {
         let Some(index) = self.index_of(number) else {
             return no_unit(number);
         };
@@ -150,22 +150,23 @@ impl Session {
     /// What the session has to say about the unit at `index`.
     fn describe(&mut self, index: usize) -> crate::UnitDetail {
         let number = self.units[index].number;
-        let effects = self.engine.unit_effects(index);
+        let accesses = self.engine.unit_accesses(index);
         crate::UnitDetail {
             unit: number,
             diagnostics: self.engine.unit_diagnostics(index, &fmt!("unit {number}"), script::TextStyle::Ansi),
             bindings: self.engine.unit_bindings(index),
-            provides: effects.provides,
-            uses: effects.uses,
-            takes: effects.taken,
-            overwrites: effects.overwritten,
-            updates: effects.updated,
+            provides: accesses.provides,
+            reads: accesses.reads,
+            takes: accesses.takes,
+            overwrites: accesses.overwrites,
+            updates: accesses.updates,
+            revives: accesses.revives,
         }
     }
 
     /// Put a unit back with its number, as it was before it was deleted, or
     /// before the append or insert that made it was taken back.
-    fn restore(&mut self, number: u32, after: Option<u32>, source: Unit) -> Eval {
+    fn restore(&mut self, number: u32, after: Option<u32>, source: Unit) -> Outcome {
         let index = match after {
             Some(after) => match self.index_of(after) {
                 Some(index) => index + 1,
@@ -191,13 +192,13 @@ impl Session {
         &mut self,
         step: Result<Vec<script::UnitStep>, UnitStep>,
         change: impl FnOnce(&mut Vec<NumberedUnit>),
-    ) -> Eval {
+    ) -> Outcome {
         let step = match step {
             Ok(step) => step,
-            Err(crash) => return Eval::Edited(vec![crash]),
+            Err(crash) => return Outcome::Edited(vec![crash]),
         };
         change(&mut self.units);
-        let eval = Eval::Edited(self.take_step(step));
+        let eval = Outcome::Edited(self.take_step(step));
         if eval.reset_the_session() {
             self.forget();
         }
@@ -221,7 +222,7 @@ impl Session {
             self.engine.reset();
             self.forget();
             let message = fmt!("Panic {doing} unit {number}: {}", script::panic_message(&*panic));
-            UnitStep { unit: number, compiled: false, eval: Some(script::Eval::CrashReset(message)) }
+            UnitStep { unit: number, compiled: false, eval: Some(script::Eval::Crashed(message)) }
         })
     }
 
@@ -263,13 +264,13 @@ impl Session {
     }
 }
 
-fn no_unit(number: u32) -> Eval {
-    Eval::CommandError(fmt!("there is no unit {number}"))
+fn no_unit(number: u32) -> Outcome {
+    Outcome::CommandError(fmt!("there is no unit {number}"))
 }
 
 fn kind(unit: &Unit) -> &'static str {
     match unit {
-        Unit::Fragment(_) => "statements",
+        Unit::Fragment(_) => "a fragment",
         Unit::Expression(_) => "an expression",
     }
 }

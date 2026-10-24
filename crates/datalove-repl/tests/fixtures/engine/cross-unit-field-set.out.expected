@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "p",
@@ -39,7 +39,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -59,7 +61,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -80,7 +84,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "(int, string)",
           "value": "(5, \"b\")"
         }
@@ -105,7 +109,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "q",
@@ -139,7 +143,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -165,7 +171,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "((int, string), string)",
           "value": "((1, \"z\"), \"y\")"
         }
@@ -195,7 +201,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "r",
@@ -234,7 +240,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -265,7 +273,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "{ name: string, age: int }",
           "value": "{name = \"Bob\", age = 30}"
         }
@@ -300,7 +308,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "s",
@@ -345,7 +353,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "t",
@@ -375,7 +383,7 @@
       {
         "name": "s",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "t",
@@ -395,7 +403,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "error[D013]: `s` was given away by an earlier input\n  help: use `@` to clone `s` where it was given away"
+        "NotCompiled": "error[D013]: `s` was given away by an earlier unit\n  help: use `@` to clone `s` where it was given away"
       }
     },
     "environment": [
@@ -417,7 +425,7 @@
       {
         "name": "s",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "t",
@@ -437,7 +445,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "(int, string)",
           "value": "(1, \"a\")"
         }
@@ -462,7 +470,7 @@
       {
         "name": "s",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "t",

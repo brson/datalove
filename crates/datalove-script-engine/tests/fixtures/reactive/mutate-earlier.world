@@ -41,7 +41,7 @@ expect unit 1 is broken
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
 | 1 | - | recompile fails | edited | - |
-| 2 | - | reruns | rewind: unit 3 updated `b` when it last ran, and is undone | `b` = 125 |
+| 2 | - | reruns | rerun: unit 3 updated `b` when it last ran, and is retracted | `b` = 125 |
 | 3 | reads `a` (1), updates `b` (2) | recompile fails | `a` is unbound: unit 1 failed | - |
 
 ----------

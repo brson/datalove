@@ -131,7 +131,7 @@ pub struct TypeContext<'db> {
     ///
     /// None outside a script unit, which is the only reader: recording every
     /// lookup of a module's typecheck cost a percent of a compile.
-    asked_names: Option<RefCell<bct::lookup::LookupSet<InternedText<'db>>>>,
+    uses: Option<RefCell<bct::lookup::LookupSet<InternedText<'db>>>>,
     /// The bound each of the enclosing function's type parameters carries.
     ///
     /// A bare parameter is absent here and nothing may be done to a value of
@@ -207,7 +207,7 @@ impl<'db> TypeContext<'db> {
             variables: Default::default(),
             scope_undo: Vec::new(),
             functions: Default::default(),
-            asked_names: None,
+            uses: None,
             function_asts: Default::default(),
             type_aliases: bct::lookup::LookupMap::new(),
             type_param_bounds: bct::lookup::LookupMap::new(),
@@ -1044,14 +1044,14 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Record that something asked about `name`, found or not.
     fn note_asked(&self, name: InternedText<'db>) {
-        if let Some(asked) = &self.asked_names {
+        if let Some(asked) = &self.uses {
             asked.borrow_mut().insert(name);
         }
     }
 
-    /// Record every name asked about, for a script unit; see `asked_names`.
-    pub(crate) fn record_asked_names(&mut self) {
-        self.asked_names = Some(RefCell::default());
+    /// Record every name asked about, for a script unit; see `uses`.
+    pub(crate) fn record_uses(&mut self) {
+        self.uses = Some(RefCell::default());
     }
 
     /// What the earlier script units left behind under `name`.
@@ -1077,8 +1077,8 @@ replace the view rather than the elements it shows. Index down to single element
     /// Ordered because it is part of a memoized value and a `BTreeSet` of
     /// `InternedText` iterates by salsa id; sorting by text is what keeps it the
     /// same between runs. See the determinism section of salsa-patterns.md.
-    pub fn asked_names(&self) -> Vec<InternedText<'db>> {
-        let asked = self.asked_names.as_ref().expect("a script unit records what it asks");
+    pub fn uses(&self) -> Vec<InternedText<'db>> {
+        let asked = self.uses.as_ref().expect("a script unit records what it asks");
         let mut names: Vec<InternedText<'db>> = asked.borrow().iter_unordered().copied().collect();
         names.sort_by(|a, b| a.as_str(self.db).cmp(b.as_str(self.db)));
         names

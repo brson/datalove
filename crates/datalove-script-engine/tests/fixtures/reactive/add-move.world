@@ -62,7 +62,7 @@ expect unit 3 is edited back to read `a`
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | reruns | rewind: unit 3 took `a` when it last ran, and the edit undoes that | `a` = 1000 |
-| 2 | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
+| 1 | - | reruns | rerun: unit 3 took `a` when it last ran, and the edit retracts that | `a` = 1000 |
+| 2 | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 100 |
 | 3 | reads `a` (1) | recompiles, runs | edited | `d` = 1001 |
 | 4 | reads `a` (1) | reruns | `a` can be named again, as it could in step 1, whose compile is still memoized | `e` = 1002 |

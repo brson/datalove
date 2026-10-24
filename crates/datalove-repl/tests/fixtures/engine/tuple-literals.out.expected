@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "pair",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "(int, string)",
           "value": "(42, \"hello\")"
         }
@@ -65,7 +65,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "triple",
@@ -100,7 +100,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "(int, int, int)",
           "value": "(1, 2, 3)"
         }
@@ -130,7 +130,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "mixed",
@@ -170,7 +170,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "(int, string, bool)",
           "value": "(100, \"test\", true)"
         }

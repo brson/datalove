@@ -67,7 +67,7 @@ impl ReplExecutor for MockExecutor {
                     state.session.clear();
                     state.next_number = 1;
                     state.step.clear();
-                } else if let (repl::Command::Unit(unit), repl::Eval::Unit(result)) = (command, &*eval) {
+                } else if let (repl::Command::Unit(unit), repl::Outcome::Unit(result)) = (command, &*eval) {
                     let number = state.next_number.max(1);
                     state.next_number = number + 1;
                     state.session.push(repl::NumberedUnit { number, unit });
@@ -115,16 +115,16 @@ impl MockExecutor {
 }
 
 fn binding(name: &str, ty: &str, value: &str) -> repl::script::EnvBinding {
-    repl::script::EnvBinding { name: name.to_string(), ty: ty.to_string(), value: value.to_string() }
+    repl::script::EnvBinding { name: name.to_string(), ty: ty.to_string(), value: Some(value.to_string()) }
 }
 
 fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
-        eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Value {
+        eval: repl::Outcome::Unit(repl::script::Eval::Ran(vec![repl::script::EvalBinding::Value {
             name: name.to_string(),
             ty: "int".to_string(),
-            value: "1".to_string(),
+            value: Some("1".to_string()),
         }])),
         environment: vec![binding(name, "int", "1")],
         session: Vec::new(),
@@ -152,7 +152,7 @@ fn results_land_on_their_own_entry() {
     assert!(matches!(history[0].status, EntryStatus::Success));
     assert!(matches!(
         history[0].eval_result,
-        Some(repl::Eval::Unit(repl::script::Eval::Success(_)))
+        Some(repl::Outcome::Unit(repl::script::Eval::Ran(_)))
     ));
     assert!(matches!(history[1].status, EntryStatus::Evaluating));
 }
@@ -190,7 +190,7 @@ fn multiline_mode_spans_one_submission() {
 
     executor.queue(WorkerResponse::EvalResult {
         id: 0,
-        eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Function {
+        eval: repl::Outcome::Unit(repl::script::Eval::Ran(vec![repl::script::EvalBinding::Function {
             name: "f".to_string(),
         }])),
         environment: vec![binding("f", "fun(): int", "-")],
@@ -310,7 +310,7 @@ fn reset_command_clears_history_and_environment() {
     app.submit_input("let b = 1".to_string());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::Reset,
+        eval: repl::Outcome::Reset,
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -385,7 +385,7 @@ fn save_writes_the_history_up_to_itself() {
     executor.queue(evaluated_let(0, "f"));
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::Unit(repl::script::Eval::Error("no such name".to_string())),
+        eval: repl::Outcome::Unit(repl::script::Eval::NotCompiled("no such name".to_string())),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -394,7 +394,7 @@ fn save_writes_the_history_up_to_itself() {
 
     assert!(matches!(
         app.history()[2].eval_result,
-        Some(repl::Eval::Saved { inputs: 3, .. }),
+        Some(repl::Outcome::Saved { inputs: 3, .. }),
     ), "{:?}", app.history()[2]);
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "\
 ----------
@@ -429,7 +429,7 @@ fn save_without_a_path_is_an_error() {
     app.submit_input("/save".to_string());
 
     assert!(matches!(app.history()[0].status, EntryStatus::Error));
-    assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::CommandError(_))));
+    assert!(matches!(app.history()[0].eval_result, Some(repl::Outcome::CommandError(_))));
 }
 
 /// A crash forgets the history up to the input that crashed, as `/reset`
@@ -445,7 +445,7 @@ fn input_after_a_crash_runs_in_the_new_session() {
 
     executor.queue(WorkerResponse::EvalResult {
         id: 0,
-        eval: repl::Eval::Unit(repl::script::Eval::CrashReset("boom".to_string())),
+        eval: repl::Outcome::Unit(repl::script::Eval::Crashed("boom".to_string())),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -481,7 +481,7 @@ fn a_runtime_error_reset_clears_the_session() {
     app.submit_input("let y = f()".to_string());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::Unit(repl::script::Eval::ErrorReset("Error: stack overflow".to_string())),
+        eval: repl::Outcome::Unit(repl::script::Eval::RuntimeError("Error: stack overflow".to_string())),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -666,7 +666,7 @@ fn submitting_returns_to_the_newest_entry() {
 }
 
 fn evaluated(id: u64, eval: repl::script::Eval) -> WorkerResponse {
-    WorkerResponse::EvalResult { id, eval: repl::Eval::Unit(eval), environment: Vec::new(), session: Vec::new(), step: Vec::new() }
+    WorkerResponse::EvalResult { id, eval: repl::Outcome::Unit(eval), environment: Vec::new(), session: Vec::new(), step: Vec::new() }
 }
 
 /// The code panel is the session's units, without the REPL commands, each
@@ -683,26 +683,26 @@ fn code_units_are_the_units_and_their_statuses() {
     app.poll_results();
 
     let pending: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
-    assert_eq!(pending, vec![UnitStatus::Pending; 3]);
+    assert_eq!(pending, vec![UnitStatus::Waiting; 3]);
 
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.code_units(), vec![
         CodeUnit { number: Some(1), source: "let a = 1", status: UnitStatus::Ran, compiled: true, ran: true },
-        CodeUnit { number: None, source: "let b = c", status: UnitStatus::Pending, compiled: false, ran: false },
-        CodeUnit { number: None, source: "a", status: UnitStatus::Pending, compiled: false, ran: false },
+        CodeUnit { number: None, source: "let b = c", status: UnitStatus::Waiting, compiled: false, ran: false },
+        CodeUnit { number: None, source: "a", status: UnitStatus::Waiting, compiled: false, ran: false },
     ]);
 
-    executor.queue(evaluated(2, repl::script::Eval::Error("no `c`".to_string())));
+    executor.queue(evaluated(2, repl::script::Eval::NotCompiled("no `c`".to_string())));
     app.poll_results();
     let statuses: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
-    assert_eq!(statuses, vec![UnitStatus::Ran, UnitStatus::Failed, UnitStatus::Pending]);
+    assert_eq!(statuses, vec![UnitStatus::Ran, UnitStatus::NotCompiled, UnitStatus::Waiting]);
 
     executor.queue(evaluated(3, repl::script::Eval::Blocked { on: vec![1] }));
     app.poll_results();
     let statuses: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
     // Each unit keeps its status until a step reports it again.
-    assert_eq!(statuses, vec![UnitStatus::Ran, UnitStatus::Failed, UnitStatus::Blocked]);
+    assert_eq!(statuses, vec![UnitStatus::Ran, UnitStatus::NotCompiled, UnitStatus::Blocked]);
 }
 
 /// A runtime error empties the session, and the code panel with it.
@@ -714,7 +714,7 @@ fn a_runtime_error_clears_the_code() {
     app.submit_input("let a = 1".to_string());
     executor.queue(evaluated_let(0, "a"));
     app.submit_input("let b = f()".to_string());
-    executor.queue(evaluated(1, repl::script::Eval::ErrorReset("Error: stack overflow".to_string())));
+    executor.queue(evaluated(1, repl::script::Eval::RuntimeError("Error: stack overflow".to_string())));
     app.poll_results();
 
     assert!(app.code_units().is_empty());
@@ -879,7 +879,7 @@ fn a_reset_loses_the_selection() {
     app.submit_input("let b = 1".to_string());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::Reset,
+        eval: repl::Outcome::Reset,
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -965,7 +965,7 @@ repl-command
 
     executor.queue(WorkerResponse::EvalResult {
         id: 2,
-        eval: repl::Eval::Reset,
+        eval: repl::Outcome::Reset,
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -990,7 +990,7 @@ fn load_without_a_saved_session_is_an_error() {
 
     assert!(executor.evals().is_empty(), "nothing is sent the engine");
     assert!(matches!(app.history()[0].status, EntryStatus::Error));
-    assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::CommandError(_))));
+    assert!(matches!(app.history()[0].eval_result, Some(repl::Outcome::CommandError(_))));
 }
 
 /// The code is the session as it will be: a `/reset` the engine has not
@@ -1008,7 +1008,7 @@ fn a_pending_reset_takes_the_code_before_it() {
     app.submit_input("let b = 2".to_string());
 
     let units = app.code_units();
-    assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", status: UnitStatus::Pending, compiled: false, ran: false }]);
+    assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", status: UnitStatus::Waiting, compiled: false, ran: false }]);
     // The history keeps the units the engine still has.
     assert_eq!(app.history().len(), 3);
 }
@@ -1052,7 +1052,7 @@ fn numbered(number: u32, source: &str) -> repl::NumberedUnit {
 fn edited(id: u64, reports: Vec<(u32, repl::script::Eval)>, session: Vec<repl::NumberedUnit>) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
-        eval: repl::Eval::Edited(reports.into_iter()
+        eval: repl::Outcome::Edited(reports.into_iter()
             .map(|(unit, eval)| repl::UnitStep { unit, compiled: false, eval: Some(eval) })
             .collect()),
         environment: Vec::new(),
@@ -1070,7 +1070,7 @@ fn statuses(app: &ReplApp<MockExecutor>) -> Vec<(Option<u32>, &str, UnitStatus)>
 /// engine reports takes the status it reports, and the rest keep theirs.
 #[test]
 fn edits_change_the_code_when_answered() {
-    let ran = || repl::script::Eval::Nothing;
+    let ran = || repl::script::Eval::Ran(Vec::new());
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a", "let c = 3"]);
 
     app.submit_input("/edit 1 let a = 2".to_string());
@@ -1092,13 +1092,13 @@ fn edits_change_the_code_when_answered() {
     executor.queue_raw(edited(4, vec![(4, ran()), (2, ran()), (3, ran())],
         vec![numbered(1, "let a = 2"), numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
     app.submit_input("/delete 1".to_string());
-    executor.queue_raw(edited(5, vec![(2, repl::script::Eval::Error("no `a`".to_string()))],
+    executor.queue_raw(edited(5, vec![(2, repl::script::Eval::NotCompiled("no `a`".to_string()))],
         vec![numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
     app.poll_results();
 
     assert_eq!(statuses(&app), vec![
         (Some(4), "let d = 4", UnitStatus::Ran),
-        (Some(2), "let b = a", UnitStatus::Failed),
+        (Some(2), "let b = a", UnitStatus::NotCompiled),
         (Some(3), "let c = 3", UnitStatus::Ran),
     ]);
     assert_eq!(app.session_mismatch_message(), None);
@@ -1118,7 +1118,7 @@ fn an_edit_that_resets_the_session_clears_the_code() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a"]);
 
     app.submit_input("/edit 1 let a = f()".to_string());
-    executor.queue_raw(edited(2, vec![(1, repl::script::Eval::ErrorReset("Error: stack overflow".to_string()))], Vec::new()));
+    executor.queue_raw(edited(2, vec![(1, repl::script::Eval::RuntimeError("Error: stack overflow".to_string()))], Vec::new()));
     app.poll_results();
 
     assert!(app.code_units().is_empty());
@@ -1135,7 +1135,7 @@ fn a_session_with_different_source_is_reported() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1"]);
 
     app.submit_input("/edit 1 let a = 2".to_string());
-    executor.queue_raw(edited(1, vec![(1, repl::script::Eval::Nothing)], vec![numbered(1, "let a = 3")]));
+    executor.queue_raw(edited(1, vec![(1, repl::script::Eval::Ran(Vec::new()))], vec![numbered(1, "let a = 3")]));
     app.poll_results();
 
     let message = app.session_mismatch_message().expect("the mismatch is reported");
@@ -1204,14 +1204,14 @@ fn the_code_shows_what_the_last_step_did() {
 
     app.submit_input("/edit 1 let a = 2".to_string());
     let WorkerResponse::EvalResult { id, eval, environment, session, .. } = edited(
-        3, vec![(1, repl::script::Eval::Nothing), (2, repl::script::Eval::Nothing)],
+        3, vec![(1, repl::script::Eval::Ran(Vec::new())), (2, repl::script::Eval::Ran(Vec::new()))],
         vec![numbered(1, "let a = 2"), numbered(2, "let b = a"), numbered(3, "let c = 3")],
     ) else {
         unreachable!();
     };
     let step = vec![
-        repl::UnitStep { unit: 1, compiled: true, eval: Some(repl::script::Eval::Nothing) },
-        repl::UnitStep { unit: 2, compiled: false, eval: Some(repl::script::Eval::Nothing) },
+        repl::UnitStep { unit: 1, compiled: true, eval: Some(repl::script::Eval::Ran(Vec::new())) },
+        repl::UnitStep { unit: 2, compiled: false, eval: Some(repl::script::Eval::Ran(Vec::new())) },
     ];
     executor.queue_raw(WorkerResponse::EvalResult { id, eval, environment, session, step });
     app.poll_results();
@@ -1431,17 +1431,18 @@ fn detail_of(unit: u32) -> repl::UnitDetail {
         diagnostics: String::new(),
         bindings: vec![("x".to_string(), Some("1".to_string()))],
         provides: vec!["x".to_string()],
-        uses: Vec::new(),
+        reads: Vec::new(),
         takes: Vec::new(),
         overwrites: Vec::new(),
         updates: Vec::new(),
+        revives: Vec::new(),
     }
 }
 
 fn described(id: u64, unit: u32) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
-        eval: repl::Eval::Detail(detail_of(unit)),
+        eval: repl::Outcome::Detail(detail_of(unit)),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -1465,7 +1466,7 @@ fn the_detail_tab_is_there_while_there_are_units() {
     app.submit_input("/reset".to_string());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Eval::Reset,
+        eval: repl::Outcome::Reset,
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -1487,7 +1488,7 @@ fn a_broken_unit_shows_its_detail() {
     assert_eq!(app.tab(), Tab::Environment);
 
     for (id, eval) in [
-        (1, repl::script::Eval::Error("no `c`".to_string())),
+        (1, repl::script::Eval::NotCompiled("no `c`".to_string())),
         (2, repl::script::Eval::ReturnedEarly("none".to_string())),
         (3, repl::script::Eval::Blocked { on: vec![2] }),
     ] {

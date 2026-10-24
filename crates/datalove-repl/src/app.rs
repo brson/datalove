@@ -89,11 +89,11 @@ impl Tab {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnitStatus {
     /// Submitted, and not yet answered.
-    Pending,
+    Waiting,
     /// Ran to its end.
     Ran,
     /// Did not compile.
-    Failed,
+    NotCompiled,
     /// Returned early through `!` or `?`.
     ReturnedEarly,
     /// Compiled, and not run because it reads from a unit that did not finish.
@@ -108,7 +108,7 @@ pub struct CodeUnit<'a> {
     pub number: Option<u32>,
     pub source: &'a str,
     pub status: UnitStatus,
-    /// Whether the last step to change the session analyzed the unit again.
+    /// Whether the last step to change the session compiled the unit again.
     pub compiled: bool,
     /// Whether the last step to change the session ran the unit.
     pub ran: bool,
@@ -189,7 +189,7 @@ pub struct HistoryEntry {
     /// The command the input was read as.
     pub command: repl::Command,
     /// Evaluation result if available.
-    pub eval_result: Option<repl::Eval>,
+    pub eval_result: Option<repl::Outcome>,
     /// Entry status (lifecycle and outcome).
     pub status: EntryStatus,
     /// How to take back the change the entry made to the session, and make it
@@ -277,7 +277,7 @@ pub enum WorkerResponse {
     EngineDead { message: String },
     EvalResult {
         id: u64,
-        eval: repl::Eval,
+        eval: repl::Outcome,
         environment: Vec<script::EnvBinding>,
         /// The units in the engine's session once it had answered.
         session: Vec<repl::NumberedUnit>,
@@ -678,18 +678,18 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::ReplCommand::Exit => self.should_exit = true,
             repl::ReplCommand::Help => {
                 let id = self.push_entry(input, command, EntryStatus::Success);
-                find_entry(&mut self.history, id).eval_result = Some(repl::Eval::Help);
+                find_entry(&mut self.history, id).eval_result = Some(repl::Outcome::Help);
             }
             repl::ReplCommand::Save => {
                 let id = self.push_entry(input, command, EntryStatus::Evaluating);
-                let eval = self.save(id).unwrap_or_else(|e| repl::Eval::CommandError(fmt!("{e:#}")));
+                let eval = self.save(id).unwrap_or_else(|e| repl::Outcome::CommandError(fmt!("{e:#}")));
                 self.finish_in_app(id, eval);
             }
             repl::ReplCommand::Load => {
                 let id = self.push_entry(input, command, EntryStatus::Evaluating);
                 match self.load() {
                     Ok(inputs) => {
-                        self.finish_in_app(id, repl::Eval::Loaded { inputs: inputs.len() });
+                        self.finish_in_app(id, repl::Outcome::Loaded { inputs: inputs.len() });
                         // A reset first, so the session is the one saved and
                         // not the saved one on top of this, and all of it
                         // ahead of what was entered after the `/load`. The
@@ -705,7 +705,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                             self.queue.insert(index, item);
                         }
                     }
-                    Err(e) => self.finish_in_app(id, repl::Eval::CommandError(fmt!("{e:#}"))),
+                    Err(e) => self.finish_in_app(id, repl::Outcome::CommandError(fmt!("{e:#}"))),
                 }
             }
             other => unreachable!("{other:?} is the engine's"),
@@ -713,10 +713,10 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     /// What a command carried out in the app came to.
-    fn finish_in_app(&mut self, id: u64, eval: repl::Eval) {
+    fn finish_in_app(&mut self, id: u64, eval: repl::Outcome) {
         let entry = find_entry(&mut self.history, id);
         entry.status = match eval {
-            repl::Eval::CommandError(_) => EntryStatus::Error,
+            repl::Outcome::CommandError(_) => EntryStatus::Error,
             _ => EntryStatus::Success,
         };
         entry.eval_result = Some(eval);
@@ -858,7 +858,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 }
                 WorkerResponse::EvalResult { id, eval, .. } if id >= DESCRIBE_IDS => {
                     self.detail = match eval {
-                        repl::Eval::Detail(detail) => Some(detail),
+                        repl::Outcome::Detail(detail) => Some(detail),
                         // Gone since it was asked about.
                         _ => None,
                     };
@@ -912,17 +912,17 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Only an answer that re-derived the unit does, so one that left it
     /// alone, however it fared before, does not take the tab from what is
     /// being looked at.
-    fn show_detail_if_broken(&mut self, eval: &repl::Eval) {
+    fn show_detail_if_broken(&mut self, eval: &repl::Outcome) {
         let Some(selected) = self.selected_unit() else {
             return;
         };
         let reached = match eval {
-            repl::Eval::Unit(_) => self.units.last().is_some_and(|unit| unit.numbered.number == selected),
-            repl::Eval::Edited(step) => step.iter().any(|unit| unit.unit == selected && unit.eval.is_some()),
+            repl::Outcome::Unit(_) => self.units.last().is_some_and(|unit| unit.numbered.number == selected),
+            repl::Outcome::Edited(step) => step.iter().any(|unit| unit.unit == selected && unit.eval.is_some()),
             _ => false,
         };
         let broken = self.units.iter().find(|unit| unit.numbered.number == selected)
-            .is_some_and(|unit| matches!(unit.status, UnitStatus::Failed | UnitStatus::ReturnedEarly | UnitStatus::Blocked));
+            .is_some_and(|unit| matches!(unit.status, UnitStatus::NotCompiled | UnitStatus::ReturnedEarly | UnitStatus::Blocked));
         if reached && broken {
             self.tab = Tab::Detail;
         }
@@ -948,7 +948,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.focus = Panel::Bottom;
     }
 
-    fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<script::EnvBinding>) {
+    fn handle_eval_result(&mut self, id: u64, eval: repl::Outcome, environment: Vec<script::EnvBinding>) {
         if let Some(command) = self.unrecorded.remove(&id) {
             self.apply(&command, &eval);
             self.environment = environment;
@@ -965,7 +965,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.environment = environment;
         self.show_detail_if_broken(&eval);
 
-        if let repl::Eval::Reset = eval {
+        if let repl::Outcome::Reset = eval {
             // Input submitted after the reset was evaluated in the new
             // session, so only what came before it is forgotten, the reset
             // with it.
@@ -984,19 +984,19 @@ impl<E: ReplExecutor> ReplApp<E> {
         let status = match &eval {
             // A unit that did not run to its end stays in the session, so
             // nothing is cleared; it is reported as the error it is.
-            repl::Eval::Unit(script::Eval::Error(_) | script::Eval::ReturnedEarly(_) | script::Eval::Blocked { .. })
-            | repl::Eval::CommandError(_) => Some(EntryStatus::Error),
+            repl::Outcome::Unit(script::Eval::NotCompiled(_) | script::Eval::ReturnedEarly(_) | script::Eval::Blocked { .. })
+            | repl::Outcome::CommandError(_) => Some(EntryStatus::Error),
             // What each unit an edit reached came to is the units' to show;
             // the edit itself was made.
-            repl::Eval::Unit(script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_))
-            | repl::Eval::Edited(_) => Some(EntryStatus::Success),
-            repl::Eval::Unit(script::Eval::ErrorReset(_) | script::Eval::CrashReset(_)) | repl::Eval::Reset => {
+            repl::Outcome::Unit(script::Eval::Ran(_) | script::Eval::Value(_))
+            | repl::Outcome::Edited(_) => Some(EntryStatus::Success),
+            repl::Outcome::Unit(script::Eval::RuntimeError(_) | script::Eval::Crashed(_)) | repl::Outcome::Reset => {
                 unreachable!("a reset was handled above")
             }
-            repl::Eval::Help | repl::Eval::Saved { .. } | repl::Eval::Loaded { .. } => {
+            repl::Outcome::Help | repl::Outcome::Saved { .. } | repl::Outcome::Loaded { .. } => {
                 unreachable!("the app carries out {command:?} itself")
             }
-            repl::Eval::Detail(_) => unreachable!("a detail answers a question, not an entry"),
+            repl::Outcome::Detail(_) => unreachable!("a detail answers a question, not an entry"),
         };
         let entry = find_entry(&mut self.history, id);
         entry.eval_result = Some(eval.C());
@@ -1012,7 +1012,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// alone, changes nothing. A unit a command names and the app does not
     /// have is a disagreement with the engine, which the report that came
     /// with the answer shows.
-    fn apply(&mut self, command: &repl::Command, eval: &repl::Eval) -> Option<Change> {
+    fn apply(&mut self, command: &repl::Command, eval: &repl::Outcome) -> Option<Change> {
         use repl::ReplCommand as R;
         if eval.empties_session() {
             self.units.clear();
@@ -1023,7 +1023,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             return None;
         }
         let change = match (command, eval) {
-            (repl::Command::Unit(unit), repl::Eval::Unit(eval)) => {
+            (repl::Command::Unit(unit), repl::Outcome::Unit(eval)) => {
                 let number = self.take_number();
                 let after = self.units.last().map(|unit| unit.numbered.number);
                 self.units.push(SessionUnit {
@@ -1039,7 +1039,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.next_number = *next;
                 return None;
             }
-            (repl::Command::ReplCommand(command), repl::Eval::Edited(_)) => match command {
+            (repl::Command::ReplCommand(command), repl::Outcome::Edited(_)) => match command {
                 R::Edit { unit, source } => self.index_of(*unit).map(|index| {
                     let old = std::mem::replace(&mut self.units[index].numbered.unit, source.C());
                     Change::Edited { unit: *unit, old, new: source.C() }
@@ -1068,8 +1068,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             },
             _ => None,
         };
-        // A unit only analyzed keeps its status.
-        if let repl::Eval::Edited(step) = eval {
+        // A unit only compiled again keeps its status.
+        if let repl::Outcome::Edited(step) = eval {
             for unit in step {
                 if let (Some(index), Some(eval)) = (self.index_of(unit.unit), &unit.eval) {
                     self.units[index].status = status_of(eval);
@@ -1085,7 +1085,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     fn make(&mut self, index: usize, number: u32, source: script::Unit) {
         self.units.insert(index, SessionUnit {
             numbered: repl::NumberedUnit { number, unit: source },
-            status: UnitStatus::Pending,
+            status: UnitStatus::Waiting,
             outcome: None,
         });
     }
@@ -1138,7 +1138,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 // reports it.
                 let status = statuses.iter().find(|(number, _)| *number == numbered.number)
                     .map(|(_, status)| *status)
-                    .unwrap_or(UnitStatus::Pending);
+                    .unwrap_or(UnitStatus::Waiting);
                 SessionUnit { numbered, status, outcome: None }
             })
             .collect();
@@ -1158,7 +1158,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// included, as it was typed. What was typed after the `/save` is left
     /// out.
     ///
-    fn save(&self, save_id: u64) -> AnyResult<repl::Eval> {
+    fn save(&self, save_id: u64) -> AnyResult<repl::Outcome> {
         use datalove_datafun::package_load_worldfile::{WorldfileSection, write_worldfile};
 
         let Some(path) = &self.session_path else {
@@ -1183,7 +1183,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         std::fs::write(path, write_worldfile(&sections)?)
             .with_context(|| fmt!("failed to write {}", path.display()))?;
-        Ok(repl::Eval::Saved { path: path.display().to_string(), inputs: sections.len() })
+        Ok(repl::Outcome::Saved { path: path.display().to_string(), inputs: sections.len() })
     }
 
     /// Move focus to the next panel down.
@@ -1628,7 +1628,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 repl::Command::Unit(unit) => Some(CodeUnit {
                     number: None,
                     source: unit.source(),
-                    status: UnitStatus::Pending,
+                    status: UnitStatus::Waiting,
                     compiled: false,
                     ran: false,
                 }),
@@ -1641,26 +1641,26 @@ impl<E: ReplExecutor> ReplApp<E> {
 /// The status a unit's evaluation leaves it with, as its bar shows it.
 fn status_of(eval: &script::Eval) -> UnitStatus {
     match eval {
-        script::Eval::Nothing | script::Eval::Success(_) | script::Eval::SuccessExpr(_) => UnitStatus::Ran,
-        script::Eval::Error(_) => UnitStatus::Failed,
+        script::Eval::Ran(_) | script::Eval::Value(_) => UnitStatus::Ran,
+        script::Eval::NotCompiled(_) => UnitStatus::NotCompiled,
         script::Eval::ReturnedEarly(_) => UnitStatus::ReturnedEarly,
         script::Eval::Blocked { .. } => UnitStatus::Blocked,
-        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
+        script::Eval::RuntimeError(_) | script::Eval::Crashed(_) => {
             unreachable!("a reset leaves no units to have a status")
         }
     }
 }
 
 /// What the crash modal says of an answer that reset the session.
-fn reset_message(eval: &repl::Eval) -> String {
+fn reset_message(eval: &repl::Outcome) -> String {
     let say = |eval: &script::Eval| match eval {
-        script::Eval::ErrorReset(msg) => Some(fmt!("A runtime error: {msg}")),
-        script::Eval::CrashReset(msg) => Some(fmt!("The engine panicked: {msg}")),
+        script::Eval::RuntimeError(msg) => Some(fmt!("A runtime error: {msg}")),
+        script::Eval::Crashed(msg) => Some(fmt!("The engine panicked: {msg}")),
         _ => None,
     };
     match eval {
-        repl::Eval::Unit(eval) => say(eval),
-        repl::Eval::Edited(step) => step.iter().find_map(|unit| {
+        repl::Outcome::Unit(eval) => say(eval),
+        repl::Outcome::Edited(step) => step.iter().find_map(|unit| {
             say(unit.eval.as_ref()?).map(|said| fmt!("Unit {}: {said}", unit.unit))
         }),
         _ => None,

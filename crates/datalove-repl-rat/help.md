@@ -1,7 +1,7 @@
 # The datalove REPL
 
-Every line you enter is a **script unit**: statements, whose bindings the
-session keeps, or an expression, whose value it shows. Units stay in the
+Everything you submit is a **script unit**: a fragment of statements, whose
+bindings the session keeps, or an expression, whose value it shows. Units stay in the
 session in order, and the **Code** panel above shows them all, each with a
 number it keeps for as long as the session lasts.
 
@@ -31,13 +31,13 @@ A bar with no right half was left alone.
 One unit is always selected, its number in white: the one last entered, or
 the one moved to in the Code panel. The **Detail** tab says what there is to
 know about it -- how it fared and what the last change did to it, its errors,
-what its bindings hold now, the functions it defines, and the names it reads
-and writes. A change that leaves the selected unit broken shows the Detail
+what its bindings hold now, the functions it defines, and how it uses earlier
+units' bindings: which it reads, takes, overwrites, updates and revives. A change that leaves the selected unit broken shows the Detail
 tab.
 
 ## Typing
 
-- **Enter** submits a line.
+- **Enter** submits a unit.
 - A line that opens a block -- `fun`, `if`, `match`, `loop`, `for` -- goes on
   over several lines until its `end`. There **Enter** starts a new line and
   **Alt+Enter** submits.
@@ -51,8 +51,9 @@ With focus on the Code panel, **Up** and **Down** select a unit, and:
 - **Delete** deletes it;
 - **Insert** writes a new unit to go before it.
 
-Units that use what a change touched are compiled and run again, and the
-rest are left as they were. The same changes can be typed as commands:
+After an edit, the units that use what it touched are compiled and run
+again, and the rest are left as they were. A delete or an insert moves every
+unit after it, so all of those are compiled and run again. The same changes can be typed as commands:
 
 ```
 /edit N <source>

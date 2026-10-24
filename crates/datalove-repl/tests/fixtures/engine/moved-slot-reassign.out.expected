@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "v",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "x",
@@ -55,7 +55,7 @@
       {
         "name": "v",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "x",
@@ -74,7 +74,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -100,7 +102,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "[int]",
           "value": "[3]"
         }
@@ -130,7 +132,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "[int]",
           "value": "[1, 2]"
         }

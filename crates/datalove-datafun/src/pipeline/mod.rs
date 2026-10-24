@@ -71,7 +71,7 @@ pub use result::{
 };
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
 pub use compiled_world::CompiledWorld;
-pub use script_compiler::{ScriptCompiler, ScriptSession, Splice, UnitEffects};
+pub use script_compiler::{ScriptCompiler, ScriptSession, Splice, UnitAccesses};
 pub use script_executor::{ScriptExecutor, UnitStatus};
 pub use module_pipeline::ModuleCompilationPipeline;
 pub use workspace::{

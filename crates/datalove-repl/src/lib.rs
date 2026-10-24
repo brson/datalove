@@ -163,7 +163,7 @@ impl Place {
 
 /// What evaluating a command came to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Eval {
+pub enum Outcome {
     /// What the engine made of a script unit.
     Unit(script::Eval),
     /// The session was reset by `/reset`.
@@ -179,17 +179,17 @@ pub enum Eval {
     CommandError(String),
     /// The history was saved, as this many inputs, to this path.
     Saved { path: String, inputs: usize },
-    /// What an `/edit`, `/delete` or `/insert` did to each unit it analyzed
+    /// What an `/edit`, `/delete` or `/insert` did to each unit it compiled
     /// or re-derived, in the session's order.
     Edited(Vec<UnitStep>),
 }
 
-impl Eval {
+impl Outcome {
     /// Whether a runtime error or a crash emptied the session.
     pub fn reset_the_session(&self) -> bool {
         match self {
-            Eval::Unit(eval) => eval.resets(),
-            Eval::Edited(step) => step.iter().any(|unit| unit.eval.as_ref().is_some_and(script::Eval::resets)),
+            Outcome::Unit(eval) => eval.resets(),
+            Outcome::Edited(step) => step.iter().any(|unit| unit.eval.as_ref().is_some_and(script::Eval::resets)),
             _ => false,
         }
     }
@@ -197,7 +197,7 @@ impl Eval {
     /// Whether the session is empty after this: a `/reset`, or a runtime
     /// error or a crash.
     pub fn empties_session(&self) -> bool {
-        self.reset_the_session() || matches!(self, Eval::Reset)
+        self.reset_the_session() || matches!(self, Outcome::Reset)
     }
 }
 
@@ -207,22 +207,24 @@ impl Eval {
 pub struct UnitDetail {
     /// The unit's number.
     pub unit: u32,
-    /// Its parse and type diagnostics as they stand, rendered as text; empty
-    /// for a unit with none.
+    /// Its parse, type and ownership diagnostics as they stand, rendered as
+    /// text; empty for a unit with none.
     pub diagnostics: String,
     /// What it binds, and what each binding holds now; `None` for one given
     /// away since.
     pub bindings: Vec<(String, Option<String>)>,
     /// The names it provides the units after it.
     pub provides: Vec<String>,
-    /// The names it asks the units before it for.
-    pub uses: Vec<String>,
+    /// The earlier units' bindings it only reads.
+    pub reads: Vec<String>,
     /// The earlier units' bindings it gives away.
     pub takes: Vec<String>,
     /// The earlier units' bindings it writes over whatever they held.
     pub overwrites: Vec<String>,
     /// The earlier units' bindings it changes, needing what they held.
     pub updates: Vec<String>,
+    /// The bindings an earlier unit gave away that it gives a value again.
+    pub revives: Vec<String>,
 }
 
 /// What a step did to one unit, which the REPL names by number.
@@ -233,7 +235,7 @@ pub struct UnitDetail {
 pub struct UnitStep {
     /// The unit's number.
     pub unit: u32,
-    /// Whether the step analyzed the unit again.
+    /// Whether the step compiled the unit again.
     pub compiled: bool,
     /// What re-deriving the unit came to, if the step re-derived it.
     pub eval: Option<script::Eval>,
@@ -242,7 +244,7 @@ pub struct UnitStep {
 impl UnitStep {
     /// Whether the step ran the unit.
     pub fn ran(&self) -> bool {
-        self.eval.as_ref().is_some_and(script::Eval::ran)
+        self.eval.as_ref().is_some_and(script::Eval::was_run)
     }
 }
 

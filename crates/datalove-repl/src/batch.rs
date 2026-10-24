@@ -4,14 +4,14 @@ use rmx::prelude::*;
 use serde::Serialize;
 
 use crate::script::{Engine, EnvBinding};
-use crate::{Eval, Input, InputParse, PackageLibrary, Session, SystemLibrary};
+use crate::{Outcome, Input, InputParse, PackageLibrary, Session, SystemLibrary};
 
 /// One input's parse and eval, and the environment it left behind.
 #[derive(Debug, Serialize)]
 pub struct InputResult {
     pub input: String,
     pub parse: InputParse,
-    pub eval: Option<Eval>,
+    pub eval: Option<Outcome>,
     pub environment: Vec<EnvBinding>,
 }
 

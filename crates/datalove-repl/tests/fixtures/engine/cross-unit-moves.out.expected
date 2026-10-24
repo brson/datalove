@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "a",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "b",
@@ -55,7 +55,7 @@
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -75,14 +75,14 @@
     },
     "eval": {
       "Unit": {
-        "Error": "error[D013]: `a` was given away by an earlier input\n  help: use `@` to clone `a` where it was given away"
+        "NotCompiled": "error[D013]: `a` was given away by an earlier unit\n  help: use `@` to clone `a` where it was given away"
       }
     },
     "environment": [
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -102,7 +102,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "[int]",
           "value": "[1, 2]"
         }
@@ -112,7 +112,7 @@
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -132,7 +132,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "d",
@@ -154,7 +154,7 @@
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -184,14 +184,14 @@
     },
     "eval": {
       "Unit": {
-        "Error": "error[D013]: `d` was given away by an earlier input\n  help: use `@` to clone `d` where it was given away"
+        "NotCompiled": "error[D013]: `d` was given away by an earlier unit\n  help: use `@` to clone `d` where it was given away"
       }
     },
     "environment": [
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -221,7 +221,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "v",
@@ -236,7 +236,7 @@
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -271,7 +271,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "w",
@@ -286,7 +286,7 @@
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -306,7 +306,7 @@
       {
         "name": "v",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "w",
@@ -326,14 +326,14 @@
     },
     "eval": {
       "Unit": {
-        "Error": "error[D013]: `v` was given away by an earlier input\n  help: use `@` to clone `v` where it was given away"
+        "NotCompiled": "error[D013]: `v` was given away by an earlier unit\n  help: use `@` to clone `v` where it was given away"
       }
     },
     "environment": [
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -353,7 +353,7 @@
       {
         "name": "v",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "w",
@@ -372,13 +372,15 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",
@@ -418,7 +420,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "[int]",
           "value": "[6]"
         }
@@ -428,7 +430,7 @@
       {
         "name": "a",
         "ty": "[int]",
-        "value": "<moved>"
+        "value": null
       },
       {
         "name": "b",

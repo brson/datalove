@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "inc"
@@ -38,7 +38,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "double"
@@ -71,7 +71,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "6"
         }
@@ -101,7 +101,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "10"
         }
@@ -131,7 +131,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "12"
         }
@@ -161,7 +161,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "11"
         }
@@ -191,7 +191,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "multiply"
@@ -229,7 +229,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "add"
@@ -272,7 +272,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "compute"
@@ -320,7 +320,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "14"
         }

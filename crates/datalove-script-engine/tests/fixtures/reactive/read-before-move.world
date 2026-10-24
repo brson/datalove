@@ -38,6 +38,6 @@ expect unit 2 is edited
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | reruns | rewind: unit 2 reads `a`, which unit 3 took after it | `a` moved |
+| 1 | - | reruns | rerun: unit 2 reads `a`, which unit 3 took after it | `a` moved |
 | 2 | reads `a` (1) | recompiles, runs | edited | `c` = 10 |
-| 3 | takes `a` (1) | reruns | replay: takes `a` from unit 1, which reran | `a_moved` = 1000 |
+| 3 | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |

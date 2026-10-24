@@ -15,7 +15,7 @@
 //! module registry, which is the one thing a module edit replaces.
 //!
 //! **Every expectation here is derived from the typechecker's own record** --
-//! `new_vars`, `new_fns` and `asked_names` from stage A, and
+//! `new_vars`, `new_fns` and `uses` from stage A, and
 //! `imported_modules` for the module edge -- together with the fixture text the
 //! test itself wrote. None of it is read back from the reach the compiler
 //! computes, which is the thing under test. See
@@ -69,7 +69,7 @@ pub struct Session {
     pub script: Option<ScriptSession>,
     pub executor: ScriptExecutor,
     /// Each unit's text as it now stands, which is where the import edges the
-    /// typechecker does not record in `asked_names` are read from.
+    /// typechecker does not record in `uses` are read from.
     texts: Vec<String>,
 }
 
@@ -198,9 +198,9 @@ impl Session {
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let redone = compiler.relower_reach(edited);
+        let rederived = compiler.relower_reach(edited);
         self.script = Some(compiler.into_session());
-        redone
+        rederived
     }
 
     /// Re-lower and re-execute what an edit to unit `edited` reaches.
@@ -209,16 +209,16 @@ impl Session {
     /// a unit whose lowering the edit reaches has to run again, since it is its
     /// values the edit changed.
     pub fn rederive(&mut self, edited: usize) -> BTreeSet<usize> {
-        let redone = self.relower(edited);
-        self.rerun(redone)
+        let rederived = self.relower(edited);
+        self.rerun(rederived)
     }
 
     /// Drop the units from `n` on.
     ///
     /// Returns the units re-derived. Truncating renumbers nothing, because
     /// there is nothing after what goes, so that is none unless a unit that
-    /// went took or wrote an earlier unit's binding, which rewinds to where the
-    /// binding was made.
+    /// went took or wrote an earlier unit's binding, which reruns from where
+    /// the binding was made.
     pub fn truncate(&mut self, n: usize) -> BTreeSet<usize> {
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
@@ -241,7 +241,7 @@ impl Session {
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let splice = compiler.remove_unit(i);
+        let splice = compiler.delete_unit(i);
         self.script = Some(compiler.into_session());
 
         self.texts.remove(i);
@@ -275,12 +275,12 @@ impl Session {
     /// moved. A splice moves them, so the frames from the splice point on are
     /// destroyed and the suffix is run again from the top.
     fn rerun_spliced(&mut self, splice: datafun::pipeline::Splice) -> BTreeSet<usize> {
-        let datafun::pipeline::Splice { from, redone } = splice;
+        let datafun::pipeline::Splice { from, rederived } = splice;
         self.executor.truncate_units(from);
         let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
 
         let mut order = Vec::new();
-        for (index, result) in redone {
+        for (index, result) in rederived {
             order.push(index);
             let Some(ir_unit) = result.ir_unit.as_ref() else {
                 self.executor.skip_unit();
@@ -339,26 +339,26 @@ impl Session {
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let redone = compiler.relower_module_reach(&[module.path()]);
+        let rederived = compiler.relower_module_reach(&[module.path()]);
         self.script = Some(compiler.into_session());
-        redone
+        rederived
     }
 
     /// Change a module's text and re-derive and re-execute what it reaches.
     pub fn rederive_module(&mut self, module: &Module<'_>) -> BTreeSet<usize> {
-        let redone = self.relower_module(module);
-        self.rerun(redone)
+        let rederived = self.relower_module(module);
+        self.rerun(rederived)
     }
 
     /// Run each re-lowered unit again in place, in the order given.
-    fn rerun(&mut self, redone: Vec<(usize, ScriptCompilationResult)>) -> BTreeSet<usize> {
+    fn rerun(&mut self, rederived: Vec<(usize, ScriptCompilationResult)>) -> BTreeSet<usize> {
         let mut order = Vec::new();
-        for (index, result) in redone {
+        for (index, result) in rederived {
             let ir_unit = result.ir_unit.as_ref().unwrap_or_else(|| {
                 panic!("unit {index} should re-lower: {:?} {:?}",
                     result.typecheck, result.lowering)
             });
-            let (_, output) = self.executor.reexecute_unit(index, ir_unit);
+            let (_, output) = self.executor.rerun_unit(index, ir_unit);
             assert!(!output.starts_with("Error:"), "re-running unit {index}: {output}");
             order.push(index);
         }
@@ -417,9 +417,9 @@ impl Session {
             }
             graph.signatures.push(signatures);
             let mut uses: Vec<String> =
-                output.asked_names(db).iter().map(|name| name.as_str(db).S()).collect();
+                output.uses(db).iter().map(|name| name.as_str(db).S()).collect();
             // The alias an `import` names does not go through the lookups
-            // `asked_names` records, so it is read off the fixture text -- which
+            // `uses` records, so it is read off the fixture text -- which
             // this test wrote and the compiler's own derivation has no part in.
             uses.extend(imported_aliases(&self.texts[index]));
             graph.uses.push(uses);
@@ -461,6 +461,7 @@ impl Session {
             .get_binding(name)
             .unwrap_or_else(|| panic!("no binding named {name}"))
             .1
+            .unwrap_or("given away".S())
     }
 
     /// Whether a name is bound at all, which a removed binding is not.
@@ -557,9 +558,9 @@ impl Graph {
     ///
     /// A provider reached that way builds what it built before, so the units
     /// that only read it are not reached for its sake: only those that took or
-    /// wrote what it builds, which are replayed in turn.
+    /// wrote what it builds, which are rerun in turn.
     ///
-    /// An edited unit is always in its own reach: `asked_names` records a name
+    /// An edited unit is always in its own reach: `uses` records a name
     /// the unit binds itself, deliberately, and that over-reporting is what
     /// makes it sound. See `script_graph_tests`.
     pub fn reach_from(&self, seeds: &BTreeSet<usize>) -> BTreeSet<usize> {
@@ -572,22 +573,22 @@ impl Graph {
                 self.provides[*earlier].contains(name) || self.changed[*earlier].contains(name)
             })
         };
-        let mut rewound = BTreeSet::new();
+        let mut rerun_starts = BTreeSet::new();
         loop {
             let mut rederived = vec![false; count];
-            let mut replayed = vec![false; count];
+            let mut restoring = vec![false; count];
             for unit in 0..count {
                 rederived[unit] = seeds.contains(&unit)
                     || self.uses[unit].iter()
                         .any(|name| source(unit, name).is_some_and(|source| rederived[source]));
-                replayed[unit] = !rederived[unit]
-                    && (rewound.contains(&unit)
+                restoring[unit] = !rederived[unit]
+                    && (rerun_starts.contains(&unit)
                         || self.changed[unit].iter().any(|name| {
                             source(unit, name)
-                                .is_some_and(|source| rederived[source] || replayed[source])
+                                .is_some_and(|source| rederived[source] || restoring[source])
                         }));
             }
-            let reached = |unit: usize| rederived[unit] || replayed[unit];
+            let reached = |unit: usize| rederived[unit] || restoring[unit];
             let mut added = false;
             for unit in (0..count).filter(|unit| reached(*unit)) {
                 for name in &self.uses[unit] {
@@ -596,7 +597,7 @@ impl Graph {
                         .filter(|later| provider(*later, name) == Some(source))
                         .any(|later| self.changed[later].contains(name));
                     if !reached(source) && changed_since {
-                        added |= rewound.insert(source);
+                        added |= rerun_starts.insert(source);
                     }
                 }
             }

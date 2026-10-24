@@ -278,7 +278,7 @@ fn attributed(cold_keys: &[salsa::Id], executed: &[salsa::Id]) -> BTreeSet<usize
 /// Every binding in the environment and what it reads.
 fn environment(session: &mut Session) -> BTreeMap<String, String> {
     session.executor.get_environment().into_iter()
-        .map(|(name, _kind, _ty, value)| (name, value))
+        .map(|(name, _kind, _ty, value)| (name, value.unwrap_or("given away".S())))
         .collect()
 }
 
@@ -318,7 +318,7 @@ fn check(scenario: &Scenario) {
     };
 
     run.recorder.clear();
-    let redone: Vec<(usize, ScriptCompilationResult)> = if scenario.is_module() {
+    let rederived: Vec<(usize, ScriptCompilationResult)> = if scenario.is_module() {
         run.session.relower_module(&scenario.module())
     } else {
         run.session.edit(scenario.position.unit(), scenario.text);
@@ -336,10 +336,10 @@ fn check(scenario: &Scenario) {
     } else {
         union.reach_from(&seeds)
     };
-    let reached: BTreeSet<usize> = redone.iter().map(|(unit, _)| *unit).collect();
+    let reached: BTreeSet<usize> = rederived.iter().map(|(unit, _)| *unit).collect();
     assert_eq!(reached, expected_reach, "{name}: the units re-lowered");
 
-    let failed: BTreeSet<usize> = redone.iter()
+    let failed: BTreeSet<usize> = rederived.iter()
         .filter(|(_, result)| result.ir_unit.is_none())
         .map(|(unit, _)| *unit)
         .collect();
@@ -349,9 +349,9 @@ fn check(scenario: &Scenario) {
     );
 
     let mut ran = BTreeSet::new();
-    for (unit, result) in &redone {
+    for (unit, result) in &rederived {
         if let Some(ir_unit) = &result.ir_unit {
-            let (_, output) = run.session.executor.reexecute_unit(*unit, ir_unit);
+            let (_, output) = run.session.executor.rerun_unit(*unit, ir_unit);
             assert!(!output.starts_with("Error:"), "{name}: re-running unit {unit}: {output}");
             ran.insert(*unit);
         }
@@ -522,7 +522,7 @@ fn a_module_body_edit_reaches_only_the_unit_that_imports_from_it() {
     );
 
     run.recorder.clear();
-    let redone = run.session.relower_module(&Module {
+    let rederived = run.session.relower_module(&Module {
         library: "local", package: "test", module: "m1",
         source: "fun f1(x: int): int\n    ret x * 100\nend fun\n",
     });
@@ -540,7 +540,7 @@ fn a_module_body_edit_reaches_only_the_unit_that_imports_from_it() {
     );
 
     assert_eq!(
-        redone.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
+        rederived.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
         BTreeSet::from([2, 3]),
         "and the execution reach is what it always was: unit 3 reads `c`, so it \
          holds a stale value whether or not its typecheck had to re-run",
@@ -560,7 +560,7 @@ fn a_module_signature_edit_reaches_the_importer_and_its_readers() {
     let before = run.session.graph();
 
     run.recorder.clear();
-    let redone = run.session.relower_module(&Module {
+    let rederived = run.session.relower_module(&Module {
         library: "local", package: "test", module: "m1",
         source: "fun f1(x: string): int\n    ret 5\nend fun\n",
     });
@@ -581,7 +581,7 @@ fn a_module_signature_edit_reaches_the_importer_and_its_readers() {
          differently for",
     );
     assert_eq!(
-        redone.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
+        rederived.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
         BTreeSet::from([2, 3]),
         "the execution reach is the same as for a body edit -- it is the imports \
          that decide it -- which is what the narrowing had to catch up with",
@@ -812,20 +812,20 @@ fn blanking_a_unit_is_the_removal_the_numbering_allows() {
     let expected = before.union(&after).reach_from(&BTreeSet::from([0]));
     assert_eq!(expected, BTreeSet::from([0, 2]), "the blanked unit and the unit that read it");
 
-    let redone = session.relower(0);
+    let rederived = session.relower(0);
     assert_eq!(
-        redone.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
+        rederived.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
         expected,
     );
-    let broken: Vec<usize> = redone.iter()
+    let broken: Vec<usize> = rederived.iter()
         .filter(|(_, result)| result.ir_unit.is_none())
         .map(|(unit, _)| *unit)
         .collect();
     assert_eq!(broken, vec![2], "`x` is gone, so the unit that read it stops compiling");
 
-    for (unit, result) in &redone {
+    for (unit, result) in &rederived {
         if let Some(ir_unit) = &result.ir_unit {
-            session.executor.reexecute_unit(*unit, ir_unit);
+            session.executor.rerun_unit(*unit, ir_unit);
         }
     }
     assert!(!session.has_binding("x"), "the blanked unit exports nothing now");
@@ -877,7 +877,7 @@ fn a_move_out_of_an_earlier_unit_is_made_again_when_its_source_reruns() {
     session.append("let ys = xs\ndebuglog \"ran B\"\n");
     session.append("let zs = [9]\ndebuglog \"ran C\"\n");
     let _ = session.units_run();
-    assert_eq!(session.binding("xs"), "<moved>");
+    assert_eq!(session.binding("xs"), "given away");
     assert_eq!(session.binding("ys"), "[1, 2, 3]");
 
     let expected = session.graph().reach(0);
@@ -887,20 +887,20 @@ fn a_move_out_of_an_earlier_unit_is_made_again_when_its_source_reruns() {
     assert_eq!(session.rederive(0), expected);
     assert_eq!(session.units_run(), expected);
 
-    assert_eq!(session.binding("xs"), "<moved>", "taken again");
+    assert_eq!(session.binding("xs"), "given away", "taken again");
     assert_eq!(session.binding("ys"), "[4, 5, 6]");
     assert_eq!(session.binding("zs"), "[9]");
 }
 
-/// Re-running a unit that moved out of an earlier binding **rewinds to the
-/// binding's provider**, because the binding holds nothing to move out of
+/// Re-running a unit that moved out of an earlier binding **reruns from
+/// the binding's provider**, because the binding holds nothing to move out of
 /// until it is built again.
 ///
 /// Editing B alone used to run B alone, which read the list it had already
 /// taken. The reach goes back to A, and from A forward to everything that
 /// uses what A provides, which here is B again and not C.
 #[test]
-fn re_running_a_unit_that_moved_an_earlier_binding_rewinds_to_its_provider() {
+fn re_running_a_unit_that_moved_an_earlier_binding_reruns_from_its_provider() {
     let mut session = Session::new();
     session.append("let xs = [1, 2, 3]\ndebuglog \"ran A\"\n");
     session.append("let ys = xs\ndebuglog \"ran B\"\n");
@@ -916,24 +916,24 @@ fn re_running_a_unit_that_moved_an_earlier_binding_rewinds_to_its_provider() {
     assert_eq!(session.rederive(1), expected);
     assert_eq!(session.units_run(), expected);
     assert_eq!(session.binding("ys"), "[1, 2, 3]");
-    assert_eq!(session.binding("xs"), "<moved>");
+    assert_eq!(session.binding("xs"), "given away");
 }
 
-/// A unit that **reads** a binding a later unit moved out of rewinds too.
+/// A unit that **reads** a binding a later unit moved out of reruns from its provider too.
 ///
 /// Neither is about the other's names: B reads `e` and D takes it. Editing B
 /// runs it against `e` as it is now, which is nothing, unless A runs first to
 /// build `e` again -- and then D, which uses `e` too, takes it again. The
 /// function C stays out of it.
 #[test]
-fn reading_a_binding_a_later_unit_moved_rewinds_to_its_provider() {
+fn reading_a_binding_a_later_unit_moved_reruns_from_its_provider() {
     let mut session = Session::new();
     session.append("let e = 100\ndebuglog \"ran A\"\n");
     session.append("let f = e + 1\ndebuglog \"ran B\"\n");
     session.append("fun g(n: int): int\n    ret n * 2\nend fun\ndebuglog \"ran C\"\n");
     session.append("let h = g(e)\ndebuglog \"ran D\"\n");
     let _ = session.units_run();
-    assert_eq!(session.binding("e"), "<moved>", "`int` is not copy, so the call took it");
+    assert_eq!(session.binding("e"), "given away", "`int` is not copy, so the call took it");
 
     let expected = session.graph().reach(1);
     assert_eq!(expected, BTreeSet::from([0, 1, 3]));
@@ -945,10 +945,10 @@ fn reading_a_binding_a_later_unit_moved_rewinds_to_its_provider() {
     assert_eq!(session.binding("h"), "200");
 }
 
-/// A unit that reads a `var` a later unit **wrote** rewinds to its provider,
+/// A unit that reads a `var` a later unit **wrote** reruns from its provider,
 /// rather than reading what the later write left.
 #[test]
-fn reading_a_var_a_later_unit_wrote_rewinds_to_its_provider() {
+fn reading_a_var_a_later_unit_wrote_reruns_from_its_provider() {
     let mut session = Session::new();
     session.append("var v = 1\ndebuglog \"ran A\"\n");
     session.append("let b = v + 1\ndebuglog \"ran B\"\n");
@@ -969,7 +969,7 @@ fn reading_a_var_a_later_unit_wrote_rewinds_to_its_provider() {
 /// A write that is not idempotent happens once, however often the unit making
 /// it is re-derived.
 #[test]
-fn re_running_an_increment_rewinds_to_what_it_increments() {
+fn re_running_an_increment_reruns_from_what_it_increments() {
     let mut session = Session::new();
     session.append("var n = 1\ndebuglog \"ran A\"\n");
     session.append("set n = n + 1\ndebuglog \"ran B\"\n");
@@ -983,10 +983,10 @@ fn re_running_an_increment_rewinds_to_what_it_increments() {
     }
 }
 
-/// A unit that reads a `var` **after** an earlier unit wrote it rewinds
-/// nothing: what the write left is what it read.
+/// A unit that reads a `var` **after** an earlier unit wrote it reruns
+/// nothing earlier: what the write left is what it read.
 #[test]
-fn reading_a_var_an_earlier_unit_wrote_rewinds_nothing() {
+fn reading_a_var_an_earlier_unit_wrote_reruns_nothing_earlier() {
     let mut session = Session::new();
     session.append("var v = 1\ndebuglog \"ran A\"\n");
     session.append("set v = 10\ndebuglog \"ran B\"\n");
@@ -1003,13 +1003,13 @@ fn reading_a_var_an_earlier_unit_wrote_rewinds_nothing() {
     assert_eq!(session.binding("v"), "10");
 }
 
-/// A rewind **replays the units that took or wrote what it rebuilt, and not
+/// A rerun **reruns the units that took or wrote what it rebuilt, and not
 /// the ones that only read it**, which would compute what they already hold.
 ///
-/// C reads `a` and D takes it, so editing C rewinds to A. B reads `a` too,
+/// C reads `a` and D takes it, so editing C reruns from A. B reads `a` too,
 /// but before D took it, and it is left alone.
 #[test]
-fn a_rewind_replays_the_takers_and_not_the_readers() {
+fn a_rerun_reruns_the_takers_and_not_the_readers() {
     let mut session = Session::new();
     session.append("let a = 1000\ndebuglog \"ran A\"\n");
     session.append("let c = a /! 10\ndebuglog \"ran B\"\n");
@@ -1026,16 +1026,16 @@ fn a_rewind_replays_the_takers_and_not_the_readers() {
     assert_eq!(session.binding("c"), "100");
     assert_eq!(session.binding("d"), "1002");
     assert_eq!(session.binding("m"), "1000");
-    assert_eq!(session.binding("a"), "<moved>");
+    assert_eq!(session.binding("a"), "given away");
 }
 
-/// A rewind replays every write after the rebuilt binding, in order, and
+/// A rerun reruns every write after the rebuilt binding, in order, and
 /// skips the reader between them.
 ///
 /// D reads `v` after B incremented it and before E doubled it. Editing D
-/// rewinds to A, and B and E write again; C read `v` and is left alone.
+/// reruns from A, and B and E write again; C read `v` and is left alone.
 #[test]
-fn a_rewind_replays_each_write_and_not_the_readers_between() {
+fn a_rerun_reruns_each_write_and_not_the_readers_between() {
     let mut session = Session::new();
     session.append("var v = 1\ndebuglog \"ran A\"\n");
     session.append("set v = v + 1\ndebuglog \"ran B\"\n");
@@ -1072,9 +1072,9 @@ fn a_unit_that_now_moves_a_binding_reaches_its_later_users() {
     let _ = session.units_run();
 
     session.edit(1, "let n = a\ndebuglog \"ran B\"\n");
-    let redone = session.relower(1);
-    assert_eq!(redone.iter().map(|(unit, _)| *unit).collect::<Vec<_>>(), vec![0, 1, 2]);
-    let c = &redone[2].1;
+    let rederived = session.relower(1);
+    assert_eq!(rederived.iter().map(|(unit, _)| *unit).collect::<Vec<_>>(), vec![0, 1, 2]);
+    let c = &rederived[2].1;
     assert!(format!("{:?}", c.ownership).contains("D013"), "{:?}", c.ownership);
 }
 
@@ -1082,7 +1082,7 @@ fn a_unit_that_now_moves_a_binding_reaches_its_later_users() {
 /// that read it, which see the write.
 ///
 /// The case only the forward edge reaches: nothing changed `v` before the
-/// edit, so there is nothing to rewind, and C uses nothing B provides. What
+/// edit, so there is nothing to rerun, and C uses nothing B provides. What
 /// reaches C is that B now writes `v`, known once B is compiled again.
 #[test]
 fn a_unit_that_now_writes_a_var_reaches_its_later_readers() {
@@ -1123,15 +1123,15 @@ fn an_earlier_units_binding_moves_once_within_a_unit() {
 /// Truncating a unit that took an earlier binding **puts the binding back**,
 /// by running its provider again.
 #[test]
-fn truncating_a_unit_that_moved_a_binding_rewinds_to_its_provider() {
+fn truncating_a_unit_that_moved_a_binding_reruns_from_its_provider() {
     let mut session = Session::new();
     session.append("let xs = [1, 2, 3]\ndebuglog \"ran A\"\n");
     session.append("let n = 5\ndebuglog \"ran B\"\n");
     session.append("let ys = xs\ndebuglog \"ran C\"\n");
     let _ = session.units_run();
-    assert_eq!(session.binding("xs"), "<moved>");
+    assert_eq!(session.binding("xs"), "given away");
 
-    assert_eq!(session.truncate(2), BTreeSet::from([0, 1]), "rewound to A, and on from there");
+    assert_eq!(session.truncate(2), BTreeSet::from([0, 1]), "rerun from A, and on from there");
     assert_eq!(session.marks_run(&["A", "B", "C"]), BTreeSet::from(["A", "B"]));
     assert_eq!(session.binding("xs"), "[1, 2, 3]");
     assert!(!session.has_binding("ys"));
@@ -1140,7 +1140,7 @@ fn truncating_a_unit_that_moved_a_binding_rewinds_to_its_provider() {
 /// A binding a unit **gave away** stays given away after the unit is
 /// re-executed, and a unit compiled afterwards is still told so.
 ///
-/// `dead_exports` and `taken` record the moves and `dead_externals_over` folds
+/// `dead_exports` and `takes` record the moves and `dead_externals_over` folds
 /// the records to decide what a new unit may name, so **a move has to survive
 /// a re-derivation**: if the record went missing, a line typed after the edit
 /// would read a value that was given away. Asserted before the edit and again
@@ -1153,7 +1153,7 @@ fn a_move_across_units_survives_an_edit() {
     session.append("let n = 5\ndebuglog \"ran B\"\n");
     session.append("let taken = moved\ndebuglog \"ran C\"\n");
     let _ = session.units_run();
-    assert_eq!(session.binding("moved"), "<moved>");
+    assert_eq!(session.binding("moved"), "given away");
     assert_eq!(session.binding("taken"), "[1, 2, 3]", "unit 2 took it");
     assert!(gave_away(&mut session, "xs"), "unit 0 gave `xs` away to `moved`");
     assert!(gave_away(&mut session, "moved"), "unit 2 took `moved`");

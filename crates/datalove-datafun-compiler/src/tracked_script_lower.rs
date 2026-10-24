@@ -44,19 +44,19 @@ pub struct UnitLowerRecord {
     /// Names this unit exported without a value behind them.
     pub dead_exports: Vec<String>,
     /// Names an earlier unit gave away that this unit assigned to.
-    pub revived: Vec<String>,
+    pub revives: Vec<String>,
     /// The earlier units' bindings this unit gave away.
-    pub taken: Vec<String>,
+    pub takes: Vec<String>,
     /// The earlier units' bindings this unit wrote to.
     ///
-    /// With `taken`, what the unit did to state that is not its own, which is
+    /// With `takes`, what the unit did to state that is not its own, which is
     /// what re-running a unit has to take back first: see
     /// `ScriptCompiler::reach_from`.
-    pub written: Vec<String>,
-    /// Those of `written` it overwrote: wrote on every way through the unit
+    pub writes: Vec<String>,
+    /// Those of `writes` it overwrote: wrote on every way through the unit
     /// before reading what they held. Running the unit again needs nothing of
-    /// such a binding as it was. The rest of `written` it updated.
-    pub overwritten: Vec<String>,
+    /// such a binding as it was. The rest of `writes` it updated.
+    pub overwrites: Vec<String>,
     /// The names this unit provides, as the typechecker recorded them.
     ///
     /// Kept as owned text because the reach of an edit is computed across a
@@ -156,8 +156,8 @@ pub fn external_consts_over(records: &[UnitLowerRecord]) -> Vec<String> {
 pub fn dead_externals_over(records: &[UnitLowerRecord]) -> Vec<String> {
     let mut dead: Vec<String> = Vec::new();
     for record in records {
-        dead.extend(record.taken.iter().cloned());
-        for name in &record.revived {
+        dead.extend(record.takes.iter().cloned());
+        for name in &record.revives {
             dead.retain(|held| held != name);
         }
         for (name, _) in &record.exports {

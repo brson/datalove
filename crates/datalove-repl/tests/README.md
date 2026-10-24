@@ -20,7 +20,7 @@ y
 ```
 
 For each input it records the input, the parse result (`InputParse`), the
-eval result (`Eval`) if there is one, and the environment afterwards. The
+outcome (`Outcome`) if there is one, and the environment afterwards. The
 record is JSON, compared against `<name>.out.expected`. A run writes
 `<name>.out.actual` alongside, which git ignores.
 

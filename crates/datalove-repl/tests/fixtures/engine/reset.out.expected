@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "a",
@@ -50,7 +50,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "b",
@@ -80,7 +80,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "200"
         }
@@ -105,7 +105,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "cannot find `a` in this scope"
+        "NotCompiled": "cannot find `a` in this scope"
       }
     },
     "environment": [

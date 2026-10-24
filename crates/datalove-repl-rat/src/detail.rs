@@ -53,11 +53,11 @@ pub(crate) fn lines<E: ReplExecutor>(repl: &ReplApp<E>, width: usize) -> Vec<Lin
     // the engine has them, and by its error where it does not.
     let diagnostics = detail.map(|detail| detail.diagnostics.as_str()).filter(|text| !text.is_empty());
     match (eval, diagnostics) {
-        (Some(script::Eval::Error(_)), Some(diagnostics)) => {
+        (Some(script::Eval::NotCompiled(_)), Some(diagnostics)) => {
             heading(&mut lines, "Diagnostics");
             lines.extend(crate::ansi::lines(diagnostics));
         }
-        (Some(script::Eval::Success(_) | script::Eval::Nothing), _) | (None, _) => {}
+        (Some(script::Eval::Ran(_)), _) | (None, _) => {}
         (Some(eval), _) => {
             lines.push(Line::from(""));
             let (mark, color, said) = outcome(eval);
@@ -74,7 +74,7 @@ pub(crate) fn lines<E: ReplExecutor>(repl: &ReplApp<E>, width: usize) -> Vec<Lin
     // Each binding's type is what the unit's run said; what it holds is what
     // it holds now, which a later unit may have changed.
     let defined: &[script::EvalBinding] = match eval {
-        Some(script::Eval::Success(bindings)) => bindings,
+        Some(script::Eval::Ran(bindings)) => bindings,
         _ => &[],
     };
     if !detail.bindings.is_empty() {
@@ -95,7 +95,7 @@ pub(crate) fn lines<E: ReplExecutor>(repl: &ReplApp<E>, width: usize) -> Vec<Lin
                     spans.push(Span::raw(" = "));
                     spans.push(Span::raw(value.C()));
                 }
-                None => spans.push(Span::styled(" -- given away", Style::default().fg(Color::DarkGray))),
+                None => spans.push(Span::styled(" -- given away", crate::render::given_away())),
             }
             lines.push(Line::from(spans));
         }
@@ -112,16 +112,17 @@ pub(crate) fn lines<E: ReplExecutor>(repl: &ReplApp<E>, width: usize) -> Vec<Lin
         ])));
     }
 
-    let effects = [
-        ("reads", &detail.uses),
+    let accesses = [
         ("provides", &detail.provides),
+        ("reads", &detail.reads),
         ("takes", &detail.takes),
         ("overwrites", &detail.overwrites),
         ("updates", &detail.updates),
+        ("revives", &detail.revives),
     ];
-    if effects.iter().any(|(_, names)| !names.is_empty()) {
+    if accesses.iter().any(|(_, names)| !names.is_empty()) {
         heading(&mut lines, "Names");
-        for (what, names) in effects {
+        for (what, names) in accesses {
             if !names.is_empty() {
                 let label = fmt!("{what:<11}");
                 lines.extend(wrapped(&names.join(", "), Style::default(), &label, &" ".repeat(label.len()), width));
@@ -140,9 +141,9 @@ fn heading(lines: &mut Vec<Line<'static>>, text: &'static str) {
 /// How a unit fared, in words.
 fn status_words(status: UnitStatus) -> &'static str {
     match status {
-        UnitStatus::Pending => "waiting on the engine",
+        UnitStatus::Waiting => "waiting on the engine",
         UnitStatus::Ran => "ran",
-        UnitStatus::Failed => "did not compile",
+        UnitStatus::NotCompiled => "did not compile",
         UnitStatus::ReturnedEarly => "returned early",
         UnitStatus::Blocked => "blocked",
     }

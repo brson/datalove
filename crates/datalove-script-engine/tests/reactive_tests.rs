@@ -300,10 +300,10 @@ impl Outcome {
 
 fn ran(eval: &Eval) -> Ran {
     match eval {
-        Eval::Error(_) => Ran::Fails,
+        Eval::NotCompiled(_) => Ran::Fails,
         Eval::ReturnedEarly(_) => Ran::ReturnsEarly,
         Eval::Blocked { .. } => Ran::Blocked,
-        Eval::Nothing | Eval::Success(_) | Eval::SuccessExpr(_) => Ran::Runs,
+        Eval::Ran(_) | Eval::Value(_) => Ran::Runs,
         other => panic!("a unit came to {other:?}"),
     }
 }
@@ -355,19 +355,19 @@ impl Session {
     /// What unit `index` does to earlier units' bindings, as a step table's
     /// `uses` column says it, one entry per binding.
     fn uses(&self, index: usize) -> Vec<String> {
-        let effects = self.engine.unit_effects(index);
-        let mut uses: Vec<String> = effects.uses.iter()
+        let accesses = self.engine.unit_accesses(index);
+        let mut uses: Vec<String> = accesses.uses.iter()
             .filter_map(|name| {
                 let provider = (0..index).rev()
-                    .find(|earlier| self.engine.unit_effects(*earlier).provides.contains(name))?;
+                    .find(|earlier| self.engine.unit_accesses(*earlier).provides.contains(name))?;
                 let has = |names: &[String]| names.contains(name);
-                let verb = if has(&effects.revived) {
+                let verb = if has(&accesses.revives) {
                     "revives"
-                } else if has(&effects.taken) {
+                } else if has(&accesses.takes) {
                     "takes"
-                } else if has(&effects.updated) {
+                } else if has(&accesses.updates) {
                     "updates"
-                } else if has(&effects.overwritten) {
+                } else if has(&accesses.overwrites) {
                     "overwrites"
                 } else {
                     "reads"
@@ -413,7 +413,7 @@ impl Session {
                 let index = self.index(unit);
                 self.units.remove(index);
                 ran.push((unit.C(), Ran::Deleted));
-                let reports = self.engine.remove_unit(index);
+                let reports = self.engine.delete_unit(index);
                 ran.extend(self.reported(reports));
                 Some(index)
             }

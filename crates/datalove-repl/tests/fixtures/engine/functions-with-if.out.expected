@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "invalid operand type `i32` for operator `-`"
+        "NotCompiled": "invalid operand type `i32` for operator `-`"
       }
     },
     "environment": []
@@ -26,7 +26,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "cannot find `abs` in this scope"
+        "NotCompiled": "cannot find `abs` in this scope"
       }
     },
     "environment": []
@@ -42,7 +42,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "cannot find `abs` in this scope"
+        "NotCompiled": "cannot find `abs` in this scope"
       }
     },
     "environment": []
@@ -58,7 +58,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "classify"
@@ -86,7 +86,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "u32",
           "value": "1"
         }
@@ -111,7 +111,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "u32",
           "value": "2"
         }
@@ -136,7 +136,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "u32",
           "value": "3"
         }
@@ -161,7 +161,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "grade"
@@ -194,7 +194,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "u32",
           "value": "4"
         }
@@ -224,7 +224,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "u32",
           "value": "3"
         }
@@ -254,7 +254,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "u32",
           "value": "2"
         }
@@ -284,7 +284,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "u32",
           "value": "1"
         }

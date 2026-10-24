@@ -7,7 +7,7 @@
 //! exist: what a unit *uses*.
 //!
 //! Provides was already there, as a unit's typecheck outputs. Uses is
-//! `asked_names`, recorded by `TypeContext` as the typechecker resolves names,
+//! `uses`, recorded by `TypeContext` as the typechecker resolves names,
 //! rather than computed by a separate walk over the AST -- so it cannot miss a
 //! form the walk forgot, which is the failure that would keep a stale type.
 //!
@@ -53,7 +53,7 @@ fn graph_of(units: &[&str]) -> Vec<(Vec<String>, Vec<String>)> {
                 .chain(output.new_fns(&db).iter().map(|(name, _)| name.as_str(&db).S()))
                 .collect();
             provides.sort();
-            let uses: Vec<String> = output.asked_names(&db).iter()
+            let uses: Vec<String> = output.uses(&db).iter()
                 .map(|name| name.as_str(&db).S())
                 .collect();
             (provides, uses)

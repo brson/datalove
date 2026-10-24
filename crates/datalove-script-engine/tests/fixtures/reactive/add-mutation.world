@@ -63,6 +63,6 @@ expect unit 3 is edited back to read `b`
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
 | 1 | - | untouched | nothing changed `a` | `a` = 1000 |
-| 2 | - | reruns | rewind: unit 3 updated `b` when it last ran, and the edit undoes that | `b` = 125 |
+| 2 | - | reruns | rerun: unit 3 updated `b` when it last ran, and the edit retracts that | `b` = 125 |
 | 3 | reads `b` (2) | recompiles, runs | edited | `d` = 250 |
 | 4 | reads `a` (1), reads `b` (2) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 8 |

@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "b",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "flag",
@@ -74,7 +74,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -100,7 +102,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "f",
@@ -139,7 +141,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -170,7 +174,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "i",
@@ -214,7 +218,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -249,7 +255,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -284,7 +292,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -320,7 +330,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "2"
         }
@@ -360,7 +370,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "4"
         }

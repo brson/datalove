@@ -397,7 +397,7 @@ Ways a body changes under one identity:
 | Event | What changes |
 |---|---|
 | The dynamic inliner replaces a caller | A new body; counts usually grow, but slots need not |
-| REPL `reexecute_unit` | New bodies under the same `FuncIdentity::Unit` |
+| REPL `rerun_unit` | New bodies under the same `FuncIdentity::Unit` |
 | REPL truncation, then new units | Indices reused by different units |
 | `set_module_registry` | New module bodies under the same `FuncIdentity::Module` |
 | A unit that fails part way | Its index reused by the next unit |

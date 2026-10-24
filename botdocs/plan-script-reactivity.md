@@ -1,20 +1,21 @@
 # Script reactivity
 
-Editing a script unit should re-analyze and re-execute the units that depend on
+Editing a script unit should compile again and rerun the units that depend on
 it, and no others.
 
 **This is the plan, kept for why things are shaped as they are and what was tried
 and rejected.** What the code actually is, and how it is validated, is
 [script-reactivity-architecture.md](script-reactivity-architecture.md).
 
-Given units A B C D where C does not depend on B, editing B re-analyzes and
-re-executes B and D. A is untouched because it is upstream. **C is untouched
+Given units A B C D where C does not depend on B, editing B compiles and reruns
+B and D. A is untouched because it is upstream. **C is untouched
 because it does not use anything B provides**, even though it sits between them.
 
 That last clause is the whole problem. Everything else follows from it.
 
-This is the shape the script semantics were reaching for and what
-`repl-architecture.md` calls "rewind and replay". The UI is out of scope here;
+This is the shape the script semantics were reaching for, and what
+`script-reactivity-architecture.md` calls reruns: the backward reach that
+rebuilds a binding before a unit reads it again. The UI is out of scope here;
 this is the engine.
 
 ## Where things actually stand, measured
@@ -28,23 +29,23 @@ through `ScriptCompiler::compile_fragment`:
 | append unit 1 | 11 | 1 |
 | append unit 2 | 11 | 1 |
 | append unit 3 | 11 | 1 |
-| replay all four in a new compiler | 44 | 4 |
+| recompile all four from scratch in a new compiler | 44 | 4 |
 
 Three things to take from this, and the first was a surprise.
 
-**Appending is already incremental.** Each new line typechecks exactly one unit.
+**Appending is already incremental.** Each new unit typechecks exactly one unit.
 `typecheck_script_unit` is keyed on `(unit_spec, module_specs, accumulated,
 auto_adapt_mode)` where `accumulated` is every binding from every earlier unit --
 a prefix aggregate -- and for an append that key is unchanged for the units
 already there. So the existing design is right for the direction a REPL usually
 grows.
 
-**Replay in a fresh compiler reuses nothing.** `compile_fragment` mints a
+**Recompiling from scratch in a fresh compiler reuses nothing.** `compile_fragment` mints a
 `Source` per call, and `Source` is a `#[salsa::input]`, so identical text is a
 different input and everything downstream of it is a different question. This
 does not matter for appending -- a session keeps its `ScriptCompiler` -- but it
-means a crash reset re-does the session from scratch, and it means every line
-leaks an input, inputs never being collected.
+means a crash reset re-does the session from scratch, and it means every unit
+leaks a salsa input, inputs never being collected.
 
 **Editing is not expressible at all.** `accumulated_unit_specs` is
 append-and-pop; there is no way to replace unit *i*. That is not an oversight to
@@ -83,7 +84,7 @@ stages are a walk over them.
 
 **Under-reporting uses would be unsound** -- a unit would keep a stale type --
 so it is recorded rather than computed. `TypeContext` notes every name asked of
-it as the typechecker resolves one, and `ScriptUnitTypecheckOutput::asked_names`
+it as the typechecker resolves one, and `ScriptUnitTypecheckOutput::uses`
 carries the set out. A walk over the AST collecting free names was the
 alternative and would have been wrong the first time some expression form was
 forgotten; recording sits at the four lookups and cannot miss a form.
@@ -153,7 +154,7 @@ failures and say which to tighten when it is fixed.
 
 The goal: editing B re-typechecks B and D, and C is a memo hit. **That holds
 now**, and `script_reactivity_tests` pins it: editing B re-typechecks exactly the
-units whose `asked_names` intersect what B provides, which for A B C D is B and
+units whose `uses` intersect what B provides, which for A B C D is B and
 D, with C and A memo hits. A value-only edit reaches only the unit it is in; a
 type edit reaches the units that read the binding; appending still typechecks
 one unit.
@@ -195,20 +196,20 @@ appending leaves the earlier handles alone without a setter at all.
 
 The reason not to use the input: **appending would have needed `&mut db` too,
 not just editing.** `set_units` is the only way to grow an input's list, so
-every REPL line would want exclusive access to the database -- and
+every REPL unit would want exclusive access to the database -- and
 `ScriptCompiler` cannot be handed it. It holds `&'db dyn Database` and, behind
 that lifetime, `ModuleSpec`s and a whole `SharedModuleContext` derived from
 `CompiledModules<'db>`, and salsa's lifetimes exist precisely to stop that data
-outliving a mutation. `ModuleCompilationPipeline` gets away with `&mut D`
+outliving a database change. `ModuleCompilationPipeline` gets away with `&mut D`
 because it holds nothing but `Source`s and rebuilds its `'db` data per compile;
 making the script compiler do the same means re-deriving the module compilation
-on every line and restructuring 58 call sites across 22 files. That is stage C
+on every unit and restructuring 58 call sites across 22 files. That is stage C
 and D's shape, not a keying change.
 
 `&mut db` is still what an edit costs, exactly as
 `IncrementalModuleWorld::update_source` costs it -- `ScriptCompiler::unit_sources`
 hands out the `Source` per unit for that, and the caller that owns the database
-does the `set_text`. What is not needed is `&mut db` per appended line.
+does the `set_text`. What is not needed is `&mut db` per appended unit.
 
 Two smaller things fell out. `function_types` on a unit's result no longer
 carries the earlier units' functions, because every consumer looks one up by the
@@ -271,13 +272,14 @@ and `ModuleCompilationPipeline::compile` already takes `&mut D` for exactly this
 reason, so there is precedent to follow rather than a new idea to invent.
 
 Two things fall out for free. `Source`-per-`compile_fragment` stops being minted,
-so the replay row in the table above and the input leak per line both go. And
+so the recompile-from-scratch row in the table above and the input leak per
+unit both go. And
 stage D's "hold a stable handle per unit" is most of this, so D shrinks to
 re-deriving the affected suffix.
 
-**`asked_names` stays useful.** It is not the key -- the query reads are -- but it
+**`uses` stays useful.** It is not the key -- the query reads are -- but it
 is the graph as data, which stage C needs, and it is how to *test* that this is
-precise: the units that re-typechecked should equal the units whose `asked_names`
+precise: the units that re-typechecked should equal the units whose `uses`
 intersect what the edit changed. Assert that rather than a bare count.
 
 ### C. Per-unit lowering and execution state -- done
@@ -322,7 +324,7 @@ What went in:
   introduces is absent from the old one though a unit that asked for it in vain
   now finds it. Module aliases are in `provides` as well as bindings, because a
   `require` in one unit is what an `import` in a later one resolves through and
-  the typechecker reaches that by a different query than `asked_names`.
+  the typechecker reaches that by a different query than `uses` records.
 - **Lowering no longer parses a unit itself.** The statements come from
   `unit_ast`, keyed on the unit, so re-lowering costs no second parse.
 
@@ -333,7 +335,7 @@ afterwards. The `Source`s being inputs is what makes that free: interning them
 again gives back the very same `ScriptUnit` and `Script` handles, so every memo
 keyed on one is still good. **The `Engine` owns its database now** rather than
 borrowing it, and builds a compiler per operation. What that costs is
-re-deriving the module compilation each line, which is salsa verifying what it
+re-deriving the module compilation each unit, which is salsa verifying what it
 already has -- the same thing a crash reset has always relied on.
 
 Two things worth knowing about what it does not do:
@@ -345,7 +347,7 @@ Two things worth knowing about what it does not do:
   is destroyed when the session ends, so nothing leaks.
 - **An edit reaches expression units too**, and running one again needs
   somewhere for its value to land -- `UnitEnd` carries a result and the
-  interpreter panics without a destination. `ScriptExecutor::reexecute_unit`
+  interpreter panics without a destination. `ScriptExecutor::rerun_unit`
   handles both kinds.
 
 What follows is what it looked like before.
@@ -388,7 +390,7 @@ What is actually missing is two things:
 
 Then re-deriving is a walk over the graph stages A and B built: for an edit to
 unit *i*, re-lower and re-execute *i* together with the units whose
-`asked_names` reach it, **in index order**, and leave the rest.
+`uses` reach it, **in index order**, and leave the rest.
 
 Two things make this tractable now and will stop being true:
 
@@ -398,10 +400,9 @@ Two things make this tractable now and will stop being true:
   rethinking -- `repl-architecture.md` says so too.
 
   *Since stopped being true, on purpose:* units move out of earlier bindings
-  now, and the reach goes back to rebuild what a unit took or wrote before
-  re-running it. `script-reactivity-architecture.md` section 5 has how.
-- **Only pure `fun`s exist.** The only effect is `debuglog`, which is per-unit
-  output, so skipping a unit's execution skips nothing observable beyond it.
+  now, and the reach goes backward to rebuild what a unit took or wrote before
+  rerunning it. `script-reactivity-architecture.md` section 5 has how.
+- **Only pure `fun`s exist.** The only output is `debuglog`, which is per-unit, so skipping a unit's execution skips nothing observable beyond it.
   `proc`s and real I/O need virtualized I/O.
 
 ### The alias edge, and why it is the soft spot
@@ -429,17 +430,18 @@ tested -- but it is the one asymmetry left in the design.
 
 Done as `Engine::edit_unit` (`crates/datalove-script-engine/src/engine.rs`), over
 `ScriptSession::unit_sources`, `set_text` and `ScriptCompiler::relower_reach`;
-`engine_edit_tests` holds it. What follows was the plan. The replay row and the
+`engine_edit_tests` holds it. What follows was the plan. The
+recompile-from-scratch row and the
 input leak it mentions are still open: `compile_fragment` mints a `Source` per
 call.
 
 `ScriptCompiler::edit_unit(i, text)` and an engine entry point: hold a stable
 `Source` per unit and `set_text` on it, exactly as `IncrementalModuleWorld` does
 for modules -- "a `Source` is the input, and it is the only handle worth
-keeping". That also fixes the replay row in the table above and the input leak
-per line.
+keeping". That also fixes the recompile-from-scratch row in the table above and
+the input leak per unit.
 
-Then re-derive from the graph: re-analyze and re-execute the units reachable
+Then re-derive from the graph: compile again and rerun the units reachable
 from the edited one, in order, and leave the rest.
 
 ## Order, and what each stage is worth
@@ -452,10 +454,10 @@ D is small once C is done.
 **C took most of D with it.** The edit path is `ScriptSession::unit_sources` and
 `set_text`, `ScriptCompiler::relower_reach` and `Engine::edit_unit`, all of which
 C needed in order to be testable at all -- there is no way to measure the reach
-of an edit without being able to make one. What D leaves is the replay row in
-the table above and the input leak per line, neither of which C touched: a
-session still mints a `Source` per appended line, and a fresh compiler still
-re-does the session from nothing.
+of an edit without being able to make one. What D leaves is the
+recompile-from-scratch row in the table above and the input leak per unit,
+neither of which C touched: a session still mints a `Source` per appended unit,
+and a fresh compiler still re-does the session from nothing.
 
 The measurement the whole thing is held to is the one the
 `edit_reach_tests`/`roots_tests` technique has caught bugs with: build A B C D,
@@ -497,18 +499,18 @@ two independent roots; the removal case; and the ownership cases.
 
 **Removing a unit turned out to be inexpressible rather than wrong** -- at the
 time. Section G built it, so what follows is the position the scenario suite was
-written from, and blanking is now one of two ways to delete a line rather than
+written from, and blanking is now one of two ways to delete a unit rather than
 the only one. Nothing in
 `ScriptSession`, `ScriptCompiler`, `FrameStore` or `UnitFunctionRegistry` offers
 a removal, and that is the numbering protecting itself: every script value is a
 `(unit_index, ValueId)` pair, so taking a unit out would leave every later
 unit's IR one frame off. What is expressible is *blanking* a unit, and it
 behaves -- the index and the frame stay, what the unit exported stops being on
-offer, the units that read it are told -- so that is what a "delete that line"
+offer, the units that read it are told -- so that is what a "delete that unit"
 has to be built out of.
 `blanking_a_unit_is_the_removal_the_numbering_allows` and
 `a_blanked_units_index_is_not_reused` hold both halves, the second of them
-stating the cost: a session that deletes lines spends an index per deletion.
+stating the cost: a session that deletes units spends an index per deletion.
 
 **Ownership across a re-execution holds.** *(Written when units copied out of
 earlier bindings; that is gone, and the tests named here were rewritten for
@@ -517,7 +519,7 @@ unit's binding, and `a_copy_out_of_an_earlier_unit_survives_its_re_execution`
 puts a list -- heap memory, so a move would be visible to the leak checker --
 through an edit to the unit it came from. A unit may only move out of a binding
 it defined itself, and `a_move_across_units_survives_an_edit` says the record of
-that survives a re-derivation: D013 is still reported for a line typed
+that survives a re-derivation: D013 is still reported for a unit typed
 afterwards, which is the only observable, since the frame still holds the value.
 
 **Thinner than it looks:**
@@ -537,7 +539,7 @@ afterwards, which is the only observable, since the frame still holds the value.
   *reach* is right at that size; it says nothing about time. The records fold
   from the start of the session for every unit re-derived, so the cost per edit
   grows with the session, and nobody has measured where that stops being free.
-- **`Engine` re-derives the module compilation per line**, resting on
+- **`Engine` re-derives the module compilation per unit**, resting on
   `ScriptEnv` interning to the same handle each time -- which is now a much
   weaker thing to rest on: the env is a list of `Module` handles, and a `Module`
   is interned over a `ModuleId` and a `Source`, neither of which a recompile
@@ -582,7 +584,7 @@ not mention:
 
 **An edit whose modules do not compile is put back.** Nothing in the engine can
 work against a module set with errors -- `script_compiler_resumed` returns
-`None` and every later line would fail to build a compiler at all -- so
+`None` and every later unit would fail to build a compiler at all -- so
 `edit_module` returns the errors as `Err` and restores the previous text.
 Reporting module errors while keeping the broken text means carrying them
 through every path that compiles, which is a larger change than this.
@@ -780,8 +782,8 @@ against a module asks `module_spans(db, module)` directly now.
 
 ## G. Insert, remove and truncate -- done
 
-**Done.** `truncate_units`, `remove_unit` and `insert_unit` exist on
-`ScriptCompiler` and on `Engine`, and all three go through one `splice`: put a
+**Done.** `truncate_units`, `delete_unit` (then `remove_unit`) and
+`insert_unit` exist on `ScriptCompiler` and on `Engine`, and all three go through one `splice`: put a
 new unit list in place, rebuild the `Script` chain over it, re-derive from the
 splice point to the end, and -- at the engine -- destroy the frames from the
 splice point on and run the re-derived suffix as appends. Truncating is the one
@@ -793,9 +795,9 @@ reads B's:
 | verb | re-derived | the name reach from the same point |
 |---|---|---|
 | `truncate_units(1)` | `{}` | n/a -- nothing after what goes |
-| `remove_unit(1)` | `{1,2}` -- C and D at their new indices | `{1}` |
+| `delete_unit(1)` | `{1,2}` -- C and D at their new indices | `{1}` |
 | `insert_unit(1, ..)` | `{1,2,3,4}` | `{1}` |
-| `remove_unit(3)`, the last unit | `{}` | `{3}` |
+| `delete_unit(3)`, the last unit | `{}` | `{3}` |
 
 **The suffix being wider than the reach is the answer, not over-propagation**,
 and `the_whole_suffix_is_rederived_not_just_the_reach` asserts it by deriving
@@ -805,7 +807,11 @@ whatever D reads.
 
 Five things were decided or found while doing it.
 
-1. **The put-back is the compiler's, not the engine's.** `splice` compiles the
+1. **The put-back is the compiler's, not the engine's.** *(Superseded: a
+   splice no longer rejects a suffix that fails to compile. A failing unit
+   stays, as an appended one does; see
+   [script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-splices).
+   Points 1 and 4 and the rejection cases below record the policy as it was.)* `splice` compiles the
    new suffix, and if any unit of it failed puts the old list back and
    re-derives, returning `Err`. So the engine never sees a half-spliced session
    and touches the frame store only once the whole suffix has compiled, which is
@@ -876,10 +882,12 @@ functions and called them within a single unit. A cross-unit call after a
 truncation is the only shape that asks the registry.
 
 
-Undo and redo were left out, deliberately. What they need is a history, which
-is engine-level; the machinery now has every verb one would be built on --
-undoing an append is `truncate_units`, and undoing an insert or a remove is the
-other splice verb.
+Undo and redo were left out of the engine, deliberately. What they need is a
+history; the machinery now has every verb one would be built on -- undoing an
+append is `truncate_units`, and undoing an insert or a delete is the other
+splice verb. The REPL's `/undo` and `/redo` have since been built that way, on
+the REPL's own history; see
+[repl-architecture.md](repl-architecture.md#user-content-undo-and-redo).
 
 What follows is the plan as written before the work.
 

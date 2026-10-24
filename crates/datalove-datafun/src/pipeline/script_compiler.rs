@@ -71,12 +71,12 @@ struct TypecheckOutput<'db> {
 
 /// What a splice re-derived, and where it started.
 ///
-/// The caller drops the runtime state from `from` on and runs `redone` as
-/// appends. `from` is the splice point unless the splice had to rewind to
-/// build an earlier binding again.
+/// The caller drops the runtime state from `from` on and runs `rederived` as
+/// appends. `from` is the splice point unless the splice had to start at an
+/// earlier binding's provider, to rerun it and restore the binding.
 pub struct Splice {
     pub from: usize,
-    pub redone: Vec<(usize, ScriptCompilationResult)>,
+    pub rederived: Vec<(usize, ScriptCompilationResult)>,
 }
 
 /// The graph the units' records held before a re-derivation, which the reach
@@ -87,7 +87,7 @@ struct HeldGraph {
     /// What each unit took or wrote of earlier units' bindings.
     changed: Vec<BTreeSet<String>>,
     /// What each unit took of earlier units' bindings.
-    taken: Vec<BTreeSet<String>>,
+    takes: Vec<BTreeSet<String>>,
 }
 
 /// Output from ownership phase.
@@ -97,13 +97,13 @@ struct OwnershipOutput<'db> {
     /// Names this unit exports that hold no value.
     dead_exports: Vec<String>,
     /// Names an earlier unit gave away that this unit assigned to.
-    revived: Vec<String>,
+    revives: Vec<String>,
     /// The earlier units' bindings this unit gave away.
-    taken: Vec<String>,
+    takes: Vec<String>,
     /// The earlier units' bindings this unit wrote to.
-    written: Vec<String>,
+    writes: Vec<String>,
     /// Those of them it overwrote rather than updated.
-    overwritten: Vec<String>,
+    overwrites: Vec<String>,
 }
 
 /// Lowered functions from the lowering phase.
@@ -229,23 +229,25 @@ impl<'db> CompiledModules<'db> {
     }
 }
 
-/// What a unit provides and what it does to earlier units' bindings.
+/// What a unit provides, and how it uses earlier units' bindings.
 ///
-/// Apart from `provides`, the names are of bindings earlier units made. A
-/// name in `uses` and in none of `taken`, `overwritten`, `updated` or
-/// `revived` is only read.
+/// Apart from `provides`, the names are of bindings earlier units made. Each
+/// name in `uses` is in exactly one of the five kinds of use.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct UnitEffects {
+pub struct UnitAccesses {
     pub provides: Vec<String>,
     /// Every name the unit asked its environment for.
     pub uses: Vec<String>,
-    pub taken: Vec<String>,
+    /// Only read.
+    pub reads: Vec<String>,
+    /// Given away.
+    pub takes: Vec<String>,
     /// Written on every way through the unit before anything read it.
-    pub overwritten: Vec<String>,
+    pub overwrites: Vec<String>,
     /// Written, and the value it held read or kept on some way through.
-    pub updated: Vec<String>,
+    pub updates: Vec<String>,
     /// Written after an earlier unit gave it away.
-    pub revived: Vec<String>,
+    pub revives: Vec<String>,
 }
 
 /// The part of a script compiler that survives a database mutation.
@@ -295,19 +297,24 @@ impl ScriptSession {
     /// What unit `index` provides, and what it does to earlier units'
     /// bindings, as of its last compile. A unit that did not compile does
     /// nothing.
-    pub fn unit_effects(&self, index: usize) -> UnitEffects {
+    pub fn unit_accesses(&self, index: usize) -> UnitAccesses {
         let record = &self.records[index];
-        let updated = record.written.iter()
-            .filter(|name| !record.overwritten.contains(name) && !record.revived.contains(name))
+        let updates: Vec<String> = record.writes.iter()
+            .filter(|name| !record.overwrites.contains(name) && !record.revives.contains(name))
             .cloned()
             .collect();
-        UnitEffects {
+        let reads = record.uses.iter()
+            .filter(|name| ![&record.takes, &record.writes].iter().any(|kind| kind.contains(name)))
+            .cloned()
+            .collect();
+        UnitAccesses {
             provides: record.provides.clone(),
             uses: record.uses.clone(),
-            taken: record.taken.clone(),
-            overwritten: record.overwritten.clone(),
-            updated,
-            revived: record.revived.clone(),
+            reads,
+            takes: record.takes.clone(),
+            overwrites: record.overwrites.clone(),
+            updates,
+            revives: record.revives.clone(),
         }
     }
 
@@ -475,8 +482,8 @@ impl<'db> ScriptCompiler<'db> {
     /// surviving unit's `(unit_index, ValueId)` references move. Usually
     /// nothing is re-derived and the splice starts at `n`. But a unit that goes
     /// may have taken or written an earlier unit's binding, and then the
-    /// session is rewound to that binding's provider, and the units from there
-    /// to `n` are re-derived to build it again (see [`Self::rewind_point`]).
+    /// rerun starts at that binding's provider, and the units from there to
+    /// `n` are re-derived to build it again (see [`Self::rerun_start`]).
     /// The caller drops the runtime state from the splice's start on --
     /// `ScriptExecutor::truncate_units` -- and runs what comes back as appends.
     ///
@@ -498,7 +505,7 @@ impl<'db> ScriptCompiler<'db> {
     ///
     /// See [`Self::splice`] for why the whole suffix is re-derived. A unit that
     /// read what the removed unit provided stops compiling, and stays.
-    pub fn remove_unit(&mut self, i: usize) -> Splice {
+    pub fn delete_unit(&mut self, i: usize) -> Splice {
         let mut units = self.unit_list();
         assert!(
             i < units.len(),
@@ -557,15 +564,15 @@ impl<'db> ScriptCompiler<'db> {
     ///
     /// The suffix can start before `at`: a unit from `at` on, which is
     /// dropped or run again, may have taken or written an earlier unit's
-    /// binding, which has to be built again first (see [`Self::rewind_point`]).
+    /// binding, which has to be built again first (see [`Self::rerun_start`]).
     ///
     /// A unit of the suffix that stops compiling stays, as an appended unit
     /// that fails does, and so does one that already did not compile.
     fn splice(&mut self, units: Vec<(bct::input::Source, bool)>, at: usize) -> Splice {
-        let from = self.rewind_point(at);
+        let from = self.rerun_start(at);
         self.set_units(units, from);
-        let redone = self.rederive((from..self.scripts.len()).collect());
-        Splice { from, redone }
+        let rederived = self.rederive((from..self.scripts.len()).collect());
+        Splice { from, rederived }
     }
 
     /// Where a splice at `at` has to start for the bindings before it to be as
@@ -578,7 +585,7 @@ impl<'db> ScriptCompiler<'db> {
     /// starts at that binding's provider instead, which builds the binding
     /// again. The units between are run again as well, so what they changed
     /// counts too, and the point moves back until nothing earlier is changed.
-    fn rewind_point(&self, at: usize) -> usize {
+    fn rerun_start(&self, at: usize) -> usize {
         let held = self.held_graph();
         let provider = |unit: usize, name: &String| {
             (0..unit).rev().find(|earlier| held.provides[*earlier].contains(name))
@@ -667,13 +674,13 @@ impl<'db> ScriptCompiler<'db> {
             let units = self.reach_from(&seeds, &held, &changed);
             let results = self.rederive(units.clone());
             for (unit, record) in self.unit_records.iter().enumerate() {
-                for name in record.taken.iter().chain(&record.written) {
+                for name in record.takes.iter().chain(&record.writes) {
                     changed[unit].insert(name.C());
                 }
             }
             // What the units do now can shrink the reach as well as grow it:
             // an edit that makes a unit overwrite what it updated needs no
-            // rewind, which only its new record says. The results are for the
+            // rerun, which only its new record says. The results are for the
             // reach as it settles; a unit compiled on the way and left out of
             // it compiled to what it was.
             if self.reach_from(&seeds, &held, &changed) == units {
@@ -720,14 +727,14 @@ impl<'db> ScriptCompiler<'db> {
     /// what the running session went through. It repeats until no provider is
     /// added.
     ///
-    /// **A provider reached that way is only replayed.** Its code is the same
+    /// **A provider reached that way is only rerun.** Its code is the same
     /// and so are its inputs, so it builds the values it built before, and a
     /// unit that only read them would compute what it already holds. What has
     /// to run again after it is the units that took or wrote what it builds,
     /// which left the binding changed and have to change it again; those are
-    /// replayed in turn, and so on down. A unit is re-derived for its own sake
-    /// -- a seed, or a user of what such a unit provides -- or for a replay,
-    /// and the first wins.
+    /// rerun in turn, and so on down. A unit is re-derived for its own sake
+    /// -- a seed, or a user of what such a unit provides -- or to restore a
+    /// binding, and the first wins.
     ///
     /// The graph is the union of what it was before the edit and what it is
     /// after, since either alone would miss a case: a binding the edit
@@ -766,7 +773,7 @@ impl<'db> ScriptCompiler<'db> {
         // a binding that was given away.
         let writes_without_reading = |unit: usize, name: &String| {
             let record = &self.unit_records[unit];
-            record.overwritten.contains(name) || record.revived.contains(name)
+            record.overwrites.contains(name) || record.revives.contains(name)
         };
 
         // The nearest unit before `unit` that set the binding `name` without
@@ -785,15 +792,15 @@ impl<'db> ScriptCompiler<'db> {
             })
         };
 
-        let mut rewound = BTreeSet::new();
+        let mut rerun_starts = BTreeSet::new();
         loop {
             let mut rederived = vec![false; count];
-            let mut replayed = vec![false; count];
+            let mut restoring = vec![false; count];
             for unit in 0..count {
                 // A unit that writes a binding without reading it does not
                 // care how an earlier unit left it, only what the binding is,
-                // which its provider says. If its write was undone it is
-                // replayed.
+                // which its provider says. If its write was retracted it is
+                // rerun.
                 //
                 // Nor does a unit after a take that is still there: the
                 // binding holds nothing after it, as it did before.
@@ -801,21 +808,21 @@ impl<'db> ScriptCompiler<'db> {
                     || uses[unit].iter().any(|name| {
                         source(unit, name).is_some_and(|source| {
                             let still_taken = !provides[source].contains(name)
-                                && held.taken[source].contains(name)
-                                && self.unit_records[source].taken.contains(name);
+                                && held.takes[source].contains(name)
+                                && self.unit_records[source].takes.contains(name);
                             rederived[source]
                                 && !still_taken
                                 && (provides[source].contains(name) || !writes_without_reading(unit, name))
                         })
                     });
-                replayed[unit] = !rederived[unit]
-                    && (rewound.contains(&unit)
+                restoring[unit] = !rederived[unit]
+                    && (rerun_starts.contains(&unit)
                         || changed[unit].iter().any(|name| {
                             source(unit, name)
-                                .is_some_and(|source| rederived[source] || replayed[source])
+                                .is_some_and(|source| rederived[source] || restoring[source])
                         }));
             }
-            let reached = |unit: usize| rederived[unit] || replayed[unit];
+            let reached = |unit: usize| rederived[unit] || restoring[unit];
 
             let mut added = false;
             for unit in (0..count).filter(|unit| reached(*unit)) {
@@ -834,7 +841,7 @@ impl<'db> ScriptCompiler<'db> {
                     }
                     // A unit that overwrites the binding needs nothing of what
                     // it held, so it does not matter what changed it. The
-                    // units after it that changed it are replayed from it.
+                    // units after it that changed it are rerun from it.
                     if writes_without_reading(unit, name) {
                         continue;
                     }
@@ -842,7 +849,7 @@ impl<'db> ScriptCompiler<'db> {
                         .take_while(|later| provider(*later, name) == Some(source))
                         .any(|later| held.changed[later].contains(name));
                     if since {
-                        added |= rewound.insert(setter);
+                        added |= rerun_starts.insert(setter);
                     }
                 }
             }
@@ -860,18 +867,18 @@ impl<'db> ScriptCompiler<'db> {
             provides: self.unit_records.iter().map(|record| set(&record.provides)).collect(),
             uses: self.unit_records.iter().map(|record| set(&record.uses)).collect(),
             changed: self.unit_records.iter()
-                .map(|record| record.taken.iter().chain(&record.written).cloned().collect())
+                .map(|record| record.takes.iter().chain(&record.writes).cloned().collect())
                 .collect(),
-            taken: self.unit_records.iter().map(|record| set(&record.taken)).collect(),
+            takes: self.unit_records.iter().map(|record| set(&record.takes)).collect(),
         }
     }
 
     /// What each unit provides and what it asks for, as things stand now.
     ///
     /// Both are the typechecker's own record -- `new_vars`, `new_fns` and
-    /// `asked_names` from stage A -- plus the module aliases, which the
+    /// `uses` from stage A -- plus the module aliases, which the
     /// typechecker resolves through a different query and so does not put in
-    /// `asked_names`: a `require` in one unit provides an alias that an
+    /// `uses`: a `require` in one unit provides an alias that an
     /// `import` in a later unit names.
     fn graph_now(&self) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
         let outputs = self.unit_typecheck_outputs();
@@ -928,7 +935,7 @@ impl<'db> ScriptCompiler<'db> {
     ) -> Vec<String> {
         let db = self.db;
         let mut used: Vec<String> =
-            output.asked_names(db).iter().map(|name| name.as_str(db).S()).collect();
+            output.uses(db).iter().map(|name| name.as_str(db).S()).collect();
         let qualified_calls = match &unit_ast(db, self.scripts[index].unit(db)).kind {
             ScriptUnitKind::Fragment(parsed, _) => {
                 for statement in parsed.statements(db).iter() {
@@ -976,7 +983,7 @@ impl<'db> ScriptCompiler<'db> {
     pub fn unit_changes(&self) -> Vec<Vec<String>> {
         self.unit_records.iter()
             .map(|record| {
-                let mut names: Vec<String> = record.taken.iter().chain(&record.written).cloned().collect();
+                let mut names: Vec<String> = record.takes.iter().chain(&record.writes).cloned().collect();
                 names.sort();
                 names.dedup();
                 names
@@ -1389,7 +1396,7 @@ impl<'db> ScriptCompiler<'db> {
         index: usize,
         output: datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>,
     ) -> (Vec<ExternalBinding>, Vec<String>) {
-        let asked: Vec<String> = output.asked_names(self.db).iter()
+        let asked: Vec<String> = output.uses(self.db).iter()
             .map(|name| name.as_str(self.db).S())
             .collect();
         (externals_over(&self.unit_records[..index], &asked), external_consts_over(&self.unit_records[..index]))
@@ -1432,10 +1439,10 @@ impl<'db> ScriptCompiler<'db> {
                     func_analyses,
                     script_analysis,
                     dead_exports: ownership_result.dead_exports(self.db).clone(),
-                    revived: ownership_result.revived_exports(self.db).clone(),
-                    taken: ownership_result.taken_externals(self.db).clone(),
-                    written: ownership_result.written_externals(self.db).clone(),
-                    overwritten: ownership_result.overwritten_externals(self.db).clone(),
+                    revives: ownership_result.revived_exports(self.db).clone(),
+                    takes: ownership_result.taken_externals(self.db).clone(),
+                    writes: ownership_result.written_externals(self.db).clone(),
+                    overwrites: ownership_result.overwritten_externals(self.db).clone(),
                 })
             }
             ParsedUnit::Expr(parsed) => {
@@ -1460,10 +1467,10 @@ impl<'db> ScriptCompiler<'db> {
                     func_analyses: bct::lookup::LookupMap::new(),
                     script_analysis: None,
                     dead_exports: Vec::new(),
-                    revived: Vec::new(),
-                    taken: ownership_result.taken_externals(self.db).clone(),
-                    written: ownership_result.written_externals(self.db).clone(),
-                    overwritten: ownership_result.overwritten_externals(self.db).clone(),
+                    revives: Vec::new(),
+                    takes: ownership_result.taken_externals(self.db).clone(),
+                    writes: ownership_result.written_externals(self.db).clone(),
+                    overwrites: ownership_result.overwritten_externals(self.db).clone(),
                 })
             }
         }
@@ -2137,10 +2144,10 @@ impl<'db> ScriptCompiler<'db> {
             slot_types: ir_unit.slot_types.clone(),
             consts: consts.declared_consts.clone(),
             dead_exports: ownership.dead_exports.clone(),
-            revived: ownership.revived.clone(),
-            taken: ownership.taken.clone(),
-            written: ownership.written.clone(),
-            overwritten: ownership.overwritten.clone(),
+            revives: ownership.revives.clone(),
+            takes: ownership.takes.clone(),
+            writes: ownership.writes.clone(),
+            overwrites: ownership.overwrites.clone(),
             provides: self.unit_provides_names(typecheck.output),
             uses: self.unit_used_names(index, typecheck.output),
             imports: typecheck.output.imported_modules(self.db).C(),

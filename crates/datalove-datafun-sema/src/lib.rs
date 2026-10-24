@@ -710,7 +710,7 @@ pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
 fn format_single_error(error: &AnalysisError) -> String {
     match error {
         AnalysisError::UseAfterMoveInEarlierUnit { expr_key: _, name, recovery_hint } => {
-            let base = format!("error[D013]: `{}` was given away by an earlier input", name);
+            let base = format!("error[D013]: `{}` was given away by an earlier unit", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::UseAfterMove { expr_key: _, moved_at: _, name, recovery_hint } => {

@@ -45,7 +45,7 @@ expect Step 2, with unit 4 taking `a`: unit 3 is edited to take `a`
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | reruns | rewind: unit 3 takes `a`, which unit 4 took after it | `a` moved |
-| 2 | reads `a` (1) | untouched | unit 1 built the same `a` | `c` = 100 |
+| 1 | - | reruns | rerun: unit 3 takes `a`, which unit 4 took after it | `a` moved |
+| 2 | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 100 |
 | 3 | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | takes `a` (1) | recompile fails | `a` was given away by unit 3 | - |

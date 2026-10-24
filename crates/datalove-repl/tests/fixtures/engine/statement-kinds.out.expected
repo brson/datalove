@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "x",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "c",
@@ -75,7 +75,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Slot": {
               "name": "v",
@@ -114,7 +114,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -145,7 +147,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "9"
         }
@@ -180,7 +182,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "y",
@@ -224,7 +226,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": [
       {
@@ -260,7 +264,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "f"
@@ -308,7 +312,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "a",

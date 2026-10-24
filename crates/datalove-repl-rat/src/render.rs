@@ -115,10 +115,17 @@ fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
             Span::styled(name, Style::default().fg(Color::Cyan)),
             Span::raw(": "),
             Span::styled(ty, Style::default().fg(Color::Yellow)),
-            Span::raw(" = "),
-            Span::raw(value),
+            match value {
+                Some(value) => Span::raw(fmt!(" = {value}")),
+                None => Span::styled(" -- given away", given_away()),
+            },
         ]),
     }
+}
+
+/// How a binding that was given away is shown in place of its value.
+pub(crate) fn given_away() -> Style {
+    Style::default().fg(Color::DarkGray)
 }
 
 /// What a unit came to, in a line's worth: its mark, its color, and what it
@@ -129,38 +136,37 @@ fn binding_line(binding: &script::EvalBinding) -> Line<'_> {
 /// was blocked.
 pub(crate) fn outcome(eval: &script::Eval) -> (&'static str, Color, String) {
     match eval {
-        script::Eval::Nothing => ("✓", Color::Green, "ran".S()),
-        script::Eval::Success(bindings) => {
+        script::Eval::Ran(bindings) if bindings.is_empty() => ("✓", Color::Green, "ran".S()),
+        script::Eval::Ran(bindings) => {
             let bound: Vec<String> = bindings.iter().map(|binding| match binding {
                 script::EvalBinding::Function { name } => fmt!("fun {name}"),
-                script::EvalBinding::Value { name, value, .. }
-                | script::EvalBinding::Slot { name, value, .. } => fmt!("{name} = {value}"),
+                script::EvalBinding::Value { name, value: Some(value), .. }
+                | script::EvalBinding::Slot { name, value: Some(value), .. } => fmt!("{name} = {value}"),
+                script::EvalBinding::Value { name, value: None, .. }
+                | script::EvalBinding::Slot { name, value: None, .. } => fmt!("{name}, given away"),
             }).collect();
             ("✓", Color::Green, bound.join(", "))
         }
-        script::Eval::SuccessExpr(expr) => ("⇒", Color::Green, fmt!("{} = {}", expr.ty, expr.value)),
-        script::Eval::Error(e) => ("✗", Color::Red, fmt!("error: {e}")),
+        script::Eval::Value(expr) => ("⇒", Color::Green, fmt!("{} = {}", expr.ty, expr.value)),
+        script::Eval::NotCompiled(e) => ("✗", Color::Red, fmt!("error: {e}")),
         script::Eval::ReturnedEarly(returned) => ("✗", Color::Yellow, fmt!("returned early: {returned}")),
-        script::Eval::Blocked { on } => {
-            let on: Vec<String> = on.iter().map(|unit| unit.to_string()).collect();
-            ("✗", Color::Magenta, fmt!("not run: it reads from units {}, which did not finish", on.join(", ")))
-        }
-        script::Eval::ErrorReset(_) | script::Eval::CrashReset(_) => {
+        script::Eval::Blocked { on } => ("✗", Color::Magenta, script::blocked_reason(on)),
+        script::Eval::RuntimeError(_) | script::Eval::Crashed(_) => {
             unreachable!("a reset takes the entry it would be shown in")
         }
     }
 }
 
 /// The lines saying what an answered input came to.
-fn eval_lines(eval: &repl::Eval) -> Vec<Line<'_>> {
+fn eval_lines(eval: &repl::Outcome) -> Vec<Line<'_>> {
     match eval {
         // A fragment's bindings, each with its type.
-        repl::Eval::Unit(script::Eval::Success(bindings)) => bindings.iter().map(binding_line).collect(),
-        repl::Eval::Unit(eval) => {
+        repl::Outcome::Unit(script::Eval::Ran(bindings)) => bindings.iter().map(binding_line).collect(),
+        repl::Outcome::Unit(eval) => {
             let (mark, color, said) = outcome(eval);
             vec![marked(mark, color, said)]
         }
-        repl::Eval::Edited(step) => {
+        repl::Outcome::Edited(step) => {
             let mut lines: Vec<Line> = step.iter().map(|unit| match &unit.eval {
                 Some(eval) => {
                     let (mark, color, said) = outcome(eval);
@@ -170,19 +176,19 @@ fn eval_lines(eval: &repl::Eval) -> Vec<Line<'_>> {
                         Span::styled(said, Style::default().fg(color)),
                     ])
                 }
-                None => marked("·", Color::DarkGray, fmt!("unit {}: analyzed again", unit.unit)),
+                None => marked("·", Color::DarkGray, fmt!("unit {}: compiled again", unit.unit)),
             }).collect();
             if step.iter().all(|unit| unit.eval.is_none()) {
                 lines.insert(0, marked("✓", Color::Green, "no other unit reran"));
             }
             lines
         }
-        repl::Eval::CommandError(e) => vec![marked("✗", Color::Red, fmt!("error: {e}"))],
-        repl::Eval::Saved { path, inputs } => vec![marked("✓", Color::Green, fmt!("saved {inputs} inputs to {path}"))],
-        repl::Eval::Help => vec![marked("ℹ", Color::Blue, "shown in the Help tab")],
-        repl::Eval::Loaded { inputs } => vec![marked("✓", Color::Green, fmt!("loaded {inputs} inputs"))],
-        repl::Eval::Reset => unreachable!("a reset takes its own entry"),
-        repl::Eval::Detail(_) => unreachable!("a detail answers a question, not an entry"),
+        repl::Outcome::CommandError(e) => vec![marked("✗", Color::Red, fmt!("error: {e}"))],
+        repl::Outcome::Saved { path, inputs } => vec![marked("✓", Color::Green, fmt!("saved {inputs} inputs to {path}"))],
+        repl::Outcome::Help => vec![marked("ℹ", Color::Blue, "shown in the Help tab")],
+        repl::Outcome::Loaded { inputs } => vec![marked("✓", Color::Green, fmt!("loaded {inputs} inputs"))],
+        repl::Outcome::Reset => unreachable!("a reset takes its own entry"),
+        repl::Outcome::Detail(_) => unreachable!("a detail answers a question, not an entry"),
     }
 }
 
@@ -227,9 +233,9 @@ pub(crate) fn bar_glyph(compiled: bool, ran: bool, line: usize, last_line: usize
 /// The color of a unit's bar, for its status.
 pub(crate) fn status_color(status: UnitStatus) -> Color {
     match status {
-        UnitStatus::Pending => Color::Cyan,
+        UnitStatus::Waiting => Color::Cyan,
         UnitStatus::Ran => Color::Green,
-        UnitStatus::Failed => Color::Red,
+        UnitStatus::NotCompiled => Color::Red,
         UnitStatus::ReturnedEarly => Color::Yellow,
         UnitStatus::Blocked => Color::Magenta,
     }
@@ -483,7 +489,7 @@ fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: R
     let pane_rows = area.height.saturating_sub(BORDERS + 1) as usize;
     let environment = repl.environment();
     if environment.is_empty() {
-        let empty = Paragraph::new(Line::from(Span::styled("(no variables defined)", Style::default().fg(Color::DarkGray))))
+        let empty = Paragraph::new(Line::from(Span::styled("(no bindings)", Style::default().fg(Color::DarkGray))))
             .block(block);
         f.render_widget(empty, area);
         return ScrollDownView { pane_rows, scroll_limit: 0 };
@@ -502,7 +508,10 @@ fn render_environment<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: R
         Row::new(vec![
             Cell::from(binding.name.as_str()).style(Style::default().fg(Color::Cyan)),
             Cell::from(binding.ty.as_str()).style(Style::default().fg(Color::Yellow)),
-            Cell::from(binding.value.as_str()),
+            match &binding.value {
+                Some(value) => Cell::from(value.as_str()),
+                None => Cell::from("given away").style(given_away()),
+            },
         ])
     });
     // A value is usually the longest of the three.
@@ -629,7 +638,7 @@ fn render_session_mismatch_modal(f: &mut Frame, msg: &str) {
 
     let lines = vec![
         Line::from(""),
-        Line::from("The REPL lost track of which code units the engine has."),
+        Line::from("The REPL lost track of which units the engine has."),
         Line::from("The code shown is the engine's; the history may not match it."),
         Line::from(""),
         Line::from(msg).style(Style::default().fg(Color::Yellow)),

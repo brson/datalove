@@ -25,7 +25,7 @@
 //! `debuglog` is the only effect a `fun` can have. Lowering has no per-unit
 //! salsa query to record -- phases 2 to 5 are plain functions -- so the
 //! measurement is which units `relower_reach` compiled, against an expectation
-//! the test derives from `asked_names` independently of how the compiler
+//! the test derives from `uses` independently of how the compiler
 //! derives it. `a_unit_that_does_use_b_is_reached` is what says that
 //! measurement is not vacuous: change the graph and the answer changes with it.
 
@@ -311,12 +311,12 @@ fn an_edit_reaches_an_expression_unit() {
     assert_eq!(named, (Some("int".S()), "2".S()));
 
     session.edit(0, "let b = 5\ndebuglog \"ran B\"\n");
-    let redone = session.relower(0);
+    let rederived = session.relower(0);
 
     let mut values = Vec::new();
-    for (index, result) in &redone {
+    for (index, result) in &rederived {
         let ir_unit = result.ir_unit.as_ref().expect("every unit re-lowers");
-        values.push((*index, session.executor.reexecute_unit(*index, ir_unit)));
+        values.push((*index, session.executor.rerun_unit(*index, ir_unit)));
     }
 
     assert_eq!(
@@ -343,12 +343,12 @@ fn an_edit_that_breaks_a_later_unit_leaves_the_rest_alone() {
 
     session.edit(1, "let b = \"two\"\ndebuglog \"ran B\"\n");
 
-    let redone = session.relower(1);
+    let rederived = session.relower(1);
 
-    let reached: BTreeSet<usize> = redone.iter().map(|(index, _)| *index).collect();
+    let reached: BTreeSet<usize> = rederived.iter().map(|(index, _)| *index).collect();
     assert_eq!(reached, BTreeSet::from([1, 3]));
 
-    let failed: BTreeSet<usize> = redone.iter()
+    let failed: BTreeSet<usize> = rederived.iter()
         .filter(|(_, result)| result.ir_unit.is_none())
         .map(|(index, _)| *index)
         .collect();
@@ -356,9 +356,9 @@ fn an_edit_that_breaks_a_later_unit_leaves_the_rest_alone() {
 
     // B re-lowered and can be re-executed; D did not, so its frame stays as it
     // was and its binding drops out of the environment.
-    for (index, result) in &redone {
+    for (index, result) in &rederived {
         if let Some(ir_unit) = &result.ir_unit {
-            session.executor.reexecute_unit(*index, ir_unit);
+            session.executor.rerun_unit(*index, ir_unit);
         }
     }
     assert_eq!(session.binding("c"), "30", "C never heard about any of this");
@@ -450,7 +450,7 @@ fn rederiving_typechecks_no_more_than_analysis_would() {
 }
 
 // ============================================================================
-// The alias edge, which does not come from `asked_names`
+// The alias edge, which does not come from `uses`
 // ============================================================================
 
 /// Editing a `require` line reaches a later unit's `import` of that alias.
@@ -491,9 +491,9 @@ fn editing_a_require_reaches_a_later_import_and_nothing_else() {
     // `relower` rather than `rederive`, because the unit this reaches is
     // supposed to stop compiling and `rederive` asserts that everything it
     // touches lowers.
-    let redone = session.relower(0);
-    let reached: BTreeSet<usize> = redone.iter().map(|(index, _)| *index).collect();
-    let broken: Vec<usize> = redone.iter()
+    let rederived = session.relower(0);
+    let reached: BTreeSet<usize> = rederived.iter().map(|(index, _)| *index).collect();
+    let broken: Vec<usize> = rederived.iter()
         .filter(|(_, result)| result.ir_unit.is_none())
         .map(|(index, _)| *index)
         .collect();
@@ -665,11 +665,11 @@ fn a_module_signature_change_is_reported_against_the_importing_unit() {
         library: "local", package: "test", module: "m",
         source: "fun f(x: string): u32\n    ret 7\nend fun\n",
     };
-    let redone = session.relower_module(&edited);
+    let rederived = session.relower_module(&edited);
 
-    let reached: BTreeSet<usize> = redone.iter().map(|(index, _)| *index).collect();
+    let reached: BTreeSet<usize> = rederived.iter().map(|(index, _)| *index).collect();
     assert_eq!(reached, BTreeSet::from([0]), "the importing unit and nothing else");
-    let broken: Vec<usize> = redone.iter()
+    let broken: Vec<usize> = rederived.iter()
         .filter(|(_, result)| result.ir_unit.is_none())
         .map(|(index, _)| *index)
         .collect();

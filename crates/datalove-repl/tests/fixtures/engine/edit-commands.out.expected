@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "a",
@@ -40,7 +40,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "b",
@@ -75,7 +75,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "c",
@@ -124,7 +124,7 @@
           "unit": 1,
           "compiled": true,
           "eval": {
-            "Success": [
+            "Ran": [
               {
                 "Value": {
                   "name": "a",
@@ -139,7 +139,7 @@
           "unit": 2,
           "compiled": false,
           "eval": {
-            "Success": [
+            "Ran": [
               {
                 "Value": {
                   "name": "b",
@@ -191,7 +191,7 @@
           "unit": 4,
           "compiled": true,
           "eval": {
-            "Success": [
+            "Ran": [
               {
                 "Value": {
                   "name": "d",
@@ -206,7 +206,7 @@
           "unit": 2,
           "compiled": true,
           "eval": {
-            "Success": [
+            "Ran": [
               {
                 "Value": {
                   "name": "b",
@@ -221,7 +221,7 @@
           "unit": 3,
           "compiled": true,
           "eval": {
-            "Success": [
+            "Ran": [
               {
                 "Value": {
                   "name": "c",
@@ -278,7 +278,7 @@
           "unit": 5,
           "compiled": true,
           "eval": {
-            "SuccessExpr": {
+            "Value": {
               "ty": "int",
               "value": "50"
             }
@@ -326,7 +326,7 @@
           "unit": 5,
           "compiled": true,
           "eval": {
-            "Error": "cannot find `c` in this scope"
+            "NotCompiled": "cannot find `c` in this scope"
           }
         }
       ]
@@ -369,7 +369,7 @@
           "unit": 5,
           "compiled": true,
           "eval": {
-            "SuccessExpr": {
+            "Value": {
               "ty": "int",
               "value": "21"
             }
@@ -415,7 +415,7 @@
           "unit": 2,
           "compiled": true,
           "eval": {
-            "Success": [
+            "Ran": [
               {
                 "Function": {
                   "name": "f"
@@ -459,7 +459,7 @@
       }
     },
     "eval": {
-      "CommandError": "unit 5 is an expression, and the edit is statements; a unit keeps its kind"
+      "CommandError": "unit 5 is an expression, and the edit is a fragment; a unit keeps its kind"
     },
     "environment": [
       {

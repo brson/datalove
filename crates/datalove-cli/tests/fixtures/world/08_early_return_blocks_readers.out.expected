@@ -1,4 +1,4 @@
 er error "division by zero"
 er error "division by zero"
-unit 4: Not run: reads from unit 3, which did not run to its end
+unit 4: not run: it reads from unit 3, which did not finish
 Error: 1 of 4 script units failed

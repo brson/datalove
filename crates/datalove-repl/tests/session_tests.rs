@@ -200,7 +200,7 @@ fn edits_save_and_load_back() {
     expected.push((Some(6), "let late = 1".S()));
     assert_eq!(code(&app), expected, "the load numbers the units as they were");
     let mut environment = environment;
-    environment.push(datalove_repl::script::EnvBinding { name: "late".S(), ty: "int".S(), value: "1".S() });
+    environment.push(datalove_repl::script::EnvBinding { name: "late".S(), ty: "int".S(), value: Some("1".S()) });
     environment.sort();
     let mut loaded = app.environment().to_vec();
     loaded.sort();
@@ -271,7 +271,7 @@ fn a_saved_help_is_not_replayed() {
 /// The environment, sorted, for comparing.
 fn bindings(app: &App) -> Vec<(String, String)> {
     let mut bindings: Vec<(String, String)> = app.environment().iter()
-        .map(|binding| (binding.name.C(), binding.value.C()))
+        .map(|binding| (binding.name.C(), binding.value.C().unwrap_or("given away".S())))
         .collect();
     bindings.sort();
     bindings

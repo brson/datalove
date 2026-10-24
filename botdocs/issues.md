@@ -57,7 +57,7 @@ home here.
   - [Pruning stops at the module](#user-content-pruning-stops-at-the-module)
   - [Nothing consumes a WorkspaceDelta](#user-content-nothing-consumes-a-workspacedelta)
   - [No batch of scripts against one world](#user-content-no-batch-of-scripts-against-one-world)
-  - [Every REPL line is a new salsa input](#user-content-every-repl-line-is-a-new-salsa-input)
+  - [Every REPL unit is a new salsa input](#user-content-every-repl-unit-is-a-new-salsa-input)
 
 - [Testing](#user-content-testing)
   - [Nothing proves the suite runs with leak checking on](#user-content-nothing-proves-the-suite-runs-with-leak-checking-on)
@@ -144,10 +144,10 @@ session, which the model in `script-reactivity-architecture.md` says it does
 not.
 
 It lasts until something re-derives the unit: its record lists what it wrote
-and took, and the rewind of `script-reactivity-architecture.md` section 5 builds
+and took, and the rerun of `script-reactivity-architecture.md` section 5 builds
 those bindings again before running it. What is missing is doing the same when
-the unit fails, and the obvious way does not work: rewinding re-runs everything
-that uses the binding after its provider, which includes the failed unit, and it
+the unit fails, and the obvious way does not work: rerunning from the provider
+reruns everything that uses the binding after it, which includes the failed unit, and it
 fails again having done the same. Copying the places before the unit runs and
 restoring them would work, but only for types that can be cloned, and moves
 across units were made real so as not to depend on that.
@@ -170,14 +170,14 @@ let w = ys
 
 The fourth unit reads `i` from the third, which returned early, so it is
 blocked and never runs; `ys` is still in the environment as `[1, 2]`. But the
-fifth unit is refused with D013, "`ys` was given away by an earlier input",
+fifth unit is refused with D013, "`ys` was given away by an earlier unit",
 because the fourth unit's record says it takes `ys`. A unit that returns early
 before its move does the same. The help, to clone `ys` where it was given away,
 names no place and the place never ran.
 
 Whether a binding is given away is decided statically, from records, and a unit
 that compiled keeps its full record whether or not it ran. The cost beyond the
-wrong error is a wasted rewind: re-deriving such a unit rewinds to the provider
+wrong error is a wasted rerun: re-deriving such a unit reruns from the provider
 of what it would take. Fixing it means the records of a unit that did not run
 to its end not counting as having taken anything, and then the units after it
 being re-derived when it runs -- which the reach does already, since they use
@@ -762,18 +762,18 @@ across ten crates, with everything they hold needing `Serialize` and
 after most of the annotating. It should be justified against the in-process batch,
 not against today's one-script-per-process.
 
-### Every REPL line is a new salsa input
+### Every REPL unit is a new salsa input
 
 **Reasoned from the code.** `ScriptCompiler::compile_fragment` and
 `compile_expr` mint a `bct::input::Source` per call, and salsa never collects
-inputs, so a session grows by one input (and its text) per line, forever. Small
-per line; unbounded in a long session. Editing a unit already goes through a
+inputs, so a session grows by one input (and its text) per unit, forever. Small
+per unit; unbounded in a long session. Editing a unit already goes through a
 stable per-unit `Source` and `set_text`; appending does not.
 
-The same minting means a fresh compiler replaying a session's lines would reuse
-nothing, since identical text is a different input. Nothing replays today --
-`Engine::reset` after a panic starts an empty session rather than replaying the
-old one -- so that half only matters if recovery is ever meant to keep the
+The same minting means a fresh compiler recompiling a session's units from
+scratch would reuse nothing, since identical text is a different input. Nothing
+does that today -- `Engine::reset` after a panic starts an empty session rather
+than recompiling the old one -- so that half only matters if recovery is ever meant to keep the
 session. Holding a stable `Source` per unit for appends too would fix both.
 
 ## Testing

@@ -155,9 +155,9 @@ fn four_units() -> Session {
 fn removing_a_unit_nothing_depends_on_rederives_the_suffix() {
     let mut session = four_units();
 
-    let redone = session.remove(1);
+    let rederived = session.remove(1);
 
-    assert_eq!(redone, BTreeSet::from([1, 2]), "C and D, at the indices they now have");
+    assert_eq!(rederived, BTreeSet::from([1, 2]), "C and D, at the indices they now have");
     assert_eq!(session.unit_count(), 3);
     assert!(!session.has_binding("b"), "B is gone");
     assert_eq!(session.binding("a"), "1", "A is upstream of the splice");
@@ -180,12 +180,12 @@ fn the_whole_suffix_is_rederived_not_just_the_reach() {
     let reach = graph.reach(1);
     assert_eq!(reach, BTreeSet::from([1]), "nothing after B reads what B provides");
 
-    let redone = session.remove(1);
+    let rederived = session.remove(1);
 
-    assert_eq!(redone, BTreeSet::from([1, 2]), "the suffix: both units after the splice");
+    assert_eq!(rederived, BTreeSet::from([1, 2]), "the suffix: both units after the splice");
     assert!(
-        redone.len() > reach.len(),
-        "the suffix is wider than the reach, which is the point: {redone:?} against {reach:?}",
+        rederived.len() > reach.len(),
+        "the suffix is wider than the reach, which is the point: {rederived:?} against {reach:?}",
     );
     assert_eq!(session.binding("d"), "6", "and D, re-derived, computes its own value");
 }
@@ -195,9 +195,9 @@ fn the_whole_suffix_is_rederived_not_just_the_reach() {
 fn removing_the_last_unit_rederives_nothing() {
     let mut session = four_units();
 
-    let redone = session.remove(3);
+    let rederived = session.remove(3);
 
-    assert_eq!(redone, BTreeSet::new(), "there is no suffix to re-derive");
+    assert_eq!(rederived, BTreeSet::new(), "there is no suffix to re-derive");
     assert!(!session.has_binding("d"));
     assert_eq!(session.binding("c"), "30");
     assert_eq!(session.marks_run(&["A", "B", "C", "D"]), BTreeSet::new());
@@ -213,9 +213,9 @@ fn removing_the_last_unit_rederives_nothing() {
 fn removing_a_unit_a_later_unit_depends_on_leaves_it_failing() {
     let mut session = four_units();
 
-    let redone = session.remove(0);
+    let rederived = session.remove(0);
 
-    assert_eq!(redone, BTreeSet::from([0, 1, 2]), "B, C and D, at the indices they now have");
+    assert_eq!(rederived, BTreeSet::from([0, 1, 2]), "B, C and D, at the indices they now have");
     assert_eq!(session.unit_count(), 3, "D is still in the session");
     assert_eq!(session.failed(), vec![2], "D, which reads the `a` that went");
     assert!(!session.has_binding("d"));
@@ -257,10 +257,10 @@ fn shadowing_units() -> Session {
 fn inserting_in_the_middle_rederives_the_suffix() {
     let mut session = shadowing_units();
 
-    let redone = session.insert(1, &unit("X", "let n = 5"));
+    let rederived = session.insert(1, &unit("X", "let n = 5"));
 
     assert_eq!(
-        redone,
+        rederived,
         BTreeSet::from([1, 2, 3, 4]),
         "the inserted unit and the three that moved up",
     );
@@ -280,9 +280,9 @@ fn inserting_in_the_middle_rederives_the_suffix() {
 fn inserting_at_the_end_runs_only_the_new_unit() {
     let mut session = shadowing_units();
 
-    let redone = session.insert(4, &unit("X", "let x = n + 1"));
+    let rederived = session.insert(4, &unit("X", "let x = n + 1"));
 
-    assert_eq!(redone, BTreeSet::from([4]), "there is no suffix after it");
+    assert_eq!(rederived, BTreeSet::from([4]), "there is no suffix after it");
     assert_eq!(session.binding("x"), "8", "which reads C's `n`");
     assert_eq!(session.marks_run(&["A", "B", "C", "D", "X"]), BTreeSet::from(["X"]));
 }
@@ -293,9 +293,9 @@ fn inserting_at_the_end_runs_only_the_new_unit() {
 fn inserting_a_unit_that_does_not_typecheck_keeps_it() {
     let mut session = shadowing_units();
 
-    let redone = session.insert(1, &unit("X", "let x = n + \"five\""));
+    let rederived = session.insert(1, &unit("X", "let x = n + \"five\""));
 
-    assert_eq!(redone, BTreeSet::from([1, 2, 3, 4]), "X and the three that moved up");
+    assert_eq!(rederived, BTreeSet::from([1, 2, 3, 4]), "X and the three that moved up");
     assert_eq!(session.unit_count(), 5);
     assert_eq!(session.failed(), vec![1], "X, and none of the units it moved up");
     assert!(!session.has_binding("x"));
@@ -323,9 +323,9 @@ fn inserting_a_unit_that_breaks_a_later_unit_leaves_that_unit_failing() {
     assert_eq!(session.binding("d"), "107", "C still shadows `n` for D");
 
     session.edit(1, &unit("X", "let n = 5"));
-    let redone = session.rederive(1);
+    let rederived = session.rederive(1);
 
-    assert_eq!(redone, BTreeSet::from([1, 2]), "X, and B, which reads its `n`");
+    assert_eq!(rederived, BTreeSet::from([1, 2]), "X, and B, which reads its `n`");
     assert_eq!(session.failed(), Vec::<usize>::new());
     assert_eq!(session.binding("b"), "6", "B ran against the fixed `n`");
     assert_eq!(session.binding("d"), "107");
@@ -344,9 +344,9 @@ fn inserting_a_unit_that_does_not_parse_keeps_it() {
     assert_eq!(session.binding("b"), "2", "B reads A's `n`, as if X were not there");
 
     session.edit(1, &unit("X", "let n = 5"));
-    let redone = session.rederive(1);
+    let rederived = session.rederive(1);
 
-    assert_eq!(redone, BTreeSet::from([1, 2]), "X, and B, which asked for `n`");
+    assert_eq!(rederived, BTreeSet::from([1, 2]), "X, and B, which asked for `n`");
     assert_eq!(session.binding("b"), "6");
 }
 

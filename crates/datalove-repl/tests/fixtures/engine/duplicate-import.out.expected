@@ -9,7 +9,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": []
   },
@@ -23,7 +25,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": []
   },
@@ -37,7 +41,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": []
   },
@@ -52,7 +58,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "`abs` is imported already, from `sys/std/int`"
+        "NotCompiled": "`abs` is imported already, from `sys/std/int`"
       }
     },
     "environment": []
@@ -68,7 +74,7 @@
     },
     "eval": {
       "Unit": {
-        "SuccessExpr": {
+        "Value": {
           "ty": "int",
           "value": "5"
         }
@@ -86,7 +92,9 @@
       }
     },
     "eval": {
-      "Unit": "Nothing"
+      "Unit": {
+        "Ran": []
+      }
     },
     "environment": []
   }

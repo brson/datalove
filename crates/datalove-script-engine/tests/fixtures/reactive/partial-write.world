@@ -49,4 +49,4 @@ engine
 | unit | this step | note |
 |------|-----------|------|
 | 1 | reruns | tracks bindings by name, so the write to `p.1` counts as a write to all of `p` |
-| 3 | reruns | replays its write after rerunning unit 1 |
+| 3 | reruns | writes `p` again after unit 1 reruns |

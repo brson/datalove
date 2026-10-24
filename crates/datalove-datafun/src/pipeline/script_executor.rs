@@ -16,7 +16,7 @@
 //! let output = executor.execute_fragment(&ir_unit);
 //!
 //! // Query bindings.
-//! if let Some((ty, val)) = executor.get_binding("x") {
+//! if let Some((ty, Some(val))) = executor.get_binding("x") {
 //!     println!("x: {} = {}", ty, val);
 //! }
 //!
@@ -285,7 +285,7 @@ impl ScriptExecutor {
                     Some(name) => {
                         let (ty, value) = self.get_binding(name)
                             .expect("the unit named a binding the executor registered");
-                        return (Some(ty), value);
+                        return (Some(ty), value.expect("an expression unit's value is its own, and held"));
                     }
                     None => "(fragment executed)".S(),
                 },
@@ -461,7 +461,7 @@ impl ScriptExecutor {
     /// The unit it replaces may not have run, and this unit may not run
     /// either, if it reads from a unit that did not run to its end; then the
     /// frame it had is destroyed and the type is `None`.
-    pub fn reexecute_unit(
+    pub fn rerun_unit(
         &mut self,
         index: usize,
         ir_unit: &IrCodeUnit,
@@ -484,7 +484,7 @@ impl ScriptExecutor {
         self.rebuild_script_ctx();
 
         let script_ctx = ir_unit.script_context()
-            .expect("reexecute_unit requires a script code unit");
+            .expect("rerun_unit requires a script code unit");
         let result_id = script_ctx.result;
         let shown_binding = script_ctx.result_name.clone();
         let result_ty = result_id
@@ -540,7 +540,7 @@ impl ScriptExecutor {
                     let name = name.C();
                     let (ty, value) = self.get_binding(&name)
                         .expect("the unit named a binding the executor registered");
-                    return (Some(ty), value);
+                    return (Some(ty), value.expect("an expression unit's value is its own, and held"));
                 }
                 (None, None) => "(fragment executed)".S(),
             },
@@ -639,11 +639,12 @@ impl ScriptExecutor {
             .map(|unit| unit as usize)
     }
 
-    /// Get the type and value of a binding by name.
+    /// Get the type and value of a binding by name; the value is `None` for
+    /// a binding a later unit gave away.
     ///
     /// `None` when the nearest unit binding it did not run to its end, as when
     /// nothing binds it: what that unit bound is not on offer.
-    pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
+    pub fn get_binding(&mut self, name: &str) -> Option<(String, Option<String>)> {
         let provider = self.script_ctx.values.get(name).map(|(unit, _)| *unit)
             .or_else(|| self.script_ctx.slots.get(name).map(|(unit, _)| *unit));
         if provider.is_some_and(|unit| self.units[unit as usize].status != UnitStatus::Ran) {
@@ -654,36 +655,27 @@ impl ScriptExecutor {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = if let Some(v) = self.env.frames.external_value(*unit, *value_id) {
-                self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e))
-            } else {
-                "<moved>".S()
-            };
-            return Some((ty, val));
+            let value = self.env.frames.external_value(*unit, *value_id);
+            return Some((ty, value.map(|v| printed(&mut self.interp, &v))));
         }
 
         if let Some((unit, slot_id)) = self.script_ctx.slots.get(name) {
             let ty = self.script_ctx.slot_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = if let Some(v) = self.env.frames.external_slot(*unit, *slot_id) {
-                self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e))
-            } else {
-                "<moved>".S()
-            };
-            return Some((ty, val));
+            let value = self.env.frames.external_slot(*unit, *slot_id);
+            return Some((ty, value.map(|v| printed(&mut self.interp, &v))));
         }
 
         None
     }
 
-    /// Get all bindings as (name, kind, type, value) tuples.
+    /// Get all bindings as (name, kind, type, value) tuples; the value is
+    /// `None` for a binding a later unit gave away.
     ///
     /// Only the units that ran to their end offer bindings, so a name whose
     /// nearest binding is in one that did not is left out.
-    pub fn get_environment(&mut self) -> Vec<(String, String, String, String)> {
+    pub fn get_environment(&mut self) -> Vec<(String, String, String, Option<String>)> {
         let mut result = Vec::new();
         let ran = |unit: &u32| self.units[*unit as usize].status == UnitStatus::Ran;
 
@@ -691,12 +683,7 @@ impl ScriptExecutor {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = if let Some(v) = self.env.frames.external_value(*unit, *value_id) {
-                self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e))
-            } else {
-                "<moved>".S()
-            };
+            let val = self.env.frames.external_value(*unit, *value_id).map(|v| printed(&mut self.interp, &v));
             result.push((name.C(), "let".S(), ty, val));
         }
 
@@ -704,17 +691,12 @@ impl ScriptExecutor {
             let ty = self.script_ctx.slot_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = if let Some(v) = self.env.frames.external_slot(*unit, *slot_id) {
-                self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e))
-            } else {
-                "<moved>".S()
-            };
+            let val = self.env.frames.external_slot(*unit, *slot_id).map(|v| printed(&mut self.interp, &v));
             result.push((name.C(), "var".S(), ty, val));
         }
 
         for (name, _) in self.script_ctx.functions.iter().filter(|(_, (unit, _))| ran(unit)) {
-            result.push((name.C(), "fun".S(), "function".S(), "-".S()));
+            result.push((name.C(), "fun".S(), "function".S(), Some("-".S())));
         }
 
         result.sort_by(|a, b| a.0.cmp(&b.0));
@@ -776,5 +758,11 @@ fn unit_index(ir_unit: &IrCodeUnit) -> usize {
 
 /// What a unit that was not run reports in place of its output.
 fn blocked_output(on: &[usize]) -> String {
-    format!("(not run: it reads from units {on:?}, which did not run to their end)")
+    format!("(not run: it reads from units {on:?}, which did not finish)")
+}
+
+/// A binding's value, printed.
+fn printed(interp: &mut datalove_datafun_interp::IrInterpreter, value: &datalove_datafun_interp::Value) -> String {
+    interp.pretty_print_value(value)
+        .unwrap_or_else(|e| format!("<print error: {:?}>", e))
 }

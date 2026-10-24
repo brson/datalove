@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "expected expression"
+        "NotCompiled": "expected expression"
       }
     },
     "environment": []
@@ -26,7 +26,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "x",
@@ -56,7 +56,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "cannot find `y` in this scope"
+        "NotCompiled": "cannot find `y` in this scope"
       }
     },
     "environment": [

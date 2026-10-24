@@ -15,10 +15,10 @@
 //!
 //! **The assertion is which units re-ran, not how many.** A count can be right
 //! for the wrong reasons -- two units re-running is the correct answer here and
-//! also what you get if the wrong two run. `asked_names`, recorded in stage A,
+//! also what you get if the wrong two run. `uses`, recorded in stage A,
 //! says what each unit uses, so the expectation is derived from the graph rather
 //! than written down: the units that re-ran must be exactly those whose
-//! `asked_names` intersect what the edited unit provides.
+//! `uses` intersect what the edited unit provides.
 //!
 //! Attribution works by position. `typecheck_script_unit` takes two arguments,
 //! so salsa keys it on an interned tuple and cannot name the unit in the event
@@ -85,7 +85,7 @@ impl Graph {
                 .map(|(name, _, _)| name.as_str(db).S())
                 .chain(output.new_fns(db).iter().map(|(name, _)| name.as_str(db).S()))
                 .collect();
-            let uses: Vec<String> = output.asked_names(db).iter()
+            let uses: Vec<String> = output.uses(db).iter()
                 .map(|name| name.as_str(db).S())
                 .collect();
             graph.provides.push(provides);
@@ -97,7 +97,7 @@ impl Graph {
 
     /// The units whose uses intersect what unit `edited` provides.
     ///
-    /// The edited unit is always in here: `asked_names` records a name the unit
+    /// The edited unit is always in here: `uses` records a name the unit
     /// binds itself, deliberately, and that over-reporting is what makes it
     /// sound. See `script_graph_tests`.
     fn dependents_of(&self, edited: usize) -> BTreeSet<usize> {

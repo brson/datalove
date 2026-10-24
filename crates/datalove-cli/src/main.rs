@@ -726,9 +726,11 @@ impl ScriptCommand {
         }
 
         // Look up the "output" binding from the exports.
-        if let Some((ty, value)) = executor.get_binding("output") {
-            let _ = ty; // Type not needed for display.
-            println!("{}", value);
+        if let Some((_, value)) = executor.get_binding("output") {
+            match value {
+                Some(value) => println!("{}", value),
+                None => bail!("`output` was given away"),
+            }
         }
         // No output binding found - this is okay, just don't print anything.
 
@@ -1097,8 +1099,8 @@ impl ScriptWorldCommand {
                     compiler, compiled, &files, &self.file_path, &line_offsets, &cwd));
             });
             let error = match eval {
-                Eval::Nothing | Eval::Success(_) => None,
-                Eval::SuccessExpr(expr) => {
+                Eval::Ran(_) => None,
+                Eval::Value(expr) => {
                     println!("{}", expr.value);
                     None
                 }
@@ -1106,14 +1108,14 @@ impl ScriptWorldCommand {
                     println!("{}", output);
                     None
                 }
-                Eval::Error(_) => Some(compile_error.expect("a unit that failed to compile was reported")),
+                Eval::NotCompiled(_) => Some(compile_error.expect("a unit that failed to compile was reported")),
                 Eval::Blocked { on } => {
-                    let on: Vec<String> = on.iter().map(|unit| (unit + 1).to_string()).collect();
-                    Some(anyhow!("Not run: reads from unit {}, which did not run to its end", on.join(", ")))
+                    let on: Vec<usize> = on.iter().map(|unit| unit + 1).collect();
+                    Some(anyhow!("{}", datalove::script_engine::blocked_reason(&on)))
                 }
                 // The session is gone, so nothing is left for the rest to run against.
-                Eval::ErrorReset(output) => bail!("{}", output.strip_prefix("Error: ").unwrap_or(&output)),
-                Eval::CrashReset(message) => bail!("{}", message),
+                Eval::RuntimeError(output) => bail!("{}", output.strip_prefix("Error: ").unwrap_or(&output)),
+                Eval::Crashed(message) => bail!("{}", message),
             };
             if let Some(error) = error {
                 if total > 1 {

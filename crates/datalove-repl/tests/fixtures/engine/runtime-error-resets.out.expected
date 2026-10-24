@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Function": {
               "name": "down"
@@ -38,7 +38,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "keep",
@@ -73,7 +73,7 @@
     },
     "eval": {
       "Unit": {
-        "ErrorReset": "Error: stack overflow"
+        "RuntimeError": "Error: stack overflow"
       }
     },
     "environment": []
@@ -89,7 +89,7 @@
     },
     "eval": {
       "Unit": {
-        "Success": [
+        "Ran": [
           {
             "Value": {
               "name": "z",
