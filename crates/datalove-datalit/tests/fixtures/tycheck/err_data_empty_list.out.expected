@@ -27,7 +27,7 @@
           "text": "[]"
         }
       ],
-      "message": "cannot infer type for empty list"
+      "message": "cannot infer what an empty list is a list of"
     }
   ],
   "errors": [

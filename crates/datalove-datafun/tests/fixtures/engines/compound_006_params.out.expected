@@ -25,7 +25,7 @@ Analysis(
                         debuglog s1
                         v5 = const 1u32
                         v6 = const 10f64
-                        v7 = pack Struct0 {v5, v6}
+                        v7 = pack struct {v5, v6}
                         store.copy s2, v7
                         v8 = call u2(s2)
                         debuglog s2
@@ -50,7 +50,7 @@ Analysis(
                         v4 = err v3
                         return v4
                     block2:
-                        v5 = pack () {}
+                        v5 = pack unit {}
                         v6 = ok v5
                         return v6
                     

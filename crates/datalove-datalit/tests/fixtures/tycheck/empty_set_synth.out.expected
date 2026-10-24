@@ -20,7 +20,7 @@
           "text": "#{}"
         }
       ],
-      "message": "cannot infer type for empty set"
+      "message": "cannot infer what an empty set is a set of"
     }
   ],
   "errors": [

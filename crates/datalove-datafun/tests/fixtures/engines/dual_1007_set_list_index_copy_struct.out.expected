@@ -32,10 +32,10 @@ Analysis(
                         drop v11
                         v12 = const 1f64
                         v13 = const 1u32
-                        v14 = pack Struct0 {v12, v13}
+                        v14 = pack struct {v12, v13}
                         v15 = const 2f64
                         v16 = const 2u32
-                        v17 = pack Struct0 {v15, v16}
+                        v17 = pack struct {v15, v16}
                         v18 = list [v14, v17]
                         v19 = const 1index
                         v20 = call u1(v18, v19)
@@ -43,10 +43,10 @@ Analysis(
                         drop v20
                         v21 = const 1f64
                         v22 = const 1u32
-                        v23 = pack Struct0 {v21, v22}
+                        v23 = pack struct {v21, v22}
                         v24 = const 2f64
                         v25 = const 2u32
-                        v26 = pack Struct0 {v24, v25}
+                        v26 = pack struct {v24, v25}
                         v27 = list [v23, v26]
                         v28 = const 9index
                         v29 = call u1(v27, v28)
@@ -76,7 +76,7 @@ Analysis(
                         store.move.tracked s0, v0
                         v1 = const 2.5f64
                         v2 = const 7u32
-                        v3 = pack Struct0 {v1, v2}
+                        v3 = pack struct {v1, v2}
                         v4 = listset s0[p1] = v3
                         branch v4, block2, block1
                     block1:

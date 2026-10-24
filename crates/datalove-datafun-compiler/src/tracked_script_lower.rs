@@ -73,6 +73,24 @@ pub struct UnitLowerRecord {
     /// The unit's functions as compiled, for a later unit's function to
     /// inline one.
     pub functions: Vec<Arc<datalove_datafun_ir::IrCodeUnit>>,
+    /// The type of each binding and function the unit provides, by name, as
+    /// datalove writes it.
+    ///
+    /// For a reader: the language's types, from the typechecker, where the
+    /// IR's `value_types` are how the values are laid out.
+    pub types: Vec<(String, String)>,
+    /// An expression unit's type, as datalove writes it.
+    pub value_type: Option<String>,
+}
+
+impl UnitLowerRecord {
+    /// The type of `name`, which the unit provides, as datalove writes it.
+    pub fn type_of(&self, name: &str) -> &str {
+        self.types.iter()
+            .find(|(bound, _)| bound == name)
+            .map(|(_, ty)| ty.as_str())
+            .unwrap_or_else(|| panic!("the unit provides `{name}`"))
+    }
 }
 
 /// The lowering context a unit sitting after `records` is lowered against.

@@ -41,7 +41,7 @@ Analysis(
                     block4:
                         v8 = load.move.tracked s0
                         v9 = load.move.tracked s1
-                        v10 = pack Tuple2 {v8, v9}
+                        v10 = pack tuple/2 {v8, v9}
                         return v10
                     
                     fn walk_order(p0):
@@ -155,7 +155,7 @@ Analysis(
                     block12:
                         v10 = load.copy s0
                         v11 = load.move.tracked s1
-                        v12 = pack Tuple2 {v10, v11}
+                        v12 = pack tuple/2 {v10, v11}
                         return v12
                     
                     fn main():
@@ -195,7 +195,7 @@ Analysis(
                         v29 = call m0.u3(v28)
                         drop v28
                         v30 = call m0.u1(v0)
-                        v31 = pack Tuple5 {v5, v11, v19, v29, v30}
+                        v31 = pack tuple/5 {v5, v11, v19, v29, v30}
                         drop v0
                         return v31
                 """,

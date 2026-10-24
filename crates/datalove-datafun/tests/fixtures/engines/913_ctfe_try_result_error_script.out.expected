@@ -6,9 +6,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TypeMismatch { expected: \"error\", actual: \"string\" }",
-                    "UnresolvedName(\"R\")",
-                    "UnresolvedName(\"V\")",
+                    "mismatched types: expected `error`, found `string`",
+                    "cannot find `R` in this scope",
+                    "cannot find `V` in this scope",
                 ],
             ),
             ownership: OwnershipResult(

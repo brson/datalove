@@ -56,7 +56,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "UnresolvedName(\"y\")"
+        "Error": "cannot find `y` in this scope"
       }
     },
     "environment": [

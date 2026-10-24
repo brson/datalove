@@ -33,9 +33,9 @@ Analysis(
                         return v5
                     block2:
                         v6 = const "third"
-                        v7 = pack Tuple2 {v3, v6}
-                        v8 = pack Tuple2 {v2, v7}
-                        v9 = pack Tuple2 {v1, v8}
+                        v7 = pack tuple/2 {v3, v6}
+                        v8 = pack tuple/2 {v2, v7}
+                        v9 = pack tuple/2 {v1, v8}
                         v10 = some v9
                         return v10
                 """,

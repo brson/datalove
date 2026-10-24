@@ -116,7 +116,7 @@ Analysis(
                         v2 = const 2int
                         v3 = const 3int
                         v4 = list [v1, v2, v3]
-                        v5 = pack Struct0 {v0, v4}
+                        v5 = pack struct {v0, v4}
                         v6 = const 1int
                         v7 = const 2int
                         v8 = list [v6, v7]
@@ -133,7 +133,7 @@ Analysis(
                         v19 = const 7index
                         v20 = call m0.u1(v15, v19)
                         v21 = call m0.u2(v15)
-                        v22 = pack Tuple4 {v16, v18, v20, v21}
+                        v22 = pack tuple/4 {v16, v18, v20, v21}
                         drop v5
                         drop v15
                         return v22

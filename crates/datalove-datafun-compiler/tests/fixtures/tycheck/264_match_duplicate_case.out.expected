@@ -4,7 +4,7 @@
       "code": "F016",
       "labels": [
         {
-          "message": "duplicate match case",
+          "message": "each variant is matched by one case",
           "span": [
             115,
             116
@@ -12,14 +12,14 @@
           "text": "c"
         }
       ],
-      "message": "mismatched types: expected `unique case`, found `duplicate case 'Red'`"
+      "message": "`Red` has two cases"
     }
   ],
   "errors": [
     {
-      "actual": "duplicate case 'Red'",
-      "expected": "unique case",
-      "kind": "TypeMismatch"
+      "code": "F016",
+      "kind": "Worded",
+      "message": "`Red` has two cases"
     }
   ],
   "judgements": [

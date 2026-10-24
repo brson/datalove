@@ -14,7 +14,7 @@
           {
             "Value": {
               "name": "point",
-              "ty": "{x: int, y: int}",
+              "ty": "{ x: int, y: int }",
               "value": "{x = 10, y = 20}"
             }
           }
@@ -24,7 +24,7 @@
     "environment": [
       {
         "name": "point",
-        "ty": "{x: int, y: int}",
+        "ty": "{ x: int, y: int }",
         "value": "{x = 10, y = 20}"
       }
     ]
@@ -41,7 +41,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "{x: int, y: int}",
+          "ty": "{ x: int, y: int }",
           "value": "{x = 10, y = 20}"
         }
       }
@@ -49,7 +49,7 @@
     "environment": [
       {
         "name": "point",
-        "ty": "{x: int, y: int}",
+        "ty": "{ x: int, y: int }",
         "value": "{x = 10, y = 20}"
       }
     ]
@@ -69,7 +69,7 @@
           {
             "Value": {
               "name": "person",
-              "ty": "{name: string, age: int}",
+              "ty": "{ name: string, age: int }",
               "value": "{name = \"Alice\", age = 30}"
             }
           }
@@ -79,12 +79,12 @@
     "environment": [
       {
         "name": "person",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
-        "ty": "{x: int, y: int}",
+        "ty": "{ x: int, y: int }",
         "value": "{x = 10, y = 20}"
       }
     ]
@@ -101,7 +101,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "{name: string, age: int}",
+          "ty": "{ name: string, age: int }",
           "value": "{name = \"Alice\", age = 30}"
         }
       }
@@ -109,12 +109,12 @@
     "environment": [
       {
         "name": "person",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
-        "ty": "{x: int, y: int}",
+        "ty": "{ x: int, y: int }",
         "value": "{x = 10, y = 20}"
       }
     ]
@@ -134,7 +134,7 @@
           {
             "Value": {
               "name": "multifield",
-              "ty": "{a: int, b: int, c: int, d: int}",
+              "ty": "{ a: int, b: int, c: int, d: int }",
               "value": "{a = 1, b = 2, c = 3, d = 4}"
             }
           }
@@ -144,17 +144,17 @@
     "environment": [
       {
         "name": "multifield",
-        "ty": "{a: int, b: int, c: int, d: int}",
+        "ty": "{ a: int, b: int, c: int, d: int }",
         "value": "{a = 1, b = 2, c = 3, d = 4}"
       },
       {
         "name": "person",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
-        "ty": "{x: int, y: int}",
+        "ty": "{ x: int, y: int }",
         "value": "{x = 10, y = 20}"
       }
     ]
@@ -171,7 +171,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "{a: int, b: int, c: int, d: int}",
+          "ty": "{ a: int, b: int, c: int, d: int }",
           "value": "{a = 1, b = 2, c = 3, d = 4}"
         }
       }
@@ -179,17 +179,17 @@
     "environment": [
       {
         "name": "multifield",
-        "ty": "{a: int, b: int, c: int, d: int}",
+        "ty": "{ a: int, b: int, c: int, d: int }",
         "value": "{a = 1, b = 2, c = 3, d = 4}"
       },
       {
         "name": "person",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
-        "ty": "{x: int, y: int}",
+        "ty": "{ x: int, y: int }",
         "value": "{x = 10, y = 20}"
       }
     ]

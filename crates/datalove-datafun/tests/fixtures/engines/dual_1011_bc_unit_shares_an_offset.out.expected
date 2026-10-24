@@ -22,7 +22,7 @@ Analysis(
                     
                     fn f(p0):
                     block0:
-                        v0 = pack () {}
+                        v0 = pack unit {}
                         v1 = copy p0
                         v2 = ok v0
                         v3, v4, v5 = unwrap_result v2

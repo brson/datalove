@@ -12,21 +12,21 @@
           "text": ".age"
         }
       ],
-      "message": "`{name: string}` has no field `age`"
+      "message": "`{ name: string }` has no field `age`"
     }
   ],
   "errors": [
     {
       "field_name": "age",
       "kind": "FieldNotFound",
-      "type": "{name: string}"
+      "type": "{ name: string }"
     }
   ],
   "judgements": [
     {
       "kind": "variable",
       "name": "s",
-      "type": "{name: string}"
+      "type": "{ name: string }"
     }
   ]
 }

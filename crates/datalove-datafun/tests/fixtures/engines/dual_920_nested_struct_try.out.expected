@@ -28,11 +28,11 @@ Analysis(
                         v3 = none
                         return v3
                     block2:
-                        v4 = pack Struct0 {v1}
+                        v4 = pack struct {v1}
                         v5 = const "middle_name"
-                        v6 = pack Struct0 {v4, v5}
+                        v6 = pack struct {v4, v5}
                         v7 = const "outer_label"
-                        v8 = pack Struct0 {v6, v7}
+                        v8 = pack struct {v6, v7}
                         v9 = some v8
                         return v9
                 """,

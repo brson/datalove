@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 10int
                         v1 = const 2u32
-                        v2 = pack Struct0 {v0, v1}
+                        v2 = pack struct {v0, v1}
                         v3 = getfieldref v2.0
                         v4 = clone *v3
                         debuglog v4
@@ -32,9 +32,9 @@ Analysis(
                         debuglog v10
                         v11 = const 5int
                         v12 = const 1u32
-                        v13 = pack Struct0 {v11, v12}
+                        v13 = pack struct {v11, v12}
                         v14 = const 3u32
-                        v15 = pack Struct0 {v13, v14}
+                        v15 = pack struct {v13, v14}
                         v16 = getfieldref v15.0
                         v17 = getfieldref *v16.0
                         v18 = clone *v17
@@ -44,7 +44,7 @@ Analysis(
                         debuglog *v20
                         v21 = const 10int
                         v22 = const 2u32
-                        v23 = pack Tuple2 {v21, v22}
+                        v23 = pack tuple/2 {v21, v22}
                         v24 = getfieldref v23.0
                         v25 = clone *v24
                         debuglog v25
@@ -61,9 +61,9 @@ Analysis(
                         debuglog v31
                         v32 = const 5int
                         v33 = const 1u32
-                        v34 = pack Tuple2 {v32, v33}
+                        v34 = pack tuple/2 {v32, v33}
                         v35 = const 3u32
-                        v36 = pack Tuple2 {v34, v35}
+                        v36 = pack tuple/2 {v34, v35}
                         v37 = getfieldref v36.0
                         v38 = getfieldref *v37.0
                         v39 = clone *v38
@@ -74,7 +74,7 @@ Analysis(
                         debuglog *v41
                         v42 = const 10int
                         v43 = const 2u32
-                        v44 = pack Tuple2 {v42, v43}
+                        v44 = pack tuple/2 {v42, v43}
                         store.move.tracked s0, v44
                         v45 = getfieldref s0.0
                         v46 = call u1(*v45)
@@ -92,7 +92,7 @@ Analysis(
                         debuglog *v52
                         v53 = const 10int
                         v54 = const 2u32
-                        v55 = pack Struct0 {v53, v54}
+                        v55 = pack struct {v53, v54}
                         store.move.tracked s1, v55
                         v56 = getfieldref s1.0
                         v57 = call u1(*v56)

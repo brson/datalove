@@ -304,6 +304,15 @@ impl IrType {
     }
 }
 
+/// The IR's own syntax for its types, for IR dumps and the compiler's own
+/// messages; what a reader of datalove sees is the language's syntax, from
+/// `datalove_datalit::type_syntax`.
+///
+/// Kept apart from that on purpose, so an IR type is never taken for a
+/// datalove one: every compound is a lowercase name with its parts in angle
+/// brackets -- `list<int>`, `tuple<u8, string>`, `struct<x: f32>`,
+/// `enum<Red, Custom(string)>`, `param<0>` -- and only the scalars and `unit`
+/// are bare words.
 impl std::fmt::Display for IrType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -325,54 +334,65 @@ impl std::fmt::Display for IrType {
             IrType::String => write!(f, "string"),
             IrType::Data => write!(f, "data"),
             IrType::Error => write!(f, "error"),
-            IrType::Tuple(fields) => {
-                write!(f, "(")?;
-                for (i, ty) in fields.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{}", ty)?;
-                }
-                write!(f, ")")
-            }
-            IrType::Struct(fields) => {
-                write!(f, "{{")?;
-                for (i, (name, ty)) in fields.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{}: {}", name, ty)?;
-                }
-                write!(f, "}}")
-            }
+            IrType::Tuple(fields) => write!(f, "tuple<{}>", IrJoined(fields.iter())),
+            IrType::Struct(fields) => write!(f, "struct<{}>", IrFields(fields.iter().map(|(name, ty)| (name, ty)))),
+            IrType::Table(cols) => write!(f, "table<{}>", IrFields(cols.iter().map(|(name, ty)| (name, &**ty)))),
             IrType::Enum(variants) => {
-                write!(f, "enum{{")?;
+                write!(f, "enum<")?;
                 for (i, (name, payload)) in variants.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
-                    if let Some(ty) = payload {
-                        write!(f, "{}({})", name, ty)?;
-                    } else {
-                        write!(f, "{}", name)?;
+                    match payload {
+                        Some(ty) => write!(f, "{}({})", name, ty)?,
+                        None => write!(f, "{}", name)?,
                     }
                 }
-                write!(f, "}}")
+                write!(f, ">")
             }
-            IrType::Atom(name) => write!(f, "atom {}", name),
-            IrType::Term(name, payload) => write!(f, "term {} {}", name, payload),
+            IrType::Atom(name) => write!(f, "atom<{}>", name),
+            IrType::Term(name, payload) => write!(f, "term<{}, {}>", name, payload),
             IrType::List(elem) => write!(f, "list<{}>", elem),
             IrType::Set(elem) => write!(f, "set<{}>", elem),
             IrType::Map(k, v) => write!(f, "map<{}, {}>", k, v),
             IrType::Option(inner) => write!(f, "option<{}>", inner),
             IrType::Result(ok) => write!(f, "result<{}>", ok),
-            IrType::Tensor(elem, rank) => write!(f, "[|{}, {}|]", elem, rank),
+            IrType::Tensor(elem, rank) => write!(f, "tensor<{}, {}>", elem, rank),
             IrType::Ref(inner) => write!(f, "ref<{}>", inner),
-            IrType::Cursor(kind) => write!(f, "cursor<{:?}>", kind),
-            IrType::Param(i) => write!(f, "T{}", i),
-            IrType::Table(cols) => {
-                write!(f, "{{| ")?;
-                for (i, (name, ty)) in cols.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{}: {}", name, ty)?;
-                }
-                write!(f, " |}}")
+            IrType::Cursor(kind) => {
+                let kind = match kind {
+                    CursorKind::Stride => "stride",
+                    CursorKind::Row => "row",
+                    CursorKind::Tree => "tree",
+                };
+                write!(f, "cursor<{}>", kind)
             }
+            IrType::Param(i) => write!(f, "param<{}>", i),
         }
+    }
+}
+
+/// IR types separated by commas.
+struct IrJoined<'a, I: Iterator<Item = &'a IrType> + Clone>(I);
+
+impl<'a, I: Iterator<Item = &'a IrType> + Clone> std::fmt::Display for IrJoined<'a, I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, ty) in self.0.clone().enumerate() {
+            if i > 0 { write!(f, ", ")?; }
+            write!(f, "{}", ty)?;
+        }
+        Ok(())
+    }
+}
+
+/// Named IR types, `name: type`, separated by commas.
+struct IrFields<'a, I: Iterator<Item = (&'a String, &'a IrType)> + Clone>(I);
+
+impl<'a, I: Iterator<Item = (&'a String, &'a IrType)> + Clone> std::fmt::Display for IrFields<'a, I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, (name, ty)) in self.0.clone().enumerate() {
+            if i > 0 { write!(f, ", ")?; }
+            write!(f, "{}: {}", name, ty)?;
+        }
+        Ok(())
     }
 }
 

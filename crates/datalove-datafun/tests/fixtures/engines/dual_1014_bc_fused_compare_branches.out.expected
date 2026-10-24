@@ -30,7 +30,7 @@ Analysis(
                         v13 = const 4index
                         v14 = const 20u32
                         v15 = call u4(v4, v13, v14)
-                        v16 = pack Tuple5 {v6, v8, v10, v12, v15}
+                        v16 = pack tuple/5 {v6, v8, v10, v12, v15}
                         debuglog v16
                         drop v16
                         unit_end_drop v4

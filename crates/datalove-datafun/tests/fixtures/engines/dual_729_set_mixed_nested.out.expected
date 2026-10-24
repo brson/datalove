@@ -16,8 +16,8 @@ Analysis(
                     block0:
                         v0 = const 1int
                         v1 = const 2int
-                        v2 = pack Tuple2 {v0, v1}
-                        v3 = pack Struct0 {v2}
+                        v2 = pack tuple/2 {v0, v1}
+                        v3 = pack struct {v2}
                         store.move.tracked s0, v3
                         v4 = const 99int
                         drop.field s0.0.0

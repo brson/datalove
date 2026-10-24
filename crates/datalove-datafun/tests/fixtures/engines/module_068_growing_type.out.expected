@@ -13,8 +13,8 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn nest(p0, p1):
-                      desc0 = T0
-                      desc1 = list<T0>
+                      desc0 = param<0>
+                      desc1 = list<param<0>>
                     block0:
                         v0 = const 1u32
                         v1 = lt p1, v0
@@ -40,7 +40,7 @@ Analysis(
                         drop v5
                         return v11
                     block5:
-                        v12 = call m0.u0(v5, v7) <list<T0>>
+                        v12 = call m0.u0(v5, v7) <list<param<0>>>
                         v13, v14, v15 = unwrap_result v12
                         branch v15, block7, block6
                     block6:

@@ -61,7 +61,7 @@
           {
             "Value": {
               "name": "a",
-              "ty": "option<i8>",
+              "ty": "?i8",
               "value": "none"
             }
           }
@@ -71,7 +71,7 @@
     "environment": [
       {
         "name": "a",
-        "ty": "option<i8>",
+        "ty": "?i8",
         "value": "none"
       }
     ]
@@ -88,7 +88,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "option<i8>",
+          "ty": "?i8",
           "value": "none"
         }
       }
@@ -96,7 +96,7 @@
     "environment": [
       {
         "name": "a",
-        "ty": "option<i8>",
+        "ty": "?i8",
         "value": "none"
       }
     ]
@@ -116,7 +116,7 @@
           {
             "Slot": {
               "name": "xs",
-              "ty": "list<u32>",
+              "ty": "[u32]",
               "value": "[1]"
             }
           }
@@ -126,12 +126,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "option<i8>",
+        "ty": "?i8",
         "value": "none"
       },
       {
         "name": "xs",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[1]"
       }
     ]
@@ -151,12 +151,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "option<i8>",
+        "ty": "?i8",
         "value": "none"
       },
       {
         "name": "xs",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[1]"
       }
     ]
@@ -176,12 +176,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "option<i8>",
+        "ty": "?i8",
         "value": "none"
       },
       {
         "name": "xs",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[1, 2]"
       }
     ]
@@ -198,7 +198,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "list<u32>",
+          "ty": "[u32]",
           "value": "[1, 2]"
         }
       }
@@ -206,12 +206,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "option<i8>",
+        "ty": "?i8",
         "value": "none"
       },
       {
         "name": "xs",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[1, 2]"
       }
     ]

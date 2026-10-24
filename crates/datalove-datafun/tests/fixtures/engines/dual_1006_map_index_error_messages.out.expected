@@ -24,7 +24,7 @@ Analysis(
                         v7 = %{v5: v6}
                         v8 = const "b"
                         v9 = call u1(v7, v8)
-                        v10 = pack Tuple2 {v4, v9}
+                        v10 = pack tuple/2 {v4, v9}
                         debuglog v10
                         drop v10
                         v11 = const "a"
@@ -36,7 +36,7 @@ Analysis(
                         v17 = list [v16]
                         v18 = const 3index
                         v19 = call u3(v17, v18)
-                        v20 = pack Tuple2 {v15, v19}
+                        v20 = pack tuple/2 {v15, v19}
                         debuglog v20
                         drop v20
                         unit_end

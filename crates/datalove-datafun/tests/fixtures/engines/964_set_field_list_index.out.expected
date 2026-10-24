@@ -19,7 +19,7 @@ Analysis(
                         v2 = const 30u32
                         v3 = list [v0, v1, v2]
                         v4 = const 3u32
-                        v5 = pack Struct0 {v3, v4}
+                        v5 = pack struct {v3, v4}
                         v6 = const 1index
                         v7 = const 99u32
                         v8 = call u0(v5, v6, v7)
@@ -30,7 +30,7 @@ Analysis(
                         v11 = const 30u32
                         v12 = list [v9, v10, v11]
                         v13 = const 3u32
-                        v14 = pack Struct0 {v12, v13}
+                        v14 = pack struct {v12, v13}
                         v15 = const 5index
                         v16 = const 99u32
                         v17 = call u0(v14, v15, v16)

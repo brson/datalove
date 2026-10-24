@@ -18,6 +18,7 @@ Reference for the datalove-datafun compiler architecture.
   - [The ABI Check](#user-content-the-abi-check)
   - [Rider Manifests and Interfaces](#user-content-rider-manifests-and-interfaces)
 - [Script Compilation Pipeline](#user-content-script-compilation-pipeline)
+- [Printing Types and Errors](#user-content-printing-types-and-errors)
 - [IR Types](#user-content-ir-types)
   - [IDs](#user-content-ids)
   - [Code Unit References](#user-content-code-unit-references)
@@ -987,6 +988,39 @@ fixed at lowering time.
 An expression unit that is a bare name computes nothing: lowering records the
 name in `ScriptContext::result_name` with no result value, and the executor
 reads that binding where it lives instead of copying it to print it.
+
+## Printing Types and Errors
+
+**A type a reader sees is written as datalove writes it**, and one place
+spells that syntax out: `TypeSyntax` in `datalove-datalit/src/type_syntax.rs`,
+whose `Display` is the syntax -- `[T]`, `%{K = V}`, `?T`, `(T,)`, `{ x: T }`,
+`enum { atom A, term B T }`. Every form a type is held in maps itself onto it:
+`TypeHint::syntax` as written (an alias stays its name), datalit's
+`Type::syntax` as checked, `PType`'s as half inferred (`_` for what nothing
+decided), and datafun's `Type::syntax`, which adds functions as `fun(A): R`.
+`type_to_string` is that, printed. A new kind of type is a new `TypeSyntax`
+variant, which every form's mapping has to reach before it compiles, and
+`what_is_printed_parses_back_the_same` parses the printer's output and prints
+it again, so the printer cannot drift from the parser.
+
+**`IrType` has a syntax of its own**, for IR dumps and the compiler's own
+faults: every compound a lowercase name with its parts in angle brackets
+(`list<int>`, `tuple<u8, string>`, `param<0>`), so an IR type is never taken
+for a datalove one. Nothing a user sees prints one. The REPL takes its types
+from the typechecker; see
+[repl-architecture.md](repl-architecture.md#user-content-the-engine).
+
+**A type error is worded once.** Each `PendingDiagnostic` is built into a
+diagnostic in one function, `build` in `datafun-tycheck/src/emit.rs`; emitting
+files it, and `format_pending_diagnostics` writes the same diagnostic as a line
+(`line 3, col 7: error[F016]: ...`). A `TypeError` travels without its
+diagnostic -- as the REPL's report of a unit that did not compile, and as a
+type error with no span to render -- and says itself with its `Display`. Where
+a report site words an error from the error alone, as `report_place_error`
+does, the message is that `Display`. A message names a type by its syntax, not
+as `Option` or `list`; where there is no type to show, it says what was wrong
+in words (`ctx.error_worded`), rather than putting the words where F016's types
+go.
 
 ## IR Types
 

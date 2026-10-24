@@ -14,7 +14,7 @@
           {
             "Value": {
               "name": "a",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[1, 2]"
             }
           }
@@ -24,7 +24,7 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       }
     ]
@@ -44,7 +44,7 @@
           {
             "Value": {
               "name": "b",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[1, 2]"
             }
           }
@@ -54,12 +54,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       }
     ]
@@ -81,12 +81,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       }
     ]
@@ -103,7 +103,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "list<int>",
+          "ty": "[int]",
           "value": "[1, 2]"
         }
       }
@@ -111,12 +111,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       }
     ]
@@ -136,14 +136,14 @@
           {
             "Value": {
               "name": "d",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[3, 4]"
             }
           },
           {
             "Value": {
               "name": "e",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[3, 4]"
             }
           }
@@ -153,22 +153,22 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       },
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "e",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       }
     ]
@@ -190,22 +190,22 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       },
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "e",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       }
     ]
@@ -225,7 +225,7 @@
           {
             "Slot": {
               "name": "v",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[5]"
             }
           }
@@ -235,27 +235,27 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       },
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "e",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "v",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[5]"
       }
     ]
@@ -275,7 +275,7 @@
           {
             "Value": {
               "name": "w",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[5]"
             }
           }
@@ -285,32 +285,32 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       },
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "e",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "v",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "w",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[5]"
       }
     ]
@@ -332,32 +332,32 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       },
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "e",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "v",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "w",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[5]"
       }
     ]
@@ -377,32 +377,32 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       },
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "e",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "v",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[6]"
       },
       {
         "name": "w",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[5]"
       }
     ]
@@ -419,7 +419,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "list<int>",
+          "ty": "[int]",
           "value": "[6]"
         }
       }
@@ -427,32 +427,32 @@
     "environment": [
       {
         "name": "a",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "<moved>"
       },
       {
         "name": "b",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2]"
       },
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "e",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       },
       {
         "name": "v",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[6]"
       },
       {
         "name": "w",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[5]"
       }
     ]

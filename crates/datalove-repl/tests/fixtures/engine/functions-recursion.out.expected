@@ -22,7 +22,7 @@
     "environment": [
       {
         "name": "factorial",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -47,7 +47,7 @@
     "environment": [
       {
         "name": "factorial",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -72,7 +72,7 @@
     "environment": [
       {
         "name": "factorial",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -97,7 +97,7 @@
     "environment": [
       {
         "name": "factorial",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -122,7 +122,7 @@
     "environment": [
       {
         "name": "factorial",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]

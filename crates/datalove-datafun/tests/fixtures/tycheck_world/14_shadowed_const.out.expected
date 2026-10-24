@@ -49,12 +49,12 @@
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "'N' is not a const binding"
+          "reason": "`N` is not a const binding"
         },
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "'N' is not a const binding"
+          "reason": "`N` is not a const binding"
         },
         {
           "kind": "NonConstInConstExpr",

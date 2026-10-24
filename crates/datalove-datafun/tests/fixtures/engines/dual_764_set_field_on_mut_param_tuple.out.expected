@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 200u32
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         store.copy s0, v2
                         v3 = call u0(s0)
                         v4 = getfieldref s0.0

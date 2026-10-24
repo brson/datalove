@@ -33,7 +33,7 @@ Analysis(
                         v8 = err v7
                         return v8
                     block5:
-                        v9 = pack () {}
+                        v9 = pack unit {}
                         v10 = ok v9
                         return v10
                     
@@ -54,7 +54,7 @@ Analysis(
                         v4 = none
                         return v4
                     block5:
-                        v5 = pack () {}
+                        v5 = pack unit {}
                         v6 = some v5
                         return v6
                     
@@ -74,7 +74,7 @@ Analysis(
                         v9 = err v7
                         return v9
                     block4:
-                        v10 = pack () {}
+                        v10 = pack unit {}
                         v11 = ok v10
                         return v11
                     
@@ -94,7 +94,7 @@ Analysis(
                         v7 = none
                         return v7
                     block4:
-                        v8 = pack () {}
+                        v8 = pack unit {}
                         v9 = some v8
                         return v9
                 """,

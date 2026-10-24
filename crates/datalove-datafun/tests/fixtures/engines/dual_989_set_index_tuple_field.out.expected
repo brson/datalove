@@ -16,10 +16,10 @@ Analysis(
                     block0:
                         v0 = const 1u32
                         v1 = const 2u32
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         v3 = const 3u32
                         v4 = const 4u32
-                        v5 = pack Tuple2 {v3, v4}
+                        v5 = pack tuple/2 {v3, v4}
                         v6 = list [v2, v5]
                         v7 = const 0index
                         v8 = const 99u32
@@ -28,10 +28,10 @@ Analysis(
                         drop v9
                         v10 = const 1u32
                         v11 = const 2u32
-                        v12 = pack Tuple2 {v10, v11}
+                        v12 = pack tuple/2 {v10, v11}
                         v13 = const 3u32
                         v14 = const 4u32
-                        v15 = pack Tuple2 {v13, v14}
+                        v15 = pack tuple/2 {v13, v14}
                         v16 = list [v12, v15]
                         v17 = const 1index
                         v18 = const 77u32

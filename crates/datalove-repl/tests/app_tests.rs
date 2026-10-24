@@ -193,7 +193,7 @@ fn multiline_mode_spans_one_submission() {
         eval: repl::Eval::Unit(repl::script::Eval::Success(vec![repl::script::EvalBinding::Function {
             name: "f".to_string(),
         }])),
-        environment: vec![binding("f", "function", "-")],
+        environment: vec![binding("f", "fun(): int", "-")],
         session: Vec::new(),
         step: Vec::new(),
     });

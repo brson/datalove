@@ -27,7 +27,7 @@ Analysis(
                         v0 = copy p0
                         v1 = copy p1
                         v2 = copy p2
-                        v3 = pack Struct0 {v0, v1, v2}
+                        v3 = pack struct {v0, v1, v2}
                         store.copy s0, v3
                         v4 = load.copy s0
                         store.copy s0, v4

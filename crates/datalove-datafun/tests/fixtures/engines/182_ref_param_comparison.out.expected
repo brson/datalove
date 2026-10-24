@@ -40,7 +40,7 @@ Analysis(
                         v3 = call m0.u0(v0, v2)
                         v4 = call m0.u0(v0, v1)
                         v5 = call m0.u0(v0, v0)
-                        v6 = pack Tuple3 {v3, v4, v5}
+                        v6 = pack tuple/3 {v3, v4, v5}
                         unit_end_drop v0
                         unit_end_drop v1
                         unit_end_drop v2

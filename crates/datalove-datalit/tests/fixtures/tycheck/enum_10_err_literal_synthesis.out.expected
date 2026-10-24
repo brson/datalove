@@ -27,7 +27,7 @@
           "text": "enum { atom Ready }"
         }
       ],
-      "message": "cannot infer type for enum literal"
+      "message": "cannot infer which enum this literal is of"
     }
   ],
   "errors": [

@@ -4,6 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use bct::text::InternedText;
 use bct::text::ByteSpan;
+use crate::type_syntax::TypeSyntax;
 
 /// Span entry for a parsed expression.
 ///
@@ -146,6 +147,54 @@ pub enum TypeHint<'db> {
     ParseError(TypeHintParseError<'db>),
 }
 
+
+impl<'db> TypeHint<'db> {
+    /// This type as written, shaped as datalove writes it; see
+    /// [`crate::type_syntax`]. An alias stays its name, and a type that did
+    /// not parse says so where it stood.
+    pub fn syntax(&self, db: &'db dyn salsa::Database) -> TypeSyntax<'db> {
+        use std::borrow::Cow::Borrowed;
+        let boxed = |hint: &TypeHint<'db>| Box::new(hint.syntax(db));
+        let fields = |fields: &[TypeHintNamedField<'db>]| fields.iter()
+            .map(|field| (Borrowed(field.name.as_str(db)), field.type_hint.syntax(db)))
+            .collect();
+        match self {
+            TypeHint::Bool => TypeSyntax::word("bool"),
+            TypeHint::U8 => TypeSyntax::word("u8"),
+            TypeHint::I8 => TypeSyntax::word("i8"),
+            TypeHint::U16 => TypeSyntax::word("u16"),
+            TypeHint::I16 => TypeSyntax::word("i16"),
+            TypeHint::U32 => TypeSyntax::word("u32"),
+            TypeHint::I32 => TypeSyntax::word("i32"),
+            TypeHint::U64 => TypeSyntax::word("u64"),
+            TypeHint::I64 => TypeSyntax::word("i64"),
+            TypeHint::Index => TypeSyntax::word("index"),
+            TypeHint::Offset => TypeSyntax::word("offset"),
+            TypeHint::F32 => TypeSyntax::word("f32"),
+            TypeHint::F64 => TypeSyntax::word("f64"),
+            TypeHint::Int => TypeSyntax::word("int"),
+            TypeHint::String => TypeSyntax::word("string"),
+            TypeHint::Data => TypeSyntax::word("data"),
+            TypeHint::Error => TypeSyntax::word("error"),
+            TypeHint::Alias(alias) => TypeSyntax::word(alias.name.as_str(db)),
+            TypeHint::ParseError(e) => TypeSyntax::word(fmt!("<parse-error: {}>", e.message.as_str(db))),
+            TypeHint::AnonTuple(t) => TypeSyntax::Tuple(t.fields.iter().map(|f| f.syntax(db)).collect()),
+            TypeHint::AnonStruct(s) => TypeSyntax::Struct(fields(&s.fields)),
+            TypeHint::Table(t) => TypeSyntax::Table(fields(&t.columns)),
+            TypeHint::List(l) => TypeSyntax::List(boxed(&l.element_type)),
+            TypeHint::Set(s) => TypeSyntax::Set(boxed(&s.element_type)),
+            TypeHint::Map(m) => TypeSyntax::Map(boxed(&m.key_type), boxed(&m.value_type)),
+            TypeHint::Option(o) => TypeSyntax::Option(boxed(&o.inner_type)),
+            TypeHint::Result(r) => TypeSyntax::Result(boxed(&r.inner_type)),
+            TypeHint::Tensor(t) => TypeSyntax::Tensor(boxed(&t.element_type), t.rank),
+            TypeHint::Atom(a) => TypeSyntax::Atom(Borrowed(a.name.as_str(db))),
+            TypeHint::Term(t) => TypeSyntax::Term(Borrowed(t.name.as_str(db)), boxed(&t.payload)),
+            TypeHint::Enum(e) => TypeSyntax::Enum(e.variants.iter()
+                .map(|v| (Borrowed(v.name.as_str(db)), v.payload.as_ref().map(|p| p.syntax(db))))
+                .collect()),
+        }
+    }
+}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]

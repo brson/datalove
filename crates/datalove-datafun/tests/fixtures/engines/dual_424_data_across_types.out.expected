@@ -83,7 +83,7 @@ Analysis(
                         drop v34
                         v35 = const 1int
                         v36 = const 2int
-                        v37 = pack Tuple2 {v35, v36}
+                        v37 = pack tuple/2 {v35, v36}
                         v38 = data_from v37
                         debuglog v38
                         drop v38
@@ -118,7 +118,7 @@ Analysis(
                         v57 = data_from v56
                         v58 = const "heap"
                         v59 = data_from v58
-                        v60 = pack Tuple2 {v57, v59}
+                        v60 = pack tuple/2 {v57, v59}
                         debuglog v60
                         drop v60
                         v61 = const true
@@ -143,7 +143,7 @@ Analysis(
                     block0:
                         v0 = clone p0
                         v1 = move p0
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         return v2
                     
                     fn through(p0):

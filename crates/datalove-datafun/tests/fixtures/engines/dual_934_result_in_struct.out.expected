@@ -34,7 +34,7 @@ Analysis(
                         drop v3
                         return v8
                     block2:
-                        v9 = pack Struct0 {v3, v4, v5}
+                        v9 = pack struct {v3, v4, v5}
                         v10 = ok v9
                         return v10
                 """,

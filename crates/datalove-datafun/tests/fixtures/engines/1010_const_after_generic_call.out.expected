@@ -13,12 +13,12 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn dup(p0):
-                      desc0 = T0
-                      desc1 = (T0, T0)
+                      desc0 = param<0>
+                      desc1 = tuple<param<0>, param<0>>
                     block0:
                         v0 = clone p0
                         v1 = move p0
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         return v2
                     
                     fn f():

@@ -14,7 +14,8 @@
 use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
-use crate::context::TypeContext;
+use datalit::tycheck::OpenLiteral;
+use crate::context::{TypeContext, Wrapper};
 use crate::check::check_expr;
 use crate::types::*;
 
@@ -85,8 +86,8 @@ fn require_option_return_type<'db>(
         return Err(ctx.error_try_return_type_mismatch(
             expr,
             op_str,
-            "Option",
-            "no enclosing function",
+            Wrapper::Option,
+            None,
         ));
     };
     match expected_return {
@@ -94,8 +95,8 @@ fn require_option_return_type<'db>(
         _ => Err(ctx.error_try_return_type_mismatch(
             expr,
             op_str,
-            "Option",
-            &type_to_string(db, &expected_return)
+            Wrapper::Option,
+            Some(&type_to_string(db, &expected_return)),
         )),
     }
 }
@@ -115,8 +116,8 @@ fn require_result_return_type<'db>(
         return Err(ctx.error_try_return_type_mismatch(
             expr,
             op_str,
-            "Result",
-            "no enclosing function",
+            Wrapper::Result,
+            None,
         ));
     };
     match expected_return {
@@ -124,8 +125,8 @@ fn require_result_return_type<'db>(
         _ => Err(ctx.error_try_return_type_mismatch(
             expr,
             op_str,
-            "Result",
-            &type_to_string(db, &expected_return)
+            Wrapper::Result,
+            Some(&type_to_string(db, &expected_return)),
         )),
     }
 }
@@ -212,18 +213,18 @@ pub(crate) fn inferred_type<'db>(
 
 /// Report an expression that leaves a type open with nothing to decide it.
 fn report_open<'db>(ctx: &mut TypeContext<'db>, open: ExprFun<'db>) -> TypeError {
-    let message = match open.kind() {
-        ExprFunKind::None(_) => "cannot infer type for None value",
-        ExprFunKind::Er(_) => "cannot infer type for Er value",
-        ExprFunKind::EnumLiteral(_) => "enum literal requires type context",
-        ExprFunKind::List(_) => "cannot infer type for empty list",
-        ExprFunKind::Set(_) => "cannot infer type for empty set",
-        ExprFunKind::Map(_) => "cannot infer type for empty map",
-        ExprFunKind::Tensor(_) => "cannot infer type for empty tensor",
-        ExprFunKind::Table(_) => "cannot infer type for table with no rows",
+    let open_literal = match open.kind() {
+        ExprFunKind::None(_) => OpenLiteral::None,
+        ExprFunKind::Er(_) => OpenLiteral::Er,
+        ExprFunKind::EnumLiteral(_) => OpenLiteral::Enum,
+        ExprFunKind::List(_) => OpenLiteral::List,
+        ExprFunKind::Set(_) => OpenLiteral::Set,
+        ExprFunKind::Map(_) => OpenLiteral::Map,
+        ExprFunKind::Tensor(_) => OpenLiteral::Tensor,
+        ExprFunKind::Table(_) => OpenLiteral::Table,
         _ => unreachable!("no other expression leaves a type open"),
     };
-    ctx.error_cannot_synthesize(open, message)
+    ctx.error_cannot_synthesize(open, open_literal.message())
 }
 
 /// Whether an expression builds a value out of the expressions inside it.
@@ -363,7 +364,7 @@ pub fn synthesize_unhinted<'db>(
             Ok(ty)
         }
         ExprFunKind::None(_) => {
-            Err(ctx.error_cannot_synthesize(expr, "cannot infer type for None value"))
+            Err(ctx.error_cannot_synthesize(expr, OpenLiteral::None.message()))
         }
         ExprFunKind::Int(_) => {
             // Integer literals synthesize to bigint for REPL ergonomics.
@@ -442,8 +443,8 @@ pub fn synthesize_unhinted<'db>(
             Ok(Type::Datalit(result_ty))
         }
         ExprFunKind::Er(_) => {
-            // Er needs a type hint to know the Result's ok type.
-            Err(ctx.error_cannot_synthesize(expr, "cannot infer type for Er value"))
+            // `er` needs a hint to say what the result holds.
+            Err(ctx.error_cannot_synthesize(expr, OpenLiteral::Er.message()))
         }
         ExprFunKind::Data(data_expr) => {
             synthesize_inline_data(ctx, expr, data_expr)
@@ -1126,14 +1127,14 @@ fn validate_comptime_arg<'db>(
             let name = place.root;
             // Must be a const binding, not a let/var/parameter.
             if !ctx.is_const_binding(name) {
-                let reason = format!("'{}' is not a const binding", name.as_str(db));
-                report_comptime_arg(ctx, arg, fmt!("`{}` is not a const binding", name.as_str(db)));
+                let reason = fmt!("`{}` is not a const binding", name.as_str(db));
+                report_comptime_arg(ctx, arg, reason.C());
                 ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
             }
         }
         _ => {
-            let reason = "comptime argument must be a const binding name".to_string();
-            report_comptime_arg(ctx, arg, S("the argument to a const parameter must name a const"));
+            let reason = S("the argument to a const parameter must name a const");
+            report_comptime_arg(ctx, arg, reason.C());
             ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
         }
     }
@@ -1238,7 +1239,7 @@ fn synthesize_try_option<'db>(
             return Err(ctx.error_try_type_mismatch(
                 expr,
                 "?",
-                "Option",
+                Wrapper::Option,
                 &type_to_string(db, &operand_ty)
             ));
         }
@@ -1275,7 +1276,7 @@ fn synthesize_try_result<'db>(
             return Err(ctx.error_try_type_mismatch(
                 expr,
                 "!",
-                "Result",
+                Wrapper::Result,
                 &type_to_string(db, &operand_ty)
             ));
         }
@@ -1513,7 +1514,7 @@ pub(crate) fn resolve_index_types<'db>(
                 Type::Datalit(datalit::tycheck::Type::Index),
             ))
         }
-        _ => Err(format!("indexing requires list, map, or tensor type, got {}", type_to_string(db, base_ty))),
+        _ => Err(format!("`{}` cannot be indexed; a list `[T]`, a map `%{{K = V}}` or a tensor `[|T, N|]` can", type_to_string(db, base_ty))),
     }
 }
 

@@ -17,11 +17,11 @@ Analysis(
                         v0 = const 1u32
                         v1 = const 10u32
                         v2 = const 20u32
-                        v3 = pack Struct0 {v1, v2}
+                        v3 = pack struct {v1, v2}
                         v4 = const 2u32
                         v5 = const 30u32
                         v6 = const 40u32
-                        v7 = pack Struct0 {v5, v6}
+                        v7 = pack struct {v5, v6}
                         v8 = %{v0: v3, v4: v7}
                         v9 = const 1u32
                         v10 = const 99u32

@@ -16,36 +16,32 @@
  [38;5;240m   │[0m 
  [38;5;240m   │[0m [38;5;115mNote[0m: write `[i]?` or `[i]!` to replace an element that is already there
 [38;5;246m────╯[0m
-[31m[F011] Error:[0m indexing requires list, map, or tensor type, got i32
+[31m[F011] Error:[0m `i32` cannot be indexed; a list `[T]`, a map `%{K = V}` or a tensor `[|T, N|]` can
     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/87_set_target_errors.dfs:17:5 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m17 │[0m [38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;187mn[0m[38;5;187m[[0m[38;5;187mj[0m[38;5;187m][0m[38;5;187m![0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m5[0m
  [38;5;240m   │[0m     [38;5;187m─[0m[38;5;187m─[0m[38;5;187m┬[0m[38;5;187m─[0m[38;5;187m─[0m  
  [38;5;240m   │[0m       [38;5;187m╰[0m[38;5;187m─[0m[38;5;187m─[0m[38;5;187m─[0m[38;5;187m─[0m this cannot be indexed
 [38;5;246m────╯[0m
-[31m[F011] Error:[0m indexing requires list, map, or tensor type, got i32
+[31m[F011] Error:[0m `i32` cannot be indexed; a list `[T]`, a map `%{K = V}` or a tensor `[|T, N|]` can
     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/87_set_target_errors.dfs:18:5 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m18 │[0m [38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;218mn[0m[38;5;218m[[0m[38;5;218mj[0m[38;5;218m][0m[38;5;218m![0m[38;5;218m[[0m[38;5;218mj[0m[38;5;218m][0m[38;5;218m![0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m5[0m
  [38;5;240m   │[0m     [38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m┬[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m  
  [38;5;240m   │[0m         [38;5;218m╰[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m[38;5;218m─[0m this cannot be indexed
 [38;5;246m────╯[0m
-[31m[F049] Error:[0m `set` through an index with `?` requires function to return Option, found `!()`
+[31m[F049] Error:[0m `set` through an index with `?` can return early, so the function has to return an option `?T`, and it returns `!()`
     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/87_set_target_errors.dfs:23:7 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m23 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;158my[0m[38;5;158ms[0m[38;5;158m[[0m[38;5;158mi[0m[38;5;158m][0m[38;5;158m?[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m5[0m
  [38;5;240m   │[0m       [38;5;158m─[0m[38;5;158m─[0m[38;5;158m─[0m[38;5;158m┬[0m[38;5;158m─[0m[38;5;158m─[0m  
  [38;5;240m   │[0m          [38;5;158m╰[0m[38;5;158m─[0m[38;5;158m─[0m[38;5;158m─[0m[38;5;158m─[0m this index can return early
- [38;5;240m   │[0m 
- [38;5;240m   │[0m [38;5;115mNote[0m: function must return Option to use `?`
 [38;5;246m────╯[0m
-[31m[F049] Error:[0m `set` through an index with `!` requires function to return Result, found `()`
+[31m[F049] Error:[0m `set` through an index with `!` can return early, so the function has to return a result `!T`, and it returns `()`
     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/87_set_target_errors.dfs:29:7 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m29 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;189my[0m[38;5;189ms[0m[38;5;189m[[0m[38;5;189mi[0m[38;5;189m][0m[38;5;189m![0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m5[0m
  [38;5;240m   │[0m       [38;5;189m─[0m[38;5;189m─[0m[38;5;189m─[0m[38;5;189m┬[0m[38;5;189m─[0m[38;5;189m─[0m  
  [38;5;240m   │[0m          [38;5;189m╰[0m[38;5;189m─[0m[38;5;189m─[0m[38;5;189m─[0m[38;5;189m─[0m this index can return early
- [38;5;240m   │[0m 
- [38;5;240m   │[0m [38;5;115mNote[0m: function must return Result to use `!`
 [38;5;246m────╯[0m
 Error: Type error

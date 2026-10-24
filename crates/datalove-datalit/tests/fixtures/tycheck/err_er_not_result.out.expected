@@ -26,7 +26,7 @@
       "code": "T032",
       "labels": [
         {
-          "message": "expected `u32`, found `er`",
+          "message": "expected `u32`, found `!_`",
           "span": [
             0,
             20
@@ -39,7 +39,7 @@
   ],
   "errors": [
     {
-      "actual": "er",
+      "actual": "!_",
       "expected": "u32",
       "kind": "TypeMismatch"
     }

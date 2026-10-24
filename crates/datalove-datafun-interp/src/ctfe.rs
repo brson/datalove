@@ -529,7 +529,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 })
             }
 
-            _ => Err(CtfeError::UnsupportedType(format!("{:?}", ir_type))),
+            _ => Err(CtfeError::UnsupportedType(format!("{}", ir_type))),
         }
     }
 }

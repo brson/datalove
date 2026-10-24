@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const true
                         v1 = const "s"
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         (v3, v4) = unpack v2
                         store.copy s0, v3
                         store.move.tracked s1, v4
@@ -27,13 +27,13 @@ Analysis(
                         store.move.tracked s1, v6
                         v7 = load.copy s0
                         v8 = load.move.tracked s1
-                        v9 = pack Tuple2 {v7, v8}
+                        v9 = pack tuple/2 {v7, v8}
                         debuglog v9
                         drop v9
                         v10 = const "x"
                         v11 = const 1int
                         v12 = list [v11]
-                        v13 = pack Struct0 {v10, v12}
+                        v13 = pack struct {v10, v12}
                         (v14, v15) = unpack v13
                         store.move.tracked s2, v14
                         store.move.tracked s3, v15
@@ -47,7 +47,7 @@ Analysis(
                         store.move.tracked s3, v19
                         v20 = load.move.tracked s2
                         v21 = load.move.tracked s3
-                        v22 = pack Tuple2 {v20, v21}
+                        v22 = pack tuple/2 {v20, v21}
                         debuglog v22
                         drop v22
                         v23 = const "f"

@@ -24,7 +24,7 @@
           "text": "{|\n  x, y\n|}"
         }
       ],
-      "message": "cannot infer type for table with no rows"
+      "message": "cannot infer the column types of a table with no rows"
     }
   ],
   "errors": [

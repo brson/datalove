@@ -55,7 +55,7 @@ Analysis(
                         v5 = call m0.u1()
                         v6 = call u1()
                         v7 = call u2()
-                        v8 = pack Tuple3 {v5, v6, v7}
+                        v8 = pack tuple/3 {v5, v6, v7}
                         debuglog v8
                         drop v8
                         unit_end_drop v4

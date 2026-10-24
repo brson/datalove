@@ -20,7 +20,7 @@ Analysis(
                         v3 = const "key2"
                         v4 = const 200int
                         v5 = %{v1: v2, v3: v4}
-                        v6 = pack Struct0 {v0, v5}
+                        v6 = pack struct {v0, v5}
                         v7 = getfieldref v6.0
                         debuglog *v7
                         v8 = getfieldref v6.1

@@ -28,10 +28,10 @@ Analysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         v3 = const 30u32
                         v4 = const 40u32
-                        v5 = pack Tuple2 {v3, v4}
+                        v5 = pack tuple/2 {v3, v4}
                         v6 = list [v2, v5]
                         store.move.tracked s0, v6
                         v7 = const 0index

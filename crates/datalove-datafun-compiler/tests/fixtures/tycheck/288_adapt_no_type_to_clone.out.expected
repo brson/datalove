@@ -12,7 +12,7 @@
           "text": "none"
         }
       ],
-      "message": "cannot infer type for None value"
+      "message": "cannot infer what `none` is an option of"
     }
   ],
   "errors": [

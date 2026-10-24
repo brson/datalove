@@ -13,30 +13,30 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn identity(p0):
-                      desc0 = T0
+                      desc0 = param<0>
                     block0:
                         v0 = move p0
                         return v0
                     
                     fn pick_first(p0, p1):
-                      desc0 = T0
+                      desc0 = param<0>
                     block0:
                         v0 = move p0
                         drop p1
                         return v0
                     
                     fn second(p0, p1):
-                      desc0 = T0
-                      desc1 = T1
+                      desc0 = param<0>
+                      desc1 = param<1>
                     block0:
                         v0 = move p1
                         drop p0
                         return v0
                     
                     fn twice(p0):
-                      desc0 = T0
+                      desc0 = param<0>
                     block0:
-                        v0 = call m0.u0(p0) <T0>
+                        v0 = call m0.u0(p0) <param<0>>
                         return v0
                     
                     fn main():
@@ -55,7 +55,7 @@ Analysis(
                         v11 = call m0.u2(v9, v10) <string, u32>
                         v12 = const "through two"
                         v13 = call m0.u3(v12) <string>
-                        v14 = pack Tuple6 {v1, v3, v5, v8, v11, v13}
+                        v14 = pack tuple/6 {v1, v3, v5, v8, v11, v13}
                         return v14
                 """,
             ),

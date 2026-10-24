@@ -22,7 +22,7 @@
     "environment": [
       {
         "name": "fill",
-        "ty": "function",
+        "ty": "fun(string, string): ()",
         "value": "-"
       }
     ]
@@ -52,7 +52,7 @@
     "environment": [
       {
         "name": "fill",
-        "ty": "function",
+        "ty": "fun(string, string): ()",
         "value": "-"
       },
       {
@@ -77,7 +77,7 @@
     "environment": [
       {
         "name": "fill",
-        "ty": "function",
+        "ty": "fun(string, string): ()",
         "value": "-"
       },
       {
@@ -107,7 +107,7 @@
     "environment": [
       {
         "name": "fill",
-        "ty": "function",
+        "ty": "fun(string, string): ()",
         "value": "-"
       },
       {
@@ -142,7 +142,7 @@
     "environment": [
       {
         "name": "fill",
-        "ty": "function",
+        "ty": "fun(string, string): ()",
         "value": "-"
       },
       {
@@ -172,7 +172,7 @@
     "environment": [
       {
         "name": "fill",
-        "ty": "function",
+        "ty": "fun(string, string): ()",
         "value": "-"
       },
       {
@@ -207,7 +207,7 @@
     "environment": [
       {
         "name": "fill",
-        "ty": "function",
+        "ty": "fun(string, string): ()",
         "value": "-"
       },
       {

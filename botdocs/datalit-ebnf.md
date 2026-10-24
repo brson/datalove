@@ -56,7 +56,7 @@ scalar_type    = "bool" | "u8" | "u16" | "u32" | "u64"
 option_type    = "?", ws, type ;
 result_type    = "!", ws, type ;
 list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
-tuple_type     = "(", ws, [ type_list ], ws, ")" ;  (* (T) is the 1-tuple *)
+tuple_type     = "(", ws, [ type_list ], ws, ")" ;  (* (T,) is the 1-tuple *)
 struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
 table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
 map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;  (* D044 *)

@@ -32,8 +32,8 @@ Analysis(
                         drop v1
                         return v5
                     block2:
-                        v6 = pack Tuple2 {v2, v3}
-                        v7 = pack Struct0 {v1, v6}
+                        v6 = pack tuple/2 {v2, v3}
+                        v7 = pack struct {v1, v6}
                         v8 = some v7
                         return v8
                 """,

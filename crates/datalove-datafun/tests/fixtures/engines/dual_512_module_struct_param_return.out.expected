@@ -34,7 +34,7 @@ Analysis(
                         v13 = err v12
                         return v13
                     block4:
-                        v14 = pack Struct0 {v2, v9}
+                        v14 = pack struct {v2, v9}
                         v15 = ok v14
                         return v15
                 """,
@@ -57,7 +57,7 @@ Analysis(
                     block0:
                         v0 = const 5u32
                         v1 = const 10u32
-                        v2 = pack Struct0 {v0, v1}
+                        v2 = pack struct {v0, v1}
                         v3 = call m0.u0(v2)
                         debuglog v3
                         drop v3

@@ -24,7 +24,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "UnresolvedName(\"lt\")",
+                    "cannot find `lt` in this scope",
                 ],
             ),
             ownership: OwnershipResult(

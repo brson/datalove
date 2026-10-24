@@ -24,6 +24,7 @@ pub use api::{
 pub use types::{
     // Type representation.
     Type,
+    OpenLiteral,
     TypeAnonTuple,
     TypeAnonStruct,
     TypeNamedField,

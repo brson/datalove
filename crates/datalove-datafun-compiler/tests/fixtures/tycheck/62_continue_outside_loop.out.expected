@@ -12,7 +12,7 @@
           "text": "continue"
         }
       ],
-      "message": "`continue` used outside of loop",
+      "message": "`continue` outside of a loop",
       "notes": [
         "continue can only be used inside loop blocks"
       ]

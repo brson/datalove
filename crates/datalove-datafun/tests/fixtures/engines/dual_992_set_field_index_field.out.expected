@@ -16,13 +16,13 @@ Analysis(
                     block0:
                         v0 = const 1u32
                         v1 = const 2u32
-                        v2 = pack Struct0 {v0, v1}
+                        v2 = pack struct {v0, v1}
                         v3 = const 3u32
                         v4 = const 4u32
-                        v5 = pack Struct0 {v3, v4}
+                        v5 = pack struct {v3, v4}
                         v6 = list [v2, v5]
                         v7 = const 2u32
-                        v8 = pack Struct0 {v6, v7}
+                        v8 = pack struct {v6, v7}
                         v9 = const 0index
                         v10 = const 99u32
                         v11 = call u0(v8, v9, v10)
@@ -30,13 +30,13 @@ Analysis(
                         drop v11
                         v12 = const 1u32
                         v13 = const 2u32
-                        v14 = pack Struct0 {v12, v13}
+                        v14 = pack struct {v12, v13}
                         v15 = const 3u32
                         v16 = const 4u32
-                        v17 = pack Struct0 {v15, v16}
+                        v17 = pack struct {v15, v16}
                         v18 = list [v14, v17]
                         v19 = const 2u32
-                        v20 = pack Struct0 {v18, v19}
+                        v20 = pack struct {v18, v19}
                         v21 = const 1index
                         v22 = const 77u32
                         v23 = call u0(v20, v21, v22)
@@ -44,13 +44,13 @@ Analysis(
                         drop v23
                         v24 = const 1u32
                         v25 = const 2u32
-                        v26 = pack Struct0 {v24, v25}
+                        v26 = pack struct {v24, v25}
                         v27 = const 3u32
                         v28 = const 4u32
-                        v29 = pack Struct0 {v27, v28}
+                        v29 = pack struct {v27, v28}
                         v30 = list [v26, v29]
                         v31 = const 2u32
-                        v32 = pack Struct0 {v30, v31}
+                        v32 = pack struct {v30, v31}
                         v33 = const 5index
                         v34 = const 77u32
                         v35 = call u0(v32, v33, v34)

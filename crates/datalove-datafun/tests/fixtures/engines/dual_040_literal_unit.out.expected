@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = pack () {}
+                        v0 = pack unit {}
                         debuglog v0
                         unit_end
                 """,

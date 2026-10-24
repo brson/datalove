@@ -22,7 +22,7 @@
     "environment": [
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -50,12 +50,12 @@
     "environment": [
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -80,12 +80,12 @@
     "environment": [
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -110,12 +110,12 @@
     "environment": [
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -140,12 +140,12 @@
     "environment": [
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -170,12 +170,12 @@
     "environment": [
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -203,17 +203,17 @@
     "environment": [
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "multiply",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       }
     ]
@@ -241,22 +241,22 @@
     "environment": [
       {
         "name": "add",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       },
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "multiply",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       }
     ]
@@ -284,27 +284,27 @@
     "environment": [
       {
         "name": "add",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       },
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       },
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "multiply",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       }
     ]
@@ -329,27 +329,27 @@
     "environment": [
       {
         "name": "add",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       },
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       },
       {
         "name": "double",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "inc",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "multiply",
-        "ty": "function",
+        "ty": "fun(int, int): int",
         "value": "-"
       }
     ]

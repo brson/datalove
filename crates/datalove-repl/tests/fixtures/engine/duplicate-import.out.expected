@@ -52,7 +52,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "DuplicateImport { name: \"abs\", first: \"sys/std/int\", second: \"sys/std/i32\" }"
+        "Error": "`abs` is imported already, from `sys/std/int`"
       }
     },
     "environment": []

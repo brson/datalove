@@ -15,6 +15,8 @@
 use rmx::prelude::*;
 use bct::text::InternedText;
 use crate::ast::TypeHint;
+use crate::type_syntax::TypeSyntax;
+use std::borrow::Cow;
 
 // ============================================================================
 // Type Representation
@@ -164,6 +166,23 @@ pub enum TypeError {
     IntOutOfRange,
     VariantNotFound(String),
     ArityMismatch { expected: usize, actual: usize },
+}
+
+impl std::fmt::Display for TypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeError::TypeMismatch { expected, actual } => {
+                write!(f, "mismatched types: expected `{expected}`, found `{actual}`")
+            }
+            TypeError::CannotSynthesize => write!(f, "cannot infer a type here"),
+            TypeError::MissingField(name) => write!(f, "missing field `{name}`"),
+            TypeError::ExtraField(name) => write!(f, "unexpected field `{name}`"),
+            TypeError::FieldOrderMismatch => write!(f, "the fields are not in the order the type has them"),
+            TypeError::IntOutOfRange => write!(f, "integer literal out of range for its type"),
+            TypeError::VariantNotFound(name) => write!(f, "no variant `{name}`"),
+            TypeError::ArityMismatch { expected, actual } => write!(f, "expected {expected} elements, found {actual}"),
+        }
+    }
 }
 
 // ============================================================================
@@ -505,97 +524,83 @@ pub fn convert_type_hint<'db>(
 // Type to String
 // ============================================================================
 
-/// Convert a type to a string for error messages.
-pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
-    match ty {
-        Type::Bool => "bool".S(),
-        Type::U8 => "u8".S(),
-        Type::I8 => "i8".S(),
-        Type::U16 => "u16".S(),
-        Type::I16 => "i16".S(),
-        Type::U32 => "u32".S(),
-        Type::I32 => "i32".S(),
-        Type::U64 => "u64".S(),
-        Type::I64 => "i64".S(),
-        Type::Index => "index".S(),
-        Type::Offset => "offset".S(),
-        Type::F32 => "f32".S(),
-        Type::F64 => "f64".S(),
-        Type::Int => "int".S(),
-        Type::String => "string".S(),
-        Type::Var(name) => name.as_str(db).to_string(),
-        Type::Data => "data".S(),
-        Type::Error => "error".S(),
-        Type::AnonTuple(t) => {
-            let fields: Vec<_> = t.fields.C()
-                .iter()
-                .map(|f| type_to_string(db, f))
-                .collect();
-            format!("({})", fields.join(", "))
-        }
-        Type::AnonStruct(s) => {
-            let fields: Vec<_> = s.fields.C()
-                .iter()
-                .map(|f| {
-                    let name = f.name.as_str(db);
-                    let ty_str = type_to_string(db, &f.ty);
-                    format!("{}: {}", name, ty_str)
-                })
-                .collect();
-            format!("{{{}}}", fields.join(", "))
-        }
+/// A literal that leaves its type open, with nothing around it to decide it.
+///
+/// Datalit and datafun report the same literals the same way, from here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenLiteral {
+    None,
+    Er,
+    Enum,
+    List,
+    Set,
+    Map,
+    Tensor,
+    Table,
+}
 
-        Type::List(l) => {
-            let ty_str = type_to_string(db, &l.element_type);
-            format!("[{}]", ty_str)
+impl OpenLiteral {
+    /// What could not be decided about it.
+    pub fn message(self) -> &'static str {
+        match self {
+            OpenLiteral::None => "cannot infer what `none` is an option of",
+            OpenLiteral::Er => "cannot infer what `er` is a result of",
+            OpenLiteral::Enum => "cannot infer which enum this literal is of",
+            OpenLiteral::List => "cannot infer what an empty list is a list of",
+            OpenLiteral::Set => "cannot infer what an empty set is a set of",
+            OpenLiteral::Map => "cannot infer the key and value types of an empty map",
+            OpenLiteral::Tensor => "cannot infer what an empty tensor is a tensor of",
+            OpenLiteral::Table => "cannot infer the column types of a table with no rows",
         }
-        Type::Map(m) => {
-            format!("%{{{} = {}}}",
-                type_to_string(db, &m.key_type),
-                type_to_string(db, &m.value_type))
-        }
-        Type::Set(s) => {
-            let ty_str = type_to_string(db, &s.element_type);
-            format!("#{{{}}}", ty_str)
-        }
-        Type::Option(o) => {
-            let ty_str = type_to_string(db, &o.inner_type);
-            format!("?{}", ty_str)
-        }
-        Type::Result(r) => {
-            let ty_str = type_to_string(db, &r.inner_type);
-            format!("!{}", ty_str)
-        }
-        Type::Tensor(t) => {
-            let ty_str = type_to_string(db, &t.element_type);
-            format!("[|{}, {}|]", ty_str, t.rank)
-        }
-        Type::Table(t) => {
-            let cols: Vec<_> = t.columns.C()
-                .iter()
-                .map(|c| {
-                    let name = c.name.as_str(db);
-                    let ty_str = type_to_string(db, &c.ty);
-                    format!("{}: {}", name, ty_str)
-                })
-                .collect();
-            format!("{{| {} |}}", cols.join(", "))
-        }
-        Type::Atom(a) => {
-            format!("atom {}", a.name.as_str(db))
-        }
-        Type::Term(t) => {
-            format!("term {} {}", t.name.as_str(db), type_to_string(db, &t.payload))
-        }
-        Type::Enum(e) => {
-            let variants: Vec<_> = e.variants.iter().map(|v| {
-                if let Some(payload) = &v.payload {
-                    format!("term {} {}", v.name.as_str(db), type_to_string(db, payload))
-                } else {
-                    format!("atom {}", v.name.as_str(db))
-                }
-            }).collect();
-            format!("enum{{{}}}", variants.join(", "))
+    }
+}
+
+/// A type as datalove writes it, for error messages and anything else a
+/// reader sees.
+pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
+    ty.syntax(db).to_string()
+}
+
+impl<'db> Type<'db> {
+    /// This type, shaped as datalove writes it; see [`crate::type_syntax`].
+    pub fn syntax(&self, db: &'db dyn crate::Db) -> TypeSyntax<'db> {
+        let boxed = |ty: &Type<'db>| Box::new(ty.syntax(db));
+        let fields = |fields: &[TypeNamedField<'db>]| fields.iter()
+            .map(|field| (Cow::Borrowed(field.name.as_str(db)), field.ty.syntax(db)))
+            .collect();
+        match self {
+            Type::Bool => TypeSyntax::word("bool"),
+            Type::U8 => TypeSyntax::word("u8"),
+            Type::I8 => TypeSyntax::word("i8"),
+            Type::U16 => TypeSyntax::word("u16"),
+            Type::I16 => TypeSyntax::word("i16"),
+            Type::U32 => TypeSyntax::word("u32"),
+            Type::I32 => TypeSyntax::word("i32"),
+            Type::U64 => TypeSyntax::word("u64"),
+            Type::I64 => TypeSyntax::word("i64"),
+            Type::Index => TypeSyntax::word("index"),
+            Type::Offset => TypeSyntax::word("offset"),
+            Type::F32 => TypeSyntax::word("f32"),
+            Type::F64 => TypeSyntax::word("f64"),
+            Type::Int => TypeSyntax::word("int"),
+            Type::String => TypeSyntax::word("string"),
+            Type::Data => TypeSyntax::word("data"),
+            Type::Error => TypeSyntax::word("error"),
+            Type::Var(name) => TypeSyntax::word(name.as_str(db)),
+            Type::AnonTuple(t) => TypeSyntax::Tuple(t.fields.iter().map(|f| f.syntax(db)).collect()),
+            Type::AnonStruct(s) => TypeSyntax::Struct(fields(&s.fields)),
+            Type::Table(t) => TypeSyntax::Table(fields(&t.columns)),
+            Type::List(l) => TypeSyntax::List(boxed(&l.element_type)),
+            Type::Set(s) => TypeSyntax::Set(boxed(&s.element_type)),
+            Type::Map(m) => TypeSyntax::Map(boxed(&m.key_type), boxed(&m.value_type)),
+            Type::Option(o) => TypeSyntax::Option(boxed(&o.inner_type)),
+            Type::Result(r) => TypeSyntax::Result(boxed(&r.inner_type)),
+            Type::Tensor(t) => TypeSyntax::Tensor(boxed(&t.element_type), t.rank),
+            Type::Atom(a) => TypeSyntax::Atom(Cow::Borrowed(a.name.as_str(db))),
+            Type::Term(t) => TypeSyntax::Term(Cow::Borrowed(t.name.as_str(db)), boxed(&t.payload)),
+            Type::Enum(e) => TypeSyntax::Enum(e.variants.iter()
+                .map(|v| (Cow::Borrowed(v.name.as_str(db)), v.payload.as_ref().map(|p| p.syntax(db))))
+                .collect()),
         }
     }
 }

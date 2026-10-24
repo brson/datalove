@@ -14,7 +14,7 @@
           {
             "Value": {
               "name": "W",
-              "ty": "list<u32>",
+              "ty": "[u32]",
               "value": "[7, 8]"
             }
           }
@@ -24,7 +24,7 @@
     "environment": [
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       }
     ]
@@ -54,7 +54,7 @@
     "environment": [
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -84,7 +84,7 @@
     "environment": [
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -109,7 +109,7 @@
           {
             "Value": {
               "name": "C",
-              "ty": "list<u32>",
+              "ty": "[u32]",
               "value": "[9]"
             }
           }
@@ -119,12 +119,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -159,12 +159,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -199,12 +199,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -234,7 +234,7 @@
           {
             "Slot": {
               "name": "s",
-              "ty": "list<u32>",
+              "ty": "[u32]",
               "value": "[3]"
             }
           }
@@ -244,12 +244,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -259,7 +259,7 @@
       },
       {
         "name": "s",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[3]"
       },
       {
@@ -294,12 +294,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -309,7 +309,7 @@
       },
       {
         "name": "s",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[3]"
       },
       {
@@ -344,12 +344,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -359,7 +359,7 @@
       },
       {
         "name": "s",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[3]"
       },
       {
@@ -389,7 +389,7 @@
           {
             "Value": {
               "name": "p",
-              "ty": "(list<u32>, string)",
+              "ty": "([u32], string)",
               "value": "([4, 5], \"a\")"
             }
           }
@@ -399,12 +399,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -414,12 +414,12 @@
       },
       {
         "name": "p",
-        "ty": "(list<u32>, string)",
+        "ty": "([u32], string)",
         "value": "([4, 5], \"a\")"
       },
       {
         "name": "s",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[3]"
       },
       {
@@ -459,12 +459,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -474,7 +474,7 @@
       },
       {
         "name": "p",
-        "ty": "(list<u32>, string)",
+        "ty": "([u32], string)",
         "value": "([4, 5], \"a\")"
       },
       {
@@ -484,7 +484,7 @@
       },
       {
         "name": "s",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[3]"
       },
       {
@@ -519,12 +519,12 @@
     "environment": [
       {
         "name": "C",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[9]"
       },
       {
         "name": "W",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[7, 8]"
       },
       {
@@ -534,7 +534,7 @@
       },
       {
         "name": "p",
-        "ty": "(list<u32>, string)",
+        "ty": "([u32], string)",
         "value": "([4, 5], \"a\")"
       },
       {
@@ -544,7 +544,7 @@
       },
       {
         "name": "s",
-        "ty": "list<u32>",
+        "ty": "[u32]",
         "value": "[3]"
       },
       {

@@ -21,7 +21,7 @@
       "code": "T057",
       "labels": [
         {
-          "message": "expected `enum{term Custom string}`, found `atom Custom`",
+          "message": "expected `enum { term Custom string }`, found `atom Custom`",
           "span": [
             0,
             43
@@ -35,7 +35,7 @@
   "errors": [
     {
       "actual": "atom Custom",
-      "expected": "enum{term Custom string}",
+      "expected": "enum { term Custom string }",
       "kind": "TypeMismatch"
     }
   ],

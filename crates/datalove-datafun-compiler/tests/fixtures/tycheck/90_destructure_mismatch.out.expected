@@ -26,7 +26,7 @@
           "text": "{c = 1, d = 2}"
         }
       ],
-      "message": "the pattern does not name field `d` of `{c: int, d: int}`"
+      "message": "the pattern does not name field `d` of `{ c: int, d: int }`"
     },
     {
       "code": "F071",
@@ -40,7 +40,7 @@
           "text": "{e = 1}"
         }
       ],
-      "message": "`{e: int}` has no field `f`"
+      "message": "`{ e: int }` has no field `f`"
     },
     {
       "code": "F071",
@@ -68,7 +68,7 @@
           "text": "(1,)"
         }
       ],
-      "message": "a struct pattern cannot take apart `(int)`"
+      "message": "a struct pattern cannot take apart `(int,)`"
     },
     {
       "code": "F071",
@@ -110,7 +110,7 @@
           "text": "s"
         }
       ],
-      "message": "a `let` cannot take apart `enum{atom A, term B int}`"
+      "message": "a `let` cannot take apart `enum { atom A, term B int }`"
     }
   ],
   "errors": [
@@ -120,11 +120,11 @@
     },
     {
       "kind": "PatternMismatch",
-      "message": "the pattern does not name field `d` of `{c: int, d: int}`"
+      "message": "the pattern does not name field `d` of `{ c: int, d: int }`"
     },
     {
       "kind": "PatternMismatch",
-      "message": "`{e: int}` has no field `f`"
+      "message": "`{ e: int }` has no field `f`"
     },
     {
       "kind": "PatternMismatch",
@@ -132,7 +132,7 @@
     },
     {
       "kind": "PatternMismatch",
-      "message": "a struct pattern cannot take apart `(int)`"
+      "message": "a struct pattern cannot take apart `(int,)`"
     },
     {
       "kind": "PatternMismatch",
@@ -144,7 +144,7 @@
     },
     {
       "kind": "PatternMismatch",
-      "message": "a `let` cannot take apart `enum{atom A, term B int}`"
+      "message": "a `let` cannot take apart `enum { atom A, term B int }`"
     }
   ],
   "judgements": [
@@ -156,12 +156,12 @@
     {
       "kind": "variable",
       "name": "c",
-      "type": "{c: int, d: int}"
+      "type": "{ c: int, d: int }"
     },
     {
       "kind": "variable",
       "name": "e, f",
-      "type": "{e: int}"
+      "type": "{ e: int }"
     },
     {
       "kind": "variable",
@@ -171,7 +171,7 @@
     {
       "kind": "variable",
       "name": "i",
-      "type": "(int)"
+      "type": "(int,)"
     },
     {
       "kind": "variable",
@@ -186,12 +186,12 @@
     {
       "kind": "variable",
       "name": "s",
-      "type": "enum{atom A, term B int}"
+      "type": "enum { atom A, term B int }"
     },
     {
       "kind": "variable",
       "name": "",
-      "type": "enum{atom A, term B int}"
+      "type": "enum { atom A, term B int }"
     }
   ]
 }

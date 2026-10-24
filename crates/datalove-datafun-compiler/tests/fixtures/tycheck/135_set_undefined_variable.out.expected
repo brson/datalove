@@ -12,7 +12,7 @@
           "text": "x"
         }
       ],
-      "message": "undefined variable: x",
+      "message": "cannot find variable `x` in this scope",
       "notes": [
         "declare the variable with 'var' before assigning to it"
       ]

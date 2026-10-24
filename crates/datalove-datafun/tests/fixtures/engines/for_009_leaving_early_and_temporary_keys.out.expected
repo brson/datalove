@@ -140,7 +140,7 @@ Analysis(
                     block12:
                         v22 = load.copy s0
                         v23 = load.copy s2
-                        v24 = pack Tuple2 {v22, v23}
+                        v24 = pack tuple/2 {v22, v23}
                         v25 = ok v24
                         return v25
                     
@@ -173,7 +173,7 @@ Analysis(
                         drop v15
                         return v20
                     block2:
-                        v21 = pack Tuple5 {v15, v4, v9, v14, v17}
+                        v21 = pack tuple/5 {v15, v4, v9, v14, v17}
                         v22 = ok v21
                         return v22
                 """,

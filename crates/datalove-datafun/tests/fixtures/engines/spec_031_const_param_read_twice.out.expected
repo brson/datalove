@@ -126,7 +126,7 @@ Analysis(
                         v0 = move unit0.v2
                         v1 = move unit0.v4
                         v2 = move unit0.v6
-                        v3 = pack Tuple3 {v0, v1, v2}
+                        v3 = pack tuple/3 {v0, v1, v2}
                         unit_end v3
                 """,
             ),

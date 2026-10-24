@@ -514,16 +514,16 @@ impl LitOpCommand {
         if !typechecked1.errors(&db).is_empty() {
             let errors: Vec<_> = typechecked1.errors(&db)
                 .iter()
-                .map(|e| e.error(&db))
+                .map(|e| e.error(&db).to_string())
                 .collect();
-            bail!("Type errors in first expression: {:?}", errors);
+            bail!("Type errors in first expression: {}", errors.join("; "));
         }
         if !typechecked2.errors(&db).is_empty() {
             let errors: Vec<_> = typechecked2.errors(&db)
                 .iter()
-                .map(|e| e.error(&db))
+                .map(|e| e.error(&db).to_string())
                 .collect();
-            bail!("Type errors in second expression: {:?}", errors);
+            bail!("Type errors in second expression: {}", errors.join("; "));
         }
 
         // Instantiate values with RAII guards for cleanup.

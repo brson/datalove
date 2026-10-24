@@ -16,19 +16,19 @@ Analysis(
                     block0:
                         v0 = const 1u32
                         v1 = const 2u32
-                        v2 = pack Struct0 {v0, v1}
+                        v2 = pack struct {v0, v1}
                         v3 = const 3u32
                         v4 = const 4u32
-                        v5 = pack Struct0 {v3, v4}
+                        v5 = pack struct {v3, v4}
                         v6 = list [v2, v5]
                         v7 = const 1u32
                         v8 = const 1u32
                         v9 = const 1u32
-                        v10 = pack Struct0 {v8, v9}
+                        v10 = pack struct {v8, v9}
                         v11 = const 2u32
                         v12 = const 2u32
                         v13 = const 2u32
-                        v14 = pack Struct0 {v12, v13}
+                        v14 = pack struct {v12, v13}
                         v15 = %{v7: v10, v11: v14}
                         v16 = clone v6
                         v17 = const 2index
@@ -42,7 +42,7 @@ Analysis(
                         v25 = clone v6
                         v26 = const 5index
                         v27 = call u1(v25, v26)
-                        v28 = pack Tuple4 {v18, v21, v24, v27}
+                        v28 = pack tuple/4 {v18, v21, v24, v27}
                         debuglog v28
                         drop v28
                         v29 = clone v15
@@ -51,7 +51,7 @@ Analysis(
                         v32 = clone v15
                         v33 = const 5u32
                         v34 = call u2(v32, v33)
-                        v35 = pack Tuple2 {v31, v34}
+                        v35 = pack tuple/2 {v31, v34}
                         debuglog v35
                         drop v35
                         unit_end_drop v6
@@ -71,7 +71,7 @@ Analysis(
                     block2:
                         v3 = const 7u32
                         v4 = const 8u32
-                        v5 = pack Struct0 {v3, v4}
+                        v5 = pack struct {v3, v4}
                         v6 = listset s0[s1] = v5
                         branch v6, block4, block3
                     block3:

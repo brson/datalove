@@ -72,7 +72,7 @@ Analysis(
                         v2 = mul p0, p1
                         v3 = div p0, p1
                         v4 = neg p0
-                        v5 = pack Tuple5 {v0, v1, v2, v3, v4}
+                        v5 = pack tuple/5 {v0, v1, v2, v3, v4}
                         return v5
                     
                     fn arith32(p0, p1):
@@ -82,7 +82,7 @@ Analysis(
                         v2 = mul p0, p1
                         v3 = div p0, p1
                         v4 = neg p0
-                        v5 = pack Tuple5 {v0, v1, v2, v3, v4}
+                        v5 = pack tuple/5 {v0, v1, v2, v3, v4}
                         return v5
                     
                     fn cmp64(p0, p1):
@@ -93,7 +93,7 @@ Analysis(
                         v3 = le p0, p1
                         v4 = gt p0, p1
                         v5 = ge p0, p1
-                        v6 = pack Tuple6 {v0, v1, v2, v3, v4, v5}
+                        v6 = pack tuple/6 {v0, v1, v2, v3, v4, v5}
                         return v6
                     
                     fn cmp32(p0, p1):
@@ -104,7 +104,7 @@ Analysis(
                         v3 = le p0, p1
                         v4 = gt p0, p1
                         v5 = ge p0, p1
-                        v6 = pack Tuple6 {v0, v1, v2, v3, v4, v5}
+                        v6 = pack tuple/6 {v0, v1, v2, v3, v4, v5}
                         return v6
                     
                     fn halvings(p0):
@@ -140,7 +140,7 @@ Analysis(
                         v5 = intrinsic F64ToF32(p0)
                         v6 = intrinsic BitxorU32(p4, p5)
                         v7 = intrinsic BitorU32(p4, p5)
-                        v8 = pack Tuple8 {v0, v1, v2, v3, v4, v5, v6, v7}
+                        v8 = pack tuple/8 {v0, v1, v2, v3, v4, v5, v6, v7}
                         return v8
                 """,
             ),

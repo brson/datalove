@@ -30,7 +30,7 @@
           {
             "Value": {
               "name": "d",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[3, 4]"
             }
           }
@@ -40,7 +40,7 @@
     "environment": [
       {
         "name": "d",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[3, 4]"
       }
     ]

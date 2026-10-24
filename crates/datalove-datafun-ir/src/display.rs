@@ -99,29 +99,32 @@ impl fmt::Display for CodeRef {
     }
 }
 
+/// A type's shape, without what it holds, named as [`IrType`]'s `Display`
+/// names it: `list`, `option`, `struct`, and `tuple/3` for a tuple of three.
 impl fmt::Display for TypeRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeRef::Bool => write!(f, "Bool"),
-            TypeRef::U8 => write!(f, "U8"),
-            TypeRef::U16 => write!(f, "U16"),
-            TypeRef::U32 => write!(f, "U32"),
-            TypeRef::U64 => write!(f, "U64"),
-            TypeRef::I8 => write!(f, "I8"),
-            TypeRef::I16 => write!(f, "I16"),
-            TypeRef::I32 => write!(f, "I32"),
-            TypeRef::I64 => write!(f, "I64"),
-            TypeRef::Index => write!(f, "Index"),
-            TypeRef::Offset => write!(f, "Offset"),
-            TypeRef::Int => write!(f, "Int"),
-            TypeRef::Tuple(0) => write!(f, "()"),
-            TypeRef::Tuple(n) => write!(f, "Tuple{}", n),
-            TypeRef::AnonStruct(n) => write!(f, "Struct{}", n),
-            TypeRef::Option => write!(f, "Option"),
-            TypeRef::Result => write!(f, "Result"),
-            TypeRef::List => write!(f, "List"),
-            TypeRef::Set => write!(f, "Set"),
-            TypeRef::Map => write!(f, "Map"),
+            TypeRef::Bool => write!(f, "bool"),
+            TypeRef::U8 => write!(f, "u8"),
+            TypeRef::U16 => write!(f, "u16"),
+            TypeRef::U32 => write!(f, "u32"),
+            TypeRef::U64 => write!(f, "u64"),
+            TypeRef::I8 => write!(f, "i8"),
+            TypeRef::I16 => write!(f, "i16"),
+            TypeRef::I32 => write!(f, "i32"),
+            TypeRef::I64 => write!(f, "i64"),
+            TypeRef::Index => write!(f, "index"),
+            TypeRef::Offset => write!(f, "offset"),
+            TypeRef::Int => write!(f, "int"),
+            TypeRef::Tuple(0) => write!(f, "unit"),
+            TypeRef::Tuple(n) => write!(f, "tuple/{}", n),
+            // The number is always 0, and says nothing.
+            TypeRef::AnonStruct(_) => write!(f, "struct"),
+            TypeRef::Option => write!(f, "option"),
+            TypeRef::Result => write!(f, "result"),
+            TypeRef::List => write!(f, "list"),
+            TypeRef::Set => write!(f, "set"),
+            TypeRef::Map => write!(f, "map"),
         }
     }
 }

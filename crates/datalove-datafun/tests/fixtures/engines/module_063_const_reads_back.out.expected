@@ -38,7 +38,7 @@ Analysis(
                         v21 = clone *v20
                         v22 = staticref some data 9u32
                         v23 = clone *v22
-                        v24 = pack Tuple12 {v1, v3, v5, v7, v9, v11, v13, v15, v17, v19, v21, v23}
+                        v24 = pack tuple/12 {v1, v3, v5, v7, v9, v11, v13, v15, v17, v19, v21, v23}
                         return v24
                 """,
             ),

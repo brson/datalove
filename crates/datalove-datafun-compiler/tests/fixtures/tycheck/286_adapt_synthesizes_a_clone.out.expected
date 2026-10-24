@@ -25,17 +25,17 @@
     {
       "kind": "variable",
       "name": "h",
-      "type": "enum{atom Nothing, term Text string}"
+      "type": "enum { atom Nothing, term Text string }"
     },
     {
       "kind": "variable",
       "name": "copied_enum",
-      "type": "enum{atom Nothing, term Text string}"
+      "type": "enum { atom Nothing, term Text string }"
     },
     {
       "kind": "variable",
       "name": "p",
-      "type": "{a: string, b: string}"
+      "type": "{ a: string, b: string }"
     },
     {
       "kind": "variable",

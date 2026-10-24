@@ -12,13 +12,13 @@
           "text": ": enum { atom Red, atom Blue } / atom Green"
         }
       ],
-      "message": "mismatched types: expected `enum{atom Blue, atom Red}`, found `atom Green`"
+      "message": "mismatched types: expected `enum { atom Blue, atom Red }`, found `atom Green`"
     }
   ],
   "errors": [
     {
       "actual": "atom Green",
-      "expected": "enum{atom Blue, atom Red}",
+      "expected": "enum { atom Blue, atom Red }",
       "kind": "TypeMismatch"
     }
   ],

@@ -14,7 +14,7 @@
           {
             "Value": {
               "name": "nums",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[1, 2, 3]"
             }
           }
@@ -24,7 +24,7 @@
     "environment": [
       {
         "name": "nums",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2, 3]"
       }
     ]
@@ -41,7 +41,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "list<int>",
+          "ty": "[int]",
           "value": "[1, 2, 3]"
         }
       }
@@ -49,7 +49,7 @@
     "environment": [
       {
         "name": "nums",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2, 3]"
       }
     ]
@@ -69,7 +69,7 @@
           {
             "Value": {
               "name": "words",
-              "ty": "list<string>",
+              "ty": "[string]",
               "value": "[\"hello\", \"world\"]"
             }
           }
@@ -79,12 +79,12 @@
     "environment": [
       {
         "name": "nums",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2, 3]"
       },
       {
         "name": "words",
-        "ty": "list<string>",
+        "ty": "[string]",
         "value": "[\"hello\", \"world\"]"
       }
     ]
@@ -101,7 +101,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "list<string>",
+          "ty": "[string]",
           "value": "[\"hello\", \"world\"]"
         }
       }
@@ -109,12 +109,12 @@
     "environment": [
       {
         "name": "nums",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2, 3]"
       },
       {
         "name": "words",
-        "ty": "list<string>",
+        "ty": "[string]",
         "value": "[\"hello\", \"world\"]"
       }
     ]
@@ -134,7 +134,7 @@
           {
             "Value": {
               "name": "bigger",
-              "ty": "list<int>",
+              "ty": "[int]",
               "value": "[10, 20, 30, 40, 50]"
             }
           }
@@ -144,17 +144,17 @@
     "environment": [
       {
         "name": "bigger",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[10, 20, 30, 40, 50]"
       },
       {
         "name": "nums",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2, 3]"
       },
       {
         "name": "words",
-        "ty": "list<string>",
+        "ty": "[string]",
         "value": "[\"hello\", \"world\"]"
       }
     ]
@@ -171,7 +171,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "list<int>",
+          "ty": "[int]",
           "value": "[10, 20, 30, 40, 50]"
         }
       }
@@ -179,17 +179,17 @@
     "environment": [
       {
         "name": "bigger",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[10, 20, 30, 40, 50]"
       },
       {
         "name": "nums",
-        "ty": "list<int>",
+        "ty": "[int]",
         "value": "[1, 2, 3]"
       },
       {
         "name": "words",
-        "ty": "list<string>",
+        "ty": "[string]",
         "value": "[\"hello\", \"world\"]"
       }
     ]

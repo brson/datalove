@@ -5,7 +5,7 @@
 use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
-use crate::context::TypeContext;
+use crate::context::{TypeContext, Wrapper};
 use crate::check::check_expr;
 use crate::types::type_to_string;
 
@@ -304,18 +304,19 @@ pub fn check_statement<'db>(
                         Some(Type::Datalit(ty))
                             if datalove_datafun_common::generics::contains_type_param(ty));
                     if generic {
+                        let error = TypeError::ComptimeParamOfGenericType {
+                            func_name: name.as_str(db).to_string(),
+                            param_name: param.name.as_str(db).to_string(),
+                        };
                         ctx.push_coded(
                             crate::ErrorSite::Fun(stmt.local_index()),
                             "F077",
-                            fmt!("const parameter `{}` has a type that depends on a type parameter", param.name.as_str(db)),
+                            error.to_string(),
                             S("a const parameter's type must be known before the function is specialized"),
                             Some(S("specialization makes one copy per const value, and the copy is still \
 generic, so a const whose type is a type parameter has nowhere to go. Give the const parameter a concrete type.")),
                         );
-                        ctx.add_error(TypeError::ComptimeParamOfGenericType {
-                            func_name: name.as_str(db).to_string(),
-                            param_name: param.name.as_str(db).to_string(),
-                        });
+                        ctx.add_error(error);
                     }
                 }
             }
@@ -489,11 +490,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     }
                     _ => {
                         // F016: only an option or a result has a value to bind.
-                        let err = ctx.error_type_mismatch(
-                            ctx.expr(condition),
-                            "Option or Result",
-                            &type_to_string(db, &condition_ty),
-                            "expected Option or Result type for destructuring"
+                        let err = ctx.error_worded(
+                            crate::ErrorSite::Expr(ctx.expr(condition).key()),
+                            "F016",
+                            fmt!("only an option `?T` or a result `!T` has a value to take out, and this is `{}`", type_to_string(db, &condition_ty)),
+                            "this is not an option or a result",
+                            None,
                         );
                         ctx.add_error(err);
                         return;
@@ -519,11 +521,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                                 ctx.add_variable(else_binding_name, error_ty, false);
                             } else {
                                 let actual_type = type_to_string(db, &condition_ty);
-                                let err = ctx.error_type_mismatch(
-                                    ctx.expr(condition),
-                                    "Result",
-                                    &actual_type,
-                                    "else binding requires Result type"
+                                let err = ctx.error_worded(
+                                    crate::ErrorSite::Expr(ctx.expr(condition).key()),
+                                    "F016",
+                                    fmt!("only a result `!T` has an error for `else` to bind, and this is `{actual_type}`"),
+                                    "this is not a result",
+                                    None,
                                 );
                                 ctx.add_error(err);
                             }
@@ -653,11 +656,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 Type::Datalit(datalit::tycheck::Type::Enum(e)) => e.clone(),
                 _ => {
                     let actual_str = type_to_string(db, &input_ty);
-                    let err = ctx.error_type_mismatch(
-                        ctx.expr(stmt.input),
-                        "enum",
-                        &actual_str,
-                        "match input must be an enum type"
+                    let err = ctx.error_worded(
+                        crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
+                        "F016",
+                        fmt!("`match` takes an enum apart, and this is `{actual_str}`"),
+                        "this is not an enum",
+                        None,
                     );
                     ctx.add_error(err);
                     return;
@@ -675,11 +679,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
 
                 // Check for duplicate case.
                 if covered.iter().any(|n| *n == variant_name) {
-                    let err = ctx.error_type_mismatch(
-                        ctx.expr(stmt.input),
-                        "unique case",
-                        &format!("duplicate case '{}'", variant_name.as_str(db)),
-                        "duplicate match case"
+                    let err = ctx.error_worded(
+                        crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
+                        "F016",
+                        fmt!("`{}` has two cases", variant_name.as_str(db)),
+                        "each variant is matched by one case",
+                        None,
                     );
                     ctx.add_error(err);
                     continue;
@@ -690,11 +695,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 match (&case.kind, variant) {
                     (MatchCaseKind::Atom { name }, Some(v)) => {
                         if v.payload.is_some() {
-                            let err = ctx.error_type_mismatch(
-                                ctx.expr(stmt.input),
-                                "atom case",
-                                &format!("variant '{}' has a payload", name.as_str(db)),
-                                "use 'case term' to destructure payload"
+                            let err = ctx.error_worded(
+                                crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
+                                "F016",
+                                fmt!("`{0}` is a term, with a payload, and is matched with `case term {0} <name>`", name.as_str(db)),
+                                "`case atom` matches a variant with no payload",
+                                None,
                             );
                             ctx.add_error(err);
                         }
@@ -714,11 +720,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                                 continue; // Skip the body check below.
                             }
                             None => {
-                                let err = ctx.error_type_mismatch(
-                                    ctx.expr(stmt.input),
-                                    "term case",
-                                    &format!("variant '{}' has no payload", name.as_str(db)),
-                                    "use 'case atom' for payloadless variants"
+                                let err = ctx.error_worded(
+                                    crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
+                                    "F016",
+                                    fmt!("`{0}` is an atom, with no payload, and is matched with `case atom {0}`", name.as_str(db)),
+                                    "`case term` matches a variant with a payload",
+                                    None,
                                 );
                                 ctx.add_error(err);
                                 covered.push(variant_name);
@@ -726,11 +733,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                         }
                     }
                     (_, None) => {
-                        let err = ctx.error_type_mismatch(
-                            ctx.expr(stmt.input),
-                            "valid variant",
-                            &format!("unknown variant '{}'", variant_name.as_str(db)),
-                            "variant not found in enum type"
+                        let err = ctx.error_worded(
+                            crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
+                            "F016",
+                            fmt!("`{}` has no variant `{}`", type_to_string(db, &input_ty), variant_name.as_str(db)),
+                            "no such variant",
+                            None,
                         );
                         ctx.add_error(err);
                         covered.push(variant_name);
@@ -759,11 +767,13 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     .map(|v| v.name.as_str(db).to_string())
                     .collect();
                 if !uncovered.is_empty() {
-                    let err = ctx.error_type_mismatch(
-                        ctx.expr(stmt.input),
-                        "exhaustive match",
-                        &format!("missing variants: {}", uncovered.join(", ")),
-                        "non-exhaustive match"
+                    let missing: Vec<String> = uncovered.iter().map(|name| fmt!("`{name}`")).collect();
+                    let err = ctx.error_worded(
+                        crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
+                        "F016",
+                        fmt!("this `match` has no case for {}", missing.join(", ")),
+                        "every variant needs a case, or there is a `case default`",
+                        None,
                     );
                     ctx.add_error(err);
                 }
@@ -779,9 +789,9 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                         let actual_str = type_to_string(db, &ty);
                         let err = ctx.error_type_mismatch(
                             ctx.expr(expr),
-                            "unit",
+                            "()",
                             &actual_str,
-                            "function call statement must return unit"
+                            "a `call` statement is of a function that returns `()`"
                         );
                         ctx.add_error(err);
                     }
@@ -908,9 +918,8 @@ fn check_set_value<'db>(
         Some(crate::synthesize::EarlyReturn::None) => IndexErrorMode::Option,
         None => return,
     };
-    let operator = fmt!("{op_str}=");
-    let what = fmt!("`{operator}`");
-    if let Err(e) = require_return_type_for(ctx, stmt, required, &operator, &what, "this can return early") {
+    let what = fmt!("`{op_str}=`");
+    if let Err(e) = require_return_type_for(ctx, stmt, required, &what, "this can return early") {
         ctx.add_error(e);
     }
 }
@@ -1029,25 +1038,24 @@ fn require_return_type_for_set<'db>(
         IndexErrorMode::Result => "!",
     };
     let what = fmt!("`set` through an index with `{operator}`");
-    require_return_type_for(ctx, stmt, error_mode, operator, &what, "this index can return early")
+    require_return_type_for(ctx, stmt, error_mode, &what, "this index can return early")
 }
 
-/// Require the function to return what `operator` in a `set` returns early.
+/// Require the function to return what `what`, in a `set`, returns early.
 fn require_return_type_for<'db>(
     ctx: &mut TypeContext<'db>,
     stmt: &StmtSet<'db>,
     error_mode: IndexErrorMode,
-    operator: &str,
     what: &str,
     label: &str,
 ) -> Result<(), TypeError> {
     let expected_return = ctx.expected_return_type.clone()
         .expect("a set statement is always inside a function or a script, which returns `!()`");
     let (fits, expected) = match (&error_mode, &expected_return) {
-        (IndexErrorMode::Option, Type::Datalit(datalit::tycheck::Type::Option(_))) => (true, "Option"),
-        (IndexErrorMode::Option, _) => (false, "Option"),
-        (IndexErrorMode::Result, Type::Datalit(datalit::tycheck::Type::Result(_))) => (true, "Result"),
-        (IndexErrorMode::Result, _) => (false, "Result"),
+        (IndexErrorMode::Option, Type::Datalit(datalit::tycheck::Type::Option(_))) => (true, Wrapper::Option),
+        (IndexErrorMode::Option, _) => (false, Wrapper::Option),
+        (IndexErrorMode::Result, Type::Datalit(datalit::tycheck::Type::Result(_))) => (true, Wrapper::Result),
+        (IndexErrorMode::Result, _) => (false, Wrapper::Result),
     };
     if fits {
         return Ok(());
@@ -1056,9 +1064,9 @@ fn require_return_type_for<'db>(
     Err(ctx.report_set_error(
         stmt,
         "F049",
-        fmt!("{what} requires function to return {expected}, found `{actual}`"),
+        fmt!("{what} can return early, so the function has to return {}, and it returns `{actual}`", expected.phrase()),
         label,
-        Some(&fmt!("function must return {expected} to use `{operator}`")),
+        None,
     ))
 }
 

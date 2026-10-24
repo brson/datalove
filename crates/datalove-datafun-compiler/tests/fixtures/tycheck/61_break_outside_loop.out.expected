@@ -12,7 +12,7 @@
           "text": "break"
         }
       ],
-      "message": "`break` used outside of loop",
+      "message": "`break` outside of a loop",
       "notes": [
         "break can only be used inside loop blocks"
       ]

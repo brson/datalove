@@ -50,7 +50,7 @@ Analysis(
                         v1 = list []
                         store.move.tracked s1, v1
                         v2 = const 0u64
-                        v3 = pack Struct0 {v2}
+                        v3 = pack struct {v2}
                         store.copy s2, v3
                         v4 = const 0u64
                         store.copy s3, v4
@@ -63,7 +63,7 @@ Analysis(
                         v6 = cursorelem s4
                         v7 = copy *v6
                         v8 = copy *v6
-                        v9 = pack Tuple2 {v8, v7}
+                        v9 = pack tuple/2 {v8, v7}
                         v10 = list [v9]
                         drop.tracked s0
                         store.move.tracked s0, v10
@@ -73,7 +73,7 @@ Analysis(
                         drop.tracked s1
                         store.move.tracked s1, v13
                         v14 = copy *v6
-                        v15 = pack Struct0 {v14}
+                        v15 = pack struct {v14}
                         store.copy s2, v15
                         v16 = copy *v6
                         store.copy s3, v16
@@ -86,7 +86,7 @@ Analysis(
                         v18 = load.move.tracked s1
                         v19 = load.copy s2
                         v20 = load.copy s3
-                        v21 = pack Tuple4 {v17, v18, v19, v20}
+                        v21 = pack tuple/4 {v17, v18, v19, v20}
                         return v21
                     
                     fn rows(p0):
@@ -103,7 +103,7 @@ Analysis(
                         v3 = cursorvalue s1
                         v4 = copy *v3
                         v5 = clone *v2
-                        v6 = pack Tuple2 {v4, v5}
+                        v6 = pack tuple/2 {v4, v5}
                         v7 = list [v6]
                         drop.tracked s0
                         store.move.tracked s0, v7
@@ -133,7 +133,7 @@ Analysis(
                         v13 = %{v9: v10, v11: v12}
                         v14 = call m0.u3(v13)
                         drop v13
-                        v15 = pack Tuple4 {v5, v7, v8, v14}
+                        v15 = pack tuple/4 {v5, v7, v8, v14}
                         drop v3
                         return v15
                 """,

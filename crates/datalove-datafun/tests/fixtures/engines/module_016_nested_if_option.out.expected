@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "line 8, col 17: error[F049]: try operator `+!` return type mismatch: expected `Result`, found `u32`",
+                    "line 8, col 17: error[F049]: `+!` can return early, so the function has to return a result `!T`, and it returns `u32`",
                 ],
             ),
             ownership: OwnershipResult(

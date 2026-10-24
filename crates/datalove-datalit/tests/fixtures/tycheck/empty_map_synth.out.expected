@@ -20,7 +20,7 @@
           "text": "%{}"
         }
       ],
-      "message": "cannot infer type for empty map"
+      "message": "cannot infer the key and value types of an empty map"
     }
   ],
   "errors": [

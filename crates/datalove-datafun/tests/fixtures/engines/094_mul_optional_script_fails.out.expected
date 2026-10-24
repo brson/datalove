@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TryReturnTypeMismatch { operator: \"*?\", return_type: \"!()\" }",
+                    "`*?` can return early, so the function has to return an option `?T`, and it returns `!()`",
                 ],
             ),
             ownership: OwnershipResult(

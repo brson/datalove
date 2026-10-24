@@ -22,7 +22,7 @@ Analysis(
                         v5 = clone *v4
                         v6 = staticref {d = data (8i32, true), n = 9u32}
                         v7 = clone *v6
-                        v8 = pack Tuple4 {v1, v3, v5, v7}
+                        v8 = pack tuple/4 {v1, v3, v5, v7}
                         return v8
                 """,
             ),

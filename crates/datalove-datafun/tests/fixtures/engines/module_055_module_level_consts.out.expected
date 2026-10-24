@@ -63,7 +63,7 @@ Analysis(
                         v3 = call m0.u7()
                         v4 = call m0.u5()
                         v5 = call m0.u6()
-                        v6 = pack Tuple6 {v0, v1, v2, v3, v4, v5}
+                        v6 = pack tuple/6 {v0, v1, v2, v3, v4, v5}
                         return v6
                 """,
             ),

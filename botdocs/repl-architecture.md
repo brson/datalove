@@ -186,11 +186,21 @@ whatever its modules do. The one error no root's leaving can fix is a rider
 interface's, and that still stops it starting.
 
 `ModuleErrors` has the failing modules' messages by path (`broken`), the
-lowering errors, and the type diagnostics in their stored form,
+lowering errors, and the type and ownership diagnostics in their stored form,
 `StoredDiagnostic`. That form names its `Source`s but holds no database
 lifetime, so a caller in the same process renders them against `Engine::db`.
 A caller across a thread, as the interactive REPL is, has only the messages,
 for now.
+
+**Values come from the executor, types from the typechecker.** The executor
+holds every binding's value, but knows only how the IR lays it out: its
+`IrType` is not what the language calls the type. So a unit's record in the
+compiled session (`UnitLowerRecord::types` and `value_type`) keeps the type of
+each binding and function it provides, and of an expression unit's value, as
+datalove writes it, from the unit's typecheck output; and the engine pairs a
+value from the executor with the type in the record of the unit the executor
+says provides it (`ScriptExecutor::provider_of`). An error is reported as the
+`TypeError`'s message, its `Display`, never its `Debug`.
 
 `datalove_repl::run_source` is the one loop over a `---`-separated script.
 It reads each input as the prompt would, so it is the REPL's rather than the
@@ -766,11 +776,12 @@ setup and the loop together.
   the sigil is a command on its first line. Only a replay, or an edit from
   the code panel, gives one over several lines.
 - An edit cannot change a unit from statements to an expression or back.
-- Errors are plain strings in the History tab, and type errors are their
-  `Debug` form. The Detail tab renders parse, type and ownership diagnostics,
-  but a lowering error shows only as its message, having no location; see
-  [issues.md](issues.md#user-content-the-repl-prints-errors-as-rust-values)
-  and [issues.md](issues.md#user-content-lowering-errors-say-what-never-where).
+- Errors are plain messages in the History tab. The Detail tab renders parse,
+  type and ownership diagnostics, but a lowering error shows only as its
+  message, having no location; see
+  [issues.md](issues.md#user-content-lowering-errors-say-what-never-where).
+- A type is shown expanded, never by its alias; see
+  [issues.md](issues.md#user-content-a-printed-type-loses-its-alias).
 - Mouse capture is enabled while only key events are read, which disables
   terminal text selection and drops the mouse wheel for no benefit.
 - Nothing scrolls a pane while a dialog or a modal is open.

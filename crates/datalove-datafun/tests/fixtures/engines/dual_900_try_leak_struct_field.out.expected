@@ -30,7 +30,7 @@ Analysis(
                         drop v1
                         return v4
                     block2:
-                        v5 = pack Struct0 {v1, v2}
+                        v5 = pack struct {v1, v2}
                         v6 = some v5
                         return v6
                 """,

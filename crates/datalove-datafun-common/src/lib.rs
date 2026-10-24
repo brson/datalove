@@ -395,7 +395,9 @@ pub enum TypeError {
     DatalitError(String),
     ResultRequiresErrorBinding,
     TryTypeMismatch { operator: String, actual_type: String },
-    TryReturnTypeMismatch { operator: String, return_type: String },
+    /// `return_type` is what the enclosing function returns, `None` where
+    /// there is no function to return from.
+    TryReturnTypeMismatch { operator: String, return_type: Option<String> },
     IntOutOfRange,
     MissingField(String),
     ExtraField(String),
@@ -490,6 +492,102 @@ pub enum TypeError {
     /// F087: a `for` that cannot walk what it names, or binds the wrong number
     /// of names for it.
     ForWalk { message: String },
+    /// An error its reporter worded whole, under `code`, where no other
+    /// variant says what went wrong.
+    Worded { code: String, message: String },
+}
+
+/// The error as a reader is told it, types written as datalove writes them.
+///
+/// Where a diagnostic reports an error worded from the error alone -- a
+/// projection, a cycle of inline functions -- this is its message. The rest
+/// are worded where they are reported, with what only the report site knows,
+/// and this says the same in as many words as the error holds, for wherever
+/// the error travels without its diagnostic: the REPL's report of a unit that
+/// did not compile, and a type error with no span to render.
+impl std::fmt::Display for TypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let plural = |n: usize| if n == 1 { "" } else { "s" };
+        // What an early-return operator unwraps: `?` and the optional
+        // operators an option, `!` and the checked ones a result.
+        let wrapper = |operator: &str| match operator.ends_with('?') {
+            true => "an option `?T`",
+            false => "a result `!T`",
+        };
+        match self {
+            TypeError::TypeMismatch { expected, actual } => {
+                write!(f, "mismatched types: expected `{expected}`, found `{actual}`")
+            }
+            TypeError::UnresolvedName(name) => write!(f, "cannot find `{name}` in this scope"),
+            TypeError::CannotSynthesize => write!(f, "cannot infer a type here"),
+            TypeError::InvalidOperandType { op, ty } => write!(f, "invalid operand type `{ty}` for operator `{op}`"),
+            TypeError::ArityMismatch { expected, actual } => write!(
+                f, "this function takes {expected} argument{} but {actual} {} supplied",
+                plural(*expected), if *actual == 1 { "was" } else { "were" },
+            ),
+            TypeError::NotAFunction(name) => write!(f, "`{name}` is not a function"),
+            TypeError::DatalitError(message) => write!(f, "{message}"),
+            TypeError::ResultRequiresErrorBinding => write!(f, "a result taken apart needs an `else` binding for its error"),
+            TypeError::TryTypeMismatch { operator, actual_type } => {
+                write!(f, "`{operator}` unwraps {}, and this is `{actual_type}`", wrapper(operator))
+            }
+            TypeError::TryReturnTypeMismatch { operator, return_type: Some(returns) } => write!(
+                f, "`{operator}` can return early, so the function has to return {}, and it returns `{returns}`",
+                wrapper(operator),
+            ),
+            TypeError::TryReturnTypeMismatch { operator, return_type: None } => {
+                write!(f, "`{operator}` can return early, and there is no function here to return from")
+            }
+            TypeError::IntOutOfRange => write!(f, "integer literal out of range for its type"),
+            TypeError::MissingField(name) => write!(f, "missing field `{name}`"),
+            TypeError::ExtraField(name) => write!(f, "unexpected field `{name}`"),
+            TypeError::FieldOrderMismatch => write!(f, "the fields are not in the order the type has them"),
+            TypeError::VariantNotFound(name) => write!(f, "no variant `{name}`"),
+            TypeError::BreakOutsideLoop => write!(f, "`break` outside of a loop"),
+            TypeError::ContinueOutsideLoop => write!(f, "`continue` outside of a loop"),
+            TypeError::FieldIndexOutOfBounds { index, tuple_size } => write!(f, "a tuple of {tuple_size} has no element {index}"),
+            TypeError::FieldNotFound { field_name, ty } => write!(f, "`{ty}` has no field `{field_name}`"),
+            TypeError::ProjectionOnNonAggregate { ty } => write!(f, "`{ty}` has no fields"),
+            TypeError::PatternMismatch { message } => write!(f, "{message}"),
+            TypeError::NonCopyFieldProjection { field_ty } => {
+                write!(f, "a field of type `{field_ty}` cannot be read out of what holds it")
+            }
+            TypeError::NonCopyIndexProjection { elem_ty } => {
+                write!(f, "an element of type `{elem_ty}` cannot be read out of what holds it")
+            }
+            TypeError::ViewTypeMutBinding { view_ty } => write!(f, "a view of type `{view_ty}` cannot be written through"),
+            TypeError::VoidFunctionReturnsValue => write!(f, "void function cannot return a value"),
+            TypeError::FunctionRequiresReturnValue => write!(f, "function requires return value"),
+            TypeError::UndefinedVariable => write!(f, "cannot find variable in this scope"),
+            TypeError::VariableNotMutable => write!(f, "cannot assign to an immutable variable"),
+            TypeError::UnresolvedTypeAlias { name, .. } => write!(f, "unknown type `{name}`"),
+            TypeError::CollectionKeyNotOrdered { param, position, .. } => {
+                write!(f, "`{param}` has not said it can be ordered, and {position} puts it in a set or a map")
+            }
+            TypeError::MissingReturn { name, .. } => write!(f, "`{name}` can reach the end of its body without returning a value"),
+            TypeError::NativeFunOutsideRider { name, .. } => {
+                write!(f, "`{name}` is a native function declared where there is no rider to implement it")
+            }
+            TypeError::DuplicateTypeAlias { name, .. } => write!(f, "`{name}` is defined twice"),
+            TypeError::DuplicateFunction { name, .. } => write!(f, "function `{name}` is defined twice"),
+            TypeError::ImportShadowsFunction { name } => write!(f, "`{name}` is imported, and also defined here as a function"),
+            TypeError::DuplicateImport { name, first, .. } => write!(f, "`{name}` is imported already, from `{first}`"),
+            TypeError::NonConstInConstExpr(name) => write!(f, "`{name}` is not a const binding"),
+            TypeError::ArgumentModeMismatch { expected, found, .. } => {
+                write!(f, "argument mode mismatch: expected `{expected}`, found `{found}`")
+            }
+            TypeError::ComptimeArgNotConstBinding { reason, .. } => write!(f, "{reason}"),
+            TypeError::ComptimeParamOfGenericType { param_name, .. } => {
+                write!(f, "const parameter `{param_name}` has a type that depends on a type parameter")
+            }
+            TypeError::InlineCycle { names } => {
+                let path: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
+                write!(f, "inline function `{}` is recursive ({})", names[0], path.join(" calls "))
+            }
+            TypeError::ForWalk { message } => write!(f, "{message}"),
+            TypeError::Worded { message, .. } => write!(f, "{message}"),
+        }
+    }
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {
@@ -1091,16 +1189,22 @@ fn convert_type_hint_with_aliases_inner<'db>(
 // Type to String
 // ============================================================================
 
-/// Convert a type to a string for error messages.
+/// A type as datalove writes it, for error messages and anything else a
+/// reader sees.
 pub fn type_to_string<'db>(db: &'db dyn Db, ty: &Type<'db>) -> String {
-    match ty {
-        Type::Datalit(dt) => datalit::tycheck::type_to_string(db, dt),
-        Type::Function(f) => {
-            let params: Vec<_> = f.param_types(db).iter()
-                .map(|p| type_to_string(db, p))
-                .collect();
-            let ret = type_to_string(db, &f.return_type(db));
-            format!("fn({}) -> {}", params.join(", "), ret)
+    ty.syntax(db).to_string()
+}
+
+impl<'db> Type<'db> {
+    /// This type, shaped as datalove writes it; see
+    /// [`datalit::type_syntax`].
+    pub fn syntax(&self, db: &'db dyn Db) -> datalit::type_syntax::TypeSyntax<'db> {
+        match self {
+            Type::Datalit(dt) => dt.syntax(db),
+            Type::Function(f) => datalit::type_syntax::TypeSyntax::Function(
+                f.param_types(db).iter().map(|p| p.syntax(db)).collect(),
+                Box::new(f.return_type(db).syntax(db)),
+            ),
         }
     }
 }

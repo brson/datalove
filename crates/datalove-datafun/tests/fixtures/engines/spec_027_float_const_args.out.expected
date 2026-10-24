@@ -110,7 +110,7 @@ Analysis(
                         v1 = copy unit0.v3
                         v2 = copy unit0.v5
                         v3 = copy unit0.v9
-                        v4 = pack Tuple4 {v0, v1, v2, v3}
+                        v4 = pack tuple/4 {v0, v1, v2, v3}
                         unit_end v4
                 """,
             ),

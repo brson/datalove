@@ -9,6 +9,7 @@ pub mod tycheck;
 pub mod tydesc_table;
 pub mod instantiate2;
 pub mod pretty;
+pub mod type_syntax;
 pub mod ast_gen;
 pub mod spans;
 pub mod mutation_gen;

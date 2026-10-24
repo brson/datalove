@@ -630,6 +630,15 @@ impl ScriptExecutor {
             .collect()
     }
 
+    /// The unit that provides `name` to the session: the nearest that binds
+    /// it, as the environment is built.
+    pub fn provider_of(&self, name: &str) -> Option<usize> {
+        self.script_ctx.values.get(name).map(|(unit, _)| *unit)
+            .or_else(|| self.script_ctx.slots.get(name).map(|(unit, _)| *unit))
+            .or_else(|| self.script_ctx.functions.get(name).map(|(unit, _)| *unit))
+            .map(|unit| unit as usize)
+    }
+
     /// Get the type and value of a binding by name.
     ///
     /// `None` when the nearest unit binding it did not run to its end, as when

@@ -26,7 +26,7 @@ home here.
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [A type declared in one unit is unknown to the next](#user-content-a-type-declared-in-one-unit-is-unknown-to-the-next)
   - [The REPL never reads a brace-delimited input over several lines](#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines)
-  - [The REPL prints errors as Rust values](#user-content-the-repl-prints-errors-as-rust-values)
+  - [The REPL shows a broken module only as a message](#user-content-the-repl-shows-a-broken-module-only-as-a-message)
   - [Lowering errors say what, never where](#user-content-lowering-errors-say-what-never-where)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
@@ -39,6 +39,8 @@ home here.
   - [One function per name, so no prelude of imports](#user-content-one-function-per-name-so-no-prelude-of-imports)
   - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
   - [What writing the store demo ran into](#user-content-what-writing-the-store-demo-ran-into)
+  - [A printed type loses its alias](#user-content-a-printed-type-loses-its-alias)
+  - [`(T)` is read as a tuple of one](#user-content-t-is-read-as-a-tuple-of-one)
 
 - [The typecheckers: cost and limits](#user-content-the-typecheckers-cost-and-limits)
   - [Deeply nested literals overflow the stack](#user-content-deeply-nested-literals-overflow-the-stack)
@@ -270,18 +272,13 @@ opens multiline input only on a keyword that starts a block, and has no case
 for an open brace. So a line that opens a brace, as a long `type` or a list
 literal would, is submitted on its own.
 
-### The REPL prints errors as Rust values
+### The REPL shows a broken module only as a message
 
-**Reproduced.** The REPL reports a type error as the `Debug` of its value,
-with no span: `NonCopyIndexProjection { elem_ty: "string" }`,
-`UnresolvedName("x")`, `InvalidOperandType { op: "/", ty: "int" }`.
-`ScriptCompiler::phase_typecheck` keeps them as `format!("{:?}")` strings, and
-the engine's `Eval::Error` is the first of them. The CLI renders the same
-errors as diagnostics, and so does the REPL's Detail tab, from
-`ScriptCompiler::render_unit_diagnostics`; the History tab and the engine's
-error strings do not. A module that does not compile reaches a unit as the
-module's error message, and the module's diagnostics, which the engine keeps in
-`ModuleErrors`, are rendered only by the CLI.
+**Reproduced.** A unit that requires a module that does not compile fails with
+``module `x` does not compile: ...``, the module's errors as messages. The
+module's diagnostics, framed against its source, are what the engine keeps in
+`ModuleErrors`, and only the CLI renders them; the REPL's Detail tab shows the
+unit's own diagnostics, which say nothing of the module's.
 
 ### Lowering errors say what, never where
 
@@ -569,6 +566,23 @@ data files. None stopped it; each cost a detour.
 
 Where checking a datalit or datafun input takes time or stack out of
 proportion to its size.
+
+### A printed type loses its alias
+
+**Reproduced.** `type Color: enum { atom Red, atom Blue }` and a `let c: Color`
+show `c` as `enum { atom Red, atom Blue }`, in the REPL and in every message.
+The typechecker expands an alias into what it names, and nothing after the
+parse keeps the name: `TypeHint::Alias` is the last form with one. Showing the
+alias would take carrying it beside the expansion, in `datalit::tycheck::Type`
+or in a side table, as far as `TypeSyntax`.
+
+### `(T)` is read as a tuple of one
+
+**Reproduced.** A tuple type written `(T)` parses as the tuple of one, the same
+as `(T,)`. A value is the other way: `(x)` is `x` in parentheses, a tuple of one
+is `(x,)`, and a pattern `(x)` is refused (P070). The type printer writes
+`(T,)`, so what is printed reads the same either way; whether `(T)` should be
+refused as a pattern is, or read as `T` in parentheses, is the open part.
 
 ### Deeply nested literals overflow the stack
 

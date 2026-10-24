@@ -20,6 +20,8 @@ use datalove_diagnostic::DiagnosticBuilderExt;
 use crate::ast::*;
 use super::context::TypeContext;
 use super::types::*;
+use crate::type_syntax::TypeSyntax;
+use std::borrow::Cow;
 
 /// A type variable, an index into a [`Unifier`].
 pub type VarId = u32;
@@ -395,42 +397,41 @@ impl<'db> Unifier<'db> {
     /// The type as far as it is known, for an error message: `_` for a type
     /// nothing decides.
     pub fn describe(&mut self, db: &'db dyn crate::Db, ty: &PType<'db>) -> String {
+        self.syntax(db, ty).to_string()
+    }
+
+    /// The type as far as it is known, shaped as datalove writes it.
+    fn syntax(&mut self, db: &'db dyn crate::Db, ty: &PType<'db>) -> TypeSyntax<'db> {
         match self.prune(ty).into_owned() {
             PType::Var(var) => match self.resolve(&PType::Var(var)) {
-                Ok(resolved) => type_to_string(db, &resolved),
-                Err(_) => "_".to_string(),
+                Ok(resolved) => resolved.syntax(db),
+                Err(_) => TypeSyntax::word("_"),
             },
-            PType::Known(known) => type_to_string(db, &known),
-            PType::AnonTuple(fields) => {
-                let parts: Vec<String> = fields.iter().map(|f| self.describe(db, f)).collect();
-                if parts.len() == 1 { format!("({},)", parts[0]) } else { format!("({})", parts.join(", ")) }
-            }
-            PType::AnonStruct(fields) => format!("{{{}}}", self.describe_fields(db, &fields)),
-            PType::Table(columns) => format!("{{|{}|}}", self.describe_fields(db, &columns)),
-            PType::List(elem) => format!("[{}]", self.describe(db, &elem)),
-            PType::Set(elem) => format!("#{{{}}}", self.describe(db, &elem)),
-            PType::Map(key, value) => format!("%{{{} = {}}}", self.describe(db, &key), self.describe(db, &value)),
-            PType::Option(inner) => format!("?{}", self.describe(db, &inner)),
-            PType::Result(inner) => format!("!{}", self.describe(db, &inner)),
-            PType::Tensor(elem, rank) => format!("[|{}, {}|]", self.describe(db, &elem), rank),
-            PType::Term(name, payload) => format!("term {} {}", name.as_str(db), self.describe(db, &payload)),
-            PType::Enum(variants) => {
-                let parts: Vec<String> = variants.iter()
-                    .map(|(name, payload)| match payload {
-                        Some(p) => format!("term {} {}", name.as_str(db), self.describe(db, p)),
-                        None => format!("atom {}", name.as_str(db)),
-                    })
-                    .collect();
-                format!("enum{{{}}}", parts.join(", "))
-            }
+            PType::Known(known) => known.syntax(db),
+            PType::AnonTuple(fields) => TypeSyntax::Tuple(fields.iter().map(|f| self.syntax(db, f)).collect()),
+            PType::AnonStruct(fields) => TypeSyntax::Struct(self.field_syntax(db, &fields)),
+            PType::Table(columns) => TypeSyntax::Table(self.field_syntax(db, &columns)),
+            PType::List(elem) => TypeSyntax::List(Box::new(self.syntax(db, &elem))),
+            PType::Set(elem) => TypeSyntax::Set(Box::new(self.syntax(db, &elem))),
+            PType::Map(key, value) => TypeSyntax::Map(Box::new(self.syntax(db, &key)), Box::new(self.syntax(db, &value))),
+            PType::Option(inner) => TypeSyntax::Option(Box::new(self.syntax(db, &inner))),
+            PType::Result(inner) => TypeSyntax::Result(Box::new(self.syntax(db, &inner))),
+            PType::Tensor(elem, rank) => TypeSyntax::Tensor(Box::new(self.syntax(db, &elem)), rank),
+            PType::Term(name, payload) => TypeSyntax::Term(Cow::Borrowed(name.as_str(db)), Box::new(self.syntax(db, &payload))),
+            PType::Enum(variants) => TypeSyntax::Enum(variants.iter()
+                .map(|(name, payload)| (Cow::Borrowed(name.as_str(db)), payload.as_ref().map(|p| self.syntax(db, p))))
+                .collect()),
         }
     }
 
-    fn describe_fields(&mut self, db: &'db dyn crate::Db, fields: &[(InternedText<'db>, PType<'db>)]) -> String {
+    fn field_syntax(
+        &mut self,
+        db: &'db dyn crate::Db,
+        fields: &[(InternedText<'db>, PType<'db>)],
+    ) -> Vec<(Cow<'db, str>, TypeSyntax<'db>)> {
         fields.iter()
-            .map(|(name, ty)| format!("{}: {}", name.as_str(db), self.describe(db, ty)))
-            .collect::<Vec<_>>()
-            .join(", ")
+            .map(|(name, ty)| (Cow::Borrowed(name.as_str(db)), self.syntax(db, ty)))
+            .collect()
     }
 }
 
@@ -643,16 +644,16 @@ pub fn report_unresolved<'db>(ctx: &TypeContext<'db>, unresolved: &Unresolved<'d
     };
     let Some(ts) = ctx.get_span(expr) else { return };
     let msg = match expr.expr() {
-        Expr::None => "cannot infer type for None value",
-        Expr::Er(_) => "cannot infer type for Er value",
-        Expr::Enum(_) => "cannot infer type for enum literal",
-        Expr::List(_) => "cannot infer type for empty list",
-        Expr::Set(_) => "cannot infer type for empty set",
-        Expr::Map(_) => "cannot infer type for empty map",
-        Expr::Tensor(_) => "cannot infer type for empty tensor",
-        Expr::Table(_) => "cannot infer type for table with no rows",
+        Expr::None => OpenLiteral::None,
+        Expr::Er(_) => OpenLiteral::Er,
+        Expr::Enum(_) => OpenLiteral::Enum,
+        Expr::List(_) => OpenLiteral::List,
+        Expr::Set(_) => OpenLiteral::Set,
+        Expr::Map(_) => OpenLiteral::Map,
+        Expr::Tensor(_) => OpenLiteral::Tensor,
+        Expr::Table(_) => OpenLiteral::Table,
         _ => unreachable!("no other expression leaves a type open"),
-    };
+    }.message();
     DiagnosticBuilder::error(ctx.db, msg)
         .code("T016")
         .primary_label(ts, "type annotation required")

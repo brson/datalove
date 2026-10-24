@@ -3,7 +3,9 @@
 //! Provides the SpanLookup trait and shared emit_pending_diagnostics function
 //! that can be used with either local spans or module graph spans.
 
-use bct::text::{InternedText, TextSpan};
+use bct::diagnostic::DiagnosticBuilder;
+use bct::text::TextSpan;
+use rmx::prelude::*;
 use datalove_diagnostic::DiagnosticBuilderExt;
 
 use datalove_datafun_ast::ast::ExprKey;
@@ -216,100 +218,99 @@ pub fn emit_pending_diagnostics<'db>(
     spans: &dyn SpanLookup<'db>,
 ) {
     for diag in pending {
-        emit_single_diagnostic(db, diag, spans);
+        if let Some(builder) = build(db, diag, spans) {
+            builder.emit_type();
+        }
     }
 }
 
-/// Emit a single pending diagnostic.
-fn emit_single_diagnostic<'db>(
+/// Format pending diagnostics as human-readable strings with location info.
+///
+/// The same diagnostics [`emit_pending_diagnostics`] files, each as one line
+/// -- `line 3, col 7: error[F016]: ...` -- with its help after it, for test
+/// harnesses and error collection.
+pub fn format_pending_diagnostics<'db>(
+    db: &'db dyn crate::Db,
+    pending: &[PendingDiagnostic<'db>],
+    spans: &dyn SpanLookup<'db>,
+) -> Vec<String> {
+    pending.iter()
+        .filter_map(|diag| build(db, diag, spans))
+        .map(|builder| {
+            let diagnostic = builder.build();
+            let label = diagnostic.labels.iter()
+                .find(|label| label.style == bct::diagnostic::LabelStyle::Primary)
+                .expect("every typecheck diagnostic has a primary label");
+            let loc = format_location(db, &TextSpan::new(label.source, label.span.C()));
+            let code = diagnostic.code.expect("every typecheck diagnostic has a code");
+            let mut line = format!("{}: error[{}]: {}", loc, code.as_str(db), diagnostic.message.as_str(db));
+            for help in &diagnostic.helps {
+                line.push_str(&format!(" (help: {})", help.as_str(db)));
+            }
+            line
+        })
+        .collect()
+}
+
+/// The diagnostic for one pending diagnostic, the one place each is worded;
+/// `None` where what it points at has no span.
+fn build<'db>(
     db: &'db dyn crate::Db,
     diag: &PendingDiagnostic<'db>,
     spans: &dyn SpanLookup<'db>,
-) {
-    match diag {
+) -> Option<DiagnosticBuilder<'db>> {
+    let builder = match diag {
         PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                let msg = format!("cannot find value `{}` in this scope", name.as_str(db));
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F001")
-                    .primary_label(ts, "not found in this scope")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("cannot find value `{}` in this scope", name.as_str(db)))
+                .code("F001")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope")
         }
         PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                let msg = format!("cannot find function `{}` in this scope", name.as_str(db));
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F002")
-                    .primary_label(ts, "not found in this scope")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("cannot find function `{}` in this scope", name.as_str(db)))
+                .code("F002")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope")
         }
         PendingDiagnostic::DuplicateImport { local_index, module_id: _, name, first } => {
-            if let Some(ts) = spans.lookup_import(db, *local_index) {
-                let msg = format!(
-                    "`{}` is imported already, from `{}`",
-                    name.as_str(db), first.as_str(db),
-                );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F059")
-                    .primary_label(ts, "a name binds one function")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("`{}` is imported already, from `{}`", name.as_str(db), first.as_str(db)))
+                .code("F059")
+                .primary_label(spans.lookup_import(db, *local_index)?, "a name binds one function")
         }
         PendingDiagnostic::ImportShadowsFunction { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_import(db, *local_index) {
-                let msg = format!("`{}` is imported, and also defined here as a function", name.as_str(db));
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F086")
-                    .primary_label(ts, "a name binds one function")
-                    .note("the function defined here is the one that is used")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("`{}` is imported, and also defined here as a function", name.as_str(db)))
+                .code("F086")
+                .primary_label(spans.lookup_import(db, *local_index)?, "a name binds one function")
+                .note("the function defined here is the one that is used")
         }
         PendingDiagnostic::CollectionKeyNotOrdered { local_index, module_id: _, param, position } => {
-            if let Some(ts) = spans.lookup_fun(db, *local_index) {
-                let msg = format!(
-                    "`{}` has not said it can be ordered, and {} puts it in a set or a map",
-                    param.as_str(db), position.as_str(db),
-                );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F061")
-                    .primary_label(ts, "this signature does not resolve, so calls to it are not found either")
-                    .note("a set keeps its elements in order and a map keeps its keys in order, so a \
+            let msg = format!(
+                "`{}` has not said it can be ordered, and {} puts it in a set or a map",
+                param.as_str(db), position.as_str(db),
+            );
+            DiagnosticBuilder::error(db, &msg)
+                .code("F061")
+                .primary_label(spans.lookup_fun(db, *local_index)?, "this signature does not resolve, so calls to it are not found either")
+                .note("a set keeps its elements in order and a map keeps its keys in order, so a \
 collection written over a type parameter asks that parameter for an ordering. Say so with `where { \
 <param> is ord, }`, which every type there is satisfies.")
-                    .emit_type();
-            }
         }
         PendingDiagnostic::MissingReturn { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_fun(db, *local_index) {
-                let msg = format!(
-                    "`{}` can reach the end of its body without returning a value",
-                    name.as_str(db),
-                );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F063")
-                    .primary_label(ts, "this signature promises a value")
-                    .note("the end of a body is a return like any other, and one that owes a \
+            DiagnosticBuilder::error(db, &format!("`{}` can reach the end of its body without returning a value", name.as_str(db)))
+                .code("F063")
+                .primary_label(spans.lookup_fun(db, *local_index)?, "this signature promises a value")
+                .note("the end of a body is a return like any other, and one that owes a \
 value has to be reached only where a `ret` has already left. Return from every path out, or \
 drop the return type.")
-                    .emit_type();
-            }
         }
         PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_alias(db, *local_index) {
-                let msg = format!("unknown type `{}`", name.as_str(db));
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F064")
-                    .primary_label(ts, "no type of this name is in scope")
-                    .note("a bare name in type position is a type alias, written `type Name: \
+            let mut builder = DiagnosticBuilder::error(db, &format!("unknown type `{}`", name.as_str(db)))
+                .code("F064")
+                .primary_label(spans.lookup_alias(db, *local_index)?, "no type of this name is in scope")
+                .note("a bare name in type position is a type alias, written `type Name: \
 <type>`, or one of the type parameters of the generic function it appears in.");
-                if let Some(suggestion) = datalove_datalit::parser_util::type_name_suggestion(name.as_str(db)) {
-                    builder = builder.note(&suggestion);
-                }
-                builder.emit_type();
+            if let Some(suggestion) = datalove_datalit::parser_util::type_name_suggestion(name.as_str(db)) {
+                builder = builder.note(&suggestion);
             }
+            builder
         }
         PendingDiagnostic::Coded { site, module_id: _, code, message, label, note } => {
             let ts = match site {
@@ -318,115 +319,74 @@ drop the return type.")
                 crate::ErrorSite::Fun(local_index) => spans.lookup_fun(db, *local_index),
                 crate::ErrorSite::Import(local_index) => spans.lookup_import(db, *local_index),
                 crate::ErrorSite::Require(local_index) => spans.lookup_require(db, *local_index),
-            };
-            if let Some(ts) = ts {
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
-                    .code(code.as_str(db))
-                    .primary_label(ts, label.as_str(db));
-                if let Some(note) = note {
-                    builder = builder.note(note.as_str(db));
-                }
-                builder.emit_type();
+            }?;
+            let mut builder = DiagnosticBuilder::error(db, message.as_str(db))
+                .code(code.as_str(db))
+                .primary_label(ts, label.as_str(db));
+            if let Some(note) = note {
+                builder = builder.note(note.as_str(db));
             }
+            builder
         }
         PendingDiagnostic::DuplicateTypeAlias { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_type_alias(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(db, &format!("`{}` is defined twice", name.as_str(db)))
-                    .code("F066")
-                    .primary_label(ts, "a type alias is defined once")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("`{}` is defined twice", name.as_str(db)))
+                .code("F066")
+                .primary_label(spans.lookup_type_alias(db, *local_index)?, "a type alias is defined once")
         }
         PendingDiagnostic::DuplicateFunction { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_fun(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(db, &format!("function `{}` is defined twice", name.as_str(db)))
-                    .code("F086")
-                    .primary_label(ts, "a function is defined once")
-                    .note("the first definition is the one that is used")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("function `{}` is defined twice", name.as_str(db)))
+                .code("F086")
+                .primary_label(spans.lookup_fun(db, *local_index)?, "a function is defined once")
+                .note("the first definition is the one that is used")
         }
         PendingDiagnostic::NativeFunOutsideRider { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_fun(db, *local_index) {
-                let msg = format!(
-                    "`{}` is a native function declared where there is no rider to implement it",
-                    name.as_str(db),
-                );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F062")
-                    .primary_label(ts, "nothing supplies a body for this")
-                    .note("a `native fun` names a Rust function, and the only place one is supplied \
+            let msg = format!(
+                "`{}` is a native function declared where there is no rider to implement it",
+                name.as_str(db),
+            );
+            DiagnosticBuilder::error(db, &msg)
+                .code("F062")
+                .primary_label(spans.lookup_fun(db, *local_index)?, "nothing supplies a body for this")
+                .note("a `native fun` names a Rust function, and the only place one is supplied \
 is a package's rider interface. Declare it in the package's `rider/rider.dli` and reach it from a module \
 with `require rider <name>` and `import <name>.<function>`; a script has no rider of its own.")
-                    .emit_type();
-            }
         }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
-                    .code("F011")
-                    .primary_label(ts, "cannot infer type")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, message.as_str(db))
+                .code("F011")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "cannot infer type")
         }
         PendingDiagnostic::TypeMismatch { expr_key, module_id: _, expected, actual, label, recovery_hint } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                let msg = format!(
-                    "mismatched types: expected `{}`, found `{}`",
-                    expected.as_str(db),
-                    actual.as_str(db)
-                );
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F016")
-                    .primary_label(ts, label.as_str(db));
-
-                // Add help note for recoverable errors
-                if let RecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.note(&format!("help: use `@` to {}", description));
-                }
-
-                builder.emit_type();
+            let msg = format!("mismatched types: expected `{}`, found `{}`", expected.as_str(db), actual.as_str(db));
+            let mut builder = DiagnosticBuilder::error(db, &msg)
+                .code("F016")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, label.as_str(db));
+            if let RecoveryHint::InsertAdapt { description } = recovery_hint {
+                builder = builder.help(&format!("use `@` to {}", description));
             }
+            builder
         }
         PendingDiagnostic::PatternMismatch { expr_key, module_id: _, message, label } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
-                    .code("F071")
-                    .primary_label(ts, label.as_str(db))
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, message.as_str(db))
+                .code("F071")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, label.as_str(db))
         }
         PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
-                    .code("F065")
-                    .primary_label(ts, "value out of range")
-                    .note(note.as_str(db))
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, message.as_str(db))
+                .code("F065")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "value out of range")
+                .note(note.as_str(db))
         }
         PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty, note } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                let msg = format!(
-                    "invalid operand type `{}` for operator `{}`",
-                    ty.as_str(db),
-                    op.as_str(db)
-                );
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F026")
-                    .primary_label(
-                        ts,
-                        &format!(
-                            "operator `{}` cannot be applied to type `{}`",
-                            op.as_str(db),
-                            ty.as_str(db)
-                        ),
-                    );
-                if let Some(note) = note {
-                    builder = builder.note(note.as_str(db));
-                }
-                builder.emit_type();
+            let msg = format!("invalid operand type `{}` for operator `{}`", ty.as_str(db), op.as_str(db));
+            let label = format!("operator `{}` cannot be applied to type `{}`", op.as_str(db), ty.as_str(db));
+            let mut builder = DiagnosticBuilder::error(db, &msg)
+                .code("F026")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, &label);
+            if let Some(note) = note {
+                builder = builder.note(note.as_str(db));
             }
+            builder
         }
         PendingDiagnostic::ArityMismatch {
             call_expr_key,
@@ -437,373 +397,105 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
             expected,
             actual,
         } => {
-            emit_arity_mismatch(db, spans, *call_expr_key, *func_name, *func_local_index, *func_module_id, *expected, *actual);
+            let plural = |n: usize| if n == 1 { "" } else { "s" };
+            let msg = format!(
+                "this function takes {} argument{} but {} {} supplied",
+                expected, plural(*expected), actual, if *actual == 1 { "was" } else { "were" },
+            );
+            let mut builder = DiagnosticBuilder::error(db, &msg)
+                .code("F045")
+                .primary_label(spans.lookup_expr(db, *call_expr_key)?, &format!("expected {} argument{}", expected, plural(*expected)));
+            if let Some(def_ts) = spans.lookup_fun_in_module(db, *func_module_id, *func_local_index) {
+                let def_label = format!(
+                    "function `{}` defined here with {} parameter{}",
+                    func_name.as_str(db), expected, plural(*expected),
+                );
+                builder = builder.secondary_label(def_ts, &def_label);
+            }
+            builder
         }
         PendingDiagnostic::ResultRequiresBinding { expr_key, module_id: _ } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(db, "Result destructuring requires an else binding")
-                    .code("F046")
-                    .primary_label(ts, "Result type here")
-                    .note("use `if result |value| ... else |err| ... end if` to handle both cases")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, "a result taken apart needs an `else` binding for its error")
+                .code("F046")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "this is a result, `!T`")
+                .note("use `if result |value| ... else |err| ... end if` to handle both cases")
         }
         PendingDiagnostic::TryTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                let msg = format!(
-                    "try operator `{}` requires {} type, found `{}`",
-                    operator.as_str(db),
-                    expected.as_str(db),
-                    actual.as_str(db)
-                );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F048")
-                    .primary_label(
-                        ts,
-                        &format!("expected {}, found `{}`", expected.as_str(db), actual.as_str(db)),
-                    )
-                    .emit_type();
-            }
+            let msg = format!("`{}` unwraps {}, and this is `{}`", operator.as_str(db), expected.as_str(db), actual.as_str(db));
+            DiagnosticBuilder::error(db, &msg)
+                .code("F048")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, &format!("this is `{}`", actual.as_str(db)))
         }
         PendingDiagnostic::TryReturnTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                let msg = format!(
-                    "try operator `{}` requires function to return {}, found `{}`",
-                    operator.as_str(db),
-                    expected.as_str(db),
-                    actual.as_str(db)
-                );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("F049")
-                    .primary_label(ts, "try operator here")
-                    .note(&format!(
-                        "function must return {} to use `{}` operator",
-                        expected.as_str(db),
-                        operator.as_str(db)
-                    ))
-                    .emit_type();
+            let ts = spans.lookup_expr(db, *expr_key)?;
+            match actual {
+                Some(actual) => {
+                    let msg = format!(
+                        "`{}` can return early, so the function has to return {}, and it returns `{}`",
+                        operator.as_str(db), expected.as_str(db), actual.as_str(db),
+                    );
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("F049")
+                        .primary_label(ts, "this can return early")
+                }
+                None => {
+                    let msg = format!("`{}` can return early, and there is no function here to return from", operator.as_str(db));
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("F049")
+                        .primary_label(ts, "this can return early")
+                }
             }
         }
         PendingDiagnostic::BreakOutsideLoop { local_index, module_id: _ } => {
-            if let Some(ts) = spans.lookup_break(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(db, "`break` used outside of loop")
-                    .code("F050")
-                    .primary_label(ts, "break statement here")
-                    .note("break can only be used inside loop blocks")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, "`break` outside of a loop")
+                .code("F050")
+                .primary_label(spans.lookup_break(db, *local_index)?, "break statement here")
+                .note("break can only be used inside loop blocks")
         }
         PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: _ } => {
-            if let Some(ts) = spans.lookup_continue(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(db, "`continue` used outside of loop")
-                    .code("F051")
-                    .primary_label(ts, "continue statement here")
-                    .note("continue can only be used inside loop blocks")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, "`continue` outside of a loop")
+                .code("F051")
+                .primary_label(spans.lookup_continue(db, *local_index)?, "continue statement here")
+                .note("continue can only be used inside loop blocks")
         }
         PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
-            if let Some(ts) = spans.lookup_ret(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(db, "void function cannot return a value")
-                    .code("F052")
-                    .primary_label(ts, "return with value in void function")
-                    .note("remove the return value or add a return type to the function")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, "void function cannot return a value")
+                .code("F052")
+                .primary_label(spans.lookup_ret(db, *local_index)?, "return with value in void function")
+                .note("remove the return value or add a return type to the function")
         }
         PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: _ } => {
-            if let Some(ts) = spans.lookup_ret(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(db, "function requires return value")
-                    .code("F053")
-                    .primary_label(ts, "bare return in non-void function")
-                    .note("add a return value or change the function to void")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, "function requires return value")
+                .code("F053")
+                .primary_label(spans.lookup_ret(db, *local_index)?, "bare return in non-void function")
+                .note("add a return value or change the function to void")
         }
         PendingDiagnostic::UndefinedVariableSet { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_set(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(
-                    db,
-                    &format!("undefined variable: {}", name.as_str(db)),
-                )
-                    .code("F054")
-                    .primary_label(ts, "variable not defined")
-                    .note("declare the variable with 'var' before assigning to it")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("cannot find variable `{}` in this scope", name.as_str(db)))
+                .code("F054")
+                .primary_label(spans.lookup_set(db, *local_index)?, "variable not defined")
+                .note("declare the variable with 'var' before assigning to it")
         }
         PendingDiagnostic::VariableNotMutable { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_set(db, *local_index) {
-                bct::diagnostic::DiagnosticBuilder::error(
-                    db,
-                    &format!("cannot assign to immutable variable `{}`", name.as_str(db)),
-                )
-                    .code("F055")
-                    .primary_label(ts, "cannot assign to immutable variable")
-                    .note("consider declaring the variable with 'var' instead of 'let'")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("cannot assign to immutable variable `{}`", name.as_str(db)))
+                .code("F055")
+                .primary_label(spans.lookup_set(db, *local_index)?, "cannot assign to immutable variable")
+                .note("consider declaring the variable with 'var' instead of 'let'")
         }
         PendingDiagnostic::NonConstInConstExpr { expr_key, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(
-                    db,
-                    &format!("`{}` is not a const binding", name.as_str(db)),
-                )
-                    .code("F058")
-                    .primary_label(ts, "not a const binding")
-                    .note("a const expression is evaluated at compile time, so it can only name other consts")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("`{}` is not a const binding", name.as_str(db)))
+                .code("F058")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "not a const binding")
+                .note("a const expression is evaluated at compile time, so it can only name other consts")
         }
         PendingDiagnostic::ArgumentModeMismatch { expr_key, module_id: _, expected, found } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(
-                    db,
-                    &format!("argument mode mismatch: expected `{}`, found `{}`", expected.as_str(db), found.as_str(db)),
-                )
-                    .code("F057")
-                    .primary_label(ts, &format!("this argument must be passed as `{}`", expected.as_str(db)))
-                    .note("the marker at a call site must match the parameter's declared mode")
-                    .emit_type();
-            }
+            DiagnosticBuilder::error(db, &format!("argument mode mismatch: expected `{}`, found `{}`", expected.as_str(db), found.as_str(db)))
+                .code("F057")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, &format!("this argument must be passed as `{}`", expected.as_str(db)))
+                .note("the marker at a call site must match the parameter's declared mode")
         }
-    }
-}
-
-/// Emit F045 arity mismatch diagnostic.
-#[allow(clippy::too_many_arguments)]
-fn emit_arity_mismatch<'db>(
-    db: &'db dyn crate::Db,
-    spans: &dyn SpanLookup<'db>,
-    call_expr_key: ExprKey<'db>,
-    func_name: InternedText<'db>,
-    func_local_index: u32,
-    func_module_id: Option<ModuleId<'db>>,
-    expected: usize,
-    actual: usize,
-) {
-    let Some(primary_ts) = spans.lookup_expr(db, call_expr_key) else {
-        return;
     };
-
-    let msg = format!(
-        "this function takes {} argument{} but {} {} supplied",
-        expected,
-        if expected == 1 { "" } else { "s" },
-        actual,
-        if actual == 1 { "was" } else { "were" }
-    );
-    let label = format!(
-        "expected {} argument{}",
-        expected,
-        if expected == 1 { "" } else { "s" }
-    );
-
-    let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-        .code("F045")
-        .primary_label(primary_ts, &label);
-
-    // Add secondary label for function definition.
-    if let Some(def_ts) = spans.lookup_fun_in_module(db, func_module_id, func_local_index) {
-        let def_label = format!(
-            "function `{}` defined here with {} parameter{}",
-            func_name.as_str(db),
-            expected,
-            if expected == 1 { "" } else { "s" }
-        );
-        builder = builder.secondary_label(def_ts, &def_label);
-    }
-
-    builder.emit_type();
-}
-
-/// Format pending diagnostics as human-readable strings with location info.
-///
-/// Unlike `emit_pending_diagnostics`, this returns strings instead of emitting
-/// to the diagnostic system, useful for test harnesses and error collection.
-pub fn format_pending_diagnostics<'db>(
-    db: &'db dyn crate::Db,
-    pending: &[PendingDiagnostic<'db>],
-    spans: &dyn SpanLookup<'db>,
-) -> Vec<String> {
-    pending.iter().filter_map(|diag| format_single_diagnostic(db, diag, spans)).collect()
-}
-
-/// Format a single pending diagnostic as a string.
-fn format_single_diagnostic<'db>(
-    db: &'db dyn crate::Db,
-    diag: &PendingDiagnostic<'db>,
-    spans: &dyn SpanLookup<'db>,
-) -> Option<String> {
-    match diag {
-        PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F001]: cannot find value `{}` in this scope", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F002]: cannot find function `{}` in this scope", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::DuplicateImport { local_index, module_id: _, name, first } => {
-            let ts = spans.lookup_import(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!(
-                "{}: error[F059]: `{}` is imported already, from `{}`",
-                loc, name.as_str(db), first.as_str(db),
-            ))
-        }
-        PendingDiagnostic::ImportShadowsFunction { local_index, module_id: _, name } => {
-            let ts = spans.lookup_import(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!(
-                "{}: error[F086]: `{}` is imported, and also defined here as a function",
-                loc, name.as_str(db),
-            ))
-        }
-        PendingDiagnostic::CollectionKeyNotOrdered { local_index, module_id: _, param, position } => {
-            let ts = spans.lookup_fun(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!(
-                "{}: error[F061]: `{}` has not said it can be ordered, and {} puts it in a set or a map",
-                loc, param.as_str(db), position.as_str(db),
-            ))
-        }
-        PendingDiagnostic::MissingReturn { local_index, module_id: _, name } => {
-            let ts = spans.lookup_fun(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!(
-                "{}: error[F063]: `{}` can reach the end of its body without returning a value",
-                loc, name.as_str(db),
-            ))
-        }
-        PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name } => {
-            let ts = spans.lookup_alias(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F064]: unknown type `{}`", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::NativeFunOutsideRider { local_index, module_id: _, name } => {
-            let ts = spans.lookup_fun(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!(
-                "{}: error[F062]: `{}` is a native function declared where there is no rider to implement it",
-                loc, name.as_str(db),
-            ))
-        }
-        PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F011]: {}", loc, message.as_str(db)))
-        }
-        PendingDiagnostic::TypeMismatch { expr_key, module_id: _, expected, actual, label: _, recovery_hint } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            let base_msg = format!("{}: error[F016]: mismatched types: expected `{}`, found `{}`", loc, expected.as_str(db), actual.as_str(db));
-            if let RecoveryHint::InsertAdapt { description } = recovery_hint {
-                Some(format!("{} (help: use `@` to {})", base_msg, description))
-            } else {
-                Some(base_msg)
-            }
-        }
-        PendingDiagnostic::Coded { site, module_id: _, code, message, label: _, note: _ } => {
-            let ts = match site {
-                crate::ErrorSite::Expr(key) => spans.lookup_expr(db, *key)?,
-                crate::ErrorSite::Set(local_index) => spans.lookup_set(db, *local_index)?,
-                crate::ErrorSite::Fun(local_index) => spans.lookup_fun(db, *local_index)?,
-                crate::ErrorSite::Import(local_index) => spans.lookup_import(db, *local_index)?,
-                crate::ErrorSite::Require(local_index) => spans.lookup_require(db, *local_index)?,
-            };
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[{}]: {}", loc, code.as_str(db), message.as_str(db)))
-        }
-        PendingDiagnostic::DuplicateTypeAlias { local_index, module_id: _, name } => {
-            let ts = spans.lookup_type_alias(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F066]: `{}` is defined twice", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::DuplicateFunction { local_index, module_id: _, name } => {
-            let ts = spans.lookup_fun(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F086]: function `{}` is defined twice", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::PatternMismatch { expr_key, module_id: _, message, label: _ } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F071]: {}", loc, message.as_str(db)))
-        }
-        PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note: _ } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F065]: {}", loc, message.as_str(db)))
-        }
-        PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty, note: _ } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F026]: invalid operand type `{}` for operator `{}`", loc, ty.as_str(db), op.as_str(db)))
-        }
-        PendingDiagnostic::ArityMismatch { call_expr_key, call_module_id: _, func_name, func_local_index: _, func_module_id: _, expected, actual } => {
-            let ts = spans.lookup_expr(db, *call_expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F045]: function `{}` takes {} argument(s) but {} were supplied", loc, func_name.as_str(db), expected, actual))
-        }
-        PendingDiagnostic::ResultRequiresBinding { expr_key, module_id: _ } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F046]: Result destructuring requires an else binding", loc))
-        }
-        PendingDiagnostic::TryTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F048]: try operator `{}` requires {} type, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
-        }
-        PendingDiagnostic::BreakOutsideLoop { local_index, module_id: _ } => {
-            let ts = spans.lookup_break(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F050]: `break` outside of a loop", loc))
-        }
-        PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: _ } => {
-            let ts = spans.lookup_continue(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F051]: `continue` outside of a loop", loc))
-        }
-        PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: _ } => {
-            let ts = spans.lookup_ret(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F053]: non-void function requires a return value", loc))
-        }
-        PendingDiagnostic::UndefinedVariableSet { local_index, module_id: _, name } => {
-            let ts = spans.lookup_set(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F054]: cannot find variable `{}` in this scope", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::VariableNotMutable { local_index, module_id: _, name } => {
-            let ts = spans.lookup_set(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F055]: cannot assign to immutable variable `{}`", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
-            let ts = spans.lookup_ret(db, *local_index)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F052]: void function cannot return a value", loc))
-        }
-        PendingDiagnostic::TryReturnTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F049]: try operator `{}` return type mismatch: expected `{}`, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
-        }
-        PendingDiagnostic::NonConstInConstExpr { expr_key, module_id: _, name } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F058]: `{}` is not a const binding", loc, name.as_str(db)))
-        }
-        PendingDiagnostic::ArgumentModeMismatch { expr_key, module_id: _, expected, found } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F057]: argument mode mismatch: expected `{}`, found `{}`", loc, expected.as_str(db), found.as_str(db)))
-        }
-    }
+    Some(builder)
 }
 
 /// Format a TextSpan as a location string (e.g., "line 10, col 5").

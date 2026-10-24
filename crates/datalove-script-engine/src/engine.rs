@@ -648,8 +648,13 @@ impl Engine {
             .and_then(|ctx| ctx.unit)
             .expect("a compiled unit is numbered") as usize;
         match self.executor.unit_status(index).C() {
+            // The executor's type is the IR's; the value's type is the
+            // language's, from the typechecker.
             UnitStatus::Ran => match ty {
-                Some(ty) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
+                Some(_) => {
+                    let ty = self.script.as_ref().expect("a session").value_type(index).S();
+                    Eval::SuccessExpr(EvalExpr { ty, value: output })
+                }
                 None => self.report_exports(ir_unit),
             },
             UnitStatus::ReturnedEarly => Eval::ReturnedEarly(output),
@@ -966,9 +971,21 @@ impl Engine {
         }
     }
 
+    /// The type and value of the nearest binding of `name`.
     fn binding_type_and_value(&mut self, name: &str) -> (String, String) {
-        self.executor.get_binding(name)
-            .expect("the executor registered the unit's exports before executing it")
+        let (_, value) = self.executor.get_binding(name)
+            .expect("the executor registered the unit's exports before executing it");
+        (self.type_of(name), value)
+    }
+
+    /// The type of the nearest binding of `name`, as datalove writes it.
+    ///
+    /// The executor holds the values, and knows only how the IR lays them
+    /// out; what the language says they are is the typechecker's, kept with
+    /// the unit that provides the name.
+    fn type_of(&self, name: &str) -> String {
+        let unit = self.executor.provider_of(name).expect("a binding the executor offers has a provider");
+        self.script.as_ref().expect("a session").type_of(unit, name).S()
     }
 
     /// The bindings the session offers, the nearest of each name, sorted by
@@ -976,7 +993,7 @@ impl Engine {
     pub fn get_environment(&mut self) -> Vec<EnvBinding> {
         self.executor.get_environment()
             .into_iter()
-            .map(|(name, _kind, ty, value)| EnvBinding { name, ty, value })
+            .map(|(name, _kind, _, value)| EnvBinding { ty: self.type_of(&name), name, value })
             .collect()
     }
 

@@ -22,7 +22,7 @@
     "environment": [
       {
         "name": "down",
-        "ty": "function",
+        "ty": "fun(string): u32",
         "value": "-"
       }
     ]
@@ -52,7 +52,7 @@
     "environment": [
       {
         "name": "down",
-        "ty": "function",
+        "ty": "fun(string): u32",
         "value": "-"
       },
       {

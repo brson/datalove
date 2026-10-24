@@ -182,7 +182,7 @@ Analysis(
                         v23 = call m0.u3(v7)
                         v24 = call m0.u3(v8)
                         v25 = call m0.u4(v7)
-                        v26 = pack Tuple7 {v9, v11, v13, v22, v23, v24, v25}
+                        v26 = pack tuple/7 {v9, v11, v13, v22, v23, v24, v25}
                         drop v3
                         drop v7
                         drop v8

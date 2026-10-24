@@ -43,7 +43,7 @@ Analysis(
                         v13 = none
                         return v13
                     block6:
-                        v14 = pack Struct0 {v5, v8, v11}
+                        v14 = pack struct {v5, v8, v11}
                         v15 = some v14
                         return v15
                 """,

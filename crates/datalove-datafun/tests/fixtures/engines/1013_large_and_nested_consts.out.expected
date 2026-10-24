@@ -90,7 +90,7 @@ Analysis(
                         v44 = mapvalueref *v38[v39]
                         v45 = clone *v44
                         drop v39
-                        v46 = pack Tuple6 {v2, v9, v21, v29, v37, v45}
+                        v46 = pack tuple/6 {v2, v9, v21, v29, v37, v45}
                         v47 = ok v46
                         return v47
                 """,

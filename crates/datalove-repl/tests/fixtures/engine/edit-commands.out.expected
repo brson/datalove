@@ -326,7 +326,7 @@
           "unit": 5,
           "compiled": true,
           "eval": {
-            "Error": "UnresolvedName(\"c\")"
+            "Error": "cannot find `c` in this scope"
           }
         }
       ]
@@ -439,7 +439,7 @@
       },
       {
         "name": "f",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -474,7 +474,7 @@
       },
       {
         "name": "f",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -509,7 +509,7 @@
       },
       {
         "name": "f",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -541,7 +541,7 @@
       },
       {
         "name": "f",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -571,7 +571,7 @@
       },
       {
         "name": "f",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -601,7 +601,7 @@
       },
       {
         "name": "f",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]

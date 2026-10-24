@@ -19,7 +19,7 @@ Analysis(
                         v2 = const 3int
                         v3 = list [v0, v1, v2]
                         v4 = const "numbers"
-                        v5 = pack Struct0 {v3, v4}
+                        v5 = pack struct {v3, v4}
                         unit_end_drop v5
                         unit_end
                 """,

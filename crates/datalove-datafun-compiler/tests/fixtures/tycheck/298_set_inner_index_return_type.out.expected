@@ -12,10 +12,7 @@
           "text": "xs[0]?.0"
         }
       ],
-      "message": "`set` through an index with `?` requires function to return Option, found `!()`",
-      "notes": [
-        "function must return Option to use `?`"
-      ]
+      "message": "`set` through an index with `?` can return early, so the function has to return an option `?T`, and it returns `!()`"
     },
     {
       "code": "F049",
@@ -29,20 +26,17 @@
           "text": "xss[0]![0]?"
         }
       ],
-      "message": "`set` through an index with `!` requires function to return Result, found `?()`",
-      "notes": [
-        "function must return Result to use `!`"
-      ]
+      "message": "`set` through an index with `!` can return early, so the function has to return a result `!T`, and it returns `?()`"
     }
   ],
   "errors": [
     {
       "kind": "DatalitError",
-      "message": "`set` through an index with `?` requires function to return Option, found `!()`"
+      "message": "`set` through an index with `?` can return early, so the function has to return an option `?T`, and it returns `!()`"
     },
     {
       "kind": "DatalitError",
-      "message": "`set` through an index with `!` requires function to return Result, found `?()`"
+      "message": "`set` through an index with `!` can return early, so the function has to return a result `!T`, and it returns `?()`"
     }
   ],
   "judgements": [

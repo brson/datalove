@@ -77,22 +77,22 @@
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "'three' is not a const binding"
+          "reason": "`three` is not a const binding"
         },
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "comptime argument must be a const binding name"
+          "reason": "the argument to a const parameter must name a const"
         },
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "comptime argument must be a const binding name"
+          "reason": "the argument to a const parameter must name a const"
         },
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "'factor' is not a const binding"
+          "reason": "`factor` is not a const binding"
         },
         {
           "func_name": "bad_generic",

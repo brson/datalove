@@ -4,7 +4,7 @@
       "code": "F016",
       "labels": [
         {
-          "message": "use 'case term' to destructure payload",
+          "message": "`case atom` matches a variant with no payload",
           "span": [
             167,
             168
@@ -12,14 +12,14 @@
           "text": "t"
         }
       ],
-      "message": "mismatched types: expected `atom case`, found `variant 'Note' has a payload`"
+      "message": "`Note` is a term, with a payload, and is matched with `case term Note <name>`"
     }
   ],
   "errors": [
     {
-      "actual": "variant 'Note' has a payload",
-      "expected": "atom case",
-      "kind": "TypeMismatch"
+      "code": "F016",
+      "kind": "Worded",
+      "message": "`Note` is a term, with a payload, and is matched with `case term Note <name>`"
     }
   ],
   "judgements": [

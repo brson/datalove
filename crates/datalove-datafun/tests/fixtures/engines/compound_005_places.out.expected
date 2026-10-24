@@ -69,8 +69,8 @@ Analysis(
                         v0 = const 1u32
                         v1 = const 2u32
                         v2 = const 3int
-                        v3 = pack Tuple2 {v1, v2}
-                        v4 = pack Struct0 {v0, v3}
+                        v3 = pack tuple/2 {v1, v2}
+                        v4 = pack struct {v0, v3}
                         store.move.tracked s0, v4
                         v5 = const 10u32
                         v6 = getfieldref s0.0
@@ -185,10 +185,10 @@ Analysis(
                     block14:
                         v61 = const 1u32
                         v62 = const 10int
-                        v63 = pack Struct0 {v61, v62}
+                        v63 = pack struct {v61, v62}
                         v64 = const 2u32
                         v65 = const 20int
-                        v66 = pack Struct0 {v64, v65}
+                        v66 = pack struct {v64, v65}
                         v67 = list [v63, v66]
                         store.move.tracked s4, v67
                         v68 = const 100u32
@@ -246,7 +246,7 @@ Analysis(
                         v90 = load.move.tracked s2
                         v91 = load.move.tracked s3
                         v92 = load.move.tracked s4
-                        v93 = pack Tuple5 {v88, v89, v90, v91, v92}
+                        v93 = pack tuple/5 {v88, v89, v90, v91, v92}
                         v94 = ok v93
                         return v94
                     
@@ -352,7 +352,7 @@ Analysis(
                     block6:
                         v20 = load.move.tracked s0
                         v21 = load.copy s1
-                        v22 = pack Tuple2 {v20, v21}
+                        v22 = pack tuple/2 {v20, v21}
                         v23 = ok v22
                         return v23
                 """,

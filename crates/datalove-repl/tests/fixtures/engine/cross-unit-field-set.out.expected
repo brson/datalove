@@ -199,7 +199,7 @@
           {
             "Slot": {
               "name": "r",
-              "ty": "{name: string, age: int}",
+              "ty": "{ name: string, age: int }",
               "value": "{name = \"Alice\", age = 30}"
             }
           }
@@ -219,7 +219,7 @@
       },
       {
         "name": "r",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Alice\", age = 30}"
       }
     ]
@@ -249,7 +249,7 @@
       },
       {
         "name": "r",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Bob\", age = 30}"
       }
     ]
@@ -266,7 +266,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "{name: string, age: int}",
+          "ty": "{ name: string, age: int }",
           "value": "{name = \"Bob\", age = 30}"
         }
       }
@@ -284,7 +284,7 @@
       },
       {
         "name": "r",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Bob\", age = 30}"
       }
     ]
@@ -324,7 +324,7 @@
       },
       {
         "name": "r",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Bob\", age = 30}"
       },
       {
@@ -369,7 +369,7 @@
       },
       {
         "name": "r",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Bob\", age = 30}"
       },
       {
@@ -411,7 +411,7 @@
       },
       {
         "name": "r",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Bob\", age = 30}"
       },
       {
@@ -456,7 +456,7 @@
       },
       {
         "name": "r",
-        "ty": "{name: string, age: int}",
+        "ty": "{ name: string, age: int }",
         "value": "{name = \"Bob\", age = 30}"
       },
       {

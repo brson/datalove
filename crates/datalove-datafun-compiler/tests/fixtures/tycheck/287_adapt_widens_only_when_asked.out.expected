@@ -64,7 +64,7 @@
     {
       "kind": "variable",
       "name": "widened",
-      "type": "enum{atom Blue, atom Red}"
+      "type": "enum { atom Blue, atom Red }"
     }
   ]
 }

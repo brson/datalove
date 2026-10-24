@@ -18,7 +18,7 @@
       "code": "F049",
       "labels": [
         {
-          "message": "try operator here",
+          "message": "this can return early",
           "span": [
             87,
             88
@@ -26,10 +26,7 @@
           "text": "!"
         }
       ],
-      "message": "try operator `!` requires function to return Result, found `u32`",
-      "notes": [
-        "function must return Result to use `!` operator"
-      ]
+      "message": "`!` can return early, so the function has to return a result `!T`, and it returns `u32`"
     }
   ],
   "errors": [

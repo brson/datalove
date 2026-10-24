@@ -20,12 +20,12 @@
     {
       "kind": "variable",
       "name": "d",
-      "type": "enum{atom Blue, atom Red}"
+      "type": "enum { atom Blue, atom Red }"
     },
     {
       "kind": "variable",
       "name": "e",
-      "type": "{x: u32, y: u32}"
+      "type": "{ x: u32, y: u32 }"
     },
     {
       "kind": "variable",

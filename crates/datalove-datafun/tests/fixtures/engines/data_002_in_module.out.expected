@@ -48,7 +48,7 @@ Analysis(
                     block4:
                         v9 = listelementref *v6[p0]
                         v10 = getfield *v9.1
-                        v11 = pack Tuple2 {v5, v10}
+                        v11 = pack tuple/2 {v5, v10}
                         v12 = some v11
                         return v12
                     
@@ -178,7 +178,7 @@ Analysis(
                         v30 = load.copy s0
                         v31 = load.copy s1
                         v32 = const 0.25f64
-                        v33 = pack Tuple3 {v30, v31, v32}
+                        v33 = pack tuple/3 {v30, v31, v32}
                         v34 = ok v33
                         return v34
                     

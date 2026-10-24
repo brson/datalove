@@ -38,7 +38,7 @@ Analysis(
                     block4:
                         v7 = load.copy s0
                         v8 = load.move.tracked s1
-                        v9 = pack Tuple2 {v7, v8}
+                        v9 = pack tuple/2 {v7, v8}
                         return v9
                     
                     fn map_sum(p0):
@@ -75,16 +75,16 @@ Analysis(
                         v11 = load.copy s0
                         v12 = load.move.tracked s1
                         v13 = load.move.tracked s2
-                        v14 = pack Tuple3 {v11, v12, v13}
+                        v14 = pack tuple/3 {v11, v12, v13}
                         return v14
                     
                     fn count_entries(p0):
-                      desc0 = T0
-                      desc1 = T1
-                      desc2 = map<T0, T1>
-                      desc3 = option<T0>
-                      desc4 = option<T1>
-                      desc5 = (index, option<T0>, option<T1>)
+                      desc0 = param<0>
+                      desc1 = param<1>
+                      desc2 = map<param<0>, param<1>>
+                      desc3 = option<param<0>>
+                      desc4 = option<param<1>>
+                      desc5 = tuple<index, option<param<0>>, option<param<1>>>
                     block0:
                         v0 = const 0index
                         store.copy s0, v0
@@ -119,7 +119,7 @@ Analysis(
                         v12 = load.copy s0
                         v13 = load.move.tracked s1
                         v14 = load.move.tracked s2
-                        v15 = pack Tuple3 {v12, v13, v14}
+                        v15 = pack tuple/3 {v12, v13, v14}
                         return v15
                     
                     fn main():
@@ -219,7 +219,7 @@ Analysis(
                         v92 = call m0.u0(v30)
                         v93 = call m0.u1(v91)
                         v94 = call m0.u2(v91) <string, int>
-                        v95 = pack Tuple3 {v92, v93, v94}
+                        v95 = pack tuple/3 {v92, v93, v94}
                         drop v30
                         drop v91
                         return v95

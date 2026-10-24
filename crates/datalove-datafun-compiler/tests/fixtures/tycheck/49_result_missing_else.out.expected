@@ -4,7 +4,7 @@
       "code": "F046",
       "labels": [
         {
-          "message": "Result type here",
+          "message": "this is a result, `!T`",
           "span": [
             48,
             49
@@ -12,7 +12,7 @@
           "text": "a"
         }
       ],
-      "message": "Result destructuring requires an else binding",
+      "message": "a result taken apart needs an `else` binding for its error",
       "notes": [
         "use `if result |value| ... else |err| ... end if` to handle both cases"
       ]

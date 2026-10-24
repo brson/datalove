@@ -13,9 +13,9 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn last(p0):
-                      desc0 = T0
-                      desc1 = list<T0>
-                      desc2 = option<T0>
+                      desc0 = param<0>
+                      desc1 = list<param<0>>
+                      desc2 = option<param<0>>
                     block0:
                         v0 = none
                         store.move.tracked s0, v0
@@ -39,10 +39,10 @@ Analysis(
                         return v5
                     
                     fn keys(p0):
-                      desc0 = T0
-                      desc1 = T1
-                      desc2 = map<T0, T1>
-                      desc3 = list<T0>
+                      desc0 = param<0>
+                      desc1 = param<1>
+                      desc2 = map<param<0>, param<1>>
+                      desc3 = list<param<0>>
                     block0:
                         v0 = list []
                         store.move.tracked s0, v0
@@ -67,8 +67,8 @@ Analysis(
                         return v6
                     
                     fn members(p0):
-                      desc0 = T0
-                      desc1 = set<T0>
+                      desc0 = param<0>
+                      desc1 = set<param<0>>
                     block0:
                         v0 = const 0index
                         store.copy s0, v0
@@ -114,7 +114,7 @@ Analysis(
                         v16 = #{v13, v14, v15}
                         v17 = call m0.u2(v16) <string>
                         drop v16
-                        v18 = pack Tuple4 {v3, v6, v12, v17}
+                        v18 = pack tuple/4 {v3, v6, v12, v17}
                         return v18
                 """,
             ),

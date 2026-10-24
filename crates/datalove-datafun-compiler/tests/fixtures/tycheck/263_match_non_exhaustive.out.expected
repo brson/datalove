@@ -4,7 +4,7 @@
       "code": "F016",
       "labels": [
         {
-          "message": "non-exhaustive match",
+          "message": "every variant needs a case, or there is a `case default`",
           "span": [
             183,
             184
@@ -12,14 +12,14 @@
           "text": "c"
         }
       ],
-      "message": "mismatched types: expected `exhaustive match`, found `missing variants: Green`"
+      "message": "this `match` has no case for `Green`"
     }
   ],
   "errors": [
     {
-      "actual": "missing variants: Green",
-      "expected": "exhaustive match",
-      "kind": "TypeMismatch"
+      "code": "F016",
+      "kind": "Worded",
+      "message": "this `match` has no case for `Green`"
     }
   ],
   "judgements": [

@@ -55,6 +55,25 @@ pub(crate) struct VarBinding<'db> {
     pub(crate) is_const: bool,
 }
 
+/// What an early-return operator unwraps, and returns early with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Wrapper {
+    /// `?` and the optional operators, which return `none`.
+    Option,
+    /// `!` and the checked operators, which return an `er`.
+    Result,
+}
+
+impl Wrapper {
+    /// The wrapper as a phrase naming it with its syntax: "an option `?T`".
+    pub fn phrase(self) -> &'static str {
+        match self {
+            Wrapper::Option => "an option `?T`",
+            Wrapper::Result => "a result `!T`",
+        }
+    }
+}
+
 /// Context for typechecking.
 pub struct TypeContext<'db> {
     pub(crate) db: &'db dyn crate::Db,
@@ -259,16 +278,16 @@ impl<'db> TypeContext<'db> {
                 .chain(std::iter::once(&start))
                 .map(|f| f.name.as_str(self.db).to_string())
                 .collect();
-            let path = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(" calls ");
+            let error = TypeError::InlineCycle { names };
             self.push_coded(
                 crate::ErrorSite::Fun(start.local_index),
                 "F085",
-                format!("inline function `{}` is recursive ({path})", names[0]),
+                error.to_string(),
                 S("an inline function cannot be"),
                 Some(S("every call to an inline function is replaced by its body, so a cycle of them \
 would be replaced for ever. Drop `inline` from one function of the cycle.")),
             );
-            self.add_error(TypeError::InlineCycle { names });
+            self.add_error(error);
         }
     }
 
@@ -533,42 +552,43 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
 
     /// Report a field or index projection that failed, and pass its error on.
     pub fn report_place_error(&mut self, site: crate::ErrorSite<'db>, error: TypeError) -> TypeError {
+        // The message is the error's own; see `TypeError`'s `Display`.
         let (code, message, label, note) = match &error {
-            TypeError::FieldNotFound { field_name, ty } => (
+            TypeError::FieldNotFound { .. } => (
                 "F067",
-                fmt!("`{ty}` has no field `{field_name}`"),
+                error.to_string(),
                 S("no such field"),
                 None,
             ),
-            TypeError::ProjectionOnNonAggregate { ty } => (
+            TypeError::ProjectionOnNonAggregate { .. } => (
                 "F068",
-                fmt!("`{ty}` has no fields"),
+                error.to_string(),
                 S("only a struct or a tuple has fields"),
                 None,
             ),
-            TypeError::FieldIndexOutOfBounds { index, tuple_size } => (
+            TypeError::FieldIndexOutOfBounds { .. } => (
                 "F069",
-                fmt!("a tuple of {tuple_size} has no element {index}"),
+                error.to_string(),
                 S("no such element"),
                 None,
             ),
-            TypeError::NonCopyFieldProjection { field_ty } => (
+            TypeError::NonCopyFieldProjection { .. } => (
                 "F070",
-                fmt!("a field of type `{field_ty}` cannot be read out of what holds it"),
+                error.to_string(),
                 S("this would move the field out"),
                 Some(S("the field's type is not a copy type, so reading it would move it while the \
 aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
-            TypeError::NonCopyIndexProjection { elem_ty } => (
+            TypeError::NonCopyIndexProjection { .. } => (
                 "F072",
-                fmt!("an element of type `{elem_ty}` cannot be read out of what holds it"),
+                error.to_string(),
                 S("this would move the element out"),
                 Some(S("the element's type is not a copy type, so reading it would move it while the \
 collection still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
-            TypeError::ViewTypeMutBinding { view_ty } => (
+            TypeError::ViewTypeMutBinding { .. } => (
                 "F073",
-                fmt!("a view of type `{view_ty}` cannot be written through"),
+                error.to_string(),
                 S("indexing a tensor of rank above one gives a view into it"),
                 Some(S("a view shows part of the tensor it indexes, and writing it whole would \
 replace the view rather than the elements it shows. Index down to single elements and write those.")),
@@ -605,16 +625,13 @@ replace the view rather than the elements it shows. Index down to single element
                 self.push_coded(site, "F002", fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
                 TypeError::UnresolvedName(fmt!("{module}.{item}"))
             }
-            None => {
-                self.push_coded(
-                    site,
-                    "F078",
-                    fmt!("nothing named `{module}` is required to import from"),
-                    S("no such module or rider"),
-                    Some(S("an import names a module or rider required first, with `require module` or `require rider`")),
-                );
-                TypeError::UnresolvedName(fmt!("module {module}"))
-            }
+            None => self.error_worded(
+                site,
+                "F078",
+                fmt!("nothing named `{module}` is required to import from"),
+                "no such module or rider",
+                Some(S("an import names a module or rider required first, with `require module` or `require rider`")),
+            ),
         };
         self.add_error(error);
     }
@@ -692,21 +709,35 @@ replace the view rather than the elements it shows. Index down to single element
             return Err(TypeError::UnresolvedName(fmt!("{module}.{item}")));
         }
         if self.failed_aliases.contains(module) {
-            return Err(TypeError::UnresolvedName(fmt!("module {module}")));
+            // Its `require` failed, and said so.
+            return Err(TypeError::Worded { code: S("F078"), message: fmt!("the `require` of `{module}` failed") });
         }
         let note = if self.variables.contains_key(&alias) {
             fmt!("`{module}` is a value here, and a value has no functions to call: pass it as an argument instead")
         } else {
             S("a qualified call names a module or rider required first, with `require module` or `require rider`")
         };
-        self.push_coded(
+        Err(self.error_worded(
             site,
             "F078",
             fmt!("nothing named `{module}` is required to call into"),
-            S("no such module or rider"),
+            "no such module or rider",
             Some(note),
-        );
-        Err(TypeError::UnresolvedName(fmt!("module {module}")))
+        ))
+    }
+
+    /// Report a diagnostic worded by the caller at `site`, and give the error
+    /// that says the same.
+    pub fn error_worded(
+        &mut self,
+        site: ErrorSite<'db>,
+        code: &str,
+        message: String,
+        label: &str,
+        note: Option<String>,
+    ) -> TypeError {
+        self.push_coded(site, code, message.C(), label.S(), note);
+        TypeError::Worded { code: code.S(), message }
     }
 
     /// Report a diagnostic worded by the caller, at `site`.
@@ -779,12 +810,12 @@ replace the view rather than the elements it shows. Index down to single element
     }
 
     /// F048: Try operator type mismatch.
-    pub fn error_try_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
+    pub fn error_try_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: Wrapper, actual: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TryTypeMismatch {
             expr_key: expr.key(),
             module_id: self.current_module_id,
             operator: InternedText::new(self.db, operator.S()),
-            expected: InternedText::new(self.db, expected.S()),
+            expected: InternedText::new(self.db, expected.phrase().S()),
             actual: InternedText::new(self.db, actual.S()),
         });
         TypeError::TryTypeMismatch {
@@ -794,17 +825,20 @@ replace the view rather than the elements it shows. Index down to single element
     }
 
     /// F049: Try operator return type mismatch.
-    pub fn error_try_return_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
+    ///
+    /// `actual` is what the enclosing function returns, `None` where there is
+    /// no function to return from.
+    pub fn error_try_return_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: Wrapper, actual: Option<&str>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TryReturnTypeMismatch {
             expr_key: expr.key(),
             module_id: self.current_module_id,
             operator: InternedText::new(self.db, operator.S()),
-            expected: InternedText::new(self.db, expected.S()),
-            actual: InternedText::new(self.db, actual.S()),
+            expected: InternedText::new(self.db, expected.phrase().S()),
+            actual: actual.map(|actual| InternedText::new(self.db, actual.S())),
         });
         TypeError::TryReturnTypeMismatch {
             operator: operator.S(),
-            return_type: actual.S(),
+            return_type: actual.map(S),
         }
     }
 

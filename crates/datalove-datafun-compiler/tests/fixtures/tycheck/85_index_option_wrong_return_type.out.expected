@@ -4,7 +4,7 @@
       "code": "F049",
       "labels": [
         {
-          "message": "try operator here",
+          "message": "this can return early",
           "span": [
             107,
             111
@@ -12,10 +12,7 @@
           "text": "[i]?"
         }
       ],
-      "message": "try operator `?` requires function to return Option, found `u32`",
-      "notes": [
-        "function must return Option to use `?` operator"
-      ]
+      "message": "`?` can return early, so the function has to return an option `?T`, and it returns `u32`"
     }
   ],
   "errors": [

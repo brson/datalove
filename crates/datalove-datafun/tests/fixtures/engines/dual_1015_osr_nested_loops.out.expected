@@ -33,7 +33,7 @@ Analysis(
                         v16 = call u2(v8, v15) <string>
                         v17 = const 5u32
                         v18 = call u3(v17)
-                        v19 = pack Tuple5 {v10, v12, v14, v16, v18}
+                        v19 = pack tuple/5 {v10, v12, v14, v16, v18}
                         debuglog v19
                         drop v19
                         unit_end_drop v4
@@ -161,8 +161,8 @@ Analysis(
                         return v20
                     
                     fn pairs(p0, p1):
-                      desc0 = T0
-                      desc1 = list<T0>
+                      desc0 = param<0>
+                      desc1 = list<param<0>>
                     block0:
                         v0 = const 0index
                         store.copy s0, v0

@@ -15,7 +15,7 @@
     {
       "kind": "variable",
       "name": "e",
-      "type": "enum{atom Blue, atom Red}"
+      "type": "enum { atom Blue, atom Red }"
     }
   ]
 }

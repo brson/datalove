@@ -282,6 +282,16 @@ impl ScriptSession {
         self.units.iter().map(|(source, _)| *source).collect()
     }
 
+    /// The type of `name`, which unit `unit` provides, as datalove writes it.
+    pub fn type_of(&self, unit: usize, name: &str) -> &str {
+        self.records[unit].type_of(name)
+    }
+
+    /// The type of expression unit `unit`'s value, as datalove writes it.
+    pub fn value_type(&self, unit: usize) -> &str {
+        self.records[unit].value_type.as_deref().expect("the unit is an expression that compiled")
+    }
+
     /// What unit `index` provides, and what it does to earlier units'
     /// bindings, as of its last compile. A unit that did not compile does
     /// nothing.
@@ -1349,7 +1359,7 @@ impl<'db> ScriptCompiler<'db> {
 
         // Check for errors.
         let errors: Vec<_> = result.errors(self.db).into_iter()
-            .map(|e| format!("{:?}", e.error(self.db)))
+            .map(|e| e.error(self.db).to_string())
             .collect();
         if !errors.is_empty() {
             return Err(ScriptCompilationResult {
@@ -2135,6 +2145,28 @@ impl<'db> ScriptCompiler<'db> {
             uses: self.unit_used_names(index, typecheck.output),
             imports: typecheck.output.imported_modules(self.db).C(),
             functions: ir_unit.nested_units.iter().cloned().map(Arc::new).collect(),
+            types: self.unit_types(typecheck.output),
+            value_type: match self.parsed_unit_at(index) {
+                ParsedUnit::Expr(parsed) => {
+                    let ty = typecheck.expr_types.get(parsed.expr(self.db))
+                        .expect("an expression unit that typechecked has a type");
+                    Some(datalove_datafun_common::type_to_string(self.db, ty))
+                }
+                ParsedUnit::Fragment { .. } => None,
+            },
         };
+    }
+
+    /// The type of each binding and function a unit provides, as datalove
+    /// writes it.
+    fn unit_types(&self, output: datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>) -> Vec<(String, String)> {
+        let vars = output.new_vars(self.db).iter()
+            .map(|(name, ty, _)| (name.as_str(self.db).S(), datalove_datafun_common::type_to_string(self.db, ty)));
+        let functions = output.new_fns(self.db).iter()
+            .map(|(name, ty)| {
+                let ty = datalove_datafun_common::Type::Function(*ty);
+                (name.as_str(self.db).S(), datalove_datafun_common::type_to_string(self.db, &ty))
+            });
+        vars.chain(functions).collect()
     }
 }

@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "DuplicateTypeAlias { name: \"MyInt\", local_index: 1 }",
+                    "`MyInt` is defined twice",
                 ],
             ),
             ownership: OwnershipResult(

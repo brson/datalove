@@ -13,7 +13,7 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn negated(p0):
-                      desc0 = T0
+                      desc0 = param<0>
                     block0:
                         v0 = neg p0
                         drop p0

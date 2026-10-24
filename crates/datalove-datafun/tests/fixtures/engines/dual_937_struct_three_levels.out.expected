@@ -32,9 +32,9 @@ Analysis(
                         drop v1
                         return v5
                     block2:
-                        v6 = pack Struct0 {v3}
-                        v7 = pack Struct0 {v2, v6}
-                        v8 = pack Struct0 {v1, v7}
+                        v6 = pack struct {v3}
+                        v7 = pack struct {v2, v6}
+                        v8 = pack struct {v1, v7}
                         v9 = some v8
                         return v9
                 """,

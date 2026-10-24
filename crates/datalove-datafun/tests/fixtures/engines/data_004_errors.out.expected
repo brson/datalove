@@ -6,8 +6,8 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "DatalitError(\"no data `local/app/missing` to require\")",
-                    "DatalitError(\"data `local/app/nums` is not a `[string]`\")",
+                    "no data `local/app/missing` to require",
+                    "data `local/app/nums` is not a `[string]`",
                 ],
             ),
             ownership: OwnershipResult(

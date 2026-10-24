@@ -102,7 +102,7 @@ Analysis(
                         v22 = call u3()
                         v23 = call u4()
                         v24 = call u5()
-                        v25 = pack Tuple7 {v18, v19, v20, v21, v22, v23, v24}
+                        v25 = pack tuple/7 {v18, v19, v20, v21, v22, v23, v24}
                         debuglog v25
                         unit_end_drop v2
                         unit_end_drop v4

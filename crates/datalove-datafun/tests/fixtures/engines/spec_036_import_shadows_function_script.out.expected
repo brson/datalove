@@ -26,7 +26,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "ImportShadowsFunction { name: \"twice\" }",
+                    "`twice` is imported, and also defined here as a function",
                 ],
             ),
             ownership: OwnershipResult(

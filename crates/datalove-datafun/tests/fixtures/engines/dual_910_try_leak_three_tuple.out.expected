@@ -32,7 +32,7 @@ Analysis(
                         drop v1
                         return v5
                     block2:
-                        v6 = pack Tuple3 {v1, v2, v3}
+                        v6 = pack tuple/3 {v1, v2, v3}
                         v7 = some v6
                         return v7
                 """,

@@ -4,7 +4,7 @@
       "code": "F048",
       "labels": [
         {
-          "message": "expected Option, found `u32`",
+          "message": "this is `u32`",
           "span": [
             53,
             54
@@ -12,7 +12,7 @@
           "text": "?"
         }
       ],
-      "message": "try operator `?` requires Option type, found `u32`"
+      "message": "`?` unwraps an option `?T`, and this is `u32`"
     },
     {
       "code": "F001",

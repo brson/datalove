@@ -62,13 +62,13 @@ pub fn check_expr<'db>(
         ExprFunKind::None(_lit) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Option(_)) => {
-                    // None checks against any Option<T>.
+                    // `none` checks against any option.
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "None", "None requires Option type"))
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "?_", "`none` is an option"))
                 }
             }
         }
@@ -85,7 +85,7 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "some", "some requires Option type"))
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "?_", "`some` makes an option"))
                 }
             }
         }
@@ -102,7 +102,7 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "ok", "ok requires Result type"))
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "!_", "`ok` makes a result"))
                 }
             }
         }
@@ -120,7 +120,7 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "er", "er requires Result type"))
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "!_", "`er` makes a result"))
                 }
             }
         }
@@ -531,7 +531,13 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "enum literal", "enum literal requires Enum type"))
+                    Err(ctx.error_worded(
+                        crate::ErrorSite::Expr(expr.key()),
+                        "F016",
+                        fmt!("an enum literal is a value of an enum, and `{expected_str}` is not one"),
+                        "an enum literal",
+                        None,
+                    ))
                 }
             }
         }

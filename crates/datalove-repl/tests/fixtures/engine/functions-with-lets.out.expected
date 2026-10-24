@@ -22,7 +22,7 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -47,7 +47,7 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -75,12 +75,12 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "fib",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -105,12 +105,12 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "fib",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -138,17 +138,17 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "fib",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "shadow",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]
@@ -173,17 +173,17 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "fib",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       },
       {
         "name": "shadow",
-        "ty": "function",
+        "ty": "fun(int): int",
         "value": "-"
       }
     ]

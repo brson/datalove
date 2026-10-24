@@ -13,8 +13,8 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn unwrap_or(p0, p1):
-                      desc0 = T0
-                      desc1 = option<T0>
+                      desc0 = param<0>
+                      desc1 = option<param<0>>
                     block0:
                         v0 = move p0
                         v1, v2 = unwrap_option v0
@@ -27,8 +27,8 @@ Analysis(
                         return v3
                     
                     fn ok_or(p0, p1):
-                      desc0 = T0
-                      desc1 = result<T0>
+                      desc0 = param<0>
+                      desc1 = result<param<0>>
                     block0:
                         v0 = move p0
                         v1, v2, v3 = unwrap_result v0
@@ -42,20 +42,20 @@ Analysis(
                         return v4
                     
                     fn flatten_or(p0, p1):
-                      desc0 = T0
-                      desc1 = option<T0>
-                      desc2 = option<option<T0>>
+                      desc0 = param<0>
+                      desc1 = option<param<0>>
+                      desc2 = option<option<param<0>>>
                     block0:
                         v0 = none
-                        v1 = call m0.u0(p0, v0) <option<T0>>
-                        v2 = call m0.u0(v1, p1) <T0>
+                        v1 = call m0.u0(p0, v0) <option<param<0>>>
+                        v2 = call m0.u0(v1, p1) <param<0>>
                         return v2
                     
                     fn pass_through(p0, p1):
-                      desc0 = T0
-                      desc1 = option<T0>
+                      desc0 = param<0>
+                      desc1 = option<param<0>>
                     block0:
-                        v0 = call m0.u0(p0, p1) <T0>
+                        v0 = call m0.u0(p0, p1) <param<0>>
                         return v0
                     
                     fn main():
@@ -84,7 +84,7 @@ Analysis(
                         v21 = ok v20
                         v22 = const 0u32
                         v23 = call m0.u1(v21, v22) <u32>
-                        v24 = pack Tuple6 {v3, v6, v10, v15, v19, v23}
+                        v24 = pack tuple/6 {v3, v6, v10, v15, v19, v23}
                         return v24
                 """,
             ),

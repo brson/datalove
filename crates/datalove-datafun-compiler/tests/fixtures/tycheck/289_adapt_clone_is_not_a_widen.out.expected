@@ -12,16 +12,13 @@
           "text": "c"
         }
       ],
-      "message": "mismatched types: expected `enum{atom Blue, atom Red}`, found `atom Red`",
-      "notes": [
-        "help: use `@` to convert from `atom Red` to `enum{atom Blue, atom Red}`"
-      ]
+      "message": "mismatched types: expected `enum { atom Blue, atom Red }`, found `atom Red`"
     }
   ],
   "errors": [
     {
       "actual": "atom Red",
-      "expected": "enum{atom Blue, atom Red}",
+      "expected": "enum { atom Blue, atom Red }",
       "kind": "TypeMismatch"
     }
   ],

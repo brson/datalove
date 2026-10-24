@@ -10,7 +10,7 @@
     {
       "kind": "variable",
       "name": "x, my_y",
-      "type": "{x: int, y: [int]}"
+      "type": "{ x: int, y: [int] }"
     },
     {
       "kind": "variable",

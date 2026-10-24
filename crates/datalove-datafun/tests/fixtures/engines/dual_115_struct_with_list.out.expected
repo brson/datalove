@@ -21,7 +21,7 @@ Analysis(
                         v4 = const 4int
                         v5 = const 5int
                         v6 = list [v1, v2, v3, v4, v5]
-                        v7 = pack Struct0 {v0, v6}
+                        v7 = pack struct {v0, v6}
                         v8 = getfieldref v7.0
                         debuglog *v8
                         v9 = getfieldref v7.1

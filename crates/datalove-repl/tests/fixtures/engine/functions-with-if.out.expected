@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "InvalidOperandType { op: \"-\", ty: \"i32\" }"
+        "Error": "invalid operand type `i32` for operator `-`"
       }
     },
     "environment": []
@@ -26,7 +26,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "UnresolvedName(\"abs\")"
+        "Error": "cannot find `abs` in this scope"
       }
     },
     "environment": []
@@ -42,7 +42,7 @@
     },
     "eval": {
       "Unit": {
-        "Error": "UnresolvedName(\"abs\")"
+        "Error": "cannot find `abs` in this scope"
       }
     },
     "environment": []
@@ -70,7 +70,7 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -95,7 +95,7 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -120,7 +120,7 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -145,7 +145,7 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -173,12 +173,12 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       },
       {
         "name": "grade",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -203,12 +203,12 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       },
       {
         "name": "grade",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -233,12 +233,12 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       },
       {
         "name": "grade",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -263,12 +263,12 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       },
       {
         "name": "grade",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]
@@ -293,12 +293,12 @@
     "environment": [
       {
         "name": "classify",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       },
       {
         "name": "grade",
-        "ty": "function",
+        "ty": "fun(u32): u32",
         "value": "-"
       }
     ]

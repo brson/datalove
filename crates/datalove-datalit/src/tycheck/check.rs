@@ -387,18 +387,19 @@ fn constructor_mismatch<'db>(
     constructor: &str,
 ) -> TypeError {
     let db = ctx.db;
-    let wants = if constructor == "none" { "an option" } else { "a result" };
+    // What the constructor makes, with what it holds undecided.
+    let (wants, makes) = if constructor == "none" { ("an option", "?_") } else { ("a result", "!_") };
     if let Some(ts) = ctx.get_span(expr) {
         DiagnosticBuilder::error(db, "mismatched types")
             .code("T032")
             .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                type_to_string(db, expected), constructor))
+                type_to_string(db, expected), makes))
             .note(&format!("`{constructor}` is a value of {wants} type only"))
             .emit_type();
     }
     TypeError::TypeMismatch {
         expected: type_to_string(db, expected),
-        actual: constructor.to_string(),
+        actual: makes.to_string(),
     }
 }
 

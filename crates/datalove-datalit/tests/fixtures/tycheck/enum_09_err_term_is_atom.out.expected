@@ -29,7 +29,7 @@
       "code": "T057",
       "labels": [
         {
-          "message": "expected `enum{atom Ready}`, found `term Ready`",
+          "message": "expected `enum { atom Ready }`, found `term Ready`",
           "span": [
             0,
             36
@@ -43,7 +43,7 @@
   "errors": [
     {
       "actual": "term Ready",
-      "expected": "enum{atom Ready}",
+      "expected": "enum { atom Ready }",
       "kind": "TypeMismatch"
     }
   ],

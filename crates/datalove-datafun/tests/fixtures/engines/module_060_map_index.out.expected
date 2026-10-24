@@ -90,7 +90,7 @@ Analysis(
                         v17 = %{v15: v16}
                         v18 = const "key"
                         v19 = call m0.u3(v17, v18)
-                        v20 = pack Tuple4 {v4, v9, v14, v19}
+                        v20 = pack tuple/4 {v4, v9, v14, v19}
                         return v20
                 """,
             ),

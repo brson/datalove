@@ -14,7 +14,7 @@
           {
             "Value": {
               "name": "struct_in_list",
-              "ty": "list<{x: int}>",
+              "ty": "[{ x: int }]",
               "value": "[{x = 1}, {x = 2}]"
             }
           }
@@ -24,7 +24,7 @@
     "environment": [
       {
         "name": "struct_in_list",
-        "ty": "list<{x: int}>",
+        "ty": "[{ x: int }]",
         "value": "[{x = 1}, {x = 2}]"
       }
     ]
@@ -41,7 +41,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "list<{x: int}>",
+          "ty": "[{ x: int }]",
           "value": "[{x = 1}, {x = 2}]"
         }
       }
@@ -49,7 +49,7 @@
     "environment": [
       {
         "name": "struct_in_list",
-        "ty": "list<{x: int}>",
+        "ty": "[{ x: int }]",
         "value": "[{x = 1}, {x = 2}]"
       }
     ]
@@ -69,7 +69,7 @@
           {
             "Value": {
               "name": "list_in_struct",
-              "ty": "{items: list<int>}",
+              "ty": "{ items: [int] }",
               "value": "{items = [1, 2, 3]}"
             }
           }
@@ -79,12 +79,12 @@
     "environment": [
       {
         "name": "list_in_struct",
-        "ty": "{items: list<int>}",
+        "ty": "{ items: [int] }",
         "value": "{items = [1, 2, 3]}"
       },
       {
         "name": "struct_in_list",
-        "ty": "list<{x: int}>",
+        "ty": "[{ x: int }]",
         "value": "[{x = 1}, {x = 2}]"
       }
     ]
@@ -101,7 +101,7 @@
     "eval": {
       "Unit": {
         "SuccessExpr": {
-          "ty": "{items: list<int>}",
+          "ty": "{ items: [int] }",
           "value": "{items = [1, 2, 3]}"
         }
       }
@@ -109,12 +109,12 @@
     "environment": [
       {
         "name": "list_in_struct",
-        "ty": "{items: list<int>}",
+        "ty": "{ items: [int] }",
         "value": "{items = [1, 2, 3]}"
       },
       {
         "name": "struct_in_list",
-        "ty": "list<{x: int}>",
+        "ty": "[{ x: int }]",
         "value": "[{x = 1}, {x = 2}]"
       }
     ]

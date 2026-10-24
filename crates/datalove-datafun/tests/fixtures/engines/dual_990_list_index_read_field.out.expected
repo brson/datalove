@@ -16,10 +16,10 @@ Analysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = pack Struct0 {v0, v1}
+                        v2 = pack struct {v0, v1}
                         v3 = const 30u32
                         v4 = const 40u32
-                        v5 = pack Struct0 {v3, v4}
+                        v5 = pack struct {v3, v4}
                         v6 = list [v2, v5]
                         v7 = const 0index
                         v8, v9 = listget v6[v7]

@@ -17,11 +17,11 @@ Analysis(
                         v0 = const "alice"
                         v1 = const 30int
                         v2 = const true
-                        v3 = pack Struct0 {v1, v2}
+                        v3 = pack struct {v1, v2}
                         v4 = const "bob"
                         v5 = const 25int
                         v6 = const false
-                        v7 = pack Struct0 {v5, v6}
+                        v7 = pack struct {v5, v6}
                         v8 = %{v0: v3, v4: v7}
                         debuglog v8
                         unit_end_drop v8

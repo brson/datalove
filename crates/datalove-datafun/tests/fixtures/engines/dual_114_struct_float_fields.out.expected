@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 1000000int
                         v1 = const 2000000int
                         v2 = const 3000000int
-                        v3 = pack Struct0 {v0, v1, v2}
+                        v3 = pack struct {v0, v1, v2}
                         v4 = getfieldref v3.0
                         debuglog *v4
                         v5 = getfieldref v3.1

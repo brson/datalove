@@ -24,7 +24,7 @@
           "text": "[| |]"
         }
       ],
-      "message": "cannot infer type for empty tensor"
+      "message": "cannot infer what an empty tensor is a tensor of"
     }
   ],
   "errors": [

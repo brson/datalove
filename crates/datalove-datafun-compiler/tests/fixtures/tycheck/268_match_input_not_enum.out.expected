@@ -4,7 +4,7 @@
       "code": "F016",
       "labels": [
         {
-          "message": "match input must be an enum type",
+          "message": "this is not an enum",
           "span": [
             104,
             105
@@ -12,14 +12,14 @@
           "text": "n"
         }
       ],
-      "message": "mismatched types: expected `enum`, found `u32`"
+      "message": "`match` takes an enum apart, and this is `u32`"
     }
   ],
   "errors": [
     {
-      "actual": "u32",
-      "expected": "enum",
-      "kind": "TypeMismatch"
+      "code": "F016",
+      "kind": "Worded",
+      "message": "`match` takes an enum apart, and this is `u32`"
     }
   ],
   "judgements": [

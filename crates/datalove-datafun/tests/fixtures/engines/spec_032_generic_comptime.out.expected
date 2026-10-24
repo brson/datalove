@@ -13,8 +13,8 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn wrap(p0, p1):
-                      desc0 = T0
-                      desc1 = list<T0>
+                      desc0 = param<0>
+                      desc1 = list<param<0>>
                     block0:
                         v0 = move p1
                         v1 = list [v0]
@@ -23,7 +23,7 @@ Analysis(
                         return v2
                     
                     fn pick(p0, p1, p2):
-                      desc0 = T0
+                      desc0 = param<0>
                     block0:
                         v0 = move p1
                         drop p2
@@ -41,8 +41,8 @@ Analysis(
                         return
                     
                     fn wrap__ct4(p0):
-                      desc0 = T0
-                      desc1 = list<T0>
+                      desc0 = param<0>
+                      desc1 = list<param<0>>
                     block0:
                         v0 = move p0
                         v1 = list [v0]
@@ -100,8 +100,8 @@ Analysis(
                         unit_end
                     
                     fn wrap__ct0(p0):
-                      desc0 = T0
-                      desc1 = list<T0>
+                      desc0 = param<0>
+                      desc1 = list<param<0>>
                     block0:
                         v0 = move p0
                         v1 = list [v0]
@@ -110,8 +110,8 @@ Analysis(
                         return v2
                     
                     fn wrap__ct1(p0):
-                      desc0 = T0
-                      desc1 = list<T0>
+                      desc0 = param<0>
+                      desc1 = list<param<0>>
                     block0:
                         v0 = move p0
                         v1 = list [v0]
@@ -120,7 +120,7 @@ Analysis(
                         return v2
                     
                     fn pick__ct2(p0, p1):
-                      desc0 = T0
+                      desc0 = param<0>
                     block0:
                         v0 = move p0
                         drop p1

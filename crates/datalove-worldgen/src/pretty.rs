@@ -224,145 +224,7 @@ fn write_type_hint<'db>(
     th: &TypeHint<'db>,
     out: &mut String,
 ) {
-    match th {
-        TypeHint::Bool => out.push_str("bool"),
-        TypeHint::U8 => out.push_str("u8"),
-        TypeHint::I8 => out.push_str("i8"),
-        TypeHint::U16 => out.push_str("u16"),
-        TypeHint::I16 => out.push_str("i16"),
-        TypeHint::U32 => out.push_str("u32"),
-        TypeHint::I32 => out.push_str("i32"),
-        TypeHint::U64 => out.push_str("u64"),
-        TypeHint::I64 => out.push_str("i64"),
-        TypeHint::Index => out.push_str("index"),
-        TypeHint::Offset => out.push_str("offset"),
-        TypeHint::F32 => out.push_str("f32"),
-        TypeHint::F64 => out.push_str("f64"),
-        TypeHint::Int => out.push_str("int"),
-        TypeHint::String => out.push_str("string"),
-        TypeHint::Data => out.push_str("data"),
-        TypeHint::Error => out.push_str("error"),
-
-        TypeHint::AnonTuple(t) => {
-            out.push('(');
-            for (i, field) in t.fields.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                write_type_hint(db, field, out);
-            }
-            out.push(')');
-        }
-
-        TypeHint::AnonStruct(s) => {
-            out.push('{');
-            for (i, field) in s.fields.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(field.name.as_str(db));
-                out.push_str(": ");
-                write_type_hint(db, &field.type_hint, out);
-            }
-            out.push('}');
-        }
-
-
-        TypeHint::List(l) => {
-            out.push('[');
-            write_type_hint(db, &l.element_type, out);
-            out.push(']');
-        }
-
-        TypeHint::Map(m) => {
-            out.push_str("%{");
-            write_type_hint(db, &m.key_type, out);
-            out.push_str(" = ");
-            write_type_hint(db, &m.value_type, out);
-            out.push('}');
-        }
-
-        TypeHint::Set(s) => {
-            out.push_str("#{");
-            write_type_hint(db, &s.element_type, out);
-            out.push('}');
-        }
-
-        TypeHint::Option(o) => {
-            out.push('?');
-            write_type_hint(db, &o.inner_type, out);
-        }
-
-        TypeHint::Result(r) => {
-            out.push('!');
-            write_type_hint(db, &r.inner_type, out);
-        }
-
-        TypeHint::Tensor(t) => {
-            out.push_str("[|");
-            write_type_hint(db, &t.element_type, out);
-            out.push_str(", ");
-            out.push_str(&t.rank.to_string());
-            out.push_str("|]");
-        }
-
-        TypeHint::Table(t) => {
-            out.push_str("{| ");
-            for (i, col) in t.columns.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(col.name.as_str(db));
-                out.push_str(": ");
-                write_type_hint(db, &col.type_hint, out);
-            }
-            out.push_str(" |}");
-        }
-
-        TypeHint::ParseError(e) => {
-            out.push_str("<parse-error: ");
-            out.push_str(e.message.as_str(db));
-            out.push('>');
-        }
-
-        TypeHint::Alias(alias) => {
-            out.push_str(alias.name.as_str(db));
-        }
-
-        TypeHint::Atom(a) => {
-            out.push_str("atom ");
-            out.push_str(a.name.as_str(db));
-        }
-
-        TypeHint::Term(t) => {
-            out.push_str("term ");
-            out.push_str(t.name.as_str(db));
-            out.push(' ');
-            write_type_hint(db, &t.payload, out);
-        }
-
-        TypeHint::Enum(e) => {
-            out.push_str("enum{");
-            for (i, v) in e.variants.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                match &v.payload {
-                    Some(p) => {
-                        out.push_str("term ");
-                        out.push_str(v.name.as_str(db));
-                        out.push(' ');
-                        write_type_hint(db, p, out);
-                    }
-                    None => {
-                        out.push_str("atom ");
-                        out.push_str(v.name.as_str(db));
-                    }
-                }
-            }
-            out.push('}');
-        }
-    }
+    out.push_str(&th.syntax(db).to_string());
 }
 
 /// Write tensor elements with multi-comma layout.
@@ -578,7 +440,7 @@ mod tests {
         };
 
         let struct_ty = TypeHint::AnonStruct(TypeHintAnonStruct { fields: vec![f1, f2] });
-        assert_eq!(pretty_type_hint(db, struct_ty), "{x: i32, y: i32}");
+        assert_eq!(pretty_type_hint(db, struct_ty), "{ x: i32, y: i32 }");
     }
 
     #[test]

@@ -48,7 +48,7 @@ Analysis(
                         v5 = load.copy s1
                         v6 = load.copy s2
                         v7 = load.copy s3
-                        v8 = pack Tuple4 {v4, v5, v6, v7}
+                        v8 = pack tuple/4 {v4, v5, v6, v7}
                         return v8
                     
                     fn f32_ops(p0, p1):
@@ -69,7 +69,7 @@ Analysis(
                         v5 = load.copy s1
                         v6 = load.copy s2
                         v7 = load.copy s3
-                        v8 = pack Tuple4 {v4, v5, v6, v7}
+                        v8 = pack tuple/4 {v4, v5, v6, v7}
                         return v8
                 """,
             ),

@@ -18,24 +18,24 @@ Analysis(
                         v1 = const 1int
                         v2 = const 2int
                         v3 = list [v1, v2]
-                        v4 = pack Tuple2 {v0, v3}
+                        v4 = pack tuple/2 {v0, v3}
                         v5 = call u0(v4)
                         debuglog v5
                         drop v5
                         v6 = const "a"
                         v7 = const "b"
-                        v8 = pack Tuple2 {v6, v7}
+                        v8 = pack tuple/2 {v6, v7}
                         v9 = some v8
                         v10 = const "c"
                         v11 = const "d"
-                        v12 = pack Tuple2 {v10, v11}
+                        v12 = pack tuple/2 {v10, v11}
                         v13 = some v12
                         v14 = call u1(v9, v13)
                         debuglog v14
                         drop v14
                         v15 = const "a"
                         v16 = const "b"
-                        v17 = pack Tuple2 {v15, v16}
+                        v17 = pack tuple/2 {v15, v16}
                         v18 = some v17
                         v19 = none
                         v20 = call u1(v18, v19)
@@ -51,7 +51,7 @@ Analysis(
                     block0:
                         v0 = move p0
                         (v1, v2) = unpack v0
-                        v3 = pack Tuple2 {v2, v1}
+                        v3 = pack tuple/2 {v2, v1}
                         return v3
                     
                     fn first(p0, p1):
@@ -98,7 +98,7 @@ Analysis(
                     block4:
                         v3 = const "item"
                         v4 = clone s0
-                        v5 = pack Struct0 {v3, v4}
+                        v5 = pack struct {v3, v4}
                         (v6, v7) = unpack v5
                         v8 = add s1, v7
                         drop.tracked s1

@@ -16,9 +16,9 @@ Analysis(
                     block0:
                         v0 = const 10int
                         v1 = const 20int
-                        v2 = pack Struct0 {v0, v1}
+                        v2 = pack struct {v0, v1}
                         v3 = const "nested"
-                        v4 = pack Struct0 {v2, v3}
+                        v4 = pack struct {v2, v3}
                         v5 = getfieldref v4.0
                         v6 = getfieldref *v5.0
                         debuglog *v6

@@ -17,11 +17,11 @@ Analysis(
                         v0 = const "a"
                         v1 = const "b"
                         v2 = list [v1]
-                        v3 = pack Tuple2 {v0, v2}
+                        v3 = pack tuple/2 {v0, v2}
                         (v4, v5) = unpack v3
                         v6 = const 1int
                         v7 = const "y"
-                        v8 = pack Struct0 {v6, v7}
+                        v8 = pack struct {v6, v7}
                         (v9, v10) = unpack v8
                         store.move.tracked s0, v9
                         store.move.tracked s1, v10
@@ -57,7 +57,7 @@ Analysis(
                         v3 = move unit0.v5
                         v4 = move unit0.s0
                         v5 = move unit0.s1
-                        v6 = pack Tuple4 {v2, v3, v4, v5}
+                        v6 = pack tuple/4 {v2, v3, v4, v5}
                         debuglog v6
                         drop v6
                         unit_end

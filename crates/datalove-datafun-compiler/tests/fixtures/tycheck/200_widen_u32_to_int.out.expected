@@ -12,10 +12,7 @@
           "text": "a"
         }
       ],
-      "message": "mismatched types: expected `int`, found `u32`",
-      "notes": [
-        "help: use `@` to convert from `u32` to `int`"
-      ]
+      "message": "mismatched types: expected `int`, found `u32`"
     }
   ],
   "errors": [

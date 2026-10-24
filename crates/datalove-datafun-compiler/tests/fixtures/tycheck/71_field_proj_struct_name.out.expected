@@ -49,7 +49,7 @@
     {
       "kind": "variable",
       "name": "s",
-      "type": "{id: int, age: int}"
+      "type": "{ id: int, age: int }"
     }
   ]
 }

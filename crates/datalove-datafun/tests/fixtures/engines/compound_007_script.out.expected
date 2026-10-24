@@ -32,7 +32,7 @@ Analysis(
                         drop v7
                         v8 = load.copy s0
                         v9 = clone s1
-                        v10 = pack Tuple2 {v8, v9}
+                        v10 = pack tuple/2 {v8, v9}
                         debuglog v10
                         drop v10
                         unit_end_drop.tracked s1
@@ -70,7 +70,7 @@ Analysis(
                         drop v5
                         v6 = copy unit0.s0
                         v7 = clone unit0.s1
-                        v8 = pack Tuple2 {v6, v7}
+                        v8 = pack tuple/2 {v6, v7}
                         debuglog v8
                         drop v8
                         unit_end
@@ -95,7 +95,7 @@ Analysis(
                     block0:
                         v0 = copy unit0.s0
                         v1 = move unit0.s1
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         unit_end v2
                 """,
             ),

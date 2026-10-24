@@ -240,6 +240,7 @@ pub enum PendingDiagnostic<'db> {
         expr_key: ExprKey<'db>,
         module_id: Option<ModuleId<'db>>,
         operator: InternedText<'db>,
+        /// What the operator unwraps, as a phrase: "an option `?T`".
         expected: InternedText<'db>,
         actual: InternedText<'db>,
     },
@@ -248,8 +249,10 @@ pub enum PendingDiagnostic<'db> {
         expr_key: ExprKey<'db>,
         module_id: Option<ModuleId<'db>>,
         operator: InternedText<'db>,
+        /// What the function has to return, as a phrase: "an option `?T`".
         expected: InternedText<'db>,
-        actual: InternedText<'db>,
+        /// What it returns, or `None` outside any function.
+        actual: Option<InternedText<'db>>,
     },
     /// F050: Break outside loop.
     BreakOutsideLoop {

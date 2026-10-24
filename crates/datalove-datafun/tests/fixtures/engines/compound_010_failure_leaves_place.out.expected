@@ -18,34 +18,34 @@ Analysis(
                         store.copy s0, v0
                         v1 = call u0(s0)
                         v2 = load.copy s0
-                        v3 = pack Tuple2 {v1, v2}
+                        v3 = pack tuple/2 {v1, v2}
                         debuglog v3
                         drop v3
                         v4 = const 41u32
                         store.copy s1, v4
                         v5 = call u0(s1)
                         v6 = load.copy s1
-                        v7 = pack Tuple2 {v5, v6}
+                        v7 = pack tuple/2 {v5, v6}
                         debuglog v7
                         drop v7
                         v8 = const 4611686018427387904i64
-                        v9 = pack Struct0 {v8}
+                        v9 = pack struct {v8}
                         store.copy s2, v9
                         v10 = const 4i64
                         v11 = call u1(s2, v10)
                         v12 = load.copy s2
-                        v13 = pack Tuple2 {v11, v12}
+                        v13 = pack tuple/2 {v11, v12}
                         debuglog v13
                         v14 = const -2i64
                         v15 = call u1(s2, v14)
                         v16 = load.copy s2
-                        v17 = pack Tuple2 {v15, v16}
+                        v17 = pack tuple/2 {v15, v16}
                         debuglog v17
                         v18 = const 255u8
                         store.copy s3, v18
                         v19 = call u2(s3)
                         v20 = load.copy s3
-                        v21 = pack Tuple2 {v19, v20}
+                        v21 = pack tuple/2 {v19, v20}
                         debuglog v21
                         drop v21
                         v22 = const 100000000000000000000int
@@ -53,13 +53,13 @@ Analysis(
                         v23 = const 0int
                         v24 = call u3(s4, v23)
                         v25 = clone s4
-                        v26 = pack Tuple2 {v24, v25}
+                        v26 = pack tuple/2 {v24, v25}
                         debuglog v26
                         drop v26
                         v27 = const 8int
                         v28 = call u3(s4, v27)
                         v29 = load.move.tracked s4
-                        v30 = pack Tuple2 {v28, v29}
+                        v30 = pack tuple/2 {v28, v29}
                         debuglog v30
                         drop v30
                         v31 = const 5u64
@@ -69,13 +69,13 @@ Analysis(
                         v34 = const 0index
                         v35 = call u4(s5, v34)
                         v36 = clone s5
-                        v37 = pack Tuple2 {v35, v36}
+                        v37 = pack tuple/2 {v35, v36}
                         debuglog v37
                         drop v37
                         v38 = const 1index
                         v39 = call u4(s5, v38)
                         v40 = load.move.tracked s5
-                        v41 = pack Tuple2 {v39, v40}
+                        v41 = pack tuple/2 {v39, v40}
                         debuglog v41
                         drop v41
                         unit_end_drop.tracked s4
@@ -93,7 +93,7 @@ Analysis(
                         v4 = err v3
                         return v4
                     block2:
-                        v5 = pack () {}
+                        v5 = pack unit {}
                         v6 = ok v5
                         return v6
                     
@@ -106,7 +106,7 @@ Analysis(
                         v2 = none
                         return v2
                     block2:
-                        v3 = pack () {}
+                        v3 = pack unit {}
                         v4 = some v3
                         return v4
                     
@@ -121,7 +121,7 @@ Analysis(
                         v4 = err v3
                         return v4
                     block2:
-                        v5 = pack () {}
+                        v5 = pack unit {}
                         v6 = ok v5
                         return v6
                     
@@ -136,7 +136,7 @@ Analysis(
                         drop p1
                         return v3
                     block2:
-                        v4 = pack () {}
+                        v4 = pack unit {}
                         v5 = ok v4
                         drop p1
                         return v5
@@ -157,7 +157,7 @@ Analysis(
                         v5 = none
                         return v5
                     block4:
-                        v6 = pack () {}
+                        v6 = pack unit {}
                         v7 = some v6
                         return v7
                 """,

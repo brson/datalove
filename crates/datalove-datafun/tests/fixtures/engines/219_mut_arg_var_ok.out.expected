@@ -30,7 +30,7 @@ Analysis(
                         store.copy s0, v0
                         v1 = const 1u32
                         v2 = const 2u32
-                        v3 = pack Tuple2 {v1, v2}
+                        v3 = pack tuple/2 {v1, v2}
                         store.copy s1, v3
                         v4 = call m0.u0(s0)
                         v5 = getfieldref s1.0

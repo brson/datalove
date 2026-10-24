@@ -41,7 +41,7 @@ Analysis(
                         v1 = const 3int
                         v2 = call u2()
                         v3 = call u1()
-                        v4 = pack Tuple2 {v2, v3}
+                        v4 = pack tuple/2 {v2, v3}
                         debuglog v4
                         unit_end_drop v0
                         unit_end_drop v1

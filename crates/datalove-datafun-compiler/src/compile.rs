@@ -251,12 +251,13 @@ fn collect_results<'db>(
         let span_lookup = datalove_datafun_tycheck::ModuleGraphSpanLookup::new(&parsed_graph, *module_id);
         let formatted = datalove_datafun_tycheck::format_pending_diagnostics(db.as_salsa_db(), pending, &span_lookup);
 
-        // Use formatted diagnostics if available, otherwise fall back to raw error format.
+        // The diagnostics where there are any, and otherwise the errors as
+        // they say themselves.
         let error_strings = if !formatted.is_empty() {
             formatted
         } else {
             errors.iter()
-                .map(|e| format!("{}: {:?}", path, e))
+                .map(|e| format!("{}: {}", path, e))
                 .collect()
         };
         typecheck_errors.insert(path, error_strings);

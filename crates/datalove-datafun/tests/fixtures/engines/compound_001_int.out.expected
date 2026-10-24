@@ -100,7 +100,7 @@ Analysis(
                         v3 = load.move.tracked s0
                         v4 = load.move.tracked s1
                         v5 = load.move.tracked s2
-                        v6 = pack Tuple3 {v3, v4, v5}
+                        v6 = pack tuple/3 {v3, v4, v5}
                         drop p1
                         return v6
                     

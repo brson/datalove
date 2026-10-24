@@ -18,14 +18,14 @@ Analysis(
                         v1 = call u0(v0)
                         v2 = const true
                         v3 = call u1(v2)
-                        v4 = pack Tuple2 {v1, v3}
+                        v4 = pack tuple/2 {v1, v3}
                         debuglog v4
                         v5 = const 1int
                         v6 = some v5
                         v7 = call u2(v6)
                         v8 = none
                         v9 = call u2(v8)
-                        v10 = pack Tuple2 {v7, v9}
+                        v10 = pack tuple/2 {v7, v9}
                         debuglog v10
                         v11 = const 1u8
                         v12 = const 2u8
@@ -33,7 +33,7 @@ Analysis(
                         v14 = const 255u8
                         v15 = const 1u8
                         v16 = call u3(v14, v15)
-                        v17 = pack Tuple2 {v13, v16}
+                        v17 = pack tuple/2 {v13, v16}
                         debuglog v17
                         v18 = const 1int
                         v19 = list [v18]
@@ -43,7 +43,7 @@ Analysis(
                         v23 = list [v22]
                         v24 = const 5index
                         v25 = call u4(v23, v24)
-                        v26 = pack Tuple2 {v21, v25}
+                        v26 = pack tuple/2 {v21, v25}
                         debuglog v26
                         unit_end
                     
@@ -51,10 +51,10 @@ Analysis(
                     block0:
                         v0 = const "abc"
                         v1 = neg p0
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         v3 = const "abc"
                         v4 = neg p0
-                        v5 = pack Tuple2 {v3, v4}
+                        v5 = pack tuple/2 {v3, v4}
                         v6 = eq v2, v5
                         drop v2
                         drop v5
@@ -65,10 +65,10 @@ Analysis(
                     block0:
                         v0 = const "abc"
                         v1 = logic_not p0
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         v3 = const "abc"
                         v4 = logic_not p0
-                        v5 = pack Tuple2 {v3, v4}
+                        v5 = pack tuple/2 {v3, v4}
                         v6 = eq v2, v5
                         drop v2
                         drop v5
@@ -78,7 +78,7 @@ Analysis(
                     block0:
                         v0 = const "abc"
                         v1 = const 1int
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         v3 = const "abc"
                         v4 = move p0
                         v5, v6 = unwrap_option v4
@@ -89,7 +89,7 @@ Analysis(
                         drop v3
                         return v7
                     block2:
-                        v8 = pack Tuple2 {v3, v5}
+                        v8 = pack tuple/2 {v3, v5}
                         v9 = eq v2, v8
                         drop v2
                         drop v8
@@ -100,7 +100,7 @@ Analysis(
                     block0:
                         v0 = const "abc"
                         v1 = const 3u8
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         v3 = const "abc"
                         v4, v5 = add.checked p0, p1
                         branch v5, block1, block2
@@ -110,7 +110,7 @@ Analysis(
                         drop v3
                         return v6
                     block2:
-                        v7 = pack Tuple2 {v3, v4}
+                        v7 = pack tuple/2 {v3, v4}
                         v8 = eq v2, v7
                         drop v2
                         drop v7
@@ -121,7 +121,7 @@ Analysis(
                     block0:
                         v0 = const "abc"
                         v1 = const 1int
-                        v2 = pack Tuple2 {v0, v1}
+                        v2 = pack tuple/2 {v0, v1}
                         v3 = const "abc"
                         v4 = listboundscheck p0[p1]
                         branch v4, block2, block1
@@ -134,7 +134,7 @@ Analysis(
                     block2:
                         v6 = listelementref p0[p1]
                         v7 = clone *v6
-                        v8 = pack Tuple2 {v3, v7}
+                        v8 = pack tuple/2 {v3, v7}
                         v9 = eq v2, v8
                         drop v2
                         drop v8

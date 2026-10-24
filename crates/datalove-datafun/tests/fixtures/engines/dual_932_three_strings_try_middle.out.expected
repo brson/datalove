@@ -31,7 +31,7 @@ Analysis(
                         return v4
                     block2:
                         v5 = const "third"
-                        v6 = pack Struct0 {v1, v2, v5}
+                        v6 = pack struct {v1, v2, v5}
                         v7 = some v6
                         return v7
                 """,

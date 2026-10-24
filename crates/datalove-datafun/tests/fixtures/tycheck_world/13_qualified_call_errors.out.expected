@@ -85,12 +85,14 @@
           "name": "base.add_two"
         },
         {
-          "kind": "UnresolvedName",
-          "name": "module nothing"
+          "code": "F078",
+          "kind": "Worded",
+          "message": "nothing named `nothing` is required to call into"
         },
         {
-          "kind": "UnresolvedName",
-          "name": "module x"
+          "code": "F078",
+          "kind": "Worded",
+          "message": "nothing named `x` is required to call into"
         },
         {
           "actual": 2,
