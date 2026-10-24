@@ -55,17 +55,24 @@ We do not prove correctness.
 
 
 
-- <!-- and --> What is a reactive script?
-- <!-- and --> Datalove's design for reactivity
-- <!-- but..therefore --> Changes to data are changes to code
-- <!-- but..therefore --> If one unit fails to compile how does that affect other units on replay?
-- <!-- but..therefore --> If one unit moves or mutates a binding how does that affect other units on replay?
-- <!-- therefore --> A naive algebra of recompiles and reruns for moves and mutations
-- <!-- but..therofore --> todo more buts, succinctly
-- <!-- therefore --> A recursive algebra of recompiles and reruns for moves and mutations
-- <!-- but..therefore --> Validating this design with a literate test suite
-- <!-- but..therefore --> Comparing to FRP literature
-- <!-- therefore --> A live example of the Datalove scripting engine
+- <!-- and -->
+  What is a reactive script?
+- <!-- and -->
+  Datalove's design for reactivity
+- <!-- but..therefore -->
+  If one unit moves or mutates a binding how does that affect other units on replay?
+- <!-- therefore -->
+  A naive algebra of recompiles and reruns for moves and mutations
+- <!-- but..therofore -->
+  But what about all these other cases?
+- <!-- therefore -->
+  A complete recursive algebra of recompiles and reruns for moves and mutations
+- <!-- but..therefore -->
+  Validating this design with a literate test suite
+- <!-- but..therefore -->
+  Comparing to FRP literature
+- <!-- therefore -->
+  A live example of the Datalove scripting engine
 
 
 ## What is a reactive script?
@@ -73,6 +80,12 @@ We do not prove correctness.
 <!--
 
 _And_ this is a primer on reactive scripts.
+
+Thesis: rerun dependent code.
+Antithesis: hidden state problem.
+
+Don't want to compare to existing systems.
+It's not really my goal to solve a _new_ problem, just _my_ problem.
 
 -->
 
@@ -85,30 +98,22 @@ _And_ this is a primer on reactive scripts.
 
 _And_ these are the properties that will help us solve the problem.
 
--->
-
-
-
-
-## Changes to data are changes to code
-
-<!--
-
-_But_ I/O is nondeterministic,
-_Therefore_ this is how we model it.
+_But_ what about I/O?
+_Therefore_ here is how we model it.
 
 -->
-
-
-
-
-## If one unit fails to compile how does that affect other units on replay?
-
 
 
 
 
 ## If one unit moves or mutates a binding how does that affect other units on replay?
+
+<!--
+_But_ need a simple clear example that shows the core problem.
+_Therefore_ what we decide to recompile and rerun.
+
+_But...therefore_ modest but succinct elaboration.
+-->
 
 
 
@@ -122,7 +127,7 @@ _Therefore_ we propose an algorithm.
 
 
 
-## todo more buts, succinctly
+## But what about all these other cases?
 
 <!--
 _But_ what about: todo
@@ -130,7 +135,9 @@ _Therefore_ brief discussion.
 -->
 
 
-## A recursive algebra of recompiles and reruns for moves and mutations
+
+
+## A complete recursive algebra of recompiles and reruns for moves and mutations
 
 <!--
 _Therefore_ we propose an algorithm and suggest it is complete.
@@ -156,6 +163,9 @@ _Therefore_ all these examples and more are tests.
 <!--
 _But_ we've entirely ignored the FRP literature,
 _Therefore_ let's review some papers.
+
+Prefer this last because I want to experiment on my own,
+then do the upstream research and refine based on the literature.
 -->
 
 
