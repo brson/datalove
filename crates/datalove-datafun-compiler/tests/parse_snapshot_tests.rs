@@ -202,7 +202,7 @@ fn datafun(text: &str) -> String {
         .map(|(alias, name)| json!([alias.as_str(&db), name.as_str(&db)]))
         .collect();
 
-    let expr = datalove_datafun_parser::parse_expr(&db, source);
+    let expr = &datalove_datafun_parser::parse_expr(&db, source).parsed;
     let expr_diagnostics = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
 
     let output = json!({

@@ -175,16 +175,15 @@ pub fn unit_ast<'db>(
     unit: ScriptUnit<'db>,
 ) -> ScriptUnitSpec<'db> {
     let source = unit.source(db);
+    if unit.is_expr(db) {
+        let parsed = datalove_datafun_parser::parse_expr(db, source).parsed.clone();
+        let spans = datalove_datafun_parser::datafun_expr_spans(db, source);
+        return ScriptUnitSpec::new(source, spans, ScriptUnitKind::Expr(parsed));
+    }
+    let parsed = datalove_datafun_parser::parse(db, source).parsed.clone();
+    let names = datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
     let spans = datalove_datafun_parser::datafun_spans(db, source);
-    let kind = if unit.is_expr(db) {
-        let parsed = datalove_datafun_parser::parse_expr(db, source);
-        ScriptUnitKind::Expr(parsed.clone())
-    } else {
-        let parsed = datalove_datafun_parser::parse(db, source).parsed.clone();
-        let names = datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
-        ScriptUnitKind::Fragment(parsed, names)
-    };
-    ScriptUnitSpec::new(source, spans, kind)
+    ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed, names))
 }
 
 /// What the last unit of `script` provides to the units after it.

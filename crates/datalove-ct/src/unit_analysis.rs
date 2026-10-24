@@ -24,7 +24,7 @@
 //! analysis runs on a worker.
 
 use bct::input::Source;
-use rmx::std::cell::{Cell, RefCell};
+use rmx::std::cell::RefCell;
 
 /// An analysis pass a script unit goes through.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,7 +36,6 @@ pub enum Pass {
 
 thread_local! {
     static RAN: RefCell<Option<Vec<(Pass, Source)>>> = const { RefCell::new(None) };
-    static COMPILING: Cell<Option<Source>> = const { Cell::new(None) };
 }
 
 /// Record that `pass` ran for the unit with this source.
@@ -46,26 +45,6 @@ pub fn record(pass: Pass, source: Source) {
             ran.push((pass, source));
         }
     });
-}
-
-/// Record that `pass` ran for the unit being compiled; see [`compiling`].
-///
-/// For a pass whose query is keyed on nothing that names its unit.
-pub fn record_compiling(pass: Pass) {
-    RAN.with_borrow_mut(|ran| {
-        if let Some(ran) = ran {
-            let source = COMPILING.get()
-                .unwrap_or_else(|| panic!("{pass:?} analysis ran outside a unit's compile"));
-            ran.push((pass, source));
-        }
-    });
-}
-
-/// Run `f` as the compile of the unit with this source.
-pub fn compiling<R>(source: Source, f: impl FnOnce() -> R) -> R {
-    let outer = COMPILING.replace(Some(source));
-    let _restore = Restore(Some(move || COMPILING.set(outer)));
-    f()
 }
 
 /// Run `f`, and say which units' analysis ran while it did, in the order it

@@ -588,8 +588,12 @@ it is not counted among what an app command waits for. The detail is shown
 only while it is of the selected unit; moving shows "asking the engine" until
 the next answer. The diagnostics are rendered by
 `ScriptCompiler::render_unit_diagnostics`: the unit's parse diagnostics, and,
-if it parses, the type checker's whose labels point into it, as ariadne
-renders them for the CLI, without colour.
+if it parses, the type checker's whose labels point into it and its ownership
+analysis's, as ariadne renders them for the CLI, without colour. Each pass files
+its diagnostics in a salsa accumulator from inside its query, and they are read
+back from the query; ownership analysis is keyed on what the units before it
+left as well as on the unit, so `unit_ownership_diagnostics` asks it again with
+what the unit records hold now, which is the query the unit's compile ran.
 
 **A unit that breaks shows its detail.** When an answer re-derives the
 selected unit -- a new unit appended, or a step that ran or reported it -- and
@@ -754,10 +758,10 @@ setup and the loop together.
   the code panel, gives one over several lines.
 - An edit cannot change a unit from statements to an expression or back.
 - Errors are plain strings in the History tab, and type errors are their
-  `Debug` form. The Detail tab renders parse and type diagnostics, but an
-  ownership or lowering error shows only as its message: their rendering is
-  only in the CLI's `render.rs`. See
-  [issues.md](issues.md#user-content-the-repl-prints-errors-as-rust-values).
+  `Debug` form. The Detail tab renders parse, type and ownership diagnostics,
+  but a lowering error shows only as its message, having no location; see
+  [issues.md](issues.md#user-content-the-repl-prints-errors-as-rust-values)
+  and [issues.md](issues.md#user-content-lowering-errors-say-what-never-where).
 - Mouse capture is enabled while only key events are read, which disables
   terminal text selection and drops the mouse wheel for no benefit.
 - Nothing scrolls a pane while a dialog or a modal is open.

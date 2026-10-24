@@ -428,9 +428,9 @@ pass records itself at the top of its body, through
 `datalove-ct/src/unit_analysis.rs`, which salsa only runs when it executes the
 query: the parser's `parse` and `parse_expr`, `typecheck_script_unit`, and the
 two ownership queries. Each names its unit by `Source`: the parse by its key,
-the typecheck by its `Script` argument, since a unit is typechecked outside its
-own compile too, and the ownership analysis by the unit being compiled, since
-nothing it is keyed on names the unit. The engine collects them around each
+the typecheck by its `Script` argument, and the ownership analysis by the
+`Source` it is also keyed on, which it needs for the spans its diagnostics point
+at. The engine collects them around each
 operation and maps the sources to the units after it. The log is a
 thread-local and no salsa event callback is installed, so a query nothing
 records costs nothing, and a recorded one a thread-local read. It sees only

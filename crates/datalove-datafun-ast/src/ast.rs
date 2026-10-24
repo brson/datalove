@@ -291,6 +291,15 @@ impl fmt::Debug for ExprFun<'_> {
     }
 }
 
+/// Result of parsing a source as a single expression, with the spans of its
+/// expressions kept aside, as [`ParseResult`] keeps those of statements.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ParseExprResult<'db> {
+    pub parsed: ParsedExpr<'db>,
+    pub expr_spans: Vec<ParseSpanEntry<'db>>,
+}
+
 /// Parse result containing parsed statements and span side tables.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]

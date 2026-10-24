@@ -40,8 +40,7 @@ use datalove_datafun_compiler::tracked_script_lower::{
     script_consts_over,
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
-    analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
-    emit_ownership_diagnostics, AnalysisError,
+    analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData, ExternalBinding,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
@@ -189,8 +188,6 @@ impl<'db> CompiledModules<'db> {
             skip_specialization: false,
             generics: GenericsPolicy::Off,
             shared_context: self.shared.clone(),
-            last_ownership_errors: Vec::new(),
-            last_spans: None,
         })
     }
 
@@ -356,10 +353,6 @@ pub struct ScriptCompiler<'db> {
     generics: GenericsPolicy,
     /// Shared module context for cross-module CTFE function calls.
     shared_context: Arc<SharedModuleContext<'db>>,
-    /// Last ownership errors from compilation (for diagnostic rendering).
-    last_ownership_errors: Vec<AnalysisError<'db>>,
-    /// Spans for the last compilation unit (for diagnostic rendering).
-    last_spans: Option<datalove_datafun_ast::spans::DatafunSpans<'db>>,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -645,7 +638,6 @@ impl<'db> ScriptCompiler<'db> {
         let unit = self.scripts[index].unit(self.db);
         self.last_script = Some(self.scripts[index]);
         self.last_source = Some(unit.source(self.db));
-        self.last_spans = unit_parses(self.db, unit).then(|| unit_ast(self.db, unit).spans.clone());
         self.compile_unit_at(index)
     }
 
@@ -1015,13 +1007,12 @@ impl<'db> ScriptCompiler<'db> {
         }
     }
 
-    /// Unit `index`'s parse and type diagnostics as they stand, rendered as
-    /// plain text, quoting the unit as the file `name`.
+    /// Unit `index`'s parse, type and ownership diagnostics as they stand,
+    /// rendered as plain text, quoting the unit as the file `name`.
     ///
     /// A unit's typecheck asks of the units before it, so its diagnostics
     /// include theirs; only those pointing into this unit, or nowhere, are
-    /// its. Ownership and lowering errors are not diagnostics here, and are
-    /// not rendered.
+    /// its. Lowering errors are not diagnostics, and are not rendered.
     pub fn render_unit_diagnostics(&self, index: usize, name: &str) -> String {
         let script = self.scripts[index];
         let unit = script.unit(self.db);
@@ -1041,6 +1032,8 @@ impl<'db> ScriptCompiler<'db> {
                 .filter(|diagnostic| {
                     diagnostic.labels.is_empty() || diagnostic.labels.iter().any(|label| label.source == source)
                 }));
+            diagnostics.extend(self.unit_ownership_diagnostics(index).iter()
+                .map(|diagnostic| diagnostic.to_diagnostic(self.db)));
         }
         bct::render::render_diagnostics_to_string(
             self.db, diagnostics, std::path::Path::new(name), std::path::Path::new(""))
@@ -1060,36 +1053,44 @@ impl<'db> ScriptCompiler<'db> {
         }
     }
 
-    /// Emit ownership diagnostics from the last compilation.
-    ///
-    /// This should be called when ownership errors occurred to emit proper
-    /// ariadne diagnostics with span information. Call this before displaying
-    /// the error message.
-    pub fn emit_ownership_diagnostics(&self) {
-        if let Some(spans) = &self.last_spans {
-            emit_ownership_diagnostics(self.db, &self.last_ownership_errors, spans);
-        }
-    }
-
-    /// Get ownership diagnostics from the last compilation (salsa accumulator path).
-    ///
-    /// Note: This currently returns empty because ownership diagnostics are
-    /// emitted outside of tracked functions. Use `get_ownership_errors()` and
-    /// `get_last_spans()` for direct rendering instead.
+    /// Ownership diagnostics from the last compilation: those of the last
+    /// unit compiled, if it got as far as ownership analysis.
     pub fn get_ownership_diagnostics(&self) -> Vec<&datalove_diagnostic::OwnershipDiagnostic> {
-        Vec::new()
+        let Some(last) = self.last_script else {
+            return Vec::new();
+        };
+        let index = self.scripts.iter().position(|script| *script == last)
+            .expect("the last unit compiled is in the script");
+        self.unit_ownership_diagnostics(index)
     }
 
-    /// Get the structured ownership errors from the last compilation.
+    /// Unit `index`'s ownership diagnostics as they stand; none if it does not
+    /// get as far as ownership analysis.
     ///
-    /// Use with `get_last_spans()` for direct diagnostic rendering.
-    pub fn get_ownership_errors(&self) -> &[AnalysisError<'_>] {
-        &self.last_ownership_errors
-    }
-
-    /// Get the spans from the last compilation for diagnostic rendering.
-    pub fn get_last_spans(&self) -> Option<&datalove_datafun_ast::spans::DatafunSpans<'_>> {
-        self.last_spans.as_ref()
+    /// **They are read back from the analysis, as a unit's type diagnostics
+    /// are from its typecheck**, but the analysis is keyed on what the units
+    /// before it left behind, which the unit records hold, and not on the
+    /// unit's position alone. Asked again with what the records say now, it
+    /// is the query the unit's compile ran, since an edit that changes what
+    /// the unit sees compiles it again.
+    pub fn unit_ownership_diagnostics(&self, index: usize) -> Vec<&datalove_diagnostic::OwnershipDiagnostic> {
+        let unit = self.scripts[index].unit(self.db);
+        if !unit_parses(self.db, unit) {
+            return Vec::new();
+        }
+        let output = typecheck_script_unit(self.db, self.scripts[index], self.env);
+        let result = output.result(self.db);
+        if !result.errors(self.db).is_empty() {
+            return Vec::new();
+        }
+        let source = unit.source(self.db);
+        let (externals, external_consts) = self.ownership_inputs(index, output);
+        match self.parsed_unit_at(index) {
+            ParsedUnit::Fragment { top, .. } => analyze_script_fragment_tracked::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
+                self.db, source, result, top, externals, external_consts),
+            ParsedUnit::Expr(parsed) => analyze_script_expr_tracked::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
+                self.db, source, result, parsed, externals, external_consts),
+        }
     }
 
     /// Get the database reference.
@@ -1214,13 +1215,10 @@ impl<'db> ScriptCompiler<'db> {
             return self.parse_failure_at(index);
         }
         let unit = self.parsed_unit_at(index);
-        // Marked for a recorder and for the engine's account of what it
-        // compiled: ownership analysis is keyed on what the earlier units left
-        // behind, so its key alone does not say whose it is.
-        let source = self.scripts[index].unit(self.db).source(self.db);
-        let mut result = datalove_ct::unit_analysis::compiling(source, || {
-            datalove_ct::query_events::compiling_unit(index, || self.run_phases(index, &unit))
-        });
+        // Marked for a recorder: ownership analysis is keyed on what the
+        // earlier units left behind, so its key alone does not say which
+        // position in the script it is.
+        let mut result = datalove_ct::query_events::compiling_unit(index, || self.run_phases(index, &unit));
         match &mut result.ir_unit {
             None => self.unit_records[index] = UnitLowerRecord::default(),
             Some(ir_unit) => {
@@ -1374,30 +1372,42 @@ impl<'db> ScriptCompiler<'db> {
     // Phase 1b: Ownership Analysis
     // ========================================================================
 
+    /// What unit `index`'s ownership analysis is asked with besides the unit:
+    /// the bindings it asked for of the units before it, and their consts.
+    fn ownership_inputs(
+        &self,
+        index: usize,
+        output: datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>,
+    ) -> (Vec<ExternalBinding>, Vec<String>) {
+        let asked: Vec<String> = output.asked_names(self.db).iter()
+            .map(|name| name.as_str(self.db).S())
+            .collect();
+        (externals_over(&self.unit_records[..index], &asked), external_consts_over(&self.unit_records[..index]))
+    }
+
     /// Run ownership analysis on the unit.
+    ///
+    /// Its errors are filed as diagnostics; see
+    /// [`ScriptCompiler::unit_ownership_diagnostics`].
     fn phase_ownership(
         &mut self,
         index: usize,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
     ) -> Result<OwnershipOutput<'db>, ScriptCompilationResult> {
-        let asked: Vec<String> = typecheck.output.asked_names(self.db).iter()
-            .map(|name| name.as_str(self.db).S())
-            .collect();
-        let externals = externals_over(&self.unit_records[..index], &asked);
-        let external_consts = external_consts_over(&self.unit_records[..index]);
+        let source = self.scripts[index].unit(self.db).source(self.db);
+        let (externals, external_consts) = self.ownership_inputs(index, typecheck.output);
         match unit {
             ParsedUnit::Fragment { top, body } => {
                 let ownership_result = analyze_script_fragment_tracked(
                     self.db,
+                    source,
                     typecheck.result,
                     *top,
                     externals,
                     external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
-                    // Store structured errors and spans for CLI rendering.
-                    self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
                     let error_msg = ownership_result.errors(self.db).join("\n");
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
@@ -1421,14 +1431,13 @@ impl<'db> ScriptCompiler<'db> {
             ParsedUnit::Expr(parsed) => {
                 let ownership_result = analyze_script_expr_tracked(
                     self.db,
+                    source,
                     typecheck.result,
                     parsed.clone(),
                     externals,
                     external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
-                    // Store structured errors and spans for CLI rendering.
-                    self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
                     let error_msg = ownership_result.errors(self.db).join("\n");
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,

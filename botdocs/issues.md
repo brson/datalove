@@ -16,6 +16,9 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
+  - [A script const that calls a function declared after it panics](#user-content-a-script-const-that-calls-a-function-declared-after-it-panics)
+  - [A const whose type names a type parameter panics](#user-content-a-const-whose-type-names-a-type-parameter-panics)
+  - [A module const that recurses forever panics](#user-content-a-module-const-that-recurses-forever-panics)
   - [A REPL unit that fails keeps what it did to earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units)
   - [A unit that did not run still gives away what it would have taken](#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken)
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
@@ -24,6 +27,7 @@ home here.
   - [A type declared in one unit is unknown to the next](#user-content-a-type-declared-in-one-unit-is-unknown-to-the-next)
   - [The REPL never reads a brace-delimited input over several lines](#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines)
   - [The REPL prints errors as Rust values](#user-content-the-repl-prints-errors-as-rust-values)
+  - [Lowering errors say what, never where](#user-content-lowering-errors-say-what-never-where)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
@@ -59,6 +63,62 @@ home here.
 ## Engines and the REPL: failing the wrong way
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
+
+### A script const that calls a function declared after it panics
+
+**Reproduced.**
+
+```datalove
+const C: i64 = f()
+fun f(): i64
+  ret C
+end fun
+debuglog C
+```
+
+`datalove script` panics at `datalove-datafun-lower/src/context.rs:489`,
+"local function 'f' not found - typechecker should catch this", and a REPL
+unit like it takes the engine down. The typechecker accepts the cycle. Script
+lowering defers a function whose body names a const not yet evaluated, so `f`
+is not among the functions handed to const lowering, and the script path passes
+`callable: None`, so the `Cycle` check that catches the module form never runs.
+The `unreachable!` at the `ConstError::Cycle` arm of the script compiler's
+const evaluation ("no script function waits on one") stopped being true when
+script deferral was added. With `fun f` first, the typechecker reports `C` as
+not found, so only the const-first order panics.
+
+The module form reports `const 'C': depends on a function that is not available
+yet ...`, with no span and no module path. A cycle between a const and the
+functions it calls is a name-resolution fact, and is the place to report it,
+at the const.
+
+### A const whose type names a type parameter panics
+
+**Reproduced.**
+
+```datalove
+fun f<T>(ref x: [T]): index
+  const K: [T] = []
+  ret : index / 0
+end fun
+debuglog f(ref [: i64 / 1])
+```
+
+Panics at `datalove-datafun-ir/src/lib.rs:547`, "type variable T is not a
+parameter of the function it is in": `const_type` in `const_eval.rs` converts
+the const's type with `IrType::from_tycheck` and no type parameters. Either the
+typechecker rejects a const whose type is generic, or const evaluation is done
+per instantiation; neither is.
+
+### A module const that recurses forever panics
+
+**Reproduced, by a survey of lowering errors; not tried again since.** A
+module const whose initializer recurses without end panics in
+`datalove-datafun-interp/src/bytecode/call.rs:365`, "RefCell already
+borrowed", reached through `resolve_callee`. The same const in a script
+reports `failed to lower const 'C': stack overflow`, which is an error, if
+mislabelled as lowering; see
+[Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits).
 
 ### A REPL unit that fails keeps what it did to earlier units
 
@@ -212,11 +272,53 @@ literal would, is submitted on its own.
 
 ### The REPL prints errors as Rust values
 
-**Reproduced.** The REPL reports a lowering error as the `Debug` of its value,
+**Reproduced.** The REPL reports a type error as the `Debug` of its value,
 with no span: `NonCopyIndexProjection { elem_ty: "string" }`,
-`UnresolvedName("x")`, `InvalidOperandType { op: "/", ty: "int" }`. Not
-wrong, but every user sees them. A module's ownership errors have
-the same problem; see the store demo entry below.
+`UnresolvedName("x")`, `InvalidOperandType { op: "/", ty: "int" }`.
+`ScriptCompiler::phase_typecheck` keeps them as `format!("{:?}")` strings, and
+the engine's `Eval::Error` is the first of them. The CLI renders the same
+errors as diagnostics, and so does the REPL's Detail tab, from
+`ScriptCompiler::render_unit_diagnostics`; the History tab and the engine's
+error strings do not. A module's ownership errors have the same problem; see
+the store demo entry below.
+
+### Lowering errors say what, never where
+
+**Mostly reproduced; which variants are dead was reasoned about.** No error
+raised after ownership analysis -- in lowering, const evaluation or
+specialization -- carries a span or a source. The most one has is a name: a
+binding, a function, or a `func::const` prefix. The CLI prints a script's as
+`Lowering error: {message}` and a module's bare, without even the module's
+path, and the REPL's Detail tab shows only the message.
+
+They should mostly not be lowering errors at all. What reaches users:
+
+- **A name bound by a unit that did not compile.** `BindingNotAvailable`,
+  which the script compiler words as ``"`t` is bound by unit 0, which did not
+  compile"``. The typechecker offers later units the names of a unit that
+  failed ownership analysis; it should report the use, with its span, or not
+  offer the name.
+- **A cycle between a const and a function it calls.** The module form is an
+  error with no location; the script form panics, above. Name resolution's.
+- **A const that returns early through `!` or `?`**, reported as `const 'C'
+  early-returned` or `CTFE error: early return`. A real compile-time failure,
+  but it belongs at the const's span.
+- **A const that overflows the stack**, reported as `failed to lower const
+  'C': stack overflow` -- the label is wrong too.
+- **Over 64 instantiations of a function's const parameters**, an
+  implementation limit, which names the function and not the call that went
+  over.
+
+Of `LowerError` itself only `BindingNotAvailable` is ever built:
+`FunctionNotFound`, whose doc still describes mutual recursion that
+`pre_register_func` now handles, `InvalidLiteral` and `NotImplemented` are
+dead, as is `ConstEvalError::DependencyFailed`. The lowering crate also has about a hundred panicking checks,
+some saying "typechecker should catch this"; the const cycle above is one of
+them being hit.
+
+The fix is per error, in the phase that should have caught it, with a span;
+what is left in lowering then is the compiler's own bugs, for which a message
+with no span is fine.
 
 ### An edit to a module no unit requires reports nothing
 

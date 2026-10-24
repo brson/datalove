@@ -6,7 +6,12 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::{FunKey, ParsedExpr, Statement, TopLevel};
+use std::ops::Range;
+use bct::diagnostic::DiagnosticBuilder;
+use bct::input::Source;
+use bct::render;
+use bct::text::TextSpan;
+use datalove_datafun_ast::ast::{ExprKey, FunKey, ParsedExpr, Statement, TopLevel};
 use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
 use datalove_diagnostic::DiagnosticBuilderExt;
@@ -115,21 +120,21 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
 // Type Conversion Helpers
 // ============================================================================
 
-/// Analyze ownership for a script fragment unit.
+/// Analyze ownership for a script fragment unit, whose source is `source`.
 ///
 /// Memoized: if typecheck_result and the unit's statements match a previous
-/// call, returns the cached result.
+/// call, returns the cached result. Each error is filed as an
+/// `OwnershipDiagnostic`, read back as this query's accumulated diagnostics.
 #[salsa::tracked(returns(copy))]
 pub fn analyze_script_fragment_tracked<'db>(
     db: &'db dyn salsa::Database,
+    source: Source,
     typecheck_result: UnitTypecheckResultTracked<'db>,
     top: TopLevel<'db>,
     externals: Vec<ExternalBinding>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
-    // Nothing this is keyed on names its unit, and it only runs inside the
-    // unit's compile.
-    datalove_ct::unit_analysis::record_compiling(datalove_ct::unit_analysis::Pass::Ownership);
+    datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Ownership, source);
     let expr_types = typecheck_result.expr_types(db);
     let body = top.body(db);
 
@@ -153,6 +158,7 @@ pub fn analyze_script_fragment_tracked<'db>(
                 error_msgs.push(format!("{}: {}", func_name, format_analysis_errors(&errs)));
                 structured_errors.extend(errs);
             }
+            emit_ownership_errors(db, &datalove_datafun_parser::datafun_spans(db, source), &structured_errors);
             return ScriptUnitOwnershipResult::new(
                 db,
                 Vec::new(),
@@ -177,6 +183,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     if !script_analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&script_analysis.errors);
         let structured_errors = script_analysis.errors.clone();
+        emit_ownership_errors(db, &datalove_datafun_parser::datafun_spans(db, source), &structured_errors);
         return ScriptUnitOwnershipResult::new(
             db,
             Vec::new(),
@@ -237,16 +244,17 @@ pub fn analyze_script_fragment_tracked<'db>(
 /// use-after-move errors within the expression. For example, `(x, x)` where x is non-Copy.
 ///
 /// Memoized: if typecheck_result and expr match a previous call, returns the
-/// cached result.
+/// cached result. Errors are filed as for [`analyze_script_fragment_tracked`].
 #[salsa::tracked(returns(copy))]
 pub fn analyze_script_expr_tracked<'db>(
     db: &'db dyn salsa::Database,
+    source: Source,
     typecheck_result: UnitTypecheckResultTracked<'db>,
     parsed: ParsedExpr<'db>,
     externals: Vec<ExternalBinding>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
-    datalove_ct::unit_analysis::record_compiling(datalove_ct::unit_analysis::Pass::Ownership);
+    datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Ownership, source);
     let expr_types = typecheck_result.expr_types(db);
 
     let analysis = ownership_analysis::analyze_expr_with_externals(
@@ -257,6 +265,7 @@ pub fn analyze_script_expr_tracked<'db>(
     if !analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&analysis.errors);
         let structured_errors = analysis.errors.clone();
+        emit_ownership_errors(db, &datalove_datafun_parser::datafun_expr_spans(db, source), &structured_errors);
         return ScriptUnitOwnershipResult::new(
             db, Vec::new(), None, vec![error_msg], structured_errors,
             Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(),
@@ -272,247 +281,252 @@ pub fn analyze_script_expr_tracked<'db>(
 }
 
 // ============================================================================
-// Ownership Diagnostic Emission
+// Ownership Diagnostics
 // ============================================================================
 
-/// Emit ownership diagnostics for the given errors using the provided spans.
-///
-/// This should be called from the script compiler where spans are available.
-pub fn emit_ownership_diagnostics<'db>(
-    db: &'db dyn salsa::Database,
-    errors: &[AnalysisError],
-    spans: &DatafunSpans,
-) {
+/// File a diagnostic for each of `errors`, against `spans`.
+fn emit_ownership_errors<'db>(db: &'db dyn salsa::Database, spans: &DatafunSpans<'db>, errors: &[AnalysisError<'db>]) {
     for error in errors {
-        emit_single_ownership_diagnostic(db, error, spans);
+        ownership_diagnostic(db, error, spans).emit_ownership();
     }
 }
 
-/// Emit a single ownership diagnostic.
-fn emit_single_ownership_diagnostic<'db>(
+/// The source and span of an expression.
+fn expr_span<'db>(spans: &DatafunSpans<'db>, expr_key: ExprKey<'db>) -> Option<(Source, Range<usize>)> {
+    spans.lookup_key(expr_key).map(|entry| (entry.source, entry.span.C()))
+}
+
+/// The source and span of an expression an error points at, which the parse
+/// that made the expression gave a span.
+fn error_span<'db>(spans: &DatafunSpans<'db>, expr_key: ExprKey<'db>) -> (Source, Range<usize>) {
+    expr_span(spans, expr_key).expect("an expression an ownership error points at has a span")
+}
+
+/// The help for an error a `@` would fix, showing the line as it would read.
+fn adapt_help<'db>(
+    recovery_hint: &OwnershipRecoveryHint,
+    source: &str,
+    span: &Range<usize>,
+    name: &str,
+) -> Option<String> {
+    let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint else {
+        return None;
+    };
+    Some(match render::insertion_suggestion(source, span, "@") {
+        Some(suggestion) => fmt!("insert `@` to clone:\n{suggestion}"),
+        None => fmt!("insert `@` to clone: `{name}@`"),
+    })
+}
+
+/// The diagnostic for one ownership error, against the spans of its unit or
+/// module.
+///
+/// An error that points at no expression has no label, only its message.
+pub fn ownership_diagnostic<'db>(
     db: &'db dyn salsa::Database,
-    error: &AnalysisError,
-    spans: &DatafunSpans,
-) {
+    error: &AnalysisError<'db>,
+    spans: &DatafunSpans<'db>,
+) -> DiagnosticBuilder<'db> {
     match error {
         AnalysisError::UseAfterMoveInEarlierUnit { expr_key, name, recovery_hint } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("`{}` was given away by an earlier input", name);
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+            let (text, span) = error_span(spans, *expr_key);
+            let mut builder =
+                DiagnosticBuilder::error(db, &fmt!("`{name}` was given away by an earlier input"))
                     .code("D013")
-                    .primary_label(ts, "value used after move");
-
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.note(&format!("help: use `@` to {}", description));
-                }
-
-                builder.emit_ownership();
+                    .primary_label(TextSpan::new(text, span), "value used after move");
+            if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                builder = builder.help(&fmt!("use `@` to {description}"));
             }
+            builder
         }
-        AnalysisError::UseAfterMove { expr_key, moved_at: _, name, recovery_hint } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("use of moved value: `{}`", name);
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D001")
-                    .primary_label(ts, "value used after move");
+        AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint } => {
+            let (text, span) = error_span(spans, *expr_key);
+            let mut builder = DiagnosticBuilder::error(db, &fmt!("use of moved value: `{name}`"))
+                .code("D001")
+                .primary_label(TextSpan::new(text, span.C()), "value used after move");
 
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.note(&format!("help: use `@` to {}", description));
-                }
-
-                builder.emit_ownership();
+            // The move is labelled too where it is somewhere else, and is
+            // where the `@` goes.
+            let move_span = match moved_at == expr_key {
+                true => None,
+                false => expr_span(spans, *moved_at).map(|(_, span)| span),
+            };
+            if let Some(move_span) = &move_span {
+                builder = builder
+                    .secondary_label(TextSpan::new(text, move_span.C()), "value moved here");
             }
+
+            let source = text.as_str(db);
+            let suggestion_span = move_span.unwrap_or(span);
+            if let Some(help) = adapt_help(recovery_hint, source, &suggestion_span, name) {
+                builder = builder.help(&help);
+            }
+            builder
         }
-        AnalysisError::DoubleMove { expr_key, moved_at: _, name, recovery_hint } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("value moved twice: `{}`", name);
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D002")
-                    .primary_label(ts, "second move here");
+        AnalysisError::DoubleMove { expr_key, moved_at, name, recovery_hint } => {
+            let (text, span) = error_span(spans, *expr_key);
+            let mut builder = DiagnosticBuilder::error(db, &fmt!("value moved twice: `{name}`"))
+                .code("D002")
+                .primary_label(TextSpan::new(text, span.C()), "second move here");
 
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.note(&format!("help: use `@` to {}", description));
-                }
-
-                builder.emit_ownership();
+            let move_span = match moved_at == expr_key {
+                true => None,
+                false => expr_span(spans, *moved_at).map(|(_, span)| span),
+            };
+            if let Some(move_span) = &move_span {
+                builder = builder
+                    .secondary_label(TextSpan::new(text, move_span.C()), "first move here");
             }
+
+            let source = text.as_str(db);
+            let suggestion_span = move_span.unwrap_or(span);
+            if let Some(help) = adapt_help(recovery_hint, source, &suggestion_span, name) {
+                builder = builder.help(&help);
+            }
+            builder
         }
         AnalysisError::CannotMoveBorrowed { expr_key, name } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("cannot move borrowed value: `{}`", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D003")
-                    .primary_label(ts, "cannot move borrowed value")
-                    .note("borrowed parameters (ref, mut, out) cannot be moved")
-                    .emit_ownership();
-            }
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(db, &fmt!("cannot move borrowed value: `{name}`"))
+                .code("D003")
+                .primary_label(TextSpan::new(text, span), "cannot move borrowed value")
+                .note("borrowed parameters (ref, mut, out) cannot be moved")
         }
         AnalysisError::CannotMoveConst { expr_key, name, recovery_hint } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("cannot move out of const: `{}`", name);
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D003")
-                    .primary_label(ts, "cannot move out of const")
-                    .note("a const is borrowed wherever it is named");
-
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.note(&format!("help: use `@` to {}", description));
-                }
-
-                builder.emit_ownership();
+            let (text, span) = error_span(spans, *expr_key);
+            let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move out of const: `{name}`"))
+                .code("D003")
+                .primary_label(TextSpan::new(text, span.C()), "cannot move out of const")
+                .note("a const is borrowed wherever it is named");
+            if let Some(help) = adapt_help(recovery_hint, text.as_str(db), &span, name) {
+                builder = builder.help(&help);
             }
+            builder
         }
         AnalysisError::WalkedCollectionChanged { expr_key, name } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("cannot change `{}` while a `for` walks it", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D015")
-                    .primary_label(ts, "changes the collection being walked")
-                    .note("a `for` holds references into its collection until it ends")
-                    .emit_ownership();
-            }
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(db, &fmt!("cannot change `{name}` while a `for` walks it"))
+                .code("D015")
+                .primary_label(TextSpan::new(text, span), "changes the collection being walked")
+                .note("a `for` holds references into its collection until it ends")
         }
         AnalysisError::WalkedCollectionAssigned { set_index, name } => {
-            if let Some(ts) = spans.lookup_set(*set_index) {
-                let msg = format!("cannot change `{}` while a `for` walks it", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D015")
-                    .primary_label(ts.C(), "assigns to the collection being walked")
-                    .note("a `for` holds references into its collection until it ends")
-                    .emit_ownership();
-            }
+            let ts = spans.lookup_set(*set_index).expect("a `set` an ownership error points at has a span");
+            DiagnosticBuilder::error(db, &fmt!("cannot change `{name}` while a `for` walks it"))
+                .code("D015")
+                .primary_label(ts.C(), "assigns to the collection being walked")
+                .note("a `for` holds references into its collection until it ends")
         }
         AnalysisError::CannotMutFromRef { expr_key, name } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("cannot get mutable reference from immutable: `{}`", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D004")
-                    .primary_label(ts, "ref parameter cannot be passed as mut")
-                    .emit_ownership();
-            }
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(
+                db,
+                &fmt!("cannot get mutable reference from immutable: `{name}`"),
+            )
+            .code("D004")
+            .primary_label(TextSpan::new(text, span), "ref parameter cannot be passed as mut")
         }
         AnalysisError::AliasedMutableArgument { expr_key, name } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("aliased mutable argument: `{}`", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D010")
-                    .primary_label(ts, "passed again in the same call")
-                    .note("an argument passed as `mut` or `out` cannot also be passed to another parameter")
-                    .emit_ownership();
-            }
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(db, &fmt!("aliased mutable argument: `{name}`"))
+                .code("D010")
+                .primary_label(TextSpan::new(text, span), "passed again in the same call")
+                .note("an argument passed as `mut` or `out` cannot also be passed to another parameter")
         }
         AnalysisError::CannotMutateImmutable { expr_key, name } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("cannot pass immutable binding as mutable: `{}`", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D011")
-                    .primary_label(ts, "passed to a `mut` or `out` parameter")
-                    .note(&format!("declare `{}` with `var` to allow mutation", name))
-                    .emit_ownership();
-            }
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(
+                db,
+                &fmt!("cannot pass immutable binding as mutable: `{name}`"),
+            )
+            .code("D011")
+            .primary_label(TextSpan::new(text, span), "passed to a `mut` or `out` parameter")
+            .note(&fmt!("declare `{name}` with `var` to allow mutation"))
         }
         AnalysisError::CannotMutateTemporary { expr_key } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(db, "cannot pass a temporary as mutable")
-                    .code("D012")
-                    .primary_label(ts, "passed to a `mut` or `out` parameter")
-                    .note("bind the value to a `var` first, so the mutation is observable")
-                    .emit_ownership();
-            }
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(db, "cannot pass a temporary as mutable")
+                .code("D012")
+                .primary_label(TextSpan::new(text, span), "passed to a `mut` or `out` parameter")
+                .note("bind the value to a `var` first, so the mutation is observable")
         }
         AnalysisError::ReadUninitialized { expr_key, name } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("read of uninitialized binding: `{}`", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D005")
-                    .primary_label(ts, "used before initialization")
-                    .emit_ownership();
-            }
-        }
-        AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
-            // For out param not initialized, we don't have a good span to use
-            // since ret_stmt_idx is a statement index, not an expression index.
-            // For now, emit a diagnostic without a primary span.
-            let msg = format!("out parameter not initialized: `{}`", name);
-            bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                .code("D006")
-                .emit_ownership();
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(db, &fmt!("read of uninitialized binding: `{name}`"))
+                .code("D005")
+                .primary_label(TextSpan::new(text, span), "used before initialization")
         }
         AnalysisError::MoveInLoop { expr_key, name, recovery_hint } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("cannot move `{}` in loop", name);
-                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D007")
-                    .primary_label(ts, "value moved inside loop");
-
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.note(&format!("help: use `@` to {}", description));
-                }
-
-                builder.emit_ownership();
+            let (text, span) = error_span(spans, *expr_key);
+            let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move `{name}` in loop"))
+                .code("D007")
+                .primary_label(TextSpan::new(text, span.C()), "value moved inside loop");
+            if let Some(help) = adapt_help(recovery_hint, text.as_str(db), &span, name) {
+                builder = builder.help(&help);
             }
+            builder
+        }
+        AnalysisError::OutParamPartialWrite { expr_key, name } => {
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(
+                db,
+                &fmt!("cannot partially write to out parameter: `{name}`"),
+            )
+            .code("D009")
+            .primary_label(TextSpan::new(text, span), "partial write to out parameter")
+            .note("out parameters must be written as a whole value")
         }
         AnalysisError::InconsistentBranchMove {
             at, name, gave_away, fix_in, changed_at, moved_before, ..
         } => {
-            let msg = datalove_datafun_sema::inconsistent_branch_message(error).expect("is D008");
-            let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg).code("D008");
+            let message = datalove_datafun_sema::inconsistent_branch_message(error)
+                .expect("is D008");
+            let mut builder = DiagnosticBuilder::error(db, &message).code("D008");
 
-            if let Some(ts) = changed_at.and_then(|key| spans.lookup_key(key)) {
-                let label = match gave_away {
-                    true => "given away here",
-                    false => "given a new value here",
-                };
-                builder = builder.primary_label(ts, label);
-            } else if let Some(ts) = spans.lookup_key(*at) {
-                builder = builder.primary_label(ts, "the branches of this disagree");
-            }
-            if let Some(ts) = moved_before.and_then(|key| spans.lookup_key(key)) {
-                let label = format!("`{}` given away here, before the branches", name);
-                builder = builder.secondary_label(ts, &label);
+            // The branch's own move or `set` is what to look at; the condition
+            // only says which `if` or `match` it was.
+            builder = match changed_at.and_then(|key| expr_span(spans, key)) {
+                Some((text, span)) => {
+                    let label = match gave_away {
+                        true => "given away here",
+                        false => "given a new value here",
+                    };
+                    builder.primary_label(TextSpan::new(text, span), label)
+                }
+                None => {
+                    let (text, span) = error_span(spans, *at);
+                    builder.primary_label(TextSpan::new(text, span), "the branches of this disagree")
+                }
+            };
+            if let Some((text, span)) = moved_before.and_then(|key| expr_span(spans, key)) {
+                builder = builder.secondary_label(
+                    TextSpan::new(text, span),
+                    &fmt!("`{name}` given away here, before the branches"),
+                );
             }
 
             let help = match gave_away {
-                true => format!(
-                    "give `{}` away {} too, or clone it with `@` where it is given away",
-                    name, fix_in,
-                ),
-                false => format!("give `{}` a value {} too", name, fix_in),
+                true => fmt!("give `{name}` away {fix_in} too, or clone it with `@` where it is given away"),
+                false => fmt!("give `{name}` a value {fix_in} too"),
             };
             builder
-                .note(&format!(
-                    "whether `{}` is held after the branches depends on which one ran, \
-                     and it has to be dropped without knowing",
-                    name,
+                .note(&fmt!(
+                    "whether `{name}` is held after the branches depends on which one ran, \
+                     and it has to be dropped without knowing"
                 ))
                 .help(&help)
-                .emit_ownership();
         }
-        AnalysisError::InconsistentLoopExit { stmt_idx: _, name } => {
-            let msg = format!(
-                "`{}` is given away on one way out of this loop and not another",
-                name,
-            );
-            bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+        AnalysisError::OutParamNotInitialized { name, .. } => {
+            DiagnosticBuilder::error(db, &fmt!("out parameter not initialized: `{name}`"))
+                .code("D006")
+        }
+        AnalysisError::InconsistentLoopExit { name, .. } => {
+            DiagnosticBuilder::error(db, &fmt!("`{name}` is given away on one way out of this loop and not another"))
                 .code("D014")
-                .note(
-                    "the move itself is fine -- it cannot happen twice. What cannot be \
-                     settled is whether the binding is still held after the loop, which \
-                     depends on which exit ran. Give it away on every exit, or clone it \
-                     with `@` at the move.",
-                )
-                .emit_ownership();
-        }
-        AnalysisError::OutParamPartialWrite { expr_key, name } => {
-            if let Some(ts) = spans.lookup_key(*expr_key) {
-                let msg = format!("cannot partially write to out parameter: `{}`", name);
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                    .code("D009")
-                    .primary_label(ts, "partial write to out parameter")
-                    .note("out parameters must be written as a whole value")
-                    .emit_ownership();
-            }
+                .note("the move cannot happen twice, so it is not the problem. Whether it is still \
+                       held after the loop depends on which way out ran, and a drop has to be \
+                       placed without knowing.")
+                .help("give it away on every way out, or clone it with `@` at the move")
         }
     }
 }
-

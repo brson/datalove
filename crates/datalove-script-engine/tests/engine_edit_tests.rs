@@ -793,3 +793,32 @@ fn a_unit_s_diagnostics_render_as_text() {
     let parse_error = engine.unit_diagnostics(3, "unit 4");
     assert!(parse_error.contains("unit 4"), "{parse_error}");
 }
+
+/// An expression unit's diagnostics point into it, as a fragment's do: its
+/// spans are those of the expression it was parsed as.
+#[test]
+fn an_expression_unit_s_diagnostics_point_into_it() {
+    let mut engine = engine();
+    run(&mut engine, "let a = 1");
+    engine.eval(Unit::Expression("a + nope".S()));
+    let type_error = engine.unit_diagnostics(1, "unit 2");
+    assert!(type_error.contains("unit 2:1:5") && type_error.contains("a + nope"), "{type_error}");
+}
+
+/// Ownership errors are a unit's diagnostics too, for a fragment and for an
+/// expression, and each unit keeps its own while the others change.
+#[test]
+fn a_unit_s_ownership_errors_render_as_diagnostics() {
+    let mut engine = engine();
+    run(&mut engine, "const L: [int] = [1, 2]\n---\nlet a = L");
+    engine.eval(Unit::Expression("L".S()));
+    run(&mut engine, "let b = [1]\nlet c = b\nlet d = b");
+
+    let fragment = engine.unit_diagnostics(1, "unit 2");
+    assert!(fragment.contains("[D003]") && fragment.contains("unit 2:1:9"), "{fragment}");
+    let expression = engine.unit_diagnostics(2, "unit 3");
+    assert!(expression.contains("[D003]") && expression.contains("unit 3:1:1"), "{expression}");
+    let moved = engine.unit_diagnostics(3, "unit 4");
+    assert!(moved.contains("[D001]") && moved.contains("unit 4:3:9"), "{moved}");
+    assert!(!moved.contains("D003"), "{moved}");
+}

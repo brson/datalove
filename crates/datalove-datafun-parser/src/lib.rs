@@ -91,7 +91,7 @@ fn parse_source<'db>(
 pub fn parse_expr<'db>(
     db: &'db dyn Db,
     source: Source,
-) -> ast::ParsedExpr<'db> {
+) -> ast::ParseExprResult<'db> {
     datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Parse, source);
     let bracer = bracer::bracer(db, lexer::lex(db, source));
     datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, "P050", "P051");
@@ -104,15 +104,16 @@ fn parse_bracer_expr<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
     source_text: bct::input::Source,
-) -> ast::ParsedExpr<'db> {
+) -> ast::ParseExprResult<'db> {
     // Expressions don't have module context.
     let mut parser = Parser::from_branch_with_context(db, bracer.iter(db), source_text, None, None);
     let root = parser.parse_expr_full();
     parser.error_if_not_exhausted();
     let qualified_calls = each_once(parser.take_qualified_calls());
     let arena = ast::ExprArena { module_id: None, fn_name: None, body: 0, exprs: parser.take_exprs() };
+    let expr_spans = parser.take_expr_spans();
     let top = ast::TopLevel::new(db, ast::Body { statements: vec![], arena });
-    ast::ParsedExpr { top, root, qualified_calls }
+    ast::ParseExprResult { parsed: ast::ParsedExpr { top, root, qualified_calls }, expr_spans }
 }
 
 /// Qualified calls as written, each pair kept at its first appearance.
@@ -319,6 +320,26 @@ pub fn datafun_spans<'db>(
         parse_result.require_spans.C(),
         parse_result.alias_spans.C(),
     )
+}
+
+/// Extract datafun expression spans from a source parsed as an expression.
+///
+/// As [`datafun_spans`], from [`parse_expr`]'s side table: an expression
+/// parsed as statements is a different tree, whose expressions are not these.
+pub fn datafun_expr_spans<'db>(
+    db: &'db dyn Db,
+    source: Source,
+) -> DatafunSpans<'db> {
+    use bct::text::TextSpan;
+
+    let entries = parse_expr(db, source).expr_spans
+        .iter()
+        .map(|e| SpanMapEntry {
+            expr_key: e.expr_key,
+            entry: TextSpan::new(e.source, e.span.C()),
+        })
+        .collect();
+    DatafunSpans::new(entries)
 }
 
 // ============================================================================

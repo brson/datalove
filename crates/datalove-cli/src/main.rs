@@ -401,16 +401,8 @@ fn bail_on_ownership_error(
 ) -> AnyResult<()> {
     use datalove::datafun;
     if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
-        if let Some(spans) = compiler.get_last_spans() {
-            render::render_ownership_errors_direct(
-                compiler.db(),
-                compiler.get_ownership_errors(),
-                spans,
-                file_path,
-                line_offsets,
-                cwd,
-            );
-        }
+        let diagnostics = compiler.get_ownership_diagnostics();
+        render::render_ownership_diagnostics(compiler.db(), &diagnostics, file_path, line_offsets, cwd);
         bail!("Ownership error");
     }
     Ok(())

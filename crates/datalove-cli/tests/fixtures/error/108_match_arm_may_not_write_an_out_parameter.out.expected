@@ -1,2 +1,2 @@
-error[D006]: out parameter not initialized: `n`
+[31m[D006] Error:[0m out parameter not initialized: `n`
 Error: Ownership error
