@@ -1,35 +1,67 @@
 <!--
 
-Title: An initial semantics for reactive interactive script units in Datalove
-Summary:
+Title: Reactive compilation and evaluation based on analysis of bindings with linear types
+Summary: With a simple linear type system we correctly decide which
+         code units to recompile and rerun when code and input changes
+         based on a simple fixed-point analysis of how bindings are used.
 
 Audience: practitioners
 
 Problem:
 Datalove incrementally recompiles and reexecutes only dependent script units
-when dependent code and data changes. What does this mean in the cases?
-
-Thesis:
-Antithesis:
-Synthesis:
+when dependent code and data changes.
+How do we decide which code to recompile and rerun and when?
 
 -->
 
-Datalove's language and compiler model have been designed
-primarily as an interactive scripting environment.
-It is designed such that editing existing
-code quickly recompiles previously compiled code.
-It is designed such that editing existing
-code _should be able to_ quickly re-execute previously compiled code,
-producing the same result.
-Datalove's scripting environment is intended to be
-deterministically reactive to its code and data input.
+Datalove is an interactive scripting language and environment.
+The compiler quickly re-compiles the program
+whenever its code changes.
+The program quickly re-runs whenever its code or data changes.
+We say that it is _reactive_ to changes to both code and data.
+Reruns are deterministic and,
+in the absence of semantic changes,
+identical from run to run.
 
 Until now though the CLI REPL has only barely functioned,
-and the actual semantics of what happens
-as code is recompiled and reexecuted have been left to future work.
+and the precise semantics of what happens
+as code is recompiled and rerun have been left to future work.
 Ok, future is now.
 Let's figure it out.
+
+We develop a simple recursive algebra for deciding which code
+must be recompiled and rerun when individual script units
+are interactively modified or their inputs change.
+This algebra is based entirely on an analysis of variable bindings
+and their subsequent usage within a linear type system.
+We do this by progressively developing verifiable counter-examples
+until we are satisfied of its correctness.
+We do not prove correctness.
+
+
+
+
+- <!-- and --> What is a reactive script?
+- <!-- and --> Datalove's design for reactivity
+- <!-- but --> Changes to data are changes to code
+- <!-- but --> How does one unit failing to compile affect subsequent units?
+- <!-- but --> How is re-execution affected when subsequent units move or mutate bindings from the re-run unit?
+- <!-- therefore --> A naive algebra of reruns for moves and mutations
+- <!-- but --> todo more buts, succinctly
+- <!-- therefore --> A recursive algebra of reruns for moves and mutations
+- <!-- but --> Validating this design with a literate test suite
+- <!-- but --> Comparing to FRP literature
+- <!-- therefore --> Future refinements and open questions
+
+
+
+
+
+
+
+---
+
+Old draft content.
 
 - [Datalove's design for reactivity](#user-content-dataloves-design-for-reactivity)
 - [How does one unit failing to compile affect subsequent units?](#user-content-how-does-one-unit-failing-to-compile-affect-subsequent-units)
