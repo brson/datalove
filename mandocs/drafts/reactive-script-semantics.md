@@ -1,18 +1,32 @@
 <!--
 
-Title: Reactive compilation and evaluation based on analysis of bindings with linear types
-Summary: With a simple linear type system we correctly decide which
-         code units to recompile and rerun when code and input changes
-         based on a simple fixed-point analysis of how bindings are used.
+_Title_: Reactive compilation and evaluation based on analysis of bindings with linear types
+_Summary_: With a simple linear type system we correctly decide which
+           code units to recompile and rerun when code and input changes
+           based on a simple fixed-point analysis of how bindings are used.
 
-Audience: practitioners
+_Audience_: PL practitioners
 
-Problem:
+_Problem_:
 Datalove incrementally recompiles and reexecutes only dependent script units
 when dependent code and data changes.
 How do we decide which code to recompile and rerun and when?
 
+_ABTstract_:
+A reactive notebook-style script should rerun only what an edit affects,
+_and_ Datalove's linear types tell the compiler exactly which
+earlier bindings each unit reads, moves or mutates.
+_But_ a move or mutation leaves its effect behind in an earlier unit's state.
+When that unit is edited, broken or deleted,
+the environment no longer matches the code.
+_Therefore_ we derive which units to rerun from the few ways a unit can touch an earlier binding.
+The rules are applied until nothing more needs to rerun,
+and every case is checked by a literate test suite.
+
 -->
+
+
+
 
 Datalove is an interactive scripting language and environment.
 The compiler quickly re-compiles the program
@@ -43,17 +57,124 @@ We do not prove correctness.
 
 - <!-- and --> What is a reactive script?
 - <!-- and --> Datalove's design for reactivity
-- <!-- but --> Changes to data are changes to code
-- <!-- but --> How does one unit failing to compile affect subsequent units?
-- <!-- but --> How is re-execution affected when subsequent units move or mutate bindings from the re-run unit?
-- <!-- therefore --> A naive algebra of reruns for moves and mutations
-- <!-- but --> todo more buts, succinctly
-- <!-- therefore --> A recursive algebra of reruns for moves and mutations
-- <!-- but --> Validating this design with a literate test suite
-- <!-- but --> Comparing to FRP literature
-- <!-- therefore --> Future refinements and open questions
+- <!-- but..therefore --> Changes to data are changes to code
+- <!-- but..therefore --> If one unit fails to compile how does that affect other units on replay?
+- <!-- but..therefore --> If one unit moves or mutates a binding how does that affect other units on replay?
+- <!-- therefore --> A naive algebra of recompiles and reruns for moves and mutations
+- <!-- but..therofore --> todo more buts, succinctly
+- <!-- therefore --> A recursive algebra of recompiles and reruns for moves and mutations
+- <!-- but..therefore --> Validating this design with a literate test suite
+- <!-- but..therefore --> Comparing to FRP literature
+- <!-- therefore --> A live example of the Datalove scripting engine
 
 
+## What is a reactive script?
+
+<!--
+
+_And_ this is a primer on reactive scripts.
+
+-->
+
+
+
+
+## Datalove's design for reactivity
+
+<!--
+
+_And_ these are the properties that will help us solve the problem.
+
+-->
+
+
+
+
+## Changes to data are changes to code
+
+<!--
+
+_But_ I/O is nondeterministic,
+_Therefore_ this is how we model it.
+
+-->
+
+
+
+
+## If one unit fails to compile how does that affect other units on replay?
+
+
+
+
+
+## If one unit moves or mutates a binding how does that affect other units on replay?
+
+
+
+
+## A naive algebra of recompiles and reruns for moves and mutations
+
+<!--
+_Therefore_ we propose an algorithm.
+-->
+
+
+
+
+## todo more buts, succinctly
+
+<!--
+_But_ what about: todo
+_Therefore_ brief discussion.
+-->
+
+
+## A recursive algebra of recompiles and reruns for moves and mutations
+
+<!--
+_Therefore_ we propose an algorithm and suggest it is complete.
+-->
+
+
+
+
+## Validating this design with a literate test suite
+
+<!--
+
+_But_ how do we know this is correct?
+_Therefore_ all these examples and more are tests.
+
+-->
+
+
+
+
+## Comparing to FRP literature
+
+<!--
+_But_ we've entirely ignored the FRP literature,
+_Therefore_ let's review some papers.
+-->
+
+
+
+
+## A live example of the Datalove scripting engine
+
+<!--
+_Therefore_ we implemented this.
+Here's a cool demo.
+-->
+
+
+
+
+## todo notes
+
+Can we generalize this model to fine-grained statements and/or expressions
+and abandon the concept of "script units"?
 
 
 
