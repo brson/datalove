@@ -236,7 +236,7 @@ impl IrInterpreter {
 
                     // Allocate buffer for ALL elements.
                     let num_elements = elements.len();
-                    let mut elements_buffer = vec![0u8; (stride * num_elements).max(8)];
+                    let mut elements_buffer = datalove_rt::rust::AlignedBuffer::new((stride * num_elements).max(8));
 
                     // Write each element at its offset in the buffer.
                     for (i, element_value) in elements.iter().enumerate() {
@@ -268,7 +268,7 @@ impl IrInterpreter {
                     let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
                     let stride = if stride == 0 { 1 } else { stride };
 
-                    let mut elements_buffer = vec![0u8; (stride * elements.len()).max(8)];
+                    let mut elements_buffer = datalove_rt::rust::AlignedBuffer::new((stride * elements.len()).max(8));
                     for (i, element_value) in elements.iter().enumerate() {
                         let element_dest = Destination {
                             ptr: elements_buffer.as_mut_ptr().add(i * stride),
@@ -373,7 +373,7 @@ impl IrInterpreter {
 
                     // Allocate buffer for ALL rows.
                     let num_rows = rows.len();
-                    let mut rows_buffer = vec![0u8; (row_stride as usize * num_rows).max(8)];
+                    let mut rows_buffer = datalove_rt::rust::AlignedBuffer::new((row_stride as usize * num_rows).max(8));
 
                     // Write each row at its offset in the buffer.
                     for (row_idx, row_values) in rows.iter().enumerate() {

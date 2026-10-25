@@ -64,7 +64,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         // Allocate space for the result.
         let result_tydesc = self.interp.tydesc_table_mut().get_or_create(result_type);
         let result_size = unsafe { (*result_tydesc).size as usize };
-        let mut result_buffer = vec![0u8; result_size.max(8)];
+        let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size.max(8));
         let result_dest = Destination {
             ptr: result_buffer.as_mut_ptr(),
             tydesc: result_tydesc,
@@ -74,7 +74,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         let ret_type = IrType::Result(Box::new(IrType::Unit));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
         let ret_size = unsafe { (*ret_tydesc).size as usize };
-        let mut ret_buffer = vec![0u8; ret_size.max(8)];
+        let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size.max(8));
         let ret_dest = Destination {
             ptr: ret_buffer.as_mut_ptr(),
             tydesc: ret_tydesc,
@@ -101,23 +101,19 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             }
         };
 
-        // Destroy the result value in the buffer to free heap allocations (e.g., bigint limbs).
-        // This must happen after extract_const_value since it reads from the buffer.
+        // Destroy whichever buffer the unit wrote, and only that one: the other
+        // holds zeroes, which for a result or an option is not a valid tag.
+        // The result goes after extract_const_value, which reads it; the early
+        // return holds an error that checked operations (like /!) wrote.
+        let (written, written_tydesc) = match completion {
+            UnitCompletion::Normal => (result_buffer.as_mut_ptr(), result_tydesc),
+            UnitCompletion::EarlyReturn => (ret_buffer.as_mut_ptr(), ret_tydesc),
+        };
         unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 self.interp.runtime_handle(),
-                result_buffer.as_mut_ptr(),
-                result_tydesc,
-            );
-        }
-
-        // Destroy the early return buffer to free any error values written during early return.
-        // This is necessary when checked operations (like /!) write error values to ret_buffer.
-        unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(
-                self.interp.runtime_handle(),
-                ret_buffer.as_mut_ptr(),
-                ret_tydesc,
+                written,
+                written_tydesc,
             );
         }
 
@@ -545,12 +541,12 @@ unsafe fn borrow_packed(
     ptr: *const u8,
 ) -> Result<(*const u8, datalove_rtdt::TyDescRef<'static>), CtfeError> {
     unsafe {
-        let mut scratch = [0u8; 16];
+        let mut scratch = 0u64;
         let mut value_ptr: *const u8 = std::ptr::null();
         let mut tydesc_ptr: *const datalove_rtdt::TyDesc = std::ptr::null();
         let status = datalove_rt::c::dtlv_rti_data_borrow(
             ptr,
-            scratch.as_mut_ptr(),
+            &mut scratch as *mut u64 as *mut u8,
             &mut value_ptr as *mut *const u8,
             &mut tydesc_ptr as *mut *const datalove_rtdt::TyDesc,
         );
@@ -562,13 +558,14 @@ unsafe fn borrow_packed(
         // out here keeps it alive for exactly as long as the caller needs.
         let tydesc = datalove_rtdt::TyDescRef::from_ptr(tydesc_ptr);
         let size = tydesc.size() as usize;
-        if value_ptr == scratch.as_ptr() {
+        if value_ptr == &scratch as *const u64 as *const u8 {
             // Packed into the words: copy to a leaked buffer, since the value
             // has to outlive this scratch. A const is evaluated once.
-            let mut owned = vec![0u8; size.max(1)];
+            let mut owned = datalove_rt::rust::AlignedBuffer::new(size.max(1));
             std::ptr::copy_nonoverlapping(value_ptr, owned.as_mut_ptr(), size);
-            let leaked = Box::leak(owned.into_boxed_slice());
-            return Ok((leaked.as_ptr(), tydesc));
+            let leaked = owned.as_ptr();
+            std::mem::forget(owned);
+            return Ok((leaked, tydesc));
         }
         Ok((value_ptr, tydesc))
     }

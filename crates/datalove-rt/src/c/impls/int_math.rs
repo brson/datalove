@@ -309,16 +309,20 @@ pub(crate) unsafe fn int_mul_impl(
 /// running total mostly fits where it is: no allocation, nothing freed.
 pub(crate) unsafe fn int_add_assign_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
     unsafe {
+        // `b` may be `a`, so it is read before `a` is borrowed mutably.
         let b = &*(b_in as *const rtdt::Int);
-        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b.data, b.size_and_sign)
+        let (b_data, b_size) = (b.data, b.size_and_sign);
+        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b_data, b_size)
     }
 }
 
 /// Subtract `b` from `a`: a = a - b, in `a`'s own buffer where it has room.
 pub(crate) unsafe fn int_sub_assign_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
     unsafe {
+        // `b` may be `a`, so it is read before `a` is borrowed mutably.
         let b = &*(b_in as *const rtdt::Int);
-        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b.data, -b.size_and_sign)
+        let (b_data, b_size) = (b.data, -b.size_and_sign);
+        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b_data, b_size)
     }
 }
 

@@ -168,8 +168,8 @@ unsafe fn place_bits(bits: u64, tag: TyTag, out: *mut u8) -> RtStatus {
     unsafe {
         // Written through a pointer of the right width rather than copied from
         // the low bytes, so that the byte order is the machine's own.
-        let mut buf = [0u8; 8];
-        let value = buf.as_mut_ptr();
+        let mut buf = 0u64;
+        let value = &mut buf as *mut u64 as *mut u8;
         match width(tag) {
             1 => *value = bits as u8,
             2 => *(value as *mut u16) = bits as u16,

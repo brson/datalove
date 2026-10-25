@@ -62,13 +62,16 @@ pub unsafe fn debuglog_local(
             return status;
         }
 
-        // Extract the UTF-8 bytes.
-        let result = if temp_string.data.is_null() || temp_string.size == rtdt::Index::ZERO {
+        // Extract the UTF-8 bytes, read through `string_ptr`: reading
+        // `temp_string` itself would end the pointer's write access, which
+        // the destroy below needs.
+        let printed = &*(string_ptr as *const rtdt::String);
+        let result = if printed.data.is_null() || printed.size == rtdt::Index::ZERO {
             String::new()
         } else {
             let bytes = std::slice::from_raw_parts(
-                temp_string.data as *const u8,
-                temp_string.size.as_usize(),
+                printed.data as *const u8,
+                printed.size.as_usize(),
             );
             String::from_utf8_lossy(bytes).into_owned()
         };

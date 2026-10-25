@@ -787,7 +787,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
 ///
 /// Like `dtlv_rti_data_parts`, but works for a value the `data` keeps in its
 /// own words rather than behind a pointer. `scratch` must be eight writable
-/// bytes that outlive the borrow. See `boxing::data_borrow`.
+/// bytes, aligned to eight, that outlive the borrow. See `boxing::data_borrow`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_data_borrow(
     data_in: *const u8,

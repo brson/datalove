@@ -201,18 +201,18 @@ pub unsafe fn write_string_list(
         return RtStatus::Ok;
     }
 
-    // Allocate a buffer of rtdt::String elements.
-    let string_size = std::mem::size_of::<rtdt::String>();
-    let mut buf: Vec<u8> = vec![0u8; parts.len() * string_size];
+    // Allocate a buffer of rtdt::String elements, typed so that it is aligned
+    // for them.
+    let mut buf: Vec<std::mem::MaybeUninit<rtdt::String>> = Vec::with_capacity(parts.len());
 
     // Initialize each string in the buffer.
     for (i, part) in parts.iter().enumerate() {
-        let dest = unsafe { buf.as_mut_ptr().add(i * string_size) };
+        let dest = unsafe { buf.as_mut_ptr().add(i) as *mut u8 };
         let status = unsafe { write_string_at(rt, dest, part) };
         if status != RtStatus::Ok {
             // Destroy already-initialized strings before returning.
             for j in 0..i {
-                let s = unsafe { buf.as_mut_ptr().add(j * string_size) as *mut rtdt::String };
+                let s = unsafe { buf.as_mut_ptr().add(j) as *mut rtdt::String };
                 unsafe { destroy_string(rt, s) };
             }
             return status;
@@ -225,7 +225,7 @@ pub unsafe fn write_string_list(
             rt,
             out,
             element_td,
-            buf.as_mut_ptr(),
+            buf.as_mut_ptr() as *mut u8,
             parts.len() as rtdt::IndexRepr,
         )
     }
