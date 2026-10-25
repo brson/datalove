@@ -3749,25 +3749,25 @@ fn test_btreeset_remove_rebalances() -> AnyResult<()> {
     unsafe { datalove_rt::c::dtlv_rti_btreeset_create_local(rt, &mut set as *mut rtdt::Set as *mut u8, set_td) };
 
     let mut expected = std::collections::BTreeSet::new();
-    for x in shuffled(2000, 1) {
+    for x in shuffled(datalove_rt_tests::size(2000), 1) {
         assert_eq!(unsafe { insert_u32(rt, &mut set, set_td, elem_td, x) }, 1);
         expected.insert(x);
     }
     unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
 
     // Remove three quarters, then put some back, then remove everything.
-    for x in shuffled(2000, 2).into_iter().filter(|x| x % 4 != 0) {
+    for x in shuffled(datalove_rt_tests::size(2000), 2).into_iter().filter(|x| x % 4 != 0) {
         assert_eq!(unsafe { remove_u32(rt, &mut set, set_td, elem_td, x) }, 1);
         expected.remove(&x);
         let got = unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
         assert!(got.iter().eq(expected.iter()));
     }
-    for x in shuffled(2000, 3).into_iter().filter(|x| x % 3 == 0) {
+    for x in shuffled(datalove_rt_tests::size(2000), 3).into_iter().filter(|x| x % 3 == 0) {
         let inserted = unsafe { insert_u32(rt, &mut set, set_td, elem_td, x) };
         assert_eq!(inserted == 1, expected.insert(x));
     }
     unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
-    for x in shuffled(2000, 4) {
+    for x in shuffled(datalove_rt_tests::size(2000), 4) {
         let removed = unsafe { remove_u32(rt, &mut set, set_td, elem_td, x) };
         assert_eq!(removed == 1, expected.remove(&x));
         let got = unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
@@ -3787,7 +3787,7 @@ fn test_btreeset_remove_rebalances() -> AnyResult<()> {
 /// element.
 #[test]
 fn test_btreeset_remove_from_built_set() -> AnyResult<()> {
-    for n in [1u32, 11, 12, 13, 50, 133, 144, 145, 300, 1000, 2000] {
+    for n in datalove_rt_tests::sizes([1u32, 11, 12, 13, 50, 133, 144, 145, 300, 1000, 2000]) {
         let rt = datalove_rt::c::dtlv_rti_init();
         let arena = TyDescArena::new();
         let (set_td, elem_td) = create_set_u32_tydesc(&arena);
@@ -3845,7 +3845,7 @@ fn test_btreeset_string_remove_rebalances() -> AnyResult<()> {
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
     unsafe { datalove_rt::c::dtlv_rti_btreeset_create_local(rt, set_ptr, set_td) };
 
-    for x in shuffled(600, 5) {
+    for x in shuffled(datalove_rt_tests::size(600), 5) {
         let mut s = unsafe { create_runtime_string(rt, &format!("element-{x:05}"), elem_td) };
         let mut inserted = 0u8;
         let status = unsafe {
@@ -3856,7 +3856,7 @@ fn test_btreeset_string_remove_rebalances() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    for (k, x) in shuffled(600, 6).into_iter().enumerate() {
+    for (k, x) in shuffled(datalove_rt_tests::size(600), 6).into_iter().enumerate() {
         let mut s = unsafe { create_runtime_string(rt, &format!("element-{x:05}"), elem_td) };
         let mut removed = 0u8;
         let status = unsafe {
@@ -3868,7 +3868,7 @@ fn test_btreeset_string_remove_rebalances() -> AnyResult<()> {
         assert_eq!(removed, 1);
         unsafe { datalove_rt::c::dtlv_rti_string_destroy_local(rt, &mut s as *mut rtdt::String as *mut u8, elem_td) };
         let got = unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
-        assert_eq!(got.len(), 600 - k - 1);
+        assert_eq!(got.len(), datalove_rt_tests::size(600) as usize - k - 1);
     }
     assert!(set.root.is_null());
 

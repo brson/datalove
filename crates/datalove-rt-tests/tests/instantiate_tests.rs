@@ -7,7 +7,6 @@
 //! in every field to the concrete one, names, offsets and flags included.
 
 use rmx::prelude::*;
-use std::any::Any;
 
 use datalove_datalit::Database;
 use datalove_datalit::tydesc_table::TyDescTable;
@@ -33,27 +32,36 @@ fn tydesc_of<'db>(db: &'db Database, table: &mut TyDescTable<'db>, source_text: 
 }
 
 /// Storage for the templates a test makes.
+///
+/// Kept as raw pointers, freed on drop: moving a `Box` after lending a pointer
+/// into it would invalidate the pointer.
 struct Arena {
-    kept: Vec<Box<dyn Any>>,
+    frees: Vec<Box<dyn FnOnce()>>,
+}
+
+impl Drop for Arena {
+    fn drop(&mut self) {
+        for free in self.frees.drain(..) {
+            free();
+        }
+    }
 }
 
 impl Arena {
     fn new() -> Arena {
-        Arena { kept: Vec::new() }
+        Arena { frees: Vec::new() }
     }
 
     fn desc(&mut self, desc: TyDesc) -> *const TyDesc {
-        let boxed = Box::new(desc);
-        let ptr = &*boxed as *const TyDesc;
-        self.kept.push(boxed);
+        let ptr = Box::into_raw(Box::new(desc));
+        self.frees.push(Box::new(move || drop(unsafe { Box::from_raw(ptr) })));
         ptr
     }
 
     fn slice<T: 'static>(&mut self, items: Vec<T>) -> *const T {
-        let boxed = items.into_boxed_slice();
-        let ptr = boxed.as_ptr();
-        self.kept.push(Box::new(boxed));
-        ptr
+        let ptr = Box::into_raw(items.into_boxed_slice());
+        self.frees.push(Box::new(move || drop(unsafe { Box::from_raw(ptr) })));
+        ptr as *const T
     }
 
     fn param(&mut self, index: u32) -> *const TyDesc {

@@ -15,6 +15,8 @@ struct TyDescArena {
     col_arrays: RefCell<Vec<Vec<rtdt::TyInfoTableColumn>>>,
     // Keep column name strings alive.
     col_names: RefCell<Vec<String>>,
+    // Keep tuple field arrays alive.
+    field_arrays: RefCell<Vec<Vec<rtdt::TyInfoTupleField>>>,
 }
 
 impl TyDescArena {
@@ -23,6 +25,7 @@ impl TyDescArena {
             ptrs: RefCell::new(Vec::new()),
             col_arrays: RefCell::new(Vec::new()),
             col_names: RefCell::new(Vec::new()),
+            field_arrays: RefCell::new(Vec::new()),
         }
     }
 
@@ -43,6 +46,12 @@ impl TyDescArena {
     fn alloc_col_array(&self, cols: Vec<rtdt::TyInfoTableColumn>) -> *const rtdt::TyInfoTableColumn {
         let ptr = cols.as_ptr();
         self.col_arrays.borrow_mut().push(cols);
+        ptr
+    }
+
+    fn alloc_field_array(&self, fields: Vec<rtdt::TyInfoTupleField>) -> *const rtdt::TyInfoTupleField {
+        let ptr = fields.as_ptr();
+        self.field_arrays.borrow_mut().push(fields);
         ptr
     }
 }
@@ -147,13 +156,12 @@ fn create_tuple_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     let u32_tydesc = create_u32_tydesc(arena);
 
     // Allocate fields array.
-    let fields = Box::new([
+    let fields_ptr = arena.alloc_field_array(vec![
         rtdt::TyInfoTupleField {
             offset: 0,
             tydesc: u32_tydesc,
         },
     ]);
-    let fields_ptr = Box::into_raw(fields) as *const rtdt::TyInfoTupleField;
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,
@@ -175,7 +183,7 @@ fn create_tuple_u32_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     let u64_tydesc = create_u64_tydesc(arena);
 
     // Layout: u32 at offset 0, padding, u64 at offset 8.
-    let fields = Box::new([
+    let fields_ptr = arena.alloc_field_array(vec![
         rtdt::TyInfoTupleField {
             offset: 0,
             tydesc: u32_tydesc,
@@ -185,7 +193,6 @@ fn create_tuple_u32_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
             tydesc: u64_tydesc,
         },
     ]);
-    let fields_ptr = Box::into_raw(fields) as *const rtdt::TyInfoTupleField;
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,

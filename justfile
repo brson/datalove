@@ -121,45 +121,38 @@ test-san-memory *ARGS='':
         RUSTDOCFLAGS="-Z sanitizer=memory" \
         cargo +nightly test --all -Zbuild-std --target x86_64-unknown-linux-gnu {{ARGS}}
 
+# Proptests run under Miri with few cases; at the default 256 a run takes hours.
 test-miri-rt *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt --lib -- --skip proptest {{ARGS}}
+    env PROPTEST_CASES=8 MIRIFLAGS="-Zmiri-disable-isolation" \
+        cargo +nightly miri test -p datalove-rt --lib {{ARGS}}
 
 test-miri-rt-one TEST:
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
+    env PROPTEST_CASES=8 MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt --lib {{TEST}}
 
+# Every rt-tests binary but the slow-tests proptests. `roundtrip_tests` goes
+# through salsa, whose crossbeam-epoch stacked borrows rejects, so it runs
+# under tree borrows; the rest under stacked borrows, which is stricter.
+# The largest collection sizes are dropped under Miri; see
+# `datalove_rt_tests::sizes`.
 test-miri-rt-tests *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test int_math_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test eq_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test string_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test cmp_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test rust_api_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test anypack_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test pretty_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test eq_unique_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test cmp_total_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test list_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test tensor_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test btreeset_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-rt-tests --test btreemap_tests {{ARGS}}
+    env PROPTEST_CASES=8 MIRIFLAGS="-Zmiri-disable-isolation" \
+        cargo +nightly miri test -p datalove-rt-tests --no-fail-fast \
+        --test anypack_tests --test boxing_tests --test btreemap_tests --test btreeset_tests --test clone_tests --test cmp_tests --test cmp_total_tests --test cursor_tests --test destroy_tests --test eq_tests --test eq_unique_tests --test instantiate_tests --test int_math_tests --test list_generic_tests --test list_tests --test pretty_tests --test rust_api_tests --test string_tests --test table_tests --test tensor_tests \
+        {{ARGS}}
+    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
+        cargo +nightly miri test -p datalove-rt-tests --test roundtrip_tests {{ARGS}}
 
 test-miri-rt-tests-one TEST_FILE *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
+    env PROPTEST_CASES=8 MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test {{TEST_FILE}} {{ARGS}}
+
+# The unit tests of the other crates with unsafe code: the descriptor types,
+# datalit's instantiation, and the interpreter's own.
+test-miri-libs *ARGS='':
+    env PROPTEST_CASES=8 MIRIFLAGS="-Zmiri-disable-isolation" \
+        cargo +nightly miri test --no-fail-fast \
+        -p datalove-rtdt -p datalove-datalit -p datalove-datafun-interp --lib {{ARGS}}
 
 # The engine fixtures under Miri, on the IR walker and the bytecode: the
 # bytecode's frame access is raw pointer arithmetic, which this checks as it

@@ -499,25 +499,28 @@ mod tests {
         // With capacity 4:
         // Column 0: u32 at offset 0, 4 elements = 16 bytes.
         // Column 1: u64 needs 8-byte alignment, aligns 16 -> 16, starts at 16.
-        let base = 0x1000 as *const u8;
+        // Column 1 ends at 16 + 4 * 8 = 48 bytes.
+        let buf = [0u64; 6];
+        let base = buf.as_ptr() as *const u8;
+        let at = |ptr: *const u8| ptr as usize - base as usize;
         let capacity: rtdt::IndexRepr = 4;
 
         unsafe {
             // First row, first column.
             let ptr = element_ptr(base, &tydescs, 0, 0, capacity);
-            assert_eq!(ptr as usize, 0x1000);
+            assert_eq!(at(ptr), 0);
 
             // Second row, first column.
             let ptr = element_ptr(base, &tydescs, 1, 0, capacity);
-            assert_eq!(ptr as usize, 0x1004);
+            assert_eq!(at(ptr), 4);
 
             // First row, second column.
             let ptr = element_ptr(base, &tydescs, 0, 1, capacity);
-            assert_eq!(ptr as usize, 0x1010); // 0x1000 + 16
+            assert_eq!(at(ptr), 16);
 
             // Second row, second column.
             let ptr = element_ptr(base, &tydescs, 1, 1, capacity);
-            assert_eq!(ptr as usize, 0x1018); // 0x1010 + 8
+            assert_eq!(at(ptr), 24); // 16 + 8
         }
     }
 }

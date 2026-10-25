@@ -392,7 +392,7 @@ fn test_list_cursor_walks_in_order() -> AnyResult<()> {
     let arena = TyDescArena::new();
     let u32_td = arena.u32();
     let list_td = arena.list(u32_td);
-    for n in [0u32, 1, 2, 1000] {
+    for n in datalove_rt_tests::sizes([0u32, 1, 2, 1000]) {
         let values: Vec<u32> = (0..n).map(|x| x * 3 + 1).collect();
         let mut list = unsafe { list_of(&rt, &values, list_td, u32_td) };
         assert_eq!(unsafe { walk_list_u32(&rt, &list, list_td) }, values);
@@ -539,7 +539,7 @@ fn test_tree_cursor_walks_in_order() -> AnyResult<()> {
     let u32_td = arena.u32();
     let set_td = arena.set(u32_td);
     let map_td = arena.map(u32_td, u32_td);
-    for n in [1u32, 2, 11, 12, 22, 23, 200, 5000] {
+    for n in datalove_rt_tests::sizes([1u32, 2, 11, 12, 22, 23, 200, 5000]) {
         let mut set = unsafe { set_by_inserting(&rt, shuffled(n, n as u64), set_td, u32_td) };
         assert_eq!(unsafe { walk_set_u32(&rt, &set, set_td) }, (0..n).collect::<Vec<_>>());
         unsafe { destroy_set(&rt, &mut set, set_td) };
@@ -560,10 +560,10 @@ fn test_tree_cursor_walks_after_removals() -> AnyResult<()> {
     let u32_td = arena.u32();
     let set_td = arena.set(u32_td);
     let map_td = arena.map(u32_td, u32_td);
-    let mut set = unsafe { set_by_inserting(&rt, 0..2000, set_td, u32_td) };
-    let mut map = unsafe { map_by_inserting(&rt, 0..2000, map_td, u32_td) };
-    let mut left: std::collections::BTreeSet<u32> = (0..2000).collect();
-    for (i, x) in shuffled(2000, 9).into_iter().enumerate() {
+    let mut set = unsafe { set_by_inserting(&rt, 0..datalove_rt_tests::size(2000), set_td, u32_td) };
+    let mut map = unsafe { map_by_inserting(&rt, 0..datalove_rt_tests::size(2000), map_td, u32_td) };
+    let mut left: std::collections::BTreeSet<u32> = (0..datalove_rt_tests::size(2000)).collect();
+    for (i, x) in shuffled(datalove_rt_tests::size(2000), 9).into_iter().enumerate() {
         if x % 5 == 0 {
             continue;
         }
@@ -595,7 +595,7 @@ fn test_tree_cursor_walks_bulk_built_trees() -> AnyResult<()> {
     let u32_td = arena.u32();
     let set_td = arena.set(u32_td);
     let map_td = arena.map(u32_td, u32_td);
-    for n in [1u32, 12, 133, 1000] {
+    for n in datalove_rt_tests::sizes([1u32, 12, 133, 1000]) {
         let mut elems: Vec<u32> = (0..n).collect();
         let mut set = rtdt::Set { root: ptr::null(), len: rtdt::Index::ZERO };
         let status = unsafe {
@@ -630,7 +630,7 @@ fn test_tree_cursor_walks_zero_sized_values() -> AnyResult<()> {
     let u32_td = arena.u32();
     let unit_td = arena.unit();
     let map_td = arena.map(u32_td, unit_td);
-    for n in [1u32, 11, 12, 23, 500] {
+    for n in datalove_rt_tests::sizes([1u32, 11, 12, 23, 500]) {
         let mut map = unsafe { map_of(&rt, shuffled(n, 3).into_iter().map(|k| (k, ())), map_td, u32_td, unit_td) };
         let mut cursor = unsafe { begin_map(&rt, &map, map_td) };
         assert_eq!(cursor.value_stride, 0);
@@ -650,7 +650,7 @@ fn test_tree_cursor_walks_over_aligned_values() -> AnyResult<()> {
     let u32_td = arena.u32();
     let u64_td = arena.u64();
     let map_td = arena.map(u32_td, u64_td);
-    for n in [1u32, 12, 23, 500] {
+    for n in datalove_rt_tests::sizes([1u32, 12, 23, 500]) {
         let mut map = unsafe { map_of(&rt, shuffled(n, 4).into_iter().map(|k| (k, k as u64 * 1_000_000_007)), map_td, u32_td, u64_td) };
         let mut cursor = unsafe { begin_map(&rt, &map, map_td) };
         assert_eq!(cursor.value_stride, 8);

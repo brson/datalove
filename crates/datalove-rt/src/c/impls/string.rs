@@ -528,7 +528,7 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let string = string.assume_init();
+            let mut string = string.assume_init();
             assert!(!string.data.is_null());
             assert_eq!(string.size, rtdt::Index(5));
             assert!(string.capacity >= rtdt::Index(5));
@@ -538,7 +538,7 @@ mod tests {
 
             string_destroy_local(
                 rt_handle,
-                &string as *const rtdt::String as *mut u8,
+                &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
 
@@ -566,7 +566,7 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let string = string.assume_init();
+            let mut string = string.assume_init();
             assert!(!string.data.is_null());
             assert_eq!(string.size.as_usize(), data.len());
 
@@ -575,7 +575,7 @@ mod tests {
 
             string_destroy_local(
                 rt_handle,
-                &string as *const rtdt::String as *mut u8,
+                &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
 

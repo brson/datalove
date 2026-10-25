@@ -3192,7 +3192,7 @@ fn shuffled(n: u32, seed: u64) -> Vec<u32> {
 /// finding the rest as they are removed in any order.
 #[test]
 fn test_btreemap_built_map_finds_every_key() -> AnyResult<()> {
-    for n in [1u32, 11, 12, 133, 144, 145, 300, 1000, 2000] {
+    for n in datalove_rt_tests::sizes([1u32, 11, 12, 133, 144, 145, 300, 1000, 2000]) {
         let rt = datalove_rt::c::dtlv_rti_init();
         let arena = TyDescArena::new();
         let (map_td, key_td, value_td) = create_map_u32_u32_tydesc(&arena);

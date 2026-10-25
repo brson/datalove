@@ -112,7 +112,9 @@ pub fn native_stack_limit() -> usize {
 /// The lowest address of this thread's stack, and its size. Asking is slow
 /// for the main thread, whose bounds glibc reads out of `/proc`, so
 /// `native_stack_limit` asks once a thread.
-#[cfg(target_os = "linux")]
+///
+/// Miri cannot ask, so under it there is no limit, as on other platforms.
+#[cfg(all(target_os = "linux", not(miri)))]
 fn thread_stack() -> Option<(usize, usize)> {
     use rmx::libc;
     unsafe {
@@ -128,12 +130,12 @@ fn thread_stack() -> Option<(usize, usize)> {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(all(target_os = "linux", not(miri))))]
 fn thread_stack() -> Option<(usize, usize)> {
     None
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, target_os = "linux", not(miri)))]
 mod tests {
     use super::*;
 
