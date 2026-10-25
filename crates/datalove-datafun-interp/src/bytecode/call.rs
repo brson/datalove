@@ -217,13 +217,13 @@ impl IrInterpreter {
     pub(super) fn call_planned_native(&mut self, regs: &mut Regs<'_>, call: &FastCall, plan: &NativePlan, base: *mut u8) {
         let n = plan.args.len();
         let len = 1 + 2 * n + 2;
-        let mut words = [0usize; MAX_C_WORDS];
-        words[0] = self.runtime.handle() as usize;
+        let mut words: [CWord; MAX_C_WORDS] = [std::ptr::null_mut(); MAX_C_WORDS];
+        words[0] = self.runtime.handle() as CWord;
         for (i, recipe) in plan.args.iter().enumerate() {
             // SAFETY: the recipe was made against the caller's frame.
             let arg = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames) };
-            words[1 + 2 * i] = arg.ptr as usize;
-            words[2 + 2 * i] = arg.tydesc as usize;
+            words[1 + 2 * i] = arg.ptr as CWord;
+            words[2 + 2 * i] = arg.tydesc as CWord;
         }
         // A dynamic destination is where its pointer says, described by its
         // table entry; so is a forwarder's dynamic result.
@@ -233,11 +233,11 @@ impl IrInterpreter {
             // SAFETY: the destination was lowered against the caller's frame.
             Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc }
         };
-        words[1 + 2 * n] = dest.ptr as usize;
-        words[2 + 2 * n] = if plan.dest_tydesc.is_null() { dest.tydesc } else { plan.dest_tydesc } as usize;
+        words[1 + 2 * n] = dest.ptr as CWord;
+        words[2 + 2 * n] = if plan.dest_tydesc.is_null() { dest.tydesc } else { plan.dest_tydesc } as CWord;
         // Then the descriptors the native's signature asks for.
         for (k, &r) in plan.descriptors.iter().enumerate() {
-            words[len + k] = Self::resolve_binding(r, &regs.frame) as usize;
+            words[len + k] = Self::resolve_binding(r, &regs.frame) as CWord;
         }
         let len = len + plan.descriptors.len();
         // SAFETY: the table registered this as a rider function in the
@@ -494,7 +494,7 @@ impl IrInterpreter {
             }
         };
         if let NativeTarget::C(fn_ptr) = target {
-            let mut words = [0usize; MAX_C_WORDS];
+            let mut words = [std::ptr::null_mut(); MAX_C_WORDS];
             let len = crate::native::c_words(
                 &mut words, self.runtime.handle(), (0..n).map(|i| arg(self, i, mode(i))), dest, shapes)?;
             // SAFETY: the table registered this as a rider function and holds

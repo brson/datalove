@@ -423,6 +423,11 @@ impl LayoutCache {
         Self::default()
     }
 
+    /// Every layout cached.
+    pub(crate) fn layouts(&self) -> impl Iterator<Item = &Rc<IrLayout>> {
+        self.entries.values().map(|entry| &entry.layout)
+    }
+
     /// Forget the layouts of the functions of script unit `unit`.
     pub fn forget_unit(&mut self, unit: u32) {
         self.entries.retain(|key, _| !matches!(key, FuncIdentity::Unit { unit: u, .. } if *u == unit));

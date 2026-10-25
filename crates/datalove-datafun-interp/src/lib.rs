@@ -204,12 +204,23 @@ struct StaticPool {
     by_value: rustc_hash::FxHashMap<(usize, datalove_datafun_ir::SharedConst), *const u8>,
     held: Vec<std::sync::Arc<ConstValue>>,
     /// Each value's storage and its descriptor, for destroying it.
-    entries: Vec<(Box<[u64]>, *const rtdt::TyDesc)>,
+    ///
+    /// A `Vec` rather than a `Box<[u64]>`: the pool hands out pointers into the
+    /// storage before moving it in here, and moving a `Box` asserts it is the
+    /// only way to its contents, which ends those pointers.
+    entries: Vec<(Vec<u64>, *const rtdt::TyDesc)>,
 }
 
 impl Drop for IrInterpreter {
     fn drop(&mut self) {
         self.report_bc_stats();
+        let mut bodies: Vec<_> = self.layout_cache.layouts()
+            .filter_map(|layout| layout.bytecode.get().map(|(_, bc)| bc.clone()))
+            .collect();
+        for cache in &self.retired_call_caches {
+            cache.bodies(&mut bodies);
+        }
+        bytecode::release_bodies(bodies);
         // Before the runtime the values were allocated from shuts down, which
         // is when it checks for leaks.
         for (mut storage, tydesc) in std::mem::take(&mut self.static_pool.entries) {

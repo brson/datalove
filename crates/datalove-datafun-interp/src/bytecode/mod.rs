@@ -76,7 +76,7 @@ use crate::env::{ExecutionContext, FunctionRegistry};
 use crate::error::InterpError;
 use crate::frame::{Frame, FrameStore};
 use crate::layout::IrLayout;
-use crate::native::{call_c, NativeTarget, MAX_C_WORDS};
+use crate::native::{call_c, CWord, NativeTarget, MAX_C_WORDS};
 use crate::ops::CheckedIntOps;
 
 mod call;
@@ -571,7 +571,39 @@ pub(crate) struct CallCache {
     dispatcher: Option<u64>,
 }
 
+/// Empty the call sites of `roots` and of every body they lead to.
+///
+/// A body's call sites hold their callees' layouts and bodies, and a layout
+/// holds the body lowered against it, so a recursive function's layout and
+/// body keep each other alive, and nothing frees either. For when the
+/// interpreter goes, and no frame is borrowing anything a plan holds.
+pub(crate) fn release_bodies(roots: Vec<std::rc::Rc<BcFunction>>) {
+    let mut seen = rustc_hash::FxHashSet::default();
+    let mut pending = roots;
+    while let Some(bc) = pending.pop() {
+        if !seen.insert(std::rc::Rc::as_ptr(&bc)) {
+            continue;
+        }
+        for call in &bc.calls {
+            if let Some(cache) = call.site.take().callee {
+                cache.bodies(&mut pending);
+            }
+        }
+    }
+}
+
 impl CallCache {
+    /// The bodies this cache keeps alive, directly or through a layout.
+    pub(crate) fn bodies(&self, out: &mut Vec<std::rc::Rc<BcFunction>>) {
+        let lowered = |layout: &IrLayout| layout.bytecode.get().map(|(_, bc)| bc.clone());
+        out.extend(self.layout.as_deref().and_then(lowered));
+        out.extend(self.forward.clone());
+        if let Some(Plan::Body(plan)) = &self.plan {
+            out.push(plan.bc.clone());
+            out.extend(lowered(&plan.layout));
+        }
+    }
+
     /// Whether the site has to ask the dispatcher, installed in `epoch`, how to
     /// make its calls before it can plan them.
     fn needs_policy(&self, epoch: u64) -> bool {

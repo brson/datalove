@@ -26,7 +26,7 @@ impl IrInterpreter {
             None => {
                 let (size, align) = unsafe { ((*tydesc).size as usize, (*tydesc).align as usize) };
                 assert!(align <= 8, "a static const aligned to {align} bytes");
-                let mut storage = vec![0u64; size.div_ceil(8).max(1)].into_boxed_slice();
+                let mut storage = vec![0u64; size.div_ceil(8).max(1)];
                 let ptr = storage.as_mut_ptr() as *mut u8;
                 self.write_const(value, Destination { ptr, tydesc });
                 self.static_pool.entries.push((storage, tydesc));

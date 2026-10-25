@@ -72,6 +72,15 @@ impl NativeTarget {
 /// error here.
 pub const MAX_C_WORDS: usize = 32;
 
+/// One word of a C-ABI native call.
+///
+/// A pointer, since every word is one: the runtime handle, a value, a
+/// descriptor. Passing them as integers would be a call through the wrong
+/// type, integers and pointers not being ABI-compatible, and would drop the
+/// pointers' provenance besides. Any thin pointer type is compatible with any
+/// other, so this one serves for all of a rider's parameters.
+pub type CWord = *mut u8;
+
 /// Call a rider function with the native C ABI.
 ///
 /// See `botdocs/native-abi.md` for the shape of the words. In short:
@@ -80,15 +89,15 @@ pub const MAX_C_WORDS: usize = 32;
 /// fn(rt, arg0_ptr, arg0_td, ..., out_ptr, out_td, shape_td...) -> u8
 /// ```
 ///
-/// Every word is pointer-sized, so the call is made by transmuting to a
-/// function type of the right arity. The arities are listed rather than
+/// Every word is a pointer, so the call is made by transmuting to a function
+/// type of the right arity. The arities are listed rather than
 /// generated because there is no variadic form that would keep the C ABI.
 ///
 /// # Safety
 ///
 /// `fn_ptr` must be a rider function taking `words.len()` words, and the words
 /// what it requires.
-pub unsafe fn call_c(fn_ptr: *const (), words: &[usize]) {
+pub unsafe fn call_c(fn_ptr: *const (), words: &[CWord]) {
     /// Transmute to a function of `n` pointer arguments and call it.
     macro_rules! arity {
         ($($n:literal => $($i:literal),+ ;)+) => {
@@ -101,7 +110,7 @@ pub unsafe fn call_c(fn_ptr: *const (), words: &[usize]) {
                 n => unreachable!("a native call of {n} words; `c_words` refuses more than {MAX_C_WORDS}"),
             }
         };
-        (@ptr $i:literal) => { usize };
+        (@ptr $i:literal) => { CWord };
     }
 
     let _status: u8 = arity! {
@@ -145,7 +154,7 @@ pub unsafe fn call_c(fn_ptr: *const (), words: &[usize]) {
 /// The arguments come as they are read, so a caller with them in hand passes
 /// them and one that reads each from somewhere makes no list of them first.
 pub fn c_words(
-    words: &mut [usize; MAX_C_WORDS],
+    words: &mut [CWord; MAX_C_WORDS],
     rt: LocalRtHandle,
     args: impl ExactSizeIterator<Item = Value>,
     dest: Destination,
@@ -157,16 +166,16 @@ pub fn c_words(
         return Err(InterpError::RuntimeError(format!(
             "a native function called with {len} words; the interpreter calls at most {MAX_C_WORDS}")));
     }
-    words[0] = rt as usize;
+    words[0] = rt as CWord;
     for (i, arg) in args.enumerate() {
-        words[1 + 2 * i] = arg.ptr as usize;
-        words[2 + 2 * i] = arg.tydesc as usize;
+        words[1 + 2 * i] = arg.ptr as CWord;
+        words[2 + 2 * i] = arg.tydesc as CWord;
     }
     let at = 1 + 2 * n;
-    words[at] = dest.ptr as usize;
-    words[at + 1] = dest.tydesc as usize;
+    words[at] = dest.ptr as CWord;
+    words[at + 1] = dest.tydesc as CWord;
     for (i, tydesc) in supplied.iter().enumerate() {
-        words[at + 2 + i] = *tydesc as usize;
+        words[at + 2 + i] = *tydesc as CWord;
     }
     Ok(len)
 }
@@ -265,7 +274,7 @@ impl NativeFunctionTable {
     ) -> Result<(), InterpError> {
         match self.lookup(symbol)? {
             NativeTarget::C(fn_ptr) => {
-                let mut words = [0; MAX_C_WORDS];
+                let mut words = [std::ptr::null_mut(); MAX_C_WORDS];
                 let len = c_words(&mut words, rt, args.iter().copied(), dest, supplied)?;
                 // SAFETY: registered as a rider function, whose code the table
                 // holds, with the words its ABI says.
@@ -299,39 +308,39 @@ mod tests {
     /// A rider function of the widest arity, recording a fold of its words
     /// that tells each position apart.
     extern "C-unwind" fn widest(
-        w0: usize, w1: usize, w2: usize, w3: usize, w4: usize, w5: usize, w6: usize,
-        w7: usize, w8: usize, w9: usize, w10: usize, w11: usize, w12: usize, w13: usize,
-        w14: usize, w15: usize, w16: usize, w17: usize, w18: usize, w19: usize,
-        w20: usize, w21: usize, w22: usize, w23: usize, w24: usize, w25: usize,
-        w26: usize, w27: usize, w28: usize, w29: usize, w30: usize, w31: usize,
+        w0: CWord, w1: CWord, w2: CWord, w3: CWord, w4: CWord, w5: CWord, w6: CWord,
+        w7: CWord, w8: CWord, w9: CWord, w10: CWord, w11: CWord, w12: CWord, w13: CWord,
+        w14: CWord, w15: CWord, w16: CWord, w17: CWord, w18: CWord, w19: CWord,
+        w20: CWord, w21: CWord, w22: CWord, w23: CWord, w24: CWord, w25: CWord,
+        w26: CWord, w27: CWord, w28: CWord, w29: CWord, w30: CWord, w31: CWord,
     ) -> u8 {
         let fold =
-            w0.rotate_left(0) ^ w1.rotate_left(1) ^ w2.rotate_left(2) ^
-            w3.rotate_left(3) ^ w4.rotate_left(4) ^ w5.rotate_left(5) ^
-            w6.rotate_left(6) ^ w7.rotate_left(7) ^ w8.rotate_left(8) ^
-            w9.rotate_left(9) ^ w10.rotate_left(10) ^ w11.rotate_left(11) ^
-            w12.rotate_left(12) ^ w13.rotate_left(13) ^ w14.rotate_left(14) ^
-            w15.rotate_left(15) ^ w16.rotate_left(16) ^ w17.rotate_left(17) ^
-            w18.rotate_left(18) ^ w19.rotate_left(19) ^ w20.rotate_left(20) ^
-            w21.rotate_left(21) ^ w22.rotate_left(22) ^ w23.rotate_left(23) ^
-            w24.rotate_left(24) ^ w25.rotate_left(25) ^ w26.rotate_left(26) ^
-            w27.rotate_left(27) ^ w28.rotate_left(28) ^ w29.rotate_left(29) ^
-            w30.rotate_left(30) ^ w31.rotate_left(31);
+            w0.addr().rotate_left(0) ^ w1.addr().rotate_left(1) ^ w2.addr().rotate_left(2) ^
+            w3.addr().rotate_left(3) ^ w4.addr().rotate_left(4) ^ w5.addr().rotate_left(5) ^
+            w6.addr().rotate_left(6) ^ w7.addr().rotate_left(7) ^ w8.addr().rotate_left(8) ^
+            w9.addr().rotate_left(9) ^ w10.addr().rotate_left(10) ^ w11.addr().rotate_left(11) ^
+            w12.addr().rotate_left(12) ^ w13.addr().rotate_left(13) ^ w14.addr().rotate_left(14) ^
+            w15.addr().rotate_left(15) ^ w16.addr().rotate_left(16) ^ w17.addr().rotate_left(17) ^
+            w18.addr().rotate_left(18) ^ w19.addr().rotate_left(19) ^ w20.addr().rotate_left(20) ^
+            w21.addr().rotate_left(21) ^ w22.addr().rotate_left(22) ^ w23.addr().rotate_left(23) ^
+            w24.addr().rotate_left(24) ^ w25.addr().rotate_left(25) ^ w26.addr().rotate_left(26) ^
+            w27.addr().rotate_left(27) ^ w28.addr().rotate_left(28) ^ w29.addr().rotate_left(29) ^
+            w30.addr().rotate_left(30) ^ w31.addr().rotate_left(31);
         SEEN.with(|seen| seen.set(fold));
         1
     }
 
     #[test]
     fn the_widest_native_gets_every_word_in_place() {
-        let words: Vec<usize> = (0..MAX_C_WORDS).map(|i| 1000 + i).collect();
-        let want = words.iter().enumerate().fold(0, |acc, (i, w)| acc ^ w.rotate_left(i as u32));
+        let words: Vec<CWord> = (0..MAX_C_WORDS).map(|i| std::ptr::without_provenance_mut(1000 + i)).collect();
+        let want = words.iter().enumerate().fold(0, |acc, (i, w)| acc ^ w.addr().rotate_left(i as u32));
         unsafe { call_c(widest as *const (), &words) };
         assert_eq!(SEEN.with(Cell::get), want);
     }
 
     #[test]
     fn a_native_wider_than_the_interpreter_calls_is_an_error() {
-        let mut words = [0; MAX_C_WORDS];
+        let mut words = [std::ptr::null_mut(); MAX_C_WORDS];
         let dest = Destination { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() };
         let args = vec![Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() }; 15];
         let result = c_words(&mut words, std::ptr::null_mut(), args.into_iter(), dest, &[]);

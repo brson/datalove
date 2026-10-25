@@ -594,13 +594,10 @@ pub extern "C-unwind" fn dlr_std__string_remove(
     let bytes = unsafe { as_mut_bytes(self_ptr) };
     let remaining = bytes.len() - idx - ch_len;
     if remaining > 0 {
-        unsafe {
-            std::ptr::copy(
-                bytes.as_ptr().add(idx + ch_len),
-                bytes.as_mut_ptr().add(idx),
-                remaining,
-            );
-        }
+        // One pointer for both ends: taking `as_mut_ptr` after `as_ptr` would
+        // end the first.
+        let base = bytes.as_mut_ptr();
+        unsafe { std::ptr::copy(base.add(idx + ch_len), base.add(idx), remaining) };
     }
     let s_mut = unsafe { &mut *(self_ptr as *mut rtdt::String) };
     s_mut.size = rtdt::Index::new((s_mut.size.as_usize() - ch_len) as rtdt::IndexRepr);
@@ -650,13 +647,8 @@ pub extern "C-unwind" fn dlr_std__string_insert_char(
     let old_len = total_len - encoded_len;
     // Move bytes [idx..old_len] to [idx+encoded_len..total_len].
     if idx < old_len {
-        unsafe {
-            std::ptr::copy(
-                bytes.as_ptr().add(idx),
-                bytes.as_mut_ptr().add(idx + encoded_len),
-                old_len - idx,
-            );
-        }
+        let base = bytes.as_mut_ptr();
+        unsafe { std::ptr::copy(base.add(idx), base.add(idx + encoded_len), old_len - idx) };
     }
     // Copy encoded char into the gap.
     bytes[idx..idx + encoded_len].copy_from_slice(encoded.as_bytes());
@@ -703,13 +695,8 @@ pub extern "C-unwind" fn dlr_std__string_insert_str(
     let total_len = bytes.len();
     let old_len = total_len - insert_len;
     if idx < old_len {
-        unsafe {
-            std::ptr::copy(
-                bytes.as_ptr().add(idx),
-                bytes.as_mut_ptr().add(idx + insert_len),
-                old_len - idx,
-            );
-        }
+        let base = bytes.as_mut_ptr();
+        unsafe { std::ptr::copy(base.add(idx), base.add(idx + insert_len), old_len - idx) };
     }
     // Copy inserted string into the gap.
     bytes[idx..idx + insert_len].copy_from_slice(&other_bytes);
