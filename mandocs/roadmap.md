@@ -45,19 +45,24 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## In progress
 
-
+- repl ux
+- script reactivity
 
 
 ## On deck
 
+- ir-bundles and execution
+- recursive types
+- interactive math ergonomics
+- rational numbers
+- saturating and wrapping math ops
+
+
+## Punted
+
+- tuned generics specialization
 - lazy lowering
 - lazy lowering of consts
-- parallel pipeline overhaul
-- repl ux and script reactivity
-- generics specialization
-- generic benchmarking
-- recursive types
-- saturating and wrapping math ops
 
 
 
