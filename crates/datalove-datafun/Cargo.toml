@@ -58,6 +58,14 @@ datalove-diagnostic.workspace = true
 datalove-datafun-cranelift-jit.workspace = true
 datalove-ct.workspace = true
 ron = "0.8"
+# Linked in, so that the IR replay tests can call its natives without loading a
+# library, which Miri cannot do.
+datalove-rider-sys-std.workspace = true
+
+[[test]]
+name = "ir_replay_tests"
+path = "tests/ir_replay_tests.rs"
+harness = false
 
 [[test]]
 name = "tycheck_world_tests"

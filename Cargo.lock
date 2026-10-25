@@ -1227,6 +1227,7 @@ dependencies = [
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-exampletest",
+ "datalove-rider-sys-std",
  "datalove-rt",
  "datalove-rtdt",
  "datalove-rti",

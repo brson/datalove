@@ -50,15 +50,7 @@ impl<'db> CompiledModules<'db> {
             return None;
         }
 
-        let env = ScriptEnvironment::with_module_registry(Arc::clone(&self.shared.module_registry));
-        let interp = datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher);
-
-        Some(ScriptExecutor {
-            script_ctx: lower::ScriptLowerContext::new(),
-            units: Vec::new(),
-            env,
-            interp,
-        })
+        Some(ScriptExecutor::new(Arc::clone(&self.shared.module_registry), debug_mode, call_dispatcher))
     }
 
     /// Create a script executor with a custom module registry.
@@ -77,15 +69,7 @@ impl<'db> CompiledModules<'db> {
             return None;
         }
 
-        let env = ScriptEnvironment::with_module_registry(module_registry);
-        let interp = datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher);
-
-        Some(ScriptExecutor {
-            script_ctx: lower::ScriptLowerContext::new(),
-            units: Vec::new(),
-            env,
-            interp,
-        })
+        Some(ScriptExecutor::new(module_registry, debug_mode, call_dispatcher))
     }
 
     /// Get a function registry containing module functions for AOT compilation.
@@ -171,6 +155,25 @@ impl UnitExports {
 }
 
 impl ScriptExecutor {
+    /// An executor running against `module_registry`, with no compiler behind it.
+    ///
+    /// Everything it keeps comes from the units it is handed, so the registry
+    /// and the units may have been compiled elsewhere and deserialized: that is
+    /// how the IR replay tests run the interpreter under Miri without the
+    /// compiler.
+    pub fn new(
+        module_registry: Arc<datalove_datafun_interp::ModuleFunctionRegistry>,
+        debug_mode: datalove_rt::c::DebugOutputMode,
+        call_dispatcher: Option<Box<dyn CallDispatcher>>,
+    ) -> ScriptExecutor {
+        ScriptExecutor {
+            script_ctx: lower::ScriptLowerContext::new(),
+            units: Vec::new(),
+            env: ScriptEnvironment::with_module_registry(module_registry),
+            interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
+        }
+    }
+
     /// Execute a compiled fragment unit, as the next unit.
     ///
     /// Registers bindings from the unit and executes it, unless it reads from a

@@ -165,6 +165,17 @@ test-miri-interp *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
         cargo +nightly miri test -p datalove-datafun --test engine_tests {{ARGS}}
 
+# The standard library fixtures under Miri, with the compiling done natively:
+# the native run compiles each fixture and writes its IR to target/ir-replay,
+# and the Miri run reads it back and runs it on the walker and the bytecode,
+# calling the std rider's natives. Seconds a fixture, where compiling under
+# Miri takes hours. Arguments filter fixtures by name. Deterministic floats,
+# since Miri otherwise adds error to `exp` and the like, as platforms may.
+test-miri-replay *ARGS='':
+    cargo test -p datalove-datafun --test ir_replay_tests -- {{ARGS}}
+    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-deterministic-floats" \
+        cargo +nightly miri test -p datalove-datafun --test ir_replay_tests -- {{ARGS}}
+
 # Install the `datalove` binary from this working copy.
 install:
     cargo install --path crates/datalove-cli --locked
