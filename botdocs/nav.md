@@ -23,6 +23,7 @@
 - [The compiler's salsa architecture](salsa-architecture.md)
 - [The Native Rider ABI](native-abi.md)
 - [Where Compile Time Goes](compile-time.md)
+- [Testing Under Miri](miri.md)
 
 ---
 
