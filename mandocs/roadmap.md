@@ -51,7 +51,6 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## On deck
 
-- ir-bundles and execution
 - recursive types
 - interactive math ergonomics
 - rational numbers
