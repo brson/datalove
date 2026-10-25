@@ -2,6 +2,7 @@
 
 use rmx::regex::Regex;
 use std::fmt;
+use std::sync::LazyLock;
 use crate::*;
 
 /// Expand `ir: "..."` fields in RON output into readable multiline format.
@@ -20,7 +21,8 @@ use crate::*;
 /// the ability to compare actual vs expected output (both use the same format).
 pub fn expand_ir_strings(ron: &str) -> String {
     // Match `ir: "...",` where the string may contain escaped characters.
-    let re = Regex::new(r#"(?m)^(\s*)ir: "((?:[^"\\]|\\.)*)","#).unwrap();
+    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?m)^(\s*)ir: "((?:[^"\\]|\\.)*)","#).unwrap());
+    let re = &*RE;
 
     re.replace_all(ron, |caps: &rmx::regex::Captures| {
         let indent = &caps[1];

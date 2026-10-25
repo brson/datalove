@@ -217,8 +217,8 @@ where
         self
     }
 
-    /// Find test fixture files in the configured directory.
-    fn find_test_fixtures(&self) -> Vec<PathBuf> {
+    /// Find test fixture files in the configured directory, with their stems.
+    fn find_test_fixtures(&self) -> Vec<(String, PathBuf)> {
         let fixtures_dir = self.manifest_dir
             .join("tests")
             .join("fixtures")
@@ -229,15 +229,20 @@ where
             return fixtures;
         }
 
+        // Names are matched and sorted as strings rather than parsed as paths,
+        // which for thousands of files takes minutes under Miri. They are all
+        // in one directory, so the order is the same.
+        let suffix = format!(".{}", self.file_extension);
         for entry in std::fs::read_dir(&fixtures_dir).X() {
             let entry = entry.X();
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some(&self.file_extension) {
-                fixtures.push(path);
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if let Some(stem) = name.strip_suffix(&suffix) {
+                fixtures.push((stem.to_string(), entry.path()));
             }
         }
 
-        fixtures.sort();
+        fixtures.sort_by(|a, b| a.0.cmp(&b.0));
         fixtures
     }
 
@@ -321,13 +326,13 @@ where
         // Filter fixtures based on command-line arguments and skip list.
         let fixtures: Vec<_> = all_fixtures
             .into_iter()
-            .filter(|f| {
-                let name = f.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            .filter(|(name, _)| {
                 if self.skip_names.iter().any(|s| s == name) {
                     return false;
                 }
                 matches_filters(name, &filters)
             })
+            .map(|(_, path)| path)
             .collect();
 
         if fixtures.is_empty() {
