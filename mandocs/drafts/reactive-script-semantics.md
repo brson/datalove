@@ -261,9 +261,9 @@ unit is being rerun or is broken.
 _Therefore_ we propose an algorithm.
 -->
 
-Each time any script unit is _modified_, broken or edited, triggers a _step_.
+Each time any script unit is _modified_ (_broken_ or _edited_) triggers a _step_.
 For each step we _replay_ all script units.
-For each unit replay may require a _rerun_, or take no action.
+For each unit replay may require a _recompile_ and/or a _rerun_, or take no action.
 
 Call the unit that was broken or edited the _triggering unit_.
 If the triggering unit was broken we _retract_ the effects of the previous step.
@@ -286,6 +286,14 @@ Units that only read it are left alone:
 they would compute what they already hold.
 
 A unit that touches several bindings needs the union of their rows.
+
+
+
+
+
+
+
+
 
 
 ## But what about edits to the effects of an operation on a binding?
