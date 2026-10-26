@@ -3,7 +3,7 @@
 //! Contains the runtime state for single-threaded local execution,
 //! including the allocator and any other runtime-specific state.
 
-use datalove_rti::RtHeader;
+use datalove_rti::{LocalRtHandle, RtHeader};
 
 use crate::c::impls::alloc::AllocLocal;
 use crate::c::impls::instantiate::TyDescCache;
@@ -82,6 +82,25 @@ impl RtLocal {
             self.alloc.shutdown();
         }
     }
+}
+
+/// The runtime behind a handle, for an entry point of the C API.
+///
+/// The one place a handle becomes a reference. An entry point takes the
+/// opaque handle, makes it a `&mut RtLocal` here, and everything inside the
+/// runtime is handed that reference and reborrows it; nothing turns it back
+/// into a handle. That is sound because the runtime calls out to nothing
+/// that could call back in, so nothing else reaches the runtime while an
+/// entry point runs.
+///
+/// Internal functions not yet converted to take the reference call this too,
+/// at the call that crosses into converted code.
+///
+/// # Safety
+///
+/// `rt` is a live runtime, and nothing else uses it until the borrow ends.
+pub(crate) unsafe fn from_handle<'a>(rt: LocalRtHandle) -> &'a mut RtLocal {
+    unsafe { &mut *(rt as *mut RtLocal) }
 }
 
 // fixme leaks

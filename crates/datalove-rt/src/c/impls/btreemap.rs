@@ -373,8 +373,7 @@ unsafe fn destroy_tree_recursive(
 
                 // Destroy all keys in the internal node.
                 let keys_ptr = internal_keys_ptr(node, ty);
-                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                crate::c::impls::destroy::destroy_array(rt_handle, keys_ptr, len as usize, ty.key);
+                crate::c::impls::destroy::destroy_array(rt, keys_ptr, len as usize, ty.key);
 
                 // Recursively destroy children.
                 let children_ptr = internal_child_ptrs_ptr(node, ty);
@@ -387,11 +386,10 @@ unsafe fn destroy_tree_recursive(
                 let len = read_node_len(node);
                 let keys_ptr = leaf_keys_ptr(node, ty);
                 let values_ptr = leaf_values_ptr(node, ty);
-                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
                 // Destroy all keys and values in the leaf node.
-                crate::c::impls::destroy::destroy_array(rt_handle, keys_ptr, len as usize, ty.key);
-                crate::c::impls::destroy::destroy_array(rt_handle, values_ptr, len as usize, ty.value);
+                crate::c::impls::destroy::destroy_array(rt, keys_ptr, len as usize, ty.key);
+                crate::c::impls::destroy::destroy_array(rt, values_ptr, len as usize, ty.value);
             }
         }
 
@@ -456,9 +454,8 @@ impl SplitInfo {
     /// Destroy the separator key and clean up.
     unsafe fn destroy(mut self, rt: &mut RtLocal, key_tydesc: rtdt::TyDescRef) {
         unsafe {
-            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
             let _ = crate::c::impls::destroy::any_destroy_local(
-                rt_handle,
+                rt,
                 self.separator_key_buf.as_mut_ptr(),
                 key_tydesc.as_ptr(),
             );
@@ -520,12 +517,11 @@ unsafe fn leaf_insert_or_update(
                 // Key already exists, update the value.
                 // Destroy the old value before overwriting.
                 let value_slot = values_ptr.add(i * value_size);
-                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, value_slot, ty.value.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, value_slot, ty.value.as_ptr());
                 // Move the new value (by-move semantics).
                 std::ptr::copy_nonoverlapping(value, value_slot, value_size);
                 // Destroy the input key since we're not using it (key already exists in tree).
-                let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, key as *mut u8, ty.key.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, key as *mut u8, ty.key.as_ptr());
                 return LeafInsertResult::Updated;
             }
             Err(pos) => pos,
@@ -765,7 +761,7 @@ unsafe fn split_internal_node(
 
         // Destroy the separator key in the old node since we've cloned it out.
         let _ = crate::c::impls::destroy::any_destroy_local(
-            rt_handle,
+            rt,
             keys_ptr.add(split_point * key_size),
             ty.key.as_ptr(),
         );
@@ -1291,7 +1287,7 @@ pub unsafe fn btreemap_collect_impl(
                             slot.add(second.offset() as usize));
                         if status != RtStatus::Ok {
                             crate::c::impls::destroy::any_destroy_local(
-                                rt_handle, first_slot, first.tydesc().as_ptr());
+                                rt, first_slot, first.tydesc().as_ptr());
                         }
                         status
                     }
@@ -1413,7 +1409,6 @@ pub unsafe fn btreemap_set_value_impl(
 ) -> RtStatus {
     unsafe {
         let ty = MapTy::of(btreemap_tydesc);
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let map_ptr = btreemap_value_ref as *const Map;
@@ -1422,7 +1417,7 @@ pub unsafe fn btreemap_set_value_impl(
         // The key's descriptor is checked once here, where it used to be
         // checked at every comparison; a key of another type is in no map.
         if root.is_null() || !super::cmp::eq_tydesc(key_tydesc, ty.key) {
-            crate::c::impls::destroy::any_destroy_local(rt_handle, value_in, value_tydesc.as_ptr());
+            crate::c::impls::destroy::any_destroy_local(rt, value_in, value_tydesc.as_ptr());
             return RtStatus::Error;
         }
 
@@ -1437,7 +1432,7 @@ pub unsafe fn btreemap_set_value_impl(
 
             // Destroy old value.
             let status = crate::c::impls::destroy::any_destroy_local(
-                rt_handle,
+                rt,
                 value_slot,
                 value_tydesc.as_ptr(),
             );
@@ -1455,7 +1450,7 @@ pub unsafe fn btreemap_set_value_impl(
             return RtStatus::Ok;
         }
 
-        crate::c::impls::destroy::any_destroy_local(rt_handle, value_in, value_tydesc.as_ptr());
+        crate::c::impls::destroy::any_destroy_local(rt, value_in, value_tydesc.as_ptr());
         RtStatus::Error
     }
 }
@@ -1491,11 +1486,10 @@ unsafe fn leaf_remove(
         // Find the key in the leaf.
         if let Ok(i) = search_keys(keys_ptr, len as usize, key, ty) {
             // Found the key, destroy it and the value.
-            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
             let node_key = keys_ptr.add(i * key_size);
             let value_slot = values_ptr.add(i * value_size);
-            let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, node_key as *mut u8, ty.key.as_ptr());
-            let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, value_slot, ty.value.as_ptr());
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, node_key as *mut u8, ty.key.as_ptr());
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, value_slot, ty.value.as_ptr());
 
             // Shift remaining elements left.
             if i < (len - 1) as usize {
@@ -1580,7 +1574,7 @@ unsafe fn borrow_from_left_leaf(
 
         // Destroy old separator.
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, parent_key, ty.key.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.key.as_ptr());
 
         // Clone new separator (first key of node).
         let _ = crate::c::impls::clone::clone_value(rt_handle, node_keys_ptr, ty.key.as_ptr(), parent_key);
@@ -1745,7 +1739,7 @@ unsafe fn borrow_from_right_leaf(
 
         // Destroy old separator.
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, parent_key, ty.key.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.key.as_ptr());
 
         // Clone new separator (first key of right).
         let _ = crate::c::impls::clone::clone_value(rt_handle, right_keys_ptr, ty.key.as_ptr(), parent_key);
@@ -1858,9 +1852,8 @@ unsafe fn internal_remove_key(
         let key_size = ty.key.size() as usize;
 
         // Destroy the key.
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let key_slot = keys_ptr.add(key_idx * key_size);
-        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, key_slot, ty.key.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, key_slot, ty.key.as_ptr());
 
         // Shift keys left.
         if key_idx < (len - 1) as usize {
@@ -2167,7 +2160,7 @@ unsafe fn clone_tree_recursive(
                     *new_children_ptr.add(i) = new_child;
                     if new_child.is_null() && !child.is_null() {
                         // Destroy all keys.
-                        crate::c::impls::destroy::destroy_array(rt_handle, new_keys_ptr, len as usize, ty.key);
+                        crate::c::impls::destroy::destroy_array(rt, new_keys_ptr, len as usize, ty.key);
                         // Destroy already-cloned children (including current one which is null).
                         for j in 0..=i {
                             let cloned_child = *new_children_ptr.add(j);
@@ -2207,7 +2200,7 @@ unsafe fn clone_tree_recursive(
                 // before it, and the keys go here.
                 let status = crate::c::impls::clone::clone_array(rt_handle, values_ptr, new_values_ptr, len as usize, ty.value);
                 if status != RtStatus::Ok {
-                    crate::c::impls::destroy::destroy_array(rt_handle, new_keys_ptr, len as usize, ty.key);
+                    crate::c::impls::destroy::destroy_array(rt, new_keys_ptr, len as usize, ty.key);
                     free_node(rt, new_leaf, ty);
                     return std::ptr::null_mut();
                 }
@@ -2426,7 +2419,6 @@ unsafe fn cleanup_map_leaves_internal(
     unsafe {
         let key_size = ty.key.size() as usize;
         let value_size = ty.value.size() as usize;
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
         for &leaf_node in leaves {
             let len = (*(leaf_node as *const MapNode)).len as usize;
@@ -2437,8 +2429,8 @@ unsafe fn cleanup_map_leaves_internal(
             for i in 0..len {
                 let key_to_destroy = keys_array.add(i * key_size);
                 let value_to_destroy = values_array.add(i * value_size);
-                crate::c::impls::destroy::any_destroy_local(rt_handle, key_to_destroy, ty.key.as_ptr());
-                crate::c::impls::destroy::any_destroy_local(rt_handle, value_to_destroy, ty.value.as_ptr());
+                crate::c::impls::destroy::any_destroy_local(rt, key_to_destroy, ty.key.as_ptr());
+                crate::c::impls::destroy::any_destroy_local(rt, value_to_destroy, ty.value.as_ptr());
             }
 
             // Free the leaf node.
@@ -2524,7 +2516,7 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             );
             if status != RtStatus::Ok {
                 // Clean up the cloned key before returning.
-                let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, key_buf.as_mut_ptr(), map_key_ty.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, key_buf.as_mut_ptr(), map_key_ty.as_ptr());
                 return status;
             }
 

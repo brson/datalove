@@ -2,14 +2,13 @@
 
 use datalove_rtdt as rtdt;
 use crate::c::impls::rt_local::RtLocal;
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
 
 /// Creates a new empty string.
 ///
 /// Initializes a String at the provided location with null data pointer,
 /// zero size, and zero capacity.
 pub unsafe fn string_create_local(
-    _rt: LocalRtHandle,
     value_out: *mut u8,
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -30,7 +29,7 @@ pub unsafe fn string_create_local(
 
 /// Destroys a string by freeing its data buffer.
 pub unsafe fn string_destroy_local(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_in: *mut u8,
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -45,8 +44,7 @@ pub unsafe fn string_destroy_local(
 
         // Free the data buffer if it exists.
         if !string.data.is_null() && string.capacity > rtdt::Index::ZERO {
-            let rt_ref = &mut *(rt as *mut RtLocal);
-            rt_ref.alloc.free(1, 1, string.capacity.0, string.data as *mut u8);
+            rt.alloc.free(1, 1, string.capacity.0, string.data as *mut u8);
         }
 
         // Clear the string fields.
@@ -60,7 +58,7 @@ pub unsafe fn string_destroy_local(
 
 /// Appends bytes to a string, reallocating if necessary.
 pub unsafe fn string_push_bytes_local(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
     bytes_ref: *const u8,
@@ -85,8 +83,6 @@ pub unsafe fn string_push_bytes_local(
 
         // Reallocate if needed.
         if new_size > string.capacity.0 {
-            let rt_ref = &mut *(rt as *mut RtLocal);
-
             // Calculate new capacity (double, or enough for new size).
             let mut new_capacity = string.capacity.0.max(8);
             while new_capacity < new_size {
@@ -94,7 +90,7 @@ pub unsafe fn string_push_bytes_local(
             }
 
             // Allocate new buffer.
-            let new_data = rt_ref.alloc.alloc(1, 1, new_capacity);
+            let new_data = rt.alloc.alloc(1, 1, new_capacity);
             if new_data.is_null() {
                 return RtStatus::Error;
             }
@@ -110,7 +106,7 @@ pub unsafe fn string_push_bytes_local(
 
             // Free old buffer if it exists.
             if !string.data.is_null() && string.capacity.0 > 0 {
-                rt_ref.alloc.free(1, 1, string.capacity.0, string.data as *mut u8);
+                rt.alloc.free(1, 1, string.capacity.0, string.data as *mut u8);
             }
 
             string.data = new_data;
@@ -135,7 +131,7 @@ pub unsafe fn string_push_bytes_local(
 /// If bytes_len is 0, initializes an empty string with null data pointer.
 /// Otherwise allocates a buffer, copies the bytes, and sets the String fields.
 pub unsafe fn string_from_bytes(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     bytes_ptr: *const u8,
     bytes_len: rtdt::IndexRepr,
     result_out: *mut u8,
@@ -156,9 +152,8 @@ pub unsafe fn string_from_bytes(
             (*string_ptr).capacity = rtdt::Index::ZERO;
         } else {
             // Allocate buffer and copy bytes.
-            let rt_ref = &mut *(rt as *mut RtLocal);
             let capacity = bytes_len;
-            let data = rt_ref.alloc.alloc(1, 1, capacity);
+            let data = rt.alloc.alloc(1, 1, capacity);
             if data.is_null() {
                 return RtStatus::Error;
             }
@@ -178,7 +173,6 @@ pub unsafe fn string_from_bytes(
 ///
 /// The capacity is retained so the buffer can be reused.
 pub unsafe fn string_clear_local(
-    _rt: LocalRtHandle,
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -198,6 +192,7 @@ pub unsafe fn string_clear_local(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c::LocalRtHandle;
     use crate::c::impls::rt_local;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
@@ -221,7 +216,6 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let status = string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
@@ -247,7 +241,6 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
@@ -255,7 +248,7 @@ mod tests {
 
             let data = b"hello";
             let status = string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 data.as_ptr(),
@@ -271,7 +264,7 @@ mod tests {
             assert_eq!(content, b"hello");
 
             string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -290,14 +283,13 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
             let mut string = string.assume_init();
 
             string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 b"hello".as_ptr(),
@@ -305,7 +297,7 @@ mod tests {
             );
 
             string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 b" ".as_ptr(),
@@ -313,7 +305,7 @@ mod tests {
             );
 
             string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 b"world".as_ptr(),
@@ -325,7 +317,7 @@ mod tests {
             assert_eq!(content, b"hello world");
 
             string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -344,14 +336,13 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
             let mut string = string.assume_init();
 
             string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 b"test".as_ptr(),
@@ -362,7 +353,6 @@ mod tests {
             let old_capacity = string.capacity;
 
             let status = string_clear_local(
-                rt_handle,
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -372,7 +362,7 @@ mod tests {
             assert_eq!(string.capacity, old_capacity);
 
             string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -391,14 +381,13 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
             let mut string = string.assume_init();
 
             string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 b"data".as_ptr(),
@@ -406,7 +395,7 @@ mod tests {
             );
 
             let status = string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -430,14 +419,13 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
             let mut string = string.assume_init();
 
             let status = string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 b"".as_ptr(),
@@ -448,7 +436,7 @@ mod tests {
             assert_eq!(string.size, rtdt::Index::ZERO);
 
             string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -469,7 +457,6 @@ mod tests {
 
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let status = string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &wrong_tydesc,
             );
@@ -490,7 +477,7 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let status = string_from_bytes(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 std::ptr::null(),
                 0,
                 string.as_mut_ptr() as *mut u8,
@@ -519,7 +506,7 @@ mod tests {
             let data = b"hello";
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let status = string_from_bytes(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 data.as_ptr(),
                 data.len() as rtdt::IndexRepr,
                 string.as_mut_ptr() as *mut u8,
@@ -537,7 +524,7 @@ mod tests {
             assert_eq!(content, b"hello");
 
             string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -557,7 +544,7 @@ mod tests {
             let data = "hello world".as_bytes();
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let status = string_from_bytes(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 data.as_ptr(),
                 data.len() as rtdt::IndexRepr,
                 string.as_mut_ptr() as *mut u8,
@@ -574,7 +561,7 @@ mod tests {
             assert_eq!(content, data);
 
             string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );

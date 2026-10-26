@@ -213,7 +213,7 @@ pub unsafe fn tensor_create_from_slice_impl(
                 for j in 0..i {
                     let elem_ptr = data_ptr.add((j as usize) * (element_size as usize));
                     let _ = crate::c::impls::destroy::any_destroy_local(
-                        rt_handle,
+                        rt_ref,
                         elem_ptr,
                         element_tydesc_ref.as_ptr(),
                     );
@@ -469,14 +469,13 @@ pub unsafe fn tensor_set_impl(
 ) -> RtStatus {
     unsafe {
         let element_ty = tensor_tydesc_ref.tensor_element_ty();
-        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         let Some(element_ptr) = tensor_element_slot(tensor_value_ref, tensor_tydesc_ref, indices_ptr) else {
-            crate::c::impls::destroy::any_destroy_local(rt_handle, value_in, element_ty.as_ptr());
+            crate::c::impls::destroy::any_destroy_local(rt_ref, value_in, element_ty.as_ptr());
             return RtStatus::Error;
         };
 
         let status = crate::c::impls::destroy::any_destroy_local(
-            rt_handle,
+            rt_ref,
             element_ptr,
             element_ty.as_ptr(),
         );
@@ -667,12 +666,11 @@ pub unsafe fn tensor_destroy_impl(
         // Destroy all elements in the data buffer.
         if !ptr_base.is_null() && total_elems > 0 {
             let element_size = element_ty.size() as usize;
-            let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
 
             for i in 0..total_elems {
                 let element_ptr = ptr_base.add(i as usize * element_size);
                 let status = crate::c::impls::destroy::any_destroy_local(
-                    rt_handle,
+                    rt_ref,
                     element_ptr,
                     element_ty.as_ptr(),
                 );
@@ -858,7 +856,7 @@ pub unsafe fn tensor_hyperplane_clone_impl(
                 for j in 0..dest_idx {
                     let elem_ptr = new_data.add(j as usize * elem_size_usize);
                     let _ = crate::c::impls::destroy::any_destroy_local(
-                        rt_handle,
+                        rt_ref,
                         elem_ptr,
                         element_ty.as_ptr(),
                     );

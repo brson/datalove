@@ -926,7 +926,7 @@ unsafe fn push_str(
 
     unsafe {
         let status = crate::c::impls::string::string_push_bytes_local(
-            rt,
+            crate::c::impls::rt_local::from_handle(rt),
             string_mut,
             string_tydesc,
             bytes.as_ptr(),
@@ -958,12 +958,11 @@ mod tests {
         }
     }
 
-    unsafe fn create_output_string(rt_handle: LocalRtHandle) -> (rtdt::String, rtdt::TyDesc) {
+    unsafe fn create_output_string() -> (rtdt::String, rtdt::TyDesc) {
         unsafe {
             let tydesc = create_string_tydesc();
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             crate::c::impls::string::string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
@@ -987,7 +986,7 @@ mod tests {
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
-            let (mut output_string, output_tydesc) = create_output_string(rt_handle);
+            let (mut output_string, output_tydesc) = create_output_string();
 
             let true_val = rtdt::Bool(1);
             let true_tydesc = rtdt::TyDesc {
@@ -1010,7 +1009,7 @@ mod tests {
             assert_eq!(get_string_contents(&output_string), "true");
 
             crate::c::impls::string::string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
             );
@@ -1026,7 +1025,7 @@ mod tests {
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
-            let (mut output_string, output_tydesc) = create_output_string(rt_handle);
+            let (mut output_string, output_tydesc) = create_output_string();
 
             let val = rtdt::U32(42);
             let tydesc = rtdt::TyDesc {
@@ -1049,7 +1048,7 @@ mod tests {
             assert_eq!(get_string_contents(&output_string), "42");
 
             crate::c::impls::string::string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
             );
@@ -1065,7 +1064,7 @@ mod tests {
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
-            let (mut output_string, output_tydesc) = create_output_string(rt_handle);
+            let (mut output_string, output_tydesc) = create_output_string();
 
             let val = rtdt::F32(3.14);
             let tydesc = rtdt::TyDesc {
@@ -1088,7 +1087,7 @@ mod tests {
             assert_eq!(get_string_contents(&output_string), "3.14");
 
             crate::c::impls::string::string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
             );
@@ -1104,20 +1103,19 @@ mod tests {
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
-            let (mut output_string, output_tydesc) = create_output_string(rt_handle);
+            let (mut output_string, output_tydesc) = create_output_string();
 
             // Create a string value.
             let mut string_val = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let string_tydesc = create_string_tydesc();
             crate::c::impls::string::string_create_local(
-                rt_handle,
                 string_val.as_mut_ptr() as *mut u8,
                 &string_tydesc,
             );
             let mut string_val = string_val.assume_init();
 
             crate::c::impls::string::string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
                 b"hello".as_ptr(),
@@ -1136,13 +1134,13 @@ mod tests {
             assert_eq!(get_string_contents(&output_string), "\"hello\"");
 
             crate::c::impls::string::string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
             );
 
             crate::c::impls::string::string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
             );
@@ -1158,19 +1156,18 @@ mod tests {
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
-            let (mut output_string, output_tydesc) = create_output_string(rt_handle);
+            let (mut output_string, output_tydesc) = create_output_string();
 
             let mut string_val = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let string_tydesc = create_string_tydesc();
             crate::c::impls::string::string_create_local(
-                rt_handle,
                 string_val.as_mut_ptr() as *mut u8,
                 &string_tydesc,
             );
             let mut string_val = string_val.assume_init();
 
             crate::c::impls::string::string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
                 b"hello\nworld".as_ptr(),
@@ -1189,13 +1186,13 @@ mod tests {
             assert_eq!(get_string_contents(&output_string), "\"hello\\nworld\"");
 
             crate::c::impls::string::string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
             );
 
             crate::c::impls::string::string_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
             );

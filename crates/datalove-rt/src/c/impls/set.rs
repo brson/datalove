@@ -230,8 +230,7 @@ unsafe fn destroy_tree_recursive(
 
                 // Destroy all keys in the internal node.
                 let keys_ptr = internal_keys_ptr(node, ty);
-                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                crate::c::impls::destroy::destroy_array(rt_handle, keys_ptr, len as usize, ty.elem);
+                crate::c::impls::destroy::destroy_array(rt, keys_ptr, len as usize, ty.elem);
 
                 // Recursively destroy children.
                 let children_ptr = internal_child_ptrs_ptr(node, ty);
@@ -243,10 +242,9 @@ unsafe fn destroy_tree_recursive(
             SetNodeTag::Leaf => {
                 let len = read_node_len(node);
                 let keys_ptr = leaf_keys_ptr(node, ty);
-                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
                 // Destroy all keys in the leaf node.
-                crate::c::impls::destroy::destroy_array(rt_handle, keys_ptr, len as usize, ty.elem);
+                crate::c::impls::destroy::destroy_array(rt, keys_ptr, len as usize, ty.elem);
             }
         }
 
@@ -309,7 +307,7 @@ unsafe fn clone_tree_recursive(
                     *new_children_ptr.add(i) = new_child;
                     if new_child.is_null() && !child.is_null() {
                         // Destroy all keys.
-                        crate::c::impls::destroy::destroy_array(rt_handle, new_keys_ptr, len as usize, ty.elem);
+                        crate::c::impls::destroy::destroy_array(rt, new_keys_ptr, len as usize, ty.elem);
                         // Destroy already-cloned children (including current one which is null).
                         for j in 0..=i {
                             let cloned_child = *new_children_ptr.add(j);
@@ -551,7 +549,6 @@ unsafe fn cleanup_set_leaves_internal(
 ) {
     unsafe {
         let element_size = ty.elem.size() as usize;
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
         for &leaf_node in leaves {
             let len = (*(leaf_node as *const SetNode)).len as usize;
@@ -560,7 +557,7 @@ unsafe fn cleanup_set_leaves_internal(
             // Destroy all elements in this leaf.
             for i in 0..len {
                 let elem_to_destroy = keys_array.add(i * element_size);
-                crate::c::impls::destroy::any_destroy_local(rt_handle, elem_to_destroy, ty.elem.as_ptr());
+                crate::c::impls::destroy::any_destroy_local(rt, elem_to_destroy, ty.elem.as_ptr());
             }
 
             // Free the leaf node.
@@ -698,9 +695,8 @@ impl SplitInfo {
     /// Destroy the separator key and clean up.
     unsafe fn destroy(mut self, rt: &mut RtLocal, element_tydesc: *const TyDesc) {
         unsafe {
-            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
             let _ = crate::c::impls::destroy::any_destroy_local(
-                rt_handle,
+                rt,
                 self.separator_key_buf.as_mut_ptr(),
                 element_tydesc,
             );
@@ -729,8 +725,7 @@ unsafe fn leaf_insert_element(
         let insert_pos = match search_elements(keys_ptr, len as usize, element, ty) {
             Ok(_) => {
                 // Element already exists, destroy the input and return.
-                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, element as *mut u8, ty.elem.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, element as *mut u8, ty.elem.as_ptr());
                 return LeafInsertResult::AlreadyExists;
             }
             Err(pos) => pos,
@@ -986,7 +981,7 @@ unsafe fn split_internal_node(
 
         // Destroy the separator key in the old node since we've cloned it out.
         let _ = crate::c::impls::destroy::any_destroy_local(
-            rt_handle,
+            rt,
             keys_ptr.add(split_point * element_size),
             ty.elem.as_ptr(),
         );
@@ -1334,8 +1329,7 @@ unsafe fn leaf_remove(
             return RemoveResult::NotFound;
         };
 
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, keys_ptr.add(i * size), ty.elem.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(i * size), ty.elem.as_ptr());
 
         if i < (len - 1) as usize {
             let shift_count = (len - 1) as usize - i;
@@ -1380,7 +1374,7 @@ unsafe fn borrow_from_left_leaf(
 
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
-        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, parent_key, ty.elem.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ptr());
         let _ = crate::c::impls::clone::clone_value(rt_handle, node_keys_ptr, ty.elem.as_ptr(), parent_key);
     }
 }
@@ -1413,7 +1407,7 @@ unsafe fn borrow_from_right_leaf(
 
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
-        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, parent_key, ty.elem.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ptr());
         let _ = crate::c::impls::clone::clone_value(rt_handle, right_keys_ptr, ty.elem.as_ptr(), parent_key);
     }
 }
@@ -1573,8 +1567,7 @@ unsafe fn internal_remove_key(
         let children_ptr = internal_child_ptrs_ptr(node, ty);
         let size = ty.elem.size() as usize;
 
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, keys_ptr.add(key_idx * size), ty.elem.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(key_idx * size), ty.elem.as_ptr());
 
         let after = (len - 1) as usize - key_idx;
         if after > 0 {

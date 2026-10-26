@@ -2,13 +2,13 @@
 
 use crate::c::impls::rt_local;
 use datalove_rtdt as rtdt;
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
 
 /// Destroys any type of value, freeing allocations recursively.
 /// Destroy `count` values of `ty` laid out one after another, which for values
 /// that own nothing is nothing.
 pub(crate) unsafe fn destroy_array(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     values: *mut u8,
     count: usize,
     ty: rtdt::TyDescRef,
@@ -23,13 +23,12 @@ pub(crate) unsafe fn destroy_array(
 }
 
 pub unsafe fn any_destroy_local(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     value_in: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         let ty = rtdt::TyDescRef::from_ptr(tydesc);
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
 
         match ty.type_tag() {
             // Primitives - no allocations to free.
@@ -56,7 +55,7 @@ pub unsafe fn any_destroy_local(
                 // Free the limb buffer if it exists.
                 if !int.data.is_null() && int.capacity > rtdt::Index::ZERO {
                     // Each limb is a u32.
-                    rt_ref.alloc.free(4, 4, int.capacity.0, int.data as *mut u8);
+                    rt.alloc.free(4, 4, int.capacity.0, int.data as *mut u8);
                 }
 
                 // Clear the int fields.
@@ -74,7 +73,7 @@ pub unsafe fn any_destroy_local(
 
             // Map has allocations.
             rtdt::TyTag::Map => {
-                crate::c::impls::btreemap::btreemap_destroy_impl(rt_ref, value_in, ty)
+                crate::c::impls::btreemap::btreemap_destroy_impl(rt, value_in, ty)
             }
 
             // List has allocations.
@@ -97,10 +96,8 @@ pub unsafe fn any_destroy_local(
                 }
 
                 // Free the list buffer if it exists.
-                // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
-                let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                 if !list.data.is_null() && list.capacity > rtdt::Index::ZERO {
-                    rt_ref.alloc.free(element_ty.size(), element_ty.align(), list.capacity.0, list.data as *mut u8);
+                    rt.alloc.free(element_ty.size(), element_ty.align(), list.capacity.0, list.data as *mut u8);
                 }
 
                 // Clear the list fields.
@@ -113,7 +110,7 @@ pub unsafe fn any_destroy_local(
 
             // Set has allocations.
             rtdt::TyTag::Set => {
-                crate::c::impls::set::set_destroy_impl(rt_ref, value_in, tydesc)
+                crate::c::impls::set::set_destroy_impl(rt, value_in, tydesc)
             }
 
             // Tensor has allocations.
@@ -138,10 +135,8 @@ pub unsafe fn any_destroy_local(
                 }
 
                 // Free the data buffer if it exists.
-                // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
-                let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                 if !tensor.ptr_base.is_null() && tensor.capacity_elems > rtdt::Index::ZERO {
-                    rt_ref.alloc.free(
+                    rt.alloc.free(
                         element_ty.size(),
                         element_ty.align(),
                         tensor.capacity_elems.0,
@@ -151,12 +146,12 @@ pub unsafe fn any_destroy_local(
 
                 // Free the shape array if it exists.
                 if !tensor.shape.is_null() && rank > 0 {
-                    rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), tensor.shape as *mut u8);
+                    rt.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), tensor.shape as *mut u8);
                 }
 
                 // Free the stride array if it exists.
                 if !tensor.strides.is_null() && rank > 0 {
-                    rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), tensor.strides as *mut u8);
+                    rt.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), tensor.strides as *mut u8);
                 }
 
                 // Clear the tensor fields.
@@ -304,10 +299,8 @@ pub unsafe fn any_destroy_local(
                             }
 
                             // Free the inner value allocation.
-                            // Re-obtain rt_ref after recursive call to satisfy Stacked Borrows.
-                            let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                             let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
-                            rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
+                            rt.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
                         }
 
                         RtStatus::Ok
@@ -344,10 +337,8 @@ pub unsafe fn any_destroy_local(
                             }
 
                             // Free the inner value allocation.
-                            // Re-obtain rt_ref after recursive call to satisfy Stacked Borrows.
-                            let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                             let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
-                            rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
+                            rt.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
                         }
 
                         RtStatus::Ok
@@ -369,6 +360,7 @@ pub unsafe fn any_destroy_local(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c::LocalRtHandle;
 
     /// Helper to create a string type descriptor.
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
@@ -405,7 +397,7 @@ mod tests {
         unsafe {
             let mut value = 42u32;
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut value as *mut u32 as *mut u8,
                 &tydesc,
             );
@@ -426,14 +418,13 @@ mod tests {
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             crate::c::impls::string::string_create_local(
-                rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
             let mut string = string.assume_init();
 
             crate::c::impls::string::string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 b"hello world".as_ptr(),
@@ -441,7 +432,7 @@ mod tests {
             );
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
             );
@@ -509,13 +500,12 @@ mod tests {
 
             // Initialize the string field.
             crate::c::impls::string::string_create_local(
-                rt_handle,
                 &mut tuple.field1 as *mut rtdt::String as *mut u8,
                 &string_tydesc,
             );
 
             crate::c::impls::string::string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut tuple.field1 as *mut rtdt::String as *mut u8,
                 &string_tydesc,
                 b"test".as_ptr(),
@@ -528,7 +518,7 @@ mod tests {
 
             // Destroy the tuple using any_destroy.
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut tuple as *mut TupleU32String as *mut u8,
                 &tuple_tydesc,
             );
@@ -583,7 +573,7 @@ mod tests {
             let mut data = rtdt::Data::from_u32(42);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut data as *mut rtdt::Data as *mut u8,
                 &data_tydesc,
             );
@@ -615,7 +605,7 @@ mod tests {
             let mut data = rtdt::Data::from_f64(3.14159, &f64_tydesc);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut data as *mut rtdt::Data as *mut u8,
                 &data_tydesc,
             );
@@ -644,7 +634,7 @@ mod tests {
             let mut data = rtdt::Data::from_pointers(&u32_tydesc, inner_value_ptr as *const u8);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut data as *mut rtdt::Data as *mut u8,
                 &data_tydesc,
             );
@@ -673,13 +663,12 @@ mod tests {
             ) as *mut rtdt::String;
 
             crate::c::impls::string::string_create_local(
-                rt_handle,
                 inner_string_ptr as *mut u8,
                 &string_tydesc,
             );
 
             crate::c::impls::string::string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 inner_string_ptr as *mut u8,
                 &string_tydesc,
                 b"hello data".as_ptr(),
@@ -690,7 +679,7 @@ mod tests {
             let mut data = rtdt::Data::from_pointers(&string_tydesc, inner_string_ptr as *const u8);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut data as *mut rtdt::Data as *mut u8,
                 &data_tydesc,
             );
@@ -714,7 +703,7 @@ mod tests {
             let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut error as *mut rtdt::Error as *mut u8,
                 &error_tydesc,
             );
@@ -747,7 +736,7 @@ mod tests {
             let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut error as *mut rtdt::Error as *mut u8,
                 &error_tydesc,
             );
@@ -777,7 +766,7 @@ mod tests {
             let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut error as *mut rtdt::Error as *mut u8,
                 &error_tydesc,
             );
@@ -806,13 +795,12 @@ mod tests {
             ) as *mut rtdt::String;
 
             crate::c::impls::string::string_create_local(
-                rt_handle,
                 inner_string_ptr as *mut u8,
                 &string_tydesc,
             );
 
             crate::c::impls::string::string_push_bytes_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 inner_string_ptr as *mut u8,
                 &string_tydesc,
                 b"error occurred".as_ptr(),
@@ -824,7 +812,7 @@ mod tests {
             let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
 
             let status = any_destroy_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &mut error as *mut rtdt::Error as *mut u8,
                 &error_tydesc,
             );

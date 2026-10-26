@@ -604,7 +604,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(
     debug_assert!(!tydesc.is_null(), "tydesc is null");
     debug_assert_aligned(value_in, tydesc, "any_destroy_local:value");
     unsafe {
-        crate::c::impls::destroy::any_destroy_local(rt, value_in, tydesc)
+        crate::c::impls::destroy::any_destroy_local(rt_local::from_handle(rt), value_in, tydesc)
     }
 }
 
@@ -622,7 +622,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_error_from_local(
     debug_assert!(!dest_out.is_null(), "dest_out is null");
     debug_assert_aligned(inner_in, inner_tydesc, "error_from_local:inner");
     unsafe {
-        crate::c::impls::boxing::error_from_local(rt, inner_in, inner_tydesc, dest_out)
+        crate::c::impls::boxing::error_from_local(rt_local::from_handle(rt), inner_in, inner_tydesc, dest_out)
     }
 }
 
@@ -640,7 +640,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
     debug_assert!(!dest_out.is_null(), "dest_out is null");
     debug_assert_aligned(inner_in, inner_tydesc, "data_from_local:inner");
     unsafe {
-        crate::c::impls::boxing::data_from_local(rt, inner_in, inner_tydesc, dest_out)
+        crate::c::impls::boxing::data_from_local(rt_local::from_handle(rt), inner_in, inner_tydesc, dest_out)
     }
 }
 
@@ -651,7 +651,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
 /// body cannot hold the instruction for every type the bound admits.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     op: u8,
     lhs: *const u8,
     lhs_tydesc: *const rtdt::TyDesc,
@@ -668,7 +668,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop(
     };
     unsafe {
         crate::c::impls::dyn_ops::dyn_binop(
-            rt, op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc)
+            op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc)
     }
 }
 
@@ -680,7 +680,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop(
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop_checked(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     op: u8,
     lhs: *const u8,
     lhs_tydesc: *const rtdt::TyDesc,
@@ -699,7 +699,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop_checked(
     };
     unsafe {
         crate::c::impls::dyn_ops::dyn_binop_checked(
-            rt, op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc, overflow_out)
+            op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc, overflow_out)
     }
 }
 
@@ -707,7 +707,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop_checked(
 /// says. `op` is a `rtdt::DynUnOp`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_dyn_unop(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     op: u8,
     value: *const u8,
     value_tydesc: *const rtdt::TyDesc,
@@ -719,7 +719,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_unop(
     let Some(op) = rtdt::DynUnOp::from_code(op) else {
         return RtStatus::Error;
     };
-    unsafe { crate::c::impls::dyn_ops::dyn_unop(rt, op, value, value_tydesc, out, out_tydesc) }
+    unsafe { crate::c::impls::dyn_ops::dyn_unop(op, value, value_tydesc, out, out_tydesc) }
 }
 
 /// Make a constant at the type `value_tydesc` names.
@@ -729,7 +729,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_unop(
 /// type has no argument to bring it along.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_dyn_const(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     which: u8,
     out: *mut u8,
     out_tydesc: *const rtdt::TyDesc,
@@ -740,7 +740,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_const(
     let Some(which) = rtdt::DynConst::from_code(which) else {
         return RtStatus::Error;
     };
-    unsafe { crate::c::impls::dyn_ops::dyn_const(rt, which, out, out_tydesc, value_tydesc) }
+    unsafe { crate::c::impls::dyn_ops::dyn_const(which, out, out_tydesc, value_tydesc) }
 }
 
 /// Make a float constant at the width `value_tydesc` names.
@@ -749,7 +749,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_const(
 /// integers, and for the same reason.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_dyn_float_const(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     which: u8,
     out: *mut u8,
     out_tydesc: *const rtdt::TyDesc,
@@ -760,14 +760,14 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_float_const(
     let Some(which) = rtdt::DynFloatConst::from_code(which) else {
         return RtStatus::Error;
     };
-    unsafe { crate::c::impls::dyn_ops::dyn_float_const(rt, which, out, out_tydesc, value_tydesc) }
+    unsafe { crate::c::impls::dyn_ops::dyn_float_const(which, out, out_tydesc, value_tydesc) }
 }
 
 /// Negate an integer whose type only its descriptor says, writing to
 /// `overflow_out` whether the answer fit.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     value: *const u8,
     value_tydesc: *const rtdt::TyDesc,
     out: *mut u8,
@@ -779,7 +779,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
     debug_assert!(!overflow_out.is_null(), "overflow_out is null");
     unsafe {
         crate::c::impls::dyn_ops::dyn_neg_checked(
-            rt, value, value_tydesc, out, out_tydesc, overflow_out)
+            value, value_tydesc, out, out_tydesc, overflow_out)
     }
 }
 
@@ -814,7 +814,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_create_local(
     debug_assert!(!tydesc.is_null(), "tydesc is null");
     debug_assert_aligned(value_out, tydesc, "string_create_local:value_out");
     unsafe {
-        crate::c::impls::string::string_create_local(rt, value_out, tydesc)
+        crate::c::impls::string::string_create_local(value_out, tydesc)
     }
 }
 
@@ -830,7 +830,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_destroy_local(
     debug_assert!(!tydesc.is_null(), "tydesc is null");
     debug_assert_aligned(value_in, tydesc, "string_destroy_local:value");
     unsafe {
-        crate::c::impls::string::string_destroy_local(rt, value_in, tydesc)
+        crate::c::impls::string::string_destroy_local(rt_local::from_handle(rt), value_in, tydesc)
     }
 }
 
@@ -848,7 +848,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_push_bytes_local(
     debug_assert!(bytes_len == 0 || !bytes_ref.is_null(), "bytes_ref is null");
     debug_assert_aligned(string_value_mut, string_tydesc, "string_push_bytes_local:string");
     unsafe {
-        crate::c::impls::string::string_push_bytes_local(rt, string_value_mut, string_tydesc, bytes_ref, bytes_len)
+        crate::c::impls::string::string_push_bytes_local(rt_local::from_handle(rt), string_value_mut, string_tydesc, bytes_ref, bytes_len)
     }
 }
 
@@ -863,7 +863,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_clear_local(
     debug_assert!(!string_tydesc.is_null(), "string_tydesc is null");
     debug_assert_aligned(string_value_mut, string_tydesc, "string_clear_local:string");
     unsafe {
-        crate::c::impls::string::string_clear_local(rt, string_value_mut, string_tydesc)
+        crate::c::impls::string::string_clear_local(string_value_mut, string_tydesc)
     }
 }
 
@@ -884,7 +884,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_from_bytes(
     debug_assert!(bytes_len == 0 || !bytes_ptr.is_null(), "bytes_ptr is null with non-zero len");
     debug_assert_aligned(result_out, result_tydesc, "string_from_bytes:result_out");
     unsafe {
-        crate::c::impls::string::string_from_bytes(rt, bytes_ptr, bytes_len, result_out, result_tydesc)
+        crate::c::impls::string::string_from_bytes(rt_local::from_handle(rt), bytes_ptr, bytes_len, result_out, result_tydesc)
     }
 }
 
@@ -2447,7 +2447,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_create_local(
     debug_assert_aligned(value_out, tydesc, "table_create:value_out");
     unsafe {
         let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
-        crate::c::impls::table::table_create_impl(rt, value_out, tydesc_ref)
+        crate::c::impls::table::table_create_impl(value_out, tydesc_ref)
     }
 }
 
@@ -2464,7 +2464,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_destroy_local(
     debug_assert_aligned(value_in, tydesc, "table_destroy:value");
     unsafe {
         let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
-        crate::c::impls::table::table_destroy_impl(rt, value_in, tydesc_ref)
+        crate::c::impls::table::table_destroy_impl(rt_local::from_handle(rt), value_in, tydesc_ref)
     }
 }
 
@@ -2490,7 +2490,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_push_row_local(
         let table_tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
         let row_tydesc_ref = rtdt::TyDescRef::from_ptr(row_tydesc);
         crate::c::impls::table::table_push_row_impl(
-            rt,
+            rt_local::from_handle(rt),
             table_mut,
             table_tydesc_ref,
             row_ref,
@@ -2523,7 +2523,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_build_from_rows_local(
         let table_tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
         let row_tydesc_ref = rtdt::TyDescRef::from_ptr(row_tydesc);
         crate::c::impls::table::table_build_from_rows_impl(
-            rt,
+            rt_local::from_handle(rt),
             table_out,
             table_tydesc_ref,
             rows_ptr,
@@ -2598,7 +2598,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_clear_local(
     debug_assert_aligned(table_mut, table_tydesc, "table_clear:table");
     unsafe {
         let tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
-        crate::c::impls::table::table_clear_impl(rt, table_mut, tydesc_ref)
+        crate::c::impls::table::table_clear_impl(rt_local::from_handle(rt), table_mut, tydesc_ref)
     }
 }
 

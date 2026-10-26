@@ -61,7 +61,7 @@ pub unsafe fn debuglog_local(
 
         if status != RtStatus::Ok {
             // Clean up on error.
-            crate::c::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
+            crate::c::impls::string::string_destroy_local(crate::c::impls::rt_local::from_handle(rt), string_ptr, string_tydesc);
             return status;
         }
 
@@ -95,7 +95,7 @@ pub unsafe fn debuglog_local(
         }
 
         // Destroy the temp string.
-        crate::c::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
+        crate::c::impls::string::string_destroy_local(crate::c::impls::rt_local::from_handle(rt), string_ptr, string_tydesc);
 
         RtStatus::Ok
     }

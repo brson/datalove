@@ -20,7 +20,7 @@
 use datalove_rtdt as rtdt;
 use rtdt::{DynOp, DynUnOp, TyTag};
 
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
 
 /// A number and the kind of arithmetic its type wants.
 ///
@@ -199,7 +199,6 @@ fn float_bits(value: Num) -> u64 {
 /// integer has no bare `+`, so a `T is fixedint` cannot ask for one either, and
 /// its arithmetic goes through `dyn_binop_checked` instead.
 pub unsafe fn dyn_binop(
-    _rt: LocalRtHandle,
     op: DynOp,
     lhs: *const u8,
     lhs_tydesc: *const rtdt::TyDesc,
@@ -247,7 +246,6 @@ pub unsafe fn dyn_binop(
 /// what the width-specific instruction does and what the caller's overflow
 /// branch expects to be able to drop.
 pub unsafe fn dyn_binop_checked(
-    _rt: LocalRtHandle,
     op: DynOp,
     lhs: *const u8,
     lhs_tydesc: *const rtdt::TyDesc,
@@ -326,7 +324,6 @@ fn compare<T: PartialOrd + PartialEq>(op: DynOp, lhs: T, rhs: T) -> bool {
 
 /// Apply a one-operand `op` to a value whose type is read off its descriptor.
 pub unsafe fn dyn_unop(
-    _rt: LocalRtHandle,
     op: DynUnOp,
     value: *const u8,
     value_tydesc: *const rtdt::TyDesc,
@@ -355,7 +352,6 @@ pub unsafe fn dyn_unop(
 /// because the most negative value has no counterpart and zero is the only
 /// unsigned value that survives.
 pub unsafe fn dyn_neg_checked(
-    _rt: LocalRtHandle,
     value: *const u8,
     value_tydesc: *const rtdt::TyDesc,
     out: *mut u8,
@@ -390,7 +386,6 @@ pub unsafe fn dyn_neg_checked(
 /// appears only in a native's return type has no argument to bring it. See
 /// `NativeContext::undetermined_type_params`.
 pub unsafe fn dyn_const(
-    _rt: LocalRtHandle,
     which: rtdt::DynConst,
     out: *mut u8,
     _out_tydesc: *const rtdt::TyDesc,
@@ -431,7 +426,6 @@ pub unsafe fn dyn_const(
 /// than computed from one, because the two are different types and the
 /// constants of each are its own.
 pub unsafe fn dyn_float_const(
-    _rt: LocalRtHandle,
     which: rtdt::DynFloatConst,
     out: *mut u8,
     _out_tydesc: *const rtdt::TyDesc,

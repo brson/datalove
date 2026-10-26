@@ -1,6 +1,7 @@
 //! Boxing operations for Data and Error types.
 
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
+use crate::c::impls::rt_local::RtLocal;
 use datalove_rtdt as rtdt;
 use rtdt::TyTag;
 
@@ -136,7 +137,7 @@ pub unsafe fn data_borrow(
 /// Allocates heap storage, copies the inner value, and creates an Error
 /// using anypack tagged pointer encoding.
 pub unsafe fn error_from_local(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     inner_in: *const u8,
     inner_tydesc: *const rtdt::TyDesc,
     dest_out: *mut u8,
@@ -155,7 +156,7 @@ pub unsafe fn error_from_local(
 
     // Allocate heap storage for the inner value.
     let moved_ptr = unsafe {
-        crate::c::dtlv_rti_mem_alloc_local(rt, inner_tydesc, 1)
+        rt.alloc.alloc((*inner_tydesc).size, (*inner_tydesc).align, 1)
     };
     if moved_ptr.is_null() {
         return RtStatus::Error;
@@ -181,7 +182,7 @@ pub unsafe fn error_from_local(
 /// Allocates heap storage, copies the inner value, and creates a Data
 /// using anypack tagged pointer encoding.
 pub unsafe fn data_from_local(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     inner_in: *const u8,
     inner_tydesc: *const rtdt::TyDesc,
     dest_out: *mut u8,
@@ -200,7 +201,7 @@ pub unsafe fn data_from_local(
 
     // Allocate heap storage for the inner value.
     let moved_ptr = unsafe {
-        crate::c::dtlv_rti_mem_alloc_local(rt, inner_tydesc, 1)
+        rt.alloc.alloc((*inner_tydesc).size, (*inner_tydesc).align, 1)
     };
     if moved_ptr.is_null() {
         return RtStatus::Error;

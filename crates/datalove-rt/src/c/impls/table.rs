@@ -45,7 +45,6 @@ pub unsafe fn element_ptr_mut(
 
 /// Create an empty table.
 pub unsafe fn table_create_impl(
-    _rt: LocalRtHandle,
     value_out: *mut u8,
     _tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -60,7 +59,7 @@ pub unsafe fn table_create_impl(
 
 /// Destroy a table and all its elements.
 pub unsafe fn table_destroy_impl(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     value_in: *mut u8,
     tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -96,14 +95,12 @@ pub unsafe fn table_destroy_impl(
         }
 
         // Free the data buffer.
-        // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         // Freed on the strength of the pointer, not of the capacity: a table
         // of zero-sized rows, or of no rows at all, holds a buffer of no bytes,
         // and the allocator hands those out and takes them back like any other.
         let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table.capacity.0);
         let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
-        rt_ref.alloc.free(alloc_size, alloc_align, 1, table.data as *mut u8);
+        rt.alloc.free(alloc_size, alloc_align, 1, table.data as *mut u8);
 
         // Clear the table fields.
         (*table_ptr).data = std::ptr::null();
@@ -122,7 +119,7 @@ pub unsafe fn table_destroy_impl(
 /// left the tuple owning a second copy that nothing would ever free, which for
 /// a column holding anything on the heap was one leak per row.
 pub unsafe fn table_push_row_impl(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     table_mut: *mut u8,
     tydesc: rtdt::TyDescRef,
     row_ref: *const u8,
@@ -172,7 +169,7 @@ pub unsafe fn table_push_row_impl(
 
 /// Grow a table's data buffer to a new capacity.
 unsafe fn table_grow(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     table: &mut rtdt::Table,
     column_tydescs: &[&rtdt::TyDesc],
     new_capacity: rtdt::IndexRepr,
@@ -184,12 +181,10 @@ unsafe fn table_grow(
             return RtStatus::Ok;
         }
 
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-
         let new_alloc_size = rtdt::layout::table_data_allocation_size(column_tydescs, new_capacity);
         let alloc_align = rtdt::layout::table_data_alignment(column_tydescs);
 
-        let new_data = rt_ref.alloc.alloc(new_alloc_size, alloc_align, 1);
+        let new_data = rt.alloc.alloc(new_alloc_size, alloc_align, 1);
         if new_data.is_null() {
             return RtStatus::Error;
         }
@@ -212,7 +207,7 @@ unsafe fn table_grow(
             // Freed whether or not there were rows to carry over: an empty
             // table still holds a buffer, of no bytes.
             let old_alloc_size = rtdt::layout::table_data_allocation_size(column_tydescs, table.capacity.0);
-            rt_ref.alloc.free(old_alloc_size, alloc_align, 1, table.data as *mut u8);
+            rt.alloc.free(old_alloc_size, alloc_align, 1, table.data as *mut u8);
         }
 
         table.data = new_data;
@@ -280,7 +275,7 @@ pub unsafe fn table_set_element(
 
         // Destroy old value.
         let col_tydesc = column_tydescs[col as usize];
-        let status = crate::c::impls::destroy::any_destroy_local(rt, dst, col_tydesc);
+        let status = crate::c::impls::destroy::any_destroy_local(crate::c::impls::rt_local::from_handle(rt), dst, col_tydesc);
         if status != RtStatus::Ok {
             return status;
         }
@@ -292,7 +287,7 @@ pub unsafe fn table_set_element(
 
 /// Clear a table, destroying all elements but keeping capacity.
 pub unsafe fn table_clear_impl(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     table_mut: *mut u8,
     tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -344,7 +339,7 @@ pub unsafe fn table_len(table_ref: *const u8) -> rtdt::Index {
 /// Elements are moved (not cloned) into the table's columnar storage.
 /// After this call, the source buffer is consumed and should not be destroyed.
 pub unsafe fn table_build_from_rows_impl(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     table_out: *mut u8,
     table_tydesc: rtdt::TyDescRef,
     rows_ptr: *mut u8,
@@ -370,7 +365,6 @@ pub unsafe fn table_build_from_rows_impl(
         }
 
         // Allocate table buffer with exact capacity.
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, num_rows);
         let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
 
@@ -382,7 +376,7 @@ pub unsafe fn table_build_from_rows_impl(
         // missing on the way through a clone or a print. A list of the same
         // zero-sized element has always allocated.
         let data = {
-            let ptr = rt_ref.alloc.alloc(alloc_size, alloc_align, 1);
+            let ptr = rt.alloc.alloc(alloc_size, alloc_align, 1);
             if ptr.is_null() {
                 return RtStatus::Error;
             }
@@ -416,10 +410,6 @@ pub unsafe fn table_build_from_rows_impl(
 mod tests {
     use super::*;
 
-    fn make_rt() -> Box<rt_local::RtLocal> {
-        rt_local::RtLocal::new()
-    }
-
     fn make_u32_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::U32,
@@ -434,7 +424,6 @@ mod tests {
 
     #[test]
     fn test_table_create_empty() {
-        let mut rt = make_rt();
         let u32_tydesc = make_u32_tydesc();
         let u32_tydesc_ptr = &u32_tydesc as *const _;
 
@@ -464,7 +453,6 @@ mod tests {
 
         unsafe {
             let status = table_create_impl(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
                 table.as_mut_ptr() as *mut u8,
                 table_ty,
             );

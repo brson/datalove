@@ -247,10 +247,9 @@ pub unsafe fn list_set_impl(
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     let list = unsafe { ListMut::new(list_value_mut as *mut List, element_tydesc) };
-    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
     if index >= list.size() {
-        unsafe { crate::c::impls::destroy::any_destroy_local(rt_handle, element_in, element_tydesc.as_ptr()) };
+        unsafe { crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc.as_ptr()) };
         return RtStatus::Error;
     }
 
@@ -259,7 +258,7 @@ pub unsafe fn list_set_impl(
     let element_size = element_tydesc.size() as usize;
 
     let status = unsafe {
-        crate::c::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr())
+        crate::c::impls::destroy::any_destroy_local(rt, element_ptr, element_tydesc.as_ptr())
     };
     if status != RtStatus::Ok {
         return status;
@@ -397,8 +396,7 @@ pub unsafe fn list_insert_impl(
     // Check bounds (can insert at size for push-like behavior). The element
     // is taken either way: one that does not land is destroyed.
     if index > size {
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        unsafe { crate::c::impls::destroy::any_destroy_local(rt_handle, element_in, element_tydesc.as_ptr()) };
+        unsafe { crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc.as_ptr()) };
         return RtStatus::Error;
     }
 
@@ -702,12 +700,11 @@ unsafe fn destroy_elements(
     start: rtdt::IndexRepr,
     end: rtdt::IndexRepr,
 ) -> RtStatus {
-    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let iter = unsafe { DynElementIter::new(data_ptr, element_tydesc.size(), start, end) };
 
     for element_ptr in iter {
         let status = unsafe {
-            crate::c::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr())
+            crate::c::impls::destroy::any_destroy_local(rt, element_ptr, element_tydesc.as_ptr())
         };
         if status != RtStatus::Ok {
             return status;
