@@ -33,7 +33,7 @@ does not implement that call.
 | `just test-miri-rt-tests` | all 21 rt-tests binaries | ~30 min |
 | `just test-miri-libs` | rtdt, datalit and interpreter unit tests | 3 min |
 | `just test-miri-interp FILTER` | engine fixtures, walker and bytecode | see below |
-| `just test-miri-replay` | all 182 std fixtures, walker and bytecode | ~80 min |
+| `just test-miri-replay` | all 182 std fixtures, walker and bytecode | ~2 h |
 
 Stacked borrows is the default model and the stricter one for most code. Two
 places need tree borrows instead: anything that reaches salsa or rayon, whose
@@ -146,13 +146,22 @@ Each of these passed the native suites, including under the leak checker.
 - **The interpreter's static const pool moved a `Box` after lending a
   pointer into it.** Moving a `Box` asserts it is the only way in. The
   storage is a `Vec`.
+- **A stale cached layout was caught only in debug builds.** Not Miri's
+  find, but the leak's neighbour. The layout cache is keyed by function
+  identity, and a replaced body is told apart only by its callers calling
+  `forget_*`; the check that the cached layout still fits the body was a
+  `debug_assert!`, so a missed `forget` was memory corruption in a release
+  build. It is an `assert!`, and so is the check that no frame runs when
+  bodies are forgotten.
 - **A recursive function's bytecode and layout leaked.** A layout keeps the
   body lowered against it, and the body's call sites keep their callees'
   layouts and bodies, so recursion is a reference cycle. The native leak
   check watches the runtime's allocator, not the Rust heap, and missed it.
-  The interpreter now empties every body's call sites when it drops. A body
-  forgotten while the interpreter lives (`forget_unit`, which every CTFE
-  evaluation calls) still leaks its cycle.
+  The cycles are broken wherever layouts are let go: when the interpreter
+  drops, and in `forget_compiled_bodies` and `forget_unit_bodies`, which an
+  edit, a truncation, a module swap and every CTFE evaluation go through.
+  The replay reruns each fixture's body in place so that Miri sees the
+  second of those.
 - **The std rider's `string_remove` and both inserts** passed
   `bytes.as_ptr()` and `bytes.as_mut_ptr()` to one `ptr::copy`; the second
   borrow ends the first.

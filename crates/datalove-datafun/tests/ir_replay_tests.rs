@@ -11,7 +11,8 @@
 //!   `target/ir-replay/std`. Then it replays them, as below, to check that what
 //!   it wrote runs.
 //! - Under Miri, it only replays: it reads the functions and units back,
-//!   runs them on the IR walker, the bytecode and the plain bytecode, with the
+//!   runs them on the IR walker, the bytecode and the plain bytecode, the body
+//!   twice as an edit would rerun it, with the
 //!   std rider's natives linked into this binary, and compares the output with
 //!   the fixture's expected file.
 //!
@@ -174,7 +175,15 @@ fn replay(names: &[String]) -> Vec<String> {
                     .unwrap_or_else(|| panic!("{symbol} is not a std native"));
                 table.register_c(symbol.clone(), *addr);
             }
+            // Run twice, the second time in place of the first, the way an
+            // edit reruns a unit: that forgets the compiled bodies and
+            // destroys what the first run left.
             let ran = executor.execute_fragment(&prepared.fragment);
+            let ran = if ran.starts_with("Error:") {
+                ran
+            } else {
+                executor.rerun_unit(0, &prepared.fragment).1
+            };
             let value = if ran.starts_with("Error:") {
                 ran
             } else {

@@ -214,13 +214,12 @@ struct StaticPool {
 impl Drop for IrInterpreter {
     fn drop(&mut self) {
         self.report_bc_stats();
-        let mut bodies: Vec<_> = self.layout_cache.layouts()
-            .filter_map(|layout| layout.bytecode.get().map(|(_, bc)| bc.clone()))
-            .collect();
-        for cache in &self.retired_call_caches {
-            cache.bodies(&mut bodies);
+        // Frames are left on the stack only by a panic unwinding through
+        // them, and they may be borrowing what releasing would free; then the
+        // cycles are leaked instead.
+        if self.frame_stack.is_empty() {
+            bytecode::release_layouts(self.layout_cache.layouts().map(|l| &**l), &self.retired_call_caches);
         }
-        bytecode::release_bodies(bodies);
         // Before the runtime the values were allocated from shuts down, which
         // is when it checks for leaks.
         for (mut storage, tydesc) in std::mem::take(&mut self.static_pool.entries) {

@@ -571,13 +571,26 @@ pub(crate) struct CallCache {
     dispatcher: Option<u64>,
 }
 
-/// Empty the call sites of `roots` and of every body they lead to.
+/// Break the reference cycles through `layouts` and `retired`, so that what
+/// nothing else holds is freed.
 ///
 /// A body's call sites hold their callees' layouts and bodies, and a layout
 /// holds the body lowered against it, so a recursive function's layout and
-/// body keep each other alive, and nothing frees either. For when the
-/// interpreter goes, and no frame is borrowing anything a plan holds.
-pub(crate) fn release_bodies(roots: Vec<std::rc::Rc<BcFunction>>) {
+/// body keep each other alive. This empties the call sites of every body the
+/// two lead to. For when layouts are let go, and only while no frame runs,
+/// since a running frame may be borrowing from a call site's plan.
+pub(crate) fn release_layouts<'a>(layouts: impl IntoIterator<Item = &'a IrLayout>, retired: &[CallCache]) {
+    let mut bodies: Vec<_> = layouts.into_iter()
+        .filter_map(|layout| layout.bytecode.get().map(|(_, bc)| bc.clone()))
+        .collect();
+    for cache in retired {
+        cache.bodies(&mut bodies);
+    }
+    release_bodies(bodies);
+}
+
+/// Empty the call sites of `roots` and of every body they lead to.
+fn release_bodies(roots: Vec<std::rc::Rc<BcFunction>>) {
     let mut seen = rustc_hash::FxHashSet::default();
     let mut pending = roots;
     while let Some(bc) = pending.pop() {

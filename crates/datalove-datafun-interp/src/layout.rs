@@ -428,9 +428,13 @@ impl LayoutCache {
         self.entries.values().map(|entry| &entry.layout)
     }
 
-    /// Forget the layouts of the functions of script unit `unit`.
-    pub fn forget_unit(&mut self, unit: u32) {
-        self.entries.retain(|key, _| !matches!(key, FuncIdentity::Unit { unit: u, .. } if *u == unit));
+    /// Forget the layouts of the functions of script unit `unit`, returning
+    /// them.
+    pub fn forget_unit(&mut self, unit: u32) -> Vec<Rc<IrLayout>> {
+        self.entries
+            .extract_if(|key, _| matches!(key, FuncIdentity::Unit { unit: u, .. } if *u == unit))
+            .map(|(_, entry)| entry.layout)
+            .collect()
     }
 
     /// The layout for `unit`, computing it if this is the first call to it.
@@ -444,7 +448,10 @@ impl LayoutCache {
         let slot_count = unit.slot_types.len() as u32;
 
         if let Some(entry) = self.entries.get(&key) {
-            debug_assert!(
+            // Checked in release builds too: a layout used for another body
+            // gets the frame's size and offsets wrong, and nothing else would
+            // notice. It is how a missed `forget_*` shows itself.
+            assert!(
                 entry.value_count == value_count && entry.slot_count == slot_count,
                 "the body for {key:?} changed under its cached layout");
             return Rc::clone(&entry.layout);

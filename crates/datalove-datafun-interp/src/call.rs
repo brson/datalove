@@ -90,10 +90,15 @@ impl IrInterpreter {
     /// is a new allocation, which can land where a replaced one was freed, and
     /// all of that is kept by function identity or by body address, neither of
     /// which tells the two apart. Kept, an edited function ran as it was.
+    ///
+    /// Only where no frame runs: the layouts and bodies let go here are freed,
+    /// and a running frame may be borrowing them.
     pub fn forget_compiled_bodies(&mut self) {
-        debug_assert!(self.frame_stack.is_empty(), "bodies replaced while frames run on them");
+        assert!(self.frame_stack.is_empty(), "bodies replaced while frames run on them");
         self.code_epoch += 1;
-        self.layout_cache = LayoutCache::new();
+        let layouts = std::mem::take(&mut self.layout_cache);
+        bytecode::release_layouts(layouts.layouts().map(|l| &**l), &self.retired_call_caches);
+        self.retired_call_caches.clear();
         if let Some(d) = self.call_dispatcher.get_mut().as_mut() {
             d.bodies_replaced();
         }
@@ -128,9 +133,14 @@ impl IrInterpreter {
     /// Their layouts go, and the bytecode kept with them, and every call
     /// site's idea of its callee is checked again; a module's functions,
     /// which have not changed, are lowered again only if a call site asks.
+    ///
+    /// Only where no frame runs, as for `forget_compiled_bodies`.
     pub fn forget_unit_bodies(&mut self, unit: u32) {
+        assert!(self.frame_stack.is_empty(), "bodies replaced while frames run on them");
         self.code_epoch += 1;
-        self.layout_cache.forget_unit(unit);
+        let layouts = self.layout_cache.forget_unit(unit);
+        bytecode::release_layouts(layouts.iter().map(|l| &**l), &self.retired_call_caches);
+        self.retired_call_caches.clear();
         if let Some(d) = self.call_dispatcher.get_mut().as_mut() {
             d.unit_bodies_replaced(unit);
         }
