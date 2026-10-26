@@ -196,13 +196,12 @@ pub unsafe fn tensor_create_from_slice_impl(
         }
 
         // Clone elements from slice to data buffer.
-        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         for i in 0..total_elems {
             let src_ptr = slice_ptr_ref.add((i as usize) * (element_size as usize));
             let dest_ptr = data_ptr.add((i as usize) * (element_size as usize));
 
             let status = crate::c::impls::clone::clone_value(
-                rt_handle,
+                rt_ref,
                 src_ptr,
                 element_tydesc_ref.as_ptr(),
                 dest_ptr,
@@ -403,9 +402,8 @@ pub unsafe fn tensor_get_impl(
         let Some(element_ptr) = tensor_element_slot(tensor_value_ref as *mut u8, tensor_tydesc_ref, indices_ptr) else {
             return RtStatus::Error;
         };
-        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         crate::c::impls::clone::clone_value(
-            rt_handle,
+            rt_ref,
             element_ptr,
             tensor_tydesc_ref.tensor_element_ty().as_ptr(),
             element_value_out,
@@ -820,7 +818,6 @@ pub unsafe fn tensor_hyperplane_clone_impl(
         let src_base_offset = offset_elems.0
             .saturating_add(axis0_index.saturating_mul((*strides_ptr).0));
 
-        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         let elem_size_usize = element_size as usize;
 
         // Iterate over the sub-tensor using the source strides[1..].
@@ -846,7 +843,7 @@ pub unsafe fn tensor_hyperplane_clone_impl(
             let dst_ptr = new_data.add(dest_idx as usize * elem_size_usize);
 
             let status = crate::c::impls::clone::clone_value(
-                rt_handle,
+                rt_ref,
                 src_ptr,
                 element_ty.as_ptr(),
                 dst_ptr,

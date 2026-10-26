@@ -227,7 +227,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_local(
         "clone: tydesc_in and tydesc_out must describe the same type"
     );
     unsafe {
-        crate::c::impls::clone::clone_value(rt, value_in, tydesc_in, value_out)
+        crate::c::impls::clone::clone_value(rt_local::from_handle(rt), value_in, tydesc_in, value_out)
     }
 }
 
@@ -2574,7 +2574,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_set_local(
     unsafe {
         let tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
         crate::c::impls::table::table_set_element(
-            rt,
+            rt_local::from_handle(rt),
             table_mut,
             tydesc_ref,
             row,

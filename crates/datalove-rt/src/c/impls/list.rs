@@ -61,13 +61,12 @@ pub unsafe fn list_create_from_slice_impl(
     list.set_capacity(slice_len);
 
     // Clone each element from the slice.
-    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     for i in 0..slice_len {
         let src_ptr = unsafe { slice_ptr_ref.add((i as usize) * (element_size as usize)) };
         let dest_ptr = unsafe { data.add((i as usize) * (element_size as usize)) };
 
         let status = unsafe {
-            crate::c::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr)
+            crate::c::impls::clone::clone_value(rt, src_ptr, element_tydesc.as_ptr(), dest_ptr)
         };
         if status != RtStatus::Ok {
             // Clean up partially created list.
@@ -216,10 +215,9 @@ pub unsafe fn list_get_impl(
     }
 
     // Clone element to option payload.
-    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
         crate::c::impls::clone::clone_value(
-            rt_handle,
+            rt,
             list.element_ptr(index),
             element_ty.as_ptr(),
             opt.payload_ptr(),
@@ -619,13 +617,12 @@ pub unsafe fn list_extend_from_slice_impl(
     let element_size = element_tydesc.size();
 
     // Clone each element from the slice.
-    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     for i in 0..slice_len {
         let src_ptr = unsafe { slice_ptr_ref.add((i as usize) * (element_size as usize)) };
         let dest_ptr = unsafe { list.data_mut().add(((size + i) as usize) * (element_size as usize)) };
 
         let status = unsafe {
-            crate::c::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr)
+            crate::c::impls::clone::clone_value(rt, src_ptr, element_tydesc.as_ptr(), dest_ptr)
         };
         if status != RtStatus::Ok {
             // Update size to reflect what was successfully added.

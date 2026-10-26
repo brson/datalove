@@ -1,6 +1,6 @@
 //! Deep cloning for runtime values.
 
-use crate::c::{LocalRtHandle, RtStatus, impls::rt_local};
+use crate::c::{RtStatus, impls::rt_local};
 use datalove_rtdt as rtdt;
 
 /// Clone any type into the local heap.
@@ -9,7 +9,7 @@ use datalove_rtdt as rtdt;
 /// at the `value_out` location - we just need to allocate
 /// any needed buffers.
 pub unsafe fn clone_value(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     value_in: *const u8,
     tydesc_in: *const rtdt::TyDesc,
     value_out: *mut u8,
@@ -31,7 +31,7 @@ pub unsafe fn clone_value(
 /// if one fails those already cloned are destroyed, leaving `dst` holding
 /// nothing.
 pub(crate) unsafe fn clone_array(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     src: *const u8,
     dst: *mut u8,
     count: usize,
@@ -45,24 +45,16 @@ pub(crate) unsafe fn clone_array(
     for i in 0..count {
         let status = unsafe { clone_impl(rt, src.add(i * size), ty, dst.add(i * size)) };
         if status != RtStatus::Ok {
-            unsafe { crate::c::impls::destroy::destroy_array(crate::c::impls::rt_local::from_handle(rt), dst, i, ty) };
+            unsafe { crate::c::impls::destroy::destroy_array(rt, dst, i, ty) };
             return status;
         }
     }
     RtStatus::Ok
 }
 
-/// The runtime behind `rt`, borrowed afresh.
-///
-/// For use after a recursive `clone_impl`, which borrows the runtime mutably
-/// itself and so ends any borrow made before it.
-unsafe fn local<'a>(rt: LocalRtHandle) -> &'a mut rt_local::RtLocal {
-    unsafe { &mut *(rt as *mut rt_local::RtLocal) }
-}
-
 /// Internal clone implementation.
 unsafe fn clone_impl(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     value_in: *const u8,
     tydesc: rtdt::TyDescRef,
     value_out: *mut u8,
@@ -98,10 +90,9 @@ unsafe fn clone_impl(
                 int_out.capacity = rtdt::Index::ZERO;
             } else {
                 // Allocate new limb buffer.
-                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 let limb_size = std::mem::size_of::<u32>() as u32;
                 let limb_align = std::mem::align_of::<u32>() as u32;
-                let new_data = unsafe { rt_ref.alloc.alloc(limb_size, limb_align, num_limbs.into()) as *mut u32 };
+                let new_data = unsafe { rt.alloc.alloc(limb_size, limb_align, num_limbs.into()) as *mut u32 };
 
                 // Copy limbs.
                 unsafe {
@@ -132,8 +123,7 @@ unsafe fn clone_impl(
                 str_out.capacity = rtdt::Index::ZERO;
             } else {
                 // Allocate new string buffer.
-                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                let new_data = unsafe { rt_ref.alloc.alloc(1, 1, str_in.size.0) };
+                let new_data = unsafe { rt.alloc.alloc(1, 1, str_in.size.0) };
 
                 // Copy bytes.
                 unsafe {
@@ -245,9 +235,8 @@ unsafe fn clone_impl(
                 list_out.capacity = rtdt::Index::ZERO;
             } else {
                 // Allocate new list buffer.
-                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 let elem_align = elem_ty.align();
-                let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, list_in.size.0) };
+                let new_data = unsafe { rt.alloc.alloc(elem_size, elem_align, list_in.size.0) };
 
                 // Elements that own nothing are copied in one go.
                 if elem_ty.is_plain() {
@@ -272,9 +261,9 @@ unsafe fn clone_impl(
                                 for j in 0..i {
                                     let cleanup_offset = (j as usize) * (elem_size as usize);
                                     let elem_to_destroy = new_data.add(cleanup_offset);
-                                    let _ = crate::c::impls::destroy::any_destroy_local(crate::c::impls::rt_local::from_handle(rt), elem_to_destroy, elem_ty.as_ptr());
+                                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
                                 }
-                                local(rt).alloc.free(elem_size, elem_align, list_in.size.0, new_data);
+                                rt.alloc.free(elem_size, elem_align, list_in.size.0, new_data);
                             }
                             return status;
                         }
@@ -298,11 +287,10 @@ unsafe fn clone_impl(
                 map_out.root = std::ptr::null();
                 map_out.len = rtdt::Index::ZERO;
             } else {
-                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::c::impls::btreemap::btreemap_clone_tree(
-                        rt_ref,
+                        rt,
                         map_in.root,
                         crate::c::impls::btreemap::MapTy::of(ty),
                     )
@@ -328,11 +316,10 @@ unsafe fn clone_impl(
                 set_out.root = std::ptr::null();
                 set_out.len = rtdt::Index::ZERO;
             } else {
-                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::c::impls::set::set_clone_tree(
-                        rt_ref,
+                        rt,
                         set_in.root,
                         crate::c::impls::set::SetTy::of(ty),
                     )
@@ -362,12 +349,11 @@ unsafe fn clone_impl(
             // No data means no elements, and the shape, which says how many
             // of each there are none of, comes along all the same.
             if tensor_in.ptr_base.is_null() {
-                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 tensor_out.ptr_base = std::ptr::null_mut();
                 tensor_out.offset_elems = rtdt::Index::ZERO;
                 tensor_out.capacity_elems = rtdt::Index::ZERO;
-                tensor_out.shape = unsafe { copy_index_array(rt_ref, tensor_in.shape, rank) };
-                tensor_out.strides = unsafe { copy_index_array(rt_ref, tensor_in.strides, rank) };
+                tensor_out.shape = unsafe { copy_index_array(rt, tensor_in.shape, rank) };
+                tensor_out.strides = unsafe { copy_index_array(rt, tensor_in.strides, rank) };
                 tensor_out.layout = tensor_in.layout;
             } else if tensor_in.capacity_elems == rtdt::Index::ZERO {
                 // View tensor (capacity_elems == 0, ptr_base non-null).
@@ -380,11 +366,10 @@ unsafe fn clone_impl(
                 }
             } else {
                 // Owned tensor: clone contiguous data buffer.
-                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 // Allocate new data buffer.
                 let new_data = unsafe {
-                    rt_ref.alloc.alloc(elem_size, elem_align, tensor_in.capacity_elems.0)
+                    rt.alloc.alloc(elem_size, elem_align, tensor_in.capacity_elems.0)
                 };
 
                 // Clone each element in the capacity buffer.
@@ -402,8 +387,8 @@ unsafe fn clone_impl(
                     }
                 }
 
-                let new_shape = unsafe { copy_index_array(local(rt), tensor_in.shape, rank) };
-                let new_strides = unsafe { copy_index_array(local(rt), tensor_in.strides, rank) };
+                let new_shape = unsafe { copy_index_array(rt, tensor_in.shape, rank) };
+                let new_strides = unsafe { copy_index_array(rt, tensor_in.strides, rank) };
 
                 // Copy metadata.
                 tensor_out.ptr_base = new_data;
@@ -433,8 +418,7 @@ unsafe fn clone_impl(
             let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table_in.len.0);
             let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
 
-            let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-            let new_data = unsafe { rt_ref.alloc.alloc(alloc_size, alloc_align, 1) };
+            let new_data = unsafe { rt.alloc.alloc(alloc_size, alloc_align, 1) };
             if new_data.is_null() {
                 return RtStatus::Error;
             }
@@ -478,15 +462,14 @@ unsafe fn clone_impl(
                                 let cleanup_col_info = ty.table_column_tydescs().nth(cleanup_col).unwrap();
                                 unsafe {
                                     let _ = crate::c::impls::destroy::any_destroy_local(
-                                        crate::c::impls::rt_local::from_handle(rt),
+                                        rt,
                                         cleanup_ptr,
                                         cleanup_col_info.tydesc().as_ptr(),
                                     );
                                 }
                             }
                         }
-                        let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                        unsafe { rt_ref.alloc.free(alloc_size, alloc_align, 1, new_data) };
+                        unsafe { rt.alloc.free(alloc_size, alloc_align, 1, new_data) };
                         return status;
                     }
                 }
@@ -562,8 +545,7 @@ unsafe fn clone_impl(
                     }
 
                     let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
-                    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                    let inner_value_out = unsafe { rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
+                    let inner_value_out = unsafe { rt.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
 
                     if inner_value_out.is_null() {
                         return RtStatus::Error;
@@ -572,7 +554,7 @@ unsafe fn clone_impl(
                     // Recursively clone the inner value.
                     let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
                     if status != RtStatus::Ok {
-                        unsafe { local(rt).alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
+                        unsafe { rt.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
                         return status;
                     }
 
@@ -617,8 +599,7 @@ unsafe fn clone_impl(
                     }
 
                     let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
-                    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                    let inner_value_out = unsafe { rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
+                    let inner_value_out = unsafe { rt.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
 
                     if inner_value_out.is_null() {
                         return RtStatus::Error;
@@ -627,7 +608,7 @@ unsafe fn clone_impl(
                     // Recursively clone the inner value.
                     let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
                     if status != RtStatus::Ok {
-                        unsafe { local(rt).alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
+                        unsafe { rt.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
                         return status;
                     }
 
@@ -674,8 +655,7 @@ unsafe fn clone_impl(
                     }
 
                     let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
-                    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                    let inner_value_out = unsafe { rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
+                    let inner_value_out = unsafe { rt.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
 
                     if inner_value_out.is_null() {
                         return RtStatus::Error;
@@ -684,7 +664,7 @@ unsafe fn clone_impl(
                     // Recursively clone the inner value.
                     let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
                     if status != RtStatus::Ok {
-                        unsafe { local(rt).alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
+                        unsafe { rt.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
                         return status;
                     }
 
@@ -721,7 +701,7 @@ unsafe fn clone_impl(
 /// This function computes total elements from the shape, allocates fresh
 /// buffers, and clones elements by walking the source strides.
 unsafe fn clone_view_tensor(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     tensor_in: &rtdt::Tensor,
     tensor_out: &mut rtdt::Tensor,
     element_ty: rtdt::TyDescRef,
@@ -733,7 +713,6 @@ unsafe fn clone_view_tensor(
     assert!(!tensor_in.shape.is_null());
     assert!(!tensor_in.strides.is_null());
 
-    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
     // Compute total elements from shape.
     let mut total_elems: rtdt::IndexRepr = 1;
@@ -746,35 +725,35 @@ unsafe fn clone_view_tensor(
         tensor_out.ptr_base = std::ptr::null_mut();
         tensor_out.offset_elems = rtdt::Index::ZERO;
         tensor_out.capacity_elems = rtdt::Index::ZERO;
-        tensor_out.shape = unsafe { copy_index_array(rt_ref, tensor_in.shape, rank) };
-        tensor_out.strides = unsafe { copy_index_array(rt_ref, tensor_in.strides, rank) };
+        tensor_out.shape = unsafe { copy_index_array(rt, tensor_in.shape, rank) };
+        tensor_out.strides = unsafe { copy_index_array(rt, tensor_in.strides, rank) };
         tensor_out.layout = tensor_in.layout;
         return RtStatus::Ok;
     }
 
     // Allocate data buffer.
-    let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, total_elems) };
+    let new_data = unsafe { rt.alloc.alloc(elem_size, elem_align, total_elems) };
     if new_data.is_null() {
         return RtStatus::Error;
     }
 
     // Allocate shape array.
     let new_shape = unsafe {
-        rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into())
+        rt.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into())
     } as *mut rtdt::Index;
     if new_shape.is_null() {
-        unsafe { rt_ref.alloc.free(elem_size, elem_align, total_elems, new_data) };
+        unsafe { rt.alloc.free(elem_size, elem_align, total_elems, new_data) };
         return RtStatus::Error;
     }
 
     // Allocate strides array.
     let new_strides = unsafe {
-        rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into())
+        rt.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into())
     } as *mut rtdt::Index;
     if new_strides.is_null() {
         unsafe {
-            rt_ref.alloc.free(elem_size, elem_align, total_elems, new_data);
-            rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_shape as *mut u8);
+            rt.alloc.free(elem_size, elem_align, total_elems, new_data);
+            rt.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_shape as *mut u8);
         }
         return RtStatus::Error;
     }
@@ -822,13 +801,13 @@ unsafe fn clone_view_tensor(
             for j in 0..dest_idx {
                 let elem_ptr = unsafe { new_data.add(j as usize * elem_size_usize) };
                 unsafe {
-                    let _ = crate::c::impls::destroy::any_destroy_local(crate::c::impls::rt_local::from_handle(rt), elem_ptr, element_ty.as_ptr());
+                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_ptr, element_ty.as_ptr());
                 }
             }
             unsafe {
-                local(rt).alloc.free(elem_size, elem_align, total_elems, new_data);
-                local(rt).alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_shape as *mut u8);
-                local(rt).alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_strides as *mut u8);
+                rt.alloc.free(elem_size, elem_align, total_elems, new_data);
+                rt.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_shape as *mut u8);
+                rt.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_strides as *mut u8);
             }
             return status;
         }
@@ -943,7 +922,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &tydesc,
                 &mut value_out as *mut _ as *mut u8,
@@ -964,7 +943,7 @@ mod tests {
 
             let status = unsafe {
                 clone_value(
-                    Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                    &mut rt,
                     &value as *const _ as *const u8,
                     &tydesc,
                     &mut value_out as *mut _ as *mut u8,
@@ -984,7 +963,7 @@ mod tests {
 
             let status = unsafe {
                 clone_value(
-                    Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                    &mut rt,
                     &value as *const _ as *const u8,
                     &tydesc,
                     &mut value_out as *mut _ as *mut u8,
@@ -1009,7 +988,7 @@ mod tests {
 
             let status = unsafe {
                 clone_value(
-                    Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                    &mut rt,
                     &value_in as *const _ as *const u8,
                     &tydesc,
                     &mut value_out as *mut _ as *mut u8,
@@ -1040,7 +1019,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &tydesc,
                 &mut value_out as *mut _ as *mut u8,
@@ -1090,7 +1069,7 @@ mod tests {
 
             let status = unsafe {
                 clone_value(
-                    Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                    &mut rt,
                     &value_in as *const _ as *const u8,
                     &tydesc,
                     &mut value_out as *mut _ as *mut u8,
@@ -1145,7 +1124,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &tydesc,
                 &mut value_out as *mut _ as *mut u8,
@@ -1191,7 +1170,7 @@ mod tests {
 
             let status = unsafe {
                 clone_value(
-                    Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                    &mut rt,
                     &value_in as *const _ as *const u8,
                     &tydesc,
                     &mut value_out as *mut _ as *mut u8,
@@ -1272,7 +1251,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &tuple_tydesc,
                 &mut value_out as *mut _ as *mut u8,
@@ -1318,7 +1297,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &list_tydesc,
                 &mut value_out as *mut _ as *mut u8,
@@ -1379,7 +1358,7 @@ mod tests {
 
             let status = unsafe {
                 clone_value(
-                    Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                    &mut rt,
                     &value_in as *const _ as *const u8,
                     &list_tydesc,
                     &mut value_out as *mut _ as *mut u8,
@@ -1456,7 +1435,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &option_tydesc,
                 &mut value_out as *mut _ as *mut u8,
@@ -1509,7 +1488,7 @@ mod tests {
 
             let status = unsafe {
                 clone_value(
-                    Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                    &mut rt,
                     &value_in as *const _ as *const u8,
                     &option_tydesc,
                     &mut value_out as *mut _ as *mut u8,
@@ -1552,7 +1531,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &map_tydesc,
                 &mut value_out as *mut _ as *mut u8,
@@ -1594,7 +1573,7 @@ mod tests {
 
         let status = unsafe {
             clone_value(
-                Box::as_mut(&mut rt) as *mut _ as LocalRtHandle,
+                &mut rt,
                 &value_in as *const _ as *const u8,
                 &set_tydesc,
                 &mut value_out as *mut _ as *mut u8,

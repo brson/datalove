@@ -4,7 +4,7 @@
 //! then all values for column 1, etc. This layout is cache-friendly
 //! for column-oriented operations.
 
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
 use crate::c::impls::rt_local;
 use datalove_rtdt as rtdt;
 
@@ -245,7 +245,7 @@ pub unsafe fn table_get_element_ptr(
 ///
 /// Returns Error if row or col is out of bounds.
 pub unsafe fn table_set_element(
-    rt: LocalRtHandle,
+    rt: &mut rt_local::RtLocal,
     table_mut: *mut u8,
     tydesc: rtdt::TyDescRef,
     row: rtdt::IndexRepr,
@@ -275,7 +275,7 @@ pub unsafe fn table_set_element(
 
         // Destroy old value.
         let col_tydesc = column_tydescs[col as usize];
-        let status = crate::c::impls::destroy::any_destroy_local(crate::c::impls::rt_local::from_handle(rt), dst, col_tydesc);
+        let status = crate::c::impls::destroy::any_destroy_local(rt, dst, col_tydesc);
         if status != RtStatus::Ok {
             return status;
         }
