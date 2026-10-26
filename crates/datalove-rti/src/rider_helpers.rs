@@ -430,6 +430,27 @@ pub unsafe fn arg<T: Copy>(ptr: *const u8) -> T {
     unsafe { *(ptr as *const T) }
 }
 
+/// An argument read in place, through a reference.
+///
+/// For one that is not `Copy`, or is only looked at.
+///
+/// # Safety
+///
+/// `ptr` points to an initialized `T`, which nothing changes while the
+/// reference is in use.
+pub unsafe fn ref_arg<'a, T>(ptr: *const u8) -> &'a T {
+    unsafe { &*(ptr as *const T) }
+}
+
+/// A descriptor argument.
+///
+/// # Safety
+///
+/// `ptr` points to a descriptor that outlives the reference.
+pub unsafe fn td_arg<'a>(ptr: *const u8) -> rtdt::TyDescRef<'a> {
+    unsafe { rtdt::TyDescRef::from_ptr(ptr as *const rtdt::TyDesc) }
+}
+
 /// A `string` argument, as a `&str`.
 ///
 /// # Safety
