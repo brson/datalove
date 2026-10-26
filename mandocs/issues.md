@@ -1,3 +1,8 @@
+## 2026/10/26 std rider code is horrific
+
+Missing types, magic numbers, unsafe everything.
+
+
 ## 2026/10/08 sys/std/int functions take args by val
 
 seems like a lot of them should be ref
