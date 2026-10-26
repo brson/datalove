@@ -1,7 +1,12 @@
 //! Native rider for sys/std: string operations.
 //!
 //! Each function follows the runtime C ABI convention:
-//! `extern "C-unwind" fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> u8`
+//! `unsafe extern "C-unwind" fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> u8`
+//!
+//! Unsafe to call, every one: the caller promises that each pointer is what
+//! the function's `rider.dli` signature says it is, and the function takes it
+//! at its word, reading its arguments once at the top through
+//! `rider_helpers`.
 //!
 //! For `ref string` parameters, the value pointer points to an `rtdt::String` struct.
 //! Return values are written to the `result_out` pointer.
@@ -55,7 +60,7 @@ unsafe fn write_string_result(rt: *mut u8, out: *mut u8, out_td: *const u8, s: &
 // --- Basic properties ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_len(
+pub unsafe extern "C-unwind" fn dlr_std__string_len(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -66,7 +71,7 @@ pub extern "C-unwind" fn dlr_std__string_len(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_char_count(
+pub unsafe extern "C-unwind" fn dlr_std__string_char_count(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -78,7 +83,7 @@ pub extern "C-unwind" fn dlr_std__string_char_count(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_is_ascii(
+pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -91,7 +96,7 @@ pub extern "C-unwind" fn dlr_std__string_is_ascii(
 // --- Searching ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_contains(
+pub unsafe extern "C-unwind" fn dlr_std__string_contains(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     pat_ptr: *const u8, _pat_td: *const u8,
@@ -104,7 +109,7 @@ pub extern "C-unwind" fn dlr_std__string_contains(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_starts_with(
+pub unsafe extern "C-unwind" fn dlr_std__string_starts_with(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     prefix_ptr: *const u8, _prefix_td: *const u8,
@@ -117,7 +122,7 @@ pub extern "C-unwind" fn dlr_std__string_starts_with(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_ends_with(
+pub unsafe extern "C-unwind" fn dlr_std__string_ends_with(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     suffix_ptr: *const u8, _suffix_td: *const u8,
@@ -132,7 +137,7 @@ pub extern "C-unwind" fn dlr_std__string_ends_with(
 // --- Comparison ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_eq(
+pub unsafe extern "C-unwind" fn dlr_std__string_eq(
     _rt: *mut u8,
     a_ptr: *const u8, _a_td: *const u8,
     b_ptr: *const u8, _b_td: *const u8,
@@ -145,7 +150,7 @@ pub extern "C-unwind" fn dlr_std__string_eq(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_cmp(
+pub unsafe extern "C-unwind" fn dlr_std__string_cmp(
     _rt: *mut u8,
     a_ptr: *const u8, _a_td: *const u8,
     b_ptr: *const u8, _b_td: *const u8,
@@ -163,7 +168,7 @@ pub extern "C-unwind" fn dlr_std__string_cmp(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_eq_ignore_ascii_case(
+pub unsafe extern "C-unwind" fn dlr_std__string_eq_ignore_ascii_case(
     _rt: *mut u8,
     a_ptr: *const u8, _a_td: *const u8,
     b_ptr: *const u8, _b_td: *const u8,
@@ -178,7 +183,7 @@ pub extern "C-unwind" fn dlr_std__string_eq_ignore_ascii_case(
 // --- Character predicates ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_is_ascii_alphabetic(
+pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_alphabetic(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -190,7 +195,7 @@ pub extern "C-unwind" fn dlr_std__string_is_ascii_alphabetic(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_is_ascii_digit(
+pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_digit(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -202,7 +207,7 @@ pub extern "C-unwind" fn dlr_std__string_is_ascii_digit(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_is_ascii_alphanumeric(
+pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_alphanumeric(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -214,7 +219,7 @@ pub extern "C-unwind" fn dlr_std__string_is_ascii_alphanumeric(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_is_ascii_whitespace(
+pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_whitespace(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -228,7 +233,7 @@ pub extern "C-unwind" fn dlr_std__string_is_ascii_whitespace(
 // --- Trimming ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_trim(
+pub unsafe extern "C-unwind" fn dlr_std__string_trim(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -238,7 +243,7 @@ pub extern "C-unwind" fn dlr_std__string_trim(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_trim_start(
+pub unsafe extern "C-unwind" fn dlr_std__string_trim_start(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -248,7 +253,7 @@ pub extern "C-unwind" fn dlr_std__string_trim_start(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_trim_end(
+pub unsafe extern "C-unwind" fn dlr_std__string_trim_end(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -260,7 +265,7 @@ pub extern "C-unwind" fn dlr_std__string_trim_end(
 // --- Case conversion ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_to_ascii_lowercase(
+pub unsafe extern "C-unwind" fn dlr_std__string_to_ascii_lowercase(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -271,7 +276,7 @@ pub extern "C-unwind" fn dlr_std__string_to_ascii_lowercase(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_to_ascii_uppercase(
+pub unsafe extern "C-unwind" fn dlr_std__string_to_ascii_uppercase(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -284,7 +289,7 @@ pub extern "C-unwind" fn dlr_std__string_to_ascii_uppercase(
 // --- Construction ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_repeat(
+pub unsafe extern "C-unwind" fn dlr_std__string_repeat(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     n_ptr: *const u8, _n_td: *const u8,
@@ -299,7 +304,7 @@ pub extern "C-unwind" fn dlr_std__string_repeat(
 // --- Replacement ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_replace(
+pub unsafe extern "C-unwind" fn dlr_std__string_replace(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     pat_ptr: *const u8, _pat_td: *const u8,
@@ -316,7 +321,7 @@ pub extern "C-unwind" fn dlr_std__string_replace(
 // --- Concatenation ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_concat(
+pub unsafe extern "C-unwind" fn dlr_std__string_concat(
     rt: *mut u8,
     a_ptr: *const u8, _a_td: *const u8,
     b_ptr: *const u8, _b_td: *const u8,
@@ -331,7 +336,7 @@ pub extern "C-unwind" fn dlr_std__string_concat(
 // --- Option-returning functions ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_get_byte(
+pub unsafe extern "C-unwind" fn dlr_std__string_get_byte(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     idx_ptr: *const u8, _idx_td: *const u8,
@@ -349,7 +354,7 @@ pub extern "C-unwind" fn dlr_std__string_get_byte(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_find(
+pub unsafe extern "C-unwind" fn dlr_std__string_find(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     pat_ptr: *const u8, _pat_td: *const u8,
@@ -365,7 +370,7 @@ pub extern "C-unwind" fn dlr_std__string_find(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_rfind(
+pub unsafe extern "C-unwind" fn dlr_std__string_rfind(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     pat_ptr: *const u8, _pat_td: *const u8,
@@ -381,7 +386,7 @@ pub extern "C-unwind" fn dlr_std__string_rfind(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_strip_prefix(
+pub unsafe extern "C-unwind" fn dlr_std__string_strip_prefix(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     prefix_ptr: *const u8, _prefix_td: *const u8,
@@ -396,7 +401,7 @@ pub extern "C-unwind" fn dlr_std__string_strip_prefix(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_strip_suffix(
+pub unsafe extern "C-unwind" fn dlr_std__string_strip_suffix(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     suffix_ptr: *const u8, _suffix_td: *const u8,
@@ -413,7 +418,7 @@ pub extern "C-unwind" fn dlr_std__string_strip_suffix(
 // --- Unicode case conversion ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_to_lowercase(
+pub unsafe extern "C-unwind" fn dlr_std__string_to_lowercase(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -424,7 +429,7 @@ pub extern "C-unwind" fn dlr_std__string_to_lowercase(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_to_uppercase(
+pub unsafe extern "C-unwind" fn dlr_std__string_to_uppercase(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -458,7 +463,7 @@ unsafe fn other_str<'a>(self_ptr: *mut u8, other_ptr: *const u8) -> std::borrow:
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_push_str(
+pub unsafe extern "C-unwind" fn dlr_std__string_push_str(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     other_ptr: *const u8, _other_td: *const u8,
@@ -470,7 +475,7 @@ pub extern "C-unwind" fn dlr_std__string_push_str(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_clear(
+pub unsafe extern "C-unwind" fn dlr_std__string_clear(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
@@ -480,7 +485,7 @@ pub extern "C-unwind" fn dlr_std__string_clear(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_push_char(
+pub unsafe extern "C-unwind" fn dlr_std__string_push_char(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     ch_ptr: *const u8, _ch_td: *const u8,
@@ -494,7 +499,7 @@ pub extern "C-unwind" fn dlr_std__string_push_char(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_pop(
+pub unsafe extern "C-unwind" fn dlr_std__string_pop(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -507,7 +512,7 @@ pub extern "C-unwind" fn dlr_std__string_pop(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_truncate(
+pub unsafe extern "C-unwind" fn dlr_std__string_truncate(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     len_ptr: *const u8, _len_td: *const u8,
@@ -519,7 +524,7 @@ pub extern "C-unwind" fn dlr_std__string_truncate(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_remove(
+pub unsafe extern "C-unwind" fn dlr_std__string_remove(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     idx_ptr: *const u8, _idx_td: *const u8,
@@ -534,7 +539,7 @@ pub extern "C-unwind" fn dlr_std__string_remove(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_insert_char(
+pub unsafe extern "C-unwind" fn dlr_std__string_insert_char(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     idx_ptr: *const u8, _idx_td: *const u8,
@@ -550,7 +555,7 @@ pub extern "C-unwind" fn dlr_std__string_insert_char(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_insert_str(
+pub unsafe extern "C-unwind" fn dlr_std__string_insert_str(
     rt: *mut u8,
     self_ptr: *mut u8, self_td: *const u8,
     idx_ptr: *const u8, _idx_td: *const u8,
@@ -566,7 +571,7 @@ pub extern "C-unwind" fn dlr_std__string_insert_str(
 // --- Splitting (option-of-tuple) ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_split_once(
+pub unsafe extern "C-unwind" fn dlr_std__string_split_once(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     delim_ptr: *const u8, _delim_td: *const u8,
@@ -587,7 +592,7 @@ pub extern "C-unwind" fn dlr_std__string_split_once(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_rsplit_once(
+pub unsafe extern "C-unwind" fn dlr_std__string_rsplit_once(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     delim_ptr: *const u8, _delim_td: *const u8,
@@ -610,7 +615,7 @@ pub extern "C-unwind" fn dlr_std__string_rsplit_once(
 // --- Character access ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_char_at(
+pub unsafe extern "C-unwind" fn dlr_std__string_char_at(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     idx_ptr: *const u8, _idx_td: *const u8,
@@ -626,7 +631,7 @@ pub extern "C-unwind" fn dlr_std__string_char_at(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_char_to_byte_index(
+pub unsafe extern "C-unwind" fn dlr_std__string_char_to_byte_index(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     idx_ptr: *const u8, _idx_td: *const u8,
@@ -644,7 +649,7 @@ pub extern "C-unwind" fn dlr_std__string_char_to_byte_index(
 // --- Slicing ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_slice(
+pub unsafe extern "C-unwind" fn dlr_std__string_slice(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     start_ptr: *const u8, _start_td: *const u8,
@@ -663,7 +668,7 @@ pub extern "C-unwind" fn dlr_std__string_slice(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_slice_from(
+pub unsafe extern "C-unwind" fn dlr_std__string_slice_from(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     start_ptr: *const u8, _start_td: *const u8,
@@ -680,7 +685,7 @@ pub extern "C-unwind" fn dlr_std__string_slice_from(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_slice_to(
+pub unsafe extern "C-unwind" fn dlr_std__string_slice_to(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     end_ptr: *const u8, _end_td: *const u8,
@@ -699,7 +704,7 @@ pub extern "C-unwind" fn dlr_std__string_slice_to(
 // --- Parsing ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_parse_u32(
+pub unsafe extern "C-unwind" fn dlr_std__string_parse_u32(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -713,7 +718,7 @@ pub extern "C-unwind" fn dlr_std__string_parse_u32(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_parse_i32(
+pub unsafe extern "C-unwind" fn dlr_std__string_parse_i32(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -727,7 +732,7 @@ pub extern "C-unwind" fn dlr_std__string_parse_i32(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_parse_f32(
+pub unsafe extern "C-unwind" fn dlr_std__string_parse_f32(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -743,7 +748,7 @@ pub extern "C-unwind" fn dlr_std__string_parse_f32(
 // --- Formatting ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_from_u32(
+pub unsafe extern "C-unwind" fn dlr_std__string_from_u32(
     rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -754,7 +759,7 @@ pub extern "C-unwind" fn dlr_std__string_from_u32(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_from_i32(
+pub unsafe extern "C-unwind" fn dlr_std__string_from_i32(
     rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -767,7 +772,7 @@ pub extern "C-unwind" fn dlr_std__string_from_i32(
 // --- Construction ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_from_char(
+pub unsafe extern "C-unwind" fn dlr_std__string_from_char(
     rt: *mut u8,
     ch_ptr: *const u8, _ch_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -787,7 +792,7 @@ pub extern "C-unwind" fn dlr_std__string_from_char(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_replacen(
+pub unsafe extern "C-unwind" fn dlr_std__string_replacen(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     pat_ptr: *const u8, _pat_td: *const u8,
@@ -806,7 +811,7 @@ pub extern "C-unwind" fn dlr_std__string_replacen(
 // --- Splitting (list returns) ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_split(
+pub unsafe extern "C-unwind" fn dlr_std__string_split(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     delim_ptr: *const u8, _delim_td: *const u8,
@@ -822,7 +827,7 @@ pub extern "C-unwind" fn dlr_std__string_split(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_lines(
+pub unsafe extern "C-unwind" fn dlr_std__string_lines(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -836,7 +841,7 @@ pub extern "C-unwind" fn dlr_std__string_lines(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_split_whitespace(
+pub unsafe extern "C-unwind" fn dlr_std__string_split_whitespace(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -852,7 +857,7 @@ pub extern "C-unwind" fn dlr_std__string_split_whitespace(
 // --- Joining ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_join(
+pub unsafe extern "C-unwind" fn dlr_std__string_join(
     rt: *mut u8,
     parts_ptr: *const u8, _parts_td: *const u8,
     sep_ptr: *const u8, _sep_td: *const u8,
@@ -867,7 +872,7 @@ pub extern "C-unwind" fn dlr_std__string_join(
 // --- Bigint conversion ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_from_int(
+pub unsafe extern "C-unwind" fn dlr_std__string_from_int(
     rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -877,7 +882,7 @@ pub extern "C-unwind" fn dlr_std__string_from_int(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_parse_int(
+pub unsafe extern "C-unwind" fn dlr_std__string_parse_int(
     rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -894,7 +899,7 @@ pub extern "C-unwind" fn dlr_std__string_parse_int(
 // than being known when this is compiled.
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_len(
+pub unsafe extern "C-unwind" fn dlr_std__list_len(
     rt: *mut u8,
     list_ptr: *const u8, list_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -907,7 +912,7 @@ pub extern "C-unwind" fn dlr_std__list_len(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__tensor_len(
+pub unsafe extern "C-unwind" fn dlr_std__tensor_len(
     _rt: *mut u8,
     tensor_ptr: *const u8, _tensor_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -928,7 +933,7 @@ pub extern "C-unwind" fn dlr_std__tensor_len(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__tensor_rank(
+pub unsafe extern "C-unwind" fn dlr_std__tensor_rank(
     _rt: *mut u8,
     _tensor_ptr: *const u8, tensor_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -942,7 +947,7 @@ pub extern "C-unwind" fn dlr_std__tensor_rank(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_get(
+pub unsafe extern "C-unwind" fn dlr_std__list_get(
     rt: *mut u8,
     list_ptr: *const u8, list_td: *const u8,
     index_ptr: *const u8, _index_td: *const u8,
@@ -960,7 +965,7 @@ pub extern "C-unwind" fn dlr_std__list_get(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_push(
+pub unsafe extern "C-unwind" fn dlr_std__list_push(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     elem_ptr: *mut u8, elem_td: *const u8,
@@ -977,7 +982,7 @@ pub extern "C-unwind" fn dlr_std__list_push(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_pop(
+pub unsafe extern "C-unwind" fn dlr_std__list_pop(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -993,7 +998,7 @@ pub extern "C-unwind" fn dlr_std__list_pop(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_clear(
+pub unsafe extern "C-unwind" fn dlr_std__list_clear(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
@@ -1006,7 +1011,7 @@ pub extern "C-unwind" fn dlr_std__list_clear(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_set(
+pub unsafe extern "C-unwind" fn dlr_std__list_set(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     index_ptr: *const u8, _index_td: *const u8,
@@ -1028,7 +1033,7 @@ pub extern "C-unwind" fn dlr_std__list_set(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_insert(
+pub unsafe extern "C-unwind" fn dlr_std__list_insert(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     index_ptr: *const u8, _index_td: *const u8,
@@ -1050,7 +1055,7 @@ pub extern "C-unwind" fn dlr_std__list_insert(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_remove(
+pub unsafe extern "C-unwind" fn dlr_std__list_remove(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     index_ptr: *const u8, _index_td: *const u8,
@@ -1068,7 +1073,7 @@ pub extern "C-unwind" fn dlr_std__list_remove(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_swap(
+pub unsafe extern "C-unwind" fn dlr_std__list_swap(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     i_ptr: *const u8, _i_td: *const u8,
@@ -1085,7 +1090,7 @@ pub extern "C-unwind" fn dlr_std__list_swap(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__list_reserve(
+pub unsafe extern "C-unwind" fn dlr_std__list_reserve(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,
     n_ptr: *const u8, _n_td: *const u8,
@@ -1105,7 +1110,7 @@ pub extern "C-unwind" fn dlr_std__list_reserve(
 // its key, value or element type, and a key or value comes with its own.
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_len(
+pub unsafe extern "C-unwind" fn dlr_std__map_len(
     rt: *mut u8,
     map_ptr: *const u8, map_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1118,7 +1123,7 @@ pub extern "C-unwind" fn dlr_std__map_len(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_clear(
+pub unsafe extern "C-unwind" fn dlr_std__map_clear(
     rt: *mut u8,
     map_ptr: *mut u8, map_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
@@ -1131,7 +1136,7 @@ pub extern "C-unwind" fn dlr_std__map_clear(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_contains_key(
+pub unsafe extern "C-unwind" fn dlr_std__map_contains_key(
     rt: *mut u8,
     map_ptr: *const u8, map_td: *const u8,
     key_ptr: *const u8, key_td: *const u8,
@@ -1147,7 +1152,7 @@ pub extern "C-unwind" fn dlr_std__map_contains_key(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_get(
+pub unsafe extern "C-unwind" fn dlr_std__map_get(
     rt: *mut u8,
     map_ptr: *const u8, map_td: *const u8,
     key_ptr: *const u8, key_td: *const u8,
@@ -1165,7 +1170,7 @@ pub extern "C-unwind" fn dlr_std__map_get(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_insert(
+pub unsafe extern "C-unwind" fn dlr_std__map_insert(
     rt: *mut u8,
     map_ptr: *mut u8, map_td: *const u8,
     key_ptr: *mut u8, key_td: *const u8,
@@ -1185,7 +1190,7 @@ pub extern "C-unwind" fn dlr_std__map_insert(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_add(
+pub unsafe extern "C-unwind" fn dlr_std__map_add(
     rt: *mut u8,
     map_ptr: *mut u8, map_td: *const u8,
     key_ptr: *const u8, key_td: *const u8,
@@ -1203,7 +1208,7 @@ pub extern "C-unwind" fn dlr_std__map_add(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_remove(
+pub unsafe extern "C-unwind" fn dlr_std__map_remove(
     rt: *mut u8,
     map_ptr: *mut u8, map_td: *const u8,
     key_ptr: *const u8, key_td: *const u8,
@@ -1218,7 +1223,7 @@ pub extern "C-unwind" fn dlr_std__map_remove(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__set_len(
+pub unsafe extern "C-unwind" fn dlr_std__set_len(
     rt: *mut u8,
     set_ptr: *const u8, set_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1231,7 +1236,7 @@ pub extern "C-unwind" fn dlr_std__set_len(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__set_clear(
+pub unsafe extern "C-unwind" fn dlr_std__set_clear(
     rt: *mut u8,
     set_ptr: *mut u8, set_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
@@ -1246,7 +1251,7 @@ pub extern "C-unwind" fn dlr_std__set_clear(
 /// Every key, value or entry of a map, or element of a set, read out in one
 /// walk onto the end of the caller's list. See `dtlv_rti_btreemap_keys_into_local`.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_keys_into(
+pub unsafe extern "C-unwind" fn dlr_std__map_keys_into(
     rt: *mut u8,
     map_ptr: *const u8, map_td: *const u8,
     list_ptr: *const u8, list_td: *const u8,
@@ -1261,7 +1266,7 @@ pub extern "C-unwind" fn dlr_std__map_keys_into(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_values_into(
+pub unsafe extern "C-unwind" fn dlr_std__map_values_into(
     rt: *mut u8,
     map_ptr: *const u8, map_td: *const u8,
     list_ptr: *const u8, list_td: *const u8,
@@ -1276,7 +1281,7 @@ pub extern "C-unwind" fn dlr_std__map_values_into(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_entries_into(
+pub unsafe extern "C-unwind" fn dlr_std__map_entries_into(
     rt: *mut u8,
     map_ptr: *const u8, map_td: *const u8,
     list_ptr: *const u8, list_td: *const u8,
@@ -1291,7 +1296,7 @@ pub extern "C-unwind" fn dlr_std__map_entries_into(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__set_into_list(
+pub unsafe extern "C-unwind" fn dlr_std__set_into_list(
     rt: *mut u8,
     set_ptr: *const u8, set_td: *const u8,
     list_ptr: *const u8, list_td: *const u8,
@@ -1306,7 +1311,7 @@ pub extern "C-unwind" fn dlr_std__set_into_list(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__set_contains(
+pub unsafe extern "C-unwind" fn dlr_std__set_contains(
     rt: *mut u8,
     set_ptr: *const u8, set_td: *const u8,
     elem_ptr: *const u8, elem_td: *const u8,
@@ -1321,7 +1326,7 @@ pub extern "C-unwind" fn dlr_std__set_contains(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__set_remove(
+pub unsafe extern "C-unwind" fn dlr_std__set_remove(
     rt: *mut u8,
     set_ptr: *mut u8, set_td: *const u8,
     elem_ptr: *const u8, elem_td: *const u8,
@@ -1336,7 +1341,7 @@ pub extern "C-unwind" fn dlr_std__set_remove(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__set_insert(
+pub unsafe extern "C-unwind" fn dlr_std__set_insert(
     rt: *mut u8,
     set_ptr: *mut u8, set_td: *const u8,
     elem_ptr: *mut u8, elem_td: *const u8,
@@ -1359,7 +1364,7 @@ pub extern "C-unwind" fn dlr_std__set_insert(
 // are intrinsics instead, and are not here.
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_sin(
+pub unsafe extern "C-unwind" fn dlr_std__f64_sin(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1370,7 +1375,7 @@ pub extern "C-unwind" fn dlr_std__f64_sin(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_cos(
+pub unsafe extern "C-unwind" fn dlr_std__f64_cos(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1381,7 +1386,7 @@ pub extern "C-unwind" fn dlr_std__f64_cos(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_tan(
+pub unsafe extern "C-unwind" fn dlr_std__f64_tan(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1392,7 +1397,7 @@ pub extern "C-unwind" fn dlr_std__f64_tan(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_asin(
+pub unsafe extern "C-unwind" fn dlr_std__f64_asin(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1403,7 +1408,7 @@ pub extern "C-unwind" fn dlr_std__f64_asin(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_acos(
+pub unsafe extern "C-unwind" fn dlr_std__f64_acos(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1414,7 +1419,7 @@ pub extern "C-unwind" fn dlr_std__f64_acos(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_atan(
+pub unsafe extern "C-unwind" fn dlr_std__f64_atan(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1425,7 +1430,7 @@ pub extern "C-unwind" fn dlr_std__f64_atan(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_sinh(
+pub unsafe extern "C-unwind" fn dlr_std__f64_sinh(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1436,7 +1441,7 @@ pub extern "C-unwind" fn dlr_std__f64_sinh(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_cosh(
+pub unsafe extern "C-unwind" fn dlr_std__f64_cosh(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1447,7 +1452,7 @@ pub extern "C-unwind" fn dlr_std__f64_cosh(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_tanh(
+pub unsafe extern "C-unwind" fn dlr_std__f64_tanh(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1458,7 +1463,7 @@ pub extern "C-unwind" fn dlr_std__f64_tanh(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_exp(
+pub unsafe extern "C-unwind" fn dlr_std__f64_exp(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1469,7 +1474,7 @@ pub extern "C-unwind" fn dlr_std__f64_exp(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_exp2(
+pub unsafe extern "C-unwind" fn dlr_std__f64_exp2(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1480,7 +1485,7 @@ pub extern "C-unwind" fn dlr_std__f64_exp2(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_ln(
+pub unsafe extern "C-unwind" fn dlr_std__f64_ln(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1491,7 +1496,7 @@ pub extern "C-unwind" fn dlr_std__f64_ln(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_log2(
+pub unsafe extern "C-unwind" fn dlr_std__f64_log2(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1502,7 +1507,7 @@ pub extern "C-unwind" fn dlr_std__f64_log2(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_log10(
+pub unsafe extern "C-unwind" fn dlr_std__f64_log10(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1513,7 +1518,7 @@ pub extern "C-unwind" fn dlr_std__f64_log10(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_cbrt(
+pub unsafe extern "C-unwind" fn dlr_std__f64_cbrt(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1524,7 +1529,7 @@ pub extern "C-unwind" fn dlr_std__f64_cbrt(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_atan2(
+pub unsafe extern "C-unwind" fn dlr_std__f64_atan2(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1537,7 +1542,7 @@ pub extern "C-unwind" fn dlr_std__f64_atan2(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_log(
+pub unsafe extern "C-unwind" fn dlr_std__f64_log(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1550,7 +1555,7 @@ pub extern "C-unwind" fn dlr_std__f64_log(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_pow(
+pub unsafe extern "C-unwind" fn dlr_std__f64_pow(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1563,7 +1568,7 @@ pub extern "C-unwind" fn dlr_std__f64_pow(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_hypot(
+pub unsafe extern "C-unwind" fn dlr_std__f64_hypot(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1576,7 +1581,7 @@ pub extern "C-unwind" fn dlr_std__f64_hypot(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_rem(
+pub unsafe extern "C-unwind" fn dlr_std__f64_rem(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1589,7 +1594,7 @@ pub extern "C-unwind" fn dlr_std__f64_rem(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_sin(
+pub unsafe extern "C-unwind" fn dlr_std__f32_sin(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1600,7 +1605,7 @@ pub extern "C-unwind" fn dlr_std__f32_sin(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_cos(
+pub unsafe extern "C-unwind" fn dlr_std__f32_cos(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1611,7 +1616,7 @@ pub extern "C-unwind" fn dlr_std__f32_cos(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_tan(
+pub unsafe extern "C-unwind" fn dlr_std__f32_tan(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1622,7 +1627,7 @@ pub extern "C-unwind" fn dlr_std__f32_tan(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_asin(
+pub unsafe extern "C-unwind" fn dlr_std__f32_asin(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1633,7 +1638,7 @@ pub extern "C-unwind" fn dlr_std__f32_asin(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_acos(
+pub unsafe extern "C-unwind" fn dlr_std__f32_acos(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1644,7 +1649,7 @@ pub extern "C-unwind" fn dlr_std__f32_acos(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_atan(
+pub unsafe extern "C-unwind" fn dlr_std__f32_atan(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1655,7 +1660,7 @@ pub extern "C-unwind" fn dlr_std__f32_atan(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_sinh(
+pub unsafe extern "C-unwind" fn dlr_std__f32_sinh(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1666,7 +1671,7 @@ pub extern "C-unwind" fn dlr_std__f32_sinh(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_cosh(
+pub unsafe extern "C-unwind" fn dlr_std__f32_cosh(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1677,7 +1682,7 @@ pub extern "C-unwind" fn dlr_std__f32_cosh(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_tanh(
+pub unsafe extern "C-unwind" fn dlr_std__f32_tanh(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1688,7 +1693,7 @@ pub extern "C-unwind" fn dlr_std__f32_tanh(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_exp(
+pub unsafe extern "C-unwind" fn dlr_std__f32_exp(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1699,7 +1704,7 @@ pub extern "C-unwind" fn dlr_std__f32_exp(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_exp2(
+pub unsafe extern "C-unwind" fn dlr_std__f32_exp2(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1710,7 +1715,7 @@ pub extern "C-unwind" fn dlr_std__f32_exp2(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_ln(
+pub unsafe extern "C-unwind" fn dlr_std__f32_ln(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1721,7 +1726,7 @@ pub extern "C-unwind" fn dlr_std__f32_ln(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_log2(
+pub unsafe extern "C-unwind" fn dlr_std__f32_log2(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1732,7 +1737,7 @@ pub extern "C-unwind" fn dlr_std__f32_log2(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_log10(
+pub unsafe extern "C-unwind" fn dlr_std__f32_log10(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1743,7 +1748,7 @@ pub extern "C-unwind" fn dlr_std__f32_log10(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_cbrt(
+pub unsafe extern "C-unwind" fn dlr_std__f32_cbrt(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1754,7 +1759,7 @@ pub extern "C-unwind" fn dlr_std__f32_cbrt(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_atan2(
+pub unsafe extern "C-unwind" fn dlr_std__f32_atan2(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1767,7 +1772,7 @@ pub extern "C-unwind" fn dlr_std__f32_atan2(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_log(
+pub unsafe extern "C-unwind" fn dlr_std__f32_log(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1780,7 +1785,7 @@ pub extern "C-unwind" fn dlr_std__f32_log(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_pow(
+pub unsafe extern "C-unwind" fn dlr_std__f32_pow(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1793,7 +1798,7 @@ pub extern "C-unwind" fn dlr_std__f32_pow(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_hypot(
+pub unsafe extern "C-unwind" fn dlr_std__f32_hypot(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1806,7 +1811,7 @@ pub extern "C-unwind" fn dlr_std__f32_hypot(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_rem(
+pub unsafe extern "C-unwind" fn dlr_std__f32_rem(
     _rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     y_ptr: *const u8, _y_td: *const u8,
@@ -1827,7 +1832,7 @@ pub extern "C-unwind" fn dlr_std__f32_rem(
 
 /// Convert a bigint to the nearest `f64`, or none if it is out of range.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f64_from_int(
+pub unsafe extern "C-unwind" fn dlr_std__f64_from_int(
     _rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1842,7 +1847,7 @@ pub extern "C-unwind" fn dlr_std__f64_from_int(
 
 /// Convert a bigint to the nearest `f32`, or none if it is out of range.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__f32_from_int(
+pub unsafe extern "C-unwind" fn dlr_std__f32_from_int(
     _rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1859,7 +1864,7 @@ pub extern "C-unwind" fn dlr_std__f32_from_int(
 
 /// Convert a bigint to a `u64`, or none if it is out of range.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__int_to_u64(
+pub unsafe extern "C-unwind" fn dlr_std__int_to_u64(
     _rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1874,7 +1879,7 @@ pub extern "C-unwind" fn dlr_std__int_to_u64(
 
 /// Convert a bigint to an `i64`, or none if it is out of range.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__int_to_i64(
+pub unsafe extern "C-unwind" fn dlr_std__int_to_i64(
     _rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1889,7 +1894,7 @@ pub extern "C-unwind" fn dlr_std__int_to_i64(
 
 /// The low 64 bits of a bigint in two's complement, as a `u64`.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__int_low_bits_u64(
+pub unsafe extern "C-unwind" fn dlr_std__int_low_bits_u64(
     _rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1901,7 +1906,7 @@ pub extern "C-unwind" fn dlr_std__int_low_bits_u64(
 
 /// The low 64 bits of a bigint in two's complement, as an `i64`.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__int_low_bits_i64(
+pub unsafe extern "C-unwind" fn dlr_std__int_low_bits_i64(
     _rt: *mut u8,
     n_ptr: *const u8, _n_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1930,7 +1935,7 @@ fn truncated_digits(value: f64) -> Option<String> {
 
 /// Convert an `f64` to a bigint, truncating toward zero.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__int_from_f64(
+pub unsafe extern "C-unwind" fn dlr_std__int_from_f64(
     rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1947,7 +1952,7 @@ pub extern "C-unwind" fn dlr_std__int_from_f64(
 
 /// Convert an `f32` to a bigint, truncating toward zero.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__int_from_f32(
+pub unsafe extern "C-unwind" fn dlr_std__int_from_f32(
     rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -1965,7 +1970,7 @@ pub extern "C-unwind" fn dlr_std__int_from_f32(
 // --- Float formatting and parsing ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_from_f64(
+pub unsafe extern "C-unwind" fn dlr_std__string_from_f64(
     rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -1975,7 +1980,7 @@ pub extern "C-unwind" fn dlr_std__string_from_f64(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_from_f32(
+pub unsafe extern "C-unwind" fn dlr_std__string_from_f32(
     rt: *mut u8,
     x_ptr: *const u8, _x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -1985,7 +1990,7 @@ pub extern "C-unwind" fn dlr_std__string_from_f32(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_parse_f64(
+pub unsafe extern "C-unwind" fn dlr_std__string_parse_f64(
     _rt: *mut u8,
     s_ptr: *const u8, _s_td: *const u8,
     out: *mut u8, _out_td: *const u8,
@@ -2003,7 +2008,7 @@ pub extern "C-unwind" fn dlr_std__string_parse_f64(
 // compiled body of a generic cannot hold the instruction for both.
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_abs(
+pub unsafe extern "C-unwind" fn dlr_std__float_abs(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2017,7 +2022,7 @@ pub extern "C-unwind" fn dlr_std__float_abs(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_sqrt(
+pub unsafe extern "C-unwind" fn dlr_std__float_sqrt(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2031,7 +2036,7 @@ pub extern "C-unwind" fn dlr_std__float_sqrt(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_floor(
+pub unsafe extern "C-unwind" fn dlr_std__float_floor(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2045,7 +2050,7 @@ pub extern "C-unwind" fn dlr_std__float_floor(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_ceil(
+pub unsafe extern "C-unwind" fn dlr_std__float_ceil(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2059,7 +2064,7 @@ pub extern "C-unwind" fn dlr_std__float_ceil(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_round(
+pub unsafe extern "C-unwind" fn dlr_std__float_round(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2073,7 +2078,7 @@ pub extern "C-unwind" fn dlr_std__float_round(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_trunc(
+pub unsafe extern "C-unwind" fn dlr_std__float_trunc(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2087,7 +2092,7 @@ pub extern "C-unwind" fn dlr_std__float_trunc(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_fract(
+pub unsafe extern "C-unwind" fn dlr_std__float_fract(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2101,7 +2106,7 @@ pub extern "C-unwind" fn dlr_std__float_fract(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_recip(
+pub unsafe extern "C-unwind" fn dlr_std__float_recip(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2115,7 +2120,7 @@ pub extern "C-unwind" fn dlr_std__float_recip(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_signum(
+pub unsafe extern "C-unwind" fn dlr_std__float_signum(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2129,7 +2134,7 @@ pub extern "C-unwind" fn dlr_std__float_signum(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_neg(
+pub unsafe extern "C-unwind" fn dlr_std__float_neg(
     rt: *mut u8,
     x: *const u8, x_td: *const u8,
     out: *mut u8, out_td: *const u8,
@@ -2147,7 +2152,7 @@ pub extern "C-unwind" fn dlr_std__float_neg(
 // call site hands one over after the out parameter.
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__fixedint_zero(
+pub unsafe extern "C-unwind" fn dlr_std__fixedint_zero(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2161,7 +2166,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_zero(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__fixedint_one(
+pub unsafe extern "C-unwind" fn dlr_std__fixedint_one(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2175,7 +2180,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_one(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__fixedint_min_value(
+pub unsafe extern "C-unwind" fn dlr_std__fixedint_min_value(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2189,7 +2194,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_min_value(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__fixedint_max_value(
+pub unsafe extern "C-unwind" fn dlr_std__fixedint_max_value(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2206,7 +2211,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_max_value(
 ///
 /// The operands are borrowed, each with its own descriptor.
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__ord_compare(
+pub unsafe extern "C-unwind" fn dlr_std__ord_compare(
     rt: *mut u8,
     a: *const u8, a_td: *const u8,
     b: *const u8, b_td: *const u8,
@@ -2236,7 +2241,7 @@ pub extern "C-unwind" fn dlr_std__ord_compare(
 // in the return.
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_zero(
+pub unsafe extern "C-unwind" fn dlr_std__float_zero(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2250,7 +2255,7 @@ pub extern "C-unwind" fn dlr_std__float_zero(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_one(
+pub unsafe extern "C-unwind" fn dlr_std__float_one(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2264,7 +2269,7 @@ pub extern "C-unwind" fn dlr_std__float_one(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_nan(
+pub unsafe extern "C-unwind" fn dlr_std__float_nan(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2278,7 +2283,7 @@ pub extern "C-unwind" fn dlr_std__float_nan(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_infinity(
+pub unsafe extern "C-unwind" fn dlr_std__float_infinity(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2292,7 +2297,7 @@ pub extern "C-unwind" fn dlr_std__float_infinity(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_neg_infinity(
+pub unsafe extern "C-unwind" fn dlr_std__float_neg_infinity(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2306,7 +2311,7 @@ pub extern "C-unwind" fn dlr_std__float_neg_infinity(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_min_value(
+pub unsafe extern "C-unwind" fn dlr_std__float_min_value(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2320,7 +2325,7 @@ pub extern "C-unwind" fn dlr_std__float_min_value(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_max_value(
+pub unsafe extern "C-unwind" fn dlr_std__float_max_value(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2334,7 +2339,7 @@ pub extern "C-unwind" fn dlr_std__float_max_value(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_min_positive(
+pub unsafe extern "C-unwind" fn dlr_std__float_min_positive(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2348,7 +2353,7 @@ pub extern "C-unwind" fn dlr_std__float_min_positive(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_epsilon(
+pub unsafe extern "C-unwind" fn dlr_std__float_epsilon(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2362,7 +2367,7 @@ pub extern "C-unwind" fn dlr_std__float_epsilon(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_pi(
+pub unsafe extern "C-unwind" fn dlr_std__float_pi(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2376,7 +2381,7 @@ pub extern "C-unwind" fn dlr_std__float_pi(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__float_e(
+pub unsafe extern "C-unwind" fn dlr_std__float_e(
     rt: *mut u8,
     out: *mut u8, out_td: *const u8,
     value_td: *const u8,
@@ -2396,7 +2401,7 @@ pub extern "C-unwind" fn dlr_std__float_e(
 // move is a copy of the bytes and a forgetting of where they were.
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__mem_replace(
+pub unsafe extern "C-unwind" fn dlr_std__mem_replace(
     _rt: *mut u8,
     dest_ptr: *mut u8, dest_td: *const u8,
     src_ptr: *const u8, _src_td: *const u8,
@@ -2414,7 +2419,7 @@ pub extern "C-unwind" fn dlr_std__mem_replace(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__mem_swap(
+pub unsafe extern "C-unwind" fn dlr_std__mem_swap(
     _rt: *mut u8,
     a_ptr: *mut u8, a_td: *const u8,
     b_ptr: *mut u8, _b_td: *const u8,
