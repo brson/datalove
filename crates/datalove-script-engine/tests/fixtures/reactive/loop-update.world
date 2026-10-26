@@ -1,17 +1,17 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let n = 3
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 var i = 0
@@ -21,7 +21,7 @@ loop while i .< n
 end loop
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = b + 1

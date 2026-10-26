@@ -1,29 +1,29 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 set b = 500
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = b + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = b * 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 set b = 0

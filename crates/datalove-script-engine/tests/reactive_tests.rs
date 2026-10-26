@@ -24,10 +24,11 @@
 //! | `scriptunit-edit <unit>` | The unit's new source |
 //! | `scriptunit-delete <unit>` | Nothing |
 //! | `scriptunit-insert <unit> after <unit>` | The new unit's source |
-//! | `scriptunit-fragment` | A unit appended, after the first step |
+//! | `scriptunit-fragment [<unit>]` | A unit appended, after the first step |
 //!
-//! Units are named by the number they were entered as, which a delete does
-//! not change, and an inserted unit by a name like `2a`.
+//! Units are named by the number they were entered as, whether appended or
+//! inserted, and a delete renumbers nothing. A unit's header may name the id
+//! it takes, and an insert's must; either way it is checked to be the next.
 //!
 //! `BLESS=1` re-renders the document's marked regions instead of checking
 //! them. The step tables themselves are never blessed: they are the rules.
@@ -76,11 +77,11 @@ struct Step {
 
 enum Change {
     /// The units before the first `expect`, entered one at a time.
-    Enter(Vec<String>),
+    Enter(Vec<(String, String)>),
     Edit { unit: String, source: String },
     Delete { unit: String },
     Insert { unit: String, after: String, source: String },
-    Append(String),
+    Append { unit: String, source: String },
 }
 
 struct Row {
@@ -146,19 +147,35 @@ fn parse_fixture(path: &Path) -> Fixture {
     let mut steps: Vec<Step> = Vec::new();
     let mut pending: Option<Change> = None;
     let mut entered = Vec::new();
+    // The id the next unit entered takes, by fragment or by insert.
+    let mut next = 1;
+    let mut take_id = |id: Option<&str>| {
+        let unit = next.to_string();
+        if let Some(id) = id {
+            assert_eq!(id, unit, "{name}: a new unit takes the next id");
+        }
+        next += 1;
+        unit
+    };
 
     for section in sections(&text) {
         let mut words = section.header.split_whitespace();
         let kind = words.next().X();
         let args: Vec<&str> = words.collect();
         match kind {
-            "scriptunit-fragment" if steps.is_empty() => entered.push(section.content),
-            "scriptunit-fragment" => pending = Some(Change::Append(section.content)),
+            "scriptunit-fragment" => {
+                let unit = take_id(args.first().copied());
+                match steps.is_empty() {
+                    true => entered.push((unit, section.content)),
+                    false => pending = Some(Change::Append { unit, source: section.content }),
+                }
+            }
             "scriptunit-edit" => pending = Some(Change::Edit { unit: args[0].S(), source: section.content }),
             "scriptunit-delete" => pending = Some(Change::Delete { unit: args[0].S() }),
             "scriptunit-insert" => {
                 assert_eq!(args.get(1), Some(&"after"), "{name}: `scriptunit-insert <unit> after <unit>`");
-                pending = Some(Change::Insert { unit: args[0].S(), after: args[2].S(), source: section.content });
+                let unit = take_id(Some(args[0]));
+                pending = Some(Change::Insert { unit, after: args[2].S(), source: section.content });
             }
             "expect" => {
                 let change = if steps.is_empty() {
@@ -393,14 +410,14 @@ impl Session {
         let rekeyed_from = match change {
             Change::Enter(sources) => {
                 let from = self.units.len();
-                for source in sources {
-                    ran.push(self.append(source));
+                for (unit, source) in sources {
+                    ran.push(self.append(unit, source));
                 }
                 Some(from)
             }
-            Change::Append(source) => {
+            Change::Append { unit, source } => {
                 let from = self.units.len();
-                ran.push(self.append(source));
+                ran.push(self.append(unit, source));
                 Some(from)
             }
             Change::Edit { unit, source } => {
@@ -529,16 +546,11 @@ impl Session {
         }
     }
 
-    fn append(&mut self, source: &str) -> (String, Ran) {
-        let next = self.units.iter()
-            .filter_map(|name| name.parse::<usize>().ok())
-            .max()
-            .unwrap_or(0) + 1;
-        let unit = next.to_string();
-        self.units.push(unit.C());
+    fn append(&mut self, unit: &str, source: &str) -> (String, Ran) {
+        self.units.push(unit.S());
         let eval = self.engine.eval(Unit::Fragment(source.S()));
         self.note_analyzed();
-        (unit, ran(&eval))
+        (unit.S(), ran(&eval))
     }
 }
 
@@ -682,21 +694,17 @@ fn sources_by_step(fixture: &Fixture) -> Vec<Vec<(String, String)>> {
             None => sources.push((unit.S(), source.S())),
         }
     };
-    let mut next = 1;
     let mut by_step = Vec::new();
     for step in &fixture.steps {
         match &step.change {
             Change::Enter(entered) => {
-                for source in entered {
-                    set(&mut sources, &next.to_string(), source);
-                    next += 1;
+                for (unit, source) in entered {
+                    set(&mut sources, unit, source);
                 }
             }
-            Change::Append(source) => {
-                set(&mut sources, &next.to_string(), source);
-                next += 1;
-            }
-            Change::Edit { unit, source } | Change::Insert { unit, source, .. } => set(&mut sources, unit, source),
+            Change::Edit { unit, source }
+            | Change::Insert { unit, source, .. }
+            | Change::Append { unit, source } => set(&mut sources, unit, source),
             Change::Delete { .. } => {}
         }
         by_step.push(sources.clone());

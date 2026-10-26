@@ -319,9 +319,8 @@ before it. A number does not, and nor does an error kept in the history
 naming one. The code panel shows each unit's number in a gutter, so a command
 can be typed from what is on screen. An inserted unit's number puts it out of
 order there, which is the cost: the order the panel shows is the session's,
-and the number only names the unit. The reactive fixtures name units the same
-way, and spell an inserted one `1a`; that keeps the order readable, until two
-are inserted in the same place.
+and the number only names the unit. The reactive fixtures and worldfile
+script unit headers name units the same way.
 
 **The numbers are kept beside the engine, by `Session`**, since the engine
 knows units only by position. It wraps the `Engine` and carries out every

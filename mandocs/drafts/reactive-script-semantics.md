@@ -60,7 +60,7 @@ We do not prove correctness.
 - <!-- and -->
   Datalove's design for reactivity
 - <!-- but..therefore -->
-  If one unit moves or mutates a binding how does that affect other units on replay?
+  If one unit moves or mutates a binding how does that affect preceding units on replay?
 - <!-- therefore -->
   A naive algebra of recompiles and reruns for moves and mutations
 - <!-- but..therefore -->
@@ -112,7 +112,7 @@ Motivating example to not solve here but show at the end.
 
 
 
-## If one unit moves or mutates a binding how does that affect other units on replay?
+## If one unit moves or mutates a binding how does that affect preceding units on replay?
 
 <!--
 _But_ need a simple clear example that shows the core problem.
@@ -136,31 +136,31 @@ The fifth does something different to each of them.
 
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let b = 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 var c = 3
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 var d = 4
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 let e = a + 10
@@ -190,7 +190,7 @@ Next edit unit 5 (`a + 10` -> `a + 100`) and replay.
 
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-edit 5
 ----------
 
 let e = a + 100
@@ -225,7 +225,7 @@ We can also _break_ unit 5, failing to compile.
 
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-edit 5
 ----------
 
 let e = a + 100
@@ -288,19 +288,6 @@ they would compute what they already hold.
 A unit that touches several bindings needs the union of their rows.
 
 
-## But what about subsequent units?
-
-The preceding algebra only discusses the effects of a modification.
-What effect do modifications and breaks have on subsequent units?
-
-todo
-
-
-## Another algebra re the above
-
-todo
-
-
 ## But what about edits to the effects of an operation on a binding?
 
 <!--
@@ -319,19 +306,19 @@ An edit can change that.
 
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 set b = b * 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = b + 1
@@ -426,6 +413,23 @@ because what it overwrote was nothing.
 
 
 
+## But what about the effect on subsequent units?
+
+The preceding algebra only discusses the effects of a modification.
+What effect do modifications and breaks have on subsequent units?
+
+todo
+
+
+
+
+## Another algebra re the above
+
+todo
+
+
+
+
 ## But what about units that mutate multiple bindings?
 
 <!--
@@ -437,19 +441,19 @@ but a rerun reruns a whole unit.
 
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var z = 10
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set z = z + b
@@ -658,19 +662,19 @@ They share a type checking context and execution environment.
 
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let b = 100
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let a_moved = a
@@ -706,20 +710,20 @@ This is as originally written.
 <!-- world compile-failure code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 let x = y // `y` doesn't exist
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let b = 100
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let a_moved = a
@@ -807,14 +811,14 @@ compiles fine and then reads a value that isn't there.
 
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 let x = y // broken again
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 // Naively we don't want to rerun this because it doesn't depend on
@@ -822,7 +826,7 @@ scriptunit-fragment
 let b = 100
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let a_moved = a
@@ -877,19 +881,19 @@ that mutates instead of moves.
 <!-- world mutate-earlier code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = b * 2
@@ -975,19 +979,19 @@ Here unit 3 just replaces `b`:
 <!-- world overwrite code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = 500
@@ -1133,19 +1137,19 @@ if the binding it reads was taken _after_ it ran.
 <!-- world read-before-move code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let c = a /! 10
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let a_moved = a
@@ -1200,25 +1204,25 @@ The same goes for a mutation after the read.
 <!-- world read-before-mutate code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let c = a /! b
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 set b = b * 2
@@ -1278,25 +1282,25 @@ Swap units 3 and 4, so the write comes first.
 <!-- world read-after-mutate code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = b * 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = a /! b
@@ -1366,25 +1370,25 @@ Forward, the units after it see the difference between the two.
 <!-- world add-move code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let c = a /! 10
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let d = a + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let e = a + 2
@@ -1501,25 +1505,25 @@ It changes values.
 <!-- world add-mutation code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let d = b * 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = a /! b
@@ -1635,32 +1639,32 @@ Deleting the unit is the same edit with nothing to apply.
 <!-- world delete code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let c = a /! b
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let a_moved = a
 set b = b * 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 let d = b + 1
@@ -1753,25 +1757,25 @@ Call that _reviving_ the binding.
 <!-- world revive code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let b_moved = b
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = 500
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = b + 1
@@ -2149,32 +2153,32 @@ The smallest case I can think of:
 <!-- world rerun-needs-rerun code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var z = 10
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = 500
 set z = z + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = b + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 set b = 0
@@ -2223,31 +2227,31 @@ Here `w` is made from `a2`, which was made from `a`.
 <!-- world rerun-through-moves code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let a2 = a
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 var w = a2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = w + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 set w = w * 2
@@ -2300,31 +2304,31 @@ and unit 5 reads that `var`.
 <!-- world values-through-bindings code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var total = 0
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let d = b * 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 set total = d + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 let shown = total * 10
@@ -2370,32 +2374,32 @@ so its forward rerun needs a backward rerun first.
 <!-- world forward-needs-back code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var z = 10
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 var total = 0
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 set total = b + 1
 set z = z + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 let shown = total * 10
@@ -2444,19 +2448,19 @@ The chain of moves in the section before is one round per link.
 <!-- world conditional-write code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let flag = true
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 if flag
@@ -2464,7 +2468,7 @@ if flag
 end if
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = b + 1
@@ -2513,19 +2517,19 @@ An update in a loop is still one update to the table.
 <!-- world loop-update code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let n = 3
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 var i = 0
@@ -2535,7 +2539,7 @@ loop while i .< n
 end loop
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = b + 1
@@ -2577,19 +2581,19 @@ so even `set b = 500` inside one would be an update.
 <!-- world partial-write code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var p = (1, "a")
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let n = p.0 + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set p.1 = "b"
@@ -2645,19 +2649,19 @@ Not done.
 <!-- world same-value code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let big = b .> 100
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let shown = big
@@ -2712,31 +2716,31 @@ The worst case is a chain of takes.
 <!-- world rerun-chain code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let b = a
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let c = b
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let d = c
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 5
 ----------
 
 let e = d + 1
@@ -2800,26 +2804,26 @@ Here unit 3 takes `a`, then `!`s out.
 <!-- world return-early code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let d = 0
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let a2 = a
 let q = 10 /! d
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let e = q + 1
@@ -2863,26 +2867,26 @@ Now `!` out before the take.
 <!-- world return-early-before-take code -->
 ```datalove
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let d = 0
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let q = 10 /! d
 let a2 = a
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let e = a + 1

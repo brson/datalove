@@ -1,23 +1,23 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set b = b * 2
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = a /! b

@@ -1,24 +1,24 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let d = 0
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let a2 = a
 let q = 10 /! d
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let e = q + 1

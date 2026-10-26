@@ -1,11 +1,11 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let a_moved = a
@@ -20,7 +20,7 @@ expect both units are entered
 | 2 | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
 
 ----------
-scriptunit-insert 1a after 1
+scriptunit-insert 3 after 1
 ----------
 
 let c = a + 1
@@ -31,8 +31,8 @@ expect a unit reading `a` is inserted before the take
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | reruns | rerun: unit 1a reads `a`, which unit 2 took after it | `a` moved |
-| 1a | reads `a` (1) | compiles, runs | inserted | `c` = 1001 |
+| 1 | - | reruns | rerun: unit 3 reads `a`, which unit 2 took after it | `a` moved |
+| 3 | reads `a` (1) | compiles, runs | inserted | `c` = 1001 |
 | 2 | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
 
 ----------

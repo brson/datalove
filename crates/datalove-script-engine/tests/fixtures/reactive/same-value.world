@@ -1,17 +1,17 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let big = b .> 100
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let shown = big

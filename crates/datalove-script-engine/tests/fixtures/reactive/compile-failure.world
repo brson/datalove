@@ -1,18 +1,18 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 let a = 1000
 let x = y // `y` doesn't exist
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let b = 100
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 let a_moved = a

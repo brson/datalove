@@ -1,17 +1,17 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var p = (1, "a")
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let n = p.0 + 1
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 set p.1 = "b"

@@ -1,17 +1,17 @@
 ----------
-scriptunit-fragment
+scriptunit-fragment 1
 ----------
 
 var b = 125
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 2
 ----------
 
 let flag = true
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 3
 ----------
 
 if flag
@@ -19,7 +19,7 @@ if flag
 end if
 
 ----------
-scriptunit-fragment
+scriptunit-fragment 4
 ----------
 
 let c = b + 1

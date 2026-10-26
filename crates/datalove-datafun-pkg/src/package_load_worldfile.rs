@@ -36,9 +36,13 @@
 //!
 //! | Header | Description |
 //! |--------|-------------|
-//! | `scriptunit-fragment` | Script with statements |
-//! | `scriptunit-expr` | Single expression |
+//! | `scriptunit-fragment [id]` | Script with statements |
+//! | `scriptunit-expr [id]` | Single expression |
 //! | `script` | Legacy alias for `scriptunit-fragment` |
+//!
+//! Script units are numbered from 1 in the order they appear. A header may
+//! name its unit's id, for whoever reads the file, and the parser checks it is
+//! that unit's number.
 //!
 //! ## REPL Sections
 //!
@@ -547,6 +551,8 @@ fn make_module_section(kind: ModuleSectionKind, path: ModulePath, source: String
 struct Parser<'a> {
     lines: Vec<&'a str>,
     pos: usize,
+    /// The id the next script unit takes.
+    next_unit: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -554,6 +560,7 @@ impl<'a> Parser<'a> {
         Self {
             lines: content.lines().collect(),
             pos: 0,
+            next_unit: 1,
         }
     }
 
@@ -614,10 +621,28 @@ impl<'a> Parser<'a> {
         content_lines.join("\n")
     }
 
+    /// Give the next script unit its id, checking the one its header names.
+    fn take_unit_id(&mut self, header: &str, id: Option<&str>) -> AnyResult<()> {
+        if let Some(id) = id {
+            if id != self.next_unit.to_string() {
+                bail!("section '{header}' at line {} names unit {id}, but it is unit {}", self.line_num(), self.next_unit);
+            }
+        }
+        self.next_unit += 1;
+        Ok(())
+    }
+
     /// Parse a single section.
     fn parse_section(&mut self, header: &str) -> AnyResult<WorldfileSection> {
         // Script sections.
-        if header == "scriptunit-fragment" || header == "script" {
+        if header == "script" {
+            let source = self.read_content();
+            self.next_unit += 1;
+            return Ok(WorldfileSection::ScriptFragment { source });
+        }
+
+        if let Some(id) = script_unit_id(header, "scriptunit-fragment") {
+            self.take_unit_id(header, id)?;
             let source = self.read_content();
             return Ok(WorldfileSection::ScriptFragment { source });
         }
@@ -627,7 +652,8 @@ impl<'a> Parser<'a> {
             return Ok(WorldfileSection::ReplCommand { source });
         }
 
-        if header == "scriptunit-expr" {
+        if let Some(id) = script_unit_id(header, "scriptunit-expr") {
+            self.take_unit_id(header, id)?;
             let source = self.read_content();
             return Ok(WorldfileSection::ScriptExpr { source });
         }
@@ -655,8 +681,8 @@ impl<'a> Parser<'a> {
         // Unknown section type.
         bail!(
             "unknown section type '{}' (expected 'module', 'module-add', 'module-remove', \
-             'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment', \
-             'scriptunit-expr', 'repl-command', 'data', or 'rider <name>')",
+             'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment [id]', \
+             'scriptunit-expr [id]', 'repl-command', 'data', or 'rider <name>')",
             header
         );
     }
@@ -688,6 +714,19 @@ fn parse_worldfile_with_offsets(content: &str) -> AnyResult<(Vec<WorldfileSectio
     Ok((sections, line_offsets))
 }
 
+/// The id a script unit header names, if the header is of that kind.
+///
+/// The outer `None` is a header of another kind, and the inner one a header
+/// of this kind that names no id.
+fn script_unit_id<'h>(header: &'h str, kind: &str) -> Option<Option<&'h str>> {
+    let rest = header.strip_prefix(kind)?;
+    if rest.is_empty() {
+        return Some(None);
+    }
+    let id = rest.strip_prefix(' ')?.trim();
+    Some(Some(id))
+}
+
 fn is_separator(line: &str) -> bool {
     let trimmed = line.trim();
     trimmed.starts_with("----------") && trimmed.chars().all(|c| c == '-')
@@ -716,6 +755,27 @@ mod tests {
         let sections = parse_worldfile_to_sections("// engines: -c\n\n----------\nscriptunit-fragment\n----------\n\nlet x = 1\n").X();
         assert_eq!(sections.len(), 1);
         assert!(parse_worldfile_to_sections("engines: -c\n----------\nscriptunit-fragment\n----------\n").is_err());
+    }
+
+    #[test]
+    fn a_script_unit_header_may_name_its_id_and_it_is_checked() {
+        let unit = |header: &str, source: &str| fmt!("----------\n{header}\n----------\n\n{source}\n\n");
+        let text = [
+            unit("scriptunit-fragment 1", "let x = 1"),
+            unit("repl-command", "/help"),
+            unit("scriptunit-expr", "x"),
+            unit("scriptunit-fragment 3", "let y = 2"),
+            unit("scriptunit-expr 4", "y"),
+        ].concat();
+        assert_eq!(parse_worldfile_to_sections(&text).X().len(), 5);
+
+        for bad in ["scriptunit-fragment 3", "scriptunit-expr 0", "scriptunit-fragment a"] {
+            let text = [unit("scriptunit-fragment", "let x = 1"), unit(bad, "x")].concat();
+            assert!(parse_worldfile_to_sections(&text).is_err(), "{bad}");
+        }
+        // A bare unit takes the next id, so naming an id already given fails.
+        let text = [unit("scriptunit-fragment", "let x = 1"), unit("scriptunit-fragment 1", "let y = 2")].concat();
+        assert!(parse_worldfile_to_sections(&text).is_err());
     }
 
     #[test]

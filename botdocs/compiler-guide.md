@@ -2121,8 +2121,12 @@ end fun
 
 Section headers: `module <lib>/<pkg>/<mod>`, `module-add`, `module-remove`,
 `module-change-ws`, `module-change-ast`, `module-change-ty`,
-`scriptunit-fragment`, `scriptunit-expr`, `data <lib>/<pkg>/<name>`, `rider <name>`.
-The three `module-change-*` kinds drive the memoization tests.
+`scriptunit-fragment [id]`, `scriptunit-expr [id]`, `data <lib>/<pkg>/<name>`, `rider <name>`.
+The three `module-change-*` kinds drive the memoization tests. Script units
+are numbered from 1 in file order, and an id in a header must be that number.
+The reactive fixtures, which add `scriptunit-edit`, `scriptunit-delete` and
+`scriptunit-insert`, number an inserted unit after every unit before it in the
+file, as the REPL does.
 
 ## Key Files
 
