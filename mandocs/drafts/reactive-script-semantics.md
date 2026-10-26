@@ -123,6 +123,14 @@ _But...therefore_ modest but succinct elaboration.
 Demonstrate read/take/overwrite/update
 -->
 
+After a unit declares a linear-typed binding,
+subsequent units may perform four kinds of _operations_ on it:
+
+-  _read_, without modifying,
+- _take_, leaving the binding empty,
+- _overwrite_, the value changed without also reading it,
+- _update_, read then written.
+
 The first four units each make one binding.
 The fifth does something different to each of them.
 
@@ -173,18 +181,35 @@ Unit 5 _reads_ `a`, _takes_ `b`, _overwrites_ `c` and _updates_ `d`.
 | 4 | `var d = 4` | - | compiles, runs | new | `d` = 8 |
 | 5 | `let e = a + 10; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | compiles, runs | new | `e` = 11, `f` = 2 |
 
-Now edit unit 5 and rerun only it.
-It takes `b` from a slot it emptied itself the last time it ran,
-and it doubles `d` from 8 to 16.
+The first replay compiles and runs everything successfully.
+
+
+**Step 2: unit 5 is edited.**
+
+Next edit unit 5 (`a + 10` -> `a + 100`) and replay.
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let e = a + 100
+let f = b
+set c = 30
+set d = d * 2
+```
+
+If we simply reran this unit it would
+_take_ `b` from a slot it emptied itself the last time it ran,
+and _update_ `d` again from 8 to 16.
+
 A fresh run from the top would do neither.
 Units 2 and 4 have to rerun first,
 so that `b` and `d` are as unit 5 first found them.
-Unit 3 doesn't:
-unit 5 overwrites `c` without looking at what it held.
+Unit 3 does not need to rerun:
+unit 5 _overwrites_ `c` without looking at what it held.
 Unit 1 doesn't either,
-because reading `a` left it as it was.
-
-**Step 2: unit 5 is edited.**
+because _reading_ `a` left it as it was.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
@@ -194,12 +219,26 @@ because reading `a` left it as it was.
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updates `d`, which it updated when it last ran | `d` = 8 |
 | 5 | `let e = a + 100; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompiles, runs | edited | `e` = 101, `f` = 2 |
 
-Breaking unit 5 is the other half.
+**Step 3: unit 5 is broken.**
+
+We can also _break_ unit 5, failing to compile.
+
+```datalove
+----------
+scriptunit-fragment
+----------
+
+let e = a + 100
+let f = b
+set c = 30
+set d = d * 2
+
+let x = y // These bindings don't exist - compile failure.
+```
+
 The session should now look as if unit 5 never ran,
 so every binding it changed has to be built again,
 `c` included.
-
-**Step 3: unit 5 is broken.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
@@ -209,8 +248,9 @@ so every binding it changed has to be built again,
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updated `d` when it last ran, and is retracted | `d` = 4 |
 | 5 | `let e = a + 100; ...; let x = y` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompile fails | edited | - |
 
-So what a unit does to an earlier binding decides which earlier units rerun,
-and the answer is different for running the unit and for undoing it.
+So what a unit does to an earlier binding decides which earlier units rerun.
+And which earlier units rerun changes based on whether the initaiting
+unit is being rerun or is broken.
 
 
 
@@ -221,19 +261,24 @@ and the answer is different for running the unit and for undoing it.
 _Therefore_ we propose an algorithm.
 -->
 
-Call the unit that was edited, broken, deleted or added the _triggering unit_.
-_Applying_ it runs its code.
-_Retracting_ it undoes what its code did the last time it ran.
-For each binding of an earlier unit that the triggering unit touches:
+Each time any script unit is _modified_, broken or edited, triggers a _step_.
+For each step we _replay_ all script units.
+For each unit replay may require a _rerun_, or take no action.
 
-| operation | retract | apply | forward |
-|-----------|---------|-------|---------|
-| read      | nothing | nothing | nothing |
-| take      | rerun   | rerun   | later units that name it break; removing the take fixes them |
-| overwrite | rerun   | nothing | later units that read it rerun |
-| update    | rerun   | rerun   | later units that read it rerun |
+Call the unit that was broken or edited the _triggering unit_.
+If the triggering unit was broken we _retract_ the effects of the previous step.
+If the triggering unit was edited we _apply_ the effects of the current step.
 
-A _rerun_ rebuilds the binding.
+For each preceding unit that names a binding that the triggering unit touches:
+
+| operation | retract | apply |
+|-----------|---------|-------|
+| read      | nothing | nothing |
+| take      | rerun   | rerun   |
+| overwrite | rerun   | nothing |
+| update    | rerun   | rerun   |
+
+A rerun rebuilds the binding.
 It reruns the unit that made the binding,
 then the units between that one and the triggering unit
 that took or wrote it, in order.
@@ -243,9 +288,15 @@ they would compute what they already hold.
 A unit that touches several bindings needs the union of their rows.
 
 
+## But what about subsequent units?
+
+The preceding algebra only discusses the effects of a modification
 
 
-## But what about edits?
+## Another algebra
+
+
+## But what about edits to the effects of an operation on a binding?
 
 <!--
 _But_ what about: todo
