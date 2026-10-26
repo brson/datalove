@@ -290,10 +290,15 @@ A unit that touches several bindings needs the union of their rows.
 
 ## But what about subsequent units?
 
-The preceding algebra only discusses the effects of a modification
+The preceding algebra only discusses the effects of a modification.
+What effect do modifications and breaks have on subsequent units?
+
+todo
 
 
-## Another algebra
+## Another algebra re the above
+
+todo
 
 
 ## But what about edits to the effects of an operation on a binding?
