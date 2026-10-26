@@ -601,7 +601,7 @@ unsafe fn split_leaf(
 
         // Clone the separator key (first key of new_leaf) into a buffer.
         // In a B+tree, the separator stays in the leaf, but internal nodes need their own copy.
-        let mut separator_key_buf = AlignedBuffer::with_align(key_size, ty.key.align() as usize);
+        let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.key.as_ref());
         let status = crate::c::impls::clone::clone_value(
             rt,
             new_keys_ptr,
@@ -745,7 +745,7 @@ unsafe fn split_internal_node(
         let key_size = ty.key.size() as usize;
 
         // Clone the middle key as the separator to push up.
-        let mut separator_key_buf = AlignedBuffer::with_align(key_size, ty.key.align() as usize);
+        let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.key.as_ref());
         let status = crate::c::impls::clone::clone_value(
             rt,
             keys_ptr.add(split_point * key_size),
@@ -850,8 +850,8 @@ pub unsafe fn btreemap_add_impl(
         }
 
         // A new key: its clone goes in with the amount, which zero plus it is.
-        let mut key = vec![0u64; (ty.key.size() as usize).div_ceil(8)];
-        let key_ptr = key.as_mut_ptr() as *mut u8;
+        let mut key = AlignedBuffer::for_tydesc(ty.key.as_ref());
+        let key_ptr = key.as_mut_ptr();
         let status = super::clone::clone_value(rt, key_ref, key_tydesc.as_ptr(), key_ptr);
         if status != RtStatus::Ok {
             return status;
@@ -2478,11 +2478,8 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             let value_ptr = element_ptr.add(value_field.offset() as usize);
 
             // Clone the key and value into temporary buffers.
-            let key_size = map_key_ty.size() as usize;
-            let value_size = map_value_ty.size() as usize;
-
-            let mut key_buf = AlignedBuffer::with_align(key_size, map_key_ty.align() as usize);
-            let mut value_buf = AlignedBuffer::with_align(value_size, map_value_ty.align() as usize);
+            let mut key_buf = AlignedBuffer::for_tydesc(map_key_ty.as_ref());
+            let mut value_buf = AlignedBuffer::for_tydesc(map_value_ty.as_ref());
 
             let status = crate::c::impls::clone::clone_value(
                 rt,

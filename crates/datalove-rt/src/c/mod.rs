@@ -787,7 +787,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
 ///
 /// Like `dtlv_rti_data_parts`, but works for a value the `data` keeps in its
 /// own words rather than behind a pointer. `scratch` must be eight writable
-/// bytes, aligned to eight, that outlive the borrow. See `boxing::data_borrow`.
+/// bytes, aligned to eight, that outlive the borrow: a `rust::DataScratch`, to
+/// a Rust caller. See `boxing::data_borrow`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_data_borrow(
     data_in: *const u8,
@@ -799,7 +800,12 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_borrow(
     debug_assert!(!scratch.is_null(), "scratch is null");
     debug_assert!(!value_out.is_null(), "value_out is null");
     debug_assert!(!tydesc_out.is_null(), "tydesc_out is null");
-    unsafe { crate::c::impls::boxing::data_borrow(data_in, scratch, value_out, tydesc_out) }
+    // Made a reference here, at the boundary, where the doc above holds the
+    // caller to the alignment.
+    unsafe {
+        crate::c::impls::boxing::data_borrow(
+            data_in, &mut *(scratch as *mut crate::rust::DataScratch), value_out, tydesc_out)
+    }
 }
 
 #[unsafe(no_mangle)]

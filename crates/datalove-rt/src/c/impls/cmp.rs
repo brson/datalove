@@ -17,17 +17,17 @@ enum FloatEqPolicy {
 ///
 /// # Safety
 ///
-/// `data` must be initialized and `scratch` writable for eight bytes.
+/// `data` must be initialized.
 unsafe fn data_inner(
     data: *const rtdt::Data,
-    scratch: &mut u64,
+    scratch: &mut crate::rust::DataScratch,
 ) -> std::option::Option<(*const u8, *const rtdt::TyDesc)> {
     let mut value: *const u8 = std::ptr::null();
     let mut tydesc: *const rtdt::TyDesc = std::ptr::null();
     let status = unsafe {
         super::boxing::data_borrow(
             data as *const u8,
-            scratch as *mut u64 as *mut u8,
+            scratch,
             &mut value,
             &mut tydesc,
         )
@@ -67,8 +67,8 @@ unsafe fn eq_packed(
         // Unpacked and compared as what it is, rather than as the words it
         // lies in: the two float zeros have different bits and are equal, and
         // a NaN has the same bits as itself and is not.
-        let mut scratch_a = 0u64;
-        let mut scratch_b = 0u64;
+        let mut scratch_a = crate::rust::DataScratch::default();
+        let mut scratch_b = crate::rust::DataScratch::default();
         let (std::option::Option::Some((inner_a, inner_td_a)),
              std::option::Option::Some((inner_b, inner_td_b))) =
             (data_inner(a, &mut scratch_a), data_inner(b, &mut scratch_b))
@@ -108,8 +108,8 @@ unsafe fn cmp_packed(
         if std::ptr::eq(a, b) {
             return crate::c::RtOrdering::Equal;
         }
-        let mut scratch_a = 0u64;
-        let mut scratch_b = 0u64;
+        let mut scratch_a = crate::rust::DataScratch::default();
+        let mut scratch_b = crate::rust::DataScratch::default();
         let (std::option::Option::Some((inner_a, inner_td_a)),
              std::option::Option::Some((inner_b, inner_td_b))) =
             (data_inner(a, &mut scratch_a), data_inner(b, &mut scratch_b))

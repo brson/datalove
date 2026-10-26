@@ -1523,8 +1523,7 @@ fn test_crossunit_external_value() {
     // Create ret_dest for early returns (Result<(), Error>).
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment, no result).
@@ -1606,8 +1605,7 @@ fn test_crossunit_external_slot() {
     // Create ret_dest for early returns (Result<(), Error>).
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment).
@@ -1705,8 +1703,7 @@ fn test_crossunit_external_function() {
     // Create ret_dest for early returns (Result<(), Error>).
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment with function).
@@ -1809,8 +1806,7 @@ fn test_crossunit_chain() {
     // Create ret_dest for early returns (Result<(), Error>).
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 and unit 1 (fragments).
@@ -1883,8 +1879,7 @@ fn test_list_with_explicit_drop() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
@@ -1972,8 +1967,7 @@ fn test_script_with_function_and_list_drop() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
@@ -2036,8 +2030,7 @@ fn test_multiple_explicit_drops() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
@@ -2088,8 +2081,7 @@ fn test_ctfe_struct_with_string_destruction() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2138,8 +2130,7 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
@@ -2190,8 +2181,7 @@ fn test_ctfe_struct_with_string_and_debuglog() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
@@ -2237,8 +2227,7 @@ fn test_const_error() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
@@ -2279,8 +2268,7 @@ fn test_const_data() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2325,8 +2313,7 @@ fn test_const_result_err() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2366,8 +2353,7 @@ fn test_const_data_with_string() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2407,8 +2393,7 @@ fn test_const_error_with_i32() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2454,8 +2439,7 @@ fn test_const_error_with_tuple() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2501,8 +2485,7 @@ fn test_const_data_with_tuple() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2546,8 +2529,7 @@ fn test_const_result_err_with_i32() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2587,8 +2569,7 @@ fn test_const_data_with_bool() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
@@ -2628,8 +2609,7 @@ fn test_const_error_with_unit() {
 
     let ret_type = IrType::Result(Box::new(IrType::Unit));
     let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size as usize);
+    let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();

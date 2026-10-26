@@ -24,10 +24,8 @@ impl IrInterpreter {
         let ptr = match self.static_pool.by_value.get(&key) {
             Some(&ptr) => ptr,
             None => {
-                let (size, align) = unsafe { ((*tydesc).size as usize, (*tydesc).align as usize) };
-                assert!(align <= 8, "a static const aligned to {align} bytes");
-                let mut storage = vec![0u64; size.div_ceil(8).max(1)];
-                let ptr = storage.as_mut_ptr() as *mut u8;
+                let mut storage = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*tydesc });
+                let ptr = storage.as_mut_ptr();
                 self.write_const(value, Destination { ptr, tydesc });
                 self.static_pool.entries.push((storage, tydesc));
                 self.static_pool.by_value.insert(key, ptr);
@@ -227,16 +225,11 @@ impl IrInterpreter {
                     // Build list from slice of elements.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let element_tydesc = tydesc_ref.list_element_ty().as_ptr();
-                    let element_size = (*element_tydesc).size as usize;
-                    let element_align = (*element_tydesc).align;
-
-                    // Compute element stride.
-                    let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
-                    let stride = if stride == 0 { 1 } else { stride };
+                    let stride = rtdt::layout::align_up((*element_tydesc).size, (*element_tydesc).align) as usize;
 
                     // Allocate buffer for ALL elements.
                     let num_elements = elements.len();
-                    let mut elements_buffer = datalove_rt::rust::AlignedBuffer::new((stride * num_elements).max(8));
+                    let mut elements_buffer = datalove_rt::rust::AlignedBuffer::for_elements(&*element_tydesc, num_elements);
 
                     // Write each element at its offset in the buffer.
                     for (i, element_value) in elements.iter().enumerate() {
@@ -262,13 +255,9 @@ impl IrInterpreter {
                     // The same way a tensor literal is built.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let element_tydesc = tydesc_ref.tensor_element_ty().as_ptr();
-                    let element_size = (*element_tydesc).size as usize;
-                    let element_align = (*element_tydesc).align;
+                    let stride = rtdt::layout::align_up((*element_tydesc).size, (*element_tydesc).align) as usize;
 
-                    let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
-                    let stride = if stride == 0 { 1 } else { stride };
-
-                    let mut elements_buffer = datalove_rt::rust::AlignedBuffer::new((stride * elements.len()).max(8));
+                    let mut elements_buffer = datalove_rt::rust::AlignedBuffer::for_elements(&*element_tydesc, elements.len());
                     for (i, element_value) in elements.iter().enumerate() {
                         let element_dest = Destination {
                             ptr: elements_buffer.as_mut_ptr().add(i * stride),
@@ -297,9 +286,9 @@ impl IrInterpreter {
                     let element_tydesc = rtdt::TyDescRef::from_ptr(dest.tydesc).set_element_ty().as_ptr();
                     let rt = self.runtime.handle();
                     datalove_rt::c::dtlv_rti_btreeset_create_local(rt, dest.ptr, dest.tydesc);
-                    let mut scratch = vec![0u64; ((*element_tydesc).size as usize).div_ceil(8).max(1)];
+                    let mut scratch = datalove_rt::rust::AlignedBuffer::for_tydesc(&*element_tydesc);
                     for element_value in elements {
-                        let element = Destination { ptr: scratch.as_mut_ptr() as *mut u8, tydesc: element_tydesc };
+                        let element = Destination { ptr: scratch.as_mut_ptr(), tydesc: element_tydesc };
                         self.write_const(element_value, element);
                         let mut added = false;
                         datalove_rt::c::dtlv_rti_btreeset_insert_local(
@@ -313,11 +302,11 @@ impl IrInterpreter {
                     let value_tydesc = tydesc_ref.map_value_ty().as_ptr();
                     let rt = self.runtime.handle();
                     datalove_rt::c::dtlv_rti_btreemap_create_local(rt, dest.ptr, dest.tydesc);
-                    let mut key_scratch = vec![0u64; ((*key_tydesc).size as usize).div_ceil(8).max(1)];
-                    let mut value_scratch = vec![0u64; ((*value_tydesc).size as usize).div_ceil(8).max(1)];
+                    let mut key_scratch = datalove_rt::rust::AlignedBuffer::for_tydesc(&*key_tydesc);
+                    let mut value_scratch = datalove_rt::rust::AlignedBuffer::for_tydesc(&*value_tydesc);
                     for (key_value, val_value) in entries {
-                        let key = Destination { ptr: key_scratch.as_mut_ptr() as *mut u8, tydesc: key_tydesc };
-                        let val = Destination { ptr: value_scratch.as_mut_ptr() as *mut u8, tydesc: value_tydesc };
+                        let key = Destination { ptr: key_scratch.as_mut_ptr(), tydesc: key_tydesc };
+                        let val = Destination { ptr: value_scratch.as_mut_ptr(), tydesc: value_tydesc };
                         self.write_const(key_value, key);
                         self.write_const(val_value, val);
                         datalove_rt::c::dtlv_rti_btreemap_insert_local(
@@ -348,7 +337,6 @@ impl IrInterpreter {
                         row_offset += field_size;
                     }
                     let row_size = rtdt::layout::align_up(row_offset, row_max_align);
-                    let row_stride = if row_size == 0 { 1 } else { row_size };
 
                     // Create row tuple type descriptor.
                     let mut row_tuple_fields: Vec<rtdt::TyInfoTupleField> = Vec::with_capacity(num_cols);
@@ -373,11 +361,11 @@ impl IrInterpreter {
 
                     // Allocate buffer for ALL rows.
                     let num_rows = rows.len();
-                    let mut rows_buffer = datalove_rt::rust::AlignedBuffer::new((row_stride as usize * num_rows).max(8));
+                    let mut rows_buffer = datalove_rt::rust::AlignedBuffer::for_elements(&row_tydesc, num_rows);
 
                     // Write each row at its offset in the buffer.
                     for (row_idx, row_values) in rows.iter().enumerate() {
-                        let row_base_offset = row_idx * row_stride as usize;
+                        let row_base_offset = row_idx * row_size as usize;
                         for (col_idx, col_value) in row_values.iter().enumerate() {
                             let col_offset = row_base_offset + field_offsets[col_idx] as usize;
                             let col_dest = Destination {

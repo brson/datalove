@@ -186,8 +186,7 @@ impl ScriptExecutor {
 
         let ret_type = IrType::Result(Box::new(IrType::Unit));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
-        let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
-        let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
+        let mut ret_buffer = AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
         let ret_dest = datalove_datafun_interp::Destination {
             ptr: ret_buffer.as_mut_ptr(),
             tydesc: ret_tydesc,
@@ -231,8 +230,7 @@ impl ScriptExecutor {
         let output = if let Some(result_id) = script_ctx.result {
             let ret_type = IrType::Result(Box::new(IrType::Unit));
             let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
-            let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
-            let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
+            let mut ret_buffer = AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
             let ret_dest = datalove_datafun_interp::Destination {
                 ptr: ret_buffer.as_mut_ptr(),
                 tydesc: ret_tydesc,
@@ -240,8 +238,7 @@ impl ScriptExecutor {
 
             let expr_type = &ir_unit.value_types[result_id.0 as usize];
             let expr_tydesc = self.interp.tydesc_table_mut().get_or_create(expr_type);
-            let (expr_size, expr_align) = unsafe { ((*expr_tydesc).size, (*expr_tydesc).align) };
-            let mut expr_buffer = AlignedBuffer::with_align(expr_size as usize, expr_align as usize);
+            let mut expr_buffer = AlignedBuffer::for_tydesc(unsafe { &*expr_tydesc });
             let expr_dest = datalove_datafun_interp::Destination {
                 ptr: expr_buffer.as_mut_ptr(),
                 tydesc: expr_tydesc,
@@ -276,8 +273,7 @@ impl ScriptExecutor {
             // in the frame store, then read the binding it named.
             let ret_type = IrType::Result(Box::new(IrType::Unit));
             let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
-            let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
-            let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
+            let mut ret_buffer = AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
             let ret_dest = datalove_datafun_interp::Destination {
                 ptr: ret_buffer.as_mut_ptr(),
                 tydesc: ret_tydesc,
@@ -495,8 +491,7 @@ impl ScriptExecutor {
 
         let ret_type = IrType::Result(Box::new(IrType::Unit));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
-        let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
-        let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
+        let mut ret_buffer = AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
         let ret_dest = datalove_datafun_interp::Destination {
             ptr: ret_buffer.as_mut_ptr(),
             tydesc: ret_tydesc,
@@ -511,8 +506,7 @@ impl ScriptExecutor {
         if let Some(id) = result_id {
             let expr_type = &ir_unit.value_types[id.0 as usize];
             expr_tydesc = self.interp.tydesc_table_mut().get_or_create(expr_type);
-            let (size, align) = unsafe { ((*expr_tydesc).size, (*expr_tydesc).align) };
-            let mut buffer = AlignedBuffer::with_align(size as usize, align as usize);
+            let mut buffer = AlignedBuffer::for_tydesc(unsafe { &*expr_tydesc });
             expr_dest = Some(datalove_datafun_interp::Destination {
                 ptr: buffer.as_mut_ptr(),
                 tydesc: expr_tydesc,

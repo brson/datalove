@@ -205,10 +205,10 @@ struct StaticPool {
     held: Vec<std::sync::Arc<ConstValue>>,
     /// Each value's storage and its descriptor, for destroying it.
     ///
-    /// A `Vec` rather than a `Box<[u64]>`: the pool hands out pointers into the
-    /// storage before moving it in here, and moving a `Box` asserts it is the
-    /// only way to its contents, which ends those pointers.
-    entries: Vec<(Vec<u64>, *const rtdt::TyDesc)>,
+    /// An `AlignedBuffer` holds its storage by raw pointer, so moving one in
+    /// here leaves the pointers the pool already handed out into it good,
+    /// where moving a `Box` would end them.
+    entries: Vec<(datalove_rt::rust::AlignedBuffer, *const rtdt::TyDesc)>,
 }
 
 impl Drop for IrInterpreter {
@@ -225,7 +225,7 @@ impl Drop for IrInterpreter {
         for (mut storage, tydesc) in std::mem::take(&mut self.static_pool.entries) {
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
-                    self.runtime.handle(), storage.as_mut_ptr() as *mut u8, tydesc);
+                    self.runtime.handle(), storage.as_mut_ptr(), tydesc);
             }
         }
     }

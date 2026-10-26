@@ -53,6 +53,23 @@ impl AlignedBuffer {
         Self { ptr, layout }
     }
 
+    /// Storage for one value of the type `td` describes, zero-initialized.
+    ///
+    /// Sized and aligned from the descriptor, which is what whatever writes a
+    /// value here assumes. A `Vec<u8>` or a byte array promises an alignment of
+    /// one, and storage that was only aligned by the allocator's habit is how
+    /// the interpreter came to write an `Int` at a 2-byte address under Miri.
+    pub fn for_tydesc(td: &datalove_rtdt::TyDesc) -> Self {
+        Self::with_align(td.size as usize, td.align as usize)
+    }
+
+    /// Storage for `count` values of the type `td` describes, one after
+    /// another, zero-initialized; see [`for_tydesc`](Self::for_tydesc).
+    pub fn for_elements(td: &datalove_rtdt::TyDesc, count: usize) -> Self {
+        let stride = datalove_rtdt::layout::align_up(td.size, td.align) as usize;
+        Self::with_align(stride * count, td.align as usize)
+    }
+
     /// Whether this buffer can be used for a request of `size` at `align`.
     ///
     /// A zero-size buffer was never allocated -- its pointer is an address with
@@ -169,5 +186,25 @@ mod tests {
             assert_eq!(buf.len(), 128);
             assert!(buf.as_slice().iter().all(|b| *b == 0));
         }
+    }
+}
+
+/// Where `data_borrow` unpacks a value a `data` keeps in its own words.
+///
+/// Eight bytes aligned to eight, as `dtlv_rti_data_borrow` requires: the
+/// widest value a `data` packs is a `u64` or an `f64`. A byte array is the
+/// right size and the wrong alignment, which is how the interpreter came to
+/// write a `u64` at an odd address.
+#[repr(C, align(8))]
+#[derive(Default)]
+pub struct DataScratch([u8; 8]);
+
+impl DataScratch {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.0.as_ptr()
+    }
+
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.0.as_mut_ptr()
     }
 }

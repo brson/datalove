@@ -63,8 +63,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
 
         // Allocate space for the result.
         let result_tydesc = self.interp.tydesc_table_mut().get_or_create(result_type);
-        let result_size = unsafe { (*result_tydesc).size as usize };
-        let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size.max(8));
+        let mut result_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*result_tydesc });
         let result_dest = Destination {
             ptr: result_buffer.as_mut_ptr(),
             tydesc: result_tydesc,
@@ -73,8 +72,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         // Allocate space for early return (Result<(), Error>).
         let ret_type = IrType::Result(Box::new(IrType::Unit));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
-        let ret_size = unsafe { (*ret_tydesc).size as usize };
-        let mut ret_buffer = datalove_rt::rust::AlignedBuffer::new(ret_size.max(8));
+        let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
         let ret_dest = Destination {
             ptr: ret_buffer.as_mut_ptr(),
             tydesc: ret_tydesc,
@@ -541,12 +539,12 @@ unsafe fn borrow_packed(
     ptr: *const u8,
 ) -> Result<(*const u8, datalove_rtdt::TyDescRef<'static>), CtfeError> {
     unsafe {
-        let mut scratch = 0u64;
+        let mut scratch = datalove_rt::rust::DataScratch::default();
         let mut value_ptr: *const u8 = std::ptr::null();
         let mut tydesc_ptr: *const datalove_rtdt::TyDesc = std::ptr::null();
         let status = datalove_rt::c::dtlv_rti_data_borrow(
             ptr,
-            &mut scratch as *mut u64 as *mut u8,
+            scratch.as_mut_ptr(),
             &mut value_ptr as *mut *const u8,
             &mut tydesc_ptr as *mut *const datalove_rtdt::TyDesc,
         );
@@ -558,10 +556,10 @@ unsafe fn borrow_packed(
         // out here keeps it alive for exactly as long as the caller needs.
         let tydesc = datalove_rtdt::TyDescRef::from_ptr(tydesc_ptr);
         let size = tydesc.size() as usize;
-        if value_ptr == &scratch as *const u64 as *const u8 {
+        if value_ptr == scratch.as_ptr() {
             // Packed into the words: copy to a leaked buffer, since the value
             // has to outlive this scratch. A const is evaluated once.
-            let mut owned = datalove_rt::rust::AlignedBuffer::new(size.max(1));
+            let mut owned = datalove_rt::rust::AlignedBuffer::for_tydesc(tydesc.as_ref());
             std::ptr::copy_nonoverlapping(value_ptr, owned.as_mut_ptr(), size);
             let leaked = owned.as_ptr();
             std::mem::forget(owned);

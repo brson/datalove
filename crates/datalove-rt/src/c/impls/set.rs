@@ -788,7 +788,7 @@ unsafe fn split_leaf(
         *leaf_next = new_leaf;
 
         // Clone the separator key (first key of new_leaf).
-        let mut separator_key_buf = AlignedBuffer::with_align(element_size, ty.elem.align() as usize);
+        let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.elem.as_ref());
         let status = crate::c::impls::clone::clone_value(
             rt,
             new_keys_ptr,
@@ -959,7 +959,7 @@ unsafe fn split_internal_node(
         let element_size = ty.elem.size() as usize;
 
         // Clone the middle key as the separator to push up.
-        let mut separator_key_buf = AlignedBuffer::with_align(element_size, ty.elem.align() as usize);
+        let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.elem.as_ref());
         let status = crate::c::impls::clone::clone_value(
             rt,
             keys_ptr.add(split_point * element_size),
@@ -1257,7 +1257,7 @@ pub unsafe fn btreeset_clone_from_slice_impl(
             let element_ptr = slice_ptr_ref.add(i as usize * element_size);
 
             // Clone the element into a temporary buffer.
-            let mut element_buf = AlignedBuffer::with_align(element_size, slice_element_tydesc_ref.align() as usize);
+            let mut element_buf = AlignedBuffer::for_tydesc(slice_element_tydesc_ref.as_ref());
             let status = crate::c::impls::clone::clone_value(
                 rt,
                 element_ptr,

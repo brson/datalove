@@ -91,11 +91,10 @@ pub unsafe fn data_parts(
 ///
 /// # Safety
 ///
-/// `data_in` must be an initialized `Data`, and `scratch` must be writable for
-/// eight bytes aligned to eight.
+/// `data_in` must be an initialized `Data`.
 pub unsafe fn data_borrow(
     data_in: *const u8,
-    scratch: *mut u8,
+    scratch: &mut crate::rust::DataScratch,
     value_out: *mut *const u8,
     tydesc_out: *mut *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -107,6 +106,7 @@ pub unsafe fn data_borrow(
 
         let tytag = data.tytag();
         let bits = data.inline_bits();
+        let scratch = scratch.as_mut_ptr();
         // Written through a pointer of the right width rather than copied from
         // the low bytes, so that the byte order is the machine's own.
         match tytag {

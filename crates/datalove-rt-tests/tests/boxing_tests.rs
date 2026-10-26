@@ -67,13 +67,13 @@ fn round_trip(source_text: &str) -> AnyResult<datalove_rtdt::anypack::Tag> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok, "{}", source_text);
 
     // Back.
-    let mut scratch = 0u64;
+    let mut scratch = datalove_rt::rust::DataScratch::default();
     let mut value_ptr: *const u8 = std::ptr::null();
     let mut value_tydesc: *const datalove_rtdt::TyDesc = std::ptr::null();
     let status = unsafe {
         datalove_rt::c::dtlv_rti_data_borrow(
             data_buffer.as_ptr(),
-            &mut scratch as *mut u64 as *mut u8,
+            scratch.as_mut_ptr(),
             &mut value_ptr,
             &mut value_tydesc,
         )
