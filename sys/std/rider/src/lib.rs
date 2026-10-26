@@ -8,7 +8,7 @@
 //! Returns 1 (Ok) on success, 2 (Error) on failure.
 
 use datalove_rtdt as rtdt;
-use datalove_rti::rider_helpers;
+use datalove_rti::rider_helpers::{self, arg, str_arg, StringMut};
 
 // The runtime functions this crate calls are declared, not defined, so a
 // library built from it leaves them for whoever loads it to supply. The test
@@ -459,6 +459,27 @@ pub extern "C-unwind" fn dlr_std__string_to_uppercase(
 }
 
 // --- Mutation ---
+//
+// A `mut string` is changed through one `StringMut`, so that reading it and
+// writing it cannot overlap.
+
+/// The string at `other_ptr`, to be added to the one at `self_ptr`.
+///
+/// Copied if it is that same string, which is the one way the two can share
+/// a buffer: the `StringMut` about to be made of it would otherwise change
+/// the bytes being read, or free them in growing.
+///
+/// # Safety
+///
+/// As for `str_arg`.
+unsafe fn other_str<'a>(self_ptr: *mut u8, other_ptr: *const u8) -> std::borrow::Cow<'a, str> {
+    let other = unsafe { str_arg(other_ptr) };
+    if std::ptr::eq(self_ptr as *const u8, other_ptr) {
+        std::borrow::Cow::Owned(other.to_owned())
+    } else {
+        std::borrow::Cow::Borrowed(other)
+    }
+}
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__string_push_str(
@@ -467,47 +488,19 @@ pub extern "C-unwind" fn dlr_std__string_push_str(
     other_ptr: *const u8, _other_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    let other = unsafe { as_str(other_ptr) };
-    if other.is_empty() {
-        return OK;
-    }
-    let status = unsafe {
-        datalove_rti::call::dtlv_rti_string_push_bytes_local(
-            rt,
-            self_ptr,
-            self_td as *const rtdt::TyDesc,
-            other.as_ptr(),
-            other.len() as rtdt::IndexRepr,
-        )
-    };
-    status as u8
+    let other = unsafe { other_str(self_ptr, other_ptr) };
+    let mut s = unsafe { StringMut::new(rt, self_ptr, self_td) };
+    s.push_str(&other) as u8
 }
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__string_clear(
-    _rt: *mut u8,
-    self_ptr: *mut u8, _self_td: *const u8,
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    unsafe {
-        let s = &mut *(self_ptr as *mut rtdt::String);
-        s.size = rtdt::Index::ZERO;
-    }
+    unsafe { StringMut::new(rt, self_ptr, self_td) }.clear();
     OK
-}
-
-/// Helper: convert an rtdt::String to a mutable byte slice.
-///
-/// # Safety
-///
-/// The pointer must be valid and point to a live, heap-allocated `rtdt::String`.
-unsafe fn as_mut_bytes<'a>(ptr: *mut u8) -> &'a mut [u8] {
-    let s = &mut *(ptr as *mut rtdt::String);
-    if s.data.is_null() || s.size.0 == 0 {
-        &mut []
-    } else {
-        std::slice::from_raw_parts_mut(s.data as *mut u8, s.size.as_usize())
-    }
 }
 
 #[no_mangle]
@@ -517,91 +510,50 @@ pub extern "C-unwind" fn dlr_std__string_push_char(
     ch_ptr: *const u8, _ch_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    let codepoint = unsafe { *(ch_ptr as *const u32) };
-    let ch = match char::from_u32(codepoint) {
-        Some(c) => c,
-        None => return OK, // Invalid codepoint: no-op.
+    let Some(ch) = char::from_u32(unsafe { arg::<u32>(ch_ptr) }) else {
+        return OK; // Invalid codepoint: no-op.
     };
-    let mut buf = [0u8; 4];
-    let encoded = ch.encode_utf8(&mut buf);
-    let status = unsafe {
-        datalove_rti::call::dtlv_rti_string_push_bytes_local(
-            rt,
-            self_ptr,
-            self_td as *const rtdt::TyDesc,
-            encoded.as_ptr(),
-            encoded.len() as rtdt::IndexRepr,
-        )
-    };
-    status as u8
+    let mut s = unsafe { StringMut::new(rt, self_ptr, self_td) };
+    s.push_str(ch.encode_utf8(&mut [0u8; 4])) as u8
 }
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__string_pop(
-    _rt: *mut u8,
-    self_ptr: *mut u8, _self_td: *const u8,
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    let s = unsafe { as_str(self_ptr) };
-    match s.chars().next_back() {
-        Some(ch) => {
-            let new_len = s.len() - ch.len_utf8();
-            let s_mut = unsafe { &mut *(self_ptr as *mut rtdt::String) };
-            s_mut.size = rtdt::Index::new(new_len as rtdt::IndexRepr);
-            unsafe { rider_helpers::write_option_some(out, ch as u32) };
-        }
-        None => {
-            unsafe { rider_helpers::write_option_none(out) };
-        }
+    match unsafe { StringMut::new(rt, self_ptr, self_td) }.pop() {
+        Some(ch) => unsafe { rider_helpers::write_option_some(out, ch as u32) },
+        None => unsafe { rider_helpers::write_option_none(out) },
     }
     OK
 }
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__string_truncate(
-    _rt: *mut u8,
-    self_ptr: *mut u8, _self_td: *const u8,
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
     len_ptr: *const u8, _len_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    let new_len = unsafe { *(len_ptr as *const rtdt::Index) }.as_usize();
-    let s = unsafe { as_str(self_ptr) };
-    if new_len >= s.len() {
-        return OK; // No-op if new_len >= current length.
-    }
-    assert!(s.is_char_boundary(new_len), "truncate: not a char boundary");
-    let s_mut = unsafe { &mut *(self_ptr as *mut rtdt::String) };
-    s_mut.size = rtdt::Index::new(new_len as rtdt::IndexRepr);
+    let len = unsafe { arg::<rtdt::Index>(len_ptr) }.as_usize();
+    unsafe { StringMut::new(rt, self_ptr, self_td) }.truncate(len);
     OK
 }
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__string_remove(
-    _rt: *mut u8,
-    self_ptr: *mut u8, _self_td: *const u8,
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
     idx_ptr: *const u8, _idx_td: *const u8,
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    let idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
-    let s = unsafe { as_str(self_ptr) };
-    if idx >= s.len() || !s.is_char_boundary(idx) {
-        unsafe { rider_helpers::write_option_none(out) };
-        return OK;
+    let idx = unsafe { arg::<rtdt::Index>(idx_ptr) }.as_usize();
+    match unsafe { StringMut::new(rt, self_ptr, self_td) }.remove(idx) {
+        Some(ch) => unsafe { rider_helpers::write_option_some(out, ch as u32) },
+        None => unsafe { rider_helpers::write_option_none(out) },
     }
-    let ch = s[idx..].chars().next().unwrap();
-    let ch_len = ch.len_utf8();
-    // Shift bytes after the removed character.
-    let bytes = unsafe { as_mut_bytes(self_ptr) };
-    let remaining = bytes.len() - idx - ch_len;
-    if remaining > 0 {
-        // One pointer for both ends: taking `as_mut_ptr` after `as_ptr` would
-        // end the first.
-        let base = bytes.as_mut_ptr();
-        unsafe { std::ptr::copy(base.add(idx + ch_len), base.add(idx), remaining) };
-    }
-    let s_mut = unsafe { &mut *(self_ptr as *mut rtdt::String) };
-    s_mut.size = rtdt::Index::new((s_mut.size.as_usize() - ch_len) as rtdt::IndexRepr);
-    unsafe { rider_helpers::write_option_some(out, ch as u32) };
     OK
 }
 
@@ -613,46 +565,12 @@ pub extern "C-unwind" fn dlr_std__string_insert_char(
     ch_ptr: *const u8, _ch_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    let idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
-    let codepoint = unsafe { *(ch_ptr as *const u32) };
-    let ch = match char::from_u32(codepoint) {
-        Some(c) => c,
-        None => return OK, // Invalid codepoint: no-op.
+    let idx = unsafe { arg::<rtdt::Index>(idx_ptr) }.as_usize();
+    let Some(ch) = char::from_u32(unsafe { arg::<u32>(ch_ptr) }) else {
+        return OK; // Invalid codepoint: no-op.
     };
-    let s = unsafe { as_str(self_ptr) };
-    if idx > s.len() || !s.is_char_boundary(idx) {
-        return OK; // Out of bounds or not char boundary: no-op.
-    }
-    let mut buf = [0u8; 4];
-    let encoded = ch.encode_utf8(&mut buf);
-    let encoded_len = encoded.len();
-
-    // First, grow the buffer by pushing the encoded bytes at the end.
-    let status = unsafe {
-        datalove_rti::call::dtlv_rti_string_push_bytes_local(
-            rt,
-            self_ptr,
-            self_td as *const rtdt::TyDesc,
-            encoded.as_ptr(),
-            encoded_len as rtdt::IndexRepr,
-        )
-    };
-    if status as u8 != OK {
-        return status as u8;
-    }
-
-    // Now shift existing bytes after idx to make room.
-    let bytes = unsafe { as_mut_bytes(self_ptr) };
-    let total_len = bytes.len();
-    let old_len = total_len - encoded_len;
-    // Move bytes [idx..old_len] to [idx+encoded_len..total_len].
-    if idx < old_len {
-        let base = bytes.as_mut_ptr();
-        unsafe { std::ptr::copy(base.add(idx), base.add(idx + encoded_len), old_len - idx) };
-    }
-    // Copy encoded char into the gap.
-    bytes[idx..idx + encoded_len].copy_from_slice(encoded.as_bytes());
-    OK
+    let mut s = unsafe { StringMut::new(rt, self_ptr, self_td) };
+    s.insert_str(idx, ch.encode_utf8(&mut [0u8; 4])) as u8
 }
 
 #[no_mangle]
@@ -663,44 +581,10 @@ pub extern "C-unwind" fn dlr_std__string_insert_str(
     other_ptr: *const u8, _other_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
-    let idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
-    let other = unsafe { as_str(other_ptr) };
-    if other.is_empty() {
-        return OK;
-    }
-    let s = unsafe { as_str(self_ptr) };
-    if idx > s.len() || !s.is_char_boundary(idx) {
-        return OK; // Out of bounds or not char boundary: no-op.
-    }
-    let insert_len = other.len();
-    // Grab the other bytes before mutating self (other_ptr could alias).
-    let other_bytes: Vec<u8> = other.as_bytes().to_vec();
-
-    // Grow the buffer by pushing the insert bytes at the end.
-    let status = unsafe {
-        datalove_rti::call::dtlv_rti_string_push_bytes_local(
-            rt,
-            self_ptr,
-            self_td as *const rtdt::TyDesc,
-            other_bytes.as_ptr(),
-            insert_len as rtdt::IndexRepr,
-        )
-    };
-    if status as u8 != OK {
-        return status as u8;
-    }
-
-    // Now shift existing bytes after idx to make room.
-    let bytes = unsafe { as_mut_bytes(self_ptr) };
-    let total_len = bytes.len();
-    let old_len = total_len - insert_len;
-    if idx < old_len {
-        let base = bytes.as_mut_ptr();
-        unsafe { std::ptr::copy(base.add(idx), base.add(idx + insert_len), old_len - idx) };
-    }
-    // Copy inserted string into the gap.
-    bytes[idx..idx + insert_len].copy_from_slice(&other_bytes);
-    OK
+    let idx = unsafe { arg::<rtdt::Index>(idx_ptr) }.as_usize();
+    let other = unsafe { other_str(self_ptr, other_ptr) };
+    let mut s = unsafe { StringMut::new(rt, self_ptr, self_td) };
+    s.insert_str(idx, &other) as u8
 }
 
 // --- Splitting (option-of-tuple) ---

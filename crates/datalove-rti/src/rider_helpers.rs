@@ -413,3 +413,172 @@ fn decimal_to_limbs(digits: &str) -> Vec<u32> {
 pub const fn align_up(offset: usize, align: usize) -> usize {
     (offset + align - 1) & !(align - 1)
 }
+
+// --- Arguments ---
+//
+// A rider function is an entry point: whoever calls it promises its pointers,
+// and the function takes them at its word. These turn each pointer into the
+// value it points at, once, at the top, so that the body works on typed
+// values rather than on pointers.
+
+/// A scalar argument, read through its pointer.
+///
+/// # Safety
+///
+/// `ptr` points to an initialized `T`.
+pub unsafe fn arg<T: Copy>(ptr: *const u8) -> T {
+    unsafe { *(ptr as *const T) }
+}
+
+/// A `string` argument, as a `&str`.
+///
+/// # Safety
+///
+/// `ptr` points to a live `rtdt::String` holding UTF-8, which nothing changes
+/// while the `&str` is in use.
+pub unsafe fn str_arg<'a>(ptr: *const u8) -> &'a str {
+    unsafe {
+        let s = &*(ptr as *const rtdt::String);
+        if s.data.is_null() || s.size.0 == 0 {
+            ""
+        } else {
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(s.data, s.size.as_usize()))
+        }
+    }
+}
+
+/// Write a scalar result.
+///
+/// # Safety
+///
+/// `out` is writable for a `T` and aligned for one.
+pub unsafe fn write_result<T: Copy>(out: *mut u8, val: T) {
+    unsafe { std::ptr::write(out as *mut T, val) }
+}
+
+/// A `mut string` argument, changed through one reference.
+///
+/// The ABI hands the string over as a pointer to an `rtdt::String`. Reading
+/// it as a `&str` and writing its bytes through separate borrows made from
+/// that pointer is how `string_remove` came to use a view the other had ended.
+/// Here there is one `&mut` to the string, reached through which are its
+/// contents, so the borrow checker keeps a read and a write apart. The
+/// contents stay UTF-8, every change going through a method that keeps them
+/// so, which is what lets [`as_str`](Self::as_str) be safe.
+pub struct StringMut<'a> {
+    rt: LocalRtHandle,
+    td: *const rtdt::TyDesc,
+    s: &'a mut rtdt::String,
+}
+
+impl<'a> StringMut<'a> {
+    /// # Safety
+    ///
+    /// `ptr` points to a live `rtdt::String` holding UTF-8, which `td`
+    /// describes and the runtime `rt` allocated, and nothing else reaches it
+    /// while this lives.
+    pub unsafe fn new(rt: LocalRtHandle, ptr: *mut u8, td: *const u8) -> StringMut<'a> {
+        StringMut { rt, td: td as *const rtdt::TyDesc, s: unsafe { &mut *(ptr as *mut rtdt::String) } }
+    }
+
+    pub fn as_str(&self) -> &str {
+        if self.s.data.is_null() || self.s.size.0 == 0 {
+            return "";
+        }
+        // SAFETY: the runtime keeps `size` bytes at `data`, and they are UTF-8
+        // by `new`'s contract and every change made here since.
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.s.data, self.s.size.as_usize())) }
+    }
+
+    pub fn len(&self) -> usize {
+        self.s.size.as_usize()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The contents as bytes, for a change that keeps them UTF-8.
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        if self.s.data.is_null() || self.s.size.0 == 0 {
+            return &mut [];
+        }
+        // SAFETY: as for `as_str`, and the runtime gave this string its buffer
+        // to change.
+        unsafe { std::slice::from_raw_parts_mut(self.s.data as *mut u8, self.s.size.as_usize()) }
+    }
+
+    fn set_len(&mut self, len: usize) {
+        debug_assert!(self.as_str().is_char_boundary(len));
+        self.s.size = rtdt::Index::new(len as rtdt::IndexRepr);
+    }
+
+    /// Empty the string, keeping its buffer.
+    pub fn clear(&mut self) {
+        self.set_len(0);
+    }
+
+    /// Shorten the string to `len` bytes, or leave it if it is no longer.
+    ///
+    /// Panics if `len` is not on a character boundary.
+    pub fn truncate(&mut self, len: usize) {
+        if len < self.len() {
+            assert!(self.as_str().is_char_boundary(len), "truncate: not a char boundary");
+            self.set_len(len);
+        }
+    }
+
+    /// Remove the last character and return it.
+    pub fn pop(&mut self) -> Option<char> {
+        let ch = self.as_str().chars().next_back()?;
+        self.set_len(self.len() - ch.len_utf8());
+        Some(ch)
+    }
+
+    /// Remove the character at byte `idx` and return it, or nothing if
+    /// `idx` is not the start of one.
+    pub fn remove(&mut self, idx: usize) -> Option<char> {
+        let s = self.as_str();
+        if idx >= s.len() || !s.is_char_boundary(idx) {
+            return None;
+        }
+        let ch = s[idx..].chars().next()?;
+        let (len, ch_len) = (s.len(), ch.len_utf8());
+        self.bytes_mut().copy_within(idx + ch_len..len, idx);
+        self.set_len(len - ch_len);
+        Some(ch)
+    }
+
+    /// Append `other`, growing the buffer through the runtime if it has to.
+    pub fn push_str(&mut self, other: &str) -> RtStatus {
+        if other.is_empty() {
+            return RtStatus::Ok;
+        }
+        // SAFETY: the handle, the string and its descriptor are what `new`
+        // was given; the pointer is made from the one reference to the string.
+        unsafe {
+            call::dtlv_rti_string_push_bytes_local(
+                self.rt,
+                self.s as *mut rtdt::String as *mut u8,
+                self.td,
+                other.as_ptr(),
+                other.len() as rtdt::IndexRepr,
+            )
+        }
+    }
+
+    /// Insert `other` at byte `idx`, or do nothing if `idx` is not on a
+    /// character boundary.
+    pub fn insert_str(&mut self, idx: usize, other: &str) -> RtStatus {
+        if other.is_empty() || idx > self.len() || !self.as_str().is_char_boundary(idx) {
+            return RtStatus::Ok;
+        }
+        // Appended, then turned into place: the tail after `idx` rotates right
+        // by the length appended, which brings `other` to `idx`.
+        let status = self.push_str(other);
+        if status == RtStatus::Ok {
+            self.bytes_mut()[idx..].rotate_right(other.len());
+        }
+        status
+    }
+}
