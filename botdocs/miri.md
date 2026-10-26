@@ -143,6 +143,10 @@ Each of these passed the native suites, including under the leak checker.
   recursive call borrows the runtime mutably from the raw handle, which ends
   the outer borrow, and the list, tensor and boxed arms used it afterwards.
   They borrow afresh through `local(rt)`.
+- **`debuglog_local` held a `&mut RtLocal` across the pretty-print**, which
+  reallocates through the handle, and read the debug mode through it
+  afterwards. The replay never logged into the buffer, so a unit test now
+  does.
 - **The interpreter's static const pool moved a `Box` after lending a
   pointer into it.** Moving a `Box` asserts it is the only way in. The
   storage is a `Vec`.

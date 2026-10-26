@@ -26,10 +26,13 @@ pub unsafe fn debuglog_local(
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let rt_ref = &mut *(rt as *mut RtLocal);
+        // Read now, and the runtime borrowed again for the output: the
+        // pretty-print between reaches it through `rt`, which would end a
+        // borrow held across it.
+        let mode = (*(rt as *const RtLocal)).debug_output_mode;
 
         // Check mode, return early if Disabled.
-        if rt_ref.debug_output_mode == DebugOutputMode::Disabled {
+        if mode == DebugOutputMode::Disabled {
             return RtStatus::Ok;
         }
 
@@ -77,7 +80,8 @@ pub unsafe fn debuglog_local(
         };
 
         // Output based on mode.
-        match rt_ref.debug_output_mode {
+        let rt_ref = &mut *(rt as *mut RtLocal);
+        match mode {
             DebugOutputMode::Stderr => {
                 eprintln!("{}", result);
             }
@@ -94,5 +98,37 @@ pub unsafe fn debuglog_local(
         crate::c::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
 
         RtStatus::Ok
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::c;
+
+    /// Logging into the buffer pretty-prints through the runtime, which
+    /// allocates through its handle, then appends to the buffer: two borrows
+    /// of the runtime, one after the other.
+    #[test]
+    fn a_logged_value_lands_in_the_buffer() {
+        let u64_tydesc = datalove_rtdt::TyDesc {
+            type_tag: datalove_rtdt::TyTag::U64,
+            flags: 0,
+            size: 8,
+            align: 8,
+            type_info: datalove_rtdt::TyInfo { nothing: datalove_rtdt::TyInfoNothing { unused: 0 } },
+        };
+        let value = 18_000_000_000_000_000_000u64;
+        unsafe {
+            let rt = c::dtlv_rti_init();
+            c::dtlv_rti_set_debug_mode(rt, c::impls::rt_local::DebugOutputMode::Buffer);
+            let status = c::dtlv_rti_debuglog_local(rt, &value as *const u64 as *const u8, &u64_tydesc);
+            assert_eq!(status, c::RtStatus::Ok);
+            let mut ptr = std::ptr::null();
+            let mut len = 0;
+            c::dtlv_rti_get_debug_buffer(rt, &mut ptr, &mut len);
+            let logged = std::str::from_utf8(std::slice::from_raw_parts(ptr, len)).unwrap();
+            assert_eq!(logged, "18000000000000000000\n");
+            c::dtlv_rti_shutdown(rt);
+        }
     }
 }
