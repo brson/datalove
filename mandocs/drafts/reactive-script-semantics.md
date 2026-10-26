@@ -123,13 +123,25 @@ _But...therefore_ modest but succinct elaboration.
 Demonstrate read/take/overwrite/update
 -->
 
-After a unit declares a linear-typed binding,
-subsequent units may perform four kinds of _operations_ on it:
+Whatever we rerun,
+the session must end up as a fresh run of the current code
+from the top would leave it.
+That's the rule every step below is held to.
 
--  _read_, without modifying,
-- _take_, leaving the binding empty,
-- _overwrite_, the value changed without also reading it,
-- _update_, read then written.
+After a unit declares a binding,
+later units may perform four kinds of _operations_ on it:
+
+- _read_ it, leaving it as it was,
+- _take_ it, moving the value out and leaving the binding empty,
+- _overwrite_ it, writing a new value without reading the old one,
+- _update_ it, reading the old value and writing a new one.
+
+A take is a move.
+Overwrites and updates are the two kinds of mutation,
+and only a `var` can be mutated.
+Integer literals are `int`, a bigint,
+which is linear,
+so `let f = b` moves `b` rather than copying it.
 
 The first four units each make one binding.
 The fifth does something different to each of them.
@@ -171,6 +183,13 @@ set d = d * 2
 
 Unit 5 _reads_ `a`, _takes_ `b`, _overwrites_ `c` and _updates_ `d`.
 
+Each change to the session is a _step_,
+and a table says what each unit does in it.
+_Uses from earlier units_ names the unit each binding came from in parentheses.
+_Holds after_ is what a unit's bindings hold at the end of the step,
+whichever unit last changed them:
+unit 3 holds `c` = 30 because unit 5 overwrote it.
+
 **Step 1: all five units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -181,12 +200,12 @@ Unit 5 _reads_ `a`, _takes_ `b`, _overwrites_ `c` and _updates_ `d`.
 | 4 | `var d = 4` | - | compiles, runs | new | `d` = 8 |
 | 5 | `let e = a + 10; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | compiles, runs | new | `e` = 11, `f` = 2 |
 
-The first replay compiles and runs everything successfully.
+Every unit compiles and runs once, in order.
 
 
 **Step 2: unit 5 is edited.**
 
-Next edit unit 5 (`a + 10` -> `a + 100`) and replay.
+Next edit unit 5, changing `a + 10` to `a + 100`.
 
 ```datalove
 ----------
@@ -221,7 +240,8 @@ because _reading_ `a` left it as it was.
 
 **Step 3: unit 5 is broken.**
 
-We can also _break_ unit 5, failing to compile.
+We can also _break_ unit 5,
+editing it so it fails to compile.
 
 ```datalove
 ----------
@@ -236,9 +256,11 @@ set d = d * 2
 let x = y // These bindings don't exist - compile failure.
 ```
 
-The session should now look as if unit 5 never ran,
-so every binding it changed has to be built again,
-`c` included.
+A fresh run would skip unit 5,
+so the session should now look as if unit 5 never ran.
+Every binding it changed has to be built again,
+`c` included this time:
+unit 5 won't run to overwrite it.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
@@ -248,9 +270,11 @@ so every binding it changed has to be built again,
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updated `d` when it last ran, and is retracted | `d` = 4 |
 | 5 | `let e = a + 100; ...; let x = y` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompile fails | edited | - |
 
-So what a unit does to an earlier binding decides which earlier units rerun.
-And which earlier units rerun changes based on whether the initaiting
-unit is being rerun or is broken.
+So the operation of a unit to an earlier binding decides which earlier units rerun.
+If the operation is an overwrite then the nature of the modification
+also matters: if an overwrite is edited the earlier unit does not need to rerun,
+but if an overwrite is broken the earlier unit does need to rerun to restore the value
+that will no longer be overwritten.
 
 
 
@@ -261,31 +285,41 @@ unit is being rerun or is broken.
 _Therefore_ we propose an algorithm.
 -->
 
-Each time any script unit is _modified_ (_broken_ or _edited_) triggers a _step_.
-For each step we _replay_ all script units.
-For each unit replay may require a _recompile_ and/or a _rerun_, or take no action.
+Each _modification_ of a unit,
+so far an _edit_ or a _break_,
+makes a step.
+Call the modified unit the _triggering unit_.
+In a step each unit is left untouched,
+reruns,
+recompiles and then runs,
+or fails to compile.
+The triggering unit always recompiles.
+What happens to the earlier units
+depends on what the triggering unit's code did to their bindings
+the last time it ran:
 
-Call the unit that was broken or edited the _triggering unit_.
-If the triggering unit was broken we _retract_ the effects of the previous step.
-If the triggering unit was edited we _apply_ the effects of the current step.
-
-For each preceding unit that names a binding that the triggering unit touches:
-
-| operation | retract | apply |
-|-----------|---------|-------|
+| operation | break   | edit    |
+|-----------|---------|---------|
 | read      | nothing | nothing |
-| take      | rerun   | rerun   |
-| overwrite | rerun   | nothing |
-| update    | rerun   | rerun   |
+| take      | restore | restore |
+| overwrite | restore | nothing |
+| update    | restore | restore |
 
-A rerun rebuilds the binding.
+A _restore_ puts a binding back as the triggering unit first found it.
 It reruns the unit that made the binding,
-then the units between that one and the triggering unit
-that took or wrote it, in order.
-Units that only read it are left alone:
+then, in order, the units between that one and the triggering unit
+that wrote it.
+Units in between that only read it are left alone:
 they would compute what they already hold.
 
-A unit that touches several bindings needs the union of their rows.
+An edit skips the restore for an overwrite
+because the triggering unit runs again and overwrites the binding,
+so what it held before doesn't matter.
+A break has nothing to overwrite it.
+
+A rerun runs a whole unit,
+so a triggering unit that touches several bindings
+gets the union of their rows.
 
 
 
