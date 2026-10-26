@@ -1,7 +1,7 @@
 //! Debug log implementation.
 
 use datalove_rtdt as rtdt;
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
 use crate::c::impls::rt_local::{RtLocal, DebugOutputMode};
 
 /// Create a TyDesc for String type.
@@ -21,15 +21,12 @@ fn create_string_tydesc() -> rtdt::TyDesc {
 ///
 /// Pretty-prints the value and outputs according to the current debug mode.
 pub unsafe fn debuglog_local(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        // Read now, and the runtime borrowed again for the output: the
-        // pretty-print between reaches it through `rt`, which would end a
-        // borrow held across it.
-        let mode = (*(rt as *const RtLocal)).debug_output_mode;
+        let mode = rt.debug_output_mode;
 
         // Check mode, return early if Disabled.
         if mode == DebugOutputMode::Disabled {
@@ -61,7 +58,7 @@ pub unsafe fn debuglog_local(
 
         if status != RtStatus::Ok {
             // Clean up on error.
-            crate::c::impls::string::string_destroy_local(crate::c::impls::rt_local::from_handle(rt), string_ptr, string_tydesc);
+            crate::c::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
             return status;
         }
 
@@ -80,14 +77,13 @@ pub unsafe fn debuglog_local(
         };
 
         // Output based on mode.
-        let rt_ref = &mut *(rt as *mut RtLocal);
         match mode {
             DebugOutputMode::Stderr => {
                 eprintln!("{}", result);
             }
             DebugOutputMode::Buffer => {
-                rt_ref.debug_buffer.push_str(&result);
-                rt_ref.debug_buffer.push('\n');
+                rt.debug_buffer.push_str(&result);
+                rt.debug_buffer.push('\n');
             }
             DebugOutputMode::Disabled => {
                 // Already handled above, but included for completeness.
@@ -95,7 +91,7 @@ pub unsafe fn debuglog_local(
         }
 
         // Destroy the temp string.
-        crate::c::impls::string::string_destroy_local(crate::c::impls::rt_local::from_handle(rt), string_ptr, string_tydesc);
+        crate::c::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
 
         RtStatus::Ok
     }

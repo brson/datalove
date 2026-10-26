@@ -3,19 +3,20 @@
 //! Produces valid datalit syntax that can be parsed back.
 
 use datalove_rtdt as rtdt;
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
+use crate::c::impls::rt_local::RtLocal;
 
 /// Pretty-prints a runtime value into a string.
 ///
 /// The string must be pre-allocated using string_create_local.
 pub unsafe fn pretty_print_local(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc_ref: *const rtdt::TyDesc,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if rt.is_null() || value_ref.is_null() || tydesc_ref.is_null() {
+    if value_ref.is_null() || tydesc_ref.is_null() {
         return RtStatus::Error;
     }
     if string_mut.is_null() || string_tydesc.is_null() {
@@ -38,7 +39,7 @@ pub unsafe fn pretty_print_local(
 }
 
 unsafe fn pretty_value(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -86,7 +87,7 @@ unsafe fn pretty_value(
 }
 
 unsafe fn pretty_bool(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -102,7 +103,7 @@ unsafe fn pretty_bool(
 }
 
 unsafe fn pretty_u8(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -115,7 +116,7 @@ unsafe fn pretty_u8(
 }
 
 unsafe fn pretty_i8(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -128,7 +129,7 @@ unsafe fn pretty_i8(
 }
 
 unsafe fn pretty_u16(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -141,7 +142,7 @@ unsafe fn pretty_u16(
 }
 
 unsafe fn pretty_i16(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -154,7 +155,7 @@ unsafe fn pretty_i16(
 }
 
 unsafe fn pretty_u32(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -167,7 +168,7 @@ unsafe fn pretty_u32(
 }
 
 unsafe fn pretty_i32(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -180,7 +181,7 @@ unsafe fn pretty_i32(
 }
 
 unsafe fn pretty_u64(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -193,7 +194,7 @@ unsafe fn pretty_u64(
 }
 
 unsafe fn pretty_i64(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -206,7 +207,7 @@ unsafe fn pretty_i64(
 }
 
 unsafe fn pretty_usize(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -219,7 +220,7 @@ unsafe fn pretty_usize(
 }
 
 unsafe fn pretty_isize(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -257,7 +258,7 @@ fn float_text(text: String) -> String {
 }
 
 unsafe fn pretty_f32(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -282,7 +283,7 @@ unsafe fn pretty_f32(
 }
 
 unsafe fn pretty_f64(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -307,7 +308,7 @@ unsafe fn pretty_f64(
 }
 
 unsafe fn pretty_int(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -320,7 +321,7 @@ unsafe fn pretty_int(
 }
 
 unsafe fn pretty_string(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -346,7 +347,7 @@ unsafe fn pretty_string(
 }
 
 unsafe fn pretty_tuple(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -369,7 +370,7 @@ unsafe fn pretty_tuple(
 }
 
 unsafe fn pretty_struct(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -395,7 +396,7 @@ unsafe fn pretty_struct(
 }
 
 unsafe fn pretty_enum(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -434,7 +435,7 @@ unsafe fn pretty_enum(
 }
 
 unsafe fn pretty_atom(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -447,7 +448,7 @@ unsafe fn pretty_atom(
 }
 
 unsafe fn pretty_term(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -463,7 +464,7 @@ unsafe fn pretty_term(
 }
 
 unsafe fn pretty_list(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -491,7 +492,7 @@ unsafe fn pretty_list(
 }
 
 unsafe fn pretty_map(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -546,7 +547,7 @@ unsafe fn pretty_map(
 }
 
 unsafe fn pretty_set(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -594,7 +595,7 @@ unsafe fn pretty_set(
 }
 
 unsafe fn pretty_option(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -619,7 +620,7 @@ unsafe fn pretty_option(
 }
 
 unsafe fn pretty_result(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -655,7 +656,7 @@ unsafe fn pretty_result(
 /// right type so the ordinary printers can read it, which keeps this independent
 /// of byte order.
 unsafe fn pretty_packed(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     data: &rtdt::Data,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -685,7 +686,7 @@ unsafe fn pretty_packed(
 }
 
 unsafe fn pretty_data(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -713,7 +714,7 @@ unsafe fn pretty_data(
 }
 
 unsafe fn pretty_error(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -742,7 +743,7 @@ unsafe fn pretty_error(
 }
 
 unsafe fn pretty_tensor(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -818,7 +819,7 @@ unsafe fn tensor_elem_ptr(
 /// `shape` has at least one extent, none of them zero, and `dim` indexes one
 /// of them.
 unsafe fn pretty_tensor_group(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     tensor: &rtdt::Tensor,
     elem_ty: rtdt::TyDescRef,
     elem_size: usize,
@@ -866,7 +867,7 @@ unsafe fn pretty_tensor_group(
 }
 
 unsafe fn pretty_table(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
@@ -915,7 +916,7 @@ unsafe fn pretty_table(
 }
 
 unsafe fn push_str(
-    rt: LocalRtHandle,
+    rt: &mut RtLocal,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
     bytes: &[u8],
@@ -926,7 +927,7 @@ unsafe fn push_str(
 
     unsafe {
         let status = crate::c::impls::string::string_push_bytes_local(
-            crate::c::impls::rt_local::from_handle(rt),
+            rt,
             string_mut,
             string_tydesc,
             bytes.as_ptr(),
@@ -944,6 +945,7 @@ unsafe fn push_str(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c::LocalRtHandle;
     use crate::c::impls::rt_local;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
@@ -998,7 +1000,7 @@ mod tests {
             };
 
             let status = pretty_print_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &true_val as *const rtdt::Bool as *const u8,
                 &true_tydesc,
                 &mut output_string as *mut rtdt::String as *mut u8,
@@ -1037,7 +1039,7 @@ mod tests {
             };
 
             let status = pretty_print_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &val as *const rtdt::U32 as *const u8,
                 &tydesc,
                 &mut output_string as *mut rtdt::String as *mut u8,
@@ -1076,7 +1078,7 @@ mod tests {
             };
 
             let status = pretty_print_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &val as *const rtdt::F32 as *const u8,
                 &tydesc,
                 &mut output_string as *mut rtdt::String as *mut u8,
@@ -1123,7 +1125,7 @@ mod tests {
             );
 
             let status = pretty_print_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &string_val as *const rtdt::String as *const u8,
                 &string_tydesc,
                 &mut output_string as *mut rtdt::String as *mut u8,
@@ -1175,7 +1177,7 @@ mod tests {
             );
 
             let status = pretty_print_local(
-                rt_handle,
+                crate::c::impls::rt_local::from_handle(rt_handle),
                 &string_val as *const rtdt::String as *const u8,
                 &string_tydesc,
                 &mut output_string as *mut rtdt::String as *mut u8,

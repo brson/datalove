@@ -146,7 +146,13 @@ Each of these passed the native suites, including under the leak checker.
 - **`debuglog_local` held a `&mut RtLocal` across the pretty-print**, which
   reallocates through the handle, and read the debug mode through it
   afterwards. The replay never logged into the buffer, so a unit test now
-  does.
+  does. It was one of a class: most of the runtime's internal functions
+  took the handle and made their own `&mut RtLocal` of it, and several
+  carried comments about taking it again "to satisfy Stacked Borrows".
+  Now an entry point of the C API makes the one `&mut RtLocal`, in
+  `rt_local::from_handle`, and everything inside is handed that reference
+  and reborrows it; nothing casts it back to a handle. That is sound
+  because the runtime calls out to nothing that could call back in.
 - **The interpreter's static const pool moved a `Box` after lending a
   pointer into it.** Moving a `Box` asserts it is the only way in. The
   storage is a `Vec`.

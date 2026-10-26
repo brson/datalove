@@ -93,8 +93,7 @@ impl RtLocal {
 /// that could call back in, so nothing else reaches the runtime while an
 /// entry point runs.
 ///
-/// Internal functions not yet converted to take the reference call this too,
-/// at the call that crosses into converted code.
+/// Only the entry points in `c` call this, and tests standing in for them.
 ///
 /// # Safety
 ///
