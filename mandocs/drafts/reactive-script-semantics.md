@@ -85,6 +85,8 @@ We do not prove correctness.
   A live example of the Datalove scripting engine
 
 
+
+
 ## What is a reactive script?
 
 <!--
@@ -377,12 +379,6 @@ _A rerun is an edit that doesn't change the code_,
 so a unit rerun this way gets the edit column too,
 and triggers the same analysis recursively
 to find the full set of units that must rerun.
-
-
-
-
-
-
 
 
 
