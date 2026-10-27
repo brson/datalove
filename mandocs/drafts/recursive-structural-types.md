@@ -22,7 +22,7 @@ Without naming a type we can't easily describe a recursive type.
 Second, Datalove's algebraic types are value types,
 stored inline at runtime.
 They cannot have unbounded recursive size.
-Third, one of Datalove's [principles](todo) is that performance characteristics
+Third, one of Datalove's [principles](../principles.md) is that performance characteristics
 are reflected in the surface language.
 We can't silently box the recursive instance.
 
