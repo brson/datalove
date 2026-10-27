@@ -160,15 +160,26 @@ Three places have to agree, and all three derive from the same `.dli` line.
 
    ```rust
    #[no_mangle]
-   pub extern "C-unwind" fn dlr_std__fixedint_zero(
+   pub unsafe extern "C-unwind" fn dlr_std__fixedint_zero(
        rt: *mut u8,
-       out: *mut u8, out_td: *const u8,
-       value_td: *const u8,
+       out: *mut u8, out_td: *const rtdt::TyDesc,
+       value_td: *const rtdt::TyDesc,
    ) -> u8 { ... }
    ```
 
-   The parameters are pointer-sized and untyped on the Rust side; cast the
-   descriptors to `*const rtdt::TyDesc` at the top.
+   It is `unsafe` to call: the caller promises every pointer. Each parameter
+   is a pointer to the type the declaration gives it -- `*const rtdt::String`
+   for a `ref` string, `*mut rtdt::List` for a `mut` list, `*const f64` for
+   an `f64`, `*mut rtdt::Index` for an `index` result, `*const rtdt::TyDesc`
+   for every descriptor. A value at a type parameter, an option and a tuple
+   have no Rust type to point at and stay `*const u8` or `*mut u8`, read
+   through their descriptors. A consumed argument that is not a plain scalar
+   is a `*mut`, being handed over to be taken. Any thin pointers are
+   compatible in the C ABI, so the types cost nothing at the call; they are
+   for the rider's sake, and `rider_helpers` (`arg`, `str_arg`, `StringMut`
+   and the rest) reads them. Two arguments never point at the same value
+   where either is `mut` or `out`: the ownership checker rejects that call
+   (D010).
 
 3. **A module that imports it**, which is what surface code can reach:
 
