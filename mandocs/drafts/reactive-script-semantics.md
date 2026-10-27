@@ -906,16 +906,30 @@ and that took `a`, so unit 1 reruns before it.
 _Therefore_ we propose an algorithm and suggest it is complete.
 -->
 
-A rerun is a "modification" that doesn't change the code.
-It is triggered by modifications to other units,
-and in turn forces retractions and applies to yet more units.
+A session is a list of units, run in order.
+A unit makes bindings of its own,
+and performs _operations_ on the bindings of earlier units:
 
-Each _modification_ of a unit makes a step.
-Call the modified unit the _triggering unit_.
-In a step each unit is left untouched,
-reruns, recompiles and then runs, or fails to compile.
-The triggering unit always recompiles.
-What happens to other units
+| operation | what it does to the binding |
+|-----------|-----------------------------|
+| read      | uses the value and leaves it |
+| take      | moves the value out, leaving the binding empty |
+| overwrite | writes a value without reading the old one |
+| update    | reads the value and writes a new one |
+| revive    | overwrites a binding an earlier unit took |
+
+The operations are what the compiler sees in the code.
+A write that might not happen,
+because it's conditional,
+or that writes only part of the binding,
+counts as an update.
+
+A _step_ starts with one _modification_ of one unit,
+the _triggering unit_,
+and ends when the session holds what a fresh run of the current code would.
+A modification _retracts_ the unit's old code,
+_applies_ its new code,
+or both:
 
 | modification | retract the old code | apply the new code |
 |--------------|----------------------|--------------------|
@@ -926,46 +940,48 @@ What happens to other units
 | edit         | yes                  | yes                |
 | rerun        | yes                  | yes, the same code |
 
-| operation | retract | apply | later units that name the binding |
-|-----------|---------|-------|-----------------------------------|
-| read      | nothing | restore if a later unit took or wrote it | - |
-| take      | restore | restore if a later unit took or wrote it | break; removing the take fixes them |
-| overwrite | restore | nothing | - |
-| update    | restore | restore if a later unit took or wrote it | - |
-| revive    | restore | nothing | are fixed; removing the revive breaks them |
+A modification of a unit `T` calls for more of them.
 
+- **Retract.**
+  Restore every earlier binding the old code took, overwrote, updated or revived.
+- **Apply.**
+  Restore every earlier binding the new code reads, takes or updates
+  that a unit after `T` took or wrote.
+- **Overwrites.**
+  Don't restore a binding the new code overwrites or revives.
+  `T` won't look at what it held.
+- **Restore.**
+  To restore a binding,
+  rerun the nearest unit before `T` that made, overwrote or revived it.
+  That rebuilds it from nothing.
+  A binding whose maker no longer runs has nothing to restore.
+- **Undone work.**
+  A unit that runs again rebuilds everything it makes and writes,
+  which undoes whatever later units took or wrote of it,
+  so those units rerun.
+- **Changed values.**
+  A later unit reruns if it reads, takes or updates a binding
+  whose value may have changed:
+  one the old or the new code made or wrote,
+  before anything overwrites it again.
+  A unit rerun to restore a binding finds what it found before,
+  so it changes no values.
+  A unit rerun for a changed value may change values in turn.
+- **Changed names.**
+  A later unit breaks when a name it uses is no longer available to it:
+  its maker broke or was deleted,
+  a take of it was added,
+  or a revive of it was removed.
+  It's fixed when the name is available again.
 
-The rules, all together:
-
-- **Retract** restores every binding the old code took, overwrote, updated or revived.
-- **Apply** restores every binding the new code reads, takes or updates
-  that a later unit took or wrote.
-- A binding the new code overwrites or revives is not restored.
-- A **restore** reruns the nearest unit before the triggering unit
-  that made, overwrote or revived the binding,
-  then the units between that took or wrote it,
-  then the units after the triggering unit that took or wrote it.
-- **Forward**, a later unit reruns if it reads, takes or updates a binding
-  the old or the new code made or wrote.
-  A later unit that names a binding breaks
-  when a take of it is added or a revive removed,
-  and is fixed when a take is removed or a revive added.
-
-Every rerun these rules call for,
-backward to restore or forward to follow a value,
-is a modification with its own retract and apply,
-and so is every break and fix.
-In the example above,
-the restore reruns unit 3 as an edit with unchanged code.
-That retracts its update of `z` and applies it again,
-which asks for `z` restored,
-so unit 2 reruns.
-
-Collect the modifications until nothing new is added,
+Every rerun, break and fix these rules call for
+is a modification of its own unit,
+and the rules apply to it in turn.
+Collect them until nothing new is added,
 then run the collected units in order.
 Each unit joins at most once,
 and there are finitely many units,
-so it settles.
+so the step ends.
 
 
 
