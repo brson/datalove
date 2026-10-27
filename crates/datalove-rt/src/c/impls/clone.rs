@@ -11,15 +11,14 @@ use datalove_rtdt as rtdt;
 pub unsafe fn clone_value(
     rt: &mut rt_local::RtLocal,
     value_in: *const u8,
-    tydesc_in: *const rtdt::TyDesc,
+    tydesc_in: &rtdt::TyDesc,
     value_out: *mut u8,
 ) -> RtStatus {
     assert!(!value_in.is_null());
-    assert!(!tydesc_in.is_null());
     assert!(!value_out.is_null());
 
     unsafe {
-        let ty = rtdt::TyDescRef::from_ptr(tydesc_in);
+        let ty = rtdt::TyDescRef::from_ref(tydesc_in);
         clone_impl(rt, value_in, ty, value_out)
     }
 }
@@ -248,7 +247,7 @@ unsafe fn clone_impl(
                                 for j in 0..i {
                                     let cleanup_offset = (j as usize) * (elem_size as usize);
                                     let elem_to_destroy = new_data.add(cleanup_offset);
-                                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
+                                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ref());
                                 }
                                 rt.alloc.free(elem_size, elem_align, list_in.size.0, new_data);
                             }
@@ -451,7 +450,7 @@ unsafe fn clone_impl(
                                     let _ = crate::c::impls::destroy::any_destroy_local(
                                         rt,
                                         cleanup_ptr,
-                                        cleanup_col_info.tydesc().as_ptr(),
+                                        cleanup_col_info.tydesc().as_ref(),
                                     );
                                 }
                             }
@@ -788,7 +787,7 @@ unsafe fn clone_view_tensor(
             for j in 0..dest_idx {
                 let elem_ptr = unsafe { new_data.add(j as usize * elem_size_usize) };
                 unsafe {
-                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_ptr, element_ty.as_ptr());
+                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_ptr, element_ty.as_ref());
                 }
             }
             unsafe {

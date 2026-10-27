@@ -78,7 +78,7 @@ pub unsafe fn table_destroy_impl(
 
         // Destroy elements column by column, row by row.
         for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
-            let col_tydesc = col_info.tydesc().as_ptr();
+            let col_tydesc = col_info.tydesc().as_ref();
             for row in 0..table.len.0 {
                 let elem = element_ptr_mut(
                     table.data as *mut u8,
@@ -251,7 +251,7 @@ pub unsafe fn table_set_element(
     row: rtdt::IndexRepr,
     col: u32,
     value_ref: *const u8,
-    value_tydesc: *const rtdt::TyDesc,
+    value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         let table = &*(table_mut as *const rtdt::Table);
@@ -304,7 +304,7 @@ pub unsafe fn table_clear_impl(
 
         // Destroy elements.
         for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
-            let col_tydesc = col_info.tydesc().as_ptr();
+            let col_tydesc = col_info.tydesc().as_ref();
             for row in 0..table.len.0 {
                 let elem = element_ptr_mut(
                     table.data as *mut u8,

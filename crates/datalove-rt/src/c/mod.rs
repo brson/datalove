@@ -105,8 +105,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_alloc_local(
 
     unsafe {
         let rt_ref = rt_local::from_handle(rt);
-        let ty = &*tydesc;
-        rt_ref.alloc.alloc(ty.size, ty.align, count)
+        rt_ref.alloc.alloc(tydesc.size, tydesc.align, count)
     }
 }
 
@@ -159,8 +158,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_local(
 
     unsafe {
         let rt_ref = rt_local::from_handle(rt);
-        let ty = &*tydesc;
-        rt_ref.alloc.free(ty.size, ty.align, count, ptr);
+        rt_ref.alloc.free(tydesc.size, tydesc.align, count, ptr);
     }
 
     RtStatus::Ok

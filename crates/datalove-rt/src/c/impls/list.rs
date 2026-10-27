@@ -66,7 +66,7 @@ pub unsafe fn list_create_from_slice_impl(
         let dest_ptr = unsafe { data.add((i as usize) * (element_size as usize)) };
 
         let status = unsafe {
-            crate::c::impls::clone::clone_value(rt, src_ptr, element_tydesc.as_ptr(), dest_ptr)
+            crate::c::impls::clone::clone_value(rt, src_ptr, element_tydesc.as_ref(), dest_ptr)
         };
         if status != RtStatus::Ok {
             // Clean up partially created list.
@@ -219,7 +219,7 @@ pub unsafe fn list_get_impl(
         crate::c::impls::clone::clone_value(
             rt,
             list.element_ptr(index),
-            element_ty.as_ptr(),
+            element_ty.as_ref(),
             opt.payload_ptr(),
         )
     };
@@ -247,7 +247,7 @@ pub unsafe fn list_set_impl(
     let list = unsafe { ListMut::new(list_value_mut as *mut List, element_tydesc) };
 
     if index >= list.size() {
-        unsafe { crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc.as_ptr()) };
+        unsafe { crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc.as_ref()) };
         return RtStatus::Error;
     }
 
@@ -256,7 +256,7 @@ pub unsafe fn list_set_impl(
     let element_size = element_tydesc.size() as usize;
 
     let status = unsafe {
-        crate::c::impls::destroy::any_destroy_local(rt, element_ptr, element_tydesc.as_ptr())
+        crate::c::impls::destroy::any_destroy_local(rt, element_ptr, element_tydesc.as_ref())
     };
     if status != RtStatus::Ok {
         return status;
@@ -394,7 +394,7 @@ pub unsafe fn list_insert_impl(
     // Check bounds (can insert at size for push-like behavior). The element
     // is taken either way: one that does not land is destroyed.
     if index > size {
-        unsafe { crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc.as_ptr()) };
+        unsafe { crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc.as_ref()) };
         return RtStatus::Error;
     }
 
@@ -622,7 +622,7 @@ pub unsafe fn list_extend_from_slice_impl(
         let dest_ptr = unsafe { list.data_mut().add(((size + i) as usize) * (element_size as usize)) };
 
         let status = unsafe {
-            crate::c::impls::clone::clone_value(rt, src_ptr, element_tydesc.as_ptr(), dest_ptr)
+            crate::c::impls::clone::clone_value(rt, src_ptr, element_tydesc.as_ref(), dest_ptr)
         };
         if status != RtStatus::Ok {
             // Update size to reflect what was successfully added.
@@ -701,7 +701,7 @@ unsafe fn destroy_elements(
 
     for element_ptr in iter {
         let status = unsafe {
-            crate::c::impls::destroy::any_destroy_local(rt, element_ptr, element_tydesc.as_ptr())
+            crate::c::impls::destroy::any_destroy_local(rt, element_ptr, element_tydesc.as_ref())
         };
         if status != RtStatus::Ok {
             return status;

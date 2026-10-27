@@ -18,17 +18,17 @@ pub(crate) unsafe fn destroy_array(
     }
     let size = ty.size() as usize;
     for i in 0..count {
-        let _ = unsafe { any_destroy_local(rt, values.add(i * size), ty.as_ptr()) };
+        let _ = unsafe { any_destroy_local(rt, values.add(i * size), ty.as_ref()) };
     }
 }
 
 pub unsafe fn any_destroy_local(
     rt: &mut rt_local::RtLocal,
     value_in: *mut u8,
-    tydesc: *const rtdt::TyDesc,
+    tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let ty = rtdt::TyDescRef::from_ptr(tydesc);
+        let ty = rtdt::TyDescRef::from_ref(tydesc);
 
         match ty.type_tag() {
             // Primitives - no allocations to free.
@@ -81,7 +81,7 @@ pub unsafe fn any_destroy_local(
                 let list_ptr = value_in as *mut rtdt::List;
                 let list = &*list_ptr;
                 let element_ty = ty.list_element_ty();
-                let element_tydesc = element_ty.as_ptr();
+                let element_tydesc = element_ty.as_ref();
 
                 // Recursively destroy each element, unless they own nothing.
                 if !list.data.is_null() && list.size > rtdt::Index::ZERO && !element_ty.is_plain() {
@@ -119,7 +119,7 @@ pub unsafe fn any_destroy_local(
                 let tensor_ptr = value_in as *mut rtdt::Tensor;
 
                 let element_ty = ty.tensor_element_ty();
-                let element_tydesc = element_ty.as_ptr();
+                let element_tydesc = element_ty.as_ref();
                 let rank = ty.tensor_rank();
 
                 // Recursively destroy each element in the base buffer.
@@ -179,7 +179,7 @@ pub unsafe fn any_destroy_local(
             rtdt::TyTag::Tuple => {
                 for field in ty.iter_tuple_fields() {
                     let field_ptr = value_in.add(field.offset() as usize);
-                    let status = any_destroy_local(rt, field_ptr, field.tydesc().as_ptr());
+                    let status = any_destroy_local(rt, field_ptr, field.tydesc().as_ref());
                     if status != RtStatus::Ok {
                         return status;
                     }
@@ -192,7 +192,7 @@ pub unsafe fn any_destroy_local(
             rtdt::TyTag::Struct => {
                 for field in ty.iter_struct_fields() {
                     let field_ptr = value_in.add(field.offset() as usize);
-                    let status = any_destroy_local(rt, field_ptr, field.tydesc().as_ptr());
+                    let status = any_destroy_local(rt, field_ptr, field.tydesc().as_ref());
                     if status != RtStatus::Ok {
                         return status;
                     }
@@ -204,13 +204,13 @@ pub unsafe fn any_destroy_local(
             // Term - destroy the payload (same layout).
             rtdt::TyTag::Term => {
                 let (_, payload_ty) = ty.term_info();
-                any_destroy_local(rt, value_in, payload_ty.as_ptr())
+                any_destroy_local(rt, value_in, payload_ty.as_ref())
             }
 
             // Enum - check tag and destroy payload.
             rtdt::TyTag::Enum => {
                 let enum_info = ty.enum_info();
-                let layout = rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(tydesc));
+                let layout = rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ref(tydesc));
 
                 // Read the discriminant (u32 at offset 0).
                 let discriminant_ptr = value_in as *const u32;
@@ -223,7 +223,7 @@ pub unsafe fn any_destroy_local(
                         if let core::option::Option::Some(payload_ty) = variant.payload() {
                             let payload_offset = layout.variant_offsets[discriminant as usize];
                             let payload_ptr = value_in.add(payload_offset as usize);
-                            let status = any_destroy_local(rt, payload_ptr, payload_ty.as_ptr());
+                            let status = any_destroy_local(rt, payload_ptr, payload_ty.as_ref());
                             if status != RtStatus::Ok {
                                 return status;
                             }
@@ -241,9 +241,9 @@ pub unsafe fn any_destroy_local(
 
                 if tag == rtdt::OptionTag::Some {
                     let inner_ty = ty.option_inner_ty();
-                    let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(tydesc));
+                    let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(tydesc));
                     let payload_ptr = value_in.add(layout.payload_offset as usize);
-                    any_destroy_local(rt, payload_ptr, inner_ty.as_ptr())
+                    any_destroy_local(rt, payload_ptr, inner_ty.as_ref())
                 } else {
                     RtStatus::Ok
                 }
@@ -255,12 +255,12 @@ pub unsafe fn any_destroy_local(
                 let tag = (*result_ptr).tag;
 
                 let ok_ty = ty.result_ok_ty();
-                let layout = rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(tydesc));
+                let layout = rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ref(tydesc));
                 let payload_ptr = value_in.add(layout.payload_offset as usize);
 
                 match tag {
                     rtdt::ResultTag::Ok => {
-                        any_destroy_local(rt, payload_ptr, ok_ty.as_ptr())
+                        any_destroy_local(rt, payload_ptr, ok_ty.as_ref())
                     }
                     rtdt::ResultTag::Err => {
                         // Destroy the Error payload.
@@ -275,7 +275,7 @@ pub unsafe fn any_destroy_local(
                                 nothing: rtdt::TyInfoNothing { unused: 0 },
                             },
                         };
-                        any_destroy_local(rt, payload_ptr, &error_tydesc as *const rtdt::TyDesc)
+                        any_destroy_local(rt, payload_ptr, &error_tydesc)
                     }
                 }
             }
@@ -293,7 +293,7 @@ pub unsafe fn any_destroy_local(
 
                         // Recursively destroy the inner value.
                         if !inner_value_ptr.is_null() && !inner_tydesc.is_null() {
-                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, inner_tydesc);
+                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, &*inner_tydesc);
                             if status != RtStatus::Ok {
                                 return status;
                             }
@@ -331,7 +331,7 @@ pub unsafe fn any_destroy_local(
 
                         // Recursively destroy the inner value.
                         if !inner_value_ptr.is_null() && !inner_tydesc.is_null() {
-                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, inner_tydesc);
+                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, &*inner_tydesc);
                             if status != RtStatus::Ok {
                                 return status;
                             }

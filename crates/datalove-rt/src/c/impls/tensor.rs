@@ -203,7 +203,7 @@ pub unsafe fn tensor_create_from_slice_impl(
             let status = crate::c::impls::clone::clone_value(
                 rt_ref,
                 src_ptr,
-                element_tydesc_ref.as_ptr(),
+                element_tydesc_ref.as_ref(),
                 dest_ptr,
             );
             if status != RtStatus::Ok {
@@ -214,7 +214,7 @@ pub unsafe fn tensor_create_from_slice_impl(
                     let _ = crate::c::impls::destroy::any_destroy_local(
                         rt_ref,
                         elem_ptr,
-                        element_tydesc_ref.as_ptr(),
+                        element_tydesc_ref.as_ref(),
                     );
                 }
                 if !data_ptr.is_null() { rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr); }
@@ -405,7 +405,7 @@ pub unsafe fn tensor_get_impl(
         crate::c::impls::clone::clone_value(
             rt_ref,
             element_ptr,
-            tensor_tydesc_ref.tensor_element_ty().as_ptr(),
+            tensor_tydesc_ref.tensor_element_ty().as_ref(),
             element_value_out,
         )
     }
@@ -468,14 +468,14 @@ pub unsafe fn tensor_set_impl(
     unsafe {
         let element_ty = tensor_tydesc_ref.tensor_element_ty();
         let Some(element_ptr) = tensor_element_slot(tensor_value_ref, tensor_tydesc_ref, indices_ptr) else {
-            crate::c::impls::destroy::any_destroy_local(rt_ref, value_in, element_ty.as_ptr());
+            crate::c::impls::destroy::any_destroy_local(rt_ref, value_in, element_ty.as_ref());
             return RtStatus::Error;
         };
 
         let status = crate::c::impls::destroy::any_destroy_local(
             rt_ref,
             element_ptr,
-            element_ty.as_ptr(),
+            element_ty.as_ref(),
         );
         if status != RtStatus::Ok {
             return status;
@@ -670,7 +670,7 @@ pub unsafe fn tensor_destroy_impl(
                 let status = crate::c::impls::destroy::any_destroy_local(
                     rt_ref,
                     element_ptr,
-                    element_ty.as_ptr(),
+                    element_ty.as_ref(),
                 );
                 if status != RtStatus::Ok {
                     return status;
@@ -845,7 +845,7 @@ pub unsafe fn tensor_hyperplane_clone_impl(
             let status = crate::c::impls::clone::clone_value(
                 rt_ref,
                 src_ptr,
-                element_ty.as_ptr(),
+                element_ty.as_ref(),
                 dst_ptr,
             );
             if status != RtStatus::Ok {
@@ -855,7 +855,7 @@ pub unsafe fn tensor_hyperplane_clone_impl(
                     let _ = crate::c::impls::destroy::any_destroy_local(
                         rt_ref,
                         elem_ptr,
-                        element_ty.as_ptr(),
+                        element_ty.as_ref(),
                     );
                 }
                 rt_ref.alloc.free(element_size, element_align, sub_total, new_data);

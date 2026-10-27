@@ -24,10 +24,10 @@ unsafe fn utf8<'a>(ptr: *const u8, len: rtdt::IndexRepr) -> Option<&'a str> {
 /// Creates a new empty string.
 pub unsafe fn string_create_local(
     value_out: *mut u8,
-    tydesc_in: *const rtdt::TyDesc,
+    tydesc_in: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if (*tydesc_in).type_tag != rtdt::TyTag::String {
+        if tydesc_in.type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
         std::ptr::write(value_out as *mut rtdt::String, rtdt::String::new());
@@ -39,10 +39,10 @@ pub unsafe fn string_create_local(
 pub unsafe fn string_destroy_local(
     rt: &mut RtLocal,
     value_in: *mut u8,
-    tydesc_in: *const rtdt::TyDesc,
+    tydesc_in: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if (*tydesc_in).type_tag != rtdt::TyTag::String {
+        if tydesc_in.type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
         let string = &mut *(value_in as *mut rtdt::String);
@@ -60,12 +60,12 @@ pub unsafe fn string_destroy_local(
 pub unsafe fn string_push_bytes_local(
     rt: &mut RtLocal,
     string_value_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
     bytes_ref: *const u8,
     bytes_len: rtdt::IndexRepr,
 ) -> RtStatus {
     unsafe {
-        if (*string_tydesc).type_tag != rtdt::TyTag::String {
+        if string_tydesc.type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
         let Some(bytes) = utf8(bytes_ref, bytes_len) else {
@@ -121,10 +121,10 @@ pub unsafe fn string_from_bytes(
     bytes_ptr: *const u8,
     bytes_len: rtdt::IndexRepr,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
+    result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if (*result_tydesc).type_tag != rtdt::TyTag::String {
+        if result_tydesc.type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
         let Some(text) = utf8(bytes_ptr, bytes_len) else {
@@ -151,10 +151,10 @@ pub unsafe fn string_from_bytes(
 /// The capacity is retained so the buffer can be reused.
 pub unsafe fn string_clear_local(
     string_value_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if (*string_tydesc).type_tag != rtdt::TyTag::String {
+        if string_tydesc.type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
         // SAFETY: the empty string is UTF-8.

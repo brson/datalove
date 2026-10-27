@@ -18,7 +18,7 @@ use rtdt::TyTag;
 /// describes, and `tytag` must be that type's tag.
 unsafe fn inline_data(
     inner_in: *const u8,
-    tydesc: *const rtdt::TyDesc,
+    tydesc: &rtdt::TyDesc,
     tytag: TyTag,
 ) -> rtdt::Data {
     unsafe {
@@ -139,11 +139,11 @@ pub unsafe fn data_borrow(
 pub unsafe fn error_from_local(
     rt: &mut RtLocal,
     inner_in: *const u8,
-    inner_tydesc: *const rtdt::TyDesc,
+    inner_tydesc: &rtdt::TyDesc,
     dest_out: *mut u8,
 ) -> RtStatus {
     // Error uses the same encoding as Data, so a scalar packs the same way.
-    let tytag = unsafe { (*inner_tydesc).type_tag };
+    let tytag = inner_tydesc.type_tag;
     if tytag.can_inline() {
         unsafe {
             let data = inline_data(inner_in, inner_tydesc, tytag);
@@ -152,11 +152,11 @@ pub unsafe fn error_from_local(
         return RtStatus::Ok;
     }
 
-    let inner_size = unsafe { (*inner_tydesc).size as usize };
+    let inner_size = inner_tydesc.size as usize;
 
     // Allocate heap storage for the inner value.
     let moved_ptr = unsafe {
-        rt.alloc.alloc((*inner_tydesc).size, (*inner_tydesc).align, 1)
+        rt.alloc.alloc(inner_tydesc.size, inner_tydesc.align, 1)
     };
     if moved_ptr.is_null() {
         return RtStatus::Error;
@@ -184,10 +184,10 @@ pub unsafe fn error_from_local(
 pub unsafe fn data_from_local(
     rt: &mut RtLocal,
     inner_in: *const u8,
-    inner_tydesc: *const rtdt::TyDesc,
+    inner_tydesc: &rtdt::TyDesc,
     dest_out: *mut u8,
 ) -> RtStatus {
-    let tytag = unsafe { (*inner_tydesc).type_tag };
+    let tytag = inner_tydesc.type_tag;
     // A scalar goes in the two words directly rather than onto the heap.
     if tytag.can_inline() {
         unsafe {
@@ -197,11 +197,11 @@ pub unsafe fn data_from_local(
         return RtStatus::Ok;
     }
 
-    let inner_size = unsafe { (*inner_tydesc).size as usize };
+    let inner_size = inner_tydesc.size as usize;
 
     // Allocate heap storage for the inner value.
     let moved_ptr = unsafe {
-        rt.alloc.alloc((*inner_tydesc).size, (*inner_tydesc).align, 1)
+        rt.alloc.alloc(inner_tydesc.size, inner_tydesc.align, 1)
     };
     if moved_ptr.is_null() {
         return RtStatus::Error;

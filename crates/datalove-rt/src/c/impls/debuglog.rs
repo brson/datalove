@@ -23,7 +23,7 @@ fn create_string_tydesc() -> rtdt::TyDesc {
 pub unsafe fn debuglog_local(
     rt: &mut RtLocal,
     value_ref: *const u8,
-    value_tydesc: *const rtdt::TyDesc,
+    value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         let mode = rt.debug_output_mode;
@@ -35,7 +35,7 @@ pub unsafe fn debuglog_local(
 
         // Create a TyDesc for String on the stack.
         let string_tydesc_value = create_string_tydesc();
-        let string_tydesc = &string_tydesc_value as *const rtdt::TyDesc;
+        let string_tydesc = &string_tydesc_value;
 
         // Create temp string on stack.
         let mut temp_string = rtdt::String::new();

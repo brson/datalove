@@ -70,10 +70,10 @@ fn from_bits(bits: u64, tag: TyTag) -> core::option::Option<Num> {
 /// Read a number, and the tag of its type.
 unsafe fn read_num(
     value: *const u8,
-    tydesc: *const rtdt::TyDesc,
+    tydesc: &rtdt::TyDesc,
 ) -> core::option::Option<(Num, TyTag)> {
     unsafe {
-        let tag = (*tydesc).type_tag;
+        let tag = tydesc.type_tag;
         let num = from_bits(scalar_bits(value, tag), tag)?;
         core::option::Option::Some((num, tag))
     }
@@ -201,11 +201,11 @@ fn float_bits(value: Num) -> u64 {
 pub unsafe fn dyn_binop(
     op: DynOp,
     lhs: *const u8,
-    lhs_tydesc: *const rtdt::TyDesc,
+    lhs_tydesc: &rtdt::TyDesc,
     rhs: *const u8,
-    rhs_tydesc: *const rtdt::TyDesc,
+    rhs_tydesc: &rtdt::TyDesc,
     out: *mut u8,
-    _out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         let core::option::Option::Some((lhs, tag)) = read_num(lhs, lhs_tydesc) else {
@@ -248,11 +248,11 @@ pub unsafe fn dyn_binop(
 pub unsafe fn dyn_binop_checked(
     op: DynOp,
     lhs: *const u8,
-    lhs_tydesc: *const rtdt::TyDesc,
+    lhs_tydesc: &rtdt::TyDesc,
     rhs: *const u8,
-    rhs_tydesc: *const rtdt::TyDesc,
+    rhs_tydesc: &rtdt::TyDesc,
     out: *mut u8,
-    _out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: &rtdt::TyDesc,
     overflow_out: *mut bool,
 ) -> RtStatus {
     unsafe {
@@ -326,9 +326,9 @@ fn compare<T: PartialOrd + PartialEq>(op: DynOp, lhs: T, rhs: T) -> bool {
 pub unsafe fn dyn_unop(
     op: DynUnOp,
     value: *const u8,
-    value_tydesc: *const rtdt::TyDesc,
+    value_tydesc: &rtdt::TyDesc,
     out: *mut u8,
-    _out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         let core::option::Option::Some((x, tag)) = read_num(value, value_tydesc) else {
@@ -353,9 +353,9 @@ pub unsafe fn dyn_unop(
 /// unsigned value that survives.
 pub unsafe fn dyn_neg_checked(
     value: *const u8,
-    value_tydesc: *const rtdt::TyDesc,
+    value_tydesc: &rtdt::TyDesc,
     out: *mut u8,
-    _out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: &rtdt::TyDesc,
     overflow_out: *mut bool,
 ) -> RtStatus {
     unsafe {
@@ -388,13 +388,13 @@ pub unsafe fn dyn_neg_checked(
 pub unsafe fn dyn_const(
     which: rtdt::DynConst,
     out: *mut u8,
-    _out_tydesc: *const rtdt::TyDesc,
-    value_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: &rtdt::TyDesc,
+    value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     use rtdt::DynConst;
 
     unsafe {
-        let tag = (*value_tydesc).type_tag;
+        let tag = value_tydesc.type_tag;
 
         // Written as the widest of each signedness and narrowed, so that the
         // bounds are read off the target type in one place rather than listed
@@ -428,13 +428,13 @@ pub unsafe fn dyn_const(
 pub unsafe fn dyn_float_const(
     which: rtdt::DynFloatConst,
     out: *mut u8,
-    _out_tydesc: *const rtdt::TyDesc,
-    value_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: &rtdt::TyDesc,
+    value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     use rtdt::DynFloatConst as K;
 
     unsafe {
-        let tag = (*value_tydesc).type_tag;
+        let tag = value_tydesc.type_tag;
         let bits = match tag {
             TyTag::F32 => {
                 let v: f32 = match which {
@@ -543,16 +543,16 @@ fn unary_f64(op: DynUnOp, x: f64) -> f64 {
 ///
 /// See `dtlv_rti_field_offset` for why this is here rather than in each
 /// backend.
-pub unsafe fn field_offset(tydesc: *const rtdt::TyDesc, index: u32) -> u32 {
+pub unsafe fn field_offset(tydesc: &rtdt::TyDesc, index: u32) -> u32 {
     unsafe {
-        match (*tydesc).type_tag {
+        match tydesc.type_tag {
             TyTag::Tuple => {
-                let info = (*tydesc).type_info.tuple;
+                let info = tydesc.type_info.tuple;
                 debug_assert!(index < info.num_fields, "tuple field index out of range");
                 (*info.fields.add(index as usize)).offset
             }
             TyTag::Struct => {
-                let info = (*tydesc).type_info.struct_;
+                let info = tydesc.type_info.struct_;
                 debug_assert!(index < info.num_fields, "struct field index out of range");
                 (*info.fields.add(index as usize)).offset
             }
@@ -563,16 +563,16 @@ pub unsafe fn field_offset(tydesc: *const rtdt::TyDesc, index: u32) -> u32 {
 
 /// The descriptor of field `index`, from the descriptor of the aggregate
 /// holding it.
-pub unsafe fn field_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const rtdt::TyDesc {
+pub unsafe fn field_tydesc(tydesc: &rtdt::TyDesc, index: u32) -> *const rtdt::TyDesc {
     unsafe {
-        match (*tydesc).type_tag {
+        match tydesc.type_tag {
             TyTag::Tuple => {
-                let info = (*tydesc).type_info.tuple;
+                let info = tydesc.type_info.tuple;
                 debug_assert!(index < info.num_fields, "tuple field index out of range");
                 (*info.fields.add(index as usize)).tydesc
             }
             TyTag::Struct => {
-                let info = (*tydesc).type_info.struct_;
+                let info = tydesc.type_info.struct_;
                 debug_assert!(index < info.num_fields, "struct field index out of range");
                 (*info.fields.add(index as usize)).tydesc
             }
@@ -583,9 +583,9 @@ pub unsafe fn field_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const rt
 
 /// The offset of the payload of an option, result or term, or of variant
 /// `index` of an enum, from its descriptor.
-pub unsafe fn payload_offset(tydesc: *const rtdt::TyDesc, index: u32) -> u32 {
+pub unsafe fn payload_offset(tydesc: &rtdt::TyDesc, index: u32) -> u32 {
     unsafe {
-        let td = &*tydesc;
+        let td = tydesc;
         match td.type_tag {
             TyTag::Option => rtdt::layout::option_payload_offset((*td.type_info.option.inner_tydesc).align),
             TyTag::Result => rtdt::layout::result_payload_offset((*td.type_info.result.ok_tydesc).align),
@@ -602,9 +602,9 @@ pub unsafe fn payload_offset(tydesc: *const rtdt::TyDesc, index: u32) -> u32 {
 
 /// The descriptor of the payload of an option, result or term, or of variant
 /// `index` of an enum, from its descriptor; null for a variant with none.
-pub unsafe fn payload_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const rtdt::TyDesc {
+pub unsafe fn payload_tydesc(tydesc: &rtdt::TyDesc, index: u32) -> *const rtdt::TyDesc {
     unsafe {
-        let td = &*tydesc;
+        let td = tydesc;
         match td.type_tag {
             TyTag::Option => td.type_info.option.inner_tydesc,
             TyTag::Result => td.type_info.result.ok_tydesc,

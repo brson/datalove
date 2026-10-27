@@ -457,7 +457,7 @@ impl SplitInfo {
             let _ = crate::c::impls::destroy::any_destroy_local(
                 rt,
                 self.separator_key_buf.as_mut_ptr(),
-                key_tydesc.as_ptr(),
+                key_tydesc.as_ref(),
             );
         }
     }
@@ -517,11 +517,11 @@ unsafe fn leaf_insert_or_update(
                 // Key already exists, update the value.
                 // Destroy the old value before overwriting.
                 let value_slot = values_ptr.add(i * value_size);
-                let _ = crate::c::impls::destroy::any_destroy_local(rt, value_slot, ty.value.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, value_slot, ty.value.as_ref());
                 // Move the new value (by-move semantics).
                 std::ptr::copy_nonoverlapping(value, value_slot, value_size);
                 // Destroy the input key since we're not using it (key already exists in tree).
-                let _ = crate::c::impls::destroy::any_destroy_local(rt, key as *mut u8, ty.key.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, key as *mut u8, ty.key.as_ref());
                 return LeafInsertResult::Updated;
             }
             Err(pos) => pos,
@@ -605,7 +605,7 @@ unsafe fn split_leaf(
         let status = crate::c::impls::clone::clone_value(
             rt,
             new_keys_ptr,
-            ty.key.as_ptr(),
+            ty.key.as_ref(),
             separator_key_buf.as_mut_ptr(),
         );
         if status != RtStatus::Ok {
@@ -706,7 +706,7 @@ unsafe fn insert_into_internal(
         let status = crate::c::impls::clone::clone_value(
             rt,
             separator_key.as_ptr(),
-            ty.key.as_ptr(),
+            ty.key.as_ref(),
             key_slot,
         );
         if status != RtStatus::Ok {
@@ -749,7 +749,7 @@ unsafe fn split_internal_node(
         let status = crate::c::impls::clone::clone_value(
             rt,
             keys_ptr.add(split_point * key_size),
-            ty.key.as_ptr(),
+            ty.key.as_ref(),
             separator_key_buf.as_mut_ptr(),
         );
         if status != RtStatus::Ok {
@@ -760,7 +760,7 @@ unsafe fn split_internal_node(
         let _ = crate::c::impls::destroy::any_destroy_local(
             rt,
             keys_ptr.add(split_point * key_size),
-            ty.key.as_ptr(),
+            ty.key.as_ref(),
         );
 
         // Move keys after split_point (excluding the separator) to new node.
@@ -852,7 +852,7 @@ pub unsafe fn btreemap_add_impl(
         // A new key: its clone goes in with the amount, which zero plus it is.
         let mut key = AlignedBuffer::for_tydesc(ty.key.as_ref());
         let key_ptr = key.as_mut_ptr();
-        let status = super::clone::clone_value(rt, key_ref, key_tydesc.as_ptr(), key_ptr);
+        let status = super::clone::clone_value(rt, key_ref, key_tydesc.as_ref(), key_ptr);
         if status != RtStatus::Ok {
             return status;
         }
@@ -1072,7 +1072,7 @@ unsafe fn propagate_split_up(
             let status = crate::c::impls::clone::clone_value(
                 rt,
                 split_info.separator_key_buf.as_ptr(),
-                ty.key.as_ptr(),
+                ty.key.as_ref(),
                 root_keys_ptr,
             );
             if status != RtStatus::Ok {
@@ -1127,7 +1127,7 @@ unsafe fn propagate_split_up(
         let status = crate::c::impls::clone::clone_value(
             rt,
             split_info.separator_key_buf.as_ptr(),
-            ty.key.as_ptr(),
+            ty.key.as_ref(),
             root_keys_ptr,
         );
         if status != RtStatus::Ok {
@@ -1196,7 +1196,7 @@ pub unsafe fn btreemap_get_impl(
             let status = crate::c::impls::clone::clone_value(
                 rt,
                 value_slot,
-                map_value_ty.as_ptr(),
+                map_value_ty.as_ref(),
                 option_payload_ptr,
             );
 
@@ -1263,23 +1263,23 @@ pub unsafe fn btreemap_collect_impl(
                 let value = values.add(i * value_ty.size() as usize);
                 let slot = crate::c::impls::list::list_end_slot(list_value_mut, element_ty);
                 let status = match part {
-                    MapPart::Keys => clone(rt, key, key_ty.as_ptr(), slot),
-                    MapPart::Values => clone(rt, value, value_ty.as_ptr(), slot),
+                    MapPart::Keys => clone(rt, key, key_ty.as_ref(), slot),
+                    MapPart::Values => clone(rt, value, value_ty.as_ref(), slot),
                     MapPart::Entries => {
                         let pair = element_ty.tuple_info();
                         let (Some(first), Some(second)) = (pair.field(0), pair.field(1)) else {
                             return RtStatus::Error;
                         };
                         let first_slot = slot.add(first.offset() as usize);
-                        let status = clone(rt, key, key_ty.as_ptr(), first_slot);
+                        let status = clone(rt, key, key_ty.as_ref(), first_slot);
                         if status != RtStatus::Ok {
                             return status;
                         }
-                        let status = clone(rt, value, value_ty.as_ptr(),
+                        let status = clone(rt, value, value_ty.as_ref(),
                             slot.add(second.offset() as usize));
                         if status != RtStatus::Ok {
                             crate::c::impls::destroy::any_destroy_local(
-                                rt, first_slot, first.tydesc().as_ptr());
+                                rt, first_slot, first.tydesc().as_ref());
                         }
                         status
                     }
@@ -1409,7 +1409,7 @@ pub unsafe fn btreemap_set_value_impl(
         // The key's descriptor is checked once here, where it used to be
         // checked at every comparison; a key of another type is in no map.
         if root.is_null() || !super::cmp::eq_tydesc(key_tydesc, ty.key) {
-            crate::c::impls::destroy::any_destroy_local(rt, value_in, value_tydesc.as_ptr());
+            crate::c::impls::destroy::any_destroy_local(rt, value_in, value_tydesc.as_ref());
             return RtStatus::Error;
         }
 
@@ -1426,7 +1426,7 @@ pub unsafe fn btreemap_set_value_impl(
             let status = crate::c::impls::destroy::any_destroy_local(
                 rt,
                 value_slot,
-                value_tydesc.as_ptr(),
+                value_tydesc.as_ref(),
             );
             if status != RtStatus::Ok {
                 return status;
@@ -1442,7 +1442,7 @@ pub unsafe fn btreemap_set_value_impl(
             return RtStatus::Ok;
         }
 
-        crate::c::impls::destroy::any_destroy_local(rt, value_in, value_tydesc.as_ptr());
+        crate::c::impls::destroy::any_destroy_local(rt, value_in, value_tydesc.as_ref());
         RtStatus::Error
     }
 }
@@ -1480,8 +1480,8 @@ unsafe fn leaf_remove(
             // Found the key, destroy it and the value.
             let node_key = keys_ptr.add(i * key_size);
             let value_slot = values_ptr.add(i * value_size);
-            let _ = crate::c::impls::destroy::any_destroy_local(rt, node_key as *mut u8, ty.key.as_ptr());
-            let _ = crate::c::impls::destroy::any_destroy_local(rt, value_slot, ty.value.as_ptr());
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, node_key as *mut u8, ty.key.as_ref());
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, value_slot, ty.value.as_ref());
 
             // Shift remaining elements left.
             if i < (len - 1) as usize {
@@ -1565,10 +1565,10 @@ unsafe fn borrow_from_left_leaf(
         let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
 
         // Destroy old separator.
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.key.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.key.as_ref());
 
         // Clone new separator (first key of node).
-        let _ = crate::c::impls::clone::clone_value(rt, node_keys_ptr, ty.key.as_ptr(), parent_key);
+        let _ = crate::c::impls::clone::clone_value(rt, node_keys_ptr, ty.key.as_ref(), parent_key);
     }
 }
 
@@ -1729,10 +1729,10 @@ unsafe fn borrow_from_right_leaf(
         let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
 
         // Destroy old separator.
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.key.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.key.as_ref());
 
         // Clone new separator (first key of right).
-        let _ = crate::c::impls::clone::clone_value(rt, right_keys_ptr, ty.key.as_ptr(), parent_key);
+        let _ = crate::c::impls::clone::clone_value(rt, right_keys_ptr, ty.key.as_ref(), parent_key);
     }
 }
 
@@ -1760,7 +1760,7 @@ unsafe fn merge_with_left_internal(
         // Clone parent separator down to left.
         let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
         let left_separator_slot = left_keys_ptr.add(left_len as usize * key_size);
-        let _ = crate::c::impls::clone::clone_value(rt, parent_key, ty.key.as_ptr(), left_separator_slot);
+        let _ = crate::c::impls::clone::clone_value(rt, parent_key, ty.key.as_ref(), left_separator_slot);
 
         // Copy all keys from node to left.
         if node_len > 0 {
@@ -1842,7 +1842,7 @@ unsafe fn internal_remove_key(
 
         // Destroy the key.
         let key_slot = keys_ptr.add(key_idx * key_size);
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, key_slot, ty.key.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, key_slot, ty.key.as_ref());
 
         // Shift keys left.
         if key_idx < (len - 1) as usize {
@@ -2378,7 +2378,7 @@ pub unsafe fn btreemap_build_from_sorted_slices(
                     let status = crate::c::impls::clone::clone_value(
                         rt,
                         first_key_src,
-                        ty.key.as_ptr(),
+                        ty.key.as_ref(),
                         key_dest,
                     );
                     if status != RtStatus::Ok {
@@ -2416,8 +2416,8 @@ unsafe fn cleanup_map_leaves_internal(
             for i in 0..len {
                 let key_to_destroy = keys_array.add(i * key_size);
                 let value_to_destroy = values_array.add(i * value_size);
-                crate::c::impls::destroy::any_destroy_local(rt, key_to_destroy, ty.key.as_ptr());
-                crate::c::impls::destroy::any_destroy_local(rt, value_to_destroy, ty.value.as_ptr());
+                crate::c::impls::destroy::any_destroy_local(rt, key_to_destroy, ty.key.as_ref());
+                crate::c::impls::destroy::any_destroy_local(rt, value_to_destroy, ty.value.as_ref());
             }
 
             // Free the leaf node.
@@ -2433,12 +2433,12 @@ pub unsafe fn btreemap_clone_from_slice_impl(
     rt: &mut RtLocal,
     slice_ptr_ref: *const u8,
     slice_ptr_len: rtdt::IndexRepr,
-    slice_element_tydesc: *const TyDesc,
+    slice_element_tydesc: &TyDesc,
     btreemap_value_out: *mut u8,
     btreemap_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if btreemap_value_out.is_null() || slice_element_tydesc.is_null() {
+        if btreemap_value_out.is_null() {
             return RtStatus::Error;
         }
 
@@ -2458,7 +2458,7 @@ pub unsafe fn btreemap_clone_from_slice_impl(
         let map_value_ty = btreemap_tydesc.map_value_ty();
 
         // The slice element should be a tuple (K, V).
-        let tuple_ty = rtdt::TyDescRef::from_ptr(slice_element_tydesc);
+        let tuple_ty = rtdt::TyDescRef::from_ref(slice_element_tydesc);
         if tuple_ty.tuple_info().num_fields() != 2 {
             return RtStatus::Error;
         }
@@ -2484,7 +2484,7 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             let status = crate::c::impls::clone::clone_value(
                 rt,
                 key_ptr,
-                key_field.tydesc().as_ptr(),
+                key_field.tydesc().as_ref(),
                 key_buf.as_mut_ptr(),
             );
             if status != RtStatus::Ok {
@@ -2494,12 +2494,12 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             let status = crate::c::impls::clone::clone_value(
                 rt,
                 value_ptr,
-                value_field.tydesc().as_ptr(),
+                value_field.tydesc().as_ref(),
                 value_buf.as_mut_ptr(),
             );
             if status != RtStatus::Ok {
                 // Clean up the cloned key before returning.
-                let _ = crate::c::impls::destroy::any_destroy_local(rt, key_buf.as_mut_ptr(), map_key_ty.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, key_buf.as_mut_ptr(), map_key_ty.as_ref());
                 return status;
             }
 

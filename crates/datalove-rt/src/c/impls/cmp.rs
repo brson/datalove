@@ -140,16 +140,15 @@ fn ordering_of(ordering: std::cmp::Ordering) -> crate::c::RtOrdering {
 
 pub unsafe fn eq(
     value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
+    tydesc_a: &rtdt::TyDesc,
     value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
+    tydesc_b: &rtdt::TyDesc,
 ) -> crate::c::RtEq {
     assert!(!(value_a.is_null() || value_b.is_null()));
-    assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
     unsafe {
-        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
-        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
+        let td_a = rtdt::TyDescRef::from_ref(tydesc_a);
+        let td_b = rtdt::TyDescRef::from_ref(tydesc_b);
         if !eq_tydesc(td_a, td_b) {
             return crate::c::RtEq::Error;
         }
@@ -163,16 +162,15 @@ pub unsafe fn eq(
 
 pub unsafe fn eq_unique(
     value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
+    tydesc_a: &rtdt::TyDesc,
     value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
+    tydesc_b: &rtdt::TyDesc,
 ) -> crate::c::RtEq {
     assert!(!(value_a.is_null() || value_b.is_null()));
-    assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
     unsafe {
-        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
-        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
+        let td_a = rtdt::TyDescRef::from_ref(tydesc_a);
+        let td_b = rtdt::TyDescRef::from_ref(tydesc_b);
         if !eq_tydesc(td_a, td_b) {
             return crate::c::RtEq::Error;
         }
@@ -186,16 +184,15 @@ pub unsafe fn eq_unique(
 
 pub unsafe fn cmp_total(
     value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
+    tydesc_a: &rtdt::TyDesc,
     value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
+    tydesc_b: &rtdt::TyDesc,
 ) -> crate::c::RtOrdering {
     assert!(!(value_a.is_null() || value_b.is_null()));
-    assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
     unsafe {
-        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
-        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
+        let td_a = rtdt::TyDescRef::from_ref(tydesc_a);
+        let td_b = rtdt::TyDescRef::from_ref(tydesc_b);
         if !eq_tydesc(td_a, td_b) {
             return crate::c::RtOrdering::Error;
         }

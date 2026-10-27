@@ -808,11 +808,11 @@ pub(crate) unsafe fn int_cmp_impl(
 pub(crate) unsafe fn int_from_fixed_impl(
     rt: &mut RtLocal,
     src_in: *const u8,
-    src_tydesc: *const rtdt::TyDesc,
+    src_tydesc: &rtdt::TyDesc,
     result_out: *mut u8,
 ) -> RtStatus {
     unsafe {
-        let type_tag = (*src_tydesc).type_tag;
+        let type_tag = src_tydesc.type_tag;
         let result = &mut *(result_out as *mut rtdt::Int);
 
         // Extract magnitude and sign from the fixed-width integer.

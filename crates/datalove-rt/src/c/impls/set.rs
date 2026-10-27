@@ -387,18 +387,18 @@ pub unsafe fn set_clone_tree(
 pub unsafe fn btreeset_build_from_sorted_slice(
     rt: &mut RtLocal,
     set_out: *mut Set,
-    element_tydesc: *const TyDesc,
+    element_tydesc: &TyDesc,
     elements_ptr: *mut u8,
     num_elements: rtdt::IndexRepr,
 ) -> RtStatus {
     unsafe {
-        if set_out.is_null() || element_tydesc.is_null() {
+        if set_out.is_null() {
             return RtStatus::Error;
         }
 
         // Called with the element type alone, so the layouts are worked out
         // here, once for the whole build.
-        let elem = rtdt::TyDescRef::from_ptr(element_tydesc);
+        let elem = rtdt::TyDescRef::from_ref(element_tydesc);
         let leaf = rtdt::layout::compute_set_leaf_node_layout(elem);
         let internal = rtdt::layout::compute_set_internal_node_layout(elem);
         let ty = SetTy { elem, leaf: &leaf, internal: &internal, ord: super::cmp::KeyOrd::of(elem) };
@@ -520,7 +520,7 @@ pub unsafe fn btreeset_build_from_sorted_slice(
                     let status = crate::c::impls::clone::clone_value(
                         rt,
                         first_key_src,
-                        ty.elem.as_ptr(),
+                        ty.elem.as_ref(),
                         key_dest,
                     );
                     if status != RtStatus::Ok {
@@ -555,7 +555,7 @@ unsafe fn cleanup_set_leaves_internal(
             // Destroy all elements in this leaf.
             for i in 0..len {
                 let elem_to_destroy = keys_array.add(i * element_size);
-                crate::c::impls::destroy::any_destroy_local(rt, elem_to_destroy, ty.elem.as_ptr());
+                crate::c::impls::destroy::any_destroy_local(rt, elem_to_destroy, ty.elem.as_ref());
             }
 
             // Free the leaf node.
@@ -568,7 +568,7 @@ unsafe fn cleanup_set_leaves_internal(
 pub unsafe fn btreeset_create_impl(
     _rt: &mut RtLocal,
     value_out: *mut u8,
-    _tydesc: *const TyDesc,
+    _tydesc: &TyDesc,
 ) -> RtStatus {
     unsafe {
         if value_out.is_null() {
@@ -588,14 +588,14 @@ pub unsafe fn btreeset_create_impl(
 pub unsafe fn set_destroy_impl(
     rt: &mut RtLocal,
     value_in: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: &TyDesc,
 ) -> RtStatus {
     unsafe {
-        if value_in.is_null() || tydesc.is_null() {
+        if value_in.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = SetTy::of(rtdt::TyDescRef::from_ptr(tydesc));
+        let ty = SetTy::of(rtdt::TyDescRef::from_ref(tydesc));
 
         let set_ptr = value_in as *mut Set;
         let root = (*set_ptr).root as *mut SetNode;
@@ -628,7 +628,7 @@ pub unsafe fn btreeset_len_impl(
 pub unsafe fn btreeset_clear_impl(
     rt: &mut RtLocal,
     value_mut: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: &TyDesc,
 ) -> RtStatus {
     unsafe {
         // Destroy the existing tree.
@@ -691,7 +691,7 @@ struct SplitInfo {
 
 impl SplitInfo {
     /// Destroy the separator key and clean up.
-    unsafe fn destroy(mut self, rt: &mut RtLocal, element_tydesc: *const TyDesc) {
+    unsafe fn destroy(mut self, rt: &mut RtLocal, element_tydesc: &TyDesc) {
         unsafe {
             let _ = crate::c::impls::destroy::any_destroy_local(
                 rt,
@@ -723,7 +723,7 @@ unsafe fn leaf_insert_element(
         let insert_pos = match search_elements(keys_ptr, len as usize, element, ty) {
             Ok(_) => {
                 // Element already exists, destroy the input and return.
-                let _ = crate::c::impls::destroy::any_destroy_local(rt, element as *mut u8, ty.elem.as_ptr());
+                let _ = crate::c::impls::destroy::any_destroy_local(rt, element as *mut u8, ty.elem.as_ref());
                 return LeafInsertResult::AlreadyExists;
             }
             Err(pos) => pos,
@@ -792,7 +792,7 @@ unsafe fn split_leaf(
         let status = crate::c::impls::clone::clone_value(
             rt,
             new_keys_ptr,
-            ty.elem.as_ptr(),
+            ty.elem.as_ref(),
             separator_key_buf.as_mut_ptr(),
         );
         if status != RtStatus::Ok {
@@ -912,7 +912,7 @@ unsafe fn insert_into_internal(
         let status = crate::c::impls::clone::clone_value(
             rt,
             separator_key.as_ptr(),
-            ty.elem.as_ptr(),
+            ty.elem.as_ref(),
             key_slot,
         );
         if status != RtStatus::Ok {
@@ -963,7 +963,7 @@ unsafe fn split_internal_node(
         let status = crate::c::impls::clone::clone_value(
             rt,
             keys_ptr.add(split_point * element_size),
-            ty.elem.as_ptr(),
+            ty.elem.as_ref(),
             separator_key_buf.as_mut_ptr(),
         );
         if status != RtStatus::Ok {
@@ -978,7 +978,7 @@ unsafe fn split_internal_node(
         let _ = crate::c::impls::destroy::any_destroy_local(
             rt,
             keys_ptr.add(split_point * element_size),
-            ty.elem.as_ptr(),
+            ty.elem.as_ref(),
         );
 
         // Move keys after split_point (excluding the separator) to new node.
@@ -1040,7 +1040,7 @@ unsafe fn propagate_split_up(
             // Create new internal root.
             let new_root = alloc_internal_node(rt, ty);
             if new_root.is_null() {
-                split_info.destroy(rt, ty.elem.as_ptr());
+                split_info.destroy(rt, ty.elem.as_ref());
                 return RtStatus::Error;
             }
 
@@ -1051,11 +1051,11 @@ unsafe fn propagate_split_up(
             let status = crate::c::impls::clone::clone_value(
                 rt,
                 split_info.separator_key_buf.as_ptr(),
-                ty.elem.as_ptr(),
+                ty.elem.as_ref(),
                 root_keys_ptr,
             );
             if status != RtStatus::Ok {
-                split_info.destroy(rt, ty.elem.as_ptr());
+                split_info.destroy(rt, ty.elem.as_ref());
                 return status;
             }
 
@@ -1065,7 +1065,7 @@ unsafe fn propagate_split_up(
             write_node_len(new_root, 1);
 
             *root_ptr = new_root;
-            split_info.destroy(rt, ty.elem.as_ptr());
+            split_info.destroy(rt, ty.elem.as_ref());
             return RtStatus::Ok;
         }
 
@@ -1082,18 +1082,18 @@ unsafe fn propagate_split_up(
 
             match result {
                 Ok(()) => {
-                    split_info.destroy(rt, ty.elem.as_ptr());
+                    split_info.destroy(rt, ty.elem.as_ref());
                     return RtStatus::Ok;
                 }
                 Err(new_split_info) => {
-                    split_info.destroy(rt, ty.elem.as_ptr());
+                    split_info.destroy(rt, ty.elem.as_ref());
                     split_info = new_split_info;
 
                     if i == 0 {
                         // Parent is root and split, create new root.
                         let new_root = alloc_internal_node(rt, ty);
                         if new_root.is_null() {
-                            split_info.destroy(rt, ty.elem.as_ptr());
+                            split_info.destroy(rt, ty.elem.as_ref());
                             return RtStatus::Error;
                         }
 
@@ -1103,11 +1103,11 @@ unsafe fn propagate_split_up(
                         let status = crate::c::impls::clone::clone_value(
                             rt,
                             split_info.separator_key_buf.as_ptr(),
-                            ty.elem.as_ptr(),
+                            ty.elem.as_ref(),
                             root_keys_ptr,
                         );
                         if status != RtStatus::Ok {
-                            split_info.destroy(rt, ty.elem.as_ptr());
+                            split_info.destroy(rt, ty.elem.as_ref());
                             return status;
                         }
 
@@ -1116,14 +1116,14 @@ unsafe fn propagate_split_up(
                         write_node_len(new_root, 1);
 
                         *root_ptr = new_root;
-                        split_info.destroy(rt, ty.elem.as_ptr());
+                        split_info.destroy(rt, ty.elem.as_ref());
                         return RtStatus::Ok;
                     }
                 }
             }
         }
 
-        split_info.destroy(rt, ty.elem.as_ptr());
+        split_info.destroy(rt, ty.elem.as_ref());
         RtStatus::Ok
     }
 }
@@ -1131,9 +1131,9 @@ unsafe fn propagate_split_up(
 pub unsafe fn btreeset_insert_impl(
     rt: &mut RtLocal,
     btreeset_value_ref: *mut u8,
-    btreeset_tydesc: *const TyDesc,
+    btreeset_tydesc: &TyDesc,
     element_ptr: *mut u8,
-    _element_tydesc: *const TyDesc,
+    _element_tydesc: &TyDesc,
     bool_out: *mut u8,
 ) -> RtStatus {
     unsafe {
@@ -1141,10 +1141,10 @@ pub unsafe fn btreeset_insert_impl(
             return RtStatus::Error;
         }
 
-        let ty = SetTy::of(rtdt::TyDescRef::from_ptr(btreeset_tydesc));
+        let ty = SetTy::of(rtdt::TyDescRef::from_ref(btreeset_tydesc));
         let set_element_ty = ty.elem;
-        let set_element_tydesc = set_element_ty.as_ptr();
-        let set_element_tydesc_ref = rtdt::TyDescRef::from_ptr(set_element_tydesc);
+        let set_element_tydesc = set_element_ty.as_ref();
+        let set_element_tydesc_ref = rtdt::TyDescRef::from_ref(set_element_tydesc);
 
         let set_ptr = btreeset_value_ref as *mut Set;
         // A set as long as an index counts takes nothing more, even an
@@ -1225,12 +1225,12 @@ pub unsafe fn btreeset_clone_from_slice_impl(
     rt: &mut RtLocal,
     slice_ptr_ref: *const u8,
     slice_ptr_len: rtdt::IndexRepr,
-    slice_element_tydesc: *const TyDesc,
+    slice_element_tydesc: &TyDesc,
     btreeset_value_out: *mut u8,
-    btreeset_tydesc: *const TyDesc,
+    btreeset_tydesc: &TyDesc,
 ) -> RtStatus {
     unsafe {
-        if btreeset_value_out.is_null() || slice_element_tydesc.is_null() {
+        if btreeset_value_out.is_null() {
             return RtStatus::Error;
         }
 
@@ -1245,11 +1245,11 @@ pub unsafe fn btreeset_clone_from_slice_impl(
             return RtStatus::Ok;
         }
 
-        let ty = SetTy::of(rtdt::TyDescRef::from_ptr(btreeset_tydesc));
+        let ty = SetTy::of(rtdt::TyDescRef::from_ref(btreeset_tydesc));
         let set_element_ty = ty.elem;
-        let set_element_tydesc = set_element_ty.as_ptr();
+        let set_element_tydesc = set_element_ty.as_ref();
 
-        let slice_element_tydesc_ref = rtdt::TyDescRef::from_ptr(slice_element_tydesc);
+        let slice_element_tydesc_ref = rtdt::TyDescRef::from_ref(slice_element_tydesc);
         let element_size = slice_element_tydesc_ref.size() as usize;
 
         // Iterate through each element in the slice.
@@ -1321,7 +1321,7 @@ unsafe fn leaf_remove(
             return RemoveResult::NotFound;
         };
 
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(i * size), ty.elem.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(i * size), ty.elem.as_ref());
 
         if i < (len - 1) as usize {
             let shift_count = (len - 1) as usize - i;
@@ -1365,8 +1365,8 @@ unsafe fn borrow_from_left_leaf(
         write_node_len(node, node_len + 1);
 
         let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ptr());
-        let _ = crate::c::impls::clone::clone_value(rt, node_keys_ptr, ty.elem.as_ptr(), parent_key);
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ref());
+        let _ = crate::c::impls::clone::clone_value(rt, node_keys_ptr, ty.elem.as_ref(), parent_key);
     }
 }
 
@@ -1397,8 +1397,8 @@ unsafe fn borrow_from_right_leaf(
         write_node_len(right, right_len - 1);
 
         let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ptr());
-        let _ = crate::c::impls::clone::clone_value(rt, right_keys_ptr, ty.elem.as_ptr(), parent_key);
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ref());
+        let _ = crate::c::impls::clone::clone_value(rt, right_keys_ptr, ty.elem.as_ref(), parent_key);
     }
 }
 
@@ -1496,7 +1496,7 @@ unsafe fn merge_with_left_internal(
         let _ = crate::c::impls::clone::clone_value(
             rt,
             parent_key,
-            ty.elem.as_ptr(),
+            ty.elem.as_ref(),
             left_keys_ptr.add(left_len as usize * size),
         );
 
@@ -1556,7 +1556,7 @@ unsafe fn internal_remove_key(
         let children_ptr = internal_child_ptrs_ptr(node, ty);
         let size = ty.elem.size() as usize;
 
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(key_idx * size), ty.elem.as_ptr());
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(key_idx * size), ty.elem.as_ref());
 
         let after = (len - 1) as usize - key_idx;
         if after > 0 {
@@ -1657,9 +1657,9 @@ unsafe fn remove_recursive(
 pub unsafe fn btreeset_remove_impl(
     rt: &mut RtLocal,
     btreeset_value_mut: *mut u8,
-    btreeset_tydesc: *const TyDesc,
+    btreeset_tydesc: &TyDesc,
     element_ref: *const u8,
-    _element_tydesc: *const TyDesc,
+    _element_tydesc: &TyDesc,
     bool_out: *mut u8,
 ) -> RtStatus {
     unsafe {
@@ -1667,7 +1667,7 @@ pub unsafe fn btreeset_remove_impl(
             return RtStatus::Error;
         }
 
-        let ty = SetTy::of(rtdt::TyDescRef::from_ptr(btreeset_tydesc));
+        let ty = SetTy::of(rtdt::TyDescRef::from_ref(btreeset_tydesc));
         let set_ptr = btreeset_value_mut as *mut Set;
         let root = (*set_ptr).root as *mut SetNode;
 
@@ -1736,7 +1736,7 @@ pub unsafe fn btreeset_to_list_impl(
             for i in 0..read_node_len(node) as usize {
                 let slot = crate::c::impls::list::list_end_slot(list_value_mut, element_ty);
                 let status = crate::c::impls::clone::clone_value(
-                    rt, keys.add(i * element_ty.size() as usize), element_ty.as_ptr(), slot);
+                    rt, keys.add(i * element_ty.size() as usize), element_ty.as_ref(), slot);
                 if status != RtStatus::Ok {
                     return status;
                 }
@@ -1752,9 +1752,9 @@ pub unsafe fn btreeset_to_list_impl(
 pub unsafe fn btreeset_contains_impl(
     _rt: &mut RtLocal,
     btreeset_value_ref: *const u8,
-    btreeset_tydesc: *const TyDesc,
+    btreeset_tydesc: &TyDesc,
     element_ref: *const u8,
-    _element_tydesc: *const TyDesc,
+    _element_tydesc: &TyDesc,
     bool_out: *mut u8,
 ) -> RtStatus {
     unsafe {
@@ -1762,7 +1762,7 @@ pub unsafe fn btreeset_contains_impl(
             return RtStatus::Error;
         }
 
-        let ty = SetTy::of(rtdt::TyDescRef::from_ptr(btreeset_tydesc));
+        let ty = SetTy::of(rtdt::TyDescRef::from_ref(btreeset_tydesc));
 
         let set_ptr = btreeset_value_ref as *const Set;
         let root = (*set_ptr).root as *mut SetNode;
@@ -1794,11 +1794,11 @@ pub unsafe fn btreeset_contains_impl(
 /// done from the start.
 pub unsafe fn btreeset_cursor_begin_impl(
     set_ref: *const u8,
-    set_tydesc: *const TyDesc,
+    set_tydesc: &TyDesc,
     cursor_out: *mut rtdt::TreeCursor,
 ) {
     unsafe {
-        let set_ty = rtdt::TyDescRef::from_ptr(set_tydesc);
+        let set_ty = rtdt::TyDescRef::from_ref(set_tydesc);
         let ty = SetTy::of(set_ty);
         let layout = set_ty.set_leaf_layout();
         let root = (*(set_ref as *const Set)).root as *mut SetNode;

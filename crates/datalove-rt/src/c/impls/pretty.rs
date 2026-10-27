@@ -12,20 +12,20 @@ use crate::c::impls::rt_local::RtLocal;
 pub unsafe fn pretty_print_local(
     rt: &mut RtLocal,
     value_ref: *const u8,
-    tydesc_ref: *const rtdt::TyDesc,
+    tydesc_ref: &rtdt::TyDesc,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
-    if value_ref.is_null() || tydesc_ref.is_null() {
+    if value_ref.is_null() {
         return RtStatus::Error;
     }
-    if string_mut.is_null() || string_tydesc.is_null() {
+    if string_mut.is_null() {
         return RtStatus::Error;
     }
 
     unsafe {
-        let ty = rtdt::TyDescRef::from_ptr(tydesc_ref);
-        let string_ty = rtdt::TyDescRef::from_ptr(string_tydesc);
+        let ty = rtdt::TyDescRef::from_ref(tydesc_ref);
+        let string_ty = rtdt::TyDescRef::from_ref(string_tydesc);
 
         if string_ty.as_ref().type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
@@ -43,7 +43,7 @@ unsafe fn pretty_value(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         match tydesc.as_ref().type_tag {
@@ -90,7 +90,7 @@ unsafe fn pretty_bool(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let b = &*(value_ref as *const rtdt::Bool);
@@ -106,7 +106,7 @@ unsafe fn pretty_u8(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U8);
@@ -119,7 +119,7 @@ unsafe fn pretty_i8(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I8);
@@ -132,7 +132,7 @@ unsafe fn pretty_u16(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U16);
@@ -145,7 +145,7 @@ unsafe fn pretty_i16(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I16);
@@ -158,7 +158,7 @@ unsafe fn pretty_u32(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U32);
@@ -171,7 +171,7 @@ unsafe fn pretty_i32(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I32);
@@ -184,7 +184,7 @@ unsafe fn pretty_u64(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U64);
@@ -197,7 +197,7 @@ unsafe fn pretty_i64(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I64);
@@ -210,7 +210,7 @@ unsafe fn pretty_usize(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Index);
@@ -223,7 +223,7 @@ unsafe fn pretty_isize(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Offset);
@@ -261,7 +261,7 @@ unsafe fn pretty_f32(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F32);
@@ -286,7 +286,7 @@ unsafe fn pretty_f64(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F64);
@@ -311,7 +311,7 @@ unsafe fn pretty_int(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let int_ptr = value_ref as *const rtdt::Int;
@@ -324,7 +324,7 @@ unsafe fn pretty_string(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let text = (*(value_ref as *const rtdt::String)).as_str();
@@ -356,7 +356,7 @@ unsafe fn pretty_tuple(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         push_str(rt, string_mut, string_tydesc, b"(")?;
@@ -379,7 +379,7 @@ unsafe fn pretty_struct(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         push_str(rt, string_mut, string_tydesc, b"{")?;
@@ -405,7 +405,7 @@ unsafe fn pretty_enum(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let enum_info = tydesc.enum_info();
@@ -443,7 +443,7 @@ unsafe fn pretty_atom(
     rt: &mut RtLocal,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let (name, _) = tydesc.atom_info();
@@ -457,7 +457,7 @@ unsafe fn pretty_term(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let (name, payload_ty) = tydesc.term_info();
@@ -473,7 +473,7 @@ unsafe fn pretty_list(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let list = &*(value_ref as *const rtdt::List);
@@ -501,7 +501,7 @@ unsafe fn pretty_map(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let map = &*(value_ref as *const rtdt::Map);
@@ -556,7 +556,7 @@ unsafe fn pretty_set(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let set = &*(value_ref as *const rtdt::Set);
@@ -604,7 +604,7 @@ unsafe fn pretty_option(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let option = &*(value_ref as *const rtdt::Option);
@@ -629,7 +629,7 @@ unsafe fn pretty_result(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let result = &*(value_ref as *const rtdt::Result);
@@ -664,7 +664,7 @@ unsafe fn pretty_packed(
     rt: &mut RtLocal,
     data: &rtdt::Data,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         macro_rules! print_as {
@@ -694,7 +694,7 @@ unsafe fn pretty_data(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let data = &*(value_ref as *const rtdt::Data);
@@ -722,7 +722,7 @@ unsafe fn pretty_error(
     rt: &mut RtLocal,
     value_ref: *const u8,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let error = &*(value_ref as *const rtdt::Error);
@@ -752,7 +752,7 @@ unsafe fn pretty_tensor(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let tensor = &*(value_ref as *const rtdt::Tensor);
@@ -833,7 +833,7 @@ unsafe fn pretty_tensor_group(
     offset: usize,
     count: usize,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let rank = shape.len();
@@ -876,7 +876,7 @@ unsafe fn pretty_table(
     value_ref: *const u8,
     tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
         let table = &*(value_ref as *const rtdt::Table);
@@ -923,7 +923,7 @@ unsafe fn pretty_table(
 unsafe fn push_str(
     rt: &mut RtLocal,
     string_mut: *mut u8,
-    string_tydesc: *const rtdt::TyDesc,
+    string_tydesc: &rtdt::TyDesc,
     bytes: &[u8],
 ) -> Result<(), ()> {
     if bytes.is_empty() {
