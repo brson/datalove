@@ -52,20 +52,19 @@ unsafe fn inline_data(
 /// the descriptor comes from `packed_tydesc`, which is a constant per type
 /// rather than anything made up here.
 ///
-/// The borrow lasts as long as `scratch` does, so a caller keeps it alive
-/// across whatever it was borrowing for.
+/// The value lies in the `data`'s storage or in `scratch`, so it is borrowed
+/// for as long as both are; the descriptor, for as long as the `data` is.
 ///
 /// # Safety
 ///
-/// `data_in` must be an initialized `Data`.
-pub unsafe fn data_borrow(
-    data_in: *const u8,
-    scratch: &mut crate::rust::DataScratch,
-) -> (*const u8, *const rtdt::TyDesc) {
+/// `data` must be an initialized `Data`, as for [`rtdt::Data::pointee`].
+pub unsafe fn data_borrow<'d>(
+    data: &'d rtdt::Data,
+    scratch: &'d mut crate::rust::DataScratch,
+) -> (*const u8, rtdt::TyDescRef<'d>) {
     unsafe {
-        let data = &*(data_in as *const rtdt::Data);
         if let Some((tydesc, value)) = data.pointee() {
-            return (value, tydesc.as_ptr());
+            return (value, tydesc);
         }
 
         let tytag = data.tytag();
@@ -83,10 +82,15 @@ pub unsafe fn data_borrow(
         // The wider inline forms keep their descriptor; the narrow ones have
         // only a tag, and the descriptor for a tag is a constant.
         let tydesc = match rtdt::packed_tydesc(tytag) {
-            Some(td) => td,
-            None => data.tydesc(),
+            Some(td) => rtdt::TyDescRef::from_ref(td),
+            None => {
+                let td = data.tydesc();
+                assert!(!td.is_null(), "a packed {tytag:?} has no descriptor");
+                // SAFETY: the caller promises, as for `pointee`, that the
+                // descriptor the `data` was built with lives as long as it.
+                rtdt::TyDescRef::from_ptr(td)
+            }
         };
-        assert!(!tydesc.is_null(), "a packed {tytag:?} has no descriptor");
         (scratch as *const u8, tydesc)
     }
 }

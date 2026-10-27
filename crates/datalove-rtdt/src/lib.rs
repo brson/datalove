@@ -1069,7 +1069,7 @@ fn is_plain(td: &TyDesc) -> bool {
 ///
 /// `None` for anything else, including the types that pack with their
 /// descriptor already in hand.
-pub fn packed_tydesc(tag: TyTag) -> core::option::Option<*const TyDesc> {
+pub fn packed_tydesc(tag: TyTag) -> core::option::Option<&'static TyDesc> {
     // A `TyDesc` holds a union of pointers, so it is not `Sync` and cannot be
     // a plain `static`. These are read-only and never point anywhere, so the
     // wrapper carries the promise rather than each one.
@@ -1087,7 +1087,7 @@ pub fn packed_tydesc(tag: TyTag) -> core::option::Option<*const TyDesc> {
                 align: $size,
                 type_info: TyInfo { nothing: TyInfoNothing { unused: 0 } },
             });
-            &$name.0 as *const TyDesc
+            &$name.0
         }};
     }
     core::option::Option::Some(match tag {

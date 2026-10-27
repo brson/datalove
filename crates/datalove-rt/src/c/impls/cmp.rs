@@ -17,12 +17,12 @@ enum FloatEqPolicy {
 ///
 /// # Safety
 ///
-/// `data` must be initialized.
-unsafe fn data_inner(
+/// `data` must be initialized, and live as long as `scratch` is borrowed.
+unsafe fn data_inner<'d>(
     data: *const rtdt::Data,
-    scratch: &mut crate::rust::DataScratch,
-) -> (*const u8, *const rtdt::TyDesc) {
-    unsafe { super::boxing::data_borrow(data as *const u8, scratch) }
+    scratch: &'d mut crate::rust::DataScratch,
+) -> (*const u8, rtdt::TyDescRef<'d>) {
+    unsafe { super::boxing::data_borrow(&*data, scratch) }
 }
 
 /// Whether two packed values are equal.
@@ -56,13 +56,11 @@ unsafe fn eq_packed(
         // a NaN has the same bits as itself and is not.
         let mut scratch_a = crate::rust::DataScratch::default();
         let mut scratch_b = crate::rust::DataScratch::default();
-        let (inner_a, inner_td_a) = data_inner(a, &mut scratch_a);
-        let (inner_b, inner_td_b) = data_inner(b, &mut scratch_b);
+        let (inner_a, td_a) = data_inner(a, &mut scratch_a);
+        let (inner_b, td_b) = data_inner(b, &mut scratch_b);
         // A tag is not a type. Two packed values can both be tagged `Set` and
         // hold a set of different elements, and reading one through the
         // other's descriptor reads its nodes at the wrong stride.
-        let td_a = rtdt::TyDescRef::from_ptr(inner_td_a);
-        let td_b = rtdt::TyDescRef::from_ptr(inner_td_b);
         if !eq_tydesc(td_a, td_b) {
             return false;
         }
@@ -93,14 +91,12 @@ unsafe fn cmp_packed(
         }
         let mut scratch_a = crate::rust::DataScratch::default();
         let mut scratch_b = crate::rust::DataScratch::default();
-        let (inner_a, inner_td_a) = data_inner(a, &mut scratch_a);
-        let (inner_b, inner_td_b) = data_inner(b, &mut scratch_b);
+        let (inner_a, td_a) = data_inner(a, &mut scratch_a);
+        let (inner_b, td_b) = data_inner(b, &mut scratch_b);
         // A tag is not a type: two packed values can share one and still hold
         // different types, a set of `u32` against a set of `string`. Only
         // where they are the one type may their values be read through the one
         // descriptor; where they are not, the types themselves say the order.
-        let td_a = rtdt::TyDescRef::from_ptr(inner_td_a);
-        let td_b = rtdt::TyDescRef::from_ptr(inner_td_b);
         match cmp_tydesc(td_a, td_b) {
             std::cmp::Ordering::Equal => cmp_value(inner_a, inner_b, td_a),
             ord => ordering_of(ord),

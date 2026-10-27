@@ -774,9 +774,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_borrow(
     // caller to the alignment.
     unsafe {
         let (value, tydesc) = crate::c::impls::boxing::data_borrow(
-            data_in, &mut *(scratch as *mut crate::rust::DataScratch));
+            &*(data_in as *const rtdt::Data), &mut *(scratch as *mut crate::rust::DataScratch));
         std::ptr::write(value_out, value);
-        std::ptr::write(tydesc_out, tydesc);
+        std::ptr::write(tydesc_out, tydesc.as_ptr());
     }
     RtStatus::Ok
 }
