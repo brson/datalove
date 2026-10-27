@@ -161,7 +161,7 @@ Three places have to agree, and all three derive from the same `.dli` line.
    ```rust
    #[no_mangle]
    pub unsafe extern "C-unwind" fn dlr_std__fixedint_zero(
-       rt: *mut u8,
+       rt: LocalRtHandle,
        out: *mut u8, out_td: &rtdt::TyDesc,
        value_td: &rtdt::TyDesc,
    ) -> u8 { ... }

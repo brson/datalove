@@ -114,7 +114,7 @@ impl<'a> Decl<'a> {
     /// tuple and nothing at all have no Rust type, so they are raw pointers.
     fn rust_params(&self) -> Vec<String> {
         const TD: &str = "&rtdt::TyDesc";
-        let mut out = vec!["*mut u8".to_string()];
+        let mut out = vec!["datalove_rti::LocalRtHandle".to_string()];
         for &(mode, ty) in &self.params {
             let exclusive = mode == "mut" || mode == "out" || (mode == "in" && !is_scalar(ty));
             out.push(match rust_type(ty) {
