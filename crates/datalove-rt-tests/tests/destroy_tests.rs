@@ -1111,7 +1111,7 @@ proptest! {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 inst.ptr as *mut u8,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -1122,7 +1122,7 @@ proptest! {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 rt,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 1,
                 inst.ptr as *mut u8,
             );
@@ -1160,7 +1160,7 @@ proptest! {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 inst.ptr as *mut u8,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -1171,7 +1171,7 @@ proptest! {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 rt,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 1,
                 inst.ptr as *mut u8,
             );
@@ -1212,7 +1212,7 @@ proptest! {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 inst.ptr as *mut u8,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -1223,7 +1223,7 @@ proptest! {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 rt,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 1,
                 inst.ptr as *mut u8,
             );

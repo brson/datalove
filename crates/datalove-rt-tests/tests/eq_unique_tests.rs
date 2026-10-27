@@ -535,9 +535,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
                 ptr,
-                tydesc,
+                &*tydesc,
                 ptr,
-                tydesc,
+                &*tydesc,
             )
         };
 
@@ -591,9 +591,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -601,9 +601,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
                 ptr2,
-                tydesc2,
+                &*tydesc2,
                 ptr1,
-                tydesc1,
+                &*tydesc1,
             )
         };
 
@@ -648,9 +648,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_mut_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -659,9 +659,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -670,7 +670,7 @@ proptest! {
 
         unsafe {
             cleanup_value(&rt, inst.ptr, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ref());
         }
     }
 
@@ -716,9 +716,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -727,9 +727,9 @@ proptest! {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
                     ptr1,
-                    tydesc1,
+                    &*tydesc1,
                     ptr2,
-                    tydesc2,
+                    &*tydesc2,
                 )
             };
 
@@ -785,9 +785,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -796,9 +796,9 @@ proptest! {
                 datalove_rt::c::dtlv_rti_cmp_total_local(
                     std::ptr::null_mut(),
                     ptr1,
-                    tydesc1,
+                    &*tydesc1,
                     ptr2,
-                    tydesc2,
+                    &*tydesc2,
                 )
             };
 

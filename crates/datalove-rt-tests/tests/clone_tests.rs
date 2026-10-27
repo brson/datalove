@@ -641,9 +641,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_mut_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -653,9 +653,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -663,9 +663,9 @@ proptest! {
             "Clone should equal original");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ref());
         }
     }
 
@@ -702,9 +702,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone1_buffer.as_mut_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -715,9 +715,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 clone1_buffer.as_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone2_buffer.as_mut_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -727,9 +727,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 clone2_buffer.as_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -737,10 +737,10 @@ proptest! {
             "Double-cloned value should equal original");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone1_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone2_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone1_buffer.as_mut_ptr(), inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone2_buffer.as_mut_ptr(), inst.tydesc.as_ref());
         }
     }
 }
@@ -785,9 +785,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_mut_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -797,9 +797,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -807,9 +807,9 @@ proptest! {
             "Cloned moderate container should equal original");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ref());
         }
     }
 
@@ -845,9 +845,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_mut_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -857,9 +857,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -867,9 +867,9 @@ proptest! {
             "Cloned moderate container should equal original");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ref());
         }
     }
 }

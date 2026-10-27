@@ -88,7 +88,7 @@ unsafe fn create_runtime_string(
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
             string.as_mut_ptr() as *mut u8,
-            string_tydesc,
+            &*string_tydesc,
         );
         let mut string = string.assume_init();
 
@@ -96,7 +96,7 @@ unsafe fn create_runtime_string(
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt,
                 &mut string as *mut rtdt::String as *mut u8,
-                string_tydesc,
+                &*string_tydesc,
                 s.as_ptr(),
                 (s.len() as u32).into(),
             );
@@ -126,7 +126,7 @@ proptest! {
             datalove_rt::c::dtlv_rti_btreemap_create_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                &*map_tydesc,
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -145,11 +145,11 @@ proptest! {
                 datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
                     map_ptr,
-                    &*map_tydesc as *const rtdt::TyDesc,
+                    &*map_tydesc,
                     &mut key_val as *mut u32 as *mut u8,
-                    &*_key_tydesc as *const rtdt::TyDesc,
+                    &*_key_tydesc,
                     &mut value_val as *mut u32 as *mut u8,
-                    &*_value_tydesc as *const rtdt::TyDesc,
+                    &*_value_tydesc,
                 )
             };
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -163,7 +163,7 @@ proptest! {
             datalove_rt::c::dtlv_rti_btreemap_destroy_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                &*map_tydesc,
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);

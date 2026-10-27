@@ -720,9 +720,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_cmp_total_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -793,9 +793,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_cmp_total_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -803,9 +803,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_cmp_total_local(
                 std::ptr::null_mut(),
                 ptr2,
-                tydesc2,
+                &*tydesc2,
                 ptr3,
-                tydesc3,
+                &*tydesc3,
             )
         };
 
@@ -815,9 +815,9 @@ proptest! {
                 datalove_rt::c::dtlv_rti_cmp_total_local(
                     std::ptr::null_mut(),
                     ptr1,
-                    tydesc1,
+                    &*tydesc1,
                     ptr3,
-                    tydesc3,
+                    &*tydesc3,
                 )
             };
 
@@ -874,9 +874,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_cmp_total_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -884,9 +884,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_cmp_total_local(
                 std::ptr::null_mut(),
                 ptr2,
-                tydesc2,
+                &*tydesc2,
                 ptr1,
-                tydesc1,
+                &*tydesc1,
             )
         };
 
@@ -946,9 +946,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_cmp_total_local(
                 std::ptr::null_mut(),
                 ptr,
-                tydesc,
+                &*tydesc,
                 ptr,
-                tydesc,
+                &*tydesc,
             )
         };
 
@@ -1002,9 +1002,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_cmp_total_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -1013,9 +1013,9 @@ proptest! {
                 datalove_rt::c::dtlv_rti_eq_unique_local(
                     std::ptr::null_mut(),
                     ptr1,
-                    tydesc1,
+                    &*tydesc1,
                     ptr2,
-                    tydesc2,
+                    &*tydesc2,
                 )
             };
 

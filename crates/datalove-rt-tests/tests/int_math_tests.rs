@@ -975,22 +975,22 @@ mod proptests {
 
             // a + b
             let result1_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_add(
-                    rt.handle(), ptr_a, tydesc_a, ptr_b, tydesc_b, result1_ptr, tydesc_a,
+                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, result1_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
 
             // b + a
             let result2_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_add(
-                    rt.handle(), ptr_b, tydesc_b, ptr_a, tydesc_a, result2_ptr, tydesc_a,
+                    rt.handle(), ptr_b, &*tydesc_b, ptr_a, &*tydesc_a, result2_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -999,8 +999,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result1_ptr, tydesc_a,
-                    result2_ptr, tydesc_a,
+                    result1_ptr, &*tydesc_a,
+                    result2_ptr, &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "a + b != b + a for a={}, b={}", a, b);
@@ -1027,22 +1027,22 @@ mod proptests {
 
             // a * b
             let result1_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_mul(
-                    rt.handle(), ptr_a, tydesc_a, ptr_b, tydesc_b, result1_ptr, tydesc_a,
+                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, result1_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
 
             // b * a
             let result2_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_mul(
-                    rt.handle(), ptr_b, tydesc_b, ptr_a, tydesc_a, result2_ptr, tydesc_a,
+                    rt.handle(), ptr_b, &*tydesc_b, ptr_a, &*tydesc_a, result2_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -1051,8 +1051,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result1_ptr, tydesc_a,
-                    result2_ptr, tydesc_a,
+                    result1_ptr, &*tydesc_a,
+                    result2_ptr, &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "a * b != b * a for a={}, b={}", a, b);
@@ -1079,22 +1079,22 @@ mod proptests {
 
             // tmp = a + b
             let tmp_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_add(
-                    rt.handle(), ptr_a, tydesc_a, ptr_b, tydesc_b, tmp_ptr, tydesc_a,
+                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, tmp_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
 
             // result = tmp - b = (a + b) - b = a
             let result_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_sub(
-                    rt.handle(), tmp_ptr, tydesc_a, ptr_b, tydesc_b, result_ptr, tydesc_a,
+                    rt.handle(), tmp_ptr, &*tydesc_a, ptr_b, &*tydesc_b, result_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -1103,8 +1103,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result_ptr, tydesc_a,
-                    ptr_a, tydesc_a,
+                    result_ptr, &*tydesc_a,
+                    ptr_a, &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "(a + b) - b != a for a={}, b={}", a, b);
@@ -1129,19 +1129,19 @@ mod proptests {
 
             // neg1 = -a
             let neg1_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status1 = unsafe {
-                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), ptr_a, tydesc_a, neg1_ptr, tydesc_a)
+                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), ptr_a, &*tydesc_a, neg1_ptr, &*tydesc_a)
             };
             prop_assert_eq!(status1, RtStatus::Ok);
 
             // neg2 = -(-a) = a
             let neg2_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status2 = unsafe {
-                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), neg1_ptr, tydesc_a, neg2_ptr, tydesc_a)
+                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), neg1_ptr, &*tydesc_a, neg2_ptr, &*tydesc_a)
             };
             prop_assert_eq!(status2, RtStatus::Ok);
 
@@ -1149,8 +1149,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    neg2_ptr, tydesc_a,
-                    ptr_a, tydesc_a,
+                    neg2_ptr, &*tydesc_a,
+                    ptr_a, &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "-(-a) != a for a={}", a);
@@ -1176,22 +1176,22 @@ mod proptests {
 
             // tmp = a * b
             let tmp_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_mul(
-                    rt.handle(), ptr_a, tydesc_a, ptr_b, tydesc_b, tmp_ptr, tydesc_a,
+                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, tmp_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
 
             // result = tmp / b = (a * b) / b = a
             let result_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_div_checked(
-                    rt.handle(), tmp_ptr, tydesc_a, ptr_b, tydesc_b, result_ptr, tydesc_a,
+                    rt.handle(), tmp_ptr, &*tydesc_a, ptr_b, &*tydesc_b, result_ptr, &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -1200,8 +1200,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result_ptr, tydesc_a,
-                    ptr_a, tydesc_a,
+                    result_ptr, &*tydesc_a,
+                    ptr_a, &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "(a * b) / b != a for a={}, b={}", a, b);

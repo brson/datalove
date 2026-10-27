@@ -2308,9 +2308,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -2321,11 +2321,11 @@ proptest! {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt.handle(),
                 inst.ptr as *mut u8,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             );
             datalove_rt::c::dtlv_rti_mem_free_local(
                 rt.handle(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 1,
                 inst.ptr as *mut u8,
             );
@@ -2373,9 +2373,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -2383,19 +2383,19 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 ptr2,
-                tydesc2,
+                &*tydesc2,
                 ptr1,
-                tydesc1,
+                &*tydesc1,
             )
         };
 
         prop_assert_eq!(result_xy, result_yx, "Symmetry: eq(x, y) should equal eq(y, x)");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, tydesc1);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc1, 1, ptr1 as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, tydesc2);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc2, 1, ptr2 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, &*tydesc1);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc1, 1, ptr1 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, &*tydesc2);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc2, 1, ptr2 as *mut u8);
         }
     }
 
@@ -2430,9 +2430,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_mut_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2441,9 +2441,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 clone_buffer.as_ptr(),
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -2451,9 +2451,9 @@ proptest! {
             "Clone consistency: eq(x, clone(x)) should be Equals");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ref());
         }
     }
 
@@ -2482,9 +2482,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -2492,8 +2492,8 @@ proptest! {
             "Boundary values: eq(x, x) should be Equals");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
         }
     }
 
@@ -2522,9 +2522,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
 
@@ -2532,8 +2532,8 @@ proptest! {
             "Moderate structures: eq(x, x) should be Equals");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
         }
     }
 
@@ -2578,9 +2578,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -2589,9 +2589,9 @@ proptest! {
                 datalove_rt::c::dtlv_rti_cmp_local(
                     std::ptr::null_mut(),
                     ptr1,
-                    tydesc1,
+                    &*tydesc1,
                     ptr2,
-                    tydesc2,
+                    &*tydesc2,
                 )
             };
 
@@ -2600,10 +2600,10 @@ proptest! {
         }
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, tydesc1);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc1, 1, ptr1 as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, tydesc2);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc2, 1, ptr2 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, &*tydesc1);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc1, 1, ptr1 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, &*tydesc2);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc2, 1, ptr2 as *mut u8);
         }
     }
 
@@ -2651,9 +2651,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -2661,9 +2661,9 @@ proptest! {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
                 ptr1,
-                tydesc1,
+                &*tydesc1,
                 ptr2,
-                tydesc2,
+                &*tydesc2,
             )
         };
 
@@ -2672,10 +2672,10 @@ proptest! {
             "For non-float types, eq and eq_unique should return the same result");
 
         unsafe {
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, tydesc1);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc1, 1, ptr1 as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, tydesc2);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc2, 1, ptr2 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, &*tydesc1);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc1, 1, ptr1 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, &*tydesc2);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc2, 1, ptr2 as *mut u8);
         }
     }
 }
