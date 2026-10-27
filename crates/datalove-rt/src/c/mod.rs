@@ -41,17 +41,8 @@ pub use datalove_rti::{RtHeader, ABANDONED_FOR_ERROR, ABANDONED_FOR_STACK};
 /// the runtime owns constants for the types that pack into a `data`'s own
 /// words and so have none of their own to lend. Two descriptions of one type
 /// sit at different addresses and still describe it.
-fn same_tydesc(a: *const rtdt::TyDesc, b: *const rtdt::TyDesc) -> bool {
-    if a == b {
-        return true;
-    }
-    if a.is_null() || b.is_null() {
-        return false;
-    }
-    unsafe {
-        crate::c::impls::cmp::eq_tydesc(
-            rtdt::TyDescRef::from_ptr(a), rtdt::TyDescRef::from_ptr(b))
-    }
+fn same_tydesc(a: &rtdt::TyDesc, b: &rtdt::TyDesc) -> bool {
+    crate::c::impls::cmp::eq_tydesc(rtdt::TyDescRef::from_ref(a), rtdt::TyDescRef::from_ref(b))
 }
 
 /// Debug assertion to verify pointer alignment matches tydesc requirements.
@@ -1056,11 +1047,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_local(
         let rt_ref = rt_local::from_handle(rt);
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ref(btreemap_tydesc);
         debug_assert!(
-            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ptr(), key_tydesc),
+            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ref(), key_tydesc),
             "btreemap_insert: key_tydesc doesn't match map's key type"
         );
         debug_assert!(
-            same_tydesc(btreemap_tydesc_ref.map_value_ty().as_ptr(), value_tydesc),
+            same_tydesc(btreemap_tydesc_ref.map_value_ty().as_ref(), value_tydesc),
             "btreemap_insert: value_tydesc doesn't match map's value type"
         );
         let key_tydesc_ref = rtdt::TyDescRef::from_ref(key_tydesc);
@@ -1094,7 +1085,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_remove_local(
         let rt_ref = rt_local::from_handle(rt);
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ref(btreemap_tydesc);
         debug_assert!(
-            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ptr(), key_tydesc),
+            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ref(), key_tydesc),
             "btreemap_remove: key_tydesc doesn't match map's key type"
         );
         let key_tydesc_ref = rtdt::TyDescRef::from_ref(key_tydesc);
@@ -1230,7 +1221,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_local(
         let rt_ref = rt_local::from_handle(rt);
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ref(btreemap_tydesc);
         debug_assert!(
-            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ptr(), key_tydesc),
+            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ref(), key_tydesc),
             "btreemap_get: key_tydesc doesn't match map's key type"
         );
         let key_tydesc_ref = rtdt::TyDescRef::from_ref(key_tydesc);
@@ -1375,11 +1366,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_local(
         let rt_ref = rt_local::from_handle(rt);
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ref(btreemap_tydesc);
         debug_assert!(
-            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ptr(), key_tydesc),
+            same_tydesc(btreemap_tydesc_ref.map_key_ty().as_ref(), key_tydesc),
             "btreemap_set_value: key_tydesc doesn't match map's key type"
         );
         debug_assert!(
-            same_tydesc(btreemap_tydesc_ref.map_value_ty().as_ptr(), value_tydesc),
+            same_tydesc(btreemap_tydesc_ref.map_value_ty().as_ref(), value_tydesc),
             "btreemap_set_value: value_tydesc doesn't match map's value type"
         );
         let key_tydesc_ref = rtdt::TyDescRef::from_ref(key_tydesc);
@@ -1450,7 +1441,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_local(
     unsafe {
         let btreeset_tydesc_ref = rtdt::TyDescRef::from_ref(btreeset_tydesc);
         debug_assert!(
-            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ref(), element_tydesc),
             "btreeset_insert: element_tydesc doesn't match set's element type"
         );
 
@@ -1485,7 +1476,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_remove_local(
     unsafe {
         let btreeset_tydesc_ref = rtdt::TyDescRef::from_ref(btreeset_tydesc);
         debug_assert!(
-            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ref(), element_tydesc),
             "btreeset_remove: element_tydesc doesn't match set's element type"
         );
 
@@ -1520,7 +1511,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_contains_local(
     unsafe {
         let btreeset_tydesc_ref = rtdt::TyDescRef::from_ref(btreeset_tydesc);
         debug_assert!(
-            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ref(), element_tydesc),
             "btreeset_contains: element_tydesc doesn't match set's element type"
         );
 
@@ -1568,7 +1559,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
     unsafe {
         let btreeset_tydesc_ref = rtdt::TyDescRef::from_ref(btreeset_tydesc);
         debug_assert!(
-            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ptr(), slice_element_tydesc),
+            same_tydesc(btreeset_tydesc_ref.set_element_ty().as_ref(), slice_element_tydesc),
             "btreeset_clone_from_slice: element_tydesc doesn't match set's element type"
         );
 
@@ -1656,7 +1647,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
         let rt_ref = rt_local::from_handle(rt);
         let list_tydesc_ref = rtdt::TyDescRef::from_ref(list_tydesc);
         debug_assert!(
-            same_tydesc(list_tydesc_ref.list_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(list_tydesc_ref.list_element_ty().as_ref(), element_tydesc),
             "list_create_from_slice: element_tydesc doesn't match list's element type"
         );
         let element_tydesc_ref = rtdt::TyDescRef::from_ref(element_tydesc);
@@ -1802,7 +1793,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_set_local(
         let rt_ref = rt_local::from_handle(rt);
         let list_tydesc_ref = rtdt::TyDescRef::from_ref(list_tydesc);
         debug_assert!(
-            same_tydesc(list_tydesc_ref.list_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(list_tydesc_ref.list_element_ty().as_ref(), element_tydesc),
             "list_set: element_tydesc doesn't match list's element type"
         );
         let element_tydesc_ref = rtdt::TyDescRef::from_ref(element_tydesc);
@@ -1834,7 +1825,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_push_local(
         let rt_ref = rt_local::from_handle(rt);
         let list_tydesc_ref = rtdt::TyDescRef::from_ref(list_tydesc);
         debug_assert!(
-            same_tydesc(list_tydesc_ref.list_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(list_tydesc_ref.list_element_ty().as_ref(), element_tydesc),
             "list_push: element_tydesc doesn't match list's element type"
         );
         let element_tydesc_ref = rtdt::TyDescRef::from_ref(element_tydesc);
@@ -1898,7 +1889,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_local(
         let rt_ref = rt_local::from_handle(rt);
         let list_tydesc_ref = rtdt::TyDescRef::from_ref(list_tydesc);
         debug_assert!(
-            same_tydesc(list_tydesc_ref.list_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(list_tydesc_ref.list_element_ty().as_ref(), element_tydesc),
             "list_insert: element_tydesc doesn't match list's element type"
         );
         let element_tydesc_ref = rtdt::TyDescRef::from_ref(element_tydesc);
@@ -2021,7 +2012,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
         let rt_ref = rt_local::from_handle(rt);
         let list_tydesc_ref = rtdt::TyDescRef::from_ref(list_tydesc);
         debug_assert!(
-            same_tydesc(list_tydesc_ref.list_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(list_tydesc_ref.list_element_ty().as_ref(), element_tydesc),
             "list_extend_from_slice: element_tydesc doesn't match list's element type"
         );
         let element_tydesc_ref = rtdt::TyDescRef::from_ref(element_tydesc);
@@ -2063,7 +2054,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
         let rt_ref = rt_local::from_handle(rt);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ref(tensor_tydesc);
         debug_assert!(
-            same_tydesc(tensor_tydesc_ref.tensor_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(tensor_tydesc_ref.tensor_element_ty().as_ref(), element_tydesc),
             "tensor_create_from_slice: element_tydesc doesn't match tensor's element type"
         );
         let element_tydesc_ref = rtdt::TyDescRef::from_ref(element_tydesc);
@@ -2117,7 +2108,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
         let rt_ref = rt_local::from_handle(rt);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ref(tensor_tydesc);
         debug_assert!(
-            same_tydesc(tensor_tydesc_ref.tensor_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(tensor_tydesc_ref.tensor_element_ty().as_ref(), element_tydesc),
             "tensor_get: element_tydesc doesn't match tensor's element type"
         );
         crate::c::impls::tensor::tensor_get_impl(
@@ -2154,7 +2145,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
         let rt_ref = rt_local::from_handle(rt);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ref(tensor_tydesc);
         debug_assert!(
-            same_tydesc(tensor_tydesc_ref.tensor_element_ty().as_ptr(), element_tydesc),
+            same_tydesc(tensor_tydesc_ref.tensor_element_ty().as_ref(), element_tydesc),
             "tensor_set: element_tydesc doesn't match tensor's element type"
         );
         crate::c::impls::tensor::tensor_set_impl(
@@ -2707,6 +2698,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_payload_tydesc(
 /// The descriptor a template describes, with its type parameters bound to
 /// `params`.
 ///
+/// `params` points to `num_params` descriptors, and is not null even when
+/// there are none, as a Rust slice's pointer is not.
+///
 /// A generic is handed one descriptor per type parameter; the descriptor of a
 /// type it writes in terms of them is built from those, here, from the
 /// template the compiler emitted for it. Built descriptors are cached on the
@@ -2720,14 +2714,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tydesc_instantiate(
     num_params: u32,
 ) -> *const rtdt::TyDesc {
     debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(num_params == 0 || !params.is_null(), "params is null");
+    debug_assert!(!params.is_null(), "params is null");
     unsafe {
         let rt_ref = rt_local::from_handle(rt);
-        let params = if num_params == 0 {
-            &[][..]
-        } else {
-            std::slice::from_raw_parts(params, num_params as usize)
-        };
+        let params = std::slice::from_raw_parts(params, num_params as usize);
         rt_ref.tydesc_cache.instantiate(template, params)
     }
 }

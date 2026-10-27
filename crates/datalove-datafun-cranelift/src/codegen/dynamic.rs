@@ -40,19 +40,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt = self.rt_handle_param.expect("the entry block has the runtime handle");
 
         // The type parameters' descriptors, as an array the runtime reads.
+        // It has a slot even when there are none, since the runtime takes
+        // the pointer as a slice's, which is never null.
         let count = self.type_param_values.len() as u32;
-        let params = if count == 0 {
-            builder.ins().iconst(PTR_TYPE, 0)
-        } else {
-            let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-                cl_ir::StackSlotKind::ExplicitSlot, count * types::PTR_SIZE,
-                types::align_shift(types::PTR_ALIGN)));
-            for (i, &desc) in self.type_param_values.iter().enumerate() {
-                let at = builder.ins().stack_addr(PTR_TYPE, slot, (i as u32 * types::PTR_SIZE) as i32);
-                builder.ins().store(MemFlagsData::new(), desc, at, 0);
-            }
-            builder.ins().stack_addr(PTR_TYPE, slot, 0)
-        };
+        let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot, count.max(1) * types::PTR_SIZE,
+            types::align_shift(types::PTR_ALIGN)));
+        for (i, &desc) in self.type_param_values.iter().enumerate() {
+            let at = builder.ins().stack_addr(PTR_TYPE, slot, (i as u32 * types::PTR_SIZE) as i32);
+            builder.ins().store(MemFlagsData::new(), desc, at, 0);
+        }
+        let params = builder.ins().stack_addr(PTR_TYPE, slot, 0);
         let num_params = builder.ins().iconst(cl_types::I32, count as i64);
 
         // The entries built from templates, by their table index.
