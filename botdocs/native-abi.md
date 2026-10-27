@@ -162,24 +162,31 @@ Three places have to agree, and all three derive from the same `.dli` line.
    #[no_mangle]
    pub unsafe extern "C-unwind" fn dlr_std__fixedint_zero(
        rt: *mut u8,
-       out: *mut u8, out_td: *const rtdt::TyDesc,
-       value_td: *const rtdt::TyDesc,
+       out: *mut u8, out_td: &rtdt::TyDesc,
+       value_td: &rtdt::TyDesc,
    ) -> u8 { ... }
    ```
 
-   It is `unsafe` to call: the caller promises every pointer. Each parameter
-   is a pointer to the type the declaration gives it -- `*const rtdt::String`
-   for a `ref` string, `*mut rtdt::List` for a `mut` list, `*const f64` for
-   an `f64`, `*mut rtdt::Index` for an `index` result, `*const rtdt::TyDesc`
-   for every descriptor. A value at a type parameter, an option and a tuple
-   have no Rust type to point at and stay `*const u8` or `*mut u8`, read
-   through their descriptors. A consumed argument that is not a plain scalar
-   is a `*mut`, being handed over to be taken. Any thin pointers are
-   compatible in the C ABI, so the types cost nothing at the call; they are
-   for the rider's sake, and `rider_helpers` (`arg`, `str_arg`, `StringMut`
-   and the rest) reads them. Two arguments never point at the same value
-   where either is `mut` or `out`: the ownership checker rejects that call
-   (D010).
+   It is `unsafe` to call: the caller promises every pointer. Each argument
+   Rust can name the type of is a reference to it -- `&rtdt::String` for a
+   `ref` string, `&mut rtdt::List` for a `mut` list, `&f64` for an `f64`,
+   `&rtdt::TyDesc` for every descriptor -- and a result is a
+   `&mut MaybeUninit<T>`, `&mut MaybeUninit<rtdt::Index>` for an `index`. A
+   consumed aggregate is a `&mut`, being handed over to be taken. A value at a
+   type parameter, an option and a tuple have no Rust type and stay raw
+   pointers, read through their descriptors; `fixedint_zero` above returns
+   one. Any thin pointers and references are compatible in the C ABI, so the
+   types cost nothing at the call.
+
+   The `&mut`s are sound because no two arguments are the same value where
+   either is `mut` or `out`: the ownership checker rejects such a call
+   (D010). What a reference cannot vouch for is a string's or a bigint's
+   contents, which `rider_helpers::str_arg` and `StringMut` take at the
+   runtime's word.
+
+   `build.rs` derives each function's Rust signature from its declaration
+   and checks the implementation against it, so a signature that disagrees
+   is a build error.
 
 3. **A module that imports it**, which is what surface code can reach:
 

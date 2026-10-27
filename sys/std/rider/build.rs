@@ -100,21 +100,35 @@ impl<'a> Decl<'a> {
 
     /// The Rust parameter types of the function implementing this.
     ///
-    /// The runtime handle; a pointer at each argument and its descriptor; a
-    /// pointer at the result and its descriptor; then a descriptor for each
-    /// type parameter no argument determines, which appears in the result
-    /// alone. See `botdocs/native-abi.md`.
+    /// The runtime handle; each argument and its descriptor; the result and
+    /// its descriptor; then a descriptor for each type parameter no argument
+    /// determines, which appears in the result alone. See
+    /// `botdocs/native-abi.md`.
+    ///
+    /// An argument Rust can name the type of is a reference: shared for `ref`
+    /// and for a scalar, exclusive for `mut` and for a consumed aggregate,
+    /// which is handed over to be taken. The ownership checker makes the
+    /// exclusive ones sound, rejecting a call that passes one value twice
+    /// where either is `mut` (D010). A result is a `&mut MaybeUninit`, being
+    /// written rather than read. A value at a type parameter, an option, a
+    /// tuple and nothing at all have no Rust type, so they are raw pointers.
     fn rust_params(&self) -> Vec<String> {
-        const TD: &str = "*const rtdt::TyDesc";
+        const TD: &str = "&rtdt::TyDesc";
         let mut out = vec!["*mut u8".to_string()];
         for &(mode, ty) in &self.params {
-            // A consumed argument that is not a plain scalar is handed over to
-            // be taken, so it is a `*mut`, as the runtime declares it.
-            let mutable = mode == "mut" || mode == "out" || (mode == "in" && !is_scalar(ty));
-            out.push(format!("{} {}", if mutable { "*mut" } else { "*const" }, rust_type(ty)));
+            let exclusive = mode == "mut" || mode == "out" || (mode == "in" && !is_scalar(ty));
+            out.push(match rust_type(ty) {
+                Some(t) if exclusive => format!("&mut {t}"),
+                Some(t) => format!("&{t}"),
+                None if exclusive => "*mut u8".to_string(),
+                None => "*const u8".to_string(),
+            });
             out.push(TD.to_string());
         }
-        out.push(format!("*mut {}", self.ret.map_or("u8", rust_type)));
+        out.push(match self.ret.and_then(rust_type) {
+            Some(t) => format!("&mut std::mem::MaybeUninit<{t}>"),
+            None => "*mut u8".to_string(),
+        });
         out.push(TD.to_string());
         for tp in &self.type_params {
             let in_params = self.params.iter().any(|(_, ty)| mentions(ty, tp));
@@ -126,12 +140,12 @@ impl<'a> Decl<'a> {
     }
 }
 
-/// The Rust type a pointer at a value of datalove type `ty` points at.
+/// The Rust type of a value of datalove type `ty`, if Rust can name one.
 ///
-/// A type parameter, an option, a tuple: nothing Rust can name, so `u8`, read
-/// through the descriptor.
-fn rust_type(ty: &str) -> &'static str {
-    match ty {
+/// A type parameter, an option, a tuple: nothing Rust can name, read
+/// through the descriptor instead.
+fn rust_type(ty: &str) -> Option<&'static str> {
+    Some(match ty {
         "string" => "rtdt::String",
         "index" => "rtdt::Index",
         "offset" => "rtdt::Offset",
@@ -150,8 +164,8 @@ fn rust_type(ty: &str) -> &'static str {
         _ if ty.starts_with('[') => "rtdt::List",
         _ if ty.starts_with("#{") => "rtdt::Set",
         _ if ty.starts_with("%{") => "rtdt::Map",
-        _ => "u8",
-    }
+        _ => return None,
+    })
 }
 
 fn is_scalar(ty: &str) -> bool {

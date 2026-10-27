@@ -183,21 +183,14 @@ unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus
 /// writable region large enough for an `rtdt::List`.
 pub unsafe fn write_string_list(
     rt: LocalRtHandle,
-    out: *mut rtdt::List,
-    out_td: *const rtdt::TyDesc,
+    out: &mut std::mem::MaybeUninit<rtdt::List>,
+    out_td: &rtdt::TyDesc,
     parts: &[&str],
 ) -> RtStatus {
-    let list_td_ref = unsafe { rtdt::TyDescRef::from_ptr(out_td) };
-    let element_td = list_td_ref.list_element_ty().as_ptr();
+    let element_td = rtdt::TyDescRef::from_ref(out_td).list_element_ty().as_ptr();
 
     if parts.is_empty() {
-        // Initialize empty list directly.
-        let list_ptr = out;
-        unsafe {
-            (*list_ptr).data = std::ptr::null();
-            (*list_ptr).size = rtdt::Index::ZERO;
-            (*list_ptr).capacity = rtdt::Index::ZERO;
-        }
+        out.write(rtdt::List { data: std::ptr::null(), size: rtdt::Index::ZERO, capacity: rtdt::Index::ZERO });
         return RtStatus::Ok;
     }
 
@@ -223,7 +216,7 @@ pub unsafe fn write_string_list(
     unsafe {
         call::dtlv_rti_list_build_from_slice_local(
             rt,
-            out.cast(),
+            out.as_mut_ptr().cast(),
             element_td,
             buf.as_mut_ptr() as *mut u8,
             parts.len() as rtdt::IndexRepr,
@@ -269,9 +262,8 @@ unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
 ///
 /// # Safety
 ///
-/// `list_ptr` must be a valid pointer to a live `rtdt::List` of strings.
-pub unsafe fn read_string_list<'a>(list_ptr: *const rtdt::List) -> Vec<&'a str> {
-    let list = unsafe { &*list_ptr };
+/// `list` is a list of strings the runtime made.
+pub unsafe fn read_string_list(list: &rtdt::List) -> Vec<&str> {
     let count = list.size.as_usize();
     if count == 0 {
         return Vec::new();
@@ -298,8 +290,8 @@ pub unsafe fn read_string_list<'a>(list_ptr: *const rtdt::List) -> Vec<&'a str> 
 /// # Safety
 ///
 /// `int_ptr` must point to a valid `rtdt::Int`.
-pub unsafe fn int_to_string(int_ptr: *const rtdt::Int) -> String {
-    unsafe { (*int_ptr).to_decimal_string() }
+pub unsafe fn int_to_string(int: &rtdt::Int) -> String {
+    unsafe { int.to_decimal_string() }
 }
 
 /// Parse a decimal string into an `Int` (bigint), writing the result as `?int`.
@@ -416,65 +408,24 @@ pub const fn align_up(offset: usize, align: usize) -> usize {
 
 // --- Arguments ---
 //
-// A rider function is an entry point: whoever calls it promises its pointers,
-// and the function takes them at its word. These turn each pointer into the
-// value it points at, once, at the top, so that the body works on typed
-// values rather than on pointers.
-
-/// A scalar argument, read through its pointer.
-///
-/// # Safety
-///
-/// `ptr` points to an initialized `T`.
-pub unsafe fn arg<T: Copy>(ptr: *const T) -> T {
-    unsafe { *ptr }
-}
-
-/// An argument read in place, through a reference.
-///
-/// For one that is not `Copy`, or is only looked at.
-///
-/// # Safety
-///
-/// `ptr` points to an initialized `T`, which nothing changes while the
-/// reference is in use.
-pub unsafe fn ref_arg<'a, T>(ptr: *const T) -> &'a T {
-    unsafe { &*ptr }
-}
-
-/// A descriptor argument.
-///
-/// # Safety
-///
-/// `ptr` points to a descriptor that outlives the reference.
-pub unsafe fn td_arg<'a>(ptr: *const rtdt::TyDesc) -> rtdt::TyDescRef<'a> {
-    unsafe { rtdt::TyDescRef::from_ptr(ptr) }
-}
+// A rider function takes its arguments as references to the types its
+// declaration gives them, the caller promising each one. What a reference
+// cannot promise is a string's contents: the runtime keeps `size` bytes of
+// UTF-8 at `data`, and these take it at its word.
 
 /// A `string` argument, as a `&str`.
 ///
 /// # Safety
 ///
-/// `ptr` points to a live `rtdt::String` holding UTF-8, which nothing changes
-/// while the `&str` is in use.
-pub unsafe fn str_arg<'a>(ptr: *const rtdt::String) -> &'a str {
+/// `s` is a string the runtime made, its `size` bytes at `data` UTF-8.
+pub unsafe fn str_arg(s: &rtdt::String) -> &str {
     unsafe {
-        let s = &*ptr;
         if s.data.is_null() || s.size.0 == 0 {
             ""
         } else {
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(s.data, s.size.as_usize()))
         }
     }
-}
-
-/// Write a scalar result.
-///
-/// # Safety
-///
-/// `out` is writable for a `T` and aligned for one.
-pub unsafe fn write_result<T: Copy>(out: *mut T, val: T) {
-    unsafe { std::ptr::write(out, val) }
 }
 
 /// A `mut string` argument, changed through one reference.
@@ -495,11 +446,10 @@ pub struct StringMut<'a> {
 impl<'a> StringMut<'a> {
     /// # Safety
     ///
-    /// `ptr` points to a live `rtdt::String` holding UTF-8, which `td`
-    /// describes and the runtime `rt` allocated, and nothing else reaches it
-    /// while this lives.
-    pub unsafe fn new(rt: LocalRtHandle, ptr: *mut rtdt::String, td: *const rtdt::TyDesc) -> StringMut<'a> {
-        StringMut { rt, td, s: unsafe { &mut *ptr } }
+    /// `s` holds UTF-8 that the runtime `rt` allocated, and `td` describes
+    /// it.
+    pub unsafe fn new(rt: LocalRtHandle, s: &'a mut rtdt::String, td: &rtdt::TyDesc) -> StringMut<'a> {
+        StringMut { rt, td, s }
     }
 
     pub fn as_str(&self) -> &str {
