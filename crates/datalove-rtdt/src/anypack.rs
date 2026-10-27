@@ -13,7 +13,7 @@ use crate::*;
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Tag {
-    /// Two pointers: tydesc and value.
+    /// Two pointers: tydesc and value, neither of them null.
     /// - primary: *const TyDesc (untagged, naturally aligned)
     /// - secondary: *const u8 (pointer to value)
     TwoPointers = 0,
@@ -29,7 +29,7 @@ pub enum Tag {
     /// Reserved for future use.
     Reserved3 = 3,
 
-    /// TyDesc pointer + inline 64-bit value.
+    /// TyDesc pointer + inline 64-bit value. The pointer is not null.
     /// - primary: *const TyDesc (tagged with 0b100)
     /// - secondary: 64-bit immediate value
     InlineWithTyDesc = 4,
@@ -110,6 +110,7 @@ impl Data {
     /// This is the default, unoptimized encoding used for heap-allocated values.
     #[inline]
     pub fn from_pointers(tydesc: *const TyDesc, value: *const u8) -> Self {
+        assert!(!tydesc.is_null() && !value.is_null(), "a data points to a value and its descriptor");
         debug_assert_eq!(
             tydesc.addr() & TAG_MASK,
             0,
@@ -156,6 +157,7 @@ impl Data {
     /// Construct Data from tydesc + inline 64-bit value (Tag 4).
     #[inline]
     pub fn from_inline64(tydesc: *const TyDesc, value: u64) -> Self {
+        assert!(!tydesc.is_null(), "an inline data carries its descriptor");
         debug_assert_eq!(
             tydesc.addr() & TAG_MASK,
             0,
@@ -324,6 +326,27 @@ impl Data {
     // ============================================================================
     // Accessors - Value Pointers
     // ============================================================================
+
+    /// The descriptor and the value a two-pointer `Data` points to, or `None`
+    /// for one packed into its own words.
+    ///
+    /// # Safety
+    ///
+    /// `self` must have been built by this module's constructors, from a
+    /// descriptor that outlives the borrow of `self`.
+    #[inline]
+    pub unsafe fn pointee(&self) -> std::option::Option<(TyDescRef<'_>, *const u8)> {
+        match self.tag() {
+            Tag::TwoPointers => {
+                // SAFETY: the constructor took a descriptor, which the caller
+                // promises still lives.
+                let tydesc = unsafe { TyDescRef::from_ptr(self.primary as *const TyDesc) };
+                std::option::Option::Some((tydesc, self.secondary as *const u8))
+            }
+            Tag::SmallImmediate | Tag::InlineWithTyDesc => std::option::Option::None,
+            _ => panic!("invalid tag"),
+        }
+    }
 
     /// Get pointer to value (only valid for Tag 0).
     #[inline]
@@ -609,6 +632,18 @@ impl Error {
         // Error uses same encoding as Data - interpret primary/secondary as Data.
         let as_data = unsafe { &*(self as *const Error as *const Data) };
         as_data.tydesc()
+    }
+
+    /// The descriptor and the value this error points to. See
+    /// [`Data::pointee`].
+    ///
+    /// # Safety
+    ///
+    /// As for [`Data::pointee`].
+    #[inline]
+    pub unsafe fn pointee(&self) -> std::option::Option<(TyDescRef<'_>, *const u8)> {
+        let as_data = unsafe { &*(self as *const Error as *const Data) };
+        unsafe { as_data.pointee() }
     }
 
     /// Get pointer to error value.

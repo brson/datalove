@@ -43,40 +43,6 @@ unsafe fn inline_data(
     }
 }
 
-/// The value a wrapped one holds, and the descriptor saying what it is.
-///
-/// Borrowing rather than moving: the `Data` keeps what it holds, and both of
-/// these point into it.
-///
-/// Only a wrapper holding its value on the heap has a value to point at; one
-/// packed into the two words is read by `data_borrow`, which unpacks it.
-///
-/// # Safety
-///
-/// `data_in` must be an initialized `Data`.
-pub unsafe fn data_parts(
-    data_in: *const u8,
-    value_out: *mut *const u8,
-    tydesc_out: *mut *const rtdt::TyDesc,
-) -> RtStatus {
-    unsafe {
-        let data = &*(data_in as *const rtdt::Data);
-        if data.tag() != rtdt::anypack::Tag::TwoPointers {
-            // A value packed into the words has no address to lend, and
-            // nothing that reaches here should be packed.
-            return RtStatus::Error;
-        }
-        let value_ptr = data.value_ptr();
-        let tydesc = data.tydesc();
-        if value_ptr.is_null() || tydesc.is_null() {
-            return RtStatus::Error;
-        }
-        std::ptr::write(value_out, value_ptr);
-        std::ptr::write(tydesc_out, tydesc);
-        RtStatus::Ok
-    }
-}
-
 /// Borrow what a Data holds, writing a packed value into `scratch` first.
 ///
 /// A `data` holding something on the heap can lend the address it already has.
@@ -95,13 +61,11 @@ pub unsafe fn data_parts(
 pub unsafe fn data_borrow(
     data_in: *const u8,
     scratch: &mut crate::rust::DataScratch,
-    value_out: *mut *const u8,
-    tydesc_out: *mut *const rtdt::TyDesc,
-) -> RtStatus {
+) -> (*const u8, *const rtdt::TyDesc) {
     unsafe {
         let data = &*(data_in as *const rtdt::Data);
-        if data.tag() == rtdt::anypack::Tag::TwoPointers {
-            return data_parts(data_in, value_out, tydesc_out);
+        if let Some((tydesc, value)) = data.pointee() {
+            return (value, tydesc.as_ptr());
         }
 
         let tytag = data.tytag();
@@ -122,13 +86,8 @@ pub unsafe fn data_borrow(
             Some(td) => td,
             None => data.tydesc(),
         };
-        if tydesc.is_null() {
-            return RtStatus::Error;
-        }
-
-        std::ptr::write(value_out, scratch as *const u8);
-        std::ptr::write(tydesc_out, tydesc);
-        RtStatus::Ok
+        assert!(!tydesc.is_null(), "a packed {tytag:?} has no descriptor");
+        (scratch as *const u8, tydesc)
     }
 }
 

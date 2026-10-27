@@ -21,21 +21,8 @@ enum FloatEqPolicy {
 unsafe fn data_inner(
     data: *const rtdt::Data,
     scratch: &mut crate::rust::DataScratch,
-) -> std::option::Option<(*const u8, *const rtdt::TyDesc)> {
-    let mut value: *const u8 = std::ptr::null();
-    let mut tydesc: *const rtdt::TyDesc = std::ptr::null();
-    let status = unsafe {
-        super::boxing::data_borrow(
-            data as *const u8,
-            scratch,
-            &mut value,
-            &mut tydesc,
-        )
-    };
-    if status != crate::c::RtStatus::Ok {
-        return std::option::Option::None;
-    }
-    std::option::Option::Some((value, tydesc))
+) -> (*const u8, *const rtdt::TyDesc) {
+    unsafe { super::boxing::data_borrow(data as *const u8, scratch) }
 }
 
 /// Whether two packed values are equal.
@@ -69,12 +56,8 @@ unsafe fn eq_packed(
         // a NaN has the same bits as itself and is not.
         let mut scratch_a = crate::rust::DataScratch::default();
         let mut scratch_b = crate::rust::DataScratch::default();
-        let (std::option::Option::Some((inner_a, inner_td_a)),
-             std::option::Option::Some((inner_b, inner_td_b))) =
-            (data_inner(a, &mut scratch_a), data_inner(b, &mut scratch_b))
-        else {
-            return false;
-        };
+        let (inner_a, inner_td_a) = data_inner(a, &mut scratch_a);
+        let (inner_b, inner_td_b) = data_inner(b, &mut scratch_b);
         // A tag is not a type. Two packed values can both be tagged `Set` and
         // hold a set of different elements, and reading one through the
         // other's descriptor reads its nodes at the wrong stride.
@@ -110,12 +93,8 @@ unsafe fn cmp_packed(
         }
         let mut scratch_a = crate::rust::DataScratch::default();
         let mut scratch_b = crate::rust::DataScratch::default();
-        let (std::option::Option::Some((inner_a, inner_td_a)),
-             std::option::Option::Some((inner_b, inner_td_b))) =
-            (data_inner(a, &mut scratch_a), data_inner(b, &mut scratch_b))
-        else {
-            return crate::c::RtOrdering::Error;
-        };
+        let (inner_a, inner_td_a) = data_inner(a, &mut scratch_a);
+        let (inner_b, inner_td_b) = data_inner(b, &mut scratch_b);
         // A tag is not a type: two packed values can share one and still hold
         // different types, a set of `u32` against a set of `string`. Only
         // where they are the one type may their values be read through the one

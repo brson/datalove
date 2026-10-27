@@ -702,19 +702,11 @@ unsafe fn pretty_data(
 
         // A scalar small enough to pack sits in the two words. Only the pointer
         // form has a value to follow, and only it has a tydesc to follow it with.
-        if data.tag() != rtdt::anypack::Tag::TwoPointers {
-            return pretty_packed(rt, data, string_mut, string_tydesc);
+        match data.pointee() {
+            Some((inner_tydesc, inner_value)) =>
+                pretty_value(rt, inner_value, inner_tydesc, string_mut, string_tydesc),
+            None => pretty_packed(rt, data, string_mut, string_tydesc),
         }
-
-        let tydesc_ptr = data.tydesc();
-        if tydesc_ptr.is_null() {
-            push_str(rt, string_mut, string_tydesc, b"<null>")?;
-            return Ok(());
-        }
-
-        let inner_tydesc = rtdt::TyDescRef::from_ptr(tydesc_ptr);
-        let inner_value = data.value_ptr();
-        pretty_value(rt, inner_value, inner_tydesc, string_mut, string_tydesc)
     }
 }
 
@@ -729,21 +721,15 @@ unsafe fn pretty_error(
         push_str(rt, string_mut, string_tydesc, b"error ")?;
 
         // Error uses the same encoding as Data, so a packed scalar reads the
-        // same way. The transmute is what `Error::tydesc` does internally.
-        let as_data = &*(error as *const rtdt::Error as *const rtdt::Data);
-        if as_data.tag() != rtdt::anypack::Tag::TwoPointers {
-            return pretty_packed(rt, as_data, string_mut, string_tydesc);
+        // same way. The transmute is what `Error::pointee` does internally.
+        match error.pointee() {
+            Some((inner_tydesc, inner_value)) =>
+                pretty_value(rt, inner_value, inner_tydesc, string_mut, string_tydesc),
+            None => {
+                let as_data = &*(error as *const rtdt::Error as *const rtdt::Data);
+                pretty_packed(rt, as_data, string_mut, string_tydesc)
+            }
         }
-
-        let tydesc_ptr = error.tydesc();
-        if tydesc_ptr.is_null() {
-            push_str(rt, string_mut, string_tydesc, b"<null>")?;
-            return Ok(());
-        }
-
-        let inner_tydesc = rtdt::TyDescRef::from_ptr(tydesc_ptr);
-        let inner_value = error.value_ptr();
-        pretty_value(rt, inner_value, inner_tydesc, string_mut, string_tydesc)
     }
 }
 

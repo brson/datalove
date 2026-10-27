@@ -280,80 +280,41 @@ pub unsafe fn any_destroy_local(
                 }
             }
 
-            // Data and Error - dynamic types.
+            // Data and Error - dynamic types. One packed into its own words
+            // owns nothing; one pointing to a value owns it.
             rtdt::TyTag::Data => {
-                let data_ptr = value_in as *const rtdt::Data;
-                let data = &*data_ptr;
-
-                match data.tag() {
-                    rtdt::anypack::Tag::TwoPointers => {
-                        // Extract inner tydesc and value pointer.
-                        let inner_tydesc = data.tydesc();
-                        let inner_value_ptr = data.value_ptr();
-
-                        // Recursively destroy the inner value.
-                        if !inner_value_ptr.is_null() && !inner_tydesc.is_null() {
-                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, &*inner_tydesc);
-                            if status != RtStatus::Ok {
-                                return status;
-                            }
-
-                            // Free the inner value allocation.
-                            let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
-                            rt.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
-                        }
-
-                        RtStatus::Ok
-                    }
-                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // Value is inline, no allocations to free.
-                        RtStatus::Ok
-                    }
-                    _ => {
-                        // Invalid tag.
-                        RtStatus::Error
-                    }
+                let data = &*(value_in as *const rtdt::Data);
+                match data.pointee() {
+                    Some((inner_ty, inner_value_ptr)) => destroy_pointee(rt, inner_ty, inner_value_ptr),
+                    None => RtStatus::Ok,
                 }
             }
 
             rtdt::TyTag::Param => panic!("a template is not the type of any value"),
             rtdt::TyTag::Error => {
-                // Error uses same encoding as Data.
-                let error_ptr = value_in as *const rtdt::Error;
-                let as_data_ptr = error_ptr as *const rtdt::Data;
-                let data = &*as_data_ptr;
-
-                match data.tag() {
-                    rtdt::anypack::Tag::TwoPointers => {
-                        // Extract inner tydesc and value pointer using Error methods.
-                        let inner_tydesc = (*error_ptr).tydesc();
-                        let inner_value_ptr = (*error_ptr).value_ptr();
-
-                        // Recursively destroy the inner value.
-                        if !inner_value_ptr.is_null() && !inner_tydesc.is_null() {
-                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, &*inner_tydesc);
-                            if status != RtStatus::Ok {
-                                return status;
-                            }
-
-                            // Free the inner value allocation.
-                            let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
-                            rt.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
-                        }
-
-                        RtStatus::Ok
-                    }
-                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // Value is inline, no allocations to free.
-                        RtStatus::Ok
-                    }
-                    _ => {
-                        // Invalid tag.
-                        RtStatus::Error
-                    }
+                let error = &*(value_in as *const rtdt::Error);
+                match error.pointee() {
+                    Some((inner_ty, inner_value_ptr)) => destroy_pointee(rt, inner_ty, inner_value_ptr),
+                    None => RtStatus::Ok,
                 }
             }
         }
+    }
+}
+
+/// Destroy and free the value a `data` or `error` points to.
+///
+/// # Safety
+///
+/// `value` must be an initialized value of `ty` that the runtime allocated.
+unsafe fn destroy_pointee(rt: &mut rt_local::RtLocal, ty: rtdt::TyDescRef, value: *const u8) -> RtStatus {
+    unsafe {
+        let status = any_destroy_local(rt, value as *mut u8, ty.as_ref());
+        if status != RtStatus::Ok {
+            return status;
+        }
+        rt.alloc.free(ty.size(), ty.align(), 1, value as *mut u8);
+        RtStatus::Ok
     }
 }
 

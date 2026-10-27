@@ -755,8 +755,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
 
 /// Borrow what a Data holds, unpacking into `scratch` when it has to.
 ///
-/// Like `dtlv_rti_data_parts`, but works for a value the `data` keeps in its
-/// own words rather than behind a pointer. `scratch` must be eight writable
+/// A `data` pointing to its value lends that value's address; one keeping it
+/// in its own words unpacks it into `scratch`, which must be eight writable
 /// bytes, aligned to eight, that outlive the borrow: a `rust::DataScratch`, to
 /// a Rust caller. See `boxing::data_borrow`.
 #[unsafe(no_mangle)]
@@ -773,9 +773,12 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_borrow(
     // Made a reference here, at the boundary, where the doc above holds the
     // caller to the alignment.
     unsafe {
-        crate::c::impls::boxing::data_borrow(
-            data_in, &mut *(scratch as *mut crate::rust::DataScratch), value_out, tydesc_out)
+        let (value, tydesc) = crate::c::impls::boxing::data_borrow(
+            data_in, &mut *(scratch as *mut crate::rust::DataScratch));
+        std::ptr::write(value_out, value);
+        std::ptr::write(tydesc_out, tydesc);
     }
+    RtStatus::Ok
 }
 
 #[unsafe(no_mangle)]
