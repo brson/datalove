@@ -44,7 +44,7 @@ impl IrInterpreter {
             let status = datalove_rt::c::dtlv_rti_string_create_local(
                 rt_handle,
                 output_string.as_mut_ptr() as *mut u8,
-                string_tydesc,
+                &*string_tydesc,
             );
 
             if status != RtStatus::Ok {
@@ -59,16 +59,16 @@ impl IrInterpreter {
             let status = datalove_rt::c::dtlv_rti_pretty_print_local(
                 rt_handle,
                 value.ptr,
-                value.tydesc,
+                &*value.tydesc,
                 &mut output_string as *mut rtdt::String as *mut u8,
-                string_tydesc,
+                &*string_tydesc,
             );
 
             if status != RtStatus::Ok {
                 datalove_rt::c::dtlv_rti_string_destroy_local(
                     rt_handle,
                     &mut output_string as *mut rtdt::String as *mut u8,
-                    string_tydesc,
+                    &*string_tydesc,
                 );
                 return Err(InterpError::RuntimeError(
                     "Failed to pretty-print value".to_string(),
@@ -82,7 +82,7 @@ impl IrInterpreter {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
-                string_tydesc,
+                &*string_tydesc,
             );
 
             Ok(result)
@@ -95,7 +95,7 @@ impl IrInterpreter {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 self.runtime.handle(),
                 value.ptr,
-                value.tydesc,
+                &*value.tydesc,
             );
         }
     }

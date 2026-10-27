@@ -69,7 +69,7 @@ pub struct MemGuard {
 impl MemGuard {
     /// Allocate typed memory. Returns None if allocation fails.
     pub fn new(rt: LocalRtHandle, tydesc: *const rtdt::TyDesc, count: u32) -> Option<Self> {
-        let ptr = unsafe { crate::c::dtlv_rti_mem_alloc_local(rt, tydesc, count.into()) };
+        let ptr = unsafe { crate::c::dtlv_rti_mem_alloc_local(rt, &*tydesc, count.into()) };
         if ptr.is_null() {
             None
         } else {
@@ -115,7 +115,7 @@ impl MemGuard {
 impl Drop for MemGuard {
     fn drop(&mut self) {
         unsafe {
-            crate::c::dtlv_rti_mem_free_local(self.rt, self.tydesc, self.count.into(), self.ptr);
+            crate::c::dtlv_rti_mem_free_local(self.rt, &*self.tydesc, self.count.into(), self.ptr);
         }
     }
 }
@@ -166,8 +166,8 @@ impl ValueGuard {
 impl Drop for ValueGuard {
     fn drop(&mut self) {
         unsafe {
-            crate::c::dtlv_rti_any_destroy_local(self.rt, self.ptr, self.tydesc);
-            crate::c::dtlv_rti_mem_free_local(self.rt, self.tydesc, 1, self.ptr);
+            crate::c::dtlv_rti_any_destroy_local(self.rt, self.ptr, &*self.tydesc);
+            crate::c::dtlv_rti_mem_free_local(self.rt, &*self.tydesc, 1, self.ptr);
         }
     }
 }

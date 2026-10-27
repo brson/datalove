@@ -40,9 +40,9 @@ fn test_eq_bool_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -52,22 +52,22 @@ fn test_eq_bool_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -96,9 +96,9 @@ fn test_eq_bool_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -108,22 +108,22 @@ fn test_eq_bool_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -152,9 +152,9 @@ fn test_eq_u32_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -164,22 +164,22 @@ fn test_eq_u32_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -208,9 +208,9 @@ fn test_eq_u32_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -220,22 +220,22 @@ fn test_eq_u32_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -264,9 +264,9 @@ fn test_eq_f32_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -276,22 +276,22 @@ fn test_eq_f32_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -320,9 +320,9 @@ fn test_eq_f32_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -332,22 +332,22 @@ fn test_eq_f32_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -376,9 +376,9 @@ fn test_eq_string_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -388,22 +388,22 @@ fn test_eq_string_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -432,9 +432,9 @@ fn test_eq_string_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -444,22 +444,22 @@ fn test_eq_string_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -488,9 +488,9 @@ fn test_eq_int_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -500,22 +500,22 @@ fn test_eq_int_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -544,9 +544,9 @@ fn test_eq_int_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -556,22 +556,22 @@ fn test_eq_int_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -600,9 +600,9 @@ fn test_eq_tuple_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -612,22 +612,22 @@ fn test_eq_tuple_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -656,9 +656,9 @@ fn test_eq_tuple_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -668,22 +668,22 @@ fn test_eq_tuple_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -712,9 +712,9 @@ fn test_eq_nested_tuple_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -724,22 +724,22 @@ fn test_eq_nested_tuple_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -768,9 +768,9 @@ fn test_eq_nested_tuple_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -780,22 +780,22 @@ fn test_eq_nested_tuple_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -824,9 +824,9 @@ fn test_eq_struct_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -836,22 +836,22 @@ fn test_eq_struct_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -880,9 +880,9 @@ fn test_eq_struct_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -892,22 +892,22 @@ fn test_eq_struct_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -936,9 +936,9 @@ fn test_eq_list_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -948,22 +948,22 @@ fn test_eq_list_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -992,9 +992,9 @@ fn test_eq_list_not_equals_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1004,22 +1004,22 @@ fn test_eq_list_not_equals_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1048,9 +1048,9 @@ fn test_eq_list_not_equals_lengths() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1060,22 +1060,22 @@ fn test_eq_list_not_equals_lengths() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1104,9 +1104,9 @@ fn test_eq_option_none_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1116,22 +1116,22 @@ fn test_eq_option_none_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1160,9 +1160,9 @@ fn test_eq_option_some_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1172,22 +1172,22 @@ fn test_eq_option_some_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1216,9 +1216,9 @@ fn test_eq_option_none_vs_some() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1228,22 +1228,22 @@ fn test_eq_option_none_vs_some() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1272,9 +1272,9 @@ fn test_eq_option_some_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1284,22 +1284,22 @@ fn test_eq_option_some_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1328,9 +1328,9 @@ fn test_eq_result_ok_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1340,22 +1340,22 @@ fn test_eq_result_ok_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1384,9 +1384,9 @@ fn test_eq_result_ok_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1396,22 +1396,22 @@ fn test_eq_result_ok_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1440,9 +1440,9 @@ fn test_eq_result_err_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1452,22 +1452,22 @@ fn test_eq_result_err_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1496,9 +1496,9 @@ fn test_eq_result_err_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1508,22 +1508,22 @@ fn test_eq_result_err_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1552,9 +1552,9 @@ fn test_eq_result_ok_vs_err() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1564,22 +1564,22 @@ fn test_eq_result_ok_vs_err() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1608,9 +1608,9 @@ fn test_eq_type_mismatch() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1620,22 +1620,22 @@ fn test_eq_type_mismatch() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1666,9 +1666,9 @@ fn test_eq_map_empty_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1678,22 +1678,22 @@ fn test_eq_map_empty_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1722,9 +1722,9 @@ fn test_eq_map_equals_same_contents() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1734,22 +1734,22 @@ fn test_eq_map_equals_same_contents() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1778,9 +1778,9 @@ fn test_eq_map_equals_different_literal_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1790,22 +1790,22 @@ fn test_eq_map_equals_different_literal_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1834,9 +1834,9 @@ fn test_eq_map_not_equals_different_keys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1846,22 +1846,22 @@ fn test_eq_map_not_equals_different_keys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1890,9 +1890,9 @@ fn test_eq_map_not_equals_different_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1902,22 +1902,22 @@ fn test_eq_map_not_equals_different_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -1946,9 +1946,9 @@ fn test_eq_map_not_equals_different_sizes() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1958,22 +1958,22 @@ fn test_eq_map_not_equals_different_sizes() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -2004,9 +2004,9 @@ fn test_eq_set_empty_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -2016,22 +2016,22 @@ fn test_eq_set_empty_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -2060,9 +2060,9 @@ fn test_eq_set_equals_same_contents() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -2072,22 +2072,22 @@ fn test_eq_set_equals_same_contents() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -2116,9 +2116,9 @@ fn test_eq_set_equals_different_literal_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -2128,22 +2128,22 @@ fn test_eq_set_equals_different_literal_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -2172,9 +2172,9 @@ fn test_eq_set_not_equals_different_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -2184,22 +2184,22 @@ fn test_eq_set_not_equals_different_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -2228,9 +2228,9 @@ fn test_eq_set_not_equals_different_sizes() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -2240,22 +2240,22 @@ fn test_eq_set_not_equals_different_sizes() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_a as *mut u8,
-            tydesc_a,
+            &*tydesc_a,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_a,
+            &*tydesc_a,
             1,
             ptr_a as *mut u8,
         );
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             ptr_b as *mut u8,
-            tydesc_b,
+            &*tydesc_b,
         );
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            tydesc_b,
+            &*tydesc_b,
             1,
             ptr_b as *mut u8,
         );
@@ -2702,16 +2702,16 @@ fn test_eq_table_empty_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtEq::Equals));
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, &*tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, &*tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_b, 1, ptr_b as *mut u8);
     }
     Ok(())
 }
@@ -2734,16 +2734,16 @@ fn test_eq_table_with_rows_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtEq::Equals));
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, &*tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, &*tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_b, 1, ptr_b as *mut u8);
     }
     Ok(())
 }
@@ -2766,16 +2766,16 @@ fn test_eq_table_different_values() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, &*tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, &*tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_b, 1, ptr_b as *mut u8);
     }
     Ok(())
 }
@@ -2798,16 +2798,16 @@ fn test_eq_table_different_lengths() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, &*tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, &*tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_b, 1, ptr_b as *mut u8);
     }
     Ok(())
 }
@@ -2830,16 +2830,16 @@ fn test_eq_table_with_strings() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtEq::Equals));
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, &*tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, &*tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc_b, 1, ptr_b as *mut u8);
     }
     Ok(())
 }

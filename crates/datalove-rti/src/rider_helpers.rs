@@ -209,7 +209,7 @@ pub unsafe fn write_string_list(
         call::dtlv_rti_list_build_from_slice_local(
             rt,
             out.as_mut_ptr().cast(),
-            element_td,
+            &*element_td,
             buf.as_mut_ptr() as *mut u8,
             parts.len() as rtdt::IndexRepr,
         )
@@ -495,7 +495,7 @@ impl<'a> StringMut<'a> {
             call::dtlv_rti_string_push_bytes_local(
                 self.rt,
                 self.s as *mut rtdt::String as *mut u8,
-                self.td,
+                &*self.td,
                 other.as_ptr(),
                 other.len() as rtdt::IndexRepr,
             )

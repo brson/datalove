@@ -357,7 +357,7 @@ impl IrInterpreter {
         }
         unsafe {
             datalove_rt::c::dtlv_rti_tydesc_instantiate(
-                self.runtime.handle(), template, type_params.as_ptr(), type_params.len() as u32)
+                self.runtime.handle(), &*template, type_params.as_ptr(), type_params.len() as u32)
         }
     }
 
@@ -384,7 +384,7 @@ impl IrInterpreter {
                     crate::layout::TableEntry::Param(p) => params[p as usize],
                     crate::layout::TableEntry::Template(template) => unsafe {
                         datalove_rt::c::dtlv_rti_tydesc_instantiate(
-                            rt, template, params.as_ptr(), params.len() as u32)
+                            rt, &*template, params.as_ptr(), params.len() as u32)
                     },
                 };
                 frame.set_table_entry(i, tydesc);

@@ -147,7 +147,7 @@ unsafe fn walk_stride(rt: &Rt, cursor: &mut rtdt::StrideCursor) -> Vec<*const u8
 unsafe fn walk_list_u32(rt: &Rt, list: &rtdt::List, list_td: *const rtdt::TyDesc) -> Vec<u32> {
     unsafe {
         let mut cursor = MaybeUninit::uninit();
-        let status = c::dtlv_rti_list_cursor_begin_local(rt.0, list as *const rtdt::List as *const u8, list_td, cursor.as_mut_ptr());
+        let status = c::dtlv_rti_list_cursor_begin_local(rt.0, list as *const rtdt::List as *const u8, &*list_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
         walk_stride(rt, cursor.assume_init_mut()).into_iter().map(|p| *(p as *const u32)).collect()
     }
@@ -156,7 +156,7 @@ unsafe fn walk_list_u32(rt: &Rt, list: &rtdt::List, list_td: *const rtdt::TyDesc
 unsafe fn walk_tensor_u32(rt: &Rt, tensor: &rtdt::Tensor, tensor_td: *const rtdt::TyDesc) -> Vec<u32> {
     unsafe {
         let mut cursor = MaybeUninit::uninit();
-        let status = c::dtlv_rti_tensor_cursor_begin_local(rt.0, tensor as *const rtdt::Tensor as *const u8, tensor_td, cursor.as_mut_ptr());
+        let status = c::dtlv_rti_tensor_cursor_begin_local(rt.0, tensor as *const rtdt::Tensor as *const u8, &*tensor_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
         walk_stride(rt, cursor.assume_init_mut()).into_iter().map(|p| *(p as *const u32)).collect()
     }
@@ -177,7 +177,7 @@ unsafe fn walk_tensor_nested(
             return walk_tensor_u32(rt, &*tensor, tds[0]);
         }
         let mut cursor = MaybeUninit::uninit();
-        let status = c::dtlv_rti_tensor_row_cursor_begin_local(rt.0, tensor as *const u8, tds[rank as usize - 1], cursor.as_mut_ptr());
+        let status = c::dtlv_rti_tensor_row_cursor_begin_local(rt.0, tensor as *const u8, &*(tds[rank as usize - 1]), cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
         let cursor = cursor.assume_init_mut();
         let mut all = Vec::new();
@@ -227,7 +227,7 @@ unsafe fn walk_tree(rt: &Rt, cursor: &mut rtdt::TreeCursor) -> Vec<(*const u8, *
 unsafe fn begin_set(rt: &Rt, set: &rtdt::Set, set_td: *const rtdt::TyDesc) -> rtdt::TreeCursor {
     unsafe {
         let mut cursor = MaybeUninit::uninit();
-        let status = c::dtlv_rti_btreeset_cursor_begin_local(rt.0, set as *const rtdt::Set as *const u8, set_td, cursor.as_mut_ptr());
+        let status = c::dtlv_rti_btreeset_cursor_begin_local(rt.0, set as *const rtdt::Set as *const u8, &*set_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
         cursor.assume_init()
     }
@@ -236,7 +236,7 @@ unsafe fn begin_set(rt: &Rt, set: &rtdt::Set, set_td: *const rtdt::TyDesc) -> rt
 unsafe fn begin_map(rt: &Rt, map: &rtdt::Map, map_td: *const rtdt::TyDesc) -> rtdt::TreeCursor {
     unsafe {
         let mut cursor = MaybeUninit::uninit();
-        let status = c::dtlv_rti_btreemap_cursor_begin_local(rt.0, map as *const rtdt::Map as *const u8, map_td, cursor.as_mut_ptr());
+        let status = c::dtlv_rti_btreemap_cursor_begin_local(rt.0, map as *const rtdt::Map as *const u8, &*map_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
         cursor.assume_init()
     }
@@ -261,11 +261,11 @@ unsafe fn walk_map_u32(rt: &Rt, map: &rtdt::Map, map_td: *const rtdt::TyDesc) ->
 unsafe fn list_of<T: Copy>(rt: &Rt, values: &[T], list_td: *const rtdt::TyDesc, elem_td: *const rtdt::TyDesc) -> rtdt::List {
     unsafe {
         let mut list = MaybeUninit::<rtdt::List>::uninit();
-        assert_eq!(c::dtlv_rti_list_create_local(rt.0, list.as_mut_ptr() as *mut u8, list_td), RtStatus::Ok);
+        assert_eq!(c::dtlv_rti_list_create_local(rt.0, list.as_mut_ptr() as *mut u8, &*list_td), RtStatus::Ok);
         let mut list = list.assume_init();
         for &value in values {
             let mut v = value;
-            let status = c::dtlv_rti_list_push_local(rt.0, &mut list as *mut rtdt::List as *mut u8, list_td, &mut v as *mut T as *mut u8, elem_td);
+            let status = c::dtlv_rti_list_push_local(rt.0, &mut list as *mut rtdt::List as *mut u8, &*list_td, &mut v as *mut T as *mut u8, &*elem_td);
             assert_eq!(status, RtStatus::Ok);
         }
         list
@@ -273,7 +273,7 @@ unsafe fn list_of<T: Copy>(rt: &Rt, values: &[T], list_td: *const rtdt::TyDesc, 
 }
 
 unsafe fn destroy_list(rt: &Rt, list: &mut rtdt::List, list_td: *const rtdt::TyDesc) {
-    unsafe { assert_eq!(c::dtlv_rti_list_destroy_local(rt.0, list as *mut rtdt::List as *mut u8, list_td), RtStatus::Ok) };
+    unsafe { assert_eq!(c::dtlv_rti_list_destroy_local(rt.0, list as *mut rtdt::List as *mut u8, &*list_td), RtStatus::Ok) };
 }
 
 fn empty_tensor() -> rtdt::Tensor {
@@ -297,10 +297,10 @@ unsafe fn tensor_of(rt: &Rt, arena: &TyDescArena, shape: &[u32], tensor_td: *con
         let mut shape_list = list_of(rt, shape, list_td, u32_td);
         let mut tensor = empty_tensor();
         let status = c::dtlv_rti_tensor_create_from_slice_local(
-            rt.0, data.as_ptr() as *const u8, count.into(), u32_td,
-            &mut shape_list as *mut rtdt::List as *mut u8, list_td,
+            rt.0, data.as_ptr() as *const u8, count.into(), &*u32_td,
+            &mut shape_list as *mut rtdt::List as *mut u8, &*list_td,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8, tensor_td,
+            &mut tensor as *mut rtdt::Tensor as *mut u8, &*tensor_td,
         );
         assert_eq!(status, RtStatus::Ok);
         tensor
@@ -308,17 +308,17 @@ unsafe fn tensor_of(rt: &Rt, arena: &TyDescArena, shape: &[u32], tensor_td: *con
 }
 
 unsafe fn destroy_tensor(rt: &Rt, tensor: &mut rtdt::Tensor, tensor_td: *const rtdt::TyDesc) {
-    unsafe { assert_eq!(c::dtlv_rti_tensor_destroy_local(rt.0, tensor as *mut rtdt::Tensor as *mut u8, tensor_td), RtStatus::Ok) };
+    unsafe { assert_eq!(c::dtlv_rti_tensor_destroy_local(rt.0, tensor as *mut rtdt::Tensor as *mut u8, &*tensor_td), RtStatus::Ok) };
 }
 
 unsafe fn set_by_inserting(rt: &Rt, values: impl IntoIterator<Item = u32>, set_td: *const rtdt::TyDesc, elem_td: *const rtdt::TyDesc) -> rtdt::Set {
     unsafe {
         let mut set = rtdt::Set { root: ptr::null(), len: rtdt::Index::ZERO };
-        assert_eq!(c::dtlv_rti_btreeset_create_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, set_td), RtStatus::Ok);
+        assert_eq!(c::dtlv_rti_btreeset_create_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, &*set_td), RtStatus::Ok);
         for x in values {
             let mut x = x;
             let mut inserted = 0u8;
-            let status = c::dtlv_rti_btreeset_insert_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, set_td, &mut x as *mut u32 as *mut u8, elem_td, &mut inserted);
+            let status = c::dtlv_rti_btreeset_insert_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, &*set_td, &mut x as *mut u32 as *mut u8, &*elem_td, &mut inserted);
             assert_eq!(status, RtStatus::Ok);
         }
         set
@@ -326,18 +326,18 @@ unsafe fn set_by_inserting(rt: &Rt, values: impl IntoIterator<Item = u32>, set_t
 }
 
 unsafe fn destroy_set(rt: &Rt, set: &mut rtdt::Set, set_td: *const rtdt::TyDesc) {
-    unsafe { assert_eq!(c::dtlv_rti_btreeset_destroy_local(rt.0, set as *mut rtdt::Set as *mut u8, set_td), RtStatus::Ok) };
+    unsafe { assert_eq!(c::dtlv_rti_btreeset_destroy_local(rt.0, set as *mut rtdt::Set as *mut u8, &*set_td), RtStatus::Ok) };
 }
 
 unsafe fn map_by_inserting(rt: &Rt, keys: impl IntoIterator<Item = u32>, map_td: *const rtdt::TyDesc, u32_td: *const rtdt::TyDesc) -> rtdt::Map {
     unsafe {
         let mut map = rtdt::Map { root: ptr::null(), len: rtdt::Index::ZERO };
-        assert_eq!(c::dtlv_rti_btreemap_create_local(rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td), RtStatus::Ok);
+        assert_eq!(c::dtlv_rti_btreemap_create_local(rt.0, &mut map as *mut rtdt::Map as *mut u8, &*map_td), RtStatus::Ok);
         for k in keys {
             let (mut k, mut v) = (k, k * 10);
             let status = c::dtlv_rti_btreemap_insert_local(
-                rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td,
-                &mut k as *mut u32 as *mut u8, u32_td, &mut v as *mut u32 as *mut u8, u32_td,
+                rt.0, &mut map as *mut rtdt::Map as *mut u8, &*map_td,
+                &mut k as *mut u32 as *mut u8, &*u32_td, &mut v as *mut u32 as *mut u8, &*u32_td,
             );
             assert_eq!(status, RtStatus::Ok);
         }
@@ -355,12 +355,12 @@ unsafe fn map_of<V: Copy>(
 ) -> rtdt::Map {
     unsafe {
         let mut map = rtdt::Map { root: ptr::null(), len: rtdt::Index::ZERO };
-        assert_eq!(c::dtlv_rti_btreemap_create_local(rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td), RtStatus::Ok);
+        assert_eq!(c::dtlv_rti_btreemap_create_local(rt.0, &mut map as *mut rtdt::Map as *mut u8, &*map_td), RtStatus::Ok);
         for (k, v) in entries {
             let (mut k, mut v) = (k, v);
             let status = c::dtlv_rti_btreemap_insert_local(
-                rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td,
-                &mut k as *mut u32 as *mut u8, u32_td, &mut v as *mut V as *mut u8, value_td,
+                rt.0, &mut map as *mut rtdt::Map as *mut u8, &*map_td,
+                &mut k as *mut u32 as *mut u8, &*u32_td, &mut v as *mut V as *mut u8, &*value_td,
             );
             assert_eq!(status, RtStatus::Ok);
         }
@@ -369,7 +369,7 @@ unsafe fn map_of<V: Copy>(
 }
 
 unsafe fn destroy_map(rt: &Rt, map: &mut rtdt::Map, map_td: *const rtdt::TyDesc) {
-    unsafe { assert_eq!(c::dtlv_rti_btreemap_destroy_local(rt.0, map as *mut rtdt::Map as *mut u8, map_td), RtStatus::Ok) };
+    unsafe { assert_eq!(c::dtlv_rti_btreemap_destroy_local(rt.0, map as *mut rtdt::Map as *mut u8, &*map_td), RtStatus::Ok) };
 }
 
 /// A fixed shuffle of `0..n`, so a failure reproduces.
@@ -412,7 +412,7 @@ fn test_list_cursor_walks_zero_sized_elements() -> AnyResult<()> {
     let mut list = unsafe { list_of(&rt, &[(), (), ()], list_td, unit_td) };
     let mut cursor = MaybeUninit::uninit();
     let seen = unsafe {
-        let status = c::dtlv_rti_list_cursor_begin_local(rt.0, &list as *const rtdt::List as *const u8, list_td, cursor.as_mut_ptr());
+        let status = c::dtlv_rti_list_cursor_begin_local(rt.0, &list as *const rtdt::List as *const u8, &*list_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
         walk_stride(&rt, cursor.assume_init_mut())
     };
@@ -466,8 +466,8 @@ fn test_row_cursor_walks_a_transposed_tensor() -> AnyResult<()> {
     let perm = [1u32, 0];
     let status = unsafe {
         c::dtlv_rti_tensor_transpose_local(
-            rt.0, &mut tensor as *mut rtdt::Tensor as *mut u8, tds[1], perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8, tds[1],
+            rt.0, &mut tensor as *mut rtdt::Tensor as *mut u8, &*(tds[1]), perm.as_ptr(),
+            &mut transposed as *mut rtdt::Tensor as *mut u8, &*(tds[1]),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -501,8 +501,8 @@ fn test_row_cursor_walks_a_sliced_tensor() -> AnyResult<()> {
     let mut result = [0u64; 16];
     let status = unsafe {
         c::dtlv_rti_tensor_slice_local(
-            rt.0, &mut tensor as *mut rtdt::Tensor as *mut u8, tds[1], ranges.as_ptr(),
-            result.as_mut_ptr() as *mut u8, result_td,
+            rt.0, &mut tensor as *mut rtdt::Tensor as *mut u8, &*(tds[1]), ranges.as_ptr(),
+            result.as_mut_ptr() as *mut u8, &*result_td,
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -569,8 +569,8 @@ fn test_tree_cursor_walks_after_removals() -> AnyResult<()> {
         }
         let mut removed = 0u8;
         unsafe {
-            c::dtlv_rti_btreeset_remove_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, set_td, &x as *const u32 as *const u8, u32_td, &mut removed);
-            c::dtlv_rti_btreemap_remove_local(rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td, &x as *const u32 as *const u8, u32_td);
+            c::dtlv_rti_btreeset_remove_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, &*set_td, &x as *const u32 as *const u8, &*u32_td, &mut removed);
+            c::dtlv_rti_btreemap_remove_local(rt.0, &mut map as *mut rtdt::Map as *mut u8, &*map_td, &x as *const u32 as *const u8, &*u32_td);
         }
         left.remove(&x);
         if i % 97 == 0 {
@@ -599,7 +599,7 @@ fn test_tree_cursor_walks_bulk_built_trees() -> AnyResult<()> {
         let mut elems: Vec<u32> = (0..n).collect();
         let mut set = rtdt::Set { root: ptr::null(), len: rtdt::Index::ZERO };
         let status = unsafe {
-            c::dtlv_rti_btreeset_build_from_sorted_slice_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, u32_td, elems.as_mut_ptr() as *mut u8, n.into())
+            c::dtlv_rti_btreeset_build_from_sorted_slice_local(rt.0, &mut set as *mut rtdt::Set as *mut u8, &*u32_td, elems.as_mut_ptr() as *mut u8, n.into())
         };
         assert_eq!(status, RtStatus::Ok);
         assert_eq!(unsafe { walk_set_u32(&rt, &set, set_td) }, (0..n).collect::<Vec<_>>());
@@ -610,7 +610,7 @@ fn test_tree_cursor_walks_bulk_built_trees() -> AnyResult<()> {
         let mut map = rtdt::Map { root: ptr::null(), len: rtdt::Index::ZERO };
         let status = unsafe {
             c::dtlv_rti_btreemap_build_from_sorted_slices_local(
-                rt.0, &mut map as *mut rtdt::Map as *mut u8, u32_td, u32_td,
+                rt.0, &mut map as *mut rtdt::Map as *mut u8, &*u32_td, &*u32_td,
                 keys.as_mut_ptr() as *mut u8, values.as_mut_ptr() as *mut u8, n.into(),
             )
         };

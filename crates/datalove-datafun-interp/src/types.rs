@@ -233,7 +233,7 @@ impl IrInterpreter {
 
         // Allocate heap storage for the inner value.
         let moved_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner.tydesc, 1)
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, &*inner.tydesc, 1)
         };
         assert!(!moved_ptr.is_null(), "OOM: failed to allocate Error inner storage");
 
@@ -262,7 +262,7 @@ impl IrInterpreter {
             datalove_rt::c::dtlv_rti_data_from_local(
                 self.runtime.handle(),
                 inner.ptr,
-                inner.tydesc,
+                &*inner.tydesc,
                 dest.ptr,
             )
         };

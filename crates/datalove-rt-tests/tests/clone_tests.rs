@@ -34,9 +34,9 @@ fn test_clone_empty_map() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -52,7 +52,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -61,7 +61,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -73,7 +73,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -97,9 +97,9 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -115,7 +115,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -124,7 +124,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -136,7 +136,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -162,9 +162,9 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -180,7 +180,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -189,7 +189,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -201,7 +201,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -227,9 +227,9 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -245,7 +245,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -254,7 +254,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -266,7 +266,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -290,9 +290,9 @@ fn test_clone_empty_set() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -308,7 +308,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -317,7 +317,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -329,7 +329,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -353,9 +353,9 @@ fn test_clone_set_single_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -371,7 +371,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -380,7 +380,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -392,7 +392,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -418,9 +418,9 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -436,7 +436,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -445,7 +445,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -457,7 +457,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -483,9 +483,9 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -501,7 +501,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -510,7 +510,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -522,7 +522,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -548,9 +548,9 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -566,7 +566,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -575,7 +575,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )
@@ -587,7 +587,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -929,9 +929,9 @@ fn test_clone_leak_regression_seed_980509222901775213() {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             clone_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -941,9 +941,9 @@ fn test_clone_leak_regression_seed_980509222901775213() {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             clone_buffer.as_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
 
@@ -951,9 +951,9 @@ fn test_clone_leak_regression_seed_980509222901775213() {
         "Cloned moderate container should equal original");
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ref());
     }
 }
 
@@ -977,9 +977,9 @@ fn test_clone_empty_table() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -992,9 +992,9 @@ fn test_clone_empty_table() -> AnyResult<()> {
 
     // Clean up both.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), cloned_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), cloned_buffer.as_mut_ptr(), inst.tydesc.as_ref());
     }
     Ok(())
 }
@@ -1015,9 +1015,9 @@ fn test_clone_table_with_rows() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1032,18 +1032,18 @@ fn test_clone_table_with_rows() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert!(matches!(result, datalove_rt::c::RtEq::Equals));
 
     // Clean up both.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), cloned_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), cloned_buffer.as_mut_ptr(), inst.tydesc.as_ref());
     }
     Ok(())
 }
@@ -1064,9 +1064,9 @@ fn test_clone_table_with_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1080,18 +1080,18 @@ fn test_clone_table_with_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_buffer.as_ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert!(matches!(result, datalove_rt::c::RtEq::Equals));
 
     // Clean up both.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), cloned_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), cloned_buffer.as_mut_ptr(), inst.tydesc.as_ref());
     }
     Ok(())
 }

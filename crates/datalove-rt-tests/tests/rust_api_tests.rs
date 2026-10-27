@@ -80,8 +80,8 @@ fn test_memguard_new() -> AnyResult<()> {
 
     // Clean up the instantiated value.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -103,8 +103,8 @@ fn test_memguard_ptr() -> AnyResult<()> {
     assert!(!ptr1.is_null());
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -124,8 +124,8 @@ fn test_memguard_tydesc() -> AnyResult<()> {
     assert_eq!(tydesc, inst.tydesc.as_ptr());
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -146,13 +146,13 @@ fn test_memguard_leak() -> AnyResult<()> {
 
     // Manually clean up the leaked memory.
     unsafe {
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, leaked_ptr);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, leaked_ptr);
     }
 
     // Clean up inst.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -181,9 +181,9 @@ fn test_memguard_into_value() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             mem_ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -195,8 +195,8 @@ fn test_memguard_into_value() -> AnyResult<()> {
 
     // Clean up the original instantiated value.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     // value_guard will clean up itself on drop.
@@ -218,8 +218,8 @@ fn test_memguard_drop() -> AnyResult<()> {
     }
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -238,7 +238,7 @@ fn test_valueguard_from_raw() -> AnyResult<()> {
 
     // Clone the value into a new allocation.
     let cloned_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ptr(), 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ref(), 1)
     };
     assert!(!cloned_ptr.is_null());
 
@@ -246,9 +246,9 @@ fn test_valueguard_from_raw() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -261,8 +261,8 @@ fn test_valueguard_from_raw() -> AnyResult<()> {
 
     // Clean up original.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     // value_guard will clean up on drop.
@@ -281,15 +281,15 @@ fn test_valueguard_ptr() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     let cloned_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ptr(), 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ref(), 1)
     };
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -304,8 +304,8 @@ fn test_valueguard_ptr() -> AnyResult<()> {
     assert_eq!(ptr1, cloned_ptr);
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -321,15 +321,15 @@ fn test_valueguard_tydesc() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     let cloned_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ptr(), 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ref(), 1)
     };
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -340,8 +340,8 @@ fn test_valueguard_tydesc() -> AnyResult<()> {
     assert_eq!(value_guard.tydesc(), inst.tydesc.as_ptr());
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -357,15 +357,15 @@ fn test_valueguard_leak() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     let cloned_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ptr(), 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ref(), 1)
     };
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             cloned_ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -379,14 +379,14 @@ fn test_valueguard_leak() -> AnyResult<()> {
 
     // Manually clean up the leaked value.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), leaked_ptr, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, leaked_ptr);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), leaked_ptr, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, leaked_ptr);
     }
 
     // Clean up original.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -404,15 +404,15 @@ fn test_valueguard_drop() -> AnyResult<()> {
     // Create and drop ValueGuard in inner scope.
     {
         let cloned_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ptr(), 1)
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), inst.tydesc.as_ref(), 1)
         };
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
                 inst.ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
                 cloned_ptr,
-                inst.tydesc.as_ptr(),
+                inst.tydesc.as_ref(),
             )
         };
         assert_eq!(status, RtStatus::Ok);
@@ -424,8 +424,8 @@ fn test_valueguard_drop() -> AnyResult<()> {
     }
 
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())
@@ -450,9 +450,9 @@ fn test_memguard_to_valueguard_workflow() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             mem_guard.ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -462,8 +462,8 @@ fn test_memguard_to_valueguard_workflow() -> AnyResult<()> {
 
     // Clean up original.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     // ValueGuard handles cleanup.
@@ -489,9 +489,9 @@ fn test_guards_with_complex_type() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             mem_guard.ptr(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -504,17 +504,17 @@ fn test_guards_with_complex_type() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             value_guard.ptr(),
-            value_guard.tydesc(),
+            &*(value_guard.tydesc()),
         )
     };
     assert!(matches!(eq_result, datalove_rt::c::RtEq::Equals));
 
     // Clean up original.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
 
     Ok(())

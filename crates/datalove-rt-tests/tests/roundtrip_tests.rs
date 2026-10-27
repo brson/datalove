@@ -171,10 +171,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     if !types_equal(&db, &type1, &type2) {
         unsafe {
-            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
-            rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
-            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
-            rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, &*tydesc1);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc1, 1, ptr1 as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, &*tydesc2);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc2, 1, ptr2 as *mut u8);
         }
         return Err(format!(
             "Types differ between original and first pretty-print:\nOriginal: {}\nFirst:    {}",
@@ -184,10 +184,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     if !types_equal(&db, &type2, &type3) {
         unsafe {
-            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
-            rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
-            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
-            rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, &*tydesc1);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc1, 1, ptr1 as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, &*tydesc2);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc2, 1, ptr2 as *mut u8);
         }
         return Err(format!(
             "Types differ between first and second pretty-print:\nFirst:  {}\nSecond: {}",
@@ -198,10 +198,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Step 7: Check that both pretty-prints are identical.
     if pretty1 != pretty2 {
         unsafe {
-            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
-            rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
-            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
-            rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, &*tydesc1);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc1, 1, ptr1 as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, &*tydesc2);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc2, 1, ptr2 as *mut u8);
         }
         return Err(format!(
             "Pretty-prints differ:\nFirst:  {}\nSecond: {}",
@@ -211,10 +211,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Clean up instantiated values before shutdown (Runtime drops on scope exit).
     unsafe {
-        rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
-        rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
-        rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
-        rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
+        rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, &*tydesc1);
+        rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc1, 1, ptr1 as *mut u8);
+        rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, &*tydesc2);
+        rt::c::dtlv_rti_mem_free_local(rt_handle, &*tydesc2, 1, ptr2 as *mut u8);
     }
     Ok(pretty1)
 }

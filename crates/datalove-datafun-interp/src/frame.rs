@@ -737,7 +737,7 @@ impl Frame {
             }
             let val = self.value(vid);
             unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, val.tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, &*val.tydesc);
             }
             self.mark_value_dropped(vid);
         }
@@ -748,7 +748,7 @@ impl Frame {
             }
             let val = self.slot(sid);
             unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, val.tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, &*val.tydesc);
             }
             self.mark_slot_dropped(sid);
         }

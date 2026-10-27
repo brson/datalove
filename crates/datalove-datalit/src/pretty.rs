@@ -61,7 +61,7 @@ pub fn pretty_print_runtime_value<'db>(
         let status = datalove_rt::c::dtlv_rti_pretty_print_local(
             rt_handle,
             value_ptr,
-            tydesc_ptr,
+            &*tydesc_ptr,
             &mut output_string as *mut datalove_rtdt::String as *mut u8,
             &string_tydesc,
         );

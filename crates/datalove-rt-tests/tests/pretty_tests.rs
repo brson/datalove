@@ -66,7 +66,7 @@ fn pretty_print_value(
         let status = datalove_rt::c::dtlv_rti_pretty_print_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             &mut output_string as *mut rtdt::String as *mut u8,
             &string_tydesc,
         );
@@ -92,14 +92,14 @@ fn cleanup_value(rt: &datalove_rt::rust::Runtime, inst: &instantiate2::Instantia
         let status = datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
             inst.ptr as *mut u8,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
         );
         assert_eq!(status, RtStatus::Ok);
 
         // Free container memory.
         let status = datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         );

@@ -111,7 +111,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 self.interp.runtime_handle(),
                 written,
-                written_tydesc,
+                &*written_tydesc,
             );
         }
 

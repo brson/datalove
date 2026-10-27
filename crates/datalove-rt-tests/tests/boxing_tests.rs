@@ -46,7 +46,7 @@ fn round_trip(source_text: &str) -> AnyResult<datalove_rtdt::anypack::Tag> {
         datalove_rt::c::dtlv_rti_data_from_local(
             rt.handle(),
             inst.ptr,
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             data_buffer.as_mut_ptr(),
         )
     };
@@ -59,7 +59,7 @@ fn round_trip(source_text: &str) -> AnyResult<datalove_rtdt::anypack::Tag> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt.handle(),
-            inst.tydesc.as_ptr(),
+            inst.tydesc.as_ref(),
             1,
             inst.ptr as *mut u8,
         )

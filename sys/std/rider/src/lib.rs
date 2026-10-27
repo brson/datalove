@@ -944,7 +944,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_get(
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_get_local(
-            rt, std::ptr::from_ref(list_ptr).cast(), list_ty.as_ptr(), index.0, out.cast(), out_ty.as_ptr(),
+            rt, std::ptr::from_ref(list_ptr).cast(), list_ty.as_ref(), index.0, out.cast(), out_ty.as_ref(),
         ) as u8
     }
 }
@@ -961,7 +961,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_push(
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_push_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ptr(), elem_ptr.cast(), elem_ty.as_ptr(),
+            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), elem_ptr.cast(), elem_ty.as_ref(),
         ) as u8
     }
 }
@@ -977,7 +977,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_pop(
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_pop_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ptr(), out.cast(), out_ty.as_ptr(),
+            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), out.cast(), out_ty.as_ref(),
         ) as u8
     }
 }
@@ -1009,7 +1009,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_set(
 
     let status = unsafe {
         datalove_rti::call::dtlv_rti_list_set_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ptr(), index.0, elem_ptr.cast(), elem_ty.as_ptr(),
+            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), index.0, elem_ptr.cast(), elem_ty.as_ref(),
         )
     };
     // The runtime has taken the element either way.
@@ -1031,7 +1031,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_insert(
 
     let status = unsafe {
         datalove_rti::call::dtlv_rti_list_insert_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ptr(), index.0, elem_ptr.cast(), elem_ty.as_ptr(),
+            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), index.0, elem_ptr.cast(), elem_ty.as_ref(),
         )
     };
     // The runtime has taken the element either way.
@@ -1052,7 +1052,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_remove(
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_remove_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ptr(), index.0, out.cast(), out_ty.as_ptr(),
+            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), index.0, out.cast(), out_ty.as_ref(),
         ) as u8
     }
 }
@@ -1148,8 +1148,8 @@ pub unsafe extern "C-unwind" fn dlr_std__map_get(
 
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_get_local(
-            rt, std::ptr::from_ref(map_ptr).cast(), map_ty.as_ptr(), key_ptr.cast(), key_td,
-            out.cast(), out_ty.as_ptr(),
+            rt, std::ptr::from_ref(map_ptr).cast(), map_ty.as_ref(), key_ptr.cast(), key_td,
+            out.cast(), out_ty.as_ref(),
         ) as u8
     }
 }
@@ -1168,8 +1168,8 @@ pub unsafe extern "C-unwind" fn dlr_std__map_insert(
 
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_insert_local(
-            rt, std::ptr::from_mut(map_ptr).cast(), map_ty.as_ptr(),
-            key_ptr.cast(), key_ty.as_ptr(), value_ptr.cast(), value_ty.as_ptr(),
+            rt, std::ptr::from_mut(map_ptr).cast(), map_ty.as_ref(),
+            key_ptr.cast(), key_ty.as_ref(), value_ptr.cast(), value_ty.as_ref(),
         ) as u8
     }
 }
@@ -1337,7 +1337,7 @@ pub unsafe extern "C-unwind" fn dlr_std__set_insert(
 
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_insert_local(
-            rt, std::ptr::from_mut(set_ptr).cast(), set_ty.as_ptr(), elem_ptr.cast(), elem_ty.as_ptr(), out.as_mut_ptr().cast(),
+            rt, std::ptr::from_mut(set_ptr).cast(), set_ty.as_ref(), elem_ptr.cast(), elem_ty.as_ref(), out.as_mut_ptr().cast(),
         ) as u8
     }
 }

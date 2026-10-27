@@ -95,12 +95,12 @@ unsafe fn create_runtime_string(
     unsafe {
         let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
         datalove_rt::c::dtlv_rti_string_create_local(
-            rt, string.as_mut_ptr() as *mut u8, string_tydesc,
+            rt, string.as_mut_ptr() as *mut u8, &*string_tydesc,
         );
         let mut string = string.assume_init();
         if !s.is_empty() {
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
-                rt, &mut string as *mut rtdt::String as *mut u8, string_tydesc,
+                rt, &mut string as *mut rtdt::String as *mut u8, &*string_tydesc,
                 s.as_ptr(), (s.len() as u32).into(),
             );
         }
@@ -127,7 +127,7 @@ fn test_list_len_reads_from_the_descriptor() -> AnyResult<()> {
     let mut len: rtdt::Index = rtdt::Index::ZERO;
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_len_local(
-            rt, list_ptr, list_tydesc, &mut len as *mut rtdt::Index as *mut u8,
+            rt, list_ptr, &*list_tydesc, &mut len as *mut rtdt::Index as *mut u8,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -137,8 +137,8 @@ fn test_list_len_reads_from_the_descriptor() -> AnyResult<()> {
         let mut value = i;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
-                rt, list_ptr, list_tydesc,
-                &mut value as *mut u32 as *mut u8, element_tydesc,
+                rt, list_ptr, &*list_tydesc,
+                &mut value as *mut u32 as *mut u8, &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -146,13 +146,13 @@ fn test_list_len_reads_from_the_descriptor() -> AnyResult<()> {
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_len_local(
-            rt, list_ptr, list_tydesc, &mut len as *mut rtdt::Index as *mut u8,
+            rt, list_ptr, &*list_tydesc, &mut len as *mut rtdt::Index as *mut u8,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(len.0, 3);
 
-    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, &*list_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
 }
@@ -179,8 +179,8 @@ fn test_out_of_bounds_set_and_insert_take_the_element() -> AnyResult<()> {
     let status = unsafe {
         let mut value = create_runtime_string(rt, "set past the end", element_tydesc);
         datalove_rt::c::dtlv_rti_list_set_local(
-            rt, list_ptr, list_tydesc, 5,
-            &mut value as *mut rtdt::String as *mut u8, element_tydesc,
+            rt, list_ptr, &*list_tydesc, 5,
+            &mut value as *mut rtdt::String as *mut u8, &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -188,14 +188,14 @@ fn test_out_of_bounds_set_and_insert_take_the_element() -> AnyResult<()> {
     let status = unsafe {
         let mut value = create_runtime_string(rt, "inserted past the end", element_tydesc);
         datalove_rt::c::dtlv_rti_list_insert_local(
-            rt, list_ptr, list_tydesc, 5,
-            &mut value as *mut rtdt::String as *mut u8, element_tydesc,
+            rt, list_ptr, &*list_tydesc, 5,
+            &mut value as *mut rtdt::String as *mut u8, &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
     assert_eq!(list.size, rtdt::Index::ZERO);
 
-    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, &*list_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
 }

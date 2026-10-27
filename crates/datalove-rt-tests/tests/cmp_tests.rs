@@ -22,8 +22,8 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 /// Clean up an instantiated value.
 unsafe fn cleanup_value(rt: &Runtime, ptr: *const u8, tydesc: *const datalove_rtdt::TyDesc) {
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, tydesc);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc, 1, ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, &*tydesc);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc, 1, ptr as *mut u8);
     }
 }
 
@@ -50,9 +50,9 @@ fn test_cmp_bool_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -85,9 +85,9 @@ fn test_cmp_bool_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -120,9 +120,9 @@ fn test_cmp_u32_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -155,9 +155,9 @@ fn test_cmp_u32_greater() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -190,9 +190,9 @@ fn test_cmp_u32_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -225,9 +225,9 @@ fn test_cmp_f32_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -260,9 +260,9 @@ fn test_cmp_f32_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -295,9 +295,9 @@ fn test_cmp_string_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -330,9 +330,9 @@ fn test_cmp_string_greater() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -365,9 +365,9 @@ fn test_cmp_string_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -400,9 +400,9 @@ fn test_cmp_int_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -435,9 +435,9 @@ fn test_cmp_int_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -470,9 +470,9 @@ fn test_cmp_tuple_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -505,9 +505,9 @@ fn test_cmp_tuple_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -540,9 +540,9 @@ fn test_cmp_tuple_greater() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -575,9 +575,9 @@ fn test_cmp_struct_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -610,9 +610,9 @@ fn test_cmp_struct_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -645,9 +645,9 @@ fn test_cmp_list_less_by_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -680,9 +680,9 @@ fn test_cmp_list_less_by_length() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -715,9 +715,9 @@ fn test_cmp_list_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -750,9 +750,9 @@ fn test_cmp_option_none_vs_none() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -785,9 +785,9 @@ fn test_cmp_option_none_less_than_some() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -820,9 +820,9 @@ fn test_cmp_option_some_greater_than_none() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -855,9 +855,9 @@ fn test_cmp_option_some_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -890,9 +890,9 @@ fn test_cmp_option_some_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -925,9 +925,9 @@ fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -960,9 +960,9 @@ fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -995,9 +995,9 @@ fn test_cmp_result_ok_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1030,9 +1030,9 @@ fn test_cmp_result_ok_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1065,9 +1065,9 @@ fn test_cmp_result_err_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1100,9 +1100,9 @@ fn test_cmp_result_err_less() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1135,9 +1135,9 @@ fn test_cmp_type_mismatch() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1170,9 +1170,9 @@ fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1205,9 +1205,9 @@ fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1240,9 +1240,9 @@ fn test_cmp_map_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1275,9 +1275,9 @@ fn test_cmp_map_less_by_key() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1310,9 +1310,9 @@ fn test_cmp_map_less_by_value() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1345,9 +1345,9 @@ fn test_cmp_map_less_by_length() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1380,9 +1380,9 @@ fn test_cmp_map_greater_by_key() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1415,9 +1415,9 @@ fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1450,9 +1450,9 @@ fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1485,9 +1485,9 @@ fn test_cmp_set_equal() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1520,9 +1520,9 @@ fn test_cmp_set_less_by_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1555,9 +1555,9 @@ fn test_cmp_set_less_by_length() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1590,9 +1590,9 @@ fn test_cmp_set_greater_by_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -1625,9 +1625,9 @@ fn test_cmp_set_with_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -2149,7 +2149,7 @@ fn test_cmp_table_empty_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
@@ -2178,7 +2178,7 @@ fn test_cmp_table_less_by_length() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
@@ -2207,7 +2207,7 @@ fn test_cmp_table_less_by_value() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
@@ -2236,7 +2236,7 @@ fn test_cmp_table_greater() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     assert!(matches!(result, datalove_rt::c::RtOrdering::Greater));
@@ -2265,7 +2265,7 @@ fn test_cmp_table_with_strings() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b)
     };
 
     // "Alice" < "Bob" lexicographically.

@@ -557,7 +557,7 @@ fn instantiate_string(
         let status = datalove_rt::c::dtlv_rti_string_create_local(
             rt_handle,
             string_ptr as *mut u8,
-            string_tydesc,
+            &*string_tydesc,
         );
 
         if status != datalove_rt::c::RtStatus::Ok {
@@ -569,7 +569,7 @@ fn instantiate_string(
             let status = datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt_handle,
                 string_ptr as *mut u8,
-                string_tydesc,
+                &*string_tydesc,
                 value_str.as_ptr(),
                 (value_str.len() as u32).into(),
             );
@@ -611,7 +611,7 @@ fn instantiate_tuple<'db>(
                 let prev_field_offset = layout.field_offsets[j];
                 let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
                 unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, prev_field_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, &*prev_field_tydesc);
                 }
             }
             return Err(e);
@@ -659,7 +659,7 @@ fn instantiate_struct<'db>(
                     let prev_field_offset = layout.field_offsets[j];
                     let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
                     unsafe {
-                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, prev_field_tydesc);
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, &*prev_field_tydesc);
                     }
                 }
                 return Err(e);
@@ -690,7 +690,7 @@ fn instantiate_struct<'db>(
                     let prev_field_offset = layout.field_offsets[j];
                     let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
                     unsafe {
-                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, prev_field_tydesc);
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, &*prev_field_tydesc);
                     }
                 }
                 return Err(e);
@@ -721,7 +721,7 @@ fn instantiate_list<'db>(
     unsafe {
         // Allocate list data array.
         let data_ptr = if !elements.is_empty() {
-            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, (elements.len() as u32).into());
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, &*element_tydesc, (elements.len() as u32).into());
 
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
@@ -730,10 +730,10 @@ fn instantiate_list<'db>(
                     // Destroy successfully instantiated elements.
                     for j in 0..i {
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
-                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, &*element_tydesc);
                     }
                     // Free the array.
-                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, (elements.len() as u32).into(), array_ptr);
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, &*element_tydesc, (elements.len() as u32).into(), array_ptr);
                     return Err(e);
                 }
             }
@@ -765,7 +765,7 @@ fn instantiate_table<'db>(
 
     // Create empty table.
     unsafe {
-        let status = datalove_rt::c::dtlv_rti_table_create_local(rt, dest_ptr, table_tydesc);
+        let status = datalove_rt::c::dtlv_rti_table_create_local(rt, dest_ptr, &*table_tydesc);
         if status != datalove_rt::c::RtStatus::Ok {
             return Err(anyhow!("Failed to create table"));
         }
@@ -786,12 +786,12 @@ fn instantiate_table<'db>(
 
     // Allocate temporary buffer for a single row tuple.
     let row_buffer = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt, row_tuple_tydesc, 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt, &*row_tuple_tydesc, 1)
     };
     if row_buffer.is_null() {
         // Destroy the table we just created.
         unsafe {
-            datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+            datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, &*table_tydesc);
         }
         return Err(anyhow!("Failed to allocate row buffer"));
     }
@@ -801,8 +801,8 @@ fn instantiate_table<'db>(
         if row.elements.len() != columns.len() {
             // Cleanup and error.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
-                datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, &*row_tuple_tydesc, 1, row_buffer);
+                datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, &*table_tydesc);
             }
             return Err(anyhow!(
                 "Row {} has {} elements but table has {} columns",
@@ -823,13 +823,13 @@ fn instantiate_table<'db>(
                     let cleanup_dest = unsafe { row_buffer.add(cleanup_offset as usize) };
                     let cleanup_tydesc = column_tydescs[cleanup_col];
                     unsafe {
-                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, cleanup_tydesc);
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, &*cleanup_tydesc);
                     }
                 }
                 // Cleanup and return error.
                 unsafe {
-                    datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
-                    datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, &*row_tuple_tydesc, 1, row_buffer);
+                    datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, &*table_tydesc);
                 }
                 return Err(e);
             }
@@ -840,19 +840,19 @@ fn instantiate_table<'db>(
             let status = datalove_rt::c::dtlv_rti_table_push_row_local(
                 rt,
                 dest_ptr,
-                table_tydesc,
+                &*table_tydesc,
                 row_buffer,
-                row_tuple_tydesc,
+                &*row_tuple_tydesc,
             );
             if status != datalove_rt::c::RtStatus::Ok {
                 // Destroy row cells.
                 for (col_idx, col_tydesc) in column_tydescs.iter().enumerate() {
                     let cleanup_offset = row_layout.field_offsets[col_idx];
                     let cleanup_dest = row_buffer.add(cleanup_offset as usize);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, *col_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, &*(*col_tydesc));
                 }
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
-                datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, &*row_tuple_tydesc, 1, row_buffer);
+                datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, &*table_tydesc);
                 return Err(anyhow!("Failed to push row {} to table", row_idx));
             }
         }
@@ -864,7 +864,7 @@ fn instantiate_table<'db>(
 
     // Free row buffer.
     unsafe {
-        datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt, &*row_tuple_tydesc, 1, row_buffer);
     }
 
     Ok(dest_ptr as *const u8)
@@ -1099,8 +1099,8 @@ fn instantiate_map<'db>(
             if let Err(e) = instantiate_expr_into(db, rt, &entry.key, &key_type, tydesc_table, key_dest, resolved) {
                 // Cleanup: destroy already-instantiated entries.
                 for j in 0..instantiated_count {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), key_tydesc);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), value_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), &*key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), &*value_tydesc);
                 }
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
@@ -1110,10 +1110,10 @@ fn instantiate_map<'db>(
             // Try to instantiate value.
             if let Err(e) = instantiate_expr_into(db, rt, &entry.value, &value_type, tydesc_table, value_dest, resolved) {
                 // Destroy the key we just instantiated.
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, key_tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, &*key_tydesc);
                 for j in 0..instantiated_count {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), key_tydesc);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), value_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), &*key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), &*value_tydesc);
                 }
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
@@ -1129,8 +1129,8 @@ fn instantiate_map<'db>(
         let sorted_values = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, values_buffer_size, value_align, 1);
         if sorted_keys.is_null() || sorted_values.is_null() {
             for j in 0..entries.len() {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), key_tydesc);
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), value_tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), &*key_tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), &*value_tydesc);
             }
             datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
             datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
@@ -1147,9 +1147,9 @@ fn instantiate_map<'db>(
             let value_src = values_buffer.add(from * value_size);
             if i > 0 && same_value(rt, sorted_keys.add((kept - 1) * key_size), key_src, key_tydesc) {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
-                    rt, sorted_keys.add((kept - 1) * key_size), key_tydesc);
+                    rt, sorted_keys.add((kept - 1) * key_size), &*key_tydesc);
                 datalove_rt::c::dtlv_rti_any_destroy_local(
-                    rt, sorted_values.add((kept - 1) * value_size), value_tydesc);
+                    rt, sorted_values.add((kept - 1) * value_size), &*value_tydesc);
                 kept -= 1;
             }
             std::ptr::copy_nonoverlapping(key_src, sorted_keys.add(kept * key_size), key_size);
@@ -1163,8 +1163,8 @@ fn instantiate_map<'db>(
         let status = datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
             rt,
             map_ptr as *mut u8,
-            key_tydesc,
-            value_tydesc,
+            &*key_tydesc,
+            &*value_tydesc,
             sorted_keys,
             sorted_values,
             (kept as u32).into(),
@@ -1231,7 +1231,7 @@ fn instantiate_set<'db>(
                 // Cleanup: destroy already-instantiated elements.
                 for j in 0..instantiated_count {
                     let elem_to_destroy = buffer.add(j * element_size);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, &*element_tydesc);
                 }
                 // Free the buffer.
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
@@ -1257,7 +1257,7 @@ fn instantiate_set<'db>(
         let sorted_buffer = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, buffer_size, element_align, 1);
         if sorted_buffer.is_null() {
             for j in 0..elements.len() {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt, buffer.add(j * element_size), element_tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, buffer.add(j * element_size), &*element_tydesc);
             }
             datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
             return Err(anyhow!("Failed to allocate sorted buffer for set elements"));
@@ -1269,7 +1269,7 @@ fn instantiate_set<'db>(
         for (i, &from) in sorted.iter().enumerate() {
             let src = buffer.add(from * element_size);
             if i > 0 && same_value(rt, sorted_buffer.add((kept - 1) * element_size), src, element_tydesc) {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt, src, element_tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, src, &*element_tydesc);
                 continue;
             }
             // Moves, not copies: the bytes are handed over and the old run is
@@ -1283,7 +1283,7 @@ fn instantiate_set<'db>(
         let status = datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
             rt,
             set_ptr as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
             sorted_buffer,
             (kept as u32).into(),
         );
@@ -1311,7 +1311,7 @@ unsafe fn same_value(
     tydesc: *const rtdt::TyDesc,
 ) -> bool {
     unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total_local(rt, a, tydesc, b, tydesc)
+        datalove_rt::c::dtlv_rti_cmp_total_local(rt, a, &*tydesc, b, &*tydesc)
             == datalove_rt::c::RtOrdering::Equal
     }
 }
@@ -1334,9 +1334,9 @@ unsafe fn sort_instantiated(
         match datalove_rt::c::dtlv_rti_cmp_total_local(
             rt,
             buffer.add(a * stride),
-            tydesc,
+            &*tydesc,
             buffer.add(b * stride),
-            tydesc,
+            &*tydesc,
         ) {
             datalove_rt::c::RtOrdering::Less => std::cmp::Ordering::Less,
             datalove_rt::c::RtOrdering::Greater => std::cmp::Ordering::Greater,
@@ -1372,7 +1372,7 @@ fn instantiate_tensor<'db>(
     unsafe {
         // Allocate tensor data array.
         let data_ptr = if total_elems > 0 {
-            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, (total_elems as u32).into());
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, &*element_tydesc, (total_elems as u32).into());
 
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
@@ -1381,10 +1381,10 @@ fn instantiate_tensor<'db>(
                     // Destroy successfully instantiated elements.
                     for j in 0..i {
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
-                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, &*element_tydesc);
                     }
                     // Free the array.
-                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, (total_elems as u32).into(), array_ptr);
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, &*element_tydesc, (total_elems as u32).into(), array_ptr);
                     return Err(e);
                 }
             }
@@ -1480,11 +1480,11 @@ mod tests {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
                     self.rt_handle,
                     self.inst.ptr as *mut u8,
-                    self.inst.tydesc.as_ptr(),
+                    self.inst.tydesc.as_ref(),
                 );
                 datalove_rt::c::dtlv_rti_mem_free_local(
                     self.rt_handle,
-                    self.inst.tydesc.as_ptr(),
+                    self.inst.tydesc.as_ref(),
                     1,
                     self.inst.ptr as *mut u8,
                 );

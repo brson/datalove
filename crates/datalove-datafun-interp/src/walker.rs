@@ -90,7 +90,7 @@ impl IrInterpreter {
                         datalove_rt::c::dtlv_rti_debuglog_local(
                             rt_handle,
                             val.ptr,
-                            val.tydesc,
+                            &*val.tydesc,
                         );
                     }
                     // Write to ret_dest (Result<(), Error> type).
@@ -522,7 +522,7 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
                         val.ptr,
-                        val.tydesc,
+                        &*val.tydesc,
                     );
                 }
                 // Note: we don't mark the ref_value as dropped - it's just a reference.
@@ -590,9 +590,9 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_clone_local(
                         self.runtime.handle(),
                         src_val.ptr,
-                        src_val.tydesc,
+                        &*src_val.tydesc,
                         dest_slot.ptr,
-                        dest_slot.tydesc,
+                        &*dest_slot.tydesc,
                     );
                 }
                 frame.mark_value_live(*dest);
@@ -605,7 +605,7 @@ impl IrInterpreter {
                 // A shallow copy of the field, at the offset the descriptor of
                 // what is there says.
                 unsafe {
-                    let offset = datalove_rt::c::dtlv_rti_field_offset(src_val.tydesc, *field_index);
+                    let offset = datalove_rt::c::dtlv_rti_field_offset(&*src_val.tydesc, *field_index);
                     std::ptr::copy_nonoverlapping(
                         src_val.ptr.add(offset as usize),
                         dest_slot.ptr,
@@ -662,15 +662,15 @@ impl IrInterpreter {
                 let status = unsafe {
                     match (frame.cursor_kind(*cursor), tag) {
                         (CursorKind::Stride, rtdt::TyTag::List) => datalove_rt::c::dtlv_rti_list_cursor_begin_local(
-                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::StrideCursor),
+                            rt, coll_val.ptr, &*coll_val.tydesc, out as *mut rtdt::StrideCursor),
                         (CursorKind::Stride, rtdt::TyTag::Tensor) => datalove_rt::c::dtlv_rti_tensor_cursor_begin_local(
-                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::StrideCursor),
+                            rt, coll_val.ptr, &*coll_val.tydesc, out as *mut rtdt::StrideCursor),
                         (CursorKind::Row, rtdt::TyTag::Tensor) => datalove_rt::c::dtlv_rti_tensor_row_cursor_begin_local(
-                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::RowCursor),
+                            rt, coll_val.ptr, &*coll_val.tydesc, out as *mut rtdt::RowCursor),
                         (CursorKind::Tree, rtdt::TyTag::Set) => datalove_rt::c::dtlv_rti_btreeset_cursor_begin_local(
-                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::TreeCursor),
+                            rt, coll_val.ptr, &*coll_val.tydesc, out as *mut rtdt::TreeCursor),
                         (CursorKind::Tree, rtdt::TyTag::Map) => datalove_rt::c::dtlv_rti_btreemap_cursor_begin_local(
-                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::TreeCursor),
+                            rt, coll_val.ptr, &*coll_val.tydesc, out as *mut rtdt::TreeCursor),
                         (kind, tag) => unreachable!("a {kind:?} cursor over a {tag:?}"),
                     }
                 };
@@ -908,7 +908,7 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_debuglog_local(
                         rt_handle,
                         val.ptr,
-                        val.tydesc,
+                        &*val.tydesc,
                     );
                 }
                 // Note: no mark_dropped - we're borrowing, not consuming.
@@ -936,9 +936,9 @@ impl IrInterpreter {
                         datalove_rt::c::dtlv_rti_clone_local(
                             rt_handle,
                             element_ptr,
-                            element_tydesc,
+                            &*element_tydesc,
                             dest_slot.ptr,
-                            element_tydesc,
+                            &*element_tydesc,
                         )
                     };
                     assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListGet clone failed");
@@ -956,8 +956,8 @@ impl IrInterpreter {
                 // takes the value whether or not it lands.
                 let status = unsafe {
                     datalove_rt::c::dtlv_rti_list_set_local(
-                        self.runtime.handle(), list_val.ptr as *mut u8, list_val.tydesc,
-                        idx, value_val.ptr as *mut u8, value_val.tydesc)
+                        self.runtime.handle(), list_val.ptr as *mut u8, &*list_val.tydesc,
+                        idx, value_val.ptr as *mut u8, &*value_val.tydesc)
                 };
                 let is_valid_dest = frame.value_dest(*is_valid);
                 unsafe { *(is_valid_dest.ptr as *mut bool) = status == datalove_rt::c::RtStatus::Ok; }
@@ -987,9 +987,9 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
                         rt_handle,
                         map_val.ptr,
-                        map_tydesc,
+                        &*map_tydesc,
                         key_val.ptr,
-                        key_val.tydesc,
+                        &*key_val.tydesc,
                         &mut found,
                     )
                 };
@@ -1012,11 +1012,11 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_btreemap_set_value_local(
                         rt_handle,
                         map_val.ptr as *mut u8,
-                        map_tydesc,
+                        &*map_tydesc,
                         key_val.ptr,
-                        key_val.tydesc,
+                        &*key_val.tydesc,
                         value_val.ptr as *mut u8,
-                        value_val.tydesc,
+                        &*value_val.tydesc,
                     )
                 };
                 let is_valid_dest = frame.value_dest(*is_valid);
@@ -1039,9 +1039,9 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
                         rt_handle,
                         map_val.ptr,
-                        map_tydesc,
+                        &*map_tydesc,
                         key_val.ptr,
-                        key_val.tydesc,
+                        &*key_val.tydesc,
                         &mut value_ptr,
                     )
                 };
@@ -1068,11 +1068,11 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_btreemap_insert_local(
                         rt_handle,
                         map_val.ptr as *mut u8,
-                        map_tydesc,
+                        &*map_tydesc,
                         key_val.ptr,
-                        key_tydesc,
+                        &*key_tydesc,
                         value_val.ptr,
-                        value_tydesc,
+                        &*value_tydesc,
                     )
                 };
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapUpsert failed");
@@ -1131,9 +1131,9 @@ impl IrInterpreter {
                             datalove_rt::c::dtlv_rti_clone_local(
                                 rt_handle,
                                 element_ptr,
-                                element_tydesc,
+                                &*element_tydesc,
                                 dest_slot.ptr,
-                                dest_slot.tydesc,
+                                &*dest_slot.tydesc,
                             )
                         };
                         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorGet clone failed");
@@ -1145,7 +1145,7 @@ impl IrInterpreter {
                             datalove_rt::c::dtlv_rti_tensor_hyperplane_clone_local(
                                 rt_handle,
                                 tensor_val.ptr,
-                                tensor_tydesc,
+                                &*tensor_tydesc,
                                 idx,
                                 dest_slot.ptr,
                             )
@@ -1163,9 +1163,9 @@ impl IrInterpreter {
                 // As ListSet. Rank 1 only, so the index is the indices array.
                 let status = unsafe {
                     datalove_rt::c::dtlv_rti_tensor_set_local(
-                        self.runtime.handle(), tensor_val.ptr as *mut u8, tensor_val.tydesc,
+                        self.runtime.handle(), tensor_val.ptr as *mut u8, &*tensor_val.tydesc,
                         idx_val.ptr as *const rtdt::IndexRepr,
-                        value_val.ptr as *mut u8, value_val.tydesc)
+                        value_val.ptr as *mut u8, &*value_val.tydesc)
                 };
                 let is_valid_dest = frame.value_dest(*is_valid);
                 unsafe { *(is_valid_dest.ptr as *mut bool) = status == datalove_rt::c::RtStatus::Ok; }
@@ -1247,7 +1247,7 @@ impl IrInterpreter {
                 // really passed. Reading through it later has no other way to
                 // find out.
                 let field_tydesc = unsafe {
-                    datalove_rt::c::dtlv_rti_field_tydesc(src_val.tydesc, *field_index)
+                    datalove_rt::c::dtlv_rti_field_tydesc(&*src_val.tydesc, *field_index)
                 };
                 frame.check_referent(*dest, field_tydesc);
                 frame.mark_value_live(*dest);
@@ -1297,7 +1297,7 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
                         field_ptr,
-                        field_tydesc,
+                        &*field_tydesc,
                     );
                 }
             }
@@ -1452,7 +1452,7 @@ impl IrInterpreter {
         let rt_handle = self.runtime.handle();
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
-                rt_handle, map_val.ptr, map_tydesc, key_val.ptr, key_val.tydesc, &mut value_ptr,
+                rt_handle, map_val.ptr, &*map_tydesc, key_val.ptr, &*key_val.tydesc, &mut value_ptr,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet get_value_ref failed");
@@ -1461,7 +1461,7 @@ impl IrInterpreter {
         }
 
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_clone_local(rt_handle, value_ptr, value_tydesc, dest.ptr, dest.tydesc)
+            datalove_rt::c::dtlv_rti_clone_local(rt_handle, value_ptr, &*value_tydesc, dest.ptr, &*dest.tydesc)
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet clone failed");
         true
@@ -1555,7 +1555,7 @@ impl IrInterpreter {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 self.runtime.handle(),
                 val.ptr,
-                val.tydesc,
+                &*val.tydesc,
             );
         }
     }

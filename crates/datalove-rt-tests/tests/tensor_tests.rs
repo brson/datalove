@@ -104,7 +104,7 @@ unsafe fn create_runtime_u32_list(
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list.as_mut_ptr() as *mut u8,
-            list_tydesc,
+            &*list_tydesc,
         );
         let mut list = list.assume_init();
 
@@ -113,9 +113,9 @@ unsafe fn create_runtime_u32_list(
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 &mut list as *mut rtdt::List as *mut u8,
-                list_tydesc,
+                &*list_tydesc,
                 &mut v as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
         }
 
@@ -160,12 +160,12 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -197,7 +197,7 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -247,12 +247,12 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -282,7 +282,7 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -325,12 +325,12 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -354,7 +354,7 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -397,12 +397,12 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -432,7 +432,7 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -480,12 +480,12 @@ fn test_tensor_create_mismatched_length() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -538,12 +538,12 @@ fn test_multiple_tensors() -> AnyResult<()> {
                 rt,
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
-                list_tydesc as *const rtdt::TyDesc,
+                &*list_tydesc,
                 rtdt::TensorLayout::RowMajor as u8,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -567,7 +567,7 @@ fn test_multiple_tensors() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
                 tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -614,12 +614,12 @@ fn test_tensor_get_1d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -633,10 +633,10 @@ fn test_tensor_get_1d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -649,7 +649,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -660,7 +660,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -703,12 +703,12 @@ fn test_tensor_get_2d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -730,10 +730,10 @@ fn test_tensor_get_2d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -746,7 +746,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -757,7 +757,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -798,12 +798,12 @@ fn test_tensor_get_3d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -826,10 +826,10 @@ fn test_tensor_get_3d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -842,7 +842,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -853,7 +853,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -894,12 +894,12 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -918,10 +918,10 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -932,7 +932,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -976,12 +976,12 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1009,10 +1009,10 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1025,7 +1025,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1036,7 +1036,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1081,12 +1081,12 @@ fn test_tensor_set_1d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1100,10 +1100,10 @@ fn test_tensor_set_1d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 &mut { new_value } as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1118,10 +1118,10 @@ fn test_tensor_set_1d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1134,7 +1134,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1145,7 +1145,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1188,12 +1188,12 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1210,10 +1210,10 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 &mut { new_value } as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1236,10 +1236,10 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1252,7 +1252,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1263,7 +1263,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1304,12 +1304,12 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1322,10 +1322,10 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_set_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             indices.as_ptr(),
             &mut { new_value } as *mut u32 as *mut u8,
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1336,10 +1336,10 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             indices.as_ptr(),
             element_value.as_mut_ptr() as *mut u8,
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1352,7 +1352,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             &mut value as *mut u32 as *mut u8,
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1362,7 +1362,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1403,12 +1403,12 @@ fn test_tensor_set_3d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1425,10 +1425,10 @@ fn test_tensor_set_3d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 &mut { new_value } as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1442,10 +1442,10 @@ fn test_tensor_set_3d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1458,7 +1458,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1469,7 +1469,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1510,12 +1510,12 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1533,10 +1533,10 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 &mut { new_value } as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -1547,7 +1547,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1594,12 +1594,12 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1622,10 +1622,10 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1662,10 +1662,10 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &transposed as *const rtdt::Tensor as *const u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 indices.as_ptr(),
                 element_value.as_mut_ptr() as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1678,7 +1678,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1689,7 +1689,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1731,12 +1731,12 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1756,10 +1756,10 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1780,7 +1780,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1821,12 +1821,12 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1846,10 +1846,10 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1867,7 +1867,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1908,12 +1908,12 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1933,10 +1933,10 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1957,7 +1957,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1998,12 +1998,12 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2023,10 +2023,10 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -2039,7 +2039,7 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2080,12 +2080,12 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2105,10 +2105,10 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -2118,7 +2118,7 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2159,12 +2159,12 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2177,10 +2177,10 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             indices.as_ptr(),
             element_value.as_mut_ptr() as *mut u8,
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2194,7 +2194,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             &mut value as *mut u32 as *mut u8,
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2207,10 +2207,10 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             indices.as_ptr(),
             element_value.as_mut_ptr() as *mut u8,
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2223,7 +2223,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             &mut value as *mut u32 as *mut u8,
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2233,7 +2233,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2319,12 +2319,12 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2345,10 +2345,10 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2389,7 +2389,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2429,12 +2429,12 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2453,10 +2453,10 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2485,7 +2485,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2525,12 +2525,12 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2549,10 +2549,10 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2579,7 +2579,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2619,12 +2619,12 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2643,10 +2643,10 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2675,7 +2675,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2715,12 +2715,12 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2739,10 +2739,10 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2763,7 +2763,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2804,12 +2804,12 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2829,10 +2829,10 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2863,7 +2863,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2908,12 +2908,12 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2d as *const rtdt::TyDesc,
+            &*tensor_tydesc_2d,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2932,11 +2932,11 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2d as *const rtdt::TyDesc,
+            &*tensor_tydesc_2d,
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2974,7 +2974,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut reshaped_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_3d as *const rtdt::TyDesc,
+            &*tensor_tydesc_3d,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3014,12 +3014,12 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3037,11 +3037,11 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3069,7 +3069,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3109,12 +3109,12 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3133,10 +3133,10 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             slice_result_buffer.as_mut_ptr(),
-            &*slice_result_tydesc as *const rtdt::TyDesc,
+            &*slice_result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3168,11 +3168,11 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             reshape_result_buffer.as_mut_ptr(),
-            &*reshape_result_tydesc as *const rtdt::TyDesc,
+            &*reshape_result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3193,7 +3193,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3241,12 +3241,12 @@ fn test_tensor_create_empty_shape() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -3290,12 +3290,12 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3315,11 +3315,11 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             reshape_result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3340,7 +3340,7 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3381,12 +3381,12 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3406,10 +3406,10 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             ranges.as_ptr(),
             slice_result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3443,11 +3443,11 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut sliced_tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             reshape_result_buffer.as_mut_ptr(),
-            &*result_1d_tydesc as *const rtdt::TyDesc,
+            &*result_1d_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3467,7 +3467,7 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3502,7 +3502,7 @@ fn test_tensor_destroy_already_cleared() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3545,12 +3545,12 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            &*element_tydesc_2 as *const rtdt::TyDesc,
+            &*element_tydesc_2,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3570,10 +3570,10 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_0 as *const rtdt::TyDesc,  // rank-0 tydesc
+            &*tensor_tydesc_0,  // rank-0 tydesc
             ranges.as_ptr(),
             slice_result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3594,7 +3594,7 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3636,12 +3636,12 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            &*element_tydesc_2 as *const rtdt::TyDesc,
+            &*element_tydesc_2,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3660,11 +3660,11 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_0 as *const rtdt::TyDesc,  // rank-0 tydesc
+            &*tensor_tydesc_0,  // rank-0 tydesc
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             reshape_result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3685,7 +3685,7 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3727,12 +3727,12 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            &*element_tydesc_2 as *const rtdt::TyDesc,
+            &*element_tydesc_2,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3752,10 +3752,10 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
-            &*tensor_tydesc_0 as *const rtdt::TyDesc,  // rank-0 tydesc
+            &*tensor_tydesc_0,  // rank-0 tydesc
             perm.as_ptr(),
             &mut tensor_out as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_0 as *const rtdt::TyDesc,
+            &*tensor_tydesc_0,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -3765,7 +3765,7 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3806,12 +3806,12 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3835,11 +3835,11 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             reshape_result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3871,7 +3871,7 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut reshaped_tensor as *mut rtdt::Tensor as *mut u8,
-            &*tensor_tydesc_2 as *const rtdt::TyDesc,
+            &*tensor_tydesc_2,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3915,12 +3915,12 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3945,10 +3945,10 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3981,11 +3981,11 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
             &mut new_shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             result_buffer.as_mut_ptr(),
-            &*result_tydesc as *const rtdt::TyDesc,
+            &*result_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4008,7 +4008,7 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4054,12 +4054,12 @@ fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::RowMajorTransposed as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4082,7 +4082,7 @@ fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4124,12 +4124,12 @@ fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
-            element_tydesc as *const rtdt::TyDesc,
+            &*element_tydesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
-            list_tydesc as *const rtdt::TyDesc,
+            &*list_tydesc,
             rtdt::TensorLayout::ColMajorTransposed as u8,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4152,7 +4152,7 @@ fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
-            tensor_tydesc as *const rtdt::TyDesc,
+            &*tensor_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4200,12 +4200,12 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 rt,
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
-                list_tydesc as *const rtdt::TyDesc,
+                &*list_tydesc,
                 rtdt::TensorLayout::RowMajor as u8,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4225,10 +4225,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 perm.as_ptr(),
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4243,7 +4243,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4270,12 +4270,12 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 rt,
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
-                list_tydesc as *const rtdt::TyDesc,
+                &*list_tydesc,
                 rtdt::TensorLayout::ColMajorTransposed as u8,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4295,10 +4295,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 perm.as_ptr(),
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4309,7 +4309,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4336,12 +4336,12 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 rt,
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
-                list_tydesc as *const rtdt::TyDesc,
+                &*list_tydesc,
                 rtdt::TensorLayout::ColMajor as u8,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4361,10 +4361,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 perm.as_ptr(),
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4375,7 +4375,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4402,12 +4402,12 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 rt,
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
-                element_tydesc as *const rtdt::TyDesc,
+                &*element_tydesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
-                list_tydesc as *const rtdt::TyDesc,
+                &*list_tydesc,
                 rtdt::TensorLayout::RowMajorTransposed as u8,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4427,10 +4427,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
                 perm.as_ptr(),
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -4441,7 +4441,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
                 &mut transposed as *mut rtdt::Tensor as *mut u8,
-                tensor_tydesc as *const rtdt::TyDesc,
+                &*tensor_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);

@@ -1590,7 +1590,10 @@ The runtime's C API (`datalove-rt/src/c/mod.rs`) is entirely `dtlv_rti_*`: calls
 only the compiler emits, which may use whatever ABI is convenient. The crate
 docs also describe a `dtlv_rt_*` family the language would call under a
 restricted ABI, but none exist yet. Everything but `init` takes a runtime
-handle, and every value pointer is followed by its tydesc.
+handle, and every value pointer is followed by its tydesc. The tydescs are
+`&rtdt::TyDesc`: a reference is passed as a pointer, so the compiler's
+backends pass one as before, and a Rust caller is held to a live descriptor
+where it makes the call rather than the runtime taking one on trust.
 
 ### Leak Checking
 

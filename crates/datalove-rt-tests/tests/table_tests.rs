@@ -228,7 +228,7 @@ fn test_table_create_empty() {
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, table_tydesc)
+        datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, &*table_tydesc)
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -238,7 +238,7 @@ fn test_table_create_empty() {
 
     // Destroy.
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, table_tydesc)
+        datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, &*table_tydesc)
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -263,7 +263,7 @@ fn test_table_push_and_len() {
 
     // Create table.
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, table_tydesc)
+        datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, &*table_tydesc)
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -277,16 +277,16 @@ fn test_table_push_and_len() {
             datalove_rt::c::dtlv_rti_table_push_row_local(
                 rt,
                 table_ptr,
-                table_tydesc,
+                &*table_tydesc,
                 &row as *const Row as *const u8,
-                row_tydesc,
+                &*row_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Check length.
-    let len = unsafe { datalove_rt::c::dtlv_rti_table_len(rt, table_ptr as *const u8, table_tydesc) };
+    let len = unsafe { datalove_rt::c::dtlv_rti_table_len(rt, table_ptr as *const u8, &*table_tydesc) };
     assert_eq!(len, 3);
     assert_eq!(table.len, rtdt::Index(3));
 
@@ -296,7 +296,7 @@ fn test_table_push_and_len() {
             datalove_rt::c::dtlv_rti_table_get_local(
                 rt,
                 table_ptr as *const u8,
-                table_tydesc,
+                &*table_tydesc,
                 i.into(),
                 0,
             )
@@ -308,7 +308,7 @@ fn test_table_push_and_len() {
 
     // Destroy.
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, table_tydesc)
+        datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, &*table_tydesc)
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -333,7 +333,7 @@ fn test_table_two_columns() {
 
     // Create table.
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, table_tydesc)
+        datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, &*table_tydesc)
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -348,9 +348,9 @@ fn test_table_two_columns() {
             datalove_rt::c::dtlv_rti_table_push_row_local(
                 rt,
                 table_ptr,
-                table_tydesc,
+                &*table_tydesc,
                 &row as *const Row as *const u8,
-                row_tydesc,
+                &*row_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -361,10 +361,10 @@ fn test_table_two_columns() {
     // Verify elements.
     for i in 0u32..5 {
         let col0_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, i.into(), 0)
+            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, &*table_tydesc, i.into(), 0)
         };
         let col1_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, i.into(), 1)
+            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, &*table_tydesc, i.into(), 1)
         };
         assert!(!col0_ptr.is_null());
         assert!(!col1_ptr.is_null());
@@ -377,7 +377,7 @@ fn test_table_two_columns() {
 
     // Destroy.
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, table_tydesc)
+        datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, &*table_tydesc)
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -400,7 +400,7 @@ fn test_table_get_out_of_bounds() {
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
 
-    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, &*table_tydesc) };
 
     // Push one row.
     #[repr(C)]
@@ -410,31 +410,31 @@ fn test_table_get_out_of_bounds() {
         datalove_rt::c::dtlv_rti_table_push_row_local(
             rt,
             table_ptr,
-            table_tydesc,
+            &*table_tydesc,
             &row as *const Row as *const u8,
-            row_tydesc,
+            &*row_tydesc,
         )
     };
 
     // Valid access.
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, 0, 0)
+        datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, &*table_tydesc, 0, 0)
     };
     assert!(!ptr.is_null());
 
     // Out of bounds row.
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, 1, 0)
+        datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, &*table_tydesc, 1, 0)
     };
     assert!(ptr.is_null());
 
     // Out of bounds column.
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, 0, 1)
+        datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, &*table_tydesc, 0, 1)
     };
     assert!(ptr.is_null());
 
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, &*table_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
 }
 
@@ -454,7 +454,7 @@ fn test_table_clear() {
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
 
-    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, &*table_tydesc) };
 
     // Push rows.
     #[repr(C)]
@@ -463,8 +463,8 @@ fn test_table_clear() {
         let row = Row { val: i };
         unsafe {
             datalove_rt::c::dtlv_rti_table_push_row_local(
-                rt, table_ptr, table_tydesc,
-                &row as *const Row as *const u8, row_tydesc,
+                rt, table_ptr, &*table_tydesc,
+                &row as *const Row as *const u8, &*row_tydesc,
             )
         };
     }
@@ -473,7 +473,7 @@ fn test_table_clear() {
 
     // Clear.
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_table_clear_local(rt, table_ptr, table_tydesc)
+        datalove_rt::c::dtlv_rti_table_clear_local(rt, table_ptr, &*table_tydesc)
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -481,7 +481,7 @@ fn test_table_clear() {
     assert_eq!(table.len, rtdt::Index::ZERO);
     assert_eq!(table.capacity, old_capacity);
 
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, &*table_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
 }
 
@@ -501,7 +501,7 @@ fn test_table_clone() {
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
 
-    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table_ptr, &*table_tydesc) };
 
     // Push rows.
     #[repr(C)]
@@ -510,8 +510,8 @@ fn test_table_clone() {
         let row = Row { val: i * 10 };
         unsafe {
             datalove_rt::c::dtlv_rti_table_push_row_local(
-                rt, table_ptr, table_tydesc,
-                &row as *const Row as *const u8, row_tydesc,
+                rt, table_ptr, &*table_tydesc,
+                &row as *const Row as *const u8, &*row_tydesc,
             )
         };
     }
@@ -528,9 +528,9 @@ fn test_table_clone() {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             table_ptr as *const u8,
-            table_tydesc,
+            &*table_tydesc,
             cloned_ptr,
-            table_tydesc,
+            &*table_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -541,15 +541,15 @@ fn test_table_clone() {
 
     for i in 0u32..3 {
         let elem_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_table_get_local(rt, cloned_ptr as *const u8, table_tydesc, i.into(), 0)
+            datalove_rt::c::dtlv_rti_table_get_local(rt, cloned_ptr as *const u8, &*table_tydesc, i.into(), 0)
         };
         let val = unsafe { *(elem_ptr as *const u32) };
         assert_eq!(val, i * 10);
     }
 
     // Destroy both.
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, table_tydesc) };
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, cloned_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, &*table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, cloned_ptr, &*table_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
 }
 
@@ -568,8 +568,8 @@ fn test_table_eq() {
     let table1_ptr = &mut table1 as *mut rtdt::Table as *mut u8;
     let table2_ptr = &mut table2 as *mut rtdt::Table as *mut u8;
 
-    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table1_ptr, table_tydesc) };
-    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table2_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table1_ptr, &*table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table2_ptr, &*table_tydesc) };
 
     #[repr(C)]
     struct Row { val: u32 }
@@ -577,12 +577,12 @@ fn test_table_eq() {
         let row = Row { val: i };
         unsafe {
             datalove_rt::c::dtlv_rti_table_push_row_local(
-                rt, table1_ptr, table_tydesc,
-                &row as *const Row as *const u8, row_tydesc,
+                rt, table1_ptr, &*table_tydesc,
+                &row as *const Row as *const u8, &*row_tydesc,
             );
             datalove_rt::c::dtlv_rti_table_push_row_local(
-                rt, table2_ptr, table_tydesc,
-                &row as *const Row as *const u8, row_tydesc,
+                rt, table2_ptr, &*table_tydesc,
+                &row as *const Row as *const u8, &*row_tydesc,
             );
         };
     }
@@ -591,8 +591,8 @@ fn test_table_eq() {
     let eq = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             rt,
-            table1_ptr as *const u8, table_tydesc,
-            table2_ptr as *const u8, table_tydesc,
+            table1_ptr as *const u8, &*table_tydesc,
+            table2_ptr as *const u8, &*table_tydesc,
         )
     };
     assert_eq!(eq, datalove_rt::c::RtEq::Equals);
@@ -601,22 +601,22 @@ fn test_table_eq() {
     let row = Row { val: 99 };
     unsafe {
         datalove_rt::c::dtlv_rti_table_push_row_local(
-            rt, table2_ptr, table_tydesc,
-            &row as *const Row as *const u8, row_tydesc,
+            rt, table2_ptr, &*table_tydesc,
+            &row as *const Row as *const u8, &*row_tydesc,
         )
     };
 
     let eq = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             rt,
-            table1_ptr as *const u8, table_tydesc,
-            table2_ptr as *const u8, table_tydesc,
+            table1_ptr as *const u8, &*table_tydesc,
+            table2_ptr as *const u8, &*table_tydesc,
         )
     };
     assert_eq!(eq, datalove_rt::c::RtEq::NotEquals);
 
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table1_ptr, table_tydesc) };
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table2_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table1_ptr, &*table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table2_ptr, &*table_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
 }
 
@@ -634,8 +634,8 @@ fn test_table_cmp() {
     let table1_ptr = &mut table1 as *mut rtdt::Table as *mut u8;
     let table2_ptr = &mut table2 as *mut rtdt::Table as *mut u8;
 
-    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table1_ptr, table_tydesc) };
-    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table2_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table1_ptr, &*table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, table2_ptr, &*table_tydesc) };
 
     #[repr(C)]
     struct Row { val: u32 }
@@ -646,8 +646,8 @@ fn test_table_cmp() {
         let row = Row { val: v };
         unsafe {
             datalove_rt::c::dtlv_rti_table_push_row_local(
-                rt, table1_ptr, table_tydesc,
-                &row as *const Row as *const u8, row_tydesc,
+                rt, table1_ptr, &*table_tydesc,
+                &row as *const Row as *const u8, &*row_tydesc,
             )
         };
     }
@@ -655,8 +655,8 @@ fn test_table_cmp() {
         let row = Row { val: v };
         unsafe {
             datalove_rt::c::dtlv_rti_table_push_row_local(
-                rt, table2_ptr, table_tydesc,
-                &row as *const Row as *const u8, row_tydesc,
+                rt, table2_ptr, &*table_tydesc,
+                &row as *const Row as *const u8, &*row_tydesc,
             )
         };
     }
@@ -665,14 +665,14 @@ fn test_table_cmp() {
     let ord = unsafe {
         datalove_rt::c::dtlv_rti_cmp_local(
             rt,
-            table1_ptr as *const u8, table_tydesc,
-            table2_ptr as *const u8, table_tydesc,
+            table1_ptr as *const u8, &*table_tydesc,
+            table2_ptr as *const u8, &*table_tydesc,
         )
     };
     assert_eq!(ord, datalove_rt::c::RtOrdering::Less);
 
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table1_ptr, table_tydesc) };
-    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table2_ptr, table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table1_ptr, &*table_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table2_ptr, &*table_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
 }
 
@@ -700,9 +700,9 @@ fn test_table_full_index_refuses_row() {
         datalove_rt::c::dtlv_rti_table_push_row_local(
             rt,
             &mut table as *mut rtdt::Table as *mut u8,
-            table_tydesc,
+            &*table_tydesc,
             &row as *const Row as *const u8,
-            row_tydesc,
+            &*row_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);

@@ -52,7 +52,7 @@ pub unsafe fn dtlv_rti_shutdown(rt: LocalRtHandle) -> RtStatus {
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_mem_alloc_local(rt: LocalRtHandle, tydesc: *const rtdt::TyDesc, count: rtdt::IndexRepr) -> *mut u8 {
+pub unsafe fn dtlv_rti_mem_alloc_local(rt: LocalRtHandle, tydesc: &rtdt::TyDesc, count: rtdt::IndexRepr) -> *mut u8 {
     unsafe { (crate::table(rt).dtlv_rti_mem_alloc_local)(rt, tydesc, count) }
 }
 
@@ -85,7 +85,7 @@ pub unsafe fn dtlv_rti_mem_free_raw_local(rt: LocalRtHandle, size: u32, align: u
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_mem_free_local(rt: LocalRtHandle, tydesc: *const rtdt::TyDesc, count: rtdt::IndexRepr, ptr: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_mem_free_local(rt: LocalRtHandle, tydesc: &rtdt::TyDesc, count: rtdt::IndexRepr, ptr: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_mem_free_local)(rt, tydesc, count, ptr) }
 }
 
@@ -96,7 +96,7 @@ pub unsafe fn dtlv_rti_mem_free_local(rt: LocalRtHandle, tydesc: *const rtdt::Ty
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_move_value_local(rt: LocalRtHandle, src_ref: *const u8, tydesc: *const rtdt::TyDesc, dst_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_move_value_local(rt: LocalRtHandle, src_ref: *const u8, tydesc: &rtdt::TyDesc, dst_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_move_value_local)(rt, src_ref, tydesc, dst_out) }
 }
 
@@ -107,7 +107,7 @@ pub unsafe fn dtlv_rti_move_value_local(rt: LocalRtHandle, src_ref: *const u8, t
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_clone_local(rt: LocalRtHandle, value_in: *const u8, tydesc_in: *const rtdt::TyDesc, value_out: *mut u8, tydesc_out: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_clone_local(rt: LocalRtHandle, value_in: *const u8, tydesc_in: &rtdt::TyDesc, value_out: *mut u8, tydesc_out: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_clone_local)(rt, value_in, tydesc_in, value_out, tydesc_out) }
 }
 
@@ -118,7 +118,7 @@ pub unsafe fn dtlv_rti_clone_local(rt: LocalRtHandle, value_in: *const u8, tydes
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_eq_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: *const rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: *const rtdt::TyDesc) -> RtEq {
+pub unsafe fn dtlv_rti_eq_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: &rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: &rtdt::TyDesc) -> RtEq {
     unsafe { (crate::table(rt).dtlv_rti_eq_local)(rt, value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc) }
 }
 
@@ -129,7 +129,7 @@ pub unsafe fn dtlv_rti_eq_local(rt: LocalRtHandle, value_a_ref: *const u8, value
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_eq_unique_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: *const rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: *const rtdt::TyDesc) -> RtEq {
+pub unsafe fn dtlv_rti_eq_unique_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: &rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: &rtdt::TyDesc) -> RtEq {
     unsafe { (crate::table(rt).dtlv_rti_eq_unique_local)(rt, value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc) }
 }
 
@@ -140,7 +140,7 @@ pub unsafe fn dtlv_rti_eq_unique_local(rt: LocalRtHandle, value_a_ref: *const u8
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_cmp_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: *const rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: *const rtdt::TyDesc) -> RtOrdering {
+pub unsafe fn dtlv_rti_cmp_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: &rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: &rtdt::TyDesc) -> RtOrdering {
     unsafe { (crate::table(rt).dtlv_rti_cmp_local)(rt, value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc) }
 }
 
@@ -151,7 +151,7 @@ pub unsafe fn dtlv_rti_cmp_local(rt: LocalRtHandle, value_a_ref: *const u8, valu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_cmp_total_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: *const rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: *const rtdt::TyDesc) -> RtOrdering {
+pub unsafe fn dtlv_rti_cmp_total_local(rt: LocalRtHandle, value_a_ref: *const u8, value_a_tydesc: &rtdt::TyDesc, value_b_ref: *const u8, value_b_tydesc: &rtdt::TyDesc) -> RtOrdering {
     unsafe { (crate::table(rt).dtlv_rti_cmp_total_local)(rt, value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc) }
 }
 
@@ -162,7 +162,7 @@ pub unsafe fn dtlv_rti_cmp_total_local(rt: LocalRtHandle, value_a_ref: *const u8
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_add(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_add(rt: LocalRtHandle, a_in: *const u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_add)(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) }
 }
 
@@ -173,7 +173,7 @@ pub unsafe fn dtlv_rti_int_add(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *co
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_sub(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_sub(rt: LocalRtHandle, a_in: *const u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_sub)(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) }
 }
 
@@ -184,7 +184,7 @@ pub unsafe fn dtlv_rti_int_sub(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *co
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_mul(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_mul(rt: LocalRtHandle, a_in: *const u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_mul)(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) }
 }
 
@@ -195,7 +195,7 @@ pub unsafe fn dtlv_rti_int_mul(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *co
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_neg(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *const rtdt::TyDesc, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_neg(rt: LocalRtHandle, a_in: *const u8, a_tydesc: &rtdt::TyDesc, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_neg)(rt, a_in, a_tydesc, result_out, result_tydesc) }
 }
 
@@ -206,7 +206,7 @@ pub unsafe fn dtlv_rti_int_neg(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *co
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_div_checked(rt: LocalRtHandle, a_in: *const u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_div_checked(rt: LocalRtHandle, a_in: *const u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_div_checked)(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) }
 }
 
@@ -217,7 +217,7 @@ pub unsafe fn dtlv_rti_int_div_checked(rt: LocalRtHandle, a_in: *const u8, a_tyd
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_add_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_add_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_add_assign)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
 }
 
@@ -228,7 +228,7 @@ pub unsafe fn dtlv_rti_int_add_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydes
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_sub_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_sub_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_sub_assign)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
 }
 
@@ -239,7 +239,7 @@ pub unsafe fn dtlv_rti_int_sub_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydes
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_mul_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_mul_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_mul_assign)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
 }
 
@@ -250,7 +250,7 @@ pub unsafe fn dtlv_rti_int_mul_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydes
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_div_assign_checked(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_div_assign_checked(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: &rtdt::TyDesc, b_in: *const u8, b_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_div_assign_checked)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
 }
 
@@ -261,7 +261,7 @@ pub unsafe fn dtlv_rti_int_div_assign_checked(rt: LocalRtHandle, a_mut: *mut u8,
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_from_fixed(rt: LocalRtHandle, src_in: *const u8, src_tydesc: *const rtdt::TyDesc, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_from_fixed(rt: LocalRtHandle, src_in: *const u8, src_tydesc: &rtdt::TyDesc, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_from_fixed)(rt, src_in, src_tydesc, result_out, result_tydesc) }
 }
 
@@ -272,7 +272,7 @@ pub unsafe fn dtlv_rti_int_from_fixed(rt: LocalRtHandle, src_in: *const u8, src_
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_int_from_limbs(rt: LocalRtHandle, limbs_ptr: *const u32, limb_count: u32, negative: bool, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_int_from_limbs(rt: LocalRtHandle, limbs_ptr: *const u32, limb_count: u32, negative: bool, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_int_from_limbs)(rt, limbs_ptr, limb_count, negative, result_out, result_tydesc) }
 }
 
@@ -283,7 +283,7 @@ pub unsafe fn dtlv_rti_int_from_limbs(rt: LocalRtHandle, limbs_ptr: *const u32, 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_any_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_any_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_any_destroy_local)(rt, value_in, tydesc) }
 }
 
@@ -294,7 +294,7 @@ pub unsafe fn dtlv_rti_any_destroy_local(rt: LocalRtHandle, value_in: *mut u8, t
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_error_from_local(rt: LocalRtHandle, inner_in: *const u8, inner_tydesc: *const rtdt::TyDesc, dest_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_error_from_local(rt: LocalRtHandle, inner_in: *const u8, inner_tydesc: &rtdt::TyDesc, dest_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_error_from_local)(rt, inner_in, inner_tydesc, dest_out) }
 }
 
@@ -305,7 +305,7 @@ pub unsafe fn dtlv_rti_error_from_local(rt: LocalRtHandle, inner_in: *const u8, 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_data_from_local(rt: LocalRtHandle, inner_in: *const u8, inner_tydesc: *const rtdt::TyDesc, dest_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_data_from_local(rt: LocalRtHandle, inner_in: *const u8, inner_tydesc: &rtdt::TyDesc, dest_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_data_from_local)(rt, inner_in, inner_tydesc, dest_out) }
 }
 
@@ -316,7 +316,7 @@ pub unsafe fn dtlv_rti_data_from_local(rt: LocalRtHandle, inner_in: *const u8, i
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_dyn_binop(rt: LocalRtHandle, op: u8, lhs: *const u8, lhs_tydesc: *const rtdt::TyDesc, rhs: *const u8, rhs_tydesc: *const rtdt::TyDesc, out: *mut u8, out_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_dyn_binop(rt: LocalRtHandle, op: u8, lhs: *const u8, lhs_tydesc: &rtdt::TyDesc, rhs: *const u8, rhs_tydesc: &rtdt::TyDesc, out: *mut u8, out_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_dyn_binop)(rt, op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc) }
 }
 
@@ -327,7 +327,7 @@ pub unsafe fn dtlv_rti_dyn_binop(rt: LocalRtHandle, op: u8, lhs: *const u8, lhs_
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_dyn_binop_checked(rt: LocalRtHandle, op: u8, lhs: *const u8, lhs_tydesc: *const rtdt::TyDesc, rhs: *const u8, rhs_tydesc: *const rtdt::TyDesc, out: *mut u8, out_tydesc: *const rtdt::TyDesc, overflow_out: *mut bool) -> RtStatus {
+pub unsafe fn dtlv_rti_dyn_binop_checked(rt: LocalRtHandle, op: u8, lhs: *const u8, lhs_tydesc: &rtdt::TyDesc, rhs: *const u8, rhs_tydesc: &rtdt::TyDesc, out: *mut u8, out_tydesc: &rtdt::TyDesc, overflow_out: *mut bool) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_dyn_binop_checked)(rt, op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc, overflow_out) }
 }
 
@@ -338,7 +338,7 @@ pub unsafe fn dtlv_rti_dyn_binop_checked(rt: LocalRtHandle, op: u8, lhs: *const 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_dyn_unop(rt: LocalRtHandle, op: u8, value: *const u8, value_tydesc: *const rtdt::TyDesc, out: *mut u8, out_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_dyn_unop(rt: LocalRtHandle, op: u8, value: *const u8, value_tydesc: &rtdt::TyDesc, out: *mut u8, out_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_dyn_unop)(rt, op, value, value_tydesc, out, out_tydesc) }
 }
 
@@ -349,7 +349,7 @@ pub unsafe fn dtlv_rti_dyn_unop(rt: LocalRtHandle, op: u8, value: *const u8, val
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_dyn_const(rt: LocalRtHandle, which: u8, out: *mut u8, out_tydesc: *const rtdt::TyDesc, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_dyn_const(rt: LocalRtHandle, which: u8, out: *mut u8, out_tydesc: &rtdt::TyDesc, value_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_dyn_const)(rt, which, out, out_tydesc, value_tydesc) }
 }
 
@@ -360,7 +360,7 @@ pub unsafe fn dtlv_rti_dyn_const(rt: LocalRtHandle, which: u8, out: *mut u8, out
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_dyn_float_const(rt: LocalRtHandle, which: u8, out: *mut u8, out_tydesc: *const rtdt::TyDesc, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_dyn_float_const(rt: LocalRtHandle, which: u8, out: *mut u8, out_tydesc: &rtdt::TyDesc, value_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_dyn_float_const)(rt, which, out, out_tydesc, value_tydesc) }
 }
 
@@ -371,7 +371,7 @@ pub unsafe fn dtlv_rti_dyn_float_const(rt: LocalRtHandle, which: u8, out: *mut u
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_dyn_neg_checked(rt: LocalRtHandle, value: *const u8, value_tydesc: *const rtdt::TyDesc, out: *mut u8, out_tydesc: *const rtdt::TyDesc, overflow_out: *mut bool) -> RtStatus {
+pub unsafe fn dtlv_rti_dyn_neg_checked(rt: LocalRtHandle, value: *const u8, value_tydesc: &rtdt::TyDesc, out: *mut u8, out_tydesc: &rtdt::TyDesc, overflow_out: *mut bool) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_dyn_neg_checked)(rt, value, value_tydesc, out, out_tydesc, overflow_out) }
 }
 
@@ -382,7 +382,7 @@ pub unsafe fn dtlv_rti_dyn_neg_checked(rt: LocalRtHandle, value: *const u8, valu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_string_create_local)(rt, value_out, tydesc) }
 }
 
@@ -393,7 +393,7 @@ pub unsafe fn dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_string_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_string_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_string_destroy_local)(rt, value_in, tydesc) }
 }
 
@@ -404,7 +404,7 @@ pub unsafe fn dtlv_rti_string_destroy_local(rt: LocalRtHandle, value_in: *mut u8
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_string_push_bytes_local(rt: LocalRtHandle, string_value_mut: *mut u8, string_tydesc: *const rtdt::TyDesc, bytes_ref: *const u8, bytes_len: rtdt::IndexRepr) -> RtStatus {
+pub unsafe fn dtlv_rti_string_push_bytes_local(rt: LocalRtHandle, string_value_mut: *mut u8, string_tydesc: &rtdt::TyDesc, bytes_ref: *const u8, bytes_len: rtdt::IndexRepr) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_string_push_bytes_local)(rt, string_value_mut, string_tydesc, bytes_ref, bytes_len) }
 }
 
@@ -415,7 +415,7 @@ pub unsafe fn dtlv_rti_string_push_bytes_local(rt: LocalRtHandle, string_value_m
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_string_clear_local(rt: LocalRtHandle, string_value_mut: *mut u8, string_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_string_clear_local(rt: LocalRtHandle, string_value_mut: *mut u8, string_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_string_clear_local)(rt, string_value_mut, string_tydesc) }
 }
 
@@ -426,7 +426,7 @@ pub unsafe fn dtlv_rti_string_clear_local(rt: LocalRtHandle, string_value_mut: *
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_string_from_bytes(rt: LocalRtHandle, bytes_ptr: *const u8, bytes_len: rtdt::IndexRepr, result_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_string_from_bytes(rt: LocalRtHandle, bytes_ptr: *const u8, bytes_len: rtdt::IndexRepr, result_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_string_from_bytes)(rt, bytes_ptr, bytes_len, result_out, result_tydesc) }
 }
 
@@ -437,7 +437,7 @@ pub unsafe fn dtlv_rti_string_from_bytes(rt: LocalRtHandle, bytes_ptr: *const u8
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_pretty_print_local(rt: LocalRtHandle, arg_value_ref: *const u8, arg_tydesc_ref: *const rtdt::TyDesc, string_value_mut: *mut u8, string_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_pretty_print_local(rt: LocalRtHandle, arg_value_ref: *const u8, arg_tydesc_ref: &rtdt::TyDesc, string_value_mut: *mut u8, string_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_pretty_print_local)(rt, arg_value_ref, arg_tydesc_ref, string_value_mut, string_tydesc) }
 }
 
@@ -448,7 +448,7 @@ pub unsafe fn dtlv_rti_pretty_print_local(rt: LocalRtHandle, arg_value_ref: *con
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_create_local)(rt, value_out, tydesc) }
 }
 
@@ -459,7 +459,7 @@ pub unsafe fn dtlv_rti_btreemap_create_local(rt: LocalRtHandle, value_out: *mut 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_clone_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, slice_element_tydesc: *const rtdt::TyDesc, btreemap_value_out: *mut u8, btreemap_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_clone_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, slice_element_tydesc: &rtdt::TyDesc, btreemap_value_out: *mut u8, btreemap_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_clone_from_slice_local)(rt, slice_ref, slice_len, slice_element_tydesc, btreemap_value_out, btreemap_tydesc) }
 }
 
@@ -470,7 +470,7 @@ pub unsafe fn dtlv_rti_btreemap_clone_from_slice_local(rt: LocalRtHandle, slice_
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_build_from_sorted_slices_local(rt: LocalRtHandle, map_out: *mut u8, key_tydesc: *const rtdt::TyDesc, value_tydesc: *const rtdt::TyDesc, keys_ptr: *mut u8, values_ptr: *mut u8, num_entries: rtdt::IndexRepr) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_build_from_sorted_slices_local(rt: LocalRtHandle, map_out: *mut u8, key_tydesc: &rtdt::TyDesc, value_tydesc: &rtdt::TyDesc, keys_ptr: *mut u8, values_ptr: *mut u8, num_entries: rtdt::IndexRepr) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_build_from_sorted_slices_local)(rt, map_out, key_tydesc, value_tydesc, keys_ptr, values_ptr, num_entries) }
 }
 
@@ -481,7 +481,7 @@ pub unsafe fn dtlv_rti_btreemap_build_from_sorted_slices_local(rt: LocalRtHandle
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_destroy_local)(rt, value_in, tydesc) }
 }
 
@@ -492,7 +492,7 @@ pub unsafe fn dtlv_rti_btreemap_destroy_local(rt: LocalRtHandle, value_in: *mut 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_add_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, amount_in: *mut u8, amount_tydesc: *const rtdt::TyDesc, fit_out: *mut bool) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_add_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: &rtdt::TyDesc, key_ref: *const u8, key_tydesc: &rtdt::TyDesc, amount_in: *mut u8, amount_tydesc: &rtdt::TyDesc, fit_out: *mut bool) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_add_local)(rt, btreemap_value_mut, btreemap_tydesc, key_ref, key_tydesc, amount_in, amount_tydesc, fit_out) }
 }
 
@@ -503,7 +503,7 @@ pub unsafe fn dtlv_rti_btreemap_add_local(rt: LocalRtHandle, btreemap_value_mut:
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_insert_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_in: *mut u8, key_tydesc: *const rtdt::TyDesc, value_in: *mut u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_insert_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: &rtdt::TyDesc, key_in: *mut u8, key_tydesc: &rtdt::TyDesc, value_in: *mut u8, value_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_insert_local)(rt, btreemap_value_mut, btreemap_tydesc, key_in, key_tydesc, value_in, value_tydesc) }
 }
 
@@ -514,7 +514,7 @@ pub unsafe fn dtlv_rti_btreemap_insert_local(rt: LocalRtHandle, btreemap_value_m
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_remove_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_remove_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: &rtdt::TyDesc, key_ref: *const u8, key_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_remove_local)(rt, btreemap_value_mut, btreemap_tydesc, key_ref, key_tydesc) }
 }
 
@@ -525,7 +525,7 @@ pub unsafe fn dtlv_rti_btreemap_remove_local(rt: LocalRtHandle, btreemap_value_m
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_keys_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_keys_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: &rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_keys_into_local)(rt, btreemap_value_ref, btreemap_tydesc, list_value_mut, list_tydesc) }
 }
 
@@ -536,7 +536,7 @@ pub unsafe fn dtlv_rti_btreemap_keys_into_local(rt: LocalRtHandle, btreemap_valu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_values_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_values_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: &rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_values_into_local)(rt, btreemap_value_ref, btreemap_tydesc, list_value_mut, list_tydesc) }
 }
 
@@ -547,7 +547,7 @@ pub unsafe fn dtlv_rti_btreemap_values_into_local(rt: LocalRtHandle, btreemap_va
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_entries_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_entries_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: &rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_entries_into_local)(rt, btreemap_value_ref, btreemap_tydesc, list_value_mut, list_tydesc) }
 }
 
@@ -558,7 +558,7 @@ pub unsafe fn dtlv_rti_btreemap_entries_into_local(rt: LocalRtHandle, btreemap_v
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_into_list_local(rt: LocalRtHandle, set_value_ref: *const u8, set_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_into_list_local(rt: LocalRtHandle, set_value_ref: *const u8, set_tydesc: &rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_into_list_local)(rt, set_value_ref, set_tydesc, list_value_mut, list_tydesc) }
 }
 
@@ -569,7 +569,7 @@ pub unsafe fn dtlv_rti_btreeset_into_list_local(rt: LocalRtHandle, set_value_ref
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_get_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_get_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: &rtdt::TyDesc, key_ref: *const u8, key_tydesc: &rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_get_local)(rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc, option_value_out, option_tydesc) }
 }
 
@@ -580,7 +580,7 @@ pub unsafe fn dtlv_rti_btreemap_get_local(rt: LocalRtHandle, btreemap_value_ref:
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_len_local(rt: LocalRtHandle, map_value_ref: *const u8, map_tydesc: *const rtdt::TyDesc, len_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_len_local(rt: LocalRtHandle, map_value_ref: *const u8, map_tydesc: &rtdt::TyDesc, len_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_len_local)(rt, map_value_ref, map_tydesc, len_out) }
 }
 
@@ -591,7 +591,7 @@ pub unsafe fn dtlv_rti_btreemap_len_local(rt: LocalRtHandle, map_value_ref: *con
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_len_local(rt: LocalRtHandle, set_value_ref: *const u8, set_tydesc: *const rtdt::TyDesc, len_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_len_local(rt: LocalRtHandle, set_value_ref: *const u8, set_tydesc: &rtdt::TyDesc, len_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_len_local)(rt, set_value_ref, set_tydesc, len_out) }
 }
 
@@ -602,7 +602,7 @@ pub unsafe fn dtlv_rti_btreeset_len_local(rt: LocalRtHandle, set_value_ref: *con
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_clear_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_clear_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_clear_local)(rt, btreemap_value_mut, btreemap_tydesc) }
 }
 
@@ -613,7 +613,7 @@ pub unsafe fn dtlv_rti_btreemap_clear_local(rt: LocalRtHandle, btreemap_value_mu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_contains_key_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, result_out: *mut bool) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_contains_key_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: &rtdt::TyDesc, key_ref: *const u8, key_tydesc: &rtdt::TyDesc, result_out: *mut bool) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_contains_key_local)(rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc, result_out) }
 }
 
@@ -624,7 +624,7 @@ pub unsafe fn dtlv_rti_btreemap_contains_key_local(rt: LocalRtHandle, btreemap_v
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_get_value_ref_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, value_ptr_out: *mut *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_get_value_ref_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: &rtdt::TyDesc, key_ref: *const u8, key_tydesc: &rtdt::TyDesc, value_ptr_out: *mut *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_get_value_ref_local)(rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc, value_ptr_out) }
 }
 
@@ -635,7 +635,7 @@ pub unsafe fn dtlv_rti_btreemap_get_value_ref_local(rt: LocalRtHandle, btreemap_
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_set_value_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, value_in: *mut u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_set_value_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: &rtdt::TyDesc, key_ref: *const u8, key_tydesc: &rtdt::TyDesc, value_in: *mut u8, value_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_set_value_local)(rt, btreemap_value_mut, btreemap_tydesc, key_ref, key_tydesc, value_in, value_tydesc) }
 }
 
@@ -646,7 +646,7 @@ pub unsafe fn dtlv_rti_btreemap_set_value_local(rt: LocalRtHandle, btreemap_valu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_create_local)(rt, value_out, tydesc) }
 }
 
@@ -657,7 +657,7 @@ pub unsafe fn dtlv_rti_btreeset_create_local(rt: LocalRtHandle, value_out: *mut 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_destroy_local(rt: LocalRtHandle, btreeset_value_in: *mut u8, btreeset_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_destroy_local(rt: LocalRtHandle, btreeset_value_in: *mut u8, btreeset_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_destroy_local)(rt, btreeset_value_in, btreeset_tydesc) }
 }
 
@@ -668,7 +668,7 @@ pub unsafe fn dtlv_rti_btreeset_destroy_local(rt: LocalRtHandle, btreeset_value_
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_insert_local(rt: LocalRtHandle, btreeset_value_mut: *mut u8, btreeset_tydesc: *const rtdt::TyDesc, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc, bool_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_insert_local(rt: LocalRtHandle, btreeset_value_mut: *mut u8, btreeset_tydesc: &rtdt::TyDesc, element_in: *mut u8, element_tydesc: &rtdt::TyDesc, bool_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_insert_local)(rt, btreeset_value_mut, btreeset_tydesc, element_in, element_tydesc, bool_out) }
 }
 
@@ -679,7 +679,7 @@ pub unsafe fn dtlv_rti_btreeset_insert_local(rt: LocalRtHandle, btreeset_value_m
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_remove_local(rt: LocalRtHandle, btreeset_value_mut: *mut u8, btreeset_tydesc: *const rtdt::TyDesc, element_ref: *const u8, element_tydesc: *const rtdt::TyDesc, bool_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_remove_local(rt: LocalRtHandle, btreeset_value_mut: *mut u8, btreeset_tydesc: &rtdt::TyDesc, element_ref: *const u8, element_tydesc: &rtdt::TyDesc, bool_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_remove_local)(rt, btreeset_value_mut, btreeset_tydesc, element_ref, element_tydesc, bool_out) }
 }
 
@@ -690,7 +690,7 @@ pub unsafe fn dtlv_rti_btreeset_remove_local(rt: LocalRtHandle, btreeset_value_m
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_contains_local(rt: LocalRtHandle, btreeset_value_ref: *const u8, btreeset_tydesc: *const rtdt::TyDesc, element_ref: *const u8, element_tydesc: *const rtdt::TyDesc, bool_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_contains_local(rt: LocalRtHandle, btreeset_value_ref: *const u8, btreeset_tydesc: &rtdt::TyDesc, element_ref: *const u8, element_tydesc: &rtdt::TyDesc, bool_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_contains_local)(rt, btreeset_value_ref, btreeset_tydesc, element_ref, element_tydesc, bool_out) }
 }
 
@@ -701,7 +701,7 @@ pub unsafe fn dtlv_rti_btreeset_contains_local(rt: LocalRtHandle, btreeset_value
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_clear_local(rt: LocalRtHandle, btreeset_value_mut: *mut u8, btreeset_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_clear_local(rt: LocalRtHandle, btreeset_value_mut: *mut u8, btreeset_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_clear_local)(rt, btreeset_value_mut, btreeset_tydesc) }
 }
 
@@ -712,7 +712,7 @@ pub unsafe fn dtlv_rti_btreeset_clear_local(rt: LocalRtHandle, btreeset_value_mu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_clone_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, slice_element_tydesc: *const rtdt::TyDesc, btreeset_value_out: *mut u8, btreeset_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_clone_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, slice_element_tydesc: &rtdt::TyDesc, btreeset_value_out: *mut u8, btreeset_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_clone_from_slice_local)(rt, slice_ref, slice_len, slice_element_tydesc, btreeset_value_out, btreeset_tydesc) }
 }
 
@@ -723,7 +723,7 @@ pub unsafe fn dtlv_rti_btreeset_clone_from_slice_local(rt: LocalRtHandle, slice_
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_build_from_sorted_slice_local(rt: LocalRtHandle, set_out: *mut u8, element_tydesc: *const rtdt::TyDesc, elements_ptr: *mut u8, num_elements: rtdt::IndexRepr) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_build_from_sorted_slice_local(rt: LocalRtHandle, set_out: *mut u8, element_tydesc: &rtdt::TyDesc, elements_ptr: *mut u8, num_elements: rtdt::IndexRepr) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_build_from_sorted_slice_local)(rt, set_out, element_tydesc, elements_ptr, num_elements) }
 }
 
@@ -734,7 +734,7 @@ pub unsafe fn dtlv_rti_btreeset_build_from_sorted_slice_local(rt: LocalRtHandle,
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_create_local)(rt, value_out, tydesc) }
 }
 
@@ -745,7 +745,7 @@ pub unsafe fn dtlv_rti_list_create_local(rt: LocalRtHandle, value_out: *mut u8, 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_create_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, element_tydesc: *const rtdt::TyDesc, list_value_out: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_create_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, element_tydesc: &rtdt::TyDesc, list_value_out: *mut u8, list_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_create_from_slice_local)(rt, slice_ref, slice_len, element_tydesc, list_value_out, list_tydesc) }
 }
 
@@ -756,7 +756,7 @@ pub unsafe fn dtlv_rti_list_create_from_slice_local(rt: LocalRtHandle, slice_ref
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_build_from_slice_local(rt: LocalRtHandle, list_out: *mut u8, element_tydesc: *const rtdt::TyDesc, elements_ptr: *mut u8, num_elements: rtdt::IndexRepr) -> RtStatus {
+pub unsafe fn dtlv_rti_list_build_from_slice_local(rt: LocalRtHandle, list_out: *mut u8, element_tydesc: &rtdt::TyDesc, elements_ptr: *mut u8, num_elements: rtdt::IndexRepr) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_build_from_slice_local)(rt, list_out, element_tydesc, elements_ptr, num_elements) }
 }
 
@@ -767,7 +767,7 @@ pub unsafe fn dtlv_rti_list_build_from_slice_local(rt: LocalRtHandle, list_out: 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_destroy_local)(rt, value_in, tydesc) }
 }
 
@@ -778,7 +778,7 @@ pub unsafe fn dtlv_rti_list_destroy_local(rt: LocalRtHandle, value_in: *mut u8, 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_clear_local(rt: LocalRtHandle, value_mut: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_clear_local(rt: LocalRtHandle, value_mut: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_clear_local)(rt, value_mut, tydesc) }
 }
 
@@ -789,7 +789,7 @@ pub unsafe fn dtlv_rti_list_clear_local(rt: LocalRtHandle, value_mut: *mut u8, t
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_len_local(rt: LocalRtHandle, list_value_ref: *const u8, list_tydesc: *const rtdt::TyDesc, len_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_list_len_local(rt: LocalRtHandle, list_value_ref: *const u8, list_tydesc: &rtdt::TyDesc, len_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_len_local)(rt, list_value_ref, list_tydesc, len_out) }
 }
 
@@ -800,7 +800,7 @@ pub unsafe fn dtlv_rti_list_len_local(rt: LocalRtHandle, list_value_ref: *const 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_get_local(rt: LocalRtHandle, list_value_ref: *const u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_get_local(rt: LocalRtHandle, list_value_ref: *const u8, list_tydesc: &rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_get_local)(rt, list_value_ref, list_tydesc, index, option_value_out, option_tydesc) }
 }
 
@@ -811,7 +811,7 @@ pub unsafe fn dtlv_rti_list_get_local(rt: LocalRtHandle, list_value_ref: *const 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_set_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_set_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, index: rtdt::IndexRepr, element_in: *mut u8, element_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_set_local)(rt, list_value_mut, list_tydesc, index, element_in, element_tydesc) }
 }
 
@@ -822,7 +822,7 @@ pub unsafe fn dtlv_rti_list_set_local(rt: LocalRtHandle, list_value_mut: *mut u8
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_push_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_push_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, element_in: *mut u8, element_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_push_local)(rt, list_value_mut, list_tydesc, element_in, element_tydesc) }
 }
 
@@ -833,7 +833,7 @@ pub unsafe fn dtlv_rti_list_push_local(rt: LocalRtHandle, list_value_mut: *mut u
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_pop_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_pop_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_pop_local)(rt, list_value_mut, list_tydesc, option_value_out, option_tydesc) }
 }
 
@@ -844,7 +844,7 @@ pub unsafe fn dtlv_rti_list_pop_local(rt: LocalRtHandle, list_value_mut: *mut u8
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_insert_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_insert_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, index: rtdt::IndexRepr, element_in: *mut u8, element_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_insert_local)(rt, list_value_mut, list_tydesc, index, element_in, element_tydesc) }
 }
 
@@ -855,7 +855,7 @@ pub unsafe fn dtlv_rti_list_insert_local(rt: LocalRtHandle, list_value_mut: *mut
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_remove_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_remove_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_remove_local)(rt, list_value_mut, list_tydesc, index, option_value_out, option_tydesc) }
 }
 
@@ -866,7 +866,7 @@ pub unsafe fn dtlv_rti_list_remove_local(rt: LocalRtHandle, list_value_mut: *mut
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_swap_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, i: rtdt::IndexRepr, j: rtdt::IndexRepr) -> RtStatus {
+pub unsafe fn dtlv_rti_list_swap_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, i: rtdt::IndexRepr, j: rtdt::IndexRepr) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_swap_local)(rt, list_value_mut, list_tydesc, i, j) }
 }
 
@@ -877,7 +877,7 @@ pub unsafe fn dtlv_rti_list_swap_local(rt: LocalRtHandle, list_value_mut: *mut u
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_reserve_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, additional: rtdt::IndexRepr) -> RtStatus {
+pub unsafe fn dtlv_rti_list_reserve_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, additional: rtdt::IndexRepr) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_reserve_local)(rt, list_value_mut, list_tydesc, additional) }
 }
 
@@ -888,7 +888,7 @@ pub unsafe fn dtlv_rti_list_reserve_local(rt: LocalRtHandle, list_value_mut: *mu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_shrink_to_fit_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_shrink_to_fit_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_shrink_to_fit_local)(rt, list_value_mut, list_tydesc) }
 }
 
@@ -899,7 +899,7 @@ pub unsafe fn dtlv_rti_list_shrink_to_fit_local(rt: LocalRtHandle, list_value_mu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_extend_from_slice_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, slice_ref: *const u8, slice_len: rtdt::IndexRepr, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_list_extend_from_slice_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: &rtdt::TyDesc, slice_ref: *const u8, slice_len: rtdt::IndexRepr, element_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_extend_from_slice_local)(rt, list_value_mut, list_tydesc, slice_ref, slice_len, element_tydesc) }
 }
 
@@ -910,7 +910,7 @@ pub unsafe fn dtlv_rti_list_extend_from_slice_local(rt: LocalRtHandle, list_valu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_create_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, element_tydesc: *const rtdt::TyDesc, shape_in: *mut u8, shape_tydesc: *const rtdt::TyDesc, layout: u8, tensor_value_out: *mut u8, tensor_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_create_from_slice_local(rt: LocalRtHandle, slice_ref: *const u8, slice_len: rtdt::IndexRepr, element_tydesc: &rtdt::TyDesc, shape_in: *mut u8, shape_tydesc: &rtdt::TyDesc, layout: u8, tensor_value_out: *mut u8, tensor_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_create_from_slice_local)(rt, slice_ref, slice_len, element_tydesc, shape_in, shape_tydesc, layout, tensor_value_out, tensor_tydesc) }
 }
 
@@ -921,7 +921,7 @@ pub unsafe fn dtlv_rti_tensor_create_from_slice_local(rt: LocalRtHandle, slice_r
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_destroy_local(rt: LocalRtHandle, tensor_value_in: *mut u8, tensor_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_destroy_local(rt: LocalRtHandle, tensor_value_in: *mut u8, tensor_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_destroy_local)(rt, tensor_value_in, tensor_tydesc) }
 }
 
@@ -932,7 +932,7 @@ pub unsafe fn dtlv_rti_tensor_destroy_local(rt: LocalRtHandle, tensor_value_in: 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_get_local(rt: LocalRtHandle, tensor_value_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_value_out: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_get_local(rt: LocalRtHandle, tensor_value_ref: *const u8, tensor_tydesc: &rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_value_out: *mut u8, element_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_get_local)(rt, tensor_value_ref, tensor_tydesc, indices_ptr, element_value_out, element_tydesc) }
 }
 
@@ -943,7 +943,7 @@ pub unsafe fn dtlv_rti_tensor_get_local(rt: LocalRtHandle, tensor_value_ref: *co
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_set_local(rt: LocalRtHandle, tensor_value_mut: *mut u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_set_local(rt: LocalRtHandle, tensor_value_mut: *mut u8, tensor_tydesc: &rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_in: *mut u8, element_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_set_local)(rt, tensor_value_mut, tensor_tydesc, indices_ptr, element_in, element_tydesc) }
 }
 
@@ -954,7 +954,7 @@ pub unsafe fn dtlv_rti_tensor_set_local(rt: LocalRtHandle, tensor_value_mut: *mu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_transpose_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc_ref: *const rtdt::TyDesc, perm_ptr: *const u32, tensor_value_out: *mut u8, tensor_tydesc_out: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_transpose_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc_ref: &rtdt::TyDesc, perm_ptr: *const u32, tensor_value_out: *mut u8, tensor_tydesc_out: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_transpose_local)(rt, tensor_ref, tensor_tydesc_ref, perm_ptr, tensor_value_out, tensor_tydesc_out) }
 }
 
@@ -965,7 +965,7 @@ pub unsafe fn dtlv_rti_tensor_transpose_local(rt: LocalRtHandle, tensor_ref: *co
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_slice_local(rt: LocalRtHandle, tensor_value_in: *mut u8, tensor_tydesc: *const rtdt::TyDesc, ranges_ptr: *const rtdt::SliceRange, result_value_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_slice_local(rt: LocalRtHandle, tensor_value_in: *mut u8, tensor_tydesc: &rtdt::TyDesc, ranges_ptr: *const rtdt::SliceRange, result_value_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_slice_local)(rt, tensor_value_in, tensor_tydesc, ranges_ptr, result_value_out, result_tydesc) }
 }
 
@@ -976,7 +976,7 @@ pub unsafe fn dtlv_rti_tensor_slice_local(rt: LocalRtHandle, tensor_value_in: *m
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_reshape_local(rt: LocalRtHandle, tensor_value_in: *mut u8, tensor_tydesc: *const rtdt::TyDesc, new_shape_in: *mut u8, new_shape_tydesc: *const rtdt::TyDesc, result_value_out: *mut u8, result_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_reshape_local(rt: LocalRtHandle, tensor_value_in: *mut u8, tensor_tydesc: &rtdt::TyDesc, new_shape_in: *mut u8, new_shape_tydesc: &rtdt::TyDesc, result_value_out: *mut u8, result_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_reshape_local)(rt, tensor_value_in, tensor_tydesc, new_shape_in, new_shape_tydesc, result_value_out, result_tydesc) }
 }
 
@@ -987,7 +987,7 @@ pub unsafe fn dtlv_rti_tensor_reshape_local(rt: LocalRtHandle, tensor_value_in: 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_init_local(rt: LocalRtHandle, element_data_in: *mut u8, element_count: rtdt::IndexRepr, element_tydesc: *const rtdt::TyDesc, shape_ptr: *const u32, rank: u32, tensor_value_out: *mut u8, tensor_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_init_local(rt: LocalRtHandle, element_data_in: *mut u8, element_count: rtdt::IndexRepr, element_tydesc: &rtdt::TyDesc, shape_ptr: *const u32, rank: u32, tensor_value_out: *mut u8, tensor_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_init_local)(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_value_out, tensor_tydesc) }
 }
 
@@ -998,7 +998,7 @@ pub unsafe fn dtlv_rti_tensor_init_local(rt: LocalRtHandle, element_data_in: *mu
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_hyperplane_clone_local(rt: LocalRtHandle, tensor_value_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, axis0_index: rtdt::IndexRepr, sub_tensor_out: *mut u8) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_hyperplane_clone_local(rt: LocalRtHandle, tensor_value_ref: *const u8, tensor_tydesc: &rtdt::TyDesc, axis0_index: rtdt::IndexRepr, sub_tensor_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_hyperplane_clone_local)(rt, tensor_value_ref, tensor_tydesc, axis0_index, sub_tensor_out) }
 }
 
@@ -1009,7 +1009,7 @@ pub unsafe fn dtlv_rti_tensor_hyperplane_clone_local(rt: LocalRtHandle, tensor_v
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_table_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_table_create_local)(rt, value_out, tydesc) }
 }
 
@@ -1020,7 +1020,7 @@ pub unsafe fn dtlv_rti_table_create_local(rt: LocalRtHandle, value_out: *mut u8,
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_table_destroy_local(rt: LocalRtHandle, value_in: *mut u8, tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_table_destroy_local)(rt, value_in, tydesc) }
 }
 
@@ -1031,7 +1031,7 @@ pub unsafe fn dtlv_rti_table_destroy_local(rt: LocalRtHandle, value_in: *mut u8,
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_push_row_local(rt: LocalRtHandle, table_mut: *mut u8, table_tydesc: *const rtdt::TyDesc, row_ref: *const u8, row_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_table_push_row_local(rt: LocalRtHandle, table_mut: *mut u8, table_tydesc: &rtdt::TyDesc, row_ref: *const u8, row_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_table_push_row_local)(rt, table_mut, table_tydesc, row_ref, row_tydesc) }
 }
 
@@ -1042,7 +1042,7 @@ pub unsafe fn dtlv_rti_table_push_row_local(rt: LocalRtHandle, table_mut: *mut u
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_build_from_rows_local(rt: LocalRtHandle, table_out: *mut u8, table_tydesc: *const rtdt::TyDesc, rows_ptr: *mut u8, row_tydesc: *const rtdt::TyDesc, num_rows: rtdt::IndexRepr) -> RtStatus {
+pub unsafe fn dtlv_rti_table_build_from_rows_local(rt: LocalRtHandle, table_out: *mut u8, table_tydesc: &rtdt::TyDesc, rows_ptr: *mut u8, row_tydesc: &rtdt::TyDesc, num_rows: rtdt::IndexRepr) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_table_build_from_rows_local)(rt, table_out, table_tydesc, rows_ptr, row_tydesc, num_rows) }
 }
 
@@ -1053,7 +1053,7 @@ pub unsafe fn dtlv_rti_table_build_from_rows_local(rt: LocalRtHandle, table_out:
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_get_local(rt: LocalRtHandle, table_ref: *const u8, table_tydesc: *const rtdt::TyDesc, row: rtdt::IndexRepr, col: u32) -> *const u8 {
+pub unsafe fn dtlv_rti_table_get_local(rt: LocalRtHandle, table_ref: *const u8, table_tydesc: &rtdt::TyDesc, row: rtdt::IndexRepr, col: u32) -> *const u8 {
     unsafe { (crate::table(rt).dtlv_rti_table_get_local)(rt, table_ref, table_tydesc, row, col) }
 }
 
@@ -1064,7 +1064,7 @@ pub unsafe fn dtlv_rti_table_get_local(rt: LocalRtHandle, table_ref: *const u8, 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_set_local(rt: LocalRtHandle, table_mut: *mut u8, table_tydesc: *const rtdt::TyDesc, row: rtdt::IndexRepr, col: u32, value_ref: *const u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_table_set_local(rt: LocalRtHandle, table_mut: *mut u8, table_tydesc: &rtdt::TyDesc, row: rtdt::IndexRepr, col: u32, value_ref: *const u8, value_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_table_set_local)(rt, table_mut, table_tydesc, row, col, value_ref, value_tydesc) }
 }
 
@@ -1075,7 +1075,7 @@ pub unsafe fn dtlv_rti_table_set_local(rt: LocalRtHandle, table_mut: *mut u8, ta
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_clear_local(rt: LocalRtHandle, table_mut: *mut u8, table_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_table_clear_local(rt: LocalRtHandle, table_mut: *mut u8, table_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_table_clear_local)(rt, table_mut, table_tydesc) }
 }
 
@@ -1086,7 +1086,7 @@ pub unsafe fn dtlv_rti_table_clear_local(rt: LocalRtHandle, table_mut: *mut u8, 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_len(rt: LocalRtHandle, table_ref: *const u8, table_tydesc: *const rtdt::TyDesc) -> rtdt::IndexRepr {
+pub unsafe fn dtlv_rti_table_len(rt: LocalRtHandle, table_ref: *const u8, table_tydesc: &rtdt::TyDesc) -> rtdt::IndexRepr {
     unsafe { (crate::table(rt).dtlv_rti_table_len)(rt, table_ref, table_tydesc) }
 }
 
@@ -1163,7 +1163,7 @@ pub unsafe fn dtlv_rti_set_debug_mode(rt: LocalRtHandle, mode: DebugOutputMode) 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_debuglog_local(rt: LocalRtHandle, value_ref: *const u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_debuglog_local(rt: LocalRtHandle, value_ref: *const u8, value_tydesc: &rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_debuglog_local)(rt, value_ref, value_tydesc) }
 }
 
@@ -1196,7 +1196,7 @@ pub unsafe fn dtlv_rti_clear_debug_buffer(rt: LocalRtHandle) -> RtStatus {
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tydesc_instantiate(rt: LocalRtHandle, template: *const rtdt::TyDesc, params: *const *const rtdt::TyDesc, num_params: u32) -> *const rtdt::TyDesc {
+pub unsafe fn dtlv_rti_tydesc_instantiate(rt: LocalRtHandle, template: &rtdt::TyDesc, params: *const *const rtdt::TyDesc, num_params: u32) -> *const rtdt::TyDesc {
     unsafe { (crate::table(rt).dtlv_rti_tydesc_instantiate)(rt, template, params, num_params) }
 }
 
@@ -1218,7 +1218,7 @@ pub unsafe fn dtlv_rti_shadow_alloc(rt: LocalRtHandle, size: u32, align: u32) ->
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_list_cursor_begin_local(rt: LocalRtHandle, list_ref: *const u8, list_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::StrideCursor) -> RtStatus {
+pub unsafe fn dtlv_rti_list_cursor_begin_local(rt: LocalRtHandle, list_ref: *const u8, list_tydesc: &rtdt::TyDesc, cursor_out: *mut rtdt::StrideCursor) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_cursor_begin_local)(rt, list_ref, list_tydesc, cursor_out) }
 }
 
@@ -1229,7 +1229,7 @@ pub unsafe fn dtlv_rti_list_cursor_begin_local(rt: LocalRtHandle, list_ref: *con
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::StrideCursor) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: &rtdt::TyDesc, cursor_out: *mut rtdt::StrideCursor) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_cursor_begin_local)(rt, tensor_ref, tensor_tydesc, cursor_out) }
 }
 
@@ -1251,7 +1251,7 @@ pub unsafe fn dtlv_rti_stride_cursor_advance_local(rt: LocalRtHandle, cursor_mut
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_row_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::RowCursor) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_row_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: &rtdt::TyDesc, cursor_out: *mut rtdt::RowCursor) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_row_cursor_begin_local)(rt, tensor_ref, tensor_tydesc, cursor_out) }
 }
 
@@ -1273,7 +1273,7 @@ pub unsafe fn dtlv_rti_row_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_cursor_begin_local(rt: LocalRtHandle, set_ref: *const u8, set_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::TreeCursor) -> RtStatus {
+pub unsafe fn dtlv_rti_btreeset_cursor_begin_local(rt: LocalRtHandle, set_ref: *const u8, set_tydesc: &rtdt::TyDesc, cursor_out: *mut rtdt::TreeCursor) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreeset_cursor_begin_local)(rt, set_ref, set_tydesc, cursor_out) }
 }
 
@@ -1284,7 +1284,7 @@ pub unsafe fn dtlv_rti_btreeset_cursor_begin_local(rt: LocalRtHandle, set_ref: *
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_cursor_begin_local(rt: LocalRtHandle, map_ref: *const u8, map_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::TreeCursor) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_cursor_begin_local(rt: LocalRtHandle, map_ref: *const u8, map_tydesc: &rtdt::TyDesc, cursor_out: *mut rtdt::TreeCursor) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_cursor_begin_local)(rt, map_ref, map_tydesc, cursor_out) }
 }
 

@@ -712,7 +712,7 @@ impl IrInterpreter {
                 Op::ConstString { dst, at, len, desc } => {
                     let bytes = if len == 0 { std::ptr::null() } else { bc.pool.as_ptr().add(at as usize) };
                     datalove_rt::c::dtlv_rti_string_from_bytes(
-                        self.runtime.handle(), bytes, len as rtdt::IndexRepr, dst.at(base), bc.descs[desc as usize]);
+                        self.runtime.handle(), bytes, len as rtdt::IndexRepr, dst.at(base), &*(bc.descs[desc as usize]));
                 }
                 Op::ListElementRefRt { dest, at } => {
                     let [(dst, _), l, (index, _)] = bc.rt[at as usize];
@@ -726,7 +726,7 @@ impl IrInterpreter {
                     let [d, s, _] = bc.rt[at as usize];
                     let (src, dest) = (rt_value(frame, base, s), rt_dest(frame, base, d));
                     datalove_rt::c::dtlv_rti_clone_local(
-                        self.runtime.handle(), src.ptr, src.tydesc, dest.ptr, dest.tydesc);
+                        self.runtime.handle(), src.ptr, &*src.tydesc, dest.ptr, &*dest.tydesc);
                 }
                 Op::WidenFixedRt { at } => {
                     let [d, s, _] = bc.rt[at as usize];

@@ -135,7 +135,7 @@ fn test_list_create_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -150,7 +150,7 @@ fn test_list_create_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -182,7 +182,7 @@ fn test_list_destroy_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -191,7 +191,7 @@ fn test_list_destroy_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -228,7 +228,7 @@ fn test_list_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -238,7 +238,7 @@ fn test_list_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_clear_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -251,7 +251,7 @@ fn test_list_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -287,7 +287,7 @@ fn test_list_push_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -298,9 +298,9 @@ fn test_list_push_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_push_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             &mut value as *mut u32 as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -314,7 +314,7 @@ fn test_list_push_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -345,7 +345,7 @@ fn test_list_push_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -357,9 +357,9 @@ fn test_list_push_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -373,7 +373,7 @@ fn test_list_push_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -405,7 +405,7 @@ fn test_list_pop_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -418,9 +418,9 @@ fn test_list_pop_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -434,7 +434,7 @@ fn test_list_pop_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -466,7 +466,7 @@ fn test_list_push_pop() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -477,9 +477,9 @@ fn test_list_push_pop() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_push_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             &mut value as *mut u32 as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -493,9 +493,9 @@ fn test_list_push_pop() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -518,7 +518,7 @@ fn test_list_push_pop() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -554,7 +554,7 @@ fn test_list_get_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -567,10 +567,10 @@ fn test_list_get_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             0,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -584,7 +584,7 @@ fn test_list_get_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -616,7 +616,7 @@ fn test_list_get_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -628,9 +628,9 @@ fn test_list_get_valid() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -644,10 +644,10 @@ fn test_list_get_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             1,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -667,7 +667,7 @@ fn test_list_get_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -699,7 +699,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -711,9 +711,9 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -727,10 +727,10 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             5,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -744,7 +744,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -779,7 +779,7 @@ fn test_list_capacity_growth() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -791,9 +791,9 @@ fn test_list_capacity_growth() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -812,7 +812,7 @@ fn test_list_capacity_growth() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -843,7 +843,7 @@ fn test_list_reserve() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -853,7 +853,7 @@ fn test_list_reserve() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             20,
         )
     };
@@ -868,7 +868,7 @@ fn test_list_reserve() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -899,7 +899,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -909,7 +909,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             100,
         )
     };
@@ -923,9 +923,9 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -936,7 +936,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_shrink_to_fit_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -950,7 +950,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -986,7 +986,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -998,9 +998,9 @@ fn test_list_insert_at_start() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1012,10 +1012,10 @@ fn test_list_insert_at_start() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             0,
             &mut value as *mut u32 as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1030,10 +1030,10 @@ fn test_list_insert_at_start() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 idx,
                 option_buffer.as_mut_ptr(),
-                option_tydesc,
+                &*option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1053,7 +1053,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1085,7 +1085,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1097,9 +1097,9 @@ fn test_list_remove_middle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1113,10 +1113,10 @@ fn test_list_remove_middle() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_remove_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             2,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1139,7 +1139,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1226,7 +1226,7 @@ unsafe fn create_runtime_string(
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
             string.as_mut_ptr() as *mut u8,
-            string_tydesc,
+            &*string_tydesc,
         );
         let mut string = string.assume_init();
 
@@ -1234,7 +1234,7 @@ unsafe fn create_runtime_string(
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt,
                 &mut string as *mut rtdt::String as *mut u8,
-                string_tydesc,
+                &*string_tydesc,
                 s.as_ptr(),
                 (s.len() as u32).into(),
             );
@@ -1268,7 +1268,7 @@ fn test_list_create_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1281,7 +1281,7 @@ fn test_list_create_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1312,7 +1312,7 @@ fn test_list_destroy_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1321,7 +1321,7 @@ fn test_list_destroy_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1356,7 +1356,7 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1365,7 +1365,7 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_clear_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1376,7 +1376,7 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1407,7 +1407,7 @@ fn test_list_push_single_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1417,9 +1417,9 @@ fn test_list_push_single_string() -> AnyResult<()> {
         let status = datalove_rt::c::dtlv_rti_list_push_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             &mut string_val as *mut rtdt::String as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
@@ -1431,7 +1431,7 @@ fn test_list_push_single_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1462,7 +1462,7 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1475,9 +1475,9 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
@@ -1489,7 +1489,7 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1521,7 +1521,7 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1533,9 +1533,9 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1547,7 +1547,7 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1579,7 +1579,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1589,9 +1589,9 @@ fn test_list_push_pop_string() -> AnyResult<()> {
         let status = datalove_rt::c::dtlv_rti_list_push_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             &mut string_val as *mut rtdt::String as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
@@ -1605,9 +1605,9 @@ fn test_list_push_pop_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1622,7 +1622,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1631,7 +1631,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1663,7 +1663,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1675,10 +1675,10 @@ fn test_list_get_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             0,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1690,7 +1690,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1722,7 +1722,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1735,9 +1735,9 @@ fn test_list_get_valid_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
@@ -1750,10 +1750,10 @@ fn test_list_get_valid_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             1,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1766,7 +1766,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1775,7 +1775,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1807,7 +1807,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1819,9 +1819,9 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
@@ -1834,10 +1834,10 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             5,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1849,7 +1849,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1880,7 +1880,7 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1892,9 +1892,9 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -1911,7 +1911,7 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1942,7 +1942,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1951,7 +1951,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             100,
         )
     };
@@ -1965,9 +1965,9 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
@@ -1977,7 +1977,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_shrink_to_fit_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1989,7 +1989,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2020,7 +2020,7 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2031,9 +2031,9 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
@@ -2044,10 +2044,10 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
         let status = datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             0,
             &mut string_val as *mut rtdt::String as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
@@ -2058,7 +2058,7 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2090,7 +2090,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2102,9 +2102,9 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
@@ -2117,10 +2117,10 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_remove_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             2,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2135,7 +2135,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2144,7 +2144,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2180,7 +2180,7 @@ fn test_list_set_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2192,9 +2192,9 @@ fn test_list_set_valid() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2206,10 +2206,10 @@ fn test_list_set_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_set_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             1,
             &mut new_value as *mut u32 as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2223,10 +2223,10 @@ fn test_list_set_valid() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 idx,
                 option_buffer.as_mut_ptr(),
-                option_tydesc,
+                &*option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2245,7 +2245,7 @@ fn test_list_set_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2276,7 +2276,7 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2288,9 +2288,9 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2302,10 +2302,10 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_set_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             5,
             &mut new_value as *mut u32 as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -2314,7 +2314,7 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2345,7 +2345,7 @@ fn test_list_set_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2357,9 +2357,9 @@ fn test_list_set_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut string_val as *mut rtdt::String as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
@@ -2371,10 +2371,10 @@ fn test_list_set_string() -> AnyResult<()> {
         let status = datalove_rt::c::dtlv_rti_list_set_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             1,
             &mut new_string as *mut rtdt::String as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
@@ -2385,7 +2385,7 @@ fn test_list_set_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2423,9 +2423,9 @@ fn test_list_create_from_slice_empty() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             0,
-            element_tydesc,
+            &*element_tydesc,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2436,7 +2436,7 @@ fn test_list_create_from_slice_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2470,9 +2470,9 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             5,
-            element_tydesc,
+            &*element_tydesc,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2489,10 +2489,10 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 (idx as u32).into(),
                 option_buffer.as_mut_ptr(),
-                option_tydesc,
+                &*option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2511,7 +2511,7 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2547,7 +2547,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2558,10 +2558,10 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             slice.as_ptr() as *const u8,
             3,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2577,10 +2577,10 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 (idx as u32).into(),
                 option_buffer.as_mut_ptr(),
-                option_tydesc,
+                &*option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2596,7 +2596,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2628,7 +2628,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2640,9 +2640,9 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2656,10 +2656,10 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             slice.as_ptr() as *const u8,
             3,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2676,10 +2676,10 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 (idx as u32).into(),
                 option_buffer.as_mut_ptr(),
-                option_tydesc,
+                &*option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2695,7 +2695,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2726,7 +2726,7 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2738,9 +2738,9 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2754,10 +2754,10 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             slice.as_ptr() as *const u8,
             0,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2769,7 +2769,7 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2804,7 +2804,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2814,7 +2814,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             50,
         )
     };
@@ -2829,7 +2829,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_shrink_to_fit_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2842,7 +2842,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2874,7 +2874,7 @@ fn test_list_insert_at_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2886,9 +2886,9 @@ fn test_list_insert_at_end() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2900,10 +2900,10 @@ fn test_list_insert_at_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             2, // index == size
             &mut value as *mut u32 as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2919,10 +2919,10 @@ fn test_list_insert_at_end() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 idx,
                 option_buffer.as_mut_ptr(),
-                option_tydesc,
+                &*option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2938,7 +2938,7 @@ fn test_list_insert_at_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2969,7 +2969,7 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2981,9 +2981,9 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2995,10 +2995,10 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             5,
             &mut value as *mut u32 as *mut u8,
-            element_tydesc,
+            &*element_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -3010,7 +3010,7 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3042,7 +3042,7 @@ fn test_list_remove_last() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3054,9 +3054,9 @@ fn test_list_remove_last() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3070,10 +3070,10 @@ fn test_list_remove_last() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_remove_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             2, // last index
             option_buffer.as_mut_ptr(),
-            option_tydesc,
+            &*option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3096,10 +3096,10 @@ fn test_list_remove_last() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 idx,
                 opt_buf.as_mut_ptr(),
-                option_tydesc,
+                &*option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3115,7 +3115,7 @@ fn test_list_remove_last() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3146,7 +3146,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3158,9 +3158,9 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3174,7 +3174,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_clear_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3187,7 +3187,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3218,7 +3218,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3228,7 +3228,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             20,
         )
     };
@@ -3244,9 +3244,9 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 list_ptr,
-                list_tydesc,
+                &*list_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                element_tydesc,
+                &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3257,7 +3257,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
             10,
         )
     };
@@ -3270,7 +3270,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             list_ptr,
-            list_tydesc,
+            &*list_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3301,14 +3301,14 @@ fn test_list_full_index_refuses_growth() -> AnyResult<()> {
 
     unsafe {
         let status = datalove_rt::c::dtlv_rti_list_push_local(
-            rt, list_ptr, list_tydesc, &mut element as *mut u32 as *mut u8, element_tydesc);
+            rt, list_ptr, &*list_tydesc, &mut element as *mut u32 as *mut u8, &*element_tydesc);
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
-        let status = datalove_rt::c::dtlv_rti_list_reserve_local(rt, list_ptr, list_tydesc, 1);
+        let status = datalove_rt::c::dtlv_rti_list_reserve_local(rt, list_ptr, &*list_tydesc, 1);
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
         let status = datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
-            rt, list_ptr, list_tydesc, &element as *const u32 as *const u8, 1, element_tydesc);
+            rt, list_ptr, &*list_tydesc, &element as *const u32 as *const u8, 1, &*element_tydesc);
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
     }
     assert_eq!(list.size, rtdt::Index(rtdt::IndexRepr::MAX));
@@ -3336,7 +3336,7 @@ fn test_list_swap() -> AnyResult<()> {
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
-    let status = unsafe { datalove_rt::c::dtlv_rti_list_create_local(rt, list_ptr, list_tydesc) };
+    let status = unsafe { datalove_rt::c::dtlv_rti_list_create_local(rt, list_ptr, &*list_tydesc) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Push [0, 10, 20, 30, 40].
@@ -3344,7 +3344,7 @@ fn test_list_swap() -> AnyResult<()> {
         let mut value = i * 10;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
-                rt, list_ptr, list_tydesc, &mut value as *mut u32 as *mut u8, element_tydesc,
+                rt, list_ptr, &*list_tydesc, &mut value as *mut u32 as *mut u8, &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3353,7 +3353,7 @@ fn test_list_swap() -> AnyResult<()> {
         unsafe { std::slice::from_raw_parts(list.data as *const u32, list.size.as_usize()).to_vec() }
     };
 
-    let swap = |i, j| unsafe { datalove_rt::c::dtlv_rti_list_swap_local(rt, list_ptr, list_tydesc, i, j) };
+    let swap = |i, j| unsafe { datalove_rt::c::dtlv_rti_list_swap_local(rt, list_ptr, &*list_tydesc, i, j) };
     assert_eq!(swap(1, 3), datalove_rt::c::RtStatus::Ok);
     assert_eq!(elements(&list), vec![0, 30, 20, 10, 40]);
     assert_eq!(swap(4, 0), datalove_rt::c::RtStatus::Ok);
@@ -3364,7 +3364,7 @@ fn test_list_swap() -> AnyResult<()> {
     assert_eq!(swap(5, 5), datalove_rt::c::RtStatus::Error);
     assert_eq!(elements(&list), vec![40, 30, 20, 10, 0]);
 
-    let status = unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+    let status = unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, &*list_tydesc) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

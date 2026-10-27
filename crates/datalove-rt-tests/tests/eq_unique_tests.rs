@@ -23,8 +23,8 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 /// Clean up an instantiated value.
 unsafe fn cleanup_value(rt: &Runtime, ptr: *const u8, tydesc: *const datalove_rtdt::TyDesc) {
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, tydesc);
-        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc, 1, ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, &*tydesc);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc, 1, ptr as *mut u8);
     }
 }
 
@@ -51,9 +51,9 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -86,9 +86,9 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -121,9 +121,9 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -156,9 +156,9 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -193,9 +193,9 @@ fn test_eq_unique_map_empty_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -228,9 +228,9 @@ fn test_eq_unique_map_equals_same_contents() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -263,9 +263,9 @@ fn test_eq_unique_map_not_equals_different_keys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -298,9 +298,9 @@ fn test_eq_unique_map_not_equals_different_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -333,9 +333,9 @@ fn test_eq_unique_map_not_equals_different_sizes() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -370,9 +370,9 @@ fn test_eq_unique_set_empty_equals() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -405,9 +405,9 @@ fn test_eq_unique_set_equals_same_contents() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -440,9 +440,9 @@ fn test_eq_unique_set_not_equals_different_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 
@@ -475,9 +475,9 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
-            tydesc_a,
+            &*tydesc_a,
             ptr_b,
-            tydesc_b,
+            &*tydesc_b,
         )
     };
 

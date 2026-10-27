@@ -271,7 +271,7 @@ fn assert_same(a: *const TyDesc, b: *const TyDesc, path: &str) {
 }
 
 fn instantiate(rt: &datalove_rt::rust::Runtime, template: *const TyDesc, params: &[*const TyDesc]) -> *const TyDesc {
-    unsafe { c::dtlv_rti_tydesc_instantiate(rt.handle(), template, params.as_ptr(), params.len() as u32) }
+    unsafe { c::dtlv_rti_tydesc_instantiate(rt.handle(), &*template, params.as_ptr(), params.len() as u32) }
 }
 
 /// Make a template of `concrete` over the types of `params`, instantiate it
@@ -433,7 +433,7 @@ fn a_built_descriptor_clones_like_a_static_one() {
     let value: [u32; 2] = [7, 9];
     let mut out: [u32; 2] = [0, 0];
     let status = unsafe {
-        c::dtlv_rti_clone_local(rt.handle(), value.as_ptr() as *const u8, pair, out.as_mut_ptr() as *mut u8, built)
+        c::dtlv_rti_clone_local(rt.handle(), value.as_ptr() as *const u8, &*pair, out.as_mut_ptr() as *mut u8, &*built)
     };
     assert_eq!(status, c::RtStatus::Ok);
     assert_eq!(out[1], 9);
@@ -443,7 +443,7 @@ fn a_built_descriptor_clones_like_a_static_one() {
 fn payload_offsets() {
     let db = Database::default();
     let mut table = TyDescTable::new(&db);
-    let offset = |td| unsafe { c::dtlv_rti_payload_offset(td, 0) };
+    let offset = |td: *const datalove_rtdt::TyDesc| unsafe { c::dtlv_rti_payload_offset(&*td, 0) };
 
     let option_u8 = tydesc_of(&db, &mut table, ": ?u8 / none");
     let option_u64 = tydesc_of(&db, &mut table, ": ?u64 / none");
@@ -462,12 +462,12 @@ fn payload_offsets() {
     let variants = unsafe { (*enum_desc).type_info.enum_ };
     for i in 0..variants.num_variants {
         let variant = unsafe { &*variants.variants.add(i as usize) };
-        assert_eq!(unsafe { c::dtlv_rti_payload_offset(enum_desc, i) }, variant.offset);
-        assert_eq!(unsafe { c::dtlv_rti_payload_tydesc(enum_desc, i) }, variant.payload);
+        assert_eq!(unsafe { c::dtlv_rti_payload_offset(&*enum_desc, i) }, variant.offset);
+        assert_eq!(unsafe { c::dtlv_rti_payload_tydesc(&*enum_desc, i) }, variant.payload);
     }
 
-    assert_eq!(unsafe { c::dtlv_rti_payload_tydesc(option_u64, 0) }, unsafe { (*option_u64).type_info.option.inner_tydesc });
-    assert_eq!(unsafe { c::dtlv_rti_payload_tydesc(result_u8, 0) }, unsafe { (*result_u8).type_info.result.ok_tydesc });
+    assert_eq!(unsafe { c::dtlv_rti_payload_tydesc(&*option_u64, 0) }, unsafe { (*option_u64).type_info.option.inner_tydesc });
+    assert_eq!(unsafe { c::dtlv_rti_payload_tydesc(&*result_u8, 0) }, unsafe { (*result_u8).type_info.result.ok_tydesc });
 }
 
 // ============================================================================
