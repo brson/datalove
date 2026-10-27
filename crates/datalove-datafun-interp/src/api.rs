@@ -76,12 +76,7 @@ impl IrInterpreter {
             }
 
             // Extract string contents.
-            let result = if output_string.data.is_null() || output_string.size == rtdt::Index::ZERO {
-                String::new()
-            } else {
-                let bytes = std::slice::from_raw_parts(output_string.data, output_string.size.as_usize());
-                String::from_utf8_lossy(bytes).to_string()
-            };
+            let result = output_string.as_str().to_string();
 
             // Destroy the output string.
             datalove_rt::c::dtlv_rti_string_destroy_local(

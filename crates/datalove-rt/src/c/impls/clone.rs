@@ -114,30 +114,17 @@ unsafe fn clone_impl(
         // String - allocate new buffer and copy bytes.
         TyTag::String => {
             let str_in = unsafe { &*(value_in as *const rtdt::String) };
-            let str_out = unsafe { &mut *(value_out as *mut rtdt::String) };
-
-            if str_in.size == rtdt::Index::ZERO || str_in.data.is_null() {
-                // Empty string.
-                str_out.data = std::ptr::null();
-                str_out.size = rtdt::Index::ZERO;
-                str_out.capacity = rtdt::Index::ZERO;
+            let copy = if str_in.is_empty() {
+                rtdt::String::new()
             } else {
-                // Allocate new string buffer.
-                let new_data = unsafe { rt.alloc.alloc(1, 1, str_in.size.0) };
-
-                // Copy bytes.
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        str_in.data,
-                        new_data,
-                        str_in.size.as_usize()
-                    );
-                }
-
-                str_out.data = new_data;
-                str_out.size = str_in.size;
-                str_out.capacity = str_in.size;
-            }
+                let bytes = str_in.as_bytes();
+                let size = str_in.size();
+                let new_data = unsafe { rt.alloc.alloc(1, 1, size.0) };
+                unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), new_data, bytes.len()) };
+                // SAFETY: a copy of a string's bytes, filling its buffer.
+                unsafe { rtdt::String::from_raw_parts(new_data, size, size) }
+            };
+            unsafe { std::ptr::write(value_out as *mut rtdt::String, copy) };
 
             RtStatus::Ok
         }
@@ -1110,36 +1097,31 @@ mod tests {
         let mut rt = make_rt();
         let tydesc = make_string_tydesc();
 
-        let value_in = rtdt::String {
-            data: std::ptr::null(),
-            size: rtdt::Index::ZERO,
-            capacity: rtdt::Index::ZERO,
-        };
+        let value_in = rtdt::String::new();
 
-        let mut value_out = rtdt::String {
-            data: std::ptr::null(),
-            size: rtdt::Index(999),
-            capacity: rtdt::Index(999),
-        };
+        // Uninitialized, so that every field has to be written.
+        let mut value_out = std::mem::MaybeUninit::<rtdt::String>::uninit();
 
         let status = unsafe {
             clone_value(
                 &mut rt,
                 &value_in as *const _ as *const u8,
                 &tydesc,
-                &mut value_out as *mut _ as *mut u8,
+                value_out.as_mut_ptr() as *mut u8,
             )
         };
 
         assert_eq!(status, RtStatus::Ok);
-        assert!(value_out.data.is_null());
-        assert_eq!(value_out.size, rtdt::Index::ZERO);
-        assert_eq!(value_out.capacity, rtdt::Index::ZERO);
+        let value_out = unsafe { value_out.assume_init() };
+        assert!(value_out.data().is_null());
+        assert_eq!(value_out.size(), rtdt::Index::ZERO);
+        assert_eq!(value_out.capacity(), rtdt::Index::ZERO);
     }
 
     proptest! {
         #[test]
-        fn prop_clone_string(bytes in prop::collection::vec(any::<u8>(), 0..100)) {
+        fn prop_clone_string(text in ".{0,100}") {
+            let bytes = text.as_bytes();
             let mut rt = make_rt();
             let tydesc = make_string_tydesc();
 
@@ -1156,17 +1138,11 @@ mod tests {
                 }
             };
 
-            let value_in = rtdt::String {
-                data: str_data,
-                size: rtdt::Index(bytes.len() as rtdt::IndexRepr),
-                capacity: rtdt::Index(bytes.len() as rtdt::IndexRepr),
-            };
+            let len = rtdt::Index(bytes.len() as rtdt::IndexRepr);
+            // SAFETY: a copy of `text`, filling its buffer.
+            let value_in = unsafe { rtdt::String::from_raw_parts(str_data, len, len) };
 
-            let mut value_out = rtdt::String {
-                data: std::ptr::null(),
-                size: rtdt::Index::ZERO,
-                capacity: rtdt::Index::ZERO,
-            };
+            let mut value_out = rtdt::String::new();
 
             let status = unsafe {
                 clone_value(
@@ -1178,22 +1154,22 @@ mod tests {
             };
 
             prop_assert_eq!(status, RtStatus::Ok);
-            prop_assert_eq!(value_out.size, value_in.size);
+            prop_assert_eq!(value_out.size(), value_in.size());
 
             if !bytes.is_empty() {
                 // Verify data was copied and pointers are different.
-                prop_assert_ne!(value_out.data, value_in.data);
+                prop_assert_ne!(value_out.data(), value_in.data());
 
                 // Verify byte values are equal.
                 for i in 0..bytes.len() {
-                    let in_byte = unsafe { *value_in.data.add(i) };
-                    let out_byte = unsafe { *value_out.data.add(i) };
+                    let in_byte = unsafe { *value_in.data().add(i) };
+                    let out_byte = unsafe { *value_out.data().add(i) };
                     prop_assert_eq!(in_byte, out_byte);
                 }
 
                 // Cleanup.
                 unsafe {
-                    rt.alloc.free(1, 1, (bytes.len() as u32).into(), value_out.data as *mut u8);
+                    rt.alloc.free(1, 1, (bytes.len() as u32).into(), value_out.data() as *mut u8);
                 }
             }
 

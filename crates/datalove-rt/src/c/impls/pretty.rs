@@ -327,21 +327,26 @@ unsafe fn pretty_string(
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
-        let s = &*(value_ref as *const rtdt::String);
+        let text = (*(value_ref as *const rtdt::String)).as_str();
         push_str(rt, string_mut, string_tydesc, b"\"")?;
-        if !s.data.is_null() && s.size > rtdt::Index::ZERO {
-            let bytes = std::slice::from_raw_parts(s.data, s.size.as_usize());
-            for &byte in bytes {
-                match byte {
-                    b'"' => push_str(rt, string_mut, string_tydesc, b"\\\"")?,
-                    b'\\' => push_str(rt, string_mut, string_tydesc, b"\\\\")?,
-                    b'\n' => push_str(rt, string_mut, string_tydesc, b"\\n")?,
-                    b'\r' => push_str(rt, string_mut, string_tydesc, b"\\r")?,
-                    b'\t' => push_str(rt, string_mut, string_tydesc, b"\\t")?,
-                    _ => push_str(rt, string_mut, string_tydesc, &[byte])?,
-                }
-            }
+        // Pushed a run of characters at a time, each escape between runs:
+        // a byte at a time would push the parts of a character, none of them
+        // UTF-8 alone.
+        let mut start = 0;
+        for (i, c) in text.char_indices() {
+            let escape: &[u8] = match c {
+                '"' => b"\\\"",
+                '\\' => b"\\\\",
+                '\n' => b"\\n",
+                '\r' => b"\\r",
+                '\t' => b"\\t",
+                _ => continue,
+            };
+            push_str(rt, string_mut, string_tydesc, text[start..i].as_bytes())?;
+            push_str(rt, string_mut, string_tydesc, escape)?;
+            start = i + c.len_utf8();
         }
+        push_str(rt, string_mut, string_tydesc, text[start..].as_bytes())?;
         push_str(rt, string_mut, string_tydesc, b"\"")
     }
 }
@@ -974,10 +979,10 @@ mod tests {
 
     unsafe fn get_string_contents(string: &rtdt::String) -> String {
         unsafe {
-            if string.data.is_null() || string.size == rtdt::Index::ZERO {
+            if string.data().is_null() || string.size() == rtdt::Index::ZERO {
                 return String::new();
             }
-            let bytes = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            let bytes = std::slice::from_raw_parts(string.data(), string.size().as_usize());
             String::from_utf8_lossy(bytes).to_string()
         }
     }

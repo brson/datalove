@@ -3838,7 +3838,7 @@ fn test_btreeset_string_remove_rebalances() -> AnyResult<()> {
     let (set_td, elem_td) = create_set_string_tydesc(&arena);
     let read = |p: *const u8| unsafe {
         let s = &*(p as *const rtdt::String);
-        std::slice::from_raw_parts(s.data, s.size.0 as usize).to_vec()
+        std::slice::from_raw_parts(s.data(), s.size().0 as usize).to_vec()
     };
 
     let mut set = rtdt::Set { root: ptr::null(), len: rtdt::Index::ZERO };

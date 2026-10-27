@@ -438,9 +438,9 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert!(string.data.is_null());
-            assert_eq!(string.size, rtdt::Index::ZERO);
-            assert_eq!(string.capacity, rtdt::Index::ZERO);
+            assert!(string.data().is_null());
+            assert_eq!(string.size(), rtdt::Index::ZERO);
+            assert_eq!(string.capacity(), rtdt::Index::ZERO);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
@@ -513,8 +513,8 @@ mod tests {
             );
 
             // Verify string was created.
-            assert!(!tuple.field1.data.is_null());
-            assert_eq!(tuple.field1.size, rtdt::Index(4));
+            assert!(!tuple.field1.data().is_null());
+            assert_eq!(tuple.field1.size(), rtdt::Index(4));
 
             // Destroy the tuple using any_destroy.
             let status = any_destroy_local(
@@ -524,9 +524,9 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert!(tuple.field1.data.is_null());
-            assert_eq!(tuple.field1.size, rtdt::Index::ZERO);
-            assert_eq!(tuple.field1.capacity, rtdt::Index::ZERO);
+            assert!(tuple.field1.data().is_null());
+            assert_eq!(tuple.field1.size(), rtdt::Index::ZERO);
+            assert_eq!(tuple.field1.capacity(), rtdt::Index::ZERO);
 
             // Reconstruct and drop the fields Vec to avoid leaking.
             drop(Vec::from_raw_parts(fields_ptr as *mut rtdt::TyInfoTupleField, 2, 2));

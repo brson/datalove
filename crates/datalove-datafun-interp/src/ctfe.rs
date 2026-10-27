@@ -308,18 +308,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
             }
             IrType::String => {
                 // String layout: data ptr, size, capacity.
-                let string_ptr = ptr as *const datalove_rtdt::String;
-                let string_val = &*string_ptr;
-
-                let size = string_val.size.0 as usize;
-                if size == 0 || string_val.data.is_null() {
-                    Ok(ConstValue::String(String::new()))
-                } else {
-                    let bytes = std::slice::from_raw_parts(string_val.data, size);
-                    let s = std::str::from_utf8(bytes)
-                        .map_err(|e| CtfeError::InterpError(format!("invalid UTF-8: {}", e)))?;
-                    Ok(ConstValue::String(s.to_string()))
-                }
+                Ok(ConstValue::String((*(ptr as *const datalove_rtdt::String)).as_str().to_string()))
             }
             IrType::Result(inner) => {
                 // Result layout: tag (u8) at offset 0, payload at aligned offset.

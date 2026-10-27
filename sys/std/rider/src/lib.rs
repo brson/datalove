@@ -13,7 +13,7 @@
 //! Returns 1 (Ok) on success, 2 (Error) on failure.
 
 use datalove_rtdt as rtdt;
-use datalove_rti::rider_helpers::{self, str_arg, StringMut};
+use datalove_rti::rider_helpers::{self, StringMut};
 use std::mem::MaybeUninit;
 
 // The runtime functions this crate calls are declared, not defined, so a
@@ -67,7 +67,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_len(
     out: &mut MaybeUninit<rtdt::Index>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr;
-    out.write(s.size);
+    out.write(s.size());
     OK
 }
 
@@ -77,7 +77,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_char_count(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::Index>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let count = rtdt::Index::new(s.chars().count() as rtdt::IndexRepr);
     out.write(count);
     OK
@@ -89,7 +89,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     out.write(s.is_ascii() as u8);
     OK
 }
@@ -103,8 +103,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_contains(
     pat_ptr: &rtdt::String, _pat_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let pat = unsafe { str_arg(pat_ptr) };
+    let s = s_ptr.as_str();
+    let pat = pat_ptr.as_str();
     out.write(s.contains(pat) as u8);
     OK
 }
@@ -116,8 +116,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_starts_with(
     prefix_ptr: &rtdt::String, _prefix_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let prefix = unsafe { str_arg(prefix_ptr) };
+    let s = s_ptr.as_str();
+    let prefix = prefix_ptr.as_str();
     out.write(s.starts_with(prefix) as u8);
     OK
 }
@@ -129,8 +129,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_ends_with(
     suffix_ptr: &rtdt::String, _suffix_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let suffix = unsafe { str_arg(suffix_ptr) };
+    let s = s_ptr.as_str();
+    let suffix = suffix_ptr.as_str();
     out.write(s.ends_with(suffix) as u8);
     OK
 }
@@ -144,8 +144,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_eq(
     b_ptr: &rtdt::String, _b_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let a = unsafe { str_arg(a_ptr) };
-    let b = unsafe { str_arg(b_ptr) };
+    let a = a_ptr.as_str();
+    let b = b_ptr.as_str();
     out.write((a == b) as u8);
     OK
 }
@@ -157,8 +157,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_cmp(
     b_ptr: &rtdt::String, _b_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<i32>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let a = unsafe { str_arg(a_ptr) };
-    let b = unsafe { str_arg(b_ptr) };
+    let a = a_ptr.as_str();
+    let b = b_ptr.as_str();
     let result: i32 = match a.cmp(b) {
         std::cmp::Ordering::Less => -1,
         std::cmp::Ordering::Equal => 0,
@@ -175,8 +175,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_eq_ignore_ascii_case(
     b_ptr: &rtdt::String, _b_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let a = unsafe { str_arg(a_ptr) };
-    let b = unsafe { str_arg(b_ptr) };
+    let a = a_ptr.as_str();
+    let b = b_ptr.as_str();
     out.write(a.eq_ignore_ascii_case(b) as u8);
     OK
 }
@@ -189,7 +189,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_alphabetic(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphabetic());
     out.write(result as u8);
     OK
@@ -201,7 +201,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_digit(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
     out.write(result as u8);
     OK
@@ -213,7 +213,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_alphanumeric(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric());
     out.write(result as u8);
     OK
@@ -225,7 +225,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_is_ascii_whitespace(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_whitespace());
     out.write(result as u8);
     OK
@@ -239,7 +239,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_trim(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     unsafe { write_string_result(rt, out, out_td, s.trim()) }
 }
 
@@ -249,7 +249,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_trim_start(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     unsafe { write_string_result(rt, out, out_td, s.trim_start()) }
 }
 
@@ -259,7 +259,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_trim_end(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     unsafe { write_string_result(rt, out, out_td, s.trim_end()) }
 }
 
@@ -271,7 +271,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_to_ascii_lowercase(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = s.to_ascii_lowercase();
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
@@ -282,7 +282,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_to_ascii_uppercase(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = s.to_ascii_uppercase();
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
@@ -296,7 +296,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_repeat(
     n_ptr: &rtdt::Index, _n_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let n = *n_ptr;
     let result = s.repeat(n.as_usize());
     unsafe { write_string_result(rt, out, out_td, &result) }
@@ -312,9 +312,9 @@ pub unsafe extern "C-unwind" fn dlr_std__string_replace(
     rep_ptr: &rtdt::String, _rep_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let pat = unsafe { str_arg(pat_ptr) };
-    let rep = unsafe { str_arg(rep_ptr) };
+    let s = s_ptr.as_str();
+    let pat = pat_ptr.as_str();
+    let rep = rep_ptr.as_str();
     let result = s.replace(pat, rep);
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
@@ -328,8 +328,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_concat(
     b_ptr: &rtdt::String, _b_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let a = unsafe { str_arg(a_ptr) };
-    let b = unsafe { str_arg(b_ptr) };
+    let a = a_ptr.as_str();
+    let b = b_ptr.as_str();
     let result = format!("{}{}", a, b);
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
@@ -343,7 +343,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_get_byte(
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let idx = *idx_ptr;
     let i = idx.as_usize();
     if i < s.len() {
@@ -361,8 +361,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_find(
     pat_ptr: &rtdt::String, _pat_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let pat = unsafe { str_arg(pat_ptr) };
+    let s = s_ptr.as_str();
+    let pat = pat_ptr.as_str();
     match s.find(pat) {
         Some(pos) => unsafe { rider_helpers::write_option_some(out, rtdt::Index::new(pos as rtdt::IndexRepr)) },
         None => unsafe { rider_helpers::write_option_none(out) },
@@ -377,8 +377,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_rfind(
     pat_ptr: &rtdt::String, _pat_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let pat = unsafe { str_arg(pat_ptr) };
+    let s = s_ptr.as_str();
+    let pat = pat_ptr.as_str();
     match s.rfind(pat) {
         Some(pos) => unsafe { rider_helpers::write_option_some(out, rtdt::Index::new(pos as rtdt::IndexRepr)) },
         None => unsafe { rider_helpers::write_option_none(out) },
@@ -393,8 +393,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_strip_prefix(
     prefix_ptr: &rtdt::String, _prefix_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let prefix = unsafe { str_arg(prefix_ptr) };
+    let s = s_ptr.as_str();
+    let prefix = prefix_ptr.as_str();
     match s.strip_prefix(prefix) {
         Some(rest) => unsafe { rider_helpers::write_option_some_string(rt, out, rest) as u8 },
         None => { unsafe { rider_helpers::write_option_none(out) }; OK },
@@ -408,8 +408,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_strip_suffix(
     suffix_ptr: &rtdt::String, _suffix_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let suffix = unsafe { str_arg(suffix_ptr) };
+    let s = s_ptr.as_str();
+    let suffix = suffix_ptr.as_str();
     match s.strip_suffix(suffix) {
         Some(rest) => unsafe { rider_helpers::write_option_some_string(rt, out, rest) as u8 },
         None => { unsafe { rider_helpers::write_option_none(out) }; OK },
@@ -424,7 +424,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_to_lowercase(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = s.to_lowercase();
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
@@ -435,7 +435,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_to_uppercase(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let result = s.to_uppercase();
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
@@ -452,7 +452,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_push_str(
     other_ptr: &rtdt::String, _other_td: &rtdt::TyDesc,
     _out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let other = unsafe { str_arg(other_ptr) };
+    let other = other_ptr.as_str();
     let mut s = unsafe { StringMut::new(rt, self_ptr, self_td) };
     s.push_str(other) as u8
 }
@@ -546,7 +546,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_insert_str(
     _out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let idx = idx_ptr.as_usize();
-    let other = unsafe { str_arg(other_ptr) };
+    let other = other_ptr.as_str();
     let mut s = unsafe { StringMut::new(rt, self_ptr, self_td) };
     s.insert_str(idx, other) as u8
 }
@@ -560,8 +560,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_split_once(
     delim_ptr: &rtdt::String, _delim_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let delim = unsafe { str_arg(delim_ptr) };
+    let s = s_ptr.as_str();
+    let delim = delim_ptr.as_str();
     match s.split_once(delim) {
         Some((before, after)) => {
             let status = unsafe { rider_helpers::write_option_some_string_pair(rt, out, before, after) };
@@ -581,8 +581,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_rsplit_once(
     delim_ptr: &rtdt::String, _delim_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let delim = unsafe { str_arg(delim_ptr) };
+    let s = s_ptr.as_str();
+    let delim = delim_ptr.as_str();
     match s.rsplit_once(delim) {
         Some((before, after)) => {
             let status = unsafe { rider_helpers::write_option_some_string_pair(rt, out, before, after) };
@@ -604,7 +604,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_char_at(
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let idx = idx_ptr.as_usize();
     match s.chars().nth(idx) {
         Some(ch) => unsafe { rider_helpers::write_option_some(out, ch as u32) },
@@ -620,7 +620,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_char_to_byte_index(
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let char_idx = idx_ptr.as_usize();
     match s.char_indices().nth(char_idx) {
         Some((byte_idx, _)) => unsafe { rider_helpers::write_option_some(out, rtdt::Index::new(byte_idx as rtdt::IndexRepr)) },
@@ -639,7 +639,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_slice(
     end_ptr: &rtdt::Index, _end_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let start = start_ptr.as_usize();
     let end = end_ptr.as_usize();
     if start > end || end > s.len() || !s.is_char_boundary(start) || !s.is_char_boundary(end) {
@@ -657,7 +657,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_slice_from(
     start_ptr: &rtdt::Index, _start_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let start = start_ptr.as_usize();
     if start > s.len() || !s.is_char_boundary(start) {
         unsafe { rider_helpers::write_option_none(out) };
@@ -674,7 +674,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_slice_to(
     end_ptr: &rtdt::Index, _end_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let end = end_ptr.as_usize();
     if end > s.len() || !s.is_char_boundary(end) {
         unsafe { rider_helpers::write_option_none(out) };
@@ -692,7 +692,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_u32(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     match s.parse::<u32>() {
         Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
         Err(_) => unsafe { rider_helpers::write_option_none(out) },
@@ -706,7 +706,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_i32(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     match s.parse::<i32>() {
         Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
         Err(_) => unsafe { rider_helpers::write_option_none(out) },
@@ -720,7 +720,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_f32(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     match s.parse::<f32>() {
         Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
         Err(_) => unsafe { rider_helpers::write_option_none(out) },
@@ -783,9 +783,9 @@ pub unsafe extern "C-unwind" fn dlr_std__string_replacen(
     n_ptr: &rtdt::Index, _n_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let pat = unsafe { str_arg(pat_ptr) };
-    let rep = unsafe { str_arg(rep_ptr) };
+    let s = s_ptr.as_str();
+    let pat = pat_ptr.as_str();
+    let rep = rep_ptr.as_str();
     let n = *n_ptr;
     let result = s.replacen(pat, rep, n.as_usize());
     unsafe { write_string_result(rt, out, out_td, &result) }
@@ -800,8 +800,8 @@ pub unsafe extern "C-unwind" fn dlr_std__string_split(
     delim_ptr: &rtdt::String, _delim_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::List>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
-    let delim = unsafe { str_arg(delim_ptr) };
+    let s = s_ptr.as_str();
+    let delim = delim_ptr.as_str();
     let parts: Vec<&str> = s.split(delim).collect();
     let status = unsafe {
         rider_helpers::write_string_list(rt, out, out_td, &parts)
@@ -815,7 +815,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_lines(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::List>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let parts: Vec<&str> = s.lines().collect();
     let status = unsafe {
         rider_helpers::write_string_list(rt, out, out_td, &parts)
@@ -829,7 +829,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_split_whitespace(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<rtdt::List>, out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let parts: Vec<&str> = s.split_whitespace().collect();
     let status = unsafe {
         rider_helpers::write_string_list(rt, out, out_td, &parts)
@@ -847,7 +847,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_join(
     out: &mut MaybeUninit<rtdt::String>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     let parts = unsafe { rider_helpers::read_string_list(parts_ptr) };
-    let sep = unsafe { str_arg(sep_ptr) };
+    let sep = sep_ptr.as_str();
     let result = parts.join(sep);
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
@@ -870,7 +870,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_int(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     let status = unsafe { rider_helpers::write_option_int_from_str(rt, out, s) };
     status as u8
 }
@@ -1978,7 +1978,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_f64(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     out: *mut u8, _out_td: &rtdt::TyDesc,
 ) -> u8 {
-    let s = unsafe { str_arg(s_ptr) };
+    let s = s_ptr.as_str();
     match s.parse::<f64>() {
         Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
         Err(_) => unsafe { rider_helpers::write_option_none(out) },

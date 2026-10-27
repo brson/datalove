@@ -38,11 +38,7 @@ pub unsafe fn debuglog_local(
         let string_tydesc = &string_tydesc_value as *const rtdt::TyDesc;
 
         // Create temp string on stack.
-        let mut temp_string = rtdt::String {
-            data: std::ptr::null(),
-            size: rtdt::Index::ZERO,
-            capacity: rtdt::Index::ZERO,
-        };
+        let mut temp_string = rtdt::String::new();
         let string_ptr = &mut temp_string as *mut rtdt::String as *mut u8;
 
         // String is already initialized as empty, no need to call string_create_local.
@@ -65,16 +61,7 @@ pub unsafe fn debuglog_local(
         // Extract the UTF-8 bytes, read through `string_ptr`: reading
         // `temp_string` itself would end the pointer's write access, which
         // the destroy below needs.
-        let printed = &*(string_ptr as *const rtdt::String);
-        let result = if printed.data.is_null() || printed.size == rtdt::Index::ZERO {
-            String::new()
-        } else {
-            let bytes = std::slice::from_raw_parts(
-                printed.data as *const u8,
-                printed.size.as_usize(),
-            );
-            String::from_utf8_lossy(bytes).into_owned()
-        };
+        let result = (*(string_ptr as *const rtdt::String)).as_str().to_owned();
 
         // Output based on mode.
         match mode {

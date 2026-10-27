@@ -180,9 +180,11 @@ Three places have to agree, and all three derive from the same `.dli` line.
 
    The `&mut`s are sound because no two arguments are the same value where
    either is `mut` or `out`: the ownership checker rejects such a call
-   (D010). What a reference cannot vouch for is a string's or a bigint's
-   contents, which `rider_helpers::str_arg` and `StringMut` take at the
-   runtime's word.
+   (D010). A string's contents are vouched for by `rtdt::String` itself,
+   whose fields are private and whose bytes are UTF-8: the runtime refuses
+   anything else where bytes come in, so `as_str` is safe. A `mut` string is
+   changed through `rider_helpers::StringMut`, which keeps it so. A bigint's
+   contents are still taken at the runtime's word.
 
    `build.rs` derives each function's Rust signature from its declaration
    and checks the implementation against it, so a signature that disagrees

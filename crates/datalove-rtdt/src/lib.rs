@@ -536,11 +536,112 @@ pub struct Table {
     pub data: *const u8,
 }
 
+/// A string the runtime owns.
+///
+/// Its contents are UTF-8, which is what lets [`as_str`](Self::as_str) be
+/// safe: `data` is null, with `size` and `capacity` zero, or points at an
+/// allocation of `capacity` bytes the runtime made, whose first `size` are
+/// UTF-8. The fields are private so that nothing outside the unsafe
+/// constructors and setters can break that; the runtime makes strings
+/// through them, checking bytes from anywhere they could be other than
+/// UTF-8. Compiled code reads and writes the same layout without Rust's
+/// privacy, and keeps to the same invariant.
 #[repr(C)]
 pub struct String {
-    pub data: *const u8,
-    pub size: Index,
-    pub capacity: Index,
+    data: *const u8,
+    size: Index,
+    capacity: Index,
+}
+
+impl String {
+    /// Where each field is, for code that lays a string out without Rust's
+    /// help: the compiled backends, and the ABI fingerprint.
+    pub const DATA_OFFSET: usize = std::mem::offset_of!(String, data);
+    pub const SIZE_OFFSET: usize = std::mem::offset_of!(String, size);
+    pub const CAPACITY_OFFSET: usize = std::mem::offset_of!(String, capacity);
+
+    /// The empty string, holding no buffer.
+    pub const fn new() -> String {
+        String { data: std::ptr::null(), size: Index::ZERO, capacity: Index::ZERO }
+    }
+
+    /// A string of the parts given.
+    ///
+    /// # Safety
+    ///
+    /// The parts keep the invariant: `data` null with `size` and `capacity`
+    /// zero, or an allocation of `capacity` bytes of which the first `size`
+    /// are UTF-8.
+    pub const unsafe fn from_raw_parts(data: *const u8, size: Index, capacity: Index) -> String {
+        String { data, size, capacity }
+    }
+
+    pub fn as_str(&self) -> &str {
+        // SAFETY: the type's invariant.
+        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        if self.data.is_null() || self.size == Index::ZERO {
+            return &[];
+        }
+        // SAFETY: the type's invariant.
+        unsafe { std::slice::from_raw_parts(self.data, self.size.as_usize()) }
+    }
+
+    /// Its length in bytes.
+    pub fn size(&self) -> Index {
+        self.size
+    }
+
+    pub fn len(&self) -> usize {
+        self.size.as_usize()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.size == Index::ZERO
+    }
+
+    pub fn capacity(&self) -> Index {
+        self.capacity
+    }
+
+    /// Where its bytes are, for the runtime to copy or free them.
+    pub fn data(&self) -> *const u8 {
+        self.data
+    }
+
+    /// Its bytes, to change in place, for a change that keeps them UTF-8.
+    ///
+    /// # Safety
+    ///
+    /// The bytes are UTF-8 again by the time the string is next read.
+    pub unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
+        if self.data.is_null() || self.size == Index::ZERO {
+            return &mut [];
+        }
+        // SAFETY: the invariant, and the caller's.
+        unsafe { std::slice::from_raw_parts_mut(self.data as *mut u8, self.size.as_usize()) }
+    }
+
+    /// Shorten or lengthen it within its buffer.
+    ///
+    /// # Safety
+    ///
+    /// `size` is within the capacity, and the first `size` bytes are UTF-8.
+    pub unsafe fn set_size(&mut self, size: Index) {
+        self.size = size;
+    }
+
+    /// Replace its parts, as in moving it to a new buffer.
+    ///
+    /// # Safety
+    ///
+    /// As for [`from_raw_parts`](Self::from_raw_parts). Whatever buffer it
+    /// held before is the caller's to free.
+    pub unsafe fn set_raw_parts(&mut self, data: *const u8, size: Index, capacity: Index) {
+        *self = String { data, size, capacity };
+    }
 }
 
 #[repr(C)]

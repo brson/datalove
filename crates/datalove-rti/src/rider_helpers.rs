@@ -65,10 +65,7 @@ pub unsafe fn write_option_some_string(
         let payload_ptr = out.add(payload_offset);
 
         if s.is_empty() {
-            let string_ptr = payload_ptr as *mut rtdt::String;
-            (*string_ptr).data = std::ptr::null();
-            (*string_ptr).size = rtdt::Index::ZERO;
-            (*string_ptr).capacity = rtdt::Index::ZERO;
+            std::ptr::write(payload_ptr as *mut rtdt::String, rtdt::String::new());
         } else {
             let tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::String,
@@ -144,12 +141,7 @@ pub unsafe fn write_option_some_string_pair(
 /// `rt` and `dest` must be valid pointers. `dest` must have space for an `rtdt::String`.
 unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus {
     if s.is_empty() {
-        let string_ptr = dest as *mut rtdt::String;
-        unsafe {
-            (*string_ptr).data = std::ptr::null();
-            (*string_ptr).size = rtdt::Index::ZERO;
-            (*string_ptr).capacity = rtdt::Index::ZERO;
-        }
+        unsafe { std::ptr::write(dest as *mut rtdt::String, rtdt::String::new()) };
         RtStatus::Ok
     } else {
         let tydesc = rtdt::TyDesc {
@@ -231,7 +223,7 @@ pub unsafe fn write_string_list(
 /// `rt` must be a valid runtime handle. `s` must point to a valid `rtdt::String`.
 unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
     let s_ref = unsafe { &*s };
-    if !s_ref.data.is_null() && s_ref.capacity.0 != 0 {
+    if !s_ref.data().is_null() && s_ref.capacity() != rtdt::Index::ZERO {
         let tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::String,
             flags: 0,
@@ -272,15 +264,7 @@ pub unsafe fn read_string_list(list: &rtdt::List) -> Vec<&str> {
     let mut result = Vec::with_capacity(count);
     for i in 0..count {
         let elem_ptr = unsafe { list.data.add(i * string_size) as *const rtdt::String };
-        let s = unsafe { &*elem_ptr };
-        if s.data.is_null() || s.size.0 == 0 {
-            result.push("");
-        } else {
-            let bytes = unsafe { std::slice::from_raw_parts(s.data, s.size.as_usize()) };
-            let text = std::str::from_utf8(bytes)
-                .unwrap_or_else(|e| panic!("string list element {} is not utf-8: {}", i, e));
-            result.push(text);
-        }
+        result.push(unsafe { &*elem_ptr }.as_str());
     }
     result
 }
@@ -413,30 +397,15 @@ pub const fn align_up(offset: usize, align: usize) -> usize {
 // cannot promise is a string's contents: the runtime keeps `size` bytes of
 // UTF-8 at `data`, and these take it at its word.
 
-/// A `string` argument, as a `&str`.
-///
-/// # Safety
-///
-/// `s` is a string the runtime made, its `size` bytes at `data` UTF-8.
-pub unsafe fn str_arg(s: &rtdt::String) -> &str {
-    unsafe {
-        if s.data.is_null() || s.size.0 == 0 {
-            ""
-        } else {
-            std::str::from_utf8_unchecked(std::slice::from_raw_parts(s.data, s.size.as_usize()))
-        }
-    }
-}
-
 /// A `mut string` argument, changed through one reference.
 ///
 /// The ABI hands the string over as a pointer to an `rtdt::String`. Reading
 /// it as a `&str` and writing its bytes through separate borrows made from
 /// that pointer is how `string_remove` came to use a view the other had ended.
 /// Here there is one `&mut` to the string, reached through which are its
-/// contents, so the borrow checker keeps a read and a write apart. The
-/// contents stay UTF-8, every change going through a method that keeps them
-/// so, which is what lets [`as_str`](Self::as_str) be safe.
+/// contents, so the borrow checker keeps a read and a write apart. Every
+/// change goes through a method that keeps the contents UTF-8, as
+/// `rtdt::String` requires, and grows the buffer through the runtime.
 pub struct StringMut<'a> {
     rt: LocalRtHandle,
     td: *const rtdt::TyDesc,
@@ -446,23 +415,17 @@ pub struct StringMut<'a> {
 impl<'a> StringMut<'a> {
     /// # Safety
     ///
-    /// `s` holds UTF-8 that the runtime `rt` allocated, and `td` describes
-    /// it.
+    /// The runtime `rt` allocated `s`, which `td` describes.
     pub unsafe fn new(rt: LocalRtHandle, s: &'a mut rtdt::String, td: &rtdt::TyDesc) -> StringMut<'a> {
         StringMut { rt, td, s }
     }
 
     pub fn as_str(&self) -> &str {
-        if self.s.data.is_null() || self.s.size.0 == 0 {
-            return "";
-        }
-        // SAFETY: the runtime keeps `size` bytes at `data`, and they are UTF-8
-        // by `new`'s contract and every change made here since.
-        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.s.data, self.s.size.as_usize())) }
+        self.s.as_str()
     }
 
     pub fn len(&self) -> usize {
-        self.s.size.as_usize()
+        self.s.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -470,18 +433,19 @@ impl<'a> StringMut<'a> {
     }
 
     /// The contents as bytes, for a change that keeps them UTF-8.
+    ///
+    /// Every caller leaves them UTF-8: a `copy_within` of whole characters,
+    /// a rotation of whole characters.
     fn bytes_mut(&mut self) -> &mut [u8] {
-        if self.s.data.is_null() || self.s.size.0 == 0 {
-            return &mut [];
-        }
-        // SAFETY: as for `as_str`, and the runtime gave this string its buffer
-        // to change.
-        unsafe { std::slice::from_raw_parts_mut(self.s.data as *mut u8, self.s.size.as_usize()) }
+        // SAFETY: the callers keep the contents UTF-8, as above.
+        unsafe { self.s.as_bytes_mut() }
     }
 
+    /// Shorten it to `len` bytes.
     fn set_len(&mut self, len: usize) {
-        debug_assert!(self.as_str().is_char_boundary(len));
-        self.s.size = rtdt::Index::new(len as rtdt::IndexRepr);
+        assert!(len <= self.len() && self.as_str().is_char_boundary(len));
+        // SAFETY: shorter than it was, at a character boundary.
+        unsafe { self.s.set_size(rtdt::Index::new(len as rtdt::IndexRepr)) };
     }
 
     /// Empty the string, keeping its buffer.

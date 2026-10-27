@@ -1,28 +1,36 @@
 //! String operations for the Datalove runtime.
+//!
+//! An `rtdt::String` holds UTF-8, and these are where that is made true:
+//! bytes arriving from outside, through `string_from_bytes` and
+//! `string_push_bytes_local`, are checked, and anything not UTF-8 is an error
+//! rather than a string.
 
 use datalove_rtdt as rtdt;
 use crate::c::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
 
-/// Creates a new empty string.
+/// The bytes at `ptr`, if they are UTF-8.
 ///
-/// Initializes a String at the provided location with null data pointer,
-/// zero size, and zero capacity.
+/// # Safety
+///
+/// `ptr` is readable for `len` bytes, or `len` is zero.
+unsafe fn utf8<'a>(ptr: *const u8, len: rtdt::IndexRepr) -> Option<&'a str> {
+    if len == 0 {
+        return Some("");
+    }
+    std::str::from_utf8(unsafe { std::slice::from_raw_parts(ptr, len as usize) }).ok()
+}
+
+/// Creates a new empty string.
 pub unsafe fn string_create_local(
     value_out: *mut u8,
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let ty = &*tydesc_in;
-        if ty.type_tag != rtdt::TyTag::String {
+        if (*tydesc_in).type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
-
-        let string_ptr = value_out as *mut rtdt::String;
-        (*string_ptr).data = std::ptr::null();
-        (*string_ptr).size = rtdt::Index::ZERO;
-        (*string_ptr).capacity = rtdt::Index::ZERO;
-
+        std::ptr::write(value_out as *mut rtdt::String, rtdt::String::new());
         RtStatus::Ok
     }
 }
@@ -34,29 +42,21 @@ pub unsafe fn string_destroy_local(
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let ty = &*tydesc_in;
-        if ty.type_tag != rtdt::TyTag::String {
+        if (*tydesc_in).type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
-
-        let string_ptr = value_in as *mut rtdt::String;
-        let string = &*string_ptr;
-
-        // Free the data buffer if it exists.
-        if !string.data.is_null() && string.capacity > rtdt::Index::ZERO {
-            rt.alloc.free(1, 1, string.capacity.0, string.data as *mut u8);
+        let string = &mut *(value_in as *mut rtdt::String);
+        if !string.data().is_null() && string.capacity() > rtdt::Index::ZERO {
+            rt.alloc.free(1, 1, string.capacity().0, string.data() as *mut u8);
         }
-
-        // Clear the string fields.
-        (*string_ptr).data = std::ptr::null();
-        (*string_ptr).size = rtdt::Index::ZERO;
-        (*string_ptr).capacity = rtdt::Index::ZERO;
-
+        *string = rtdt::String::new();
         RtStatus::Ok
     }
 }
 
 /// Appends bytes to a string, reallocating if necessary.
+///
+/// An error, and the string unchanged, if the bytes are not UTF-8.
 pub unsafe fn string_push_bytes_local(
     rt: &mut RtLocal,
     string_value_mut: *mut u8,
@@ -64,72 +64,58 @@ pub unsafe fn string_push_bytes_local(
     bytes_ref: *const u8,
     bytes_len: rtdt::IndexRepr,
 ) -> RtStatus {
-    if bytes_len == 0 {
-        return RtStatus::Ok;
-    }
-
     unsafe {
-        let ty = &*string_tydesc;
-        if ty.type_tag != rtdt::TyTag::String {
+        if (*string_tydesc).type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
-
-        let string_ptr = string_value_mut as *mut rtdt::String;
-        let string = &mut *string_ptr;
-
-        let Some(new_size) = string.size.0.checked_add(bytes_len) else {
+        let Some(bytes) = utf8(bytes_ref, bytes_len) else {
+            return RtStatus::Error;
+        };
+        if bytes.is_empty() {
+            return RtStatus::Ok;
+        }
+        let string = &mut *(string_value_mut as *mut rtdt::String);
+        let old_size = string.size().0;
+        let Some(new_size) = old_size.checked_add(bytes_len) else {
             return RtStatus::Error;
         };
 
-        // Reallocate if needed.
-        if new_size > string.capacity.0 {
-            // Calculate new capacity (double, or enough for new size).
-            let mut new_capacity = string.capacity.0.max(8);
+        // Reallocate if needed, to double the capacity or enough for the new
+        // size.
+        if new_size > string.capacity().0 {
+            let mut new_capacity = string.capacity().0.max(8);
             while new_capacity < new_size {
                 new_capacity = new_capacity.saturating_mul(2);
             }
-
-            // Allocate new buffer.
             let new_data = rt.alloc.alloc(1, 1, new_capacity);
             if new_data.is_null() {
                 return RtStatus::Error;
             }
-
-            // Copy old data if it exists.
-            if string.size.0 > 0 && !string.data.is_null() {
-                std::ptr::copy_nonoverlapping(
-                    string.data,
-                    new_data,
-                    string.size.as_usize(),
-                );
+            if old_size > 0 {
+                std::ptr::copy_nonoverlapping(string.data(), new_data, old_size as usize);
             }
-
-            // Free old buffer if it exists.
-            if !string.data.is_null() && string.capacity.0 > 0 {
-                rt.alloc.free(1, 1, string.capacity.0, string.data as *mut u8);
+            if !string.data().is_null() && string.capacity().0 > 0 {
+                rt.alloc.free(1, 1, string.capacity().0, string.data() as *mut u8);
             }
-
-            string.data = new_data;
-            string.capacity = rtdt::Index(new_capacity);
+            // SAFETY: the old contents, copied whole, in a buffer of
+            // `new_capacity`.
+            string.set_raw_parts(new_data, rtdt::Index(old_size), rtdt::Index(new_capacity));
         }
 
-        // Append the new bytes.
         std::ptr::copy_nonoverlapping(
-            bytes_ref,
-            (string.data as *mut u8).add(string.size.as_usize()),
-            bytes_len as usize,
+            bytes.as_ptr(),
+            (string.data() as *mut u8).add(old_size as usize),
+            bytes.len(),
         );
-
-        string.size = rtdt::Index(new_size);
-
+        // SAFETY: UTF-8 followed by UTF-8, within the capacity.
+        string.set_size(rtdt::Index(new_size));
         RtStatus::Ok
     }
 }
 
 /// Creates a string from bytes in a single call.
 ///
-/// If bytes_len is 0, initializes an empty string with null data pointer.
-/// Otherwise allocates a buffer, copies the bytes, and sets the String fields.
+/// An error, and nothing written, if the bytes are not UTF-8.
 pub unsafe fn string_from_bytes(
     rt: &mut RtLocal,
     bytes_ptr: *const u8,
@@ -138,33 +124,24 @@ pub unsafe fn string_from_bytes(
     result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let ty = &*result_tydesc;
-        if ty.type_tag != rtdt::TyTag::String {
+        if (*result_tydesc).type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
-
-        let string_ptr = result_out as *mut rtdt::String;
-
-        if bytes_len == 0 {
-            // Empty string: null data, zero size/capacity.
-            (*string_ptr).data = std::ptr::null();
-            (*string_ptr).size = rtdt::Index::ZERO;
-            (*string_ptr).capacity = rtdt::Index::ZERO;
+        let Some(text) = utf8(bytes_ptr, bytes_len) else {
+            return RtStatus::Error;
+        };
+        let string = if text.is_empty() {
+            rtdt::String::new()
         } else {
-            // Allocate buffer and copy bytes.
-            let capacity = bytes_len;
-            let data = rt.alloc.alloc(1, 1, capacity);
+            let data = rt.alloc.alloc(1, 1, bytes_len);
             if data.is_null() {
                 return RtStatus::Error;
             }
-
-            std::ptr::copy_nonoverlapping(bytes_ptr, data, bytes_len as usize);
-
-            (*string_ptr).data = data;
-            (*string_ptr).size = rtdt::Index(bytes_len);
-            (*string_ptr).capacity = rtdt::Index(capacity);
-        }
-
+            std::ptr::copy_nonoverlapping(text.as_ptr(), data, text.len());
+            // SAFETY: a copy of `text`, filling its buffer.
+            rtdt::String::from_raw_parts(data, rtdt::Index(bytes_len), rtdt::Index(bytes_len))
+        };
+        std::ptr::write(result_out as *mut rtdt::String, string);
         RtStatus::Ok
     }
 }
@@ -177,14 +154,11 @@ pub unsafe fn string_clear_local(
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let ty = &*string_tydesc;
-        if ty.type_tag != rtdt::TyTag::String {
+        if (*string_tydesc).type_tag != rtdt::TyTag::String {
             return RtStatus::Error;
         }
-
-        let string_ptr = string_value_mut as *mut rtdt::String;
-        (*string_ptr).size = rtdt::Index::ZERO;
-
+        // SAFETY: the empty string is UTF-8.
+        (*(string_value_mut as *mut rtdt::String)).set_size(rtdt::Index::ZERO);
         RtStatus::Ok
     }
 }
@@ -223,9 +197,9 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let string = string.assume_init();
-            assert!(string.data.is_null());
-            assert_eq!(string.size, rtdt::Index::ZERO);
-            assert_eq!(string.capacity, rtdt::Index::ZERO);
+            assert!(string.data().is_null());
+            assert_eq!(string.size(), rtdt::Index::ZERO);
+            assert_eq!(string.capacity(), rtdt::Index::ZERO);
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
@@ -256,11 +230,11 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert!(!string.data.is_null());
-            assert_eq!(string.size, rtdt::Index(5));
-            assert!(string.capacity >= rtdt::Index(5));
+            assert!(!string.data().is_null());
+            assert_eq!(string.size(), rtdt::Index(5));
+            assert!(string.capacity() >= rtdt::Index(5));
 
-            let content = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            let content = std::slice::from_raw_parts(string.data(), string.size().as_usize());
             assert_eq!(content, b"hello");
 
             string_destroy_local(
@@ -312,8 +286,8 @@ mod tests {
                 5,
             );
 
-            assert_eq!(string.size, rtdt::Index(11));
-            let content = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            assert_eq!(string.size(), rtdt::Index(11));
+            let content = std::slice::from_raw_parts(string.data(), string.size().as_usize());
             assert_eq!(content, b"hello world");
 
             string_destroy_local(
@@ -349,8 +323,8 @@ mod tests {
                 4,
             );
 
-            assert_eq!(string.size, rtdt::Index(4));
-            let old_capacity = string.capacity;
+            assert_eq!(string.size(), rtdt::Index(4));
+            let old_capacity = string.capacity();
 
             let status = string_clear_local(
                 &mut string as *mut rtdt::String as *mut u8,
@@ -358,8 +332,8 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(string.size, rtdt::Index::ZERO);
-            assert_eq!(string.capacity, old_capacity);
+            assert_eq!(string.size(), rtdt::Index::ZERO);
+            assert_eq!(string.capacity(), old_capacity);
 
             string_destroy_local(
                 crate::c::impls::rt_local::from_handle(rt_handle),
@@ -401,9 +375,9 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert!(string.data.is_null());
-            assert_eq!(string.size, rtdt::Index::ZERO);
-            assert_eq!(string.capacity, rtdt::Index::ZERO);
+            assert!(string.data().is_null());
+            assert_eq!(string.size(), rtdt::Index::ZERO);
+            assert_eq!(string.capacity(), rtdt::Index::ZERO);
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
@@ -433,7 +407,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(string.size, rtdt::Index::ZERO);
+            assert_eq!(string.size(), rtdt::Index::ZERO);
 
             string_destroy_local(
                 crate::c::impls::rt_local::from_handle(rt_handle),
@@ -487,9 +461,9 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let string = string.assume_init();
-            assert!(string.data.is_null());
-            assert_eq!(string.size, rtdt::Index::ZERO);
-            assert_eq!(string.capacity, rtdt::Index::ZERO);
+            assert!(string.data().is_null());
+            assert_eq!(string.size(), rtdt::Index::ZERO);
+            assert_eq!(string.capacity(), rtdt::Index::ZERO);
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
@@ -516,11 +490,11 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let mut string = string.assume_init();
-            assert!(!string.data.is_null());
-            assert_eq!(string.size, rtdt::Index(5));
-            assert!(string.capacity >= rtdt::Index(5));
+            assert!(!string.data().is_null());
+            assert_eq!(string.size(), rtdt::Index(5));
+            assert!(string.capacity() >= rtdt::Index(5));
 
-            let content = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            let content = std::slice::from_raw_parts(string.data(), string.size().as_usize());
             assert_eq!(content, b"hello");
 
             string_destroy_local(
@@ -554,10 +528,10 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let mut string = string.assume_init();
-            assert!(!string.data.is_null());
-            assert_eq!(string.size.as_usize(), data.len());
+            assert!(!string.data().is_null());
+            assert_eq!(string.size().as_usize(), data.len());
 
-            let content = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            let content = std::slice::from_raw_parts(string.data(), string.size().as_usize());
             assert_eq!(content, data);
 
             string_destroy_local(

@@ -69,9 +69,9 @@ const fn abi_version() -> u64 {
     // miss two fields of one width trading places, so the offsets are here
     // too. This list is what crosses today and has to grow with it.
     let hash = mix(hash, size_of::<rtdt::String>() as u64);
-    let hash = mix(hash, offset_of!(rtdt::String, data) as u64);
-    let hash = mix(hash, offset_of!(rtdt::String, size) as u64);
-    let hash = mix(hash, offset_of!(rtdt::String, capacity) as u64);
+    let hash = mix(hash, rtdt::String::DATA_OFFSET as u64);
+    let hash = mix(hash, rtdt::String::SIZE_OFFSET as u64);
+    let hash = mix(hash, rtdt::String::CAPACITY_OFFSET as u64);
 
     let hash = mix(hash, size_of::<rtdt::Int>() as u64);
     let hash = mix(hash, offset_of!(rtdt::Int, data) as u64);

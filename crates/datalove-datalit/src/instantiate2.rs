@@ -1618,9 +1618,9 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::String);
             let string = &*(inst.ptr as *const rtdt::String);
-            assert_eq!(string.size, rtdt::Index(5));
-            assert!(string.capacity >= rtdt::Index(5));
-            let str_slice = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            assert_eq!(string.size(), rtdt::Index(5));
+            assert!(string.capacity() >= rtdt::Index(5));
+            let str_slice = std::slice::from_raw_parts(string.data(), string.size().as_usize());
             assert_eq!(str_slice, b"hello");
         }
         Ok(())
@@ -1642,9 +1642,9 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::String);
             let string = &*(inst.ptr as *const rtdt::String);
-            assert_eq!(string.size, rtdt::Index::ZERO);
-            assert_eq!(string.capacity, rtdt::Index::ZERO);
-            assert!(string.data.is_null());
+            assert_eq!(string.size(), rtdt::Index::ZERO);
+            assert_eq!(string.capacity(), rtdt::Index::ZERO);
+            assert!(string.data().is_null());
         }
         Ok(())
     }
@@ -1881,12 +1881,12 @@ mod tests {
 
             let strings = std::slice::from_raw_parts(list.data as *const rtdt::String, list.size.as_usize());
 
-            assert_eq!(strings[0].size, rtdt::Index(5));
-            let str0 = std::slice::from_raw_parts(strings[0].data, strings[0].size.as_usize());
+            assert_eq!(strings[0].size(), rtdt::Index(5));
+            let str0 = std::slice::from_raw_parts(strings[0].data(), strings[0].size().as_usize());
             assert_eq!(str0, b"hello");
 
-            assert_eq!(strings[1].size, rtdt::Index(5));
-            let str1 = std::slice::from_raw_parts(strings[1].data, strings[1].size.as_usize());
+            assert_eq!(strings[1].size(), rtdt::Index(5));
+            let str1 = std::slice::from_raw_parts(strings[1].data(), strings[1].size().as_usize());
             assert_eq!(str1, b"world");
         }
         Ok(())
@@ -2368,7 +2368,7 @@ mod tests {
 
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::String);
             let string_ptr = inner_value_ptr as *const rtdt::String;
-            let string_bytes = std::slice::from_raw_parts((*string_ptr).data, (*string_ptr).size.as_usize());
+            let string_bytes = std::slice::from_raw_parts((*string_ptr).data(), (*string_ptr).size().as_usize());
             assert_eq!(string_bytes, b"oops");
         }
         Ok(())

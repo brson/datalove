@@ -77,12 +77,7 @@ pub fn pretty_print_runtime_value<'db>(
         }
 
         // Extract value string.
-        let value_str = if output_string.data.is_null() || output_string.size == datalove_rtdt::Index::ZERO {
-            String::new()
-        } else {
-            let bytes = std::slice::from_raw_parts(output_string.data, output_string.size.as_usize());
-            String::from_utf8_lossy(bytes).S()
-        };
+        let value_str = output_string.as_str().S();
 
         // Cleanup runtime string.
         datalove_rt::c::dtlv_rti_string_destroy_local(

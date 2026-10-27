@@ -687,18 +687,7 @@ unsafe fn eq_value(
             rtdt::TyTag::String => {
                 let str_a = &*(value_a as *const rtdt::String);
                 let str_b = &*(value_b as *const rtdt::String);
-
-                // Handle empty strings (size 0, data can be null).
-                if str_a.size == rtdt::Index::ZERO && str_b.size == rtdt::Index::ZERO {
-                    return true;
-                }
-                if str_a.size != str_b.size {
-                    return false;
-                }
-
-                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size.as_usize());
-                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size.as_usize());
-                bytes_a == bytes_b
+                str_a.as_bytes() == str_b.as_bytes()
             }
             rtdt::TyTag::Tuple => {
                 for field in td.iter_tuple_fields() {
@@ -982,21 +971,7 @@ unsafe fn cmp_string(value_a: *const u8, value_b: *const u8) -> crate::c::RtOrde
     unsafe {
         let str_a = &*(value_a as *const rtdt::String);
         let str_b = &*(value_b as *const rtdt::String);
-
-        // An empty string's data can be null, which no slice may be made of.
-        if str_a.size == rtdt::Index::ZERO && str_b.size == rtdt::Index::ZERO {
-            return crate::c::RtOrdering::Equal;
-        }
-        if str_a.size == rtdt::Index::ZERO {
-            return crate::c::RtOrdering::Less;
-        }
-        if str_b.size == rtdt::Index::ZERO {
-            return crate::c::RtOrdering::Greater;
-        }
-
-        let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size.as_usize());
-        let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size.as_usize());
-        ordering(bytes_a.cmp(bytes_b))
+        ordering(str_a.as_bytes().cmp(str_b.as_bytes()))
     }
 }
 

@@ -36,10 +36,10 @@ fn create_string_tydesc() -> rtdt::TyDesc {
 /// Extracts the contents of a runtime String as a Rust String.
 unsafe fn get_string_contents(string: &rtdt::String) -> String {
     unsafe {
-        if string.data.is_null() || string.size == rtdt::Index::ZERO {
+        if string.data().is_null() || string.size() == rtdt::Index::ZERO {
             return String::new();
         }
-        let bytes = std::slice::from_raw_parts(string.data, string.size.as_usize());
+        let bytes = std::slice::from_raw_parts(string.data(), string.size().as_usize());
         String::from_utf8_lossy(bytes).to_string()
     }
 }
