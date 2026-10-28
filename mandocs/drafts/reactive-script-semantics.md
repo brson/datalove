@@ -103,6 +103,197 @@ Motivating example.
 
 -->
 
+Datalove is an interactive scripting language.
+The compiler and interpreter live together in a long-running process called the _engine_.
+In Datalove reactivity applies to scripts.
+Conceptually, a script runs to completion,
+then the engine waits for some external force to change the code or input data,
+then the script runs to completion again.
+With careful design though we avoid actually running the script again.
+As the code changes and as its input data changes,
+the engine preserves its existing state and only reevaluates
+exactly what is necessary to produce a correct new result.
+That is what I mean by _reactive_.
+
+Here is an example script one might hack on interactively,
+performing the kind of simple data transformation Datalove is designed around.
+It reads a month of bank transactions,
+sorts each payee into a category,
+totals the categories,
+and lists the ones that went over budget.
+
+The transactions live in a data file, `local/home/transactions.dlt`:
+
+```datalove
+[
+  {day = 1, payee = "TRADER JOES #552", cents = 8412},
+  {day = 2, payee = "SHELL OIL 5741", cents = 4650},
+  {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675},
+  {day = 5, payee = "SAFEWAY 1123", cents = 6230},
+  {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380},
+  {day = 9, payee = "PG&E", cents = 11204},
+  {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540},
+  {day = 14, payee = "TRADER JOES #552", cents = 9177},
+  {day = 18, payee = "NETFLIX.COM", cents = 1549},
+  {day = 21, payee = "ZUNI CAFE", cents = 9840},
+  {day = 26, payee = "BI-RITE MARKET", cents = 3315}
+]
+```
+
+And the script reads them:
+
+```datalove
+require module sys/std/list
+require module sys/std/map
+require module sys/std/string
+
+require data local/home/transactions: [
+  {
+    day: u32,
+    payee: string,
+    cents: int,
+  }
+]
+
+fun category(ref payee: string): string
+  if (
+    string.starts_with(ref payee, ref "TRADER JOES")
+    or string.starts_with(ref payee, ref "SAFEWAY")
+  )
+    ret "groceries"
+  else if (
+    string.contains(ref payee, ref "COFFEE")
+    or string.contains(ref payee, ref "CAFE")
+    or string.starts_with(ref payee, ref "TAQUERIA")
+  )
+    ret "dining"
+  else if string.starts_with(ref payee, ref "SHELL")
+    ret "car"
+  else if payee == "PG&E" or payee == "NETFLIX.COM"
+    ret "bills"
+  end if
+  ret "other"
+end fun
+
+let budget: %{string = int} = %{
+  "groceries" = 25000,
+  "dining" = 15000,
+  "car" = 10000,
+  "bills" = 15000,
+  "other" = 5000
+}
+
+var spent: %{string = int} = %{}
+for t in ref transactions
+  let c = category(ref t.payee)
+  let so_far = map.get_or(ref spent, ref c, 0)
+  call map.insert(mut spent, c, so_far + t.cents)
+end for
+
+var over: [string] = []
+for c, amount in ref spent
+  if amount .> budget[c]!
+    call list.push(mut over, c@)
+  end if
+end for
+
+let output = {
+  spent = spent,
+  over = over
+}
+```
+
+This processes input `transactions` and produces an output `output`.
+Datalove today has no programmatic access to I/O at runtime.
+The `require data` statement includes data at compile time,
+bound to a variable named `transactions`,
+and `output` just produces a binding observable in the runtime environment.
+Let's just assume these are reasonable standins for some future way to
+impose I/O on a reactive script.
+
+Most of the remaining Datalove syntax in this example will be clear
+to readers of other common modern languages.
+The `%{string = int}` type is a map from `string` to `int`.
+The `!` sigil indicates sites of potential early-return errors,
+here a missing key in the `budget` map.
+
+The script produces `output`:
+
+```datalove
+{
+  spent = %{
+    "bills" = 12753,
+    "car" = 4650,
+    "dining" = 13435,
+    "groceries" = 23819,
+    "other" = 3315
+  },
+  over = []
+}
+```
+
+In this script we expect to trigger recompilation and/or reevaluation
+when the input `transactions` changes,
+or when the script code itself changes,
+or when any of the modules it imports changes.
+
+In other cases the input might be state changes in response to UI events,
+the script being expected to quickly generate a new UI scene description,
+as in popular frameworks like React.
+In any case, the script is continually reevaluated,
+short-circuiting any computations that will provably not change across evaluations.
+
+Imagine we are developing this script experimentally.
+In the initial output nothing is overbudget,
+but "Bi-Rite" is a grocery store,
+and its transactions are currently being accumulated in the "other" category.
+So I teach the `category` function about it:
+
+```datalove
+  if (
+    string.starts_with(ref payee, ref "TRADER JOES")
+    or string.starts_with(ref payee, ref "SAFEWAY")
+    or string.starts_with(ref payee, ref "BI-RITE")
+  )
+    ret "groceries"
+  ...
+```
+
+When the script reevaluates,
+"groceries" goes to 27134,
+"other" disappears,
+and groceries is now over budget:
+
+```datalove
+{
+  spent = %{
+    "bills" = 12753,
+    "car" = 4650,
+    "dining" = 13435,
+    "groceries" = 27134
+  },
+  over = ["groceries"]
+}
+```
+
+Then the month goes on,
+and my bank appends a coffee to the data file:
+
+```datalove
+  {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}
+```
+
+The totals for "dining" change putting me overbudget,
+`over` becoming `["dining", "groceries"]`.
+If I then change the code to increase the dining budget,
+then `over` reevaluates back to `["groceries"]`.
+
+Let's not belabor this.
+You get the idea. Inputs change.
+Reevaluate just what needs to reevaluate.
+
+There are plenty of obstacles to doing this correctly and efficiently.
+todo probably need some anithesis here.
 
 
 
