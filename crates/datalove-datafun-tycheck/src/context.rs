@@ -23,7 +23,7 @@ pub use crate::{
     CollectedNames,
 };
 
-use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_with_aliases};
+use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_inheriting};
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -429,7 +429,8 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         &mut self,
         type_hint: datalove_datalit::ast::TypeHint<'db>,
     ) -> Result<Type<'db>, TypeError> {
-        let result = convert_type_hint_with_aliases(self.db, type_hint, &self.type_aliases);
+        let result = convert_type_hint_inheriting(
+            self.db, type_hint, &self.type_aliases, &|name| self.inherited_type_alias(name));
         if let Err(TypeError::UnresolvedTypeAlias { name, local_index: Some(local_index) }) = &result {
             self.pending_diagnostics.push(PendingDiagnostic::UnresolvedTypeAlias {
                 local_index: *local_index,
@@ -1058,6 +1059,13 @@ replace the view rather than the elements it shows. Index down to single element
     fn inherited(&self, name: InternedText<'db>) -> Option<crate::ScriptBinding<'db>> {
         let inherited = self.inherited?;
         crate::api::binding_at(self.db, inherited.script, inherited.env, name)
+    }
+
+    /// The type alias an earlier unit declared under `name`.
+    pub(crate) fn inherited_type_alias(&self, name: InternedText<'db>) -> Option<Type<'db>> {
+        let inherited = self.inherited?;
+        self.note_asked(name);
+        crate::api::type_alias_at(self.db, inherited.script, inherited.env, name)
     }
 
     /// The variable an earlier unit left behind under `name`, if a body may see it.

@@ -23,7 +23,6 @@ home here.
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
-  - [A type declared in one unit is unknown to the next](#user-content-a-type-declared-in-one-unit-is-unknown-to-the-next)
   - [The REPL shows a broken module only as a message](#user-content-the-repl-shows-a-broken-module-only-as-a-message)
   - [Lowering errors say what, never where](#user-content-lowering-errors-say-what-never-where)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
@@ -233,15 +232,6 @@ Making it a refusal needs to know the `JITModule` is still usable after a
 failed definition. Dropping the engine and starting a fresh one is the
 heavier alternative. The CLI's REPL does not use the JIT, so a long session
 does not reach this today.
-
-### A type declared in one unit is unknown to the next
-
-**Reproduced** at the REPL and through `Engine`. `type Flag: enum { atom Yes,
-atom No }` in one unit and `let f: Flag = atom No` in the next fails with
-`UnresolvedTypeAlias { name: "Flag", local_index: Some(0) }`; the two in one
-unit work. Script units carry bindings, functions, consts and module aliases
-forward (`binding_at`, `module_alias_at`), and nothing does the same for type
-aliases. Not looked into further.
 
 ### The REPL shows a broken module only as a message
 

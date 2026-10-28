@@ -60,6 +60,8 @@ pub struct UnitProvides<'db> {
     pub fn_asts: Vec<(InternedText<'db>, FunHead<'db>, Option<ModuleId<'db>>)>,
     /// Module aliases from require statements: (alias, full path).
     pub module_aliases: Vec<(InternedText<'db>, String)>,
+    /// Type aliases from `type` statements.
+    pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
     /// Which of `vars` are consts rather than `let`/`var` bindings.
     ///
     /// Const-ness used to be lost at the unit boundary: a script `const`
@@ -112,6 +114,9 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     /// Module aliases from require statements: (alias, full path).
     #[returns(ref)]
     pub new_module_aliases: Vec<(InternedText<'db>, String)>,
+    /// Type aliases from `type` statements.
+    #[returns(ref)]
+    pub new_type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
     /// Which of `new_vars` are consts.
     #[returns(ref)]
     pub new_consts: Vec<InternedText<'db>>,
@@ -181,9 +186,8 @@ pub fn unit_ast<'db>(
         return ScriptUnitSpec::new(source, spans, ScriptUnitKind::Expr(parsed));
     }
     let parsed = datalove_datafun_parser::parse(db, source).parsed.clone();
-    let names = datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
     let spans = datalove_datafun_parser::datafun_spans(db, source);
-    ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed, names))
+    ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed))
 }
 
 /// What the last unit of `script` provides to the units after it.
@@ -208,6 +212,7 @@ pub fn unit_provides<'db>(
         fns: output.new_fns(db).C(),
         fn_asts: output.new_fn_asts(db).C(),
         module_aliases: output.new_module_aliases(db).C(),
+        type_aliases: output.new_type_aliases(db).C(),
         consts: output.new_consts(db).C(),
     }
 }
@@ -284,6 +289,28 @@ fn module_alias_at<'db>(
     None
 }
 
+/// The type `name` names, from the nearest earlier `type`.
+///
+/// A type declared in one REPL line is known to a later one, asked for one
+/// name at a time as [`binding_at`] asks for a binding.
+#[salsa::tracked(returns(clone))]
+pub fn type_alias_at<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    env: ScriptEnv<'db>,
+    name: InternedText<'db>,
+) -> Option<Type<'db>> {
+    let mut current = Some(script);
+    while let Some(prefix) = current {
+        let aliases = &unit_provides(db, prefix, env).type_aliases;
+        if let Some((_, ty)) = aliases.iter().rev().find(|(n, _)| *n == name) {
+            return Some(ty.clone());
+        }
+        current = prefix.prev(db);
+    }
+    None
+}
+
 /// Typecheck the last unit of `script`, against the units before it.
 ///
 /// **Keyed on a position in the script and nothing derived from it.** A
@@ -329,13 +356,19 @@ pub fn typecheck_script_unit<'db>(
     let mut new_fns = Vec::new();
     let mut new_fn_asts = Vec::new();
     let mut new_module_aliases = Vec::new();
+    let mut new_type_aliases = Vec::new();
     let mut imported_modules: Vec<String>;
 
     // Typecheck this unit based on kind.
     match &unit_spec.kind {
-        ScriptUnitKind::Fragment(parsed, collected) => {
-            // Use pre-computed name resolution.
-            ctx.seed_from_collected_names(collected, None);
+        ScriptUnitKind::Fragment(parsed) => {
+            let collected = datalove_datafun_resolve::resolve_names_inheriting(
+                db,
+                &datalove_datafun_ast::ast::Items::of(db, parsed).items,
+                &|name| ctx.inherited_type_alias(name),
+            );
+            ctx.seed_from_collected_names(&collected, None);
+            new_type_aliases = collected.type_aliases;
 
             new_module_aliases = collect_module_aliases(db, parsed);
 
@@ -520,8 +553,8 @@ pub fn typecheck_script_unit<'db>(
     );
 
     ScriptUnitTypecheckOutput::new(
-        db, result, new_vars, new_fns, new_fn_asts, new_module_aliases, new_consts,
-        uses, imported_modules)
+        db, result, new_vars, new_fns, new_fn_asts, new_module_aliases, new_type_aliases,
+        new_consts, uses, imported_modules)
 }
 
 /// Typecheck every unit of `script`, oldest first.

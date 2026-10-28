@@ -23,7 +23,7 @@ pub use datalove_datafun_common::{
     Type,
     TypeFunction,
     TypeError,
-    convert_type_hint_with_aliases,
+    convert_type_hint_inheriting,
     unit_type,
 };
 
@@ -41,6 +41,19 @@ pub use datalove_datafun_ast::spans::DatafunSpans;
 pub fn resolve_names_impl<'db>(
     db: &'db dyn Db,
     items: &[Item<'db>],
+) -> CollectedNames<'db> {
+    resolve_names_inheriting(db, items, &|_| None)
+}
+
+/// Resolve names from parsed statements, resolving a type alias they do not
+/// declare with `inherited`.
+///
+/// A script unit sees the aliases the units before it declared; a module sees
+/// only its own.
+pub fn resolve_names_inheriting<'db>(
+    db: &'db dyn Db,
+    items: &[Item<'db>],
+    inherited: &dyn Fn(InternedText<'db>) -> Option<Type<'db>>,
 ) -> CollectedNames<'db> {
     let mut errors = Vec::new();
 
@@ -63,7 +76,7 @@ pub fn resolve_names_impl<'db>(
             }
 
             // Resolve the type hint using already-collected aliases.
-            match convert_type_hint_with_aliases(db, stmt.type_hint.clone(), &type_aliases_map) {
+            match convert_type_hint_inheriting(db, stmt.type_hint.clone(), &type_aliases_map, inherited) {
                 Ok(ty) => {
                     type_aliases_map.insert(name, ty.clone());
                     type_aliases_vec.push((name, ty));
@@ -136,7 +149,7 @@ pub fn resolve_names_impl<'db>(
         let mut param_comptime = Vec::with_capacity(params.len());
         let mut has_error = false;
         for param in &params {
-            match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
+            match convert_type_hint_inheriting(db, param.type_hint.clone(), &type_aliases_map, inherited) {
                 Ok(ty) => {
                     let position = format!("parameter `{}`", param.name.as_str(db));
                     // Whatever a function is handed, the runtime still has to
@@ -167,7 +180,7 @@ pub fn resolve_names_impl<'db>(
         // Convert return type (default to unit if not specified).
         let ret_ty = match return_type {
             Some(type_hint) => {
-                match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
+                match convert_type_hint_inheriting(db, type_hint, &type_aliases_map, inherited) {
                     Ok(ty) => match unordered_collection_key_error(
                         db, &ty, "the return type", fun_local_index, &ordered)
                     {
@@ -256,25 +269,6 @@ pub fn resolve_all_names<'db>(
     }
 
     AllModuleNameResolutions::new(db, all_resolutions)
-}
-
-// ============================================================================
-// Script Name Resolution
-// ============================================================================
-
-/// Resolve names for a script (tracked function for scripts).
-///
-/// This is a tracked function that provides memoization for script name resolution.
-/// It uses the source as the memoization key, ensuring that the same script
-/// produces the same resolution results.
-#[salsa::tracked(returns(clone))]
-pub fn resolve_script_names<'db>(
-    db: &'db dyn Db,
-    source: bct::input::Source,
-    parsed: ParsedStatements<'db>,
-) -> CollectedNames<'db> {
-    let _ = source; // Used as memoization key.
-    resolve_names_impl(db, &Items::of(db, &parsed).items)
 }
 
 // ============================================================================

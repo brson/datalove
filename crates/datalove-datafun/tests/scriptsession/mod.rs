@@ -394,6 +394,8 @@ impl Session {
                     .chain(output.new_fns(db).iter().map(|(name, _)| name.as_str(db).S()))
                     .chain(output.new_module_aliases(db).iter()
                         .map(|(alias, _)| alias.as_str(db).S()))
+                    .chain(output.new_type_aliases(db).iter()
+                        .map(|(name, _)| name.as_str(db).S()))
                     .collect(),
             );
             // What `binding_at` would answer about each name, as a hash, so
@@ -407,6 +409,8 @@ impl Session {
                 })
                 .chain(output.new_fns(db).iter()
                     .map(|(name, func)| (name.as_str(db).S(), hash_of(func))))
+                .chain(output.new_type_aliases(db).iter()
+                    .map(|(name, ty)| (name.as_str(db).S(), hash_of(ty))))
                 .collect();
             if output.result(db).errors(db).is_empty() {
                 signatures.sort();

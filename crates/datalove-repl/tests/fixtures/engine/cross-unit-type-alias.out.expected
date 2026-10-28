@@ -1,0 +1,210 @@
+[
+  {
+    "input": "type Flag: enum { atom Yes, atom No }",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "type Flag: enum { atom Yes, atom No }"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Ran": []
+      }
+    },
+    "environment": []
+  },
+  {
+    "input": "let f: Flag = atom No",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "let f: Flag = atom No"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Ran": [
+          {
+            "Value": {
+              "name": "f",
+              "ty": "enum { atom No, atom Yes }",
+              "value": "enum { atom No }"
+            }
+          }
+        ]
+      }
+    },
+    "environment": [
+      {
+        "name": "f",
+        "ty": "enum { atom No, atom Yes }",
+        "value": "enum { atom No }"
+      }
+    ]
+  },
+  {
+    "input": "type Flags: [Flag]",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "type Flags: [Flag]"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Ran": []
+      }
+    },
+    "environment": [
+      {
+        "name": "f",
+        "ty": "enum { atom No, atom Yes }",
+        "value": "enum { atom No }"
+      }
+    ]
+  },
+  {
+    "input": "let fs: Flags = [atom Yes, f]",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "let fs: Flags = [atom Yes, f]"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Ran": [
+          {
+            "Value": {
+              "name": "fs",
+              "ty": "[enum { atom No, atom Yes }]",
+              "value": "[enum { atom Yes }, enum { atom No }]"
+            }
+          }
+        ]
+      }
+    },
+    "environment": [
+      {
+        "name": "f",
+        "ty": "enum { atom No, atom Yes }",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "fs",
+        "ty": "[enum { atom No, atom Yes }]",
+        "value": "[enum { atom Yes }, enum { atom No }]"
+      }
+    ]
+  },
+  {
+    "input": "fun flip(x: Flag): Flag\n  let y: Flag = atom Yes\n  match x\n    case atom Yes\n      ret atom No\n    case atom No\n      ret y\n  end match\nend fun",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "fun flip(x: Flag): Flag\n  let y: Flag = atom Yes\n  match x\n    case atom Yes\n      ret atom No\n    case atom No\n      ret y\n  end match\nend fun"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Ran": [
+          {
+            "Function": {
+              "name": "flip"
+            }
+          }
+        ]
+      }
+    },
+    "environment": [
+      {
+        "name": "f",
+        "ty": "enum { atom No, atom Yes }",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flip",
+        "ty": "fun(enum { atom No, atom Yes }): enum { atom No, atom Yes }",
+        "value": "-"
+      },
+      {
+        "name": "fs",
+        "ty": "[enum { atom No, atom Yes }]",
+        "value": "[enum { atom Yes }, enum { atom No }]"
+      }
+    ]
+  },
+  {
+    "input": "flip(f)",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Expression": "flip(f)"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "Value": {
+          "ty": "enum { atom No, atom Yes }",
+          "value": "enum { atom Yes }"
+        }
+      }
+    },
+    "environment": [
+      {
+        "name": "f",
+        "ty": "enum { atom No, atom Yes }",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flip",
+        "ty": "fun(enum { atom No, atom Yes }): enum { atom No, atom Yes }",
+        "value": "-"
+      },
+      {
+        "name": "fs",
+        "ty": "[enum { atom No, atom Yes }]",
+        "value": "[enum { atom Yes }, enum { atom No }]"
+      }
+    ]
+  },
+  {
+    "input": "let g: Glag = atom No",
+    "parse": {
+      "Command": {
+        "Unit": {
+          "Fragment": "let g: Glag = atom No"
+        }
+      }
+    },
+    "eval": {
+      "Unit": {
+        "NotCompiled": "unknown type `Glag`"
+      }
+    },
+    "environment": [
+      {
+        "name": "f",
+        "ty": "enum { atom No, atom Yes }",
+        "value": "enum { atom No }"
+      },
+      {
+        "name": "flip",
+        "ty": "fun(enum { atom No, atom Yes }): enum { atom No, atom Yes }",
+        "value": "-"
+      },
+      {
+        "name": "fs",
+        "ty": "[enum { atom No, atom Yes }]",
+        "value": "[enum { atom Yes }, enum { atom No }]"
+      }
+    ]
+  }
+]

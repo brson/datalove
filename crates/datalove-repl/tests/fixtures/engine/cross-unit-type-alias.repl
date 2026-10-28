@@ -1,0 +1,21 @@
+type Flag: enum { atom Yes, atom No }
+---
+let f: Flag = atom No
+---
+type Flags: [Flag]
+---
+let fs: Flags = [atom Yes, f]
+---
+fun flip(x: Flag): Flag
+  let y: Flag = atom Yes
+  match x
+    case atom Yes
+      ret atom No
+    case atom No
+      ret y
+  end match
+end fun
+---
+flip(f)
+---
+let g: Glag = atom No

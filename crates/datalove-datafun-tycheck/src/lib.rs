@@ -400,8 +400,11 @@ pub struct ExprTypecheckResult<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub enum ScriptUnitKind<'db> {
-    /// A fragment containing statements and pre-computed name resolution.
-    Fragment(ParsedStatements<'db>, CollectedNames<'db>),
+    /// A fragment containing statements.
+    ///
+    /// Its names are resolved where it is typechecked, since a type alias it
+    /// names may be declared by an earlier unit.
+    Fragment(ParsedStatements<'db>),
     /// A single expression, with the qualified calls it makes.
     Expr(datalove_datafun_ast::ast::ParsedExpr<'db>),
 }

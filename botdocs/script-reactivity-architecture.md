@@ -123,9 +123,14 @@ and so a different question: an import may resolve differently in it.
 ```
 binding_at(db, script, env, name)     -> the nearest earlier unit providing it
 module_alias_at(db, script, env, name)
+type_alias_at(db, script, env, name)  -> the nearest earlier `type`
 unit_provides(db, script, env)        -> the projection those walk
-unit_ast(db, unit)                    -> parse, spans, name resolution
+unit_ast(db, unit)                    -> parse, spans
 ```
+
+A fragment's names -- its aliases and function signatures -- are resolved in
+`typecheck_script_unit` and not in `unit_ast`, because a signature or an
+alias may name a type an earlier unit declared.
 
 **Salsa records the dependency because the dependency is the read.** There is
 no key to compute in advance and nothing to keep in step. Editing B reruns

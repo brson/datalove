@@ -699,3 +699,26 @@ fn an_edited_function_runs_as_edited_under_the_jit() {
     let buffer = session.executor.get_debug_buffer();
     assert!(buffer.contains("102"), "ran the old body: {buffer}");
 }
+
+/// **Editing a `type` reaches the units that name it.**
+///
+/// A type alias is provided by the unit that declares it and used by a hint
+/// in a later one, so it is an edge in the graph as a binding is. B names `T`
+/// and C does not, so changing what `T` is re-derives B and leaves C alone.
+#[test]
+fn editing_a_type_reaches_the_units_that_name_it() {
+    let mut session = Session::new();
+    session.append("type T: (u32, u32)\ndebuglog \"ran A\"\n");
+    session.append("let x: T = (1, 2)\ndebuglog \"ran B\"\n");
+    session.append("let c = 3\ndebuglog \"ran C\"\n");
+    let _ = session.units_run();
+
+    let graph = session.graph();
+    assert_eq!(graph.provides[0], vec!["T"]);
+    assert_eq!(graph.reach(0), BTreeSet::from([0, 1]), "B names `T` and C does not");
+
+    session.edit(0, "type T: (u64, u32)\ndebuglog \"ran A\"\n");
+    assert_eq!(session.rederive(0), BTreeSet::from([0, 1]));
+    assert_eq!(session.units_run(), BTreeSet::from([0, 1]));
+    assert_eq!(session.binding("x"), "(1, 2)");
+}

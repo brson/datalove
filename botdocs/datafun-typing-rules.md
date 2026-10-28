@@ -109,7 +109,8 @@ expression.
 
 A type alias (`type Point: {x: f32, y: f32}`) is a name for a structural
 type and is expanded before types are compared. An unknown name is F064; an
-alias defined twice is F066.
+alias defined twice is F066. A script unit sees the aliases earlier units
+declared, and one it declares itself shadows them.
 
 Equivalence `T ≡ U` is datalit's, extended by `α ≡ α` and nothing else: a
 type parameter is equivalent only to itself.

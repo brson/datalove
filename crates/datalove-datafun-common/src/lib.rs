@@ -959,13 +959,28 @@ pub fn convert_type_hint_with_aliases<'db>(
     type_hint: TypeHint<'db>,
     aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
-    convert_type_hint_with_aliases_inner(db, type_hint, aliases)
+    convert_type_hint_with_aliases_inner(db, type_hint, aliases, &|_| None)
+}
+
+/// Convert a type hint to a type, resolving a type alias not in `aliases`
+/// with `inherited`.
+///
+/// A script unit sees the aliases the units before it declared, and asks for
+/// them one name at a time, as it does for bindings.
+pub fn convert_type_hint_inheriting<'db>(
+    db: &'db dyn Db,
+    type_hint: TypeHint<'db>,
+    aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
+    inherited: &dyn Fn(InternedText<'db>) -> Option<Type<'db>>,
+) -> Result<Type<'db>, TypeError> {
+    convert_type_hint_with_aliases_inner(db, type_hint, aliases, inherited)
 }
 
 fn convert_type_hint_with_aliases_inner<'db>(
     db: &'db dyn Db,
     type_hint: TypeHint<'db>,
     aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
+    inherited: &dyn Fn(InternedText<'db>) -> Option<Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
     let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
@@ -989,7 +1004,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         TypeHint::AnonTuple(t) => {
             let fields: Result<Vec<_>, TypeError> = t.fields.iter()
                 .map(|f| {
-                    let f_ty = convert_type_hint_with_aliases_inner(db, f.clone(), aliases)?;
+                    let f_ty = convert_type_hint_with_aliases_inner(db, f.clone(), aliases, inherited)?;
                     match f_ty {
                         Type::Datalit(dt) => Ok(dt.clone()),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1005,7 +1020,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let fields: Result<Vec<_>, TypeError> = s.fields.iter()
                 .map(|f| {
                     let name = f.name;
-                    let f_ty = convert_type_hint_with_aliases_inner(db, (*f.type_hint).clone(), aliases)?;
+                    let f_ty = convert_type_hint_with_aliases_inner(db, (*f.type_hint).clone(), aliases, inherited)?;
                     let dt = match f_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1023,7 +1038,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
 
         TypeHint::List(l) => {
-            let elem_ty = convert_type_hint_with_aliases_inner(db, (*l.element_type).clone(), aliases)?;
+            let elem_ty = convert_type_hint_with_aliases_inner(db, (*l.element_type).clone(), aliases, inherited)?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1036,12 +1051,12 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::Map(m) => {
-            let key_ty = convert_type_hint_with_aliases_inner(db, (*m.key_type).clone(), aliases)?;
+            let key_ty = convert_type_hint_with_aliases_inner(db, (*m.key_type).clone(), aliases, inherited)?;
             let key_dt = match key_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
-            let value_ty = convert_type_hint_with_aliases_inner(db, (*m.value_type).clone(), aliases)?;
+            let value_ty = convert_type_hint_with_aliases_inner(db, (*m.value_type).clone(), aliases, inherited)?;
             let value_dt = match value_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1055,7 +1070,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::Set(s) => {
-            let elem_ty = convert_type_hint_with_aliases_inner(db, (*s.element_type).clone(), aliases)?;
+            let elem_ty = convert_type_hint_with_aliases_inner(db, (*s.element_type).clone(), aliases, inherited)?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1068,7 +1083,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::Option(o) => {
-            let inner_ty = convert_type_hint_with_aliases_inner(db, (*o.inner_type).clone(), aliases)?;
+            let inner_ty = convert_type_hint_with_aliases_inner(db, (*o.inner_type).clone(), aliases, inherited)?;
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1081,7 +1096,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::Result(r) => {
-            let inner_ty = convert_type_hint_with_aliases_inner(db, (*r.inner_type).clone(), aliases)?;
+            let inner_ty = convert_type_hint_with_aliases_inner(db, (*r.inner_type).clone(), aliases, inherited)?;
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1094,7 +1109,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::Tensor(t) => {
-            let elem_ty = convert_type_hint_with_aliases_inner(db, (*t.element_type).clone(), aliases)?;
+            let elem_ty = convert_type_hint_with_aliases_inner(db, (*t.element_type).clone(), aliases, inherited)?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1114,7 +1129,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::Term(t) => {
-            let payload_ty = convert_type_hint_with_aliases_inner(db, (*t.payload).clone(), aliases)?;
+            let payload_ty = convert_type_hint_with_aliases_inner(db, (*t.payload).clone(), aliases, inherited)?;
             let dt = match payload_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1129,7 +1144,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
                 .map(|v| {
                     let payload = match &v.payload {
                         Some(p) => {
-                            let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases)?;
+                            let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases, inherited)?;
                             let dt = match p_ty {
                                 Type::Datalit(dt) => dt.clone(),
                                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
@@ -1155,6 +1170,9 @@ fn convert_type_hint_with_aliases_inner<'db>(
             if let Some(resolved_ty) = aliases.get(&alias.name) {
                 return Ok(resolved_ty.clone());
             }
+            if let Some(resolved_ty) = inherited(alias.name) {
+                return Ok(resolved_ty);
+            }
             return Err(TypeError::UnresolvedTypeAlias {
                 name: alias.name.as_str(db).to_string(),
                 local_index: alias.local_index,
@@ -1165,7 +1183,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let columns: Result<Vec<_>, TypeError> = t.columns.iter()
                 .map(|c| {
                     let name = c.name;
-                    let c_ty = convert_type_hint_with_aliases_inner(db, (*c.type_hint).clone(), aliases)?;
+                    let c_ty = convert_type_hint_with_aliases_inner(db, (*c.type_hint).clone(), aliases, inherited)?;
                     let dt = match c_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),

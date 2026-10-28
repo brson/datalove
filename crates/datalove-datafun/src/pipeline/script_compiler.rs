@@ -924,6 +924,7 @@ impl<'db> ScriptCompiler<'db> {
         output.new_vars(db).iter().map(|(name, _, _)| name.as_str(db).S())
             .chain(output.new_fns(db).iter().map(|(name, _)| name.as_str(db).S()))
             .chain(output.new_module_aliases(db).iter().map(|(alias, _)| alias.as_str(db).S()))
+            .chain(output.new_type_aliases(db).iter().map(|(name, _)| name.as_str(db).S()))
             .collect()
     }
 
@@ -937,7 +938,7 @@ impl<'db> ScriptCompiler<'db> {
         let mut used: Vec<String> =
             output.uses(db).iter().map(|name| name.as_str(db).S()).collect();
         let qualified_calls = match &unit_ast(db, self.scripts[index].unit(db)).kind {
-            ScriptUnitKind::Fragment(parsed, _) => {
+            ScriptUnitKind::Fragment(parsed) => {
                 for statement in parsed.statements(db).iter() {
                     if let Statement::Import(import) = statement {
                         used.push(import.module_name.as_str(db).S());
@@ -1202,7 +1203,7 @@ impl<'db> ScriptCompiler<'db> {
     fn parsed_unit_at(&self, index: usize) -> ParsedUnit<'db> {
         let spec = unit_ast(self.db, self.scripts[index].unit(self.db));
         match &spec.kind {
-            ScriptUnitKind::Fragment(parsed, _) => {
+            ScriptUnitKind::Fragment(parsed) => {
                 ParsedUnit::Fragment { top: parsed.top, body: parsed.body(self.db) }
             }
             ScriptUnitKind::Expr(parsed) => ParsedUnit::Expr(parsed.clone()),
