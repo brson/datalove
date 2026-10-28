@@ -33,7 +33,7 @@ SIGNATURE = re.compile(r"pub\s+(unsafe\s+)?extern\s+\"C-unwind\"\s+fn\s+(\w+)\s*
 
 
 def signatures(source):
-    """Every exported function, as (name, is_unsafe, params, return type)."""
+    """Every exported function, as (name, is_unsafe, params, return type, body)."""
     lines = source.splitlines()
     for index, line in enumerate(lines):
         if line.strip() != MARKER:
@@ -58,8 +58,10 @@ def signatures(source):
         params = text[match.end():position - 1]
         rest = text[position:text.index("{", position)].strip()
         returns = rest[2:].strip() if rest.startswith("->") else None
+        open_brace = text.index("{", position)
+        body = text[open_brace:re.compile(r"\n\}(\n|\Z)").search(text, open_brace).start()]
 
-        yield match.group(2), bool(match.group(1)), parameters(params), returns
+        yield match.group(2), bool(match.group(1)), parameters(params), returns, body
 
 
 def parameters(params):
@@ -93,6 +95,27 @@ def parameters(params):
     return pairs
 
 
+def check_lent(name, params, body):
+    """Refuse an export that does not hold its values to `rtdt::any`'s rule.
+
+    One handed a value it changes, takes over or writes, and another value
+    beside it, has to begin with `lend!` naming every one of them, which checks
+    that none of the first kind overlaps another.
+    """
+    values = [n for n, ty in params if ty.startswith("rtdt::Any")]
+    exclusive = [n for n, ty in params if re.match(r"rtdt::Any(Mut|Owned|Out)\b", ty)]
+    if len(values) < 2 or not exclusive:
+        return
+    lend = re.match(r"\{\s*lend!\((.*?)\);", body, re.S)
+    if not lend:
+        sys.exit(f"{SOURCE}: {name} takes {', '.join(exclusive)} beside other values "
+                 "and does not begin with `lend!`")
+    named = set(re.findall(r"(\w+):", lend.group(1)))
+    missing = [v for v in values if v not in named]
+    if missing:
+        sys.exit(f"{SOURCE}: {name}'s `lend!` leaves out {', '.join(missing)}")
+
+
 def fnv1a(data):
     """FNV-1a, 64 bit. Detects difference; it is not a security boundary."""
     hashed = 0xCBF29CE484222325
@@ -117,9 +140,12 @@ def main():
     if len(found) != exported:
         sys.exit(f"parsed {len(found)} signatures but {exported} are exported")
 
+    for name, _, params, _, body in found:
+        check_lent(name, params, body)
+
     typed = [
         (name, pointer_type(is_unsafe, params, returns))
-        for name, is_unsafe, params, returns in found
+        for name, is_unsafe, params, returns, _ in found
     ]
     fields = "\n".join(f"    pub {name}: {ptype}," for name, ptype in typed)
 
@@ -169,7 +195,7 @@ pub struct RtiTable {{
     # handle anyway can reach them through the table directly.
     wrappers = []
     stateless = []
-    for name, is_unsafe, params, returns in found:
+    for name, is_unsafe, params, returns, _ in found:
         if not params or params[0] != ("rt", "LocalRtHandle"):
             stateless.append(name)
             continue
@@ -214,7 +240,7 @@ use crate::{{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus}};
 ''')
 
     filled = "\n".join(
-        f"    {name}: c::{name}," for name, _, _, _ in found
+        f"    {name}: c::{name}," for name, _, _, _, _ in found
     )
     FILLED.write_text(f'''//! This runtime's functions, as the table a rider is given.
 //!

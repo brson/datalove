@@ -307,42 +307,50 @@ pub(crate) unsafe fn int_mul_impl(
 /// What `set a += b` runs. A sum takes a limb more than the longer operand, for
 /// the carry, and addition leaves that limb spare when it doesn't use it, so a
 /// running total mostly fits where it is: no allocation, nothing freed.
+///
+/// `a` and `b` do not overlap, and so neither do their buffers: `set a += a`
+/// is lowered to an addition and a store.
 pub(crate) unsafe fn int_add_assign_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
     unsafe {
-        // `b` may be `a`, so it is read before `a` is borrowed mutably.
         let b = &*(b_in as *const rtdt::Int);
-        let (b_data, b_size) = (b.data, b.size_and_sign);
-        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b_data, b_size)
+        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), int_limbs(b), b.size_and_sign < 0)
     }
 }
 
 /// Subtract `b` from `a`: a = a - b, in `a`'s own buffer where it has room.
 pub(crate) unsafe fn int_sub_assign_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
     unsafe {
-        // `b` may be `a`, so it is read before `a` is borrowed mutably.
         let b = &*(b_in as *const rtdt::Int);
-        let (b_data, b_size) = (b.data, -b.size_and_sign);
-        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b_data, b_size)
+        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), int_limbs(b), b.size_and_sign > 0)
     }
 }
 
-/// Add the limbs at `b_data`, with signed size `b_size`, into `a`.
+/// The limbs of `int`'s magnitude.
 ///
-/// `b_data` may be `a`'s own buffer, for `set a += a`: each limb of `b` is read
-/// before the same limb of `a` is written, and nothing is read back after.
-/// So the limbs go through raw pointers, never slices that would overlap.
-unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const u32, b_size: i32) -> RtStatus {
+/// # Safety
+///
+/// `int` must be initialized.
+unsafe fn int_limbs(int: &rtdt::Int) -> &[u32] {
+    let len = int.size_and_sign.unsigned_abs() as usize;
+    if len == 0 { &[] } else { unsafe { std::slice::from_raw_parts(int.data, len) } }
+}
+
+/// Add `b_limbs`, a magnitude negated if `b_neg`, into `a`, whose buffer they
+/// are not in.
+///
+/// `a`'s limbs go through a raw pointer, since past its size its buffer is
+/// spare capacity that may never have been written.
+unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_limbs: &[u32], b_neg: bool) -> RtStatus {
     let a_len = a.size_and_sign.unsigned_abs() as usize;
-    let b_len = b_size.unsigned_abs() as usize;
+    let b_len = b_limbs.len();
     if b_len == 0 {
         return RtStatus::Ok;
     }
     // A zero holds no buffer to work in.
     if a_len == 0 {
-        return unsafe { add_assign_elsewhere(rt, a, b_data, b_size) };
+        return unsafe { add_assign_elsewhere(rt, a, b_limbs, b_neg) };
     }
     let a_neg = a.size_and_sign < 0;
-    let b_neg = b_size < 0;
     let capacity = a.capacity.as_usize();
 
     unsafe {
@@ -354,12 +362,12 @@ unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const 
                 return RtStatus::Error;
             }
             if max_len + 1 > capacity {
-                return add_assign_elsewhere(rt, a, b_data, b_size);
+                return add_assign_elsewhere(rt, a, b_limbs, b_neg);
             }
             let mut carry: u64 = 0;
             for i in 0..max_len {
                 let a_limb = if i < a_len { *a_data.add(i) as u64 } else { 0 };
-                let b_limb = if i < b_len { *b_data.add(i) as u64 } else { 0 };
+                let b_limb = b_limbs.get(i).copied().unwrap_or(0) as u64;
                 let sum = a_limb + b_limb + carry;
                 *a_data.add(i) = sum as u32;
                 carry = sum >> 32;
@@ -375,10 +383,7 @@ unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const 
 
         // The magnitudes subtract, the smaller from the larger, whose sign the
         // result takes. Equal ones cancel.
-        let order = compare_magnitude(
-            std::slice::from_raw_parts(a_data, a_len),
-            std::slice::from_raw_parts(b_data, b_len),
-        );
+        let order = compare_magnitude(std::slice::from_raw_parts(a_data, a_len), b_limbs);
         if order == 0 {
             set_zero(rt, a);
             return RtStatus::Ok;
@@ -386,7 +391,7 @@ unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const 
         let (len, negative) = if order > 0 {
             let mut borrow: i64 = 0;
             for i in 0..a_len {
-                let b_limb = if i < b_len { *b_data.add(i) as i64 } else { 0 };
+                let b_limb = b_limbs.get(i).copied().unwrap_or(0) as i64;
                 let diff = *a_data.add(i) as i64 - b_limb - borrow;
                 borrow = (diff < 0) as i64;
                 *a_data.add(i) = (diff + (borrow << 32)) as u32;
@@ -394,12 +399,12 @@ unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const 
             (a_len, a_neg)
         } else {
             if b_len > capacity {
-                return add_assign_elsewhere(rt, a, b_data, b_size);
+                return add_assign_elsewhere(rt, a, b_limbs, b_neg);
             }
             let mut borrow: i64 = 0;
-            for i in 0..b_len {
+            for (i, &b_limb) in b_limbs.iter().enumerate() {
                 let a_limb = if i < a_len { *a_data.add(i) as i64 } else { 0 };
-                let diff = *b_data.add(i) as i64 - a_limb - borrow;
+                let diff = b_limb as i64 - a_limb - borrow;
                 borrow = (diff < 0) as i64;
                 *a_data.add(i) = (diff + (borrow << 32)) as u32;
             }
@@ -415,10 +420,11 @@ unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const 
 }
 
 /// Add into `a` through a new buffer, for a sum that doesn't fit `a`'s.
-unsafe fn add_assign_elsewhere(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const u32, b_size: i32) -> RtStatus {
+unsafe fn add_assign_elsewhere(rt: &mut RtLocal, a: &mut rtdt::Int, b_limbs: &[u32], b_neg: bool) -> RtStatus {
+    let b_len = b_limbs.len() as i32;
     let b = rtdt::Int {
-        data: b_data,
-        size_and_sign: b_size,
+        data: b_limbs.as_ptr(),
+        size_and_sign: if b_neg { -b_len } else { b_len },
         capacity: rtdt::Index::ZERO,
     };
     unsafe {

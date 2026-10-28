@@ -1597,6 +1597,16 @@ null. Both are passed as pointers, so the compiler's backends pass the same
 words as before, and a Rust caller says at the call what it is lending
 rather than the runtime taking a bare pointer on trust.
 
+A value a function changes, takes over or writes overlaps no other value it
+is handed, as a `&mut` overlaps nothing; only `AnyRef`s may share one. For
+the arguments of a call the ownership checker sees to it (D010). The one way
+the language has of naming a place twice in a runtime call is `set x += x`,
+which lowering turns into the operator and a store, keeping the update in
+place for a value rooted elsewhere. An export handed such a value beside
+another begins with `lend!`, which panics on an overlap in a debug build and
+reborrows the value's bytes so that Miri reports any other way of reaching
+them; `gen-rti` refuses an export that leaves it out.
+
 ### Leak Checking
 
 The runtime allocator can record every live allocation, so that `shutdown`

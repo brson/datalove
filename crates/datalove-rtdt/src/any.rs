@@ -15,6 +15,11 @@
 //! Making one asks nothing, since nothing safe can be done with one; whoever
 //! reads or writes through `as_ptr` takes the descriptor's word for what is
 //! there.
+//!
+//! An `AnyMut`, `AnyOwned` or `AnyOut` is what a `&mut` is: no other value
+//! handed to the same call overlaps it. Two `AnyRef`s may be the one value. A
+//! callee may count on that, and the runtime's exports check it in a debug
+//! build.
 
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -95,6 +100,24 @@ macro_rules! exclusive {
             #[inline]
             pub fn as_ref(&self) -> AnyRef<'_> {
                 AnyRef { ptr: self.ptr, _loan: PhantomData }
+            }
+
+            /// The same pointer, derived from a `&mut` of the value's `size`
+            /// bytes.
+            ///
+            /// Nothing changes at run time. Under Miri it makes the bytes this
+            /// pointer's alone, so that reaching them through any other is
+            /// reported as the aliasing it is.
+            ///
+            /// # Safety
+            ///
+            /// The value's `size` bytes must be this pointer's to change.
+            #[inline]
+            pub unsafe fn exclusive(self, size: usize) -> Self {
+                let bytes = unsafe {
+                    std::slice::from_raw_parts_mut(self.ptr.as_ptr().cast::<MaybeUninit<u8>>(), size)
+                };
+                $name { ptr: NonNull::from(bytes).cast(), _loan: PhantomData }
             }
         }
     };

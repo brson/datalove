@@ -717,7 +717,8 @@ fn lower_set<'db>(
     let keys = lower_place_keys(ctx, place)?;
 
     if let Some(op) = set_stmt.op {
-        lower_set_compound(ctx, place, &keys, op, value, expr_temp_mark)?;
+        let aliased = place_root(ctx, ctx.expr(value_expr)) == Some(place.root.text(ctx.db).as_ref());
+        lower_set_compound(ctx, place, &keys, op, value, aliased, expr_temp_mark)?;
     } else if place.steps.is_empty() {
         lower_set_simple(ctx, place, value)?;
     } else if place_contains_index(place) {
@@ -804,17 +805,32 @@ fn store_slot<'db>(ctx: &mut LowerCtx<'db>, slot: SlotId, value_id: ValueId) {
     }
 }
 
+/// The binding a place expression is rooted at, if it is one.
+fn place_root<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<&'db str> {
+    match expr.kind() {
+        ExprFunKind::Place(place) => Some(place.root.text(ctx.db).as_ref()),
+        ExprFunKind::FieldProj(proj) => place_root(ctx, ctx.expr(proj.base)),
+        _ => None,
+    }
+}
+
 /// Lower a compound assignment: `set x += v`, `set xs[i]!.n +!= v`.
 ///
 /// One instruction updates the place in place, once it has been reached. A
 /// dynamic type's arithmetic is the runtime's, by its descriptor, so for one
 /// the operator's result is stored back instead.
+///
+/// So is an `int`'s whose value is `aliased`, rooted where the place is, as
+/// in `set x += x`: an update in place hands the runtime the place to change
+/// and the value to read, and those must not overlap. A copy value is read
+/// before the place is written, so it can be both.
 fn lower_set_compound<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
     keys: &[Operand],
     op: ast::BinOp,
     rhs: Operand,
+    aliased: bool,
     expr_temp_mark: usize,
 ) -> Result<(), LowerError> {
     let target = navigate_place(ctx, place, keys, place.steps.len())?;
@@ -822,7 +838,7 @@ fn lower_set_compound<'db>(
     // A place whose type only a descriptor says is updated by the operator
     // and a store; an update in place is for a type whose operation the
     // backend can emit.
-    if !ty.is_dynamic() {
+    if !ty.is_dynamic() && !(aliased && !ty.is_copy()) {
         return crate::expr::lower_op_assign(ctx, op, target, rhs, &ty, expr_temp_mark);
     }
     let result = crate::expr::lower_binop_operands(ctx, op, target, rhs, ty.clone(), expr_temp_mark)?;

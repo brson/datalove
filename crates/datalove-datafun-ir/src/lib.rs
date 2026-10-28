@@ -1246,7 +1246,9 @@ pub enum Instruction {
     /// dynamic: a type parameter's arithmetic is a store of a `BinOp`'s result.
     ///
     /// The place's value is replaced where it is. For an `int` that can mean
-    /// reusing its buffer, and `rhs` may be the place itself.
+    /// reusing its buffer, so for one `rhs` is never rooted where the place
+    /// is: the runtime is handed the place to change and the value to read,
+    /// which must not overlap. `set x += x` stores a `BinOp`'s result instead.
     ///
     /// **Ownership:** Borrows `rhs`. The place owns its new value as it did
     /// the old one, which the instruction drops.

@@ -46,6 +46,86 @@ fn same_tydesc(a: &rtdt::TyDesc, b: &rtdt::TyDesc) -> bool {
     crate::c::impls::cmp::eq_tydesc(rtdt::TyDescRef::from_ref(a), rtdt::TyDescRef::from_ref(b))
 }
 
+/// Hold the values an export is handed to what `rtdt::any` asks of a call: no
+/// value it changes, takes over or writes overlaps another it is handed.
+///
+/// In a debug build the bytes are compared, and an overlap panics. Then each
+/// value the export changes, takes or writes is rebound to a pointer derived
+/// from a `&mut` of its bytes, which is nothing at run time and under Miri
+/// makes reaching those bytes through any other argument a reported error.
+///
+/// Every export with such a value and another beside it begins with this,
+/// naming each value and its size; `gen-rti` refuses one that doesn't.
+macro_rules! lend {
+    ($function:literal; $($value:ident: $size:expr),+ $(,)?) => {
+        if cfg!(debug_assertions) {
+            check_disjoint($function, &[$(Lend::lent(&$value, stringify!($value), $size)),+]);
+        }
+        $(let $value = unsafe { Lend::hold($value, $size) };)+
+    };
+}
+
+/// One value an export is handed, as `lend!` sees it.
+struct Lent {
+    name: &'static str,
+    at: usize,
+    size: usize,
+    exclusive: bool,
+}
+
+/// What `lend!` does with each kind of value.
+trait Lend: Sized {
+    fn lent(&self, name: &'static str, size: usize) -> Lent;
+
+    /// The value, held to its bytes if the export changes, takes or writes
+    /// it.
+    ///
+    /// # Safety
+    ///
+    /// As for `AnyMut::exclusive`.
+    unsafe fn hold(self, size: usize) -> Self;
+}
+
+impl Lend for rtdt::AnyRef<'_> {
+    fn lent(&self, name: &'static str, size: usize) -> Lent {
+        Lent { name, at: self.as_ptr().addr(), size, exclusive: false }
+    }
+
+    unsafe fn hold(self, _size: usize) -> Self {
+        self
+    }
+}
+
+macro_rules! lend_exclusive {
+    ($($ty:ident),+) => {$(
+        impl Lend for rtdt::$ty<'_> {
+            fn lent(&self, name: &'static str, size: usize) -> Lent {
+                Lent { name, at: self.as_ptr().addr(), size, exclusive: true }
+            }
+
+            unsafe fn hold(self, size: usize) -> Self {
+                unsafe { self.exclusive(size) }
+            }
+        }
+    )+};
+}
+
+lend_exclusive!(AnyMut, AnyOwned, AnyOut);
+
+/// Panic if a value `function` changes, takes or writes overlaps another.
+fn check_disjoint(function: &str, values: &[Lent]) {
+    for (i, a) in values.iter().enumerate() {
+        for b in &values[i + 1..] {
+            let overlap = a.size > 0 && b.size > 0 && a.at < b.at + b.size && b.at < a.at + a.size;
+            assert!(
+                !(overlap && (a.exclusive || b.exclusive)),
+                "{function}: `{}` overlaps `{}`, and one of them is the function's to change",
+                a.name, b.name,
+            );
+        }
+    }
+}
+
 /// Debug assertion to verify pointer alignment matches tydesc requirements.
 #[inline]
 fn debug_assert_aligned(ptr: *const u8, tydesc: &rtdt::TyDesc, name: &str) {
@@ -177,6 +257,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_move_value_local(
     tydesc: &rtdt::TyDesc,
     dst_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("move_value_local";
+        src_ref: tydesc.size as usize,
+        dst_out: tydesc.size as usize,
+    );
     debug_assert_aligned(src_ref.as_ptr(), tydesc, "move_value_local:src");
     debug_assert_aligned(dst_out.as_ptr(), tydesc, "move_value_local:dst");
     unsafe {
@@ -199,6 +283,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_local(
     value_out: rtdt::AnyOut<'_>,
     tydesc_out: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("clone_local";
+        value_in: tydesc_in.size as usize,
+        value_out: tydesc_out.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(value_in.as_ptr(), tydesc_in, "clone_local:value_in.as_ptr()");
     debug_assert_aligned(value_out.as_ptr(), tydesc_out, "clone_local:value_out.as_ptr()");
@@ -308,6 +396,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_add(
     result_out: rtdt::AnyOut<'_>,
     result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_add";
+        a_in: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+        result_out: result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_in.as_ptr(), a_tydesc, "int_add:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_add:b");
@@ -330,6 +423,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_sub(
     result_out: rtdt::AnyOut<'_>,
     result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_sub";
+        a_in: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+        result_out: result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_in.as_ptr(), a_tydesc, "int_sub:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_sub:b");
@@ -352,6 +450,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_mul(
     result_out: rtdt::AnyOut<'_>,
     result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_mul";
+        a_in: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+        result_out: result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_in.as_ptr(), a_tydesc, "int_mul:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_mul:b");
@@ -372,6 +475,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_neg(
     result_out: rtdt::AnyOut<'_>,
     result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_neg";
+        a_in: a_tydesc.size as usize,
+        result_out: result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_in.as_ptr(), a_tydesc, "int_neg:a");
     debug_assert_aligned(result_out.as_ptr(), result_tydesc, "int_neg:result");
@@ -394,6 +501,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
     result_out: rtdt::AnyOut<'_>,
     result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_div_checked";
+        a_in: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+        result_out: result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_in.as_ptr(), a_tydesc, "int_div_checked:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_div_checked:b");
@@ -407,7 +519,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
 
 /// Add a bigint into another in place: a = a + b.
 ///
-/// `b` may be `a` itself.
+/// `b` must not overlap `a`, as no other value argument may overlap one that is
+/// changed (see `rtdt::any`).
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_int_add_assign(
     rt: LocalRtHandle,
@@ -416,6 +529,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_add_assign(
     b_in: rtdt::AnyRef<'_>,
     b_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_add_assign";
+        a_mut: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_mut.as_ptr(), a_tydesc, "int_add_assign:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_add_assign:b");
@@ -428,7 +545,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_add_assign(
 
 /// Subtract a bigint from another in place: a = a - b.
 ///
-/// `b` may be `a` itself.
+/// `b` must not overlap `a`, as no other value argument may overlap one that is
+/// changed (see `rtdt::any`).
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_int_sub_assign(
     rt: LocalRtHandle,
@@ -437,6 +555,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_sub_assign(
     b_in: rtdt::AnyRef<'_>,
     b_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_sub_assign";
+        a_mut: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_mut.as_ptr(), a_tydesc, "int_sub_assign:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_sub_assign:b");
@@ -449,7 +571,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_sub_assign(
 
 /// Multiply a bigint by another in place: a = a * b.
 ///
-/// `b` may be `a` itself.
+/// `b` must not overlap `a`, as no other value argument may overlap one that is
+/// changed (see `rtdt::any`).
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_int_mul_assign(
     rt: LocalRtHandle,
@@ -458,6 +581,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_mul_assign(
     b_in: rtdt::AnyRef<'_>,
     b_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_mul_assign";
+        a_mut: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_mut.as_ptr(), a_tydesc, "int_mul_assign:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_mul_assign:b");
@@ -479,6 +606,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_div_assign_checked(
     b_in: rtdt::AnyRef<'_>,
     b_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_div_assign_checked";
+        a_mut: a_tydesc.size as usize,
+        b_in: b_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(a_mut.as_ptr(), a_tydesc, "int_div_assign_checked:a");
     debug_assert_aligned(b_in.as_ptr(), b_tydesc, "int_div_assign_checked:b");
@@ -498,6 +629,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_from_fixed(
     result_out: rtdt::AnyOut<'_>,
     _result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("int_from_fixed";
+        src_in: src_tydesc.size as usize,
+        result_out: _result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
 
     unsafe {
@@ -553,6 +688,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_error_from_local(
     inner_tydesc: &rtdt::TyDesc,
     dest_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("error_from_local";
+        inner_in: inner_tydesc.size as usize,
+        dest_out: size_of::<rtdt::Error>(),
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(inner_in.as_ptr(), inner_tydesc, "error_from_local:inner");
     unsafe {
@@ -568,6 +707,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
     inner_tydesc: &rtdt::TyDesc,
     dest_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("data_from_local";
+        inner_in: inner_tydesc.size as usize,
+        dest_out: size_of::<rtdt::Data>(),
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(inner_in.as_ptr(), inner_tydesc, "data_from_local:inner");
     unsafe {
@@ -591,6 +734,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop(
     out: rtdt::AnyOut<'_>,
     out_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("dyn_binop";
+        lhs: lhs_tydesc.size as usize,
+        rhs: rhs_tydesc.size as usize,
+        out: out_tydesc.size as usize,
+    );
     let Some(op) = rtdt::DynOp::from_code(op) else {
         return RtStatus::Error;
     };
@@ -618,6 +766,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop_checked(
     out_tydesc: &rtdt::TyDesc,
     overflow_out: *mut bool,
 ) -> RtStatus {
+    lend!("dyn_binop_checked";
+        lhs: lhs_tydesc.size as usize,
+        rhs: rhs_tydesc.size as usize,
+        out: out_tydesc.size as usize,
+    );
     debug_assert!(!overflow_out.is_null(), "overflow_out is null");
     let Some(op) = rtdt::DynOp::from_code(op) else {
         return RtStatus::Error;
@@ -639,6 +792,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_unop(
     out: rtdt::AnyOut<'_>,
     out_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("dyn_unop";
+        value: value_tydesc.size as usize,
+        out: out_tydesc.size as usize,
+    );
     let Some(op) = rtdt::DynUnOp::from_code(op) else {
         return RtStatus::Error;
     };
@@ -693,6 +850,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
     out_tydesc: &rtdt::TyDesc,
     overflow_out: *mut bool,
 ) -> RtStatus {
+    lend!("dyn_neg_checked";
+        value: value_tydesc.size as usize,
+        out: out_tydesc.size as usize,
+    );
     debug_assert!(!overflow_out.is_null(), "overflow_out is null");
     unsafe {
         crate::c::impls::dyn_ops::dyn_neg_checked(
@@ -813,6 +974,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_pretty_print_local(
     string_value_mut: rtdt::AnyMut<'_>,
     string_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("pretty_print_local";
+        arg_value_ref: arg_tydesc_ref.size as usize,
+        string_value_mut: string_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(arg_value_ref.as_ptr(), arg_tydesc_ref, "pretty_print_local:arg");
     debug_assert_aligned(string_value_mut.as_ptr(), string_tydesc, "pretty_print_local:string");
@@ -941,6 +1106,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_add_local(
     amount_tydesc: &rtdt::TyDesc,
     fit_out: *mut bool,
 ) -> RtStatus {
+    lend!("btreemap_add_local";
+        btreemap_value_mut: btreemap_tydesc.size as usize,
+        key_ref: key_tydesc.size as usize,
+        amount_in: amount_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!fit_out.is_null(), "fit_out is null");
     unsafe {
@@ -970,6 +1140,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_local(
     value_in: rtdt::AnyOwned<'_>,
     value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreemap_insert_local";
+        btreemap_value_mut: btreemap_tydesc.size as usize,
+        key_in: key_tydesc.size as usize,
+        value_in: value_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(btreemap_value_mut.as_ptr(), btreemap_tydesc, "btreemap_insert:map");
     debug_assert_aligned(key_in.as_ptr(), key_tydesc, "btreemap_insert:key");
@@ -1007,6 +1182,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_remove_local(
     key_ref: rtdt::AnyRef<'_>,
     key_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreemap_remove_local";
+        btreemap_value_mut: btreemap_tydesc.size as usize,
+        key_ref: key_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(btreemap_value_mut.as_ptr(), btreemap_tydesc, "btreemap_remove:map");
     debug_assert_aligned(key_ref.as_ptr(), key_tydesc, "btreemap_remove:key");
@@ -1041,6 +1220,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_keys_into_local(
     list_value_mut: rtdt::AnyMut<'_>,
     list_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreemap_keys_into_local";
+        btreemap_value_ref: btreemap_tydesc.size as usize,
+        list_value_mut: list_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     unsafe {
         let rt_ref = rt_local::from_handle(rt);
@@ -1065,6 +1248,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_values_into_local(
     list_value_mut: rtdt::AnyMut<'_>,
     list_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreemap_values_into_local";
+        btreemap_value_ref: btreemap_tydesc.size as usize,
+        list_value_mut: list_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     unsafe {
         let rt_ref = rt_local::from_handle(rt);
@@ -1090,6 +1277,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_entries_into_local(
     list_value_mut: rtdt::AnyMut<'_>,
     list_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreemap_entries_into_local";
+        btreemap_value_ref: btreemap_tydesc.size as usize,
+        list_value_mut: list_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     unsafe {
         let rt_ref = rt_local::from_handle(rt);
@@ -1111,6 +1302,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_into_list_local(
     list_value_mut: rtdt::AnyMut<'_>,
     list_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreeset_into_list_local";
+        set_value_ref: set_tydesc.size as usize,
+        list_value_mut: list_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     unsafe {
         let rt_ref = rt_local::from_handle(rt);
@@ -1131,6 +1326,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_local(
     option_value_out: rtdt::AnyOut<'_>,
     option_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreemap_get_local";
+        btreemap_value_ref: btreemap_tydesc.size as usize,
+        key_ref: key_tydesc.size as usize,
+        option_value_out: option_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(btreemap_value_ref.as_ptr(), btreemap_tydesc, "btreemap_get:map");
     debug_assert_aligned(key_ref.as_ptr(), key_tydesc, "btreemap_get:key");
@@ -1164,6 +1364,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_len_local(
     map_tydesc: &rtdt::TyDesc,
     len_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("btreemap_len_local";
+        map_value_ref: map_tydesc.size as usize,
+        len_out: size_of::<rtdt::Index>(),
+    );
     debug_assert_aligned(map_value_ref.as_ptr(), map_tydesc, "btreemap_len:map");
     unsafe { crate::c::impls::btreemap::btreemap_len_impl(map_value_ref.as_ptr(), len_out.as_ptr()) }
 }
@@ -1175,6 +1379,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_len_local(
     set_tydesc: &rtdt::TyDesc,
     len_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("btreeset_len_local";
+        set_value_ref: set_tydesc.size as usize,
+        len_out: size_of::<rtdt::Index>(),
+    );
     debug_assert_aligned(set_value_ref.as_ptr(), set_tydesc, "btreeset_len:set");
     unsafe { crate::c::impls::set::btreeset_len_impl(set_value_ref.as_ptr(), len_out.as_ptr()) }
 }
@@ -1264,6 +1472,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_local(
     value_in: rtdt::AnyOwned<'_>,
     value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("btreemap_set_value_local";
+        btreemap_value_mut: btreemap_tydesc.size as usize,
+        key_ref: key_tydesc.size as usize,
+        value_in: value_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(btreemap_value_mut.as_ptr(), btreemap_tydesc, "btreemap_set_value:map");
     debug_assert_aligned(key_ref.as_ptr(), key_tydesc, "btreemap_set_value:key");
@@ -1336,6 +1549,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_local(
     // Output: 1 if newly inserted, 0 if already existed.
     bool_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("btreeset_insert_local";
+        btreeset_value_mut: btreeset_tydesc.size as usize,
+        element_in: element_tydesc.size as usize,
+        bool_out: size_of::<u8>(),
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(btreeset_value_mut.as_ptr(), btreeset_tydesc, "btreeset_insert:set");
     debug_assert_aligned(element_in.as_ptr(), element_tydesc, "btreeset_insert:element");
@@ -1368,6 +1586,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_remove_local(
     // Output: 1 if removed, 0 if not found.
     bool_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("btreeset_remove_local";
+        btreeset_value_mut: btreeset_tydesc.size as usize,
+        element_ref: element_tydesc.size as usize,
+        bool_out: size_of::<u8>(),
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(btreeset_value_mut.as_ptr(), btreeset_tydesc, "btreeset_remove:set");
     debug_assert_aligned(element_ref.as_ptr(), element_tydesc, "btreeset_remove:element");
@@ -1400,6 +1623,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_contains_local(
     // Output: 1 if contains, 0 if not.
     bool_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("btreeset_contains_local";
+        btreeset_value_ref: btreeset_tydesc.size as usize,
+        element_ref: element_tydesc.size as usize,
+        bool_out: size_of::<u8>(),
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(btreeset_value_ref.as_ptr(), btreeset_tydesc, "btreeset_contains:set");
     debug_assert_aligned(element_ref.as_ptr(), element_tydesc, "btreeset_contains:element");
@@ -1618,6 +1846,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_len_local(
     list_tydesc: &rtdt::TyDesc,
     len_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("list_len_local";
+        list_value_ref: list_tydesc.size as usize,
+        len_out: size_of::<rtdt::Index>(),
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(list_value_ref.as_ptr(), list_tydesc, "list_len:list");
     unsafe {
@@ -1636,6 +1868,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_get_local(
     option_value_out: rtdt::AnyOut<'_>,
     option_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("list_get_local";
+        list_value_ref: list_tydesc.size as usize,
+        option_value_out: option_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(list_value_ref.as_ptr(), list_tydesc, "list_get:list");
     debug_assert_aligned(option_value_out.as_ptr(), option_tydesc, "list_get:option");
@@ -1667,6 +1903,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_set_local(
     element_in: rtdt::AnyOwned<'_>,
     element_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("list_set_local";
+        list_value_mut: list_tydesc.size as usize,
+        element_in: element_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(list_value_mut.as_ptr(), list_tydesc, "list_set:list");
     debug_assert_aligned(element_in.as_ptr(), element_tydesc, "list_set:element");
@@ -1697,6 +1937,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_push_local(
     element_in: rtdt::AnyOwned<'_>,
     element_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("list_push_local";
+        list_value_mut: list_tydesc.size as usize,
+        element_in: element_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(list_value_mut.as_ptr(), list_tydesc, "list_push:list");
     debug_assert_aligned(element_in.as_ptr(), element_tydesc, "list_push:element");
@@ -1726,6 +1970,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_local(
     option_value_out: rtdt::AnyOut<'_>,
     option_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("list_pop_local";
+        list_value_mut: list_tydesc.size as usize,
+        option_value_out: option_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(list_value_mut.as_ptr(), list_tydesc, "list_pop:list");
     debug_assert_aligned(option_value_out.as_ptr(), option_tydesc, "list_pop:option");
@@ -1757,6 +2005,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_local(
     element_in: rtdt::AnyOwned<'_>,
     element_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("list_insert_local";
+        list_value_mut: list_tydesc.size as usize,
+        element_in: element_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(list_value_mut.as_ptr(), list_tydesc, "list_insert:list");
     debug_assert_aligned(element_in.as_ptr(), element_tydesc, "list_insert:element");
@@ -1788,6 +2040,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_remove_local(
     option_value_out: rtdt::AnyOut<'_>,
     option_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("list_remove_local";
+        list_value_mut: list_tydesc.size as usize,
+        option_value_out: option_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(list_value_mut.as_ptr(), list_tydesc, "list_remove:list");
     debug_assert_aligned(option_value_out.as_ptr(), option_tydesc, "list_remove:option");
@@ -1912,6 +2168,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
     tensor_value_out: rtdt::AnyOut<'_>,
     tensor_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("tensor_create_from_slice_local";
+        shape_in: shape_tydesc.size as usize,
+        tensor_value_out: tensor_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!slice_ref.is_null(), "slice_ref is null");
     debug_assert_aligned(slice_ref, element_tydesc, "tensor_create_from_slice:slice");
@@ -1964,6 +2224,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
     element_value_out: rtdt::AnyOut<'_>,
     element_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("tensor_get_local";
+        tensor_value_ref: tensor_tydesc.size as usize,
+        element_value_out: element_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!indices_ptr.is_null(), "indices_ptr is null");
     debug_assert_aligned(tensor_value_ref.as_ptr(), tensor_tydesc, "tensor_get:tensor");
@@ -1999,6 +2263,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
     element_in: rtdt::AnyOwned<'_>,
     element_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("tensor_set_local";
+        tensor_value_mut: tensor_tydesc.size as usize,
+        element_in: element_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!indices_ptr.is_null(), "indices_ptr is null");
     debug_assert_aligned(tensor_value_mut.as_ptr(), tensor_tydesc, "tensor_set:tensor");
@@ -2029,6 +2297,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_transpose_local(
     tensor_value_out: rtdt::AnyOut<'_>,
     tensor_tydesc_out: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("tensor_transpose_local";
+        tensor_ref: tensor_tydesc_ref.size as usize,
+        tensor_value_out: tensor_tydesc_out.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!perm_ptr.is_null(), "perm_ptr is null");
     debug_assert_aligned(tensor_ref.as_ptr(), tensor_tydesc_ref, "tensor_transpose:tensor_in");
@@ -2060,6 +2332,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_slice_local(
     result_value_out: rtdt::AnyOut<'_>,
     result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("tensor_slice_local";
+        tensor_value_in: tensor_tydesc.size as usize,
+        result_value_out: result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!ranges_ptr.is_null(), "ranges_ptr is null");
     debug_assert_aligned(tensor_value_in.as_ptr(), tensor_tydesc, "tensor_slice:tensor");
@@ -2089,6 +2365,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_reshape_local(
     result_value_out: rtdt::AnyOut<'_>,
     result_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("tensor_reshape_local";
+        tensor_value_in: tensor_tydesc.size as usize,
+        new_shape_in: new_shape_tydesc.size as usize,
+        result_value_out: result_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(tensor_value_in.as_ptr(), tensor_tydesc, "tensor_reshape:tensor");
     debug_assert_aligned(new_shape_in.as_ptr(), new_shape_tydesc, "tensor_reshape:shape");
@@ -2168,6 +2449,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_hyperplane_clone_local(
     axis0_index: rtdt::IndexRepr,
     sub_tensor_out: rtdt::AnyOut<'_>,
 ) -> RtStatus {
+    lend!("tensor_hyperplane_clone_local";
+        tensor_value_ref: tensor_tydesc.size as usize,
+        sub_tensor_out: size_of::<rtdt::Tensor>(),
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(tensor_value_ref.as_ptr(), tensor_tydesc, "tensor_hyperplane_clone:tensor");
     unsafe {
@@ -2228,6 +2513,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_push_row_local(
     row_ref: rtdt::AnyRef<'_>,
     row_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("table_push_row_local";
+        table_mut: table_tydesc.size as usize,
+        row_ref: row_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(table_mut.as_ptr(), table_tydesc, "table_push_row:table");
     debug_assert_aligned(row_ref.as_ptr(), row_tydesc, "table_push_row:row");
@@ -2304,6 +2593,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_set_local(
     value_ref: rtdt::AnyRef<'_>,
     value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
+    lend!("table_set_local";
+        table_mut: table_tydesc.size as usize,
+        value_ref: value_tydesc.size as usize,
+    );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(table_mut.as_ptr(), table_tydesc, "table_set:table");
     debug_assert_aligned(value_ref.as_ptr(), value_tydesc, "table_set:value");

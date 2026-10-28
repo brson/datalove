@@ -1106,6 +1106,10 @@ pub(crate) fn lower_op_assign<'db>(
         ast::BinOp::DivOptional => (BinOp::Div, Some(Failure::None)),
         other => panic!("{other:?} in a compound assignment, which typecheck refuses"),
     };
+    // The runtime updates an `int` given the place to change and the value to
+    // read, which must not overlap; `lower_set_compound` stores the operator's
+    // result instead where they would.
+    assert!(ty.is_copy() || place != rhs, "a compound assignment's value is its own place");
     let Some(failure) = failure else {
         ctx.emit(Instruction::OpAssign { place, op, rhs });
         ctx.emit_expr_temp_drops_since(expr_temp_mark);
