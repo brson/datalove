@@ -358,6 +358,7 @@ pub fn typecheck_script_unit<'db>(
     let mut new_module_aliases = Vec::new();
     let mut new_type_aliases = Vec::new();
     let mut imported_modules: Vec<String>;
+    let mut const_needs = Vec::new();
 
     // Typecheck this unit based on kind.
     match &unit_spec.kind {
@@ -473,6 +474,7 @@ pub fn typecheck_script_unit<'db>(
                 ctx.reach(statement);
                 check_statement(&mut ctx, statement);
             }
+            const_needs = ctx.check_const_deps(parsed.statements(db));
             ctx.report_inline_cycles();
 
             // Extract new bindings for subsequent units.
@@ -551,7 +553,7 @@ pub fn typecheck_script_unit<'db>(
     let mut function_types: Vec<_> = ctx.functions.into_iter_unordered().collect();
     function_types.sort_by(|(a, _), (b, _)| a.as_str(db).cmp(b.as_str(db)));
     let result = UnitTypecheckResultTracked::new(
-        db, errors, ctx.expr_types, ctx.call_targets, function_types, ctx.resolved_data,
+        db, errors, ctx.expr_types, ctx.call_targets, function_types, ctx.resolved_data, const_needs,
     );
 
     ScriptUnitTypecheckOutput::new(
@@ -698,6 +700,7 @@ pub fn typecheck_module<'db>(
         ctx.reach(statement);
         check_statement(&mut ctx, statement);
     }
+    let const_needs = ctx.check_const_deps(parsed.statements(db));
     ctx.report_inline_cycles();
 
     // Use exports from name resolution (already computed).
@@ -722,6 +725,7 @@ pub fn typecheck_module<'db>(
         ctx.expr_types,
         ctx.call_targets,
         ctx.resolved_data,
+        const_needs,
     )
 }
 

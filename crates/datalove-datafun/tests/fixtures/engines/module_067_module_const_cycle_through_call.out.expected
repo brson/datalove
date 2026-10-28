@@ -10,8 +10,41 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "const \'CHEAPEST\': depends on a function that is not available yet, which means it and that function depend on each other: price_at",
+                status: "Success",
+                ir: """
+                    fn price_at(p0):
+                    block0:
+                        v0 = staticref [{price = 2f64}]
+                        v1 = listboundscheck *v0[p0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = listelementref *v0[p0]
+                        v4 = getfield *v3.0
+                        v5 = some v4
+                        return v5
+                    
+                    fn cheapest():
+                    block0:
+                        v0 = const 0index
+                        v1 = call m0.u0(v0)
+                        v2, v3 = unwrap_option v1
+                        branch v3, block1, block2
+                    block1:
+                        return v2
+                    block2:
+                        goto block3
+                    block3:
+                        v4 = const 0f64
+                        return v4
+                    
+                    fn main():
+                    block0:
+                        v0 = const 2f64
+                        return v0
+                """,
             ),
             output: "",
         ),
@@ -19,15 +52,23 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u2()
+                        debuglog v0
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
+            debug_output: Some("2.0\n"),
         ),
     ],
 )

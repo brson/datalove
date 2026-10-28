@@ -1,8 +1,8 @@
 # Lexical Scope at the Top Level
 
 Written October 2026, after a script const calling a function that names
-another const was found to panic. Phase 1, lexical name resolution, is
-implemented; the const walk is not.
+another const was found to panic. Phases 1 and 2, lexical name resolution and
+the const walk, are implemented.
 
 A function body is read top to bottom: a name is in scope from where it is
 bound. The top level of a module or script is not. There most declarations
@@ -124,23 +124,32 @@ end fun
 A cycle is the case `D = C`. It needs no rule of its own and gets no message of
 its own.
 
-**Evaluation is one walk in source order:**
+**The check is one search, in the typechecker** (`check_const_deps`). The walk
+records which functions each const's initializer calls, and which consts and
+functions each function's body names and calls. Then the consts are taken in
+source order, and from each the functions it reaches are searched for a const
+at or after it, which is F089 at the const, with the chain: "`C` calls `f`,
+which calls `g`, which names `D`". A function searched from one const named
+only consts above that one, so it is fine for every const after it too, and
+the search shares one visited set across all of them: each function is
+searched once.
 
-1. At each const, lower each function its initializer can reach that is not
-   lowered yet, then evaluate it.
-2. A function lowered there that names a const with no value yet is the
-   error, reported at the const with the chain: "`C` calls `f`, which names
-   `D`, declared after `C`".
-3. After the walk, lower the functions no const reached.
+**Evaluation is one walk in source order.** The check also gives each function
+the last const it names, and lowering keys on that:
 
-Step 2 is what lowering does already when it meets `BindingNotAvailable`; it
-stops deferring and reports instead. The walk replaces both strata, the
-deferral, and `first_uncallable_target`, in modules and scripts alike.
+1. Lower every function that names no const, as before.
+2. At each const in source order, evaluate it, then lower the functions some
+   const reaches whose last-named const it is.
+3. Lower the functions no const reaches, all together.
 
-A function lowered for one const stays valid for every const after it: it
-names only consts already evaluated, or it would have been the error. So the
-walk shares one visited set across all the consts, and no function is lowered
-or walked twice.
+By the check, everything a const reaches is lowered before it is evaluated, so
+nothing waits and nothing is retried, and each function is lowered once. Step
+2 runs a batch at a time on one thread, each batch waiting on the const before
+it; steps 1 and 3 run across modules in parallel. Keeping step 2 to what a
+const reaches keeps most of the lowering in the parallel steps, since most
+functions that name a const are never called by one. This
+replaces both two-stratum schemes, the scripts' and the modules', with the
+deferral's second pass and `first_uncallable_target`.
 
 Modules form a DAG under `require` (a cycle is F083), so each module's walk
 needs only the modules it requires to be finished, not the whole graph.
@@ -197,10 +206,9 @@ files. The test suite finds those in phase 2.
    position's scope. For scripts, make `require`, `import` and `type` lexical
    within a unit. New errors for a name used above its declaration. Fix
    fixture 803.
-2. **The const walk.** Replace both two-stratum schemes with the walk, the
-   deferral and `first_uncallable_target` with the error at the const. This
-   closes [A script const that calls a function declared after it
-   panics](issues.md#user-content-a-script-const-that-calls-a-function-declared-after-it-panics).
+2. **The const walk.** Replace both two-stratum schemes with the walk, and
+   `first_uncallable_target` with F089 at the const. This closed the issue
+   of a script const that called a function declared after it panicking.
 3. **Docs.** A scope section in `botspec.md`, rewriting 8.2's ordering
    paragraph; the typing rules; the compiler guide.
 
@@ -216,7 +224,8 @@ Each phase leaves `just test` passing and is committed on its own.
   here, under the plain rule. Since aliases are structural, a signature naming
   one declared below would mean the same thing; exempting signatures would
   cost an exception and buy nothing the measured code uses.
-- **Should the const check move into the typechecker?** The walk finds it in
-  const evaluation, where it falls out for free. The typechecker records call
-  targets, so a depth-first walk over the call graph there could report it a
-  phase earlier, as the other name-resolution errors are.
+- **Should the check stay a search over the call graph?** It is linear, but
+  it is a second walk after typechecking. The typechecker could carry each
+  function's last-named const forward through its callees as it checks them,
+  if functions were checked callee first; they are checked in source order,
+  so it cannot today.

@@ -1287,12 +1287,29 @@ the bigint `A` it passes by value. `match`, the destructuring `if` and `let`
 destructuring move what they take apart, so a linear const is taken apart as
 `match C@`.
 
-**Ordering.** A module-level const is evaluated after the functions it calls are
-compiled, and before the functions that name it. Functions naming no
-module-level const are therefore compiled first, which is what lets a const call
-a function while another function reads that const. If a const calls a function
-that itself names a module-level const, the two depend on each other and the
-compiler reports it rather than choosing an order.
+**Ordering.** A const may depend only on what is declared above it, including
+through the functions it calls. A function is in scope throughout (Section 2.6),
+so a const may call one declared below it, but whatever that function names,
+directly or through the functions it calls, must be declared above the const.
+A const that depends on itself, or on a const declared after it, this way is
+an error (F089), reported at the const with the chain of calls:
+
+```datalove
+const A: int = 2
+const B: int = twice()      // fine: `twice` names `A`, which is above `B`
+fun twice(): int
+    ret A + A
+end fun
+
+const C: int = f()          // F089: `C` calls `f`, which names `D`
+const D: int = 1
+fun f(): int
+    ret D
+end fun
+```
+
+Consts are evaluated in source order, and each function is compiled once the
+last const it names has its value.
 
 ### 8.3 Set
 

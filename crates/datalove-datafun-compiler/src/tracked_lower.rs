@@ -894,9 +894,9 @@ pub struct ModuleLowerOutcome<'db> {
 ///   the reason given there.
 /// - `module_consts` is sorted, since it arrives as a `HashMap` and the key has
 ///   to hash the same way twice.
-/// - `restrict` is `None` on the first stratum and `Some` on the second, where
-///   it names the functions that were waiting on a module const. `Some(empty)`
-///   means this module has nothing to lower, which is not the same as `None`.
+/// - `restrict` is `None` on the first lowering and `Some` for a batch of the
+///   functions that were waiting on a module const, as its value arrives; see
+///   `evaluate_module_consts_in_order`.
 #[salsa::tracked]
 pub fn lower_module_functions<'db>(
     db: &'db dyn salsa::Database,
@@ -939,9 +939,9 @@ pub fn lower_module_functions<'db>(
 
             func_name_to_id.push((func_name.clone(), func_id));
 
-            // On the second pass only the deferred functions are lowered.
-            // Their FuncIds still come from statement position, so the
-            // numbering matches whichever pass a function lands in.
+            // A batch lowers only the functions named. Their FuncIds still
+            // come from statement position, so the numbering matches whichever
+            // batch a function lands in.
             if restricting {
                 let wanted = restrict
                     .map(|names| names.iter().any(|n| n == &func_name))
@@ -1109,7 +1109,6 @@ pub fn evaluate_all_module_consts<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &mut dyn CtfeEvaluator,
     lowered_functions: &LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-    callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
     module_level_errors: &LookupMap<ModuleId<'db>, Vec<String>>,
@@ -1129,7 +1128,7 @@ pub fn evaluate_all_module_consts<'db>(
         let mut consts = Vec::new();
         let mut errors = Vec::new();
 
-        // Module-level consts were evaluated between the lowering strata. They
+        // Module-level consts were evaluated as the functions were lowered. They
         // are recorded under a bare name and seeded into every function, so a
         // function-level const can name one.
         let module_level = module_consts.get(module_id).cloned().unwrap_or_default();
@@ -1165,7 +1164,7 @@ pub fn evaluate_all_module_consts<'db>(
         // wait for the copies.
         let mut env = ConstEvalEnv {
             db, expr_types, call_targets, evaluator, lowered: funcs,
-            func_name_to_id: &func_map, func_id_map, callable: Some(callable),
+            func_name_to_id: &func_map, func_id_map,
             data_files: single_typecheck.data_files(db),
         };
         let mut body = Vec::new();
@@ -1262,84 +1261,161 @@ fn module_graph_has_module_consts<'db>(
         .any(|module| module_const_kinds(db, module).0)
 }
 
-/// Evaluate the module-level consts of every module.
+/// Evaluate every module's top-level consts, lowering the functions that were
+/// waiting on them as it goes.
 ///
-/// Runs between the two lowering strata, so it can call any function that does
-/// not itself name a module const. Consts are evaluated in source order, which
-/// is what lets one name another declared above it.
-fn evaluate_module_level_consts<'db>(
+/// Modules in dependency order, so a const calling into a module it requires
+/// finds that module finished. Within a module, consts in source order: each is
+/// evaluated, then the functions whose last-named const it is are lowered, so
+/// each function is lowered once and is ready before any const that can call
+/// it. A const reaching a function that names a const at or below it was
+/// refused by the typechecker (F089), so nothing a const calls is still
+/// waiting when it runs. See `botdocs/plan-lexical-scope.md`.
+///
+/// `deferred` is what the first lowering left waiting, by module; what this
+/// lowers is merged into `lowered_modules`. Only the functions some const
+/// reaches are lowered here. The rest wait for every const, and go in `rest`,
+/// for the caller to lower all together.
+///
+/// What this lowers is lowered on the thread that called it, a batch at a
+/// time, since each batch waits on a const evaluated just before it. That is
+/// why it is kept to what a const reaches.
+#[allow(clippy::too_many_arguments)]
+fn evaluate_module_consts_in_order<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
+    ownership_analysis: ModuleGraphAnalysis<'db>,
+    func_id_map: FuncIdMap<'db>,
     evaluator: &mut dyn CtfeEvaluator,
-    lowered_functions: &LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-    callable: &ModuleFunctionRegistry,
-    func_id_map: &FuncIdLookup<'db>,
+    lowered_modules: &mut LoweredModules<'db>,
+    deferred: &LookupMap<ModuleId<'db>, Vec<String>>,
+    rest: &mut LookupMap<ModuleId<'db>, Vec<String>>,
     errors_out: &mut LookupMap<ModuleId<'db>, Vec<String>>,
     mut cache: Option<&mut ConstCache>,
 ) -> LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> {
+    let graph = parsed_graph.graph(db);
     let typecheck_module_results = typecheck_result.module_results(db);
+    let ownership_results = ownership_analysis.module_results(db);
+    let ir_ids = ir_module_ids(db, parsed_graph);
+    let func_ids = func_id_lookup(db, func_id_map);
+    let mut registry = ctfe_module_registry(db, parsed_graph, lowered_modules.clone(), func_id_map)
+        .as_ref().clone();
+    evaluator.set_module_registry(Arc::new(registry.clone()));
     let mut result = LookupMap::new();
 
-    for (module_id, parsed) in module_statements(db, parsed_graph) {
-
-        let module_id = &module_id;
-        let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let waiting = deferred.get(&module_id).cloned().unwrap_or_default();
+        if !module_const_kinds(db, module).0 {
+            assert!(waiting.is_empty(), "a module with no consts has functions waiting on one");
             continue;
+        }
+        let Some(single_typecheck) = typecheck_module_results.get(&module_id).copied() else {
+            continue;
+        };
+        let single_ownership = *ownership_results.get(&module_id)
+            .expect("a typechecked module has an ownership analysis");
+        let mut batches = WaitingBatches {
+            db, module, single_typecheck, single_ownership,
+            func_ids: reachable_func_ids(db, graph, func_id_map, module_id),
+            ir_module_id: *ir_ids.get(&module_id).expect("every parsed module is numbered"),
+            unlowerable: Vec::new(),
         };
         let path = module_id.path(db);
         let cached = cache.as_deref().and_then(|c| c.module_level(path)).cloned();
         let verifying = cache.as_deref().is_some_and(ConstCache::verifying);
-        if let Some(consts) = &cached {
-            if !verifying {
-                cache.as_deref_mut().expect("a hit came from the cache").note_reused(path);
-                if !consts.is_empty() {
-                    result.insert(*module_id, consts.clone());
-                }
-                continue;
-            }
+        // A hit still takes the batches a miss would, with the values read
+        // rather than evaluated, so that each batch's lowering is keyed the
+        // same way and an unchanged recompile is all memo hits.
+        let reuse = cached.as_ref().filter(|_| !verifying);
+        if reuse.is_some() {
+            cache.as_deref_mut().expect("a hit came from the cache").note_reused(path);
         }
 
-        let expr_types = single_typecheck.expr_types(db);
-        let call_targets = single_typecheck.call_targets(db);
+        // The const each waiting function a const reaches waits on, by its
+        // place among the module's consts.
+        let needs: HashMap<String, u32> = single_typecheck.const_needs(db).iter()
+            .map(|(name, index)| (name.text(db).S(), *index))
+            .collect();
+        let unreached: Vec<String> = waiting.iter()
+            .filter(|name| !needs.contains_key(*name))
+            .cloned()
+            .collect();
+        if !unreached.is_empty() {
+            rest.insert(module_id, unreached);
+        }
 
-        let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
-            Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
-            None => (&[], HashMap::new()),
-        };
-
-        let mut env = ConstEvalEnv {
-            db, expr_types, call_targets, evaluator, lowered: funcs,
-            func_name_to_id: &func_map, func_id_map, callable: Some(callable),
-            data_files: single_typecheck.data_files(db),
-        };
+        let parsed = datalove_datafun_parser::parse_module_ast(db, module);
         let mut consts: HashMap<String, (IrType, Arc<ConstValue>)> = HashMap::new();
         let mut failed = false;
+        let mut index = 0;
         for statement in parsed.statements(db).iter() {
-            if let Statement::Const(const_stmt) = statement {
-                // A module const is outside any function, so there is no return
-                // type for an early-return operator to check against, and no
-                // const parameters for it to name.
-                let name = const_stmt.name.text(db).S();
-                let value = parsed.body(db).arena.get(const_stmt.value);
-                let evaluated = const_type(&env, value).and_then(|ty| {
-                    evaluate_const(&mut env, value, &ty, &consts, None, &Default::default())
-                        .map(|value| (ty, value.expect("nothing is deferred at module level")))
-                });
-                match evaluated {
-                    Ok((ir_type, value)) => {
-                        consts.insert(name, (ir_type, value));
-                    }
-                    Err(error) => {
-                        failed = true;
-                        errors_out.entry(*module_id).or_default()
-                            .push(NamedConstError { name, error }.to_string());
-                    }
+            let Statement::Const(const_stmt) = statement else { continue };
+            let name = const_stmt.name.text(db).S();
+            if let Some(reused) = reuse {
+                // A module whose consts all evaluated is the only kind cached.
+                let value = reused.get(&name).expect("a cached module has every const");
+                consts.insert(name, value.clone());
+                let ready: Vec<String> = waiting.iter()
+                    .filter(|name| needs.get(*name) == Some(&index))
+                    .cloned()
+                    .collect();
+                batches.lower(ready, &consts, lowered_modules, &mut registry, evaluator);
+                index += 1;
+                continue;
+            }
+            let lowered = lowered_modules.iter()
+                .find(|(id, _)| *id == module_id)
+                .map(|(_, lowered)| lowered.functions(db));
+            let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match &lowered {
+                Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
+                None => (&[], HashMap::new()),
+            };
+            let mut env = ConstEvalEnv {
+                db,
+                expr_types: single_typecheck.expr_types(db),
+                call_targets: single_typecheck.call_targets(db),
+                evaluator: &mut *evaluator,
+                lowered: funcs,
+                func_name_to_id: &func_map,
+                func_id_map: func_ids,
+                data_files: single_typecheck.data_files(db),
+            };
+            // A module const is outside any function, so there is no return
+            // type for an early-return operator to check against, and no
+            // const parameters for it to name.
+            let value = parsed.body(db).arena.get(const_stmt.value);
+            let evaluated = const_type(&env, value).and_then(|ty| {
+                evaluate_const(&mut env, value, &ty, &consts, None, &Default::default())
+                    .map(|value| (ty, value.expect("nothing is deferred at module level")))
+            });
+            match evaluated {
+                Ok((ir_type, value)) => {
+                    consts.insert(name, (ir_type, value));
+                }
+                Err(error) => {
+                    failed = true;
+                    errors_out.entry(module_id).or_default()
+                        .push(NamedConstError { name, error }.to_string());
                 }
             }
+            let ready: Vec<String> = waiting.iter()
+                .filter(|name| needs.get(*name) == Some(&index))
+                .cloned()
+                .collect();
+            batches.lower(ready, &consts, lowered_modules, &mut registry, evaluator);
+            index += 1;
         }
 
-        if let Some(cache) = cache.as_deref_mut() {
+        for name in &batches.unlowerable {
+            errors_out.entry(module_id).or_default().push(format!(
+                "function '{}' names a module const that could not be evaluated",
+                name
+            ));
+        }
+
+        if let Some(cache) = cache.as_deref_mut().filter(|_| reuse.is_none()) {
             match cached {
                 Some(cached) => {
                     assert_eq!(cached, consts, "the const cache kept stale module consts for {}", path);
@@ -1355,11 +1431,67 @@ fn evaluate_module_level_consts<'db>(
         }
 
         if !consts.is_empty() {
-            result.insert(*module_id, consts);
+            result.insert(module_id, consts);
         }
     }
 
     result
+}
+
+/// Lowers a module's waiting functions a batch at a time, as the consts they
+/// wait on get their values.
+struct WaitingBatches<'db> {
+    db: &'db dyn salsa::Database,
+    module: Module<'db>,
+    single_typecheck: SingleModuleTypecheckResult<'db>,
+    single_ownership: SingleModuleAnalysis<'db>,
+    func_ids: ReachableFuncIds<'db>,
+    ir_module_id: IrModuleId,
+    /// Functions still waiting after their batch: a const they name failed.
+    unlowerable: Vec<String>,
+}
+
+impl<'db> WaitingBatches<'db> {
+    /// Lower `names` against `consts`, merge them into the module's lowered
+    /// functions, and give the evaluator a registry that can call them.
+    fn lower(
+        &mut self,
+        names: Vec<String>,
+        consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
+        lowered_modules: &mut LoweredModules<'db>,
+        registry: &mut ModuleFunctionRegistry,
+        evaluator: &mut dyn CtfeEvaluator,
+    ) {
+        if names.is_empty() {
+            return;
+        }
+        let db = self.db;
+        // Sorted, because the memo key has to hash the same way for the same
+        // consts.
+        let mut keyed: Vec<(String, (IrType, SharedConst))> = consts.iter()
+            .map(|(name, (ty, value))| (name.clone(), (ty.clone(), SharedConst(Arc::clone(value)))))
+            .collect();
+        keyed.sort_by(|a, b| a.0.cmp(&b.0));
+        let outcome = lower_module_functions(
+            db, self.module, self.single_typecheck, self.single_ownership, self.func_ids,
+            keyed, Some(names),
+        );
+        self.unlowerable.extend(outcome.deferred.iter().cloned());
+        let Some(batch) = outcome.lowered else { return };
+        let module_id = self.module.id(db);
+        let merged = match lowered_modules.iter_mut().find(|(id, _)| *id == module_id) {
+            Some((_, lowered)) => {
+                *lowered = merge_lowered(db, *lowered, batch);
+                *lowered
+            }
+            None => {
+                lowered_modules.push((module_id, batch));
+                batch
+            }
+        };
+        registry.set_module_code_units(self.ir_module_id, Arc::clone(ctfe_module_units(db, merged)));
+        evaluator.set_module_registry(Arc::new(registry.clone()));
+    }
 }
 
 /// Lower module graph with CTFE evaluator for complex const expressions.
@@ -1411,16 +1543,14 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Compute func_id_map first (needed for lowering).
     let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
 
-    // Phase 5a: lower module functions, in strata.
+    // Phase 5a: lower the module functions that name no module const.
     //
     // A function that names a module-level const needs that const's value to
-    // lower, and evaluating the const may call functions in the same module. So
-    // the functions that name no module const go first, the module consts are
-    // evaluated against those, and the rest follow. A const whose evaluation
-    // needs a function from the second stratum is a cycle, and shows up as the
-    // const failing to evaluate rather than as anything lowering wrongly.
+    // lower, and evaluating a const may call functions. So the functions that
+    // name none go first, all together; the rest wait, and are lowered in
+    // batches as the consts they name are evaluated, below.
     //
-    // What the first stratum does have is the data consts, which need no
+    // What this lowering does have is the data consts, which need no
     // evaluating; see `data_consts`.
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
     let data_consts: LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> =
@@ -1434,40 +1564,38 @@ pub fn lower_module_graph_with_evaluator<'db>(
             })
             .collect();
     let mut deferred: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
-    let first_stratum = lower_all_module_functions(
+    let mut lowered_modules = lower_all_module_functions(
         db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
         &data_consts, &mut deferred, None, mode,
     );
 
-    let mut lowered_modules = first_stratum;
 
-    // Phase 5a/b boundary: evaluate module-level consts against what is lowered
-    // so far. Done even when const inlining is skipped, since a module const is
-    // resolved when its reference is lowered rather than by a later pass, so
-    // there is nothing for that flag to skip.
+    // Phase 5a/b: evaluate the module-level consts in order, lowering the
+    // functions that were waiting on each as its value arrives. Done even when
+    // const inlining is skipped, since a module const is resolved when its
+    // reference is lowered rather than by a later pass, so there is nothing
+    // for that flag to skip.
     let mut module_const_errors: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
+    let mut rest: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
     let module_consts = if deferred.is_empty() && !module_graph_has_module_consts(db_salsa, parsed_graph) {
         LookupMap::new()
     } else {
-        let lowered_functions = ir_map(db_salsa, &lowered_modules);
-        let func_ids = func_id_lookup(db_salsa, func_id_map);
         warm_ctfe_module_units(db, mode, &lowered_modules);
-        let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
-        evaluator.set_module_registry(Arc::clone(module_registry));
-        evaluate_module_level_consts(
-            db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, module_registry,
-            func_ids, &mut module_const_errors, const_cache.as_deref_mut(),
+        evaluate_module_consts_in_order(
+            db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map, evaluator,
+            &mut lowered_modules, &deferred, &mut rest, &mut module_const_errors, const_cache.as_deref_mut(),
         )
     };
 
-    // Second stratum: the functions that were waiting on those values.
-    if !deferred.is_empty() {
-        let mut still_deferred: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
-        let second = lower_all_module_functions(
+    // The waiting functions no const reaches, now that every const has a value:
+    // all together, and in parallel where the compile is.
+    if !rest.is_empty() {
+        let mut still_waiting: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
+        let last = lower_all_module_functions(
             db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
-            &module_consts, &mut still_deferred, Some(&deferred), mode,
+            &module_consts, &mut still_waiting, Some(&rest), mode,
         );
-        for (module_id, names) in still_deferred.iter_unordered() {
+        for (module_id, names) in still_waiting.iter_unordered() {
             for name in names {
                 module_const_errors.entry(*module_id).or_default().push(format!(
                     "function '{}' names a module const that could not be evaluated",
@@ -1475,8 +1603,15 @@ pub fn lower_module_graph_with_evaluator<'db>(
                 ));
             }
         }
-        lowered_modules = merge_strata(db_salsa, lowered_modules, second);
-
+        for (module_id, batch) in last {
+            if !rest.contains_key(&module_id) {
+                continue;
+            }
+            match lowered_modules.iter_mut().find(|(id, _)| *id == module_id) {
+                Some((_, lowered)) => *lowered = merge_lowered(db_salsa, *lowered, batch),
+                None => lowered_modules.push((module_id, batch)),
+            }
+        }
     }
 
     // Phase 5b: Evaluate consts (skip if skip_const_inlining is enabled, or if
@@ -1494,7 +1629,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
 
         evaluate_all_module_consts(
             db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions,
-            module_registry, func_ids, &module_consts, &module_const_errors, const_cache.as_deref_mut(),
+            func_ids, &module_consts, &module_const_errors, const_cache.as_deref_mut(),
         )
     };
 
@@ -1585,48 +1720,23 @@ pub fn lower_module_graph_with_evaluator<'db>(
     assemble_module_graph(db_salsa, parsed_graph, work)
 }
 
-/// The two lowering strata for one module, as one module's IR.
+/// A module's lowered functions, and a batch lowered after them, as one module's IR.
 ///
 /// Tracked, so an unchanged recompile takes the merge out of a memo rather
 /// than concatenating and re-sorting every module's functions. Keyed on the
 /// two handles, which is two words.
 #[salsa::tracked(returns(copy))]
-fn merge_module_strata<'db>(
+fn merge_lowered<'db>(
     db: &'db dyn salsa::Database,
     first: ModuleLowered<'db>,
     second: ModuleLowered<'db>,
 ) -> ModuleLowered<'db> {
     let mut merged = first.functions(db).as_ref().clone();
     merged.functions.extend(second.functions(db).functions.iter().cloned());
-    // Keep the IR in the order the ids were assigned, so the stratum a
+    // Keep the IR in the order the ids were assigned, so the batch a
     // function landed in does not show in the output.
     merged.functions.sort_by_key(|f| f.id.0);
     ModuleLowered::new(db, first.module_id(db), Arc::new(merged))
-}
-
-/// Fold the second lowering stratum into the first, module by module.
-///
-/// A module the second stratum reached but the first did not keeps the second
-/// stratum's handle; one that both reached is merged. The result is in the
-/// first stratum's order, with anything only the second stratum found after
-/// it, so it is still graph order.
-fn merge_strata<'db>(
-    db: &'db dyn salsa::Database,
-    first: LoweredModules<'db>,
-    second: LoweredModules<'db>,
-) -> LoweredModules<'db> {
-    let mut second: LookupMap<ModuleId<'db>, ModuleLowered<'db>> = second.into_iter().collect();
-    let mut merged: LoweredModules<'db> = first.into_iter()
-        .map(|(module_id, first)| match second.remove(&module_id) {
-            Some(second) => (module_id, merge_module_strata(db, first, second)),
-            None => (module_id, first),
-        })
-        .collect();
-
-    let mut only_second: LoweredModules<'db> = second.into_iter_unordered().collect();
-    only_second.sort_by(|a, b| a.0.path(db).cmp(b.0.path(db)));
-    merged.extend(only_second);
-    merged
 }
 
 /// True if any module declares a const anywhere, at module level or in a body.
@@ -1755,7 +1865,7 @@ fn specialize_module_graph<'db>(
     evaluator.set_module_registry(Arc::clone(callable));
 
     let (lowered_functions, errors) = specialize_comptime_functions(
-        db, parsed_graph, typecheck_result, evaluator, callable, func_id_lookup(db, func_id_map),
+        db, parsed_graph, typecheck_result, evaluator, func_id_lookup(db, func_id_map),
         module_consts, ir_map(db, &modules),
     );
 
@@ -1819,7 +1929,6 @@ fn specialize_comptime_functions<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &mut dyn CtfeEvaluator,
-    callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
     mut lowered_functions: LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
@@ -1930,7 +2039,6 @@ fn specialize_comptime_functions<'db>(
                             lowered: &module_funcs.functions,
                             func_name_to_id: &func_name_to_id,
                             func_id_map,
-                            callable: Some(callable),
                             data_files: single_typecheck.data_files(db),
                         };
                         let (evaluated, const_errors) = evaluate_instantiation_consts(

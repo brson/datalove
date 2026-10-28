@@ -1,0 +1,10 @@
+[31m[F089] Error:[0m const `C` depends on `D`, which is declared after it
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/116_const_depends_on_a_later_const.dfs:3:16 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m3 │[0m [38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mC[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m6[0m[38;5;249m4[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;201mf[0m[38;5;249m([0m[38;5;249m)[0m
+ [38;5;240m  │[0m                [38;5;201m┬[0m  
+ [38;5;240m  │[0m                [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m evaluating this needs a const that has no value yet
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: `C` calls `f`, which calls `g`, which names `D`. A const may depend only on what is declared above it, including through the functions it calls.
+[38;5;246m───╯[0m
+Error: Type error

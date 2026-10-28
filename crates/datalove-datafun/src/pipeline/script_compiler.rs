@@ -120,6 +120,27 @@ struct LoweredFunctions {
     deferred: Vec<String>,
 }
 
+impl LoweredFunctions {
+    /// Add a batch of the functions that were waiting, lowered.
+    fn add(&mut self, batch: LoweredFunctions, lowered: &[String]) {
+        self.functions.extend(batch.functions);
+        // In the order the ids were assigned, as one lowering gives them.
+        self.functions.sort_by_key(|function| function.id.0);
+        self.deferred.retain(|name| !lowered.contains(name));
+        self.deferred.extend(batch.deferred);
+    }
+}
+
+/// What lowering a unit's waiting functions needs, while its consts are
+/// evaluated.
+#[derive(Clone, Copy)]
+struct Waiting<'a, 'db> {
+    index: usize,
+    unit: &'a ParsedUnit<'db>,
+    typecheck: &'a TypecheckOutput<'db>,
+    ownership: &'a OwnershipOutput<'db>,
+}
+
 /// Output from const evaluation phase.
 struct ConstEvalOutput {
     resolved_consts: ResolvedConsts,
@@ -1260,47 +1281,44 @@ impl<'db> ScriptCompiler<'db> {
         // Phase 2: Lowering
         // Functions are lowered first, then reused for const evaluation.
         //
-        // In two strata, for the reason the module pipeline has two: a function
-        // body may name a script-level const, and evaluating a script-level
-        // const may call a function in the same unit. So the bodies that need
-        // no value from this unit's consts go first, the consts are evaluated
-        // against those, and the rest follow.
-        //
-        // This unit's data consts are in the first stratum's scope already;
-        // see `data_consts`.
+        // A function body may name a script-level const, and evaluating a
+        // script-level const may call a function in the same unit. So the
+        // bodies that need no value from this unit's consts go first, and the
+        // rest wait for const evaluation to lower them, each once the last
+        // const it names has its value. This unit's data consts are in scope
+        // here already; see `data_consts`.
         let mut first_consts = script_consts_over(&self.unit_records[..index]);
         if let ParsedUnit::Fragment { body, .. } = unit {
             first_consts.extend(datalove_datafun_compiler::const_eval::data_consts(
                 self.db, body, typecheck.expr_types, self.env.data(self.db)));
         }
-        let lowered_funcs = match self.phase_lower_functions(
-            index, unit, &typecheck, &ownership, &first_consts, true,
+        let mut lowered_funcs = match self.phase_lower_functions(
+            index, unit, &typecheck, &ownership, &first_consts, true, None,
         ) {
             Ok(lf) => lf,
             Err(result) => return result,
         };
 
         // Phase 3: Const Evaluation
-        // Evaluates const expressions using the lowered functions + interpretation.
-        let consts = match self.phase_const_eval(index, unit, &typecheck, &lowered_funcs) {
+        // Evaluates const expressions using the lowered functions + interpretation,
+        // lowering the functions that were waiting as it goes.
+        let consts = match self.phase_const_eval(index, unit, &typecheck, &ownership, &mut lowered_funcs) {
             Ok(c) => c,
             Err(result) => return result,
         };
 
-        // Second stratum: the bodies that were waiting on a const's value.
-        // Everything is lowered again rather than just those, since a FuncId is
-        // the function's position among the statements either way and the
-        // bodies that did not wait lower to the same IR.
-        let lowered_funcs = if lowered_funcs.deferred.is_empty() {
-            lowered_funcs
-        } else {
+        // The bodies still waiting are those no const reaches, which waited for
+        // every const, and any naming a binding of an earlier unit that did
+        // not compile, which lowering without deferring reports.
+        if !lowered_funcs.deferred.is_empty() {
+            let waiting = std::mem::take(&mut lowered_funcs.deferred);
             match self.phase_lower_functions(
-                index, unit, &typecheck, &ownership, &consts.script_consts, false,
+                index, unit, &typecheck, &ownership, &consts.script_consts, false, Some(&waiting),
             ) {
-                Ok(lf) => lf,
+                Ok(rest) => lowered_funcs.add(rest, &waiting),
                 Err(result) => return result,
             }
-        };
+        }
 
         // Phase 2 (continued): Assemble final IR
         // Combines lowered functions with script-level code.
@@ -1484,16 +1502,18 @@ impl<'db> ScriptCompiler<'db> {
     ///
     /// `script_consts` are the script-level const values a body may name.
     /// `defer_missing_consts` holds back a body that names one with no value
-    /// yet; the caller lowers again once the consts are evaluated.
+    /// yet, for const evaluation to lower once it has one. `only` lowers just
+    /// the functions it names.
     #[allow(clippy::too_many_arguments)]
     fn phase_lower_functions(
-        &mut self,
+        &self,
         index: usize,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
         script_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         defer_missing_consts: bool,
+        only: Option<&[String]>,
     ) -> Result<LoweredFunctions, ScriptCompilationResult> {
         let ParsedUnit::Fragment { body, .. } = unit else {
             // Expressions don't have function definitions.
@@ -1535,6 +1555,7 @@ impl<'db> ScriptCompiler<'db> {
             script_ctx,
             script_consts,
             defer_missing_consts,
+            only,
         ) {
             Ok(lowered) => {
                 let functions = lowered.functions.into_iter().map(std::sync::Arc::new).collect();
@@ -1562,7 +1583,8 @@ impl<'db> ScriptCompiler<'db> {
         index: usize,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
-        lowered_funcs: &LoweredFunctions,
+        ownership: &OwnershipOutput<'db>,
+        lowered_funcs: &mut LoweredFunctions,
     ) -> Result<ConstEvalOutput, ScriptCompilationResult> {
         let earlier_consts = script_consts_over(&self.unit_records[..index]);
         let ParsedUnit::Fragment { top, body } = unit else {
@@ -1592,8 +1614,7 @@ impl<'db> ScriptCompiler<'db> {
                 &earlier_consts,
                 &const_graph,
                 body,
-                typecheck.expr_types,
-                typecheck.call_targets,
+                Waiting { index, unit, typecheck, ownership },
                 lowered_funcs,
             ) {
                 Ok(resolved) => resolved,
@@ -1663,11 +1684,18 @@ impl<'db> ScriptCompiler<'db> {
         earlier_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         const_graph: &datalove_datafun_ir::ConstBindingGraph,
         body: &'db Body<'db>,
-        expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
-        call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
-        lowered_funcs: &LoweredFunctions,
+        waiting: Waiting<'_, 'db>,
+        lowered_funcs: &mut LoweredFunctions,
     ) -> Result<ResolvedConsts, ConstEvalError> {
         let mut resolved = ResolvedConsts::new();
+        let expr_types = waiting.typecheck.expr_types;
+        let call_targets = waiting.typecheck.call_targets;
+        // The const each waiting function a const reaches waits on, by its
+        // place among the unit's consts, which is a binding's id. The others
+        // wait for every const.
+        let needs: HashMap<String, u32> = waiting.typecheck.result.const_needs(self.db).iter()
+            .map(|(name, index)| (name.text(self.db).S(), *index))
+            .collect();
 
         // Seeded with the consts earlier units left, so that a const may name
         // one: starting empty meant `const J = K` could only see a `K` declared
@@ -1688,10 +1716,15 @@ impl<'db> ScriptCompiler<'db> {
             })
             .collect();
 
+        // In source order, so that each waiting function is lowered before any
+        // const that can call it. A const names only consts above it, so this
+        // is an order the graph's dependencies allow.
+        let mut bindings: Vec<_> = const_graph.bindings.iter().collect();
+        bindings.sort_by_key(|binding| binding.stmt_id.0);
         let mut evaluator = self.ctfe_evaluator.borrow_mut();
-        let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
-        for binding in &const_graph.bindings {
+        for binding in bindings {
             let expr = const_exprs[binding.stmt_id.0 as usize];
+            let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
 
             // A script unit returns `!()`, so a script-level const may use `!`;
             // if it does return early, evaluation reports it.
@@ -1704,12 +1737,25 @@ impl<'db> ScriptCompiler<'db> {
                     message: e.to_string(),
                 },
                 ConstError::Ctfe(e) => self.ctfe_error_to_const_eval_error(e, &binding.name),
-                ConstError::MissingType | ConstError::Cycle(_) => unreachable!(
-                    "a script const's type comes from the graph, and no script function waits on one"),
+                ConstError::MissingType => unreachable!("a script const's type comes from the graph"),
             })?.expect("nothing is deferred at a script's top level");
 
             resolved.insert(binding.stmt_id, binding.name.clone(), value.clone());
             resolved_consts_map.insert(binding.name.clone(), (binding.ir_type.clone(), value));
+
+            let ready: Vec<String> = lowered_funcs.deferred.iter()
+                .filter(|name| needs.get(*name) == Some(&binding.stmt_id.0))
+                .cloned()
+                .collect();
+            if !ready.is_empty() {
+                let Ok(batch) = self.phase_lower_functions(
+                    waiting.index, waiting.unit, waiting.typecheck, waiting.ownership,
+                    &resolved_consts_map, true, Some(&ready),
+                ) else {
+                    unreachable!("lowering that defers what it cannot lower refuses nothing");
+                };
+                lowered_funcs.add(batch, &ready);
+            }
         }
 
         Ok(resolved)
@@ -1901,7 +1947,6 @@ impl<'db> ScriptCompiler<'db> {
             lowered,
             func_name_to_id,
             func_id_map: self.shared_context.func_id_map,
-            callable: None,
             data_files: self.env.data(self.db),
         };
         evaluate_instantiation_consts(&mut env, func_stmt, scope, comptime_param_indices, values)
@@ -1923,7 +1968,6 @@ impl<'db> ScriptCompiler<'db> {
             lowered: &lowered_funcs.functions,
             func_name_to_id: &lowered_funcs.func_name_to_id,
             func_id_map: self.shared_context.func_id_map,
-            callable: None,
             data_files: self.env.data(self.db),
         }
     }

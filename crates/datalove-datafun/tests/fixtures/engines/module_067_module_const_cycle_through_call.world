@@ -4,10 +4,11 @@ module local/test/main
 
 // A const whose evaluation reaches a function waiting on a module const only
 // through another function: `cheapest` names no const and is lowered first,
-// but it calls `price_at`, which names `ORDERS` and so waits for the consts.
-// The cycle is the same as a direct one and is reported the same way, naming
-// the function that waits. Before the check followed calls, it panicked in the
-// interpreter looking for `price_at`.
+// but it calls `price_at`, which names `ORDERS` and so waits for it. `ORDERS`
+// is above `CHEAPEST`, so this is no cycle: `price_at` is lowered once
+// `ORDERS` has its value, before `CHEAPEST` is evaluated. It was once refused
+// as a cycle, and before that panicked in the interpreter looking for
+// `price_at`.
 
 const ORDERS: [{price: f64}] = [{price = 2.0}]
 
@@ -24,8 +25,8 @@ end fun
 
 const CHEAPEST: f64 = cheapest()
 
-fun main(): u32
-  ret : u32 / 1
+fun main(): f64
+  ret CHEAPEST
 end fun
 
 ----------

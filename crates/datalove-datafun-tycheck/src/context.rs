@@ -53,6 +53,8 @@ pub(crate) struct VarBinding<'db> {
     /// Whether it is a const, which a const expression and a const argument
     /// may name.
     pub(crate) is_const: bool,
+    /// Its place among the scope's top-level consts, if it is one.
+    pub(crate) top_const: Option<u32>,
 }
 
 /// What an early-return operator unwraps, and returns early with.
@@ -181,6 +183,37 @@ pub struct TypeContext<'db> {
     pub(crate) inference: crate::infer::Inference<'db>,
     /// What the scope being walked declares below the statement being checked.
     pub(crate) below: DeclaredBelow<'db>,
+    /// What the scope's top-level consts depend on.
+    pub(crate) const_deps: RefCell<ConstDeps<'db>>,
+}
+
+/// What a scope's top-level consts depend on, through the functions they call.
+///
+/// A const may depend only on what is declared above it, and functions are
+/// the one way around that, being in scope throughout. So the walk records
+/// which functions each const's initializer calls, and which consts and
+/// functions each function's body names and calls; `check_const_deps` follows
+/// them. See `botdocs/plan-lexical-scope.md`.
+#[derive(Default)]
+pub(crate) struct ConstDeps<'db> {
+    /// The top-level consts in source order.
+    consts: Vec<TopConst<'db>>,
+    /// The const whose initializer the walk is in, by its place in `consts`.
+    current: Option<u32>,
+    /// The consts each function names, by their places in `consts`.
+    fun_consts: bct::lookup::LookupMap<FunKey<'db>, Vec<u32>>,
+    /// The functions each function calls.
+    fun_calls: bct::lookup::LookupMap<FunKey<'db>, Vec<FunKey<'db>>>,
+}
+
+/// A top-level const, for `ConstDeps`.
+struct TopConst<'db> {
+    name: InternedText<'db>,
+    /// Whether it is a `require data`, whose value needs no evaluating.
+    is_data: bool,
+    value: ExprId,
+    /// The functions its initializer calls.
+    calls: Vec<FunKey<'db>>,
 }
 
 /// What a scope declares below the statement its walk has reached.
@@ -259,6 +292,7 @@ impl<'db> TypeContext<'db> {
             arena: None,
             inference: crate::infer::Inference::new(db),
             below: DeclaredBelow::default(),
+            const_deps: RefCell::default(),
         }
     }
 
@@ -1000,7 +1034,7 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Bind a name, replacing whatever it named, a const included.
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: Type<'db>, is_mutable: bool) {
-        let replaced = self.variables.insert(name, VarBinding { ty, is_mutable, is_const: false });
+        let replaced = self.variables.insert(name, VarBinding { ty, is_mutable, is_const: false, top_const: None });
         self.scope_undo.push((name, replaced));
     }
 
@@ -1068,7 +1102,12 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {
         self.note_asked(name);
         match self.variables.get(&name) {
-            Some(binding) => Some(binding.ty.clone()),
+            Some(binding) => {
+                if let (Some(index), Some(fun)) = (binding.top_const, self.enclosing_fun) {
+                    self.const_deps.borrow_mut().fun_consts.entry(fun).or_default().push(index);
+                }
+                Some(binding.ty.clone())
+            }
             None => self.inherited_variable(name).map(|(ty, _)| ty),
         }
     }
@@ -1170,6 +1209,14 @@ replace the view rather than the elements it shows. Index down to single element
             && func.inline()
         {
             self.inline_calls.push((caller, func.key()));
+        }
+        {
+            let deps = self.const_deps.get_mut();
+            match (self.enclosing_fun, deps.current) {
+                (Some(fun), _) => deps.fun_calls.entry(fun).or_default().push(func.key()),
+                (None, Some(index)) => deps.consts[index as usize].calls.push(func.key()),
+                (None, None) => {}
+            }
         }
         self.call_targets.insert_call(
             expr,
@@ -1385,9 +1432,15 @@ impl<'db> TypeContext<'db> {
     /// A `const`, `let` or `var` is bound by checking it; here it only stops
     /// being below.
     pub fn reach(&mut self, statement: &Statement<'db>) {
+        let deps = self.const_deps.get_mut();
+        deps.current = None;
         match statement {
             Statement::Const(stmt) => {
                 self.below.values.remove(&stmt.name);
+                let is_data = matches!(self.expr(stmt.value).kind(), ExprFunKind::DataFile(_));
+                let deps = self.const_deps.get_mut();
+                deps.current = Some(deps.consts.len() as u32);
+                deps.consts.push(TopConst { name: stmt.name, is_data, value: stmt.value, calls: Vec::new() });
             }
             Statement::Let(stmt) => {
                 for name in stmt.binding.names() {
@@ -1438,6 +1491,119 @@ impl<'db> TypeContext<'db> {
             }
             self.functions.insert(import.name, import.func);
         }
+    }
+}
+
+impl<'db> TypeContext<'db> {
+    /// Mark the binding a top-level const just made with its place among them.
+    ///
+    /// Only the const the walk is at is top-level: one in a function body is
+    /// checked with no current const.
+    pub fn mark_top_const(&mut self, name: InternedText<'db>) {
+        if self.enclosing_fun.is_some() {
+            return;
+        }
+        let Some(index) = self.const_deps.get_mut().current else { return };
+        if let Some(binding) = self.variables.get_mut(&name) {
+            binding.top_const = Some(index);
+        }
+    }
+
+    /// F089: a const that depends, through the functions it calls, on a const
+    /// declared at or after it. And for each function a const reaches that
+    /// names one of the scope's evaluated consts, the last of them: lowering
+    /// has to lower it once that const has a value and before any const after
+    /// it is evaluated. A function no const reaches can wait for them all.
+    ///
+    /// One search over the call graph for all the consts together, in source
+    /// order. A function already searched from an earlier const named only
+    /// consts above that one, so it is fine for every const after it too.
+    pub fn check_const_deps(&mut self, statements: &[Statement<'db>]) -> Vec<(InternedText<'db>, u32)> {
+        let local: bct::lookup::LookupSet<FunKey<'db>> = statements.iter()
+            .filter_map(|statement| match statement {
+                Statement::Fun(fun) => Some(fun.head().key()),
+                _ => None,
+            })
+            .collect();
+        let deps = std::mem::take(self.const_deps.get_mut());
+        let mut searched: bct::lookup::LookupSet<FunKey<'db>> = bct::lookup::LookupSet::new();
+        for (index, top) in deps.consts.iter().enumerate() {
+            let index = index as u32;
+            // How the search reached each function, to say so.
+            let mut from: bct::lookup::LookupMap<FunKey<'db>, Option<FunKey<'db>>> = bct::lookup::LookupMap::new();
+            let mut stack = Vec::new();
+            for callee in &top.calls {
+                if local.contains(callee) && !searched.contains(callee) && !from.contains_key(callee) {
+                    from.insert(*callee, None);
+                    stack.push(*callee);
+                }
+            }
+            while let Some(fun) = stack.pop() {
+                if !searched.insert(fun) {
+                    continue;
+                }
+                let late = deps.fun_consts.get(&fun)
+                    .and_then(|named| named.iter().copied().find(|named| *named >= index));
+                if let Some(late) = late {
+                    self.report_late_const(&deps, index, late, fun, &from);
+                    break;
+                }
+                for callee in deps.fun_calls.get(&fun).into_iter().flatten() {
+                    if local.contains(callee) && !searched.contains(callee) && !from.contains_key(callee) {
+                        from.insert(*callee, Some(fun));
+                        stack.push(*callee);
+                    }
+                }
+            }
+        }
+        let mut needs: Vec<(InternedText<'db>, u32)> = deps.fun_consts.iter_unordered()
+            .filter(|(fun, _)| searched.contains(*fun))
+            .filter_map(|(fun, named)| {
+                let last = named.iter().copied()
+                    .filter(|index| !deps.consts[*index as usize].is_data)
+                    .max()?;
+                Some((fun.name, last))
+            })
+            .collect();
+        needs.sort_by(|a, b| a.0.as_str(self.db).cmp(b.0.as_str(self.db)));
+        needs
+    }
+
+    fn report_late_const(
+        &mut self,
+        deps: &ConstDeps<'db>,
+        index: u32,
+        late: u32,
+        fun: FunKey<'db>,
+        from: &bct::lookup::LookupMap<FunKey<'db>, Option<FunKey<'db>>>,
+    ) {
+        let db = self.db;
+        let top = &deps.consts[index as usize];
+        let name = top.name.as_str(db);
+        let late_name = deps.consts[late as usize].name.as_str(db);
+        let mut chain = vec![fun];
+        while let Some(Some(caller)) = from.get(chain.last().expect("the chain starts at a function")) {
+            chain.push(*caller);
+        }
+        chain.reverse();
+        let mut path = fmt!("`{name}` calls `{}`", chain[0].name.as_str(db));
+        for fun in &chain[1..] {
+            path.push_str(&fmt!(", which calls `{}`", fun.name.as_str(db)));
+        }
+        path.push_str(&fmt!(", which names `{late_name}`"));
+        let message = match late == index {
+            true => fmt!("const `{name}` depends on itself"),
+            false => fmt!("const `{name}` depends on `{late_name}`, which is declared after it"),
+        };
+        let error = self.error_worded(
+            ErrorSite::Expr(self.expr(top.value).key()),
+            "F089",
+            message,
+            "evaluating this needs a const that has no value yet",
+            Some(fmt!("{path}. A const may depend only on what is declared above it, \
+including through the functions it calls.")),
+        );
+        self.add_error(error);
     }
 }
 

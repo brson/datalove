@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+// A const that calls functions naming consts declared above it, one of the
+// functions written below the const. Each function is lowered once the last
+// const it names has its value, before any const below that can call it.
+// This used to panic: the script evaluated all its consts before lowering
+// any function that named one.
+
+const BASE: int = 2
+const DOUBLED: int = twice()
+fun twice(): int
+  ret BASE + BASE
+end fun
+const QUADRUPLED: int = again()
+fun again(): int
+  ret twice() + DOUBLED
+end fun
+debuglog QUADRUPLED

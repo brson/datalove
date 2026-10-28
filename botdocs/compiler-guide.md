@@ -297,7 +297,7 @@ around a tenth of an unchanged recompile.
 
 ```
 lower_module_functions [tracked]  ->  ModuleLowered per module
-merge_module_strata [tracked]     ->  one ModuleLowered from the two strata
+merge_lowered [tracked]           ->  one ModuleLowered from a module's and a batch's
 const_inlined_module [tracked]    ->  ModuleLowered for phase 5b' to rewrite
 specialized_module [tracked]      ->  ModuleLowered for phase 5c to rewrite
 lower_module [tracked]            ->  takes the handle, not the IR
@@ -308,8 +308,8 @@ A tracked struct's identity map belongs to the query instance that created it,
 so a graph-wide pass minting handles would give every module a new id whenever
 any module was added -- and phase 5d is keyed on the handles, so every module
 in the world would assemble again. Nothing between 5a and 5d is graph-wide
-now: `merge_module_strata` is keyed on a module's two handles, and a module
-only one stratum reached keeps that stratum's handle. The `module_memo`
+now: `merge_lowered` is keyed on a module's two handles, and a module no batch
+reached keeps its first handle. The `module_memo`
 fixtures are what catch a regression here.
 
 **Phase 5c is gated on a memoized question.** `module_has_comptime_calls` is a
@@ -375,7 +375,7 @@ cache to evaluating exactly the edited module and its requirers.
 A compile where every module hits saves a little more than the evaluation. The
 evaluator is never used, and dropping one that has run is not free -- about
 0.35ms on the store demo, which is the interpreter's own state going away. And
-the second lowering stratum and assembly key on the consts, where a reused
+the batches of functions waiting on consts and assembly key on the consts, where a reused
 `Arc` compares equal by pointer and a freshly evaluated one by walking the
 value; that was about 0.1ms of the store's two four-thousand-entry maps.
 
@@ -1882,7 +1882,7 @@ typecheck result as `data_files`, which is where lowering finds them.
 `ConstValue` led by the type, memoized on `(Source, IrType)` and handed out as the
 memo's own `Arc`, which every map of consts and every `StaticRef` then shares. A data const
 needs no evaluating, so `const_eval::data_consts` puts the module's or unit's
-data in scope before the first lowering stratum.
+data in scope before the first lowering.
 
 ### Compiling From Roots
 

@@ -1,0 +1,11 @@
+// F089: a const that reaches, through two calls, a const declared after it.
+// The note follows the chain.
+const C: i64 = f()
+const D: i64 = 1
+fun f(): i64
+  ret g()
+end fun
+fun g(): i64
+  ret D
+end fun
+debuglog C

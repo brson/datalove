@@ -638,6 +638,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             ctx.in_const_expr = true;
             check_variable_decl(ctx, &Binding::Name(stmt.name), ctx.expr(stmt.value), stmt.type_hint.clone(), false);
             ctx.in_const_expr = saved_in_const_expr;
+            ctx.mark_top_const(stmt.name);
             // A const is evaluated once, when its function is compiled, and
             // not once per binding of the function's type parameters, so it
             // has no type to be evaluated at if its own mentions one.

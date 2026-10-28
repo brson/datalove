@@ -125,7 +125,7 @@ look at each module; they must not look at each function.
 | query | memos | why more than one |
 |---|---|---|
 | `typecheck_module_graph`, `analyze_module_graph` | 2 | the module path and the script path key differently |
-| `ctfe_module_registry` | 4 | twice per compile, once per lowering stratum |
+| `ctfe_module_registry` | 4 | twice per compile: once for the module consts, once for phase 5b |
 | `create_module_graph_lowering_result`, `module_function_registry` | 4 | one per distinct lowering result; `module_function_registry` is capped at `lru = 4` because its key moves on every edit |
 | `resolve_module_exports`, `module_function_asts` | 4 | keyed per module, but only asked of a module something imports from -- four on the system library, where most modules are required by nobody |
 
@@ -140,11 +140,11 @@ look at the rest of the world -- which is what `reachable_func_ids` is for.
 `resolve_module_imports`, `module_import_demands`,
 `typecheck_module`, `analyze_module`, `module_const_kinds`,
 `lower_module_functions`, `module_shape_inputs`, `shape_closed_module`,
-`merge_module_strata`, `module_has_comptime_calls`, `ctfe_module_units`,
+`merge_lowered`, `module_has_comptime_calls`, `ctfe_module_units`,
 `lower_module`, `module_code_units`, `reachable_func_ids`.
 
-Some keep more than one memo per module -- `lower_module_functions` keeps two,
-one per lowering stratum, and `reachable_func_ids` keeps one per module per
+Some keep more than one memo per module -- `lower_module_functions` keeps one
+for the first lowering and one per batch of functions waiting on a const, and `reachable_func_ids` keeps one per module per
 graph shape it has seen.
 
 `resolve_module_imports` belongs here and only recently did. It was keyed on

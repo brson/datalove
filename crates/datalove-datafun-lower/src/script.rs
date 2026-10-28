@@ -205,7 +205,10 @@ pub struct ScriptFunctionsLowered {
 ///
 /// `defer_missing_consts` says what to do with a body that names a const with
 /// no value yet: record the function in `deferred` and carry on, or fail. The
-/// caller lowers again with the values once it has them, and fails then.
+/// caller lowers it once the const has a value.
+///
+/// `only` lowers just the functions it names, as the consts they wait on get
+/// their values. Every function still gets its `FuncId`, which is its position.
 #[allow(clippy::too_many_arguments)]
 pub fn lower_script_functions<'db>(
     db: &'db dyn salsa::Database,
@@ -220,6 +223,7 @@ pub fn lower_script_functions<'db>(
     script_ctx: ScriptLowerContext,
     script_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
     defer_missing_consts: bool,
+    only: Option<&[String]>,
 ) -> Result<ScriptFunctionsLowered, LowerError> {
     // Create a minimal context with the accumulated script context.
     let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
@@ -258,6 +262,9 @@ pub fn lower_script_functions<'db>(
             let func_id = ctx.define_func(&func_name, param_count);
 
             func_name_to_id.insert(func_name.clone(), func_id);
+            if only.is_some_and(|only| !only.contains(&func_name)) {
+                continue;
+            }
 
             // Swap in fresh state for function body.
             let saved = ctx.swap_body_state(FrameState::new());

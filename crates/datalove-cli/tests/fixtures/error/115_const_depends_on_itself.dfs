@@ -1,0 +1,8 @@
+// F089: a const that calls a function naming the const itself. A const may
+// depend only on what is declared above it, including through the functions
+// it calls.
+const C: i64 = f()
+fun f(): i64
+  ret C
+end fun
+debuglog C

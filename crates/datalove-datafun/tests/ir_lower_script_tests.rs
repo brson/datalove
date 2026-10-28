@@ -156,7 +156,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let no_data = lower::DataFiles::new();
                 let lowered = lower_script_functions(
                     &db, expr_types_raw, call_targets_raw, stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, &no_data, ScriptLowerContext::new(),
-                    &HashMap::new(), false,
+                    &HashMap::new(), false, None,
                 ).expect("function lowering failed");
                 let (lowered_functions, func_name_to_id) = (lowered.functions, lowered.func_name_to_id);
 

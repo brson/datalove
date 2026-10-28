@@ -480,6 +480,11 @@ pub struct UnitTypecheckResultTracked<'db> {
     /// The data files this unit's `require data` consts name, by path.
     #[returns(ref)]
     pub data_files: crate::DataFiles,
+    /// For each function a top-level const reaches that names one of those
+    /// consts, the place among them of the last it names. Lowering the
+    /// function waits on that const's value; see `check_const_deps`.
+    #[returns(ref)]
+    pub const_needs: Vec<(InternedText<'db>, u32)>,
 }
 
 /// Result of typechecking multiple script units together.
@@ -661,6 +666,12 @@ pub struct SingleModuleTypecheckResult<'db> {
     /// The data files this module's `require data` consts name, by path.
     #[returns(ref)]
     pub data_files: crate::DataFiles,
+
+    /// For each function a top-level const reaches that names one of those
+    /// consts, the place among them of the last it names. Lowering the
+    /// function waits on that const's value; see `check_const_deps`.
+    #[returns(ref)]
+    pub const_needs: Vec<(InternedText<'db>, u32)>,
 }
 
 /// Exported function signatures from a module.

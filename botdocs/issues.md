@@ -16,7 +16,6 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [A script const that calls a function declared after it panics](#user-content-a-script-const-that-calls-a-function-declared-after-it-panics)
   - [A module const that recurses forever panics](#user-content-a-module-const-that-recurses-forever-panics)
   - [A REPL unit that fails keeps what it did to earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units)
   - [A unit that did not run still gives away what it would have taken](#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken)
@@ -62,34 +61,6 @@ home here.
 ## Engines and the REPL: failing the wrong way
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
-
-### A script const that calls a function declared after it panics
-
-**Reproduced.**
-
-```datalove
-const C: i64 = f()
-fun f(): i64
-  ret C
-end fun
-debuglog C
-```
-
-`datalove script` panics at `datalove-datafun-lower/src/context.rs:489`,
-"local function 'f' not found - typechecker should catch this", and a REPL
-unit like it takes the engine down. The typechecker accepts the cycle. Script
-lowering defers a function whose body names a const not yet evaluated, so `f`
-is not among the functions handed to const lowering, and the script path passes
-`callable: None`, so the `Cycle` check that catches the module form never runs.
-The `unreachable!` at the `ConstError::Cycle` arm of the script compiler's
-const evaluation ("no script function waits on one") stopped being true when
-script deferral was added. With `fun f` first, the typechecker reports `C` as
-not found, so only the const-first order panics.
-
-The module form reports `const 'C': depends on a function that is not available
-yet ...`, with no span and no module path. A cycle between a const and the
-functions it calls is a name-resolution fact, and is the place to report it,
-at the const.
 
 ### A module const that recurses forever panics
 
@@ -257,8 +228,6 @@ They should mostly not be lowering errors at all. What reaches users:
   compile"``. The typechecker offers later units the names of a unit that
   failed ownership analysis; it should report the use, with its span, or not
   offer the name.
-- **A cycle between a const and a function it calls.** The module form is an
-  error with no location; the script form panics, above. Name resolution's.
 - **A const that returns early through `!` or `?`**, reported as `const 'C'
   early-returned` or `CTFE error: early return`. A real compile-time failure,
   but it belongs at the const's span.
@@ -269,8 +238,7 @@ They should mostly not be lowering errors at all. What reaches users:
   over.
 
 `LowerError` has only `BindingNotAvailable` left. The lowering crate also has
-about a hundred panicking checks, some saying "typechecker should catch this";
-the const cycle above is one of them being hit.
+about a hundred panicking checks, some saying "typechecker should catch this".
 
 The fix is per error, in the phase that should have caught it, with a span;
 what is left in lowering then is the compiler's own bugs, for which a message

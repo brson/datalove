@@ -2,13 +2,13 @@
 module local/test/main
 ----------
 
-// A const whose evaluation calls a function that reads a module const. The
+// A const whose evaluation calls a function that reads the const itself. The
 // function cannot lower until the const is evaluated, and the const cannot be
 // evaluated until the function is lowered.
 //
-// This is the case the removed implementation met and answered by evaluating
-// literals only. It is reported instead, naming both ends. Before the check it
-// panicked in the interpreter looking for a function that was never lowered.
+// A const may depend only on what is declared above it, including through the
+// functions it calls, so the typechecker refuses this at the const (F089),
+// naming the chain.
 
 const A: u32 = f()
 

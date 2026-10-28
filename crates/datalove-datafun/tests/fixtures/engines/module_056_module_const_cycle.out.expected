@@ -4,14 +4,16 @@ Analysis(
             section_type: "module",
             name: Some("local/test/main"),
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "line 10, col 16: error[F089]: const `A` depends on itself",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "const \'A\': depends on a function that is not available yet, which means it and that function depend on each other: f\nfunction \'f\' names a module const that could not be evaluated",
+                status: "Skipped",
             ),
             output: "",
         ),

@@ -7,15 +7,14 @@
 //! straight off when it is a literal or names a const already evaluated, and
 //! the unit is run by the CTFE evaluator. Both pipelines do it through here.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{Body, ExprFun, ExprFunKind, Statement, StmtFun};
 use datalove_datafun_const::evaluate_const_unit;
 use datalove_datafun_ir::{
-    CodeRef, ConstValue, CtfeError, CtfeEvaluator, FuncId, IrCodeUnit, IrType,
-    ModuleFunctionRegistry,
+    ConstValue, CtfeError, CtfeEvaluator, FuncId, IrCodeUnit, IrType,
 };
 use datalove_datafun_sema::{CallTargets, ExprTypes};
 
@@ -34,11 +33,6 @@ pub struct ConstEvalEnv<'a, 'db> {
     pub func_name_to_id: &'a HashMap<String, FuncId>,
     /// For calls into other modules.
     pub func_id_map: &'db FuncIdLookup<'db>,
-    /// What the evaluator can reach, where some of it may not be lowered yet.
-    ///
-    /// Only the module pipeline has functions waiting on a module const, so
-    /// only it can find a const depending on one: a cycle.
-    pub callable: Option<&'a ModuleFunctionRegistry>,
     /// The data files a `require data` const may name, by path.
     pub data_files: &'db lower::DataFiles,
 }
@@ -48,8 +42,6 @@ pub struct ConstEvalEnv<'a, 'db> {
 pub enum ConstError {
     MissingType,
     Lowering(LowerError),
-    /// It calls a function that is waiting on a module const, which is a cycle.
-    Cycle(String),
     Ctfe(CtfeError),
 }
 
@@ -58,12 +50,6 @@ impl fmt::Display for ConstError {
         match self {
             ConstError::MissingType => write!(f, "missing type information"),
             ConstError::Lowering(e) => write!(f, "lowering error: {}", e),
-            ConstError::Cycle(missing) => write!(
-                f,
-                "depends on a function that is not available yet, which means it and \
-                 that function depend on each other: {}",
-                missing,
-            ),
             ConstError::Ctfe(e) => write!(f, "CTFE error: {}", e),
         }
     }
@@ -149,13 +135,9 @@ pub fn evaluate_const<'db>(
     match (unit, value) {
         (None, Some(value)) => Ok(Some(value)),
         (Some(unit), None) => {
-            // Every function this reaches has to be lowered already, or the
-            // interpreter has nothing to call and panics looking for it.
-            if let Some(callable) = env.callable {
-                if let Some(missing) = first_uncallable_target(&unit, callable, env.func_id_map) {
-                    return Err(ConstError::Cycle(missing));
-                }
-            }
+            // Every function this reaches is lowered already: the typechecker
+            // refused a const that depends on one waiting on a const at or
+            // below it (F089), and lowering orders the rest.
             evaluate_const_unit(&unit, ty, &mut *env.evaluator)
                 .map(Some)
                 .map_err(ConstError::Ctfe)
@@ -202,41 +184,6 @@ pub fn evaluate_body_consts<'db>(
         }
     }
     (consts, errors)
-}
-
-/// The first module function a const's unit reaches that is not lowered yet.
-///
-/// Such a function is waiting on a module const, which is where a cycle
-/// between a const and a function shows up. Followed through the functions it
-/// can call, since the one waiting may be any number of calls away. Local and
-/// external references are resolved against units the caller already holds,
-/// so they cannot be missing.
-fn first_uncallable_target(
-    unit: &IrCodeUnit,
-    callable: &ModuleFunctionRegistry,
-    names: &FuncIdLookup<'_>,
-) -> Option<String> {
-    let mut seen = HashSet::new();
-    let mut bodies = vec![unit];
-    while let Some(body) = bodies.pop() {
-        for instr in body.blocks.iter().flat_map(|block| &block.instructions) {
-            let Some(CodeRef::Module { module, id }) = instr.call_target() else { continue };
-            if !seen.insert((*module, *id)) {
-                continue;
-            }
-            match callable.get_module_function_as_unit(*module, *id) {
-                Some(callee) => bodies.push(callee),
-                None => {
-                    let name = names.iter_unordered()
-                        .find(|(_, (m, f))| m == module && f.0 == id.0)
-                        .map(|((_, name), _)| name.clone())
-                        .expect("a module function the compiler numbered has a name");
-                    return Some(name);
-                }
-            }
-        }
-    }
-    None
 }
 
 /// Evaluate a comptime function's consts for one instantiation.
