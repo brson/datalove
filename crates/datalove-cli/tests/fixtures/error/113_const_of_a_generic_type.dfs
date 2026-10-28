@@ -1,0 +1,10 @@
+// F088 on a const in a generic function whose type mentions a type
+// parameter, alone or inside another type. A const of a concrete type in the
+// same function is fine: it is evaluated once and serves every binding.
+fun f<T>(ref x: [T]): index
+  const N: index = : index / 0
+  const K: [T] = []
+  const P: (u32, ?T) = (1, none)
+  ret N
+end fun
+debuglog f(ref [: i64 / 1])

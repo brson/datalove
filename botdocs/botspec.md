@@ -1220,6 +1220,8 @@ anything a parameter or a `let` is bound to exists. Naming a parameter or a
 `let` is an error (F058) even where a const of the same name is in scope.
 It may call functions, whose parameters are bound by the call. A module-level
 const has no enclosing function, so it cannot use the early-return operators.
+A const in a generic function is evaluated once, not once per binding of the
+function's type parameters, so its type may not mention one (F088).
 
 **Evaluation** runs the expression at compile time, by the same means that runs
 it at run time, so anything a function can compute a const can hold: not only

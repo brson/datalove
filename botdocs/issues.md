@@ -17,7 +17,6 @@ home here.
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
   - [A script const that calls a function declared after it panics](#user-content-a-script-const-that-calls-a-function-declared-after-it-panics)
-  - [A const whose type names a type parameter panics](#user-content-a-const-whose-type-names-a-type-parameter-panics)
   - [A module const that recurses forever panics](#user-content-a-module-const-that-recurses-forever-panics)
   - [A REPL unit that fails keeps what it did to earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units)
   - [A unit that did not run still gives away what it would have taken](#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken)
@@ -92,24 +91,6 @@ The module form reports `const 'C': depends on a function that is not available
 yet ...`, with no span and no module path. A cycle between a const and the
 functions it calls is a name-resolution fact, and is the place to report it,
 at the const.
-
-### A const whose type names a type parameter panics
-
-**Reproduced.**
-
-```datalove
-fun f<T>(ref x: [T]): index
-  const K: [T] = []
-  ret : index / 0
-end fun
-debuglog f(ref [: i64 / 1])
-```
-
-Panics at `datalove-datafun-ir/src/lib.rs:547`, "type variable T is not a
-parameter of the function it is in": `const_type` in `const_eval.rs` converts
-the const's type with `IrType::from_tycheck` and no type parameters. Either the
-typechecker rejects a const whose type is generic, or const evaluation is done
-per instantiation; neither is.
 
 ### A module const that recurses forever panics
 

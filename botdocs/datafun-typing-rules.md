@@ -564,6 +564,9 @@ Whether it is written before it is read is the ownership pass's business
 Γ ⊢ const x = e ⊣ Γ, x :^const T        Γ ⊢ const x: T = e ⊣ Γ, x :^const T
 ```
 
+A const's `T` mentions no type parameter (F088): it is evaluated once, not
+once per binding of the type parameters of the function it is in.
+
 `require data p: T` is `const x: T = ⟨file⟩`, where `x` is the last part of
 `p`, and the file is checked against `T` by datalit's
 `type_check_with_expected`. A missing file is F079; one not of type `T`, or
@@ -834,6 +837,7 @@ not reported again.
 | F085 | `inline` functions calling each other in a cycle |
 | F086 | A function defined twice in one module or script, or an import of a name a function there defines |
 | F087 | A `for` over something that is not a place, over a type it cannot walk, or binding the wrong number of names for its collection |
+| F088 | A const whose type mentions a type parameter |
 
 A code missing from the table is unassigned; F060 is retired. Two parse
 errors belong to the same rules: P074, a declaration inside a block, and

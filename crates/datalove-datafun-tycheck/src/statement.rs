@@ -638,6 +638,23 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             ctx.in_const_expr = true;
             check_variable_decl(ctx, &Binding::Name(stmt.name), ctx.expr(stmt.value), stmt.type_hint.clone(), false);
             ctx.in_const_expr = saved_in_const_expr;
+            // A const is evaluated once, when its function is compiled, and
+            // not once per binding of the function's type parameters, so it
+            // has no type to be evaluated at if its own mentions one.
+            let generic = matches!(
+                ctx.lookup_variable(stmt.name),
+                Some(Type::Datalit(ty)) if datalove_datafun_common::generics::contains_type_param(&ty));
+            if generic {
+                let error = ctx.error_worded(
+                    crate::ErrorSite::Expr(ctx.expr(stmt.value).key()),
+                    "F088",
+                    fmt!("const `{}` has a type that depends on a type parameter", stmt.name.as_str(db)),
+                    "a const's type must be known when its function is compiled",
+                    Some(S("a const is evaluated once, not once per type the function is called at. \
+Give the const a concrete type, or make it a `let`.")),
+                );
+                ctx.add_error(error);
+            }
             // Track this as a const binding for comptime arg validation.
             ctx.add_const_binding(stmt.name);
         }
