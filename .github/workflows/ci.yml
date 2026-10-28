@@ -80,8 +80,8 @@ jobs:
       - name: Install just
         uses: taiki-e/install-action@just
 
-      # The store demo generates its data and checks its report with Python,
-      # through uv. Only test-demos needs it.
+      # Python, through uv: `just test` checks the generated runtime interface
+      # with it, and the store demo generates its data and checks its report.
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 

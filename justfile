@@ -12,8 +12,10 @@ default:
 # backends build and the `datalove` binary the cli tests spawn.
 LEAK_CHECK := "panic"
 
-# Run the tests, and check benches compile since they are not tested.
+# Run the tests, check benches compile since they are not tested, and check
+# the runtime interface is what `gen-rti` would write.
 test:
+    uv run --no-project scripts/gen-rti.py --check
     cargo check --all --benches
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
@@ -207,8 +209,9 @@ memo-table:
 # Regenerate the runtime interface declarations from the runtime's definitions.
 #
 # Run after adding, removing or changing a `dtlv_rti_*` function in
-# `datalove-rt`'s `c.rs`. Leaving it unrun is a compile error rather than a
-# quiet mismatch; see `datalove-rt`'s `abi_check` module.
+# `datalove-rt`'s `c/mod.rs`. Leaving it unrun is a compile error rather than a
+# quiet mismatch, since the runtime fills the table it generates; `just test`
+# runs it with `--check`, which also holds each export to the rules it checks.
 gen-rti:
     uv run --no-project scripts/gen-rti.py
 
