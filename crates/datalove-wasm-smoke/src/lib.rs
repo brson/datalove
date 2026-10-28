@@ -9,11 +9,10 @@
 //! second thread to run it on.
 
 use rmx::prelude::*;
-use std::sync::Arc;
 
 use datalove_datafun as datafun;
 use datafun::pipeline::WorkspaceDescriptor;
-use datafun::pipeline::rider_load::{RiderNatives, register_natives};
+use datafun::pipeline::rider_load::register_natives;
 use datalove_datafun_interp::Engine;
 pub use datalove_datafun_common::ParallelMode;
 
@@ -35,9 +34,7 @@ pub fn run(mode: ParallelMode) -> AnyResult<String> {
     let sys = datalove_sys_packages::system_library();
     let workspace = WorkspaceDescriptor::from_system_library(&sys);
     let db = datafun::Database::default();
-    let mut pipeline = workspace.to_pipeline(&db);
-    let natives = Arc::new(RiderNatives::for_workspace(&workspace, &sys.natives));
-    pipeline.set_natives(natives.clone());
+    let (mut pipeline, natives) = workspace.to_pipeline_with_natives(&db, &sys.natives);
 
     let compiled = pipeline.compile_with_mode(&db, mode);
     if compiled.has_errors() {

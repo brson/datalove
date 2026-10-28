@@ -6,7 +6,6 @@
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
 
-use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
 
@@ -147,24 +146,13 @@ pub fn build_sys_riders() -> bool {
 
 /// The natives an executor was pointed at, and what has to stay alive for it.
 pub struct RegisteredNatives {
-    /// Raw addresses, which the JIT needs: it calls natives through a
-    /// trampoline built from the address rather than through the
+    /// Raw addresses, which the JIT needs, and was given: it calls natives
+    /// through a trampoline built from the address rather than through the
     /// interpreter's table.
     pub native_fn_ptrs: Vec<(String, *const u8)>,
 
     /// Where the addresses came from, which holds any library they lead into.
     pub natives: Arc<RiderNatives>,
-}
-
-impl RegisteredNatives {
-    /// A share of whatever these natives' code lives in.
-    ///
-    /// For whatever else took the raw addresses and has to outlive them --- the
-    /// JIT, which emits them into compiled code. The interpreter's table was
-    /// given its share when the symbols were registered.
-    pub fn code_owners(&self) -> Vec<Arc<dyn Any + Send + Sync>> {
-        vec![self.natives.clone()]
-    }
 }
 
 /// Point an executor at the native functions the compiled modules call.
@@ -173,7 +161,8 @@ impl RegisteredNatives {
 /// already needed are not built or loaded a second time. A driver that skips
 /// this and registers nothing does not fail until a script reaches a native
 /// call, and under the JIT that is a panic inside compilation rather than an
-/// error.
+/// error. A dispatcher the executor holds is told the addresses too; see
+/// [`CallDispatcher::natives_registered`](datalove_datafun_interp::CallDispatcher::natives_registered).
 pub fn register_natives(
     natives: &Arc<RiderNatives>,
     compiled: &CompiledModules,
@@ -190,6 +179,7 @@ pub fn register_natives(
 
     // The table now holds pointers into whatever the natives loaded.
     table.hold_code_owner(natives.clone());
+    executor.natives_registered(&native_fn_ptrs, natives.clone());
 
     Ok(RegisteredNatives { native_fn_ptrs, natives: natives.clone() })
 }

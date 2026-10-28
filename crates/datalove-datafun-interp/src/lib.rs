@@ -292,6 +292,14 @@ impl IrInterpreter {
         self.call_dispatcher.borrow_mut().take()
     }
 
+    /// Tell the call dispatcher, if there is one, about natives compiled code
+    /// may call; see [`CallDispatcher::natives_registered`].
+    pub fn natives_registered(&self, symbols: &[(String, *const u8)], owner: std::sync::Arc<dyn std::any::Any + Send + Sync>) {
+        if let Some(dispatcher) = self.call_dispatcher.borrow_mut().as_mut() {
+            dispatcher.natives_registered(symbols, owner);
+        }
+    }
+
     /// Install `dispatcher` in place of the one taken out to make a call,
     /// while that call runs, standing in for it.
     ///

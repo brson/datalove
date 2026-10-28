@@ -130,19 +130,10 @@ fn run_with_executor(
 
     let (lib_paths, loaded_riders) = build_and_load_riders(descriptor, compiled, &mut executor)?;
 
-    // Register native rider symbols with JIT engine if present.
-    if let Some(dispatcher) = executor.take_dispatcher() {
-        if let Some(jit_engine) = dispatcher.as_any().downcast_ref::<JitEngine>() {
-            for rider in &loaded_riders {
-                for (symbol, ptr) in &rider.native_fn_ptrs {
-                    jit_engine.register_native_symbol(symbol, *ptr);
-                }
-                // The addresses go into generated code, so the jit holds the
-                // library they lead into as well.
-                jit_engine.hold_code_owner(rider.library.clone());
-            }
-        }
-        executor.set_dispatcher(dispatcher);
+    // The addresses go into generated code, so the jit holds the library
+    // they lead into as well.
+    for rider in &loaded_riders {
+        executor.natives_registered(&rider.native_fn_ptrs, rider.library.clone());
     }
 
     // Compile and execute the fragment.

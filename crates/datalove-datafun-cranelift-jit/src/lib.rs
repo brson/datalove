@@ -933,6 +933,13 @@ impl CallDispatcher for JitEngine {
         self.forget(|_| true);
     }
 
+    fn natives_registered(&mut self, symbols: &[(String, *const u8)], owner: std::sync::Arc<dyn Any + Send + Sync>) {
+        for (symbol, ptr) in symbols {
+            self.register_native_symbol(symbol, *ptr);
+        }
+        self.hold_code_owner(owner);
+    }
+
     fn unit_bodies_replaced(&mut self, unit: u32) {
         self.forget(|f| matches!(f, FuncIdentity::Unit { unit: u, .. } if *u == unit));
     }

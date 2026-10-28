@@ -3,6 +3,7 @@
 //! Allows external code (like a JIT) to intercept function calls.
 
 use std::any::Any;
+use std::sync::Arc;
 
 use datalove_datafun_ir::{CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
 use datalove_rt::c::LocalRtHandle;
@@ -200,6 +201,17 @@ pub trait CallDispatcher {
     /// evaluation runs every const as.
     fn unit_bodies_replaced(&mut self, unit: u32) {
         let _ = unit;
+    }
+
+    /// Natives that compiled code may call, by symbol and address, and a share
+    /// of what the code behind the addresses lives in.
+    ///
+    /// The interpreter calls natives through its own table. A dispatcher that
+    /// compiles calls to them needs the addresses instead, and has to keep
+    /// `owner` for as long as its code may run, since the addresses are
+    /// emitted into it. The default compiles nothing and needs neither.
+    fn natives_registered(&mut self, symbols: &[(String, *const u8)], owner: Arc<dyn Any + Send + Sync>) {
+        let _ = (symbols, owner);
     }
 
     /// Convert to Any for downcasting.

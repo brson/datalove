@@ -3,195 +3,8 @@ use rmx::prelude::*;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
+mod compile;
 mod render;
-
-/// Give a pipeline the natives its workspace's modules call.
-///
-/// The pipeline needs them before it compiles anything, since a const can call
-/// a native, and the executor needs the same ones after; see
-/// [`register_natives`]. Built riders are built at most once between the two.
-fn attach_natives(
-    descriptor: &datalove::datafun::pipeline::WorkspaceDescriptor,
-    sys: &datalove::datafun::pipeline::SystemLibrary,
-    pipeline: &mut datalove::datafun::pipeline::ModuleCompilationPipeline,
-) -> std::sync::Arc<datalove::datafun::pipeline::rider_load::RiderNatives> {
-    use datalove::datafun::pipeline::rider_load::RiderNatives;
-
-    let natives = std::sync::Arc::new(RiderNatives::for_workspace(descriptor, &sys.natives));
-    pipeline.set_natives(natives.clone());
-    natives
-}
-
-/// Point an executor at the native functions the script calls.
-///
-/// The interpreter calls them through its native table, and the JIT calls
-/// them directly, so it needs the addresses as well; a script that reaches a
-/// native call with a JIT that has not been told about it aborts the process.
-///
-/// Hands back what the natives were registered from. The executor's table and
-/// the jit hold their own share of it, so this is not what keeps any library
-/// mapped; it is returned because a caller wanting to hand a share to anything
-/// else needs it.
-fn register_natives(
-    natives: &std::sync::Arc<datalove::datafun::pipeline::rider_load::RiderNatives>,
-    compiled: &datalove::datafun::pipeline::CompiledModules,
-    executor: &mut datalove::datafun::pipeline::ScriptExecutor,
-) -> AnyResult<datalove::datafun::pipeline::rider_load::RegisteredNatives> {
-    use datalove::datafun_jit::OptimizingDispatcher;
-
-    let registered = datalove::datafun::pipeline::rider_load::register_natives(
-        natives, compiled, executor)?;
-
-    if let Some(dispatcher) = executor.take_dispatcher() {
-        if let Some(dispatcher) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
-            let jit = dispatcher.jit();
-            for (symbol, ptr) in &registered.native_fn_ptrs {
-                jit.register_native_symbol(symbol, *ptr);
-            }
-            // The jit emits these addresses into the code it generates, which
-            // outlives the lookup, so it holds the libraries they lead into.
-            for owner in registered.code_owners() {
-                jit.hold_code_owner(owner);
-            }
-        }
-        executor.set_dispatcher(dispatcher);
-    }
-
-    Ok(registered)
-}
-
-/// The workspace a command compiles in.
-///
-/// The system library unless `no_sys`, and the `local` library that
-/// [`find_local_library`](datalove::datafun::pipeline::find_local_library)
-/// finds for `script`, or in the current directory for a command given none.
-fn command_workspace(
-    sys: &datalove::datafun::pipeline::SystemLibrary,
-    no_sys: bool,
-    script: Option<&rmx::std::path::Path>,
-) -> AnyResult<datalove::datafun::pipeline::WorkspaceDescriptor> {
-    use datalove::datafun::pipeline::WorkspaceDescriptor;
-
-    let descriptor = if no_sys {
-        WorkspaceDescriptor::empty()
-    } else {
-        WorkspaceDescriptor::from_system_library(sys)
-    };
-    Ok(match command_local_library(script)? {
-        Some(local) => descriptor.with_user_library(local)?,
-        None => descriptor,
-    })
-}
-
-/// The `local` library a command compiles against, if it finds one.
-///
-/// See [`command_workspace`].
-fn command_local_library(
-    script: Option<&rmx::std::path::Path>,
-) -> AnyResult<Option<datalove::datafun::pipeline::PackageLibrary>> {
-    use datalove::datafun::pipeline::{find_local_library, load_local_library};
-
-    let cwd = rmx::std::env::current_dir().context("failed to read the current directory")?;
-    find_local_library(script, &cwd)
-        .map(|dir| load_local_library(&dir))
-        .transpose()
-}
-
-/// The file each module and data file was read from, by its source.
-fn source_files(
-    descriptor: &datalove::datafun::pipeline::WorkspaceDescriptor,
-    pipeline: &datalove::datafun::pipeline::ModuleCompilationPipeline,
-) -> std::collections::HashMap<datalove::bct::input::Source, PathBuf> {
-    let modules = descriptor.module_files().into_iter()
-        .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)));
-    let data = descriptor.data_files().into_iter()
-        .filter_map(|(path, file)| Some((pipeline.data_source(&path)?, file)));
-    let riders = descriptor.rider_files().into_iter()
-        .filter_map(|(name, file)| Some((pipeline.rider_source(&name)?, file)));
-    modules.chain(data).chain(riders).collect()
-}
-
-/// Report a script's type errors, each against the file its text came from:
-/// the script's own, or a data file it requires.
-fn render_script_type_diagnostics<'db>(
-    db: &'db dyn datalove::datafun::Db,
-    diagnostics: &[&datalove::diagnostic::TypeDiagnostic],
-    files: &std::collections::HashMap<datalove::bct::input::Source, PathBuf>,
-    script_path: &rmx::std::path::Path,
-    line_offsets: &datalove::bct::render::LineOffsets,
-    cwd: &rmx::std::path::Path,
-) {
-    let locate = |source: datalove::bct::input::Source| files.get(&source).cloned();
-    let diagnostics = diagnostics.iter().map(|d| d.to_diagnostic(db)).collect();
-    render::render_module_diagnostics(db, diagnostics, &locate, script_path, line_offsets, cwd);
-}
-
-/// Report what stopped the modules compiling, and fail, if anything did.
-///
-/// Parse, type and ownership errors are framed against the file each module
-/// was read from. Lowering errors carry no spans and are printed as they are.
-fn bail_on_module_errors<'db>(
-    db: &'db datalove::datafun::Database,
-    compiled: &datalove::datafun::pipeline::CompiledModules<'db>,
-    pipeline: &datalove::datafun::pipeline::ModuleCompilationPipeline,
-    descriptor: &datalove::datafun::pipeline::WorkspaceDescriptor,
-    script_path: &rmx::std::path::Path,
-) -> AnyResult<()> {
-    if !compiled.has_errors() {
-        return Ok(());
-    }
-    let cwd = rmx::std::env::current_dir().unwrap_or_default();
-
-    let files = source_files(descriptor, pipeline);
-    let locate = |source: datalove::bct::input::Source| files.get(&source).cloned();
-
-    let diagnostics: Vec<_> = compiled.get_module_parse_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db))
-        .chain(compiled.get_module_type_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
-        .chain(compiled.get_module_ownership_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
-        .collect();
-    let rendered = !diagnostics.is_empty();
-    render::render_module_diagnostics(db, diagnostics, &locate, script_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-
-    let unrendered = compiled.all_lowering_errors();
-    for error in &unrendered {
-        eprintln!("{error}");
-    }
-    // Nothing above says what went wrong, so the errors say it however they can.
-    if !rendered && unrendered.is_empty() {
-        for error in compiled.all_errors() {
-            eprintln!("{error}");
-        }
-    }
-    bail!("Module compilation error");
-}
-
-/// The failure for a type error, saying what it was when nothing else did.
-///
-/// A diagnostic carries a span and renders itself. An error without one - a
-/// duplicate import or type alias, say - renders nothing, and a bare "type
-/// error" is all the user would otherwise get.
-fn type_error(diagnostics: &[&datalove::diagnostic::TypeDiagnostic], errors: &[String]) -> AnyError {
-    if diagnostics.is_empty() && !errors.is_empty() {
-        anyhow!("Type error:\n{}", errors.join("\n"))
-    } else {
-        anyhow!("Type error")
-    }
-}
-
-/// What `--version` prints.
-///
-/// The version alone would not say where this binary expects to find the
-/// runtime and the riders it has to compile, and those are the two things that
-/// go wrong. A build from a checkout names it, and says so when it has since
-/// gone missing.
-fn build_version() -> &'static str {
-    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    VERSION.get_or_init(|| format!(
-        "{} (built from {})",
-        env!("CARGO_PKG_VERSION"),
-        datalove_buildinfo::BUILD_INFO.describe(),
-    )).as_str()
-}
 
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
@@ -207,8 +20,6 @@ fn main() -> AnyResult<()> {
 struct Cli {
     #[command(subcommand)]
     cmd: Command,
-    #[command(flatten)]
-    args: Args,
 }
 
 #[derive(clap::Subcommand)]
@@ -237,10 +48,6 @@ enum Command {
     ScriptWorld(ScriptWorldCommand),
     /// Generate a random worldfile.
     Worldgen(WorldgenCommand),
-}
-
-#[derive(clap::Args)]
-struct Args {
 }
 
 #[derive(clap::Args)]
@@ -371,46 +178,24 @@ struct WorldgenCommand {
 impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
-            Command::LitTycheck(cmd) => cmd.run(&self.args),
-            Command::LitAst(cmd) => cmd.run(&self.args),
-            Command::LitPretty(cmd) => cmd.run(&self.args),
-            Command::LitOp(cmd) => cmd.run(&self.args),
-            Command::Repl(cmd) => cmd.run(&self.args),
-            Command::Script(cmd) => cmd.run(&self.args),
-            Command::ScriptIr(cmd) => cmd.run(&self.args),
-            Command::AotCompile(cmd) => cmd.run(&self.args),
-            Command::TypecheckStd(cmd) => cmd.run(&self.args),
-            Command::Docs(cmd) => cmd.run(&self.args),
-            Command::ScriptWorld(cmd) => cmd.run(&self.args),
-            Command::Worldgen(cmd) => cmd.run(&self.args),
+            Command::LitTycheck(cmd) => cmd.run(),
+            Command::LitAst(cmd) => cmd.run(),
+            Command::LitPretty(cmd) => cmd.run(),
+            Command::LitOp(cmd) => cmd.run(),
+            Command::Repl(cmd) => cmd.run(),
+            Command::Script(cmd) => cmd.run(),
+            Command::ScriptIr(cmd) => cmd.run(),
+            Command::AotCompile(cmd) => cmd.run(),
+            Command::TypecheckStd(cmd) => cmd.run(),
+            Command::Docs(cmd) => cmd.run(),
+            Command::ScriptWorld(cmd) => cmd.run(),
+            Command::Worldgen(cmd) => cmd.run(),
         }
     }
 }
 
-/// Report an ownership failure the way the interpreter does, and stop.
-///
-/// Every command that compiles a script has to do this. One that skips it gets
-/// as far as asking for the IR, finds none, and says "IR unit not available
-/// after lowering" -- which names the step that produced nothing rather than
-/// the analysis that refused to produce it.
-fn bail_on_ownership_error(
-    compiled_unit: &datalove::datafun::pipeline::ScriptCompilationResult,
-    compiler: &datalove::datafun::pipeline::ScriptCompiler<'_>,
-    file_path: &std::path::Path,
-    line_offsets: &datalove::bct::render::LineOffsets,
-    cwd: &std::path::Path,
-) -> AnyResult<()> {
-    use datalove::datafun;
-    if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
-        let diagnostics = compiler.get_ownership_diagnostics();
-        render::render_ownership_diagnostics(compiler.db(), &diagnostics, file_path, line_offsets, cwd);
-        bail!("Ownership error");
-    }
-    Ok(())
-}
-
 impl LitTycheckCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
         use datalove::datalit;
         use datalove::bct::input::Source;
 
@@ -442,7 +227,7 @@ impl LitTycheckCommand {
 }
 
 impl LitAstCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
         use datalove::datalit;
         use datalove::bct::input::Source;
 
@@ -465,7 +250,7 @@ impl LitAstCommand {
 }
 
 impl LitPrettyCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
         use datalove::datalit;
         use datalove::bct::input::Source;
 
@@ -488,7 +273,7 @@ impl LitPrettyCommand {
 }
 
 impl LitOpCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
         use datalove::datalit;
         use datalove::bct::input::Source;
 
@@ -589,18 +374,21 @@ impl LitOpCommand {
 }
 
 impl ReplCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
+        use datalove::datafun::pipeline::local_library_for;
+
+        // A command given no script looks for `local` here, and a REPL's
+        // workspace is this directory.
+        let cwd = rmx::std::env::current_dir().context("failed to read the current directory")?;
         if let Some(script_path) = &self.script {
-            let local = command_local_library(Some(script_path))?;
+            let local = local_library_for(Some(script_path), &cwd)?;
             datalove::repl::run_script(datalove::sys_packages::system_library(), local, script_path)
         } else {
-            let local = command_local_library(None)?;
-            // The workspace is the directory `local` is looked for in.
-            let root = rmx::std::env::current_dir().context("failed to read the current directory")?;
+            let local = local_library_for(None, &cwd)?;
             datalove_repl_rat::run(
                 datalove::sys_packages::system_library,
                 local,
-                &root,
+                &cwd,
                 self.load.as_deref(),
             )
         }
@@ -608,38 +396,15 @@ impl ReplCommand {
 }
 
 impl ScriptCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
         use datalove::datafun;
         use datalove::datafun_jit::{
             DispatcherConfig, DispatcherMode, OptimizingDispatcher, DEFAULT_JIT_THRESHOLD,
         };
 
         let start = std::time::Instant::now();
-        let file_path = &self.file_path;
-        let no_sys = self.no_sys;
         let db = datafun::Database::default();
-
-        // Build workspace descriptor. The work dir goes on whether or not it
-        // is used: with `DATALOVE_BUILD_SYS_RIDERS` set the riders are built
-        // rather than taken from this binary, and that is where they build.
-        let sys = datalove::sys_packages::system_library();
-        let descriptor = command_workspace(&sys, no_sys, Some(file_path))?
-            .with_work_dir(datalove::paths::work_dir()?);
-
-        // Read the script file, which is what says where compilation starts.
-        let script_source = rmx::std::fs::read_to_string(file_path)
-            .with_context(|| format!("Failed to read script file: {}", file_path.display()))?;
-
-        // Create pipeline from descriptor and compile.
-        let mut pipeline = descriptor.to_pipeline(&db);
-        let natives = attach_natives(&descriptor, &sys, &mut pipeline);
-        // Compile only what the script reaches. A program that requires two
-        // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
-        // refuses when a require does not resolve, leaving the whole world for
-        // resolution to report on.
-        pipeline.narrow_roots_to_script(&db, &script_source, &[]);
-        let compiled = pipeline.compile(&db);
-        bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, file_path)?;
+        let script = compile::compile_script(&db, &self.file_path, self.no_sys)?;
 
         // The production defaults: compiling a function on its hundredth
         // call, and a loop's code, by OSR, on its thousandth iteration. On
@@ -670,43 +435,13 @@ impl ScriptCommand {
             None
         };
 
-        // Create script compiler and executor with Stderr mode for debuglog output.
-        // Safe to unwrap since we checked has_errors() above.
-        let mut compiler = compiled.script_compiler_default(&db)
-            .expect("script_compiler should succeed after error check");
-        let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
+        // Stderr mode for debuglog output.
+        let mut executor = script.compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
+        datafun::pipeline::rider_load::register_natives(&script.natives, &script.compiled, &mut executor)?;
 
-        let _natives = register_natives(&natives, &compiled, &mut executor)?;
-
-        // Compile the script as a fragment.
-        let compiled_unit = compiler.compile_fragment(&script_source);
-
-        // Check for errors and render diagnostics.
-        let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
-            let parse_diags = compiler.get_parse_diagnostics();
-            render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-            bail!("Parse error");
-        }
-        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
-            let type_diags = compiler.get_type_diagnostics();
-            render_script_type_diagnostics(
-                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-            return Err(type_error(&type_diags, errors));
-        }
-        bail_on_ownership_error(&compiled_unit, &compiler, file_path, &datalove::bct::render::LineOffsets::new(), &cwd)?;
-        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
-            bail!("Lowering error: {}", message);
-        }
-
-        // Execute the compiled unit.
         let compiled_at = start.elapsed();
-        let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
-            executor.execute_fragment(ir_unit)
-        } else {
-            String::new()
-        };
+        let output = executor.execute_fragment(&script.ir_unit);
         if self.time || self.jit_stats {
             let ran = start.elapsed() - compiled_at;
             eprintln!("time: {:.1} ms compiling, {:.1} ms running",
@@ -717,7 +452,7 @@ impl ScriptCommand {
             let stats = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>()
                 .expect("the script command's dispatcher is an OptimizingDispatcher")
                 .jit().stats();
-            let paths = compiled.module_paths(&db);
+            let paths = script.compiled.module_paths(&db);
             eprint!("{}", stats.report(25, &|id| paths.get(&id).cloned()));
             executor.set_dispatcher(dispatcher);
         }
@@ -725,23 +460,21 @@ impl ScriptCommand {
             bail!("{error}");
         }
 
-        // Look up the "output" binding from the exports.
+        // A script need not bind `output`, and prints nothing if it does not.
         if let Some((_, value)) = executor.get_binding("output") {
             match value {
                 Some(value) => println!("{}", value),
                 None => bail!("`output` was given away"),
             }
         }
-        // No output binding found - this is okay, just don't print anything.
 
-        // Cleanup.
         executor.destroy_live_values();
 
         // The interpreters check for leaks as they drop, so they go as usual.
         // The database is most of what the process allocated, and freeing it
         // table by table was about 5% of a run requiring all of `sys/std`; the
         // process exits next, which frees it at once.
-        drop((_natives, executor, compiler, compiled, natives, pipeline));
+        drop((executor, script));
         std::mem::forget(db);
 
         Ok(())
@@ -749,66 +482,93 @@ impl ScriptCommand {
 }
 
 impl ScriptIrCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove::datafun;
-
-        let db = datafun::Database::default();
-
-        // Build workspace descriptor.
-        let sys = datalove::sys_packages::system_library();
-        let descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?;
-
-                // Read the script file, which is what says where compilation starts.
-        let script_source = rmx::std::fs::read_to_string(&self.file_path)
-            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
-
-        let mut pipeline = descriptor.to_pipeline(&db);
-        attach_natives(&descriptor, &sys, &mut pipeline);
-        // Compile only what the script reaches. A program that requires two
-        // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
-        // refuses when a require does not resolve, leaving the whole world for
-        // resolution to report on.
-        pipeline.narrow_roots_to_script(&db, &script_source, &[]);
-        let compiled = pipeline.compile(&db);
-        bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, &self.file_path)?;
-
-        // Create script compiler.
-        // Safe to unwrap since we checked has_errors() above.
-        let mut compiler = compiled.script_compiler_default(&db)
-            .expect("script_compiler should succeed after error check");
-
-
-        let compiled_unit = compiler.compile_fragment(&script_source);
-
-        // Check for errors and render diagnostics.
-        let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
-            let parse_diags = compiler.get_parse_diagnostics();
-            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-            bail!("Parse error");
-        }
-        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
-            let type_diags = compiler.get_type_diagnostics();
-            render_script_type_diagnostics(
-                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-            return Err(type_error(&type_diags, errors));
-        }
-        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd)?;
-        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
-            bail!("Lowering error: {}", message);
-        }
-
-        // Get the IR unit and print it.
-        let ir_unit = compiled_unit.ir_unit
-            .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
-
-        println!("{}", ir_unit);
-
+    fn run(&self) -> AnyResult<()> {
+        let db = datalove::datafun::Database::default();
+        let script = compile::compile_script(&db, &self.file_path, self.no_sys)?;
+        println!("{}", script.ir_unit);
         Ok(())
     }
 }
 
 impl AotCompileCommand {
+    fn run(&self) -> AnyResult<()> {
+        use datalove::datafun::pipeline::{aot, rider_build};
+
+        let db = datalove::datafun::Database::default();
+        let script = compile::compile_script(&db, &self.file_path, self.no_sys)?;
+        let registry = script.compiled.module_registry();
+        let ir_unit = &script.ir_unit;
+        let work_dir = script.descriptor.work_dir.as_ref()
+            .expect("a script is compiled with a work dir");
+
+        // The runtime and the riders this program calls, as one library for
+        // the linker. Which riders those are comes from the module graph, so
+        // a program using a package of its own gets that package's rider in
+        // here alongside the ones from `sys/`.
+        let component = rider_build::build_component_staticlib(
+            work_dir,
+            &script.descriptor.rider_crates(),
+        ).map_err(|e| anyhow!("{}", e))?;
+        let rider_libs = vec![component];
+
+        // --run implies --link.
+        let should_link = self.link || self.run;
+
+        if self.c {
+            return self.compile_via_c(ir_unit, &registry, &rider_libs, should_link);
+        }
+
+        // Compile to object bytes using pipeline::aot.
+        let obj_bytes = aot::compile_script_to_object_with_world(
+            ir_unit,
+            &registry,
+        )?;
+
+        // Determine output path.
+        let output_path = if let Some(ref out) = self.output {
+            out.C()
+        } else {
+            let stem = self.file_path.file_stem()
+                .ok_or_else(|| anyhow!("Invalid input filename"))?;
+            if should_link {
+                PathBuf::from(stem)
+            } else {
+                PathBuf::from(format!("{}.o", stem.to_string_lossy()))
+            }
+        };
+
+        if should_link {
+            // Link into executable using pipeline::aot, including rider libraries.
+            aot::link_object_to_path_with_libs(&obj_bytes, &output_path, &rider_libs)
+                .map_err(|e| anyhow!("{}", e))?;
+            println!("Linked executable: {}", output_path.display());
+
+            if self.run {
+                // Run the executable. Use absolute path or prefix with ./ for relative paths.
+                let exe_path = if output_path.is_absolute() {
+                    output_path.C()
+                } else {
+                    std::env::current_dir()?.join(&output_path)
+                };
+                let result = aot::run_executable(&exe_path)
+                    .map_err(|e| anyhow!("{}", e))?;
+                if !result.stdout.is_empty() {
+                    print!("{}", result.stdout);
+                }
+                if !result.stderr.is_empty() {
+                    eprint!("{}", result.stderr);
+                }
+            }
+        } else {
+            // Write object file.
+            rmx::std::fs::write(&output_path, &obj_bytes)
+                .with_context(|| format!("Failed to write object file: {}", output_path.display()))?;
+            println!("Wrote object file: {}", output_path.display());
+        }
+
+        Ok(())
+    }
+
     /// Compile through C rather than straight to an object.
     ///
     /// The C backend produces one source file per module plus one for the
@@ -863,131 +623,90 @@ impl AotCompileCommand {
         }
         Ok(())
     }
+}
 
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+impl TypecheckStdCommand {
+    fn run(&self) -> AnyResult<()> {
         use datalove::datafun;
-        use datafun::pipeline::{aot, rider_build};
 
         let db = datafun::Database::default();
 
-        // Build workspace descriptor. The work dir is where the native
-        // component the emitted program links gets built.
-        let work_dir = datalove::paths::work_dir()?;
         let sys = datalove::sys_packages::system_library();
-        let descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?
-            .with_work_dir(&work_dir);
+        let descriptor = datafun::pipeline::WorkspaceDescriptor::from_system_library(&sys);
 
-                // Read the script file, which is what says where compilation starts.
-        let script_source = rmx::std::fs::read_to_string(&self.file_path)
-            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
-
-        let mut pipeline = descriptor.to_pipeline(&db);
-        attach_natives(&descriptor, &sys, &mut pipeline);
-        // Compile only what the script reaches. A program that requires two
-        // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
-        // refuses when a require does not resolve, leaving the whole world for
-        // resolution to report on.
-        pipeline.narrow_roots_to_script(&db, &script_source, &[]);
-
-        // Compile modules (typecheck, drop analysis, lower to IR).
+        let (mut pipeline, _) = descriptor.to_pipeline_with_natives(&db, &sys.natives);
         let compiled = pipeline.compile(&db);
-        bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, &self.file_path)?;
 
-        // Create script compiler and get registry for AOT.
-        // Safe to unwrap since we checked has_errors() above.
-        let mut compiler = compiled.script_compiler_default(&db)
-            .expect("script_compiler should succeed after error check");
-        let registry = compiled.module_registry();
-
-
-        let compiled_unit = compiler.compile_fragment(&script_source);
-
-        // Check for errors and render diagnostics.
-        let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
-            let parse_diags = compiler.get_parse_diagnostics();
-            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-            bail!("Parse error");
-        }
-        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
-            let type_diags = compiler.get_type_diagnostics();
-            render_script_type_diagnostics(
-                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
-            return Err(type_error(&type_diags, errors));
-        }
-        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd)?;
-        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
-            bail!("Lowering error: {}", message);
+        if let Some(err) = &compiled.resolution_error {
+            bail!("Package resolution failed: {}", err);
         }
 
-        // Get the IR unit.
-        let ir_unit = compiled_unit.ir_unit
-            .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
+        let errors: Vec<(&String, &String)> = compiled.path_to_errors.iter()
+            .flat_map(|(path, errors)| errors.iter().map(move |err| (path, err)))
+            .collect();
 
-        // The runtime and the riders this program calls, as one library for
-        // the linker. Which riders those are comes from the module graph, so
-        // a program using a package of its own gets that package's rider in
-        // here alongside the ones from `sys/`.
-        let component = rider_build::build_component_staticlib(
-            &work_dir,
-            &descriptor.rider_crates(),
-        ).map_err(|e| anyhow!("{}", e))?;
-        let rider_libs = vec![component];
-
-        // --run implies --link.
-        let should_link = self.link || self.run;
-
-        if self.c {
-            return self.compile_via_c(&ir_unit, &registry, &rider_libs, should_link);
-        }
-
-        // Compile to object bytes using pipeline::aot.
-        let obj_bytes = aot::compile_script_to_object_with_world(
-            &ir_unit,
-            &registry,
-        )?;
-
-        // Determine output path.
-        let output_path = if let Some(ref out) = self.output {
-            out.C()
+        if errors.is_empty() {
+            println!("No typecheck errors found in sys/std.");
+            Ok(())
         } else {
-            let stem = self.file_path.file_stem()
-                .ok_or_else(|| anyhow!("Invalid input filename"))?;
-            if should_link {
-                PathBuf::from(stem)
-            } else {
-                PathBuf::from(format!("{}.o", stem.to_string_lossy()))
+            println!("Found {} typecheck error(s):", errors.len());
+            for (path, err) in &errors {
+                println!("  {}: {}", path, err);
             }
-        };
-
-        if should_link {
-            // Link into executable using pipeline::aot, including rider libraries.
-            aot::link_object_to_path_with_libs(&obj_bytes, &output_path, &rider_libs)
-                .map_err(|e| anyhow!("{}", e))?;
-            println!("Linked executable: {}", output_path.display());
-
-            if self.run {
-                // Run the executable. Use absolute path or prefix with ./ for relative paths.
-                let exe_path = if output_path.is_absolute() {
-                    output_path.C()
-                } else {
-                    std::env::current_dir()?.join(&output_path)
-                };
-                let result = aot::run_executable(&exe_path)
-                    .map_err(|e| anyhow!("{}", e))?;
-                if !result.stdout.is_empty() {
-                    print!("{}", result.stdout);
-                }
-                if !result.stderr.is_empty() {
-                    eprint!("{}", result.stderr);
-                }
-            }
-        } else {
-            // Write object file.
-            rmx::std::fs::write(&output_path, &obj_bytes)
-                .with_context(|| format!("Failed to write object file: {}", output_path.display()))?;
-            println!("Wrote object file: {}", output_path.display());
+            bail!("Typecheck failed with {} error(s)", errors.len());
         }
+    }
+}
+
+impl DocsCommand {
+    fn run(&self) -> AnyResult<()> {
+        use megaspace_pipeliner::{DocSet, PostsConfig, Site};
+
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_path = PathBuf::from(manifest_dir);
+        let project_root = manifest_path
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or_else(|| anyhow!("Failed to find project root"))?;
+
+        let static_assets = &["style.css", "datalove-logo.svg", "datalove-prism.js"];
+
+        let mandocs_dir = project_root.join("mandocs");
+        let botdocs_dir = project_root.join("botdocs");
+        let output_dir = project_root.join("docs");
+
+        let doc_sets = [
+            DocSet {
+                input_dir: &mandocs_dir,
+                mount: "",
+                static_assets,
+                extra_context: &[("cross_link_label", "Botdocs")],
+                link_context: &[("cross_link_url", "../botdocs/README.md")],
+                posts: Some(PostsConfig {
+                    site_title: "Datalove",
+                    site_description: "Updates from Datalove",
+                    author: "Brian Anderson",
+                    language: "en",
+                    base_url: "https://datalove-language.net",
+                    categories: &["design", "devlog", "milestone"],
+                    excerpt_bytes: 600,
+                    posts_dir: None,
+                    syndication: None,
+                }),
+            },
+            DocSet {
+                input_dir: &botdocs_dir,
+                mount: "bot",
+                static_assets,
+                extra_context: &[("cross_link_label", "Mandocs")],
+                link_context: &[("cross_link_url", "../mandocs/README.md")],
+                posts: None,
+            },
+        ];
+
+        Site { output_dir: &output_dir, doc_sets: &doc_sets, deployed_with: &[] }.build()?;
+
+        println!("Documentation generated in {}", output_dir.display());
 
         Ok(())
     }
@@ -999,7 +718,7 @@ impl ScriptWorldCommand {
     /// A unit that fails to compile, returns early, or reads from one that did
     /// stays in the session and the units after it still run, as they would at
     /// the REPL. A runtime error ends the session, and the run with it.
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
         use datalove::datafun;
         use datafun::pipeline::WorkspaceDescriptor;
         use datalove::datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
@@ -1086,7 +805,7 @@ impl ScriptWorldCommand {
             bail!("Module compilation error");
         }
 
-        let files = source_files(engine.workspace(), engine.pipeline());
+        let files = engine.workspace().source_files(engine.pipeline());
 
         let total = units.len();
         let mut failed: Vec<(usize, AnyError)> = Vec::new();
@@ -1095,8 +814,9 @@ impl ScriptWorldCommand {
             let eval = engine.eval_reporting(unit, &mut |compiler, compiled| {
                 let mut line_offsets = line_offsets.C();
                 line_offsets.insert(compiler.last_source().expect("a unit was compiled"), offset);
-                compile_error = Some(script_world_error(
-                    compiler, compiled, &files, &self.file_path, &line_offsets, &cwd));
+                compile_error = Some(compile::check_unit(
+                    compiler, compiled, &files, &self.file_path, &line_offsets, &cwd)
+                    .expect_err("a unit was reported as failing to compile"));
             });
             let error = match eval {
                 Eval::Ran(_) => None,
@@ -1133,136 +853,8 @@ impl ScriptWorldCommand {
     }
 }
 
-/// Render why a worldfile's script unit did not compile, and say what it was.
-fn script_world_error(
-    compiler: &datalove::datafun::pipeline::ScriptCompiler<'_>,
-    compiled: &datalove::datafun::pipeline::ScriptCompilationResult,
-    files: &std::collections::HashMap<datalove::bct::input::Source, PathBuf>,
-    file_path: &std::path::Path,
-    line_offsets: &datalove::bct::render::LineOffsets,
-    cwd: &std::path::Path,
-) -> AnyError {
-    use datalove::datafun::pipeline::{LoweringResult, TypecheckResult};
-
-    if let TypecheckResult::ParseError { errors: _ } = &compiled.typecheck {
-        let parse_diags = compiler.get_parse_diagnostics();
-        render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, line_offsets, cwd);
-        return anyhow!("Parse error");
-    }
-    if let TypecheckResult::Error { errors } = &compiled.typecheck {
-        // Typechecking a unit asks of the units before it, so its diagnostics
-        // include theirs, which were reported with them. What is this unit's
-        // points into its own text, or into a module or data file.
-        let own = compiler.last_source().expect("a unit was compiled");
-        let type_diags: Vec<_> = compiler.get_type_diagnostics().into_iter()
-            .filter(|diag| {
-                let diag = diag.to_diagnostic(compiler.db());
-                diag.labels.is_empty()
-                    || diag.labels.iter().any(|label| label.source == own || files.contains_key(&label.source))
-            })
-            .collect();
-        render_script_type_diagnostics(compiler.db(), &type_diags, files, file_path, line_offsets, cwd);
-        return type_error(&type_diags, errors);
-    }
-    if let Err(error) = bail_on_ownership_error(compiled, compiler, file_path, line_offsets, cwd) {
-        return error;
-    }
-    if let LoweringResult::Error { message } = &compiled.lowering {
-        return anyhow!("Lowering error: {}", message);
-    }
-    unreachable!("the unit was reported as failing to compile")
-}
-
-impl TypecheckStdCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove::datafun;
-
-        let db = datafun::Database::default();
-
-        let sys = datalove::sys_packages::system_library();
-        let descriptor = datafun::pipeline::WorkspaceDescriptor::from_system_library(&sys);
-
-        let mut pipeline = descriptor.to_pipeline(&db);
-        attach_natives(&descriptor, &sys, &mut pipeline);
-        let compiled = pipeline.compile(&db);
-
-        if let Some(err) = &compiled.resolution_error {
-            bail!("Package resolution failed: {}", err);
-        }
-
-        let errors: Vec<(&String, &String)> = compiled.path_to_errors.iter()
-            .flat_map(|(path, errors)| errors.iter().map(move |err| (path, err)))
-            .collect();
-
-        if errors.is_empty() {
-            println!("No typecheck errors found in sys/std.");
-            Ok(())
-        } else {
-            println!("Found {} typecheck error(s):", errors.len());
-            for (path, err) in &errors {
-                println!("  {}: {}", path, err);
-            }
-            bail!("Typecheck failed with {} error(s)", errors.len());
-        }
-    }
-}
-
-impl DocsCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
-        use megaspace_pipeliner::{DocSet, PostsConfig, Site};
-
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let manifest_path = PathBuf::from(manifest_dir);
-        let project_root = manifest_path
-            .parent()
-            .and_then(|p| p.parent())
-            .ok_or_else(|| anyhow!("Failed to find project root"))?;
-
-        let static_assets = &["style.css", "datalove-logo.svg", "datalove-prism.js"];
-
-        let mandocs_dir = project_root.join("mandocs");
-        let botdocs_dir = project_root.join("botdocs");
-        let output_dir = project_root.join("docs");
-
-        let doc_sets = [
-            DocSet {
-                input_dir: &mandocs_dir,
-                mount: "",
-                static_assets,
-                extra_context: &[("cross_link_label", "Botdocs")],
-                link_context: &[("cross_link_url", "../botdocs/README.md")],
-                posts: Some(PostsConfig {
-                    site_title: "Datalove",
-                    site_description: "Updates from Datalove",
-                    author: "Brian Anderson",
-                    language: "en",
-                    base_url: "https://datalove-language.net",
-                    categories: &["design", "devlog", "milestone"],
-                    excerpt_bytes: 600,
-                    posts_dir: None,
-                    syndication: None,
-                }),
-            },
-            DocSet {
-                input_dir: &botdocs_dir,
-                mount: "bot",
-                static_assets,
-                extra_context: &[("cross_link_label", "Mandocs")],
-                link_context: &[("cross_link_url", "../mandocs/README.md")],
-                posts: None,
-            },
-        ];
-
-        Site { output_dir: &output_dir, doc_sets: &doc_sets, deployed_with: &[] }.build()?;
-
-        println!("Documentation generated in {}", output_dir.display());
-
-        Ok(())
-    }
-}
-
 impl WorldgenCommand {
-    fn run(&self, _args: &Args) -> AnyResult<()> {
+    fn run(&self) -> AnyResult<()> {
         use rand::Rng;
         use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 
@@ -1278,4 +870,19 @@ impl WorldgenCommand {
 
         Ok(())
     }
+}
+
+/// What `--version` prints.
+///
+/// The version alone would not say where this binary expects to find the
+/// runtime and the riders it has to compile, and those are the two things that
+/// go wrong. A build from a checkout names it, and says so when it has since
+/// gone missing.
+fn build_version() -> &'static str {
+    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VERSION.get_or_init(|| format!(
+        "{} (built from {})",
+        env!("CARGO_PKG_VERSION"),
+        datalove_buildinfo::BUILD_INFO.describe(),
+    )).as_str()
 }

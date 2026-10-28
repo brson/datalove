@@ -112,22 +112,9 @@ fn prepare(source: &str, config: Config) -> Prepared {
         .script_executor(datafun::DebugOutputMode::Disabled, config.dispatcher())
         .expect("executor construction failed");
 
-    // A native the jit reaches without having been told its address aborts the
-    // process, so both tables are filled whether the jit is on or not. The cli
-    // does this only for a bare `JitEngine`; an `OptimizingDispatcher` holds
-    // its engine behind `jit()` and nothing in the tree hands it the symbols.
     let natives = std::sync::Arc::new(rider_load::RiderNatives::linked(&sys.natives));
-    let native_fn_ptrs = rider_load::register_natives(&natives, compiled, &mut executor)
-        .expect("linked natives must resolve")
-        .native_fn_ptrs;
-    if let Some(dispatcher) = executor.take_dispatcher() {
-        if let Some(opt) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
-            for (symbol, ptr) in &native_fn_ptrs {
-                opt.jit().register_native_symbol(symbol, *ptr);
-            }
-        }
-        executor.set_dispatcher(dispatcher);
-    }
+    rider_load::register_natives(&natives, compiled, &mut executor)
+        .expect("linked natives must resolve");
 
     let unit = compiler.compile_fragment(source);
     let unit = unit

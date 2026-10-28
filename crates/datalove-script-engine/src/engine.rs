@@ -364,11 +364,9 @@ impl Engine {
             None => workspace.with_work_dir(datalove_paths::work_dir()?),
         };
 
-        let mut pipeline = workspace.to_pipeline(&db);
         // The same natives for the life of the pipeline, so that a reset
         // neither rebuilds riders nor reloads them.
-        let natives = Arc::new(RiderNatives::for_workspace(&workspace, &sys.natives));
-        pipeline.set_natives(natives.clone());
+        let (mut pipeline, natives) = workspace.to_pipeline_with_natives(&db, &sys.natives);
 
         let module_errors = settle_roots(&db, &mut pipeline, &[], &also_roots)?;
         let started = Started::compile(&db, &mut pipeline, &natives, debug_output)?;

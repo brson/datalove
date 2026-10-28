@@ -348,6 +348,10 @@ impl CallDispatcher for OptimizingDispatcher {
         self.jit.bodies_replaced();
     }
 
+    fn natives_registered(&mut self, symbols: &[(String, *const u8)], owner: std::sync::Arc<dyn Any + Send + Sync>) {
+        self.jit.natives_registered(symbols, owner);
+    }
+
     fn unit_bodies_replaced(&mut self, unit: u32) {
         self.jit.unit_bodies_replaced(unit);
     }

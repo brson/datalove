@@ -482,7 +482,38 @@ pub fn load_local_library(dir: &Path) -> AnyResult<PackageLibrary> {
     Ok(package_library_from_map("local", &packages))
 }
 
+/// The `local` library a command compiles against, if it finds one.
+///
+/// Looked for where [`find_local_library`] says.
+pub fn local_library_for(script: Option<&Path>, cwd: &Path) -> AnyResult<Option<PackageLibrary>> {
+    find_local_library(script, cwd)
+        .map(|dir| load_local_library(&dir))
+        .transpose()
+}
+
 impl WorkspaceDescriptor {
+    /// The workspace a command compiles in.
+    ///
+    /// The system library unless `no_sys`, and the `local` library that
+    /// [`find_local_library`] finds for `script`, or in `cwd` for a command
+    /// given none.
+    pub fn for_command(
+        sys: &SystemLibrary,
+        no_sys: bool,
+        script: Option<&Path>,
+        cwd: &Path,
+    ) -> AnyResult<Self> {
+        let descriptor = if no_sys {
+            WorkspaceDescriptor::empty()
+        } else {
+            WorkspaceDescriptor::from_system_library(sys)
+        };
+        Ok(match local_library_for(script, cwd)? {
+            Some(local) => descriptor.with_user_library(local)?,
+            None => descriptor,
+        })
+    }
+
     /// Add a user library, as [`load_local_library`] gives.
     ///
     /// A rider is named after its package, in `require rider` and in the
@@ -786,6 +817,8 @@ fn package_library_from_map(
 // ---------------------------------------------------------------------------
 
 use super::module_pipeline::ModuleCompilationPipeline;
+use super::rider_load::RiderNatives;
+use rmx::std::collections::HashMap;
 
 impl WorkspaceDescriptor {
     /// Apply this descriptor to a fresh pipeline, populating all modules and riders.
@@ -813,6 +846,40 @@ impl WorkspaceDescriptor {
         let mut pipeline = ModuleCompilationPipeline::new(self.options.clone());
         self.apply_to_pipeline(&mut pipeline, db);
         pipeline
+    }
+
+    /// Create a fresh pipeline from this descriptor, given the natives its
+    /// modules call.
+    ///
+    /// `linked` is what this binary carries, as
+    /// [`SystemLibrary::natives`] lists them. The pipeline needs the natives
+    /// before it compiles anything, since a const can call one, and an
+    /// executor needs the same ones after, through
+    /// [`register_natives`](super::rider_load::register_natives), so they are
+    /// handed back too. A rider is built at most once between the two.
+    pub fn to_pipeline_with_natives(
+        &self,
+        db: &dyn salsa::Database,
+        linked: &[(String, *const ())],
+    ) -> (ModuleCompilationPipeline, Arc<RiderNatives>) {
+        let mut pipeline = self.to_pipeline(db);
+        let natives = Arc::new(RiderNatives::for_workspace(self, linked));
+        pipeline.set_natives(natives.clone());
+        (pipeline, natives)
+    }
+
+    /// The file each module, data file and rider interface `pipeline` compiled
+    /// from this descriptor was read from, by its source.
+    ///
+    /// For framing a diagnostic against the file its text came from.
+    pub fn source_files(&self, pipeline: &ModuleCompilationPipeline) -> HashMap<bct::input::Source, PathBuf> {
+        let modules = self.module_files().into_iter()
+            .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)));
+        let data = self.data_files().into_iter()
+            .filter_map(|(path, file)| Some((pipeline.data_source(&path)?, file)));
+        let riders = self.rider_files().into_iter()
+            .filter_map(|(name, file)| Some((pipeline.rider_source(&name)?, file)));
+        modules.chain(data).chain(riders).collect()
     }
 }
 

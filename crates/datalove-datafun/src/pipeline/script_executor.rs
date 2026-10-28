@@ -720,6 +720,12 @@ impl ScriptExecutor {
         self.interp.native_table_mut()
     }
 
+    /// Tell the call dispatcher, if there is one, about natives compiled code
+    /// may call; see [`CallDispatcher::natives_registered`].
+    pub fn natives_registered(&self, symbols: &[(String, *const u8)], owner: Arc<dyn std::any::Any + Send + Sync>) {
+        self.interp.natives_registered(symbols, owner);
+    }
+
     /// Take the call dispatcher from the interpreter.
     ///
     /// Returns the dispatcher if one was set, leaving None in its place.

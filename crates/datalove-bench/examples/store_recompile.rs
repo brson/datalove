@@ -16,7 +16,6 @@
 use std::time::{Duration, Instant};
 
 use datalove_datafun as datafun;
-use datafun::pipeline::rider_load::RiderNatives;
 use datafun::pipeline::{load_local_library, WorkspaceDescriptor};
 
 fn main() {
@@ -38,8 +37,7 @@ fn main() {
         .with_user_library(local)
         .expect("the store's library fits the workspace");
     descriptor.options.cache_consts = !no_cache;
-    let mut pipeline = descriptor.to_pipeline(&db);
-    pipeline.set_natives(std::sync::Arc::new(RiderNatives::for_workspace(&descriptor, &sys.natives)));
+    let (mut pipeline, _) = descriptor.to_pipeline_with_natives(&db, &sys.natives);
 
     let original = edited.as_ref().map(|module| {
         let path = format!("{}/store/{}.dfm", dir, module);
