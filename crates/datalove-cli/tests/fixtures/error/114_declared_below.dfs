@@ -1,0 +1,13 @@
+// At the top level a name is in scope from where it is declared, and only a
+// function is in scope throughout. Each use here is above its declaration.
+fun twice(x: N): N
+  ret x + x
+end fun
+let a: N = 1
+debuglog abs(-1)
+debuglog int.max(1, 2)
+debuglog LIMIT
+type N: i64
+require module sys/std/int
+import int.abs
+const LIMIT: i64 = 10

@@ -179,6 +179,37 @@ pub struct TypeContext<'db> {
     pub(crate) arena: Option<&'db ExprArena<'db>>,
     /// What inference has found of the expressions checked so far.
     pub(crate) inference: crate::infer::Inference<'db>,
+    /// What the scope being walked declares below the statement being checked.
+    pub(crate) below: DeclaredBelow<'db>,
+}
+
+/// What a scope declares below the statement its walk has reached.
+///
+/// At the top level a name is in scope from where it is declared, and a
+/// function throughout. Name and import resolution find every declaration
+/// before the walk starts; these hold the ones it has not reached yet, so that
+/// a use above one is refused, and the refusal can say why. See
+/// `botdocs/plan-lexical-scope.md`.
+#[derive(Default)]
+pub(crate) struct DeclaredBelow<'db> {
+    /// `const`, `let` and `var` names.
+    values: HashSet<InternedText<'db>>,
+    /// Type aliases, resolved, until their `type` is reached.
+    type_aliases: bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
+    /// Imported functions, until the `import` that brings them is reached.
+    imports: Vec<ImportBelow<'db>>,
+    /// The aliases `require`s give.
+    requires: HashSet<InternedText<'db>>,
+}
+
+/// A function an `import` brings into scope, once the walk reaches it.
+struct ImportBelow<'db> {
+    /// The import's span index.
+    local_index: u32,
+    name: InternedText<'db>,
+    func: TypeFunction<'db>,
+    ast: Option<FunHead<'db>>,
+    module_id: Option<ModuleId<'db>>,
 }
 
 impl<'db> TypeContext<'db> {
@@ -227,6 +258,7 @@ impl<'db> TypeContext<'db> {
             in_const_expr: false,
             arena: None,
             inference: crate::infer::Inference::new(db),
+            below: DeclaredBelow::default(),
         }
     }
 
@@ -364,6 +396,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
             expr_key: expr.key(),
             module_id: self.current_module_id,
             name,
+            below: self.below.values.contains(&name),
         });
         TypeError::UnresolvedName(name.as_str(self.db).S())
     }
@@ -410,10 +443,12 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
 
     /// F002: Undefined function.
     pub fn error_undefined_function(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
+        let below = self.below.imports.iter().any(|import| import.name == name);
         self.pending_diagnostics.push(PendingDiagnostic::UndefinedFunction {
             expr_key: expr.key(),
             module_id: self.current_module_id,
             name,
+            below,
         });
         TypeError::UnresolvedName(name.as_str(self.db).S())
     }
@@ -432,10 +467,12 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         let result = convert_type_hint_inheriting(
             self.db, type_hint, &self.type_aliases, &|name| self.inherited_type_alias(name));
         if let Err(TypeError::UnresolvedTypeAlias { name, local_index: Some(local_index) }) = &result {
+            let name = InternedText::new(self.db, name.C());
             self.pending_diagnostics.push(PendingDiagnostic::UnresolvedTypeAlias {
                 local_index: *local_index,
                 module_id: self.current_module_id,
-                name: InternedText::new(self.db, name.C()),
+                name,
+                below: self.below.type_aliases.contains_key(&name),
             });
         }
         result
@@ -699,12 +736,21 @@ replace the view rather than the elements it shows. Index down to single element
         alias: InternedText<'db>,
         name: InternedText<'db>,
     ) -> Result<crate::QualifiedFunction<'db>, TypeError> {
-        if let Some(found) = self.qualified.functions.iter().find(|f| f.alias == alias && f.name == name) {
-            return Ok(found.clone());
-        }
         let site = ErrorSite::Expr(expr.key());
         let module = alias.as_str(self.db);
         let item = name.as_str(self.db);
+        if self.below.requires.contains(&alias) {
+            return Err(self.error_worded(
+                site,
+                "F078",
+                fmt!("nothing named `{module}` is required to call into"),
+                "no such module or rider, yet",
+                Some(declared_below_note(module)),
+            ));
+        }
+        if let Some(found) = self.qualified.functions.iter().find(|f| f.alias == alias && f.name == name) {
+            return Ok(found.clone());
+        }
         if self.qualified.aliases.contains(&alias) {
             self.push_coded(site, "F002", fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
             return Err(TypeError::UnresolvedName(fmt!("{module}.{item}")));
@@ -1190,12 +1236,10 @@ replace the view rather than the elements it shows. Index down to single element
         name_resolution: &ModuleNameResolution<'db>,
         module_id: Option<ModuleId<'db>>,
     ) {
-        self.record_resolution_errors(name_resolution.errors(self.db), module_id);
-
-        // Add type aliases.
         for (name, ty) in name_resolution.type_aliases(self.db) {
             self.type_aliases.insert(*name, ty.clone());
         }
+        self.record_resolution_errors(name_resolution.errors(self.db), module_id);
 
         // Add function signatures with ASTs.
         // First build a map of ASTs for lookup.
@@ -1253,10 +1297,12 @@ replace the view rather than the elements it shows. Index down to single element
             // alias definitions, so a name that resolves to nothing in one of
             // those is found here rather than while checking a body.
             if let TypeError::UnresolvedTypeAlias { name, local_index: Some(local_index) } = error {
+                let name = InternedText::new(self.db, name.C());
                 self.pending_diagnostics.push(PendingDiagnostic::UnresolvedTypeAlias {
                     local_index: *local_index,
                     module_id,
-                    name: InternedText::new(self.db, name.C()),
+                    name,
+                    below: self.type_aliases.contains_key(&name),
                 });
             }
             self.add_error(error.clone());
@@ -1270,12 +1316,10 @@ replace the view rather than the elements it shows. Index down to single element
         collected: &CollectedNames<'db>,
         module_id: Option<ModuleId<'db>>,
     ) {
-        self.record_resolution_errors(&collected.errors, module_id);
-
-        // Add type aliases.
         for (name, ty) in &collected.type_aliases {
             self.type_aliases.insert(*name, ty.clone());
         }
+        self.record_resolution_errors(&collected.errors, module_id);
 
         // Add function signatures with ASTs.
         let ast_map: bct::lookup::LookupMap<bct::text::InternedText<'db>, FunHead<'db>> = collected.function_asts
@@ -1291,6 +1335,116 @@ replace the view rather than the elements it shows. Index down to single element
             }
         }
     }
+}
+
+impl<'db> TypeContext<'db> {
+    /// Hold back what a scope's top level declares, before walking it.
+    ///
+    /// Called once the scope's names are seeded. Its type aliases move out of
+    /// scope until their `type` is reached; its functions stay, being in scope
+    /// throughout.
+    pub fn declare_scope(&mut self, statements: &[Statement<'db>]) {
+        for statement in statements {
+            match statement {
+                Statement::Const(stmt) => {
+                    self.below.values.insert(stmt.name);
+                }
+                Statement::Let(stmt) => self.below.values.extend(stmt.binding.names()),
+                Statement::Var(stmt) => self.below.values.extend(stmt.binding.names()),
+                Statement::TypeAlias(stmt) => {
+                    if let Some(ty) = self.type_aliases.remove(&stmt.name) {
+                        self.below.type_aliases.insert(stmt.name, ty);
+                    }
+                }
+                Statement::Require(StmtRequire::Module(req)) => {
+                    self.below.requires.insert(req.module_alias);
+                }
+                Statement::Require(StmtRequire::Rider(req)) => {
+                    self.below.requires.insert(req.name);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Bring an imported function into scope at the `import` that names it.
+    pub fn import_below(
+        &mut self,
+        local_index: u32,
+        name: InternedText<'db>,
+        func: TypeFunction<'db>,
+        ast: Option<FunHead<'db>>,
+        module_id: Option<ModuleId<'db>>,
+    ) {
+        self.below.imports.push(ImportBelow { local_index, name, func, ast, module_id });
+    }
+
+    /// Bring what a top-level statement declares into scope, as the walk
+    /// reaches it.
+    ///
+    /// A `const`, `let` or `var` is bound by checking it; here it only stops
+    /// being below.
+    pub fn reach(&mut self, statement: &Statement<'db>) {
+        match statement {
+            Statement::Const(stmt) => {
+                self.below.values.remove(&stmt.name);
+            }
+            Statement::Let(stmt) => {
+                for name in stmt.binding.names() {
+                    self.below.values.remove(&name);
+                }
+            }
+            Statement::Var(stmt) => {
+                for name in stmt.binding.names() {
+                    self.below.values.remove(&name);
+                }
+            }
+            Statement::TypeAlias(stmt) => {
+                if let Some(ty) = self.below.type_aliases.remove(&stmt.name) {
+                    self.type_aliases.insert(stmt.name, ty);
+                }
+            }
+            Statement::Require(StmtRequire::Module(req)) => {
+                self.below.requires.remove(&req.module_alias);
+            }
+            Statement::Require(StmtRequire::Rider(req)) => {
+                self.below.requires.remove(&req.name);
+            }
+            Statement::Import(stmt) => self.reach_import(stmt),
+            _ => {}
+        }
+    }
+
+    fn reach_import(&mut self, stmt: &StmtImport<'db>) {
+        let (reached, below): (Vec<_>, Vec<_>) = std::mem::take(&mut self.below.imports)
+            .into_iter()
+            .partition(|import| import.local_index == stmt.local_index);
+        self.below.imports = below;
+        if self.below.requires.contains(&stmt.module_name) {
+            let module = stmt.module_name.as_str(self.db);
+            let error = self.error_worded(
+                ErrorSite::Import(stmt.local_index),
+                "F078",
+                fmt!("nothing named `{module}` is required to import from"),
+                "no such module or rider, yet",
+                Some(declared_below_note(module)),
+            );
+            self.add_error(error);
+            return;
+        }
+        for import in reached {
+            if let Some(ast) = import.ast {
+                self.function_asts.insert(import.name, (ast, import.module_id));
+            }
+            self.functions.insert(import.name, import.func);
+        }
+    }
+}
+
+/// Why a name declared at the top level is not in scope above its declaration.
+pub(crate) fn declared_below_note(name: &str) -> String {
+    fmt!("`{name}` is declared below. At the top level a name is in scope from where it \
+is declared, and only a function is in scope throughout.")
 }
 
 /// Format a description of what the @ operator does for this conversion.

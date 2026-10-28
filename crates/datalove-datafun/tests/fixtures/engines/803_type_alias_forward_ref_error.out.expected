@@ -4,22 +4,18 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "unknown type `Later`",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = const 42int
-                        unit_end_drop v0
-                        unit_end
-                """,
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
+            output: "",
         ),
     ],
 )

@@ -15,6 +15,7 @@ Appendix B rather than described.
   - [2.3 Comments](#user-content-23-comments)
   - [2.4 Spacing](#user-content-24-spacing)
   - [2.5 Names](#user-content-25-names)
+  - [2.6 Scope](#user-content-26-scope)
 - [3. Types](#user-content-3-types)
   - [3.1 Primitive Types](#user-content-31-primitive-types)
   - [3.2 Collection Types](#user-content-32-collection-types)
@@ -348,6 +349,41 @@ functions under symbols made from them (Section 9.5), and the AOT backends
 write them into generated code. Text that looks the same can also be different
 code points -- `é` precomposed or as `e` and a combining accent, a Latin `a` or
 a Cyrillic one -- and two such names would be two names.
+
+### 2.6 Scope
+
+A scope is read top to bottom. **A declaration is in scope from where it is
+written to the end of its scope, and a function throughout it**, so functions
+may call each other in any order. A function's signature and body see what is
+written above the function, and every function of the scope.
+
+```datalove
+require module sys/std/u32
+
+fun even(n: u32): bool        // calls `odd`, written below: fine
+    if n == 0
+        ret true
+    end if
+    ret odd(u32.sub_wrapping(n, 1))
+end fun
+
+fun odd(n: u32): bool
+    if n == 0
+        ret false
+    end if
+    ret even(u32.sub_wrapping(n, 1))
+end fun
+
+const LIMIT: u32 = : u32 / 10
+```
+
+`even` and `odd` may name `u32`, and not `LIMIT`. This is one rule for every
+scope: a function body, a script, a module (which has no `let` or `var`), and
+a session, whose units continue one scope, so that a unit sees the units
+before it and a function is in scope throughout only its own unit. A name used
+above its declaration is the error it would be anywhere it is not in scope:
+F001 for a value, F002 for an imported function, F064 for a type, F078 for a
+module or rider.
 
 ## 3. Types
 
@@ -1200,10 +1236,10 @@ and needs a type (P026); a destructuring `var` needs a value (P068).
 
 ### 8.2 Const
 
-**Const** binds a value the compiler evaluates. It is valid at script top
-level, in a script or module function body, and at module top level, where it
-is in scope for every function in the module regardless of where it is written.
-A script's top-level const is in scope for the functions written below it:
+**Const** binds a value the compiler evaluates. It is valid at the top level
+of a script or module and in a function body. Like any declaration it is in
+scope from where it is written (Section 2.6), so a top-level const is in scope
+for the consts and functions written below it:
 
 ```datalove
 const LIMIT: u32 = : u32 / 10
@@ -2077,8 +2113,8 @@ a `.dfm`. The last segment is the name of the const.
 
 The statement is the const `orders: [{sku: string, qty: u32}]` whose value is
 the file, and it is that const in every respect: it is borrowed wherever it is
-named, cloned out with `@`, in scope for every function of the module or for
-the units of a session after it, and built once. The file is datalit, which
+named, cloned out with `@`, in scope below the `require` and for the units of
+a session after it, and built once. The file is datalit, which
 is the literal syntax of datafun, so its value is the one the same text would
 have as a const's initializer: its literals take their types from the type at
 the `require`, so `3` is a `u32` there and an `int` without one. With no type

@@ -442,8 +442,7 @@ pub fn typecheck_script_unit<'db>(
                     continue;
                 }
                 bound.insert(item_name, source_module_id);
-                ctx.add_function(item_name, func_ty);
-                ctx.function_asts.insert(item_name, (func_ast.clone(), source_module_id));
+                ctx.import_below(local_index, item_name, func_ty, Some(func_ast.clone()), source_module_id);
                 new_fns.push((item_name, func_ty));
                 new_fn_asts.push((item_name, func_ast, source_module_id));
             }
@@ -466,10 +465,13 @@ pub fn typecheck_script_unit<'db>(
                 ctx.report_unresolved_import(unresolved);
             }
 
-            // Second pass: typecheck all statements.
+            // Second pass: typecheck all statements, in source order, each
+            // declaration coming into scope where it is written.
+            ctx.declare_scope(parsed.statements(db));
             ctx.arena = Some(&parsed.body(db).arena);
             for statement in parsed.statements(db).iter() {
-                check_statement(&mut ctx, &statement);
+                ctx.reach(statement);
+                check_statement(&mut ctx, statement);
             }
             ctx.report_inline_cycles();
 
@@ -682,31 +684,19 @@ pub fn typecheck_module<'db>(
             continue;
         }
         import_sources.insert(*local_name, source);
-        if let Some(ast) = func_ast {
-            ctx.add_imported_function(*local_name, *func_type, ast.clone(), *source_module);
-        } else {
-            ctx.add_function(*local_name, *func_type);
-        }
+        ctx.import_below(*local_index, *local_name, *func_type, func_ast.clone(), Some(*source_module));
     }
 
     // Seed context from pre-computed name resolution (replaces Pass 0/1).
     ctx.seed_from_name_resolution(&name_resolution, Some(module_id));
 
-    // Pass 2a: module-level consts, before anything that could name one. A
-    // module const is in scope for every function in the module regardless of
-    // where it is written, and functions are checked in source order below.
+    // One walk in source order. A declaration is in scope from where it is
+    // written, a function throughout; see `botdocs/plan-lexical-scope.md`.
+    ctx.declare_scope(parsed.statements(db));
     ctx.arena = Some(&parsed.body(db).arena);
     for statement in parsed.statements(db).iter() {
-        if matches!(statement, Statement::Const(_)) {
-            check_statement(&mut ctx, &statement);
-        }
-    }
-
-    // Pass 2b: everything else.
-    for statement in parsed.statements(db).iter() {
-        if !matches!(statement, Statement::Const(_)) {
-            check_statement(&mut ctx, &statement);
-        }
+        ctx.reach(statement);
+        check_statement(&mut ctx, statement);
     }
     ctx.report_inline_cycles();
 

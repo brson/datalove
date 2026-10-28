@@ -770,9 +770,12 @@ the top level; inside a block it is P074.
 **Modules.** A module's top level holds declarations only: `fun`,
 `native fun`, `const`, `type`, `require` and `import`. Any other statement
 there would never run, and the parser refuses it (P077). `Σ` is collected
-from every `fun` and `native fun` first, so order of definition does not
-matter. Module-level consts are checked next, before any other statement,
-and are in scope throughout the module. Module top level has no `ret` entry,
+from every `fun` and `native fun` first, so the order functions are written
+in does not matter. Everything else is checked in source order and is in
+scope from where it is written (botspec Section 2.6): a function's signature
+and body see the `require`s, `import`s, `type`s and consts above it, and a
+name used above its declaration is the error it would be anywhere it is not
+in scope. Module top level has no `ret` entry,
 so `?`, `!` and the checked and optional operators in a module const are
 F049 ("no enclosing function").
 

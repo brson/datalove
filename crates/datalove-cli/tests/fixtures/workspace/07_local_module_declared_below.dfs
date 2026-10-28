@@ -1,0 +1,5 @@
+// A module's top level is lexical: a const or a require is in scope from
+// where it is written, so a function above one cannot name it.
+require module local/broken/below
+
+debuglog below.get()

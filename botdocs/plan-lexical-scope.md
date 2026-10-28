@@ -1,7 +1,8 @@
 # Lexical Scope at the Top Level
 
 Written October 2026, after a script const calling a function that names
-another const was found to panic; not implemented.
+another const was found to panic. Phase 1, lexical name resolution, is
+implemented; the const walk is not.
 
 A function body is read top to bottom: a name is in scope from where it is
 bound. The top level of a module or script is not. There most declarations

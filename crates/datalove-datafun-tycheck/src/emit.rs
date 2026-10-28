@@ -252,6 +252,14 @@ pub fn format_pending_diagnostics<'db>(
         .collect()
 }
 
+/// A name's diagnostic, with why it is not in scope when it is declared below.
+fn note_below<'db>(builder: DiagnosticBuilder<'db>, below: bool, name: &str) -> DiagnosticBuilder<'db> {
+    match below {
+        true => builder.note(&crate::context::declared_below_note(name)),
+        false => builder,
+    }
+}
+
 /// The diagnostic for one pending diagnostic, the one place each is worded;
 /// `None` where what it points at has no span.
 fn build<'db>(
@@ -260,15 +268,17 @@ fn build<'db>(
     spans: &dyn SpanLookup<'db>,
 ) -> Option<DiagnosticBuilder<'db>> {
     let builder = match diag {
-        PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name } => {
-            DiagnosticBuilder::error(db, &format!("cannot find value `{}` in this scope", name.as_str(db)))
+        PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name, below } => {
+            let builder = DiagnosticBuilder::error(db, &format!("cannot find value `{}` in this scope", name.as_str(db)))
                 .code("F001")
-                .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope");
+            note_below(builder, *below, name.as_str(db))
         }
-        PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name } => {
-            DiagnosticBuilder::error(db, &format!("cannot find function `{}` in this scope", name.as_str(db)))
+        PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name, below } => {
+            let builder = DiagnosticBuilder::error(db, &format!("cannot find function `{}` in this scope", name.as_str(db)))
                 .code("F002")
-                .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope")
+                .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope");
+            note_below(builder, *below, name.as_str(db))
         }
         PendingDiagnostic::DuplicateImport { local_index, module_id: _, name, first } => {
             DiagnosticBuilder::error(db, &format!("`{}` is imported already, from `{}`", name.as_str(db), first.as_str(db)))
@@ -301,7 +311,13 @@ collection written over a type parameter asks that parameter for an ordering. Sa
 value has to be reached only where a `ret` has already left. Return from every path out, or \
 drop the return type.")
         }
-        PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name } => {
+        PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name, below: true } => {
+            let builder = DiagnosticBuilder::error(db, &format!("unknown type `{}`", name.as_str(db)))
+                .code("F064")
+                .primary_label(spans.lookup_alias(db, *local_index)?, "no type of this name is in scope");
+            note_below(builder, true, name.as_str(db))
+        }
+        PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name, below: false } => {
             let mut builder = DiagnosticBuilder::error(db, &format!("unknown type `{}`", name.as_str(db)))
                 .code("F064")
                 .primary_label(spans.lookup_alias(db, *local_index)?, "no type of this name is in scope")

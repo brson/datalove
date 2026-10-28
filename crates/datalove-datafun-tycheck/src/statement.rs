@@ -616,8 +616,8 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
         }
 
         Statement::TypeAlias(_) => {
-            // Type aliases are handled in pass 0 (collect_type_aliases).
-            // Nothing to do here.
+            // Resolved by name resolution, and brought into scope where it
+            // is written by `TypeContext::reach`.
         }
 
         Statement::NativeFun(stmt) => {

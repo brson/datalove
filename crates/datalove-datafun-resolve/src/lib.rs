@@ -57,38 +57,12 @@ pub fn resolve_names_inheriting<'db>(
 ) -> CollectedNames<'db> {
     let mut errors = Vec::new();
 
-    // Pass 0: collect type aliases.
+    // One walk in source order. A type alias is in scope from where it is
+    // declared, so an alias and a signature see only the aliases above them;
+    // the functions themselves are collected here and seeded whole, since a
+    // function is in scope throughout.
     let mut type_aliases_map: bct::lookup::LookupMap<InternedText<'db>, Type<'db>> = bct::lookup::LookupMap::new();
     let mut type_aliases_vec = Vec::new();
-
-    for item in items {
-        if let Item::TypeAlias(stmt) = item {
-            let name = stmt.name;
-            let name_str = name.as_str(db);
-
-            // Check for duplicate type alias.
-            if type_aliases_map.contains_key(&name) {
-                errors.push(TypeError::DuplicateTypeAlias {
-                    name: name_str.to_string(),
-                    local_index: stmt.local_index,
-                });
-                continue;
-            }
-
-            // Resolve the type hint using already-collected aliases.
-            match convert_type_hint_inheriting(db, stmt.type_hint.clone(), &type_aliases_map, inherited) {
-                Ok(ty) => {
-                    type_aliases_map.insert(name, ty.clone());
-                    type_aliases_vec.push((name, ty));
-                }
-                Err(e) => {
-                    errors.push(e);
-                }
-            }
-        }
-    }
-
-    // Pass 1: collect function signatures.
     let mut functions = Vec::new();
     let mut function_asts = Vec::new();
     let mut defined = std::collections::HashSet::new();
@@ -96,6 +70,24 @@ pub fn resolve_names_inheriting<'db>(
     for item in items {
         // Extract function signature from either regular or native fun.
         let (name, type_params, type_bounds, params, return_type, func_ast, local_index) = match item {
+            Item::TypeAlias(stmt) => {
+                let name = stmt.name;
+                if type_aliases_map.contains_key(&name) {
+                    errors.push(TypeError::DuplicateTypeAlias {
+                        name: name.as_str(db).to_string(),
+                        local_index: stmt.local_index,
+                    });
+                    continue;
+                }
+                match convert_type_hint_inheriting(db, stmt.type_hint.clone(), &type_aliases_map, inherited) {
+                    Ok(ty) => {
+                        type_aliases_map.insert(name, ty.clone());
+                        type_aliases_vec.push((name, ty));
+                    }
+                    Err(e) => errors.push(e),
+                }
+                continue;
+            }
             Item::Fun(head) => {
                 (head.name, head.type_params().clone(), head.type_bounds().clone(),
                  head.params().clone(), head.return_type(), Some(head), head.local_index)
