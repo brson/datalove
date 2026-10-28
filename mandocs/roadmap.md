@@ -39,7 +39,9 @@ Focus on ergonomic scripting experience and the REPL.
 - [ ] filesystem workspaces
 - [ ] multiple concurrent interactive scripts
 - [ ] std docs, in-repl docs, generated docs
-- [ ] pipeline tools
+- [ ] pipeline I/O
+- [ ] virtual I/O for all existing file access
+
 
 
 
