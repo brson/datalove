@@ -1152,18 +1152,14 @@ impl<'db> ScriptCompiler<'db> {
         context: &str,
         error: datalove_datafun_compiler::lower::LowerError,
     ) -> ScriptCompilationResult {
-        let failed_provider = match &error {
-            datalove_datafun_compiler::lower::LowerError::BindingNotAvailable(name) => {
-                let outputs = self.unit_typecheck_outputs();
-                (0..index).rev()
-                    .find(|unit| {
-                        outputs[*unit].is_some_and(|output| self.unit_provides_names(output).contains(name))
-                    })
-                    .filter(|unit| self.unit_records[*unit].provides.is_empty())
-                    .map(|unit| (name, unit))
-            }
-            _ => None,
-        };
+        let datalove_datafun_compiler::lower::LowerError::BindingNotAvailable(name) = &error;
+        let outputs = self.unit_typecheck_outputs();
+        let failed_provider = (0..index).rev()
+            .find(|unit| {
+                outputs[*unit].is_some_and(|output| self.unit_provides_names(output).contains(name))
+            })
+            .filter(|unit| self.unit_records[*unit].provides.is_empty())
+            .map(|unit| (name, unit));
         let message = match failed_provider {
             Some((name, unit)) => format!("`{name}` is bound by unit {unit}, which did not compile"),
             None => format!("{context}{error}"),
@@ -1756,9 +1752,6 @@ impl<'db> ScriptCompiler<'db> {
     /// Convert a CtfeError to a ConstEvalError.
     fn ctfe_error_to_const_eval_error(&self, e: CtfeError, binding_name: &str) -> ConstEvalError {
         match e {
-            CtfeError::InterpError(msg) if msg.contains("gas") => {
-                ConstEvalError::GasExpired { binding_name: binding_name.to_string() }
-            }
             CtfeError::InterpError(msg) => {
                 ConstEvalError::LoweringFailed {
                     binding_name: binding_name.to_string(),

@@ -93,14 +93,6 @@ pub type ScriptFunctionAnalyses<'db> = bct::lookup::LookupMap<FunKey<'db>, Funct
 /// These represent edge cases that lowering cannot handle.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LowerError {
-    /// Function not found in scope. Occurs for mutual recursion in script units
-    /// where functions are lowered sequentially and a function references another
-    /// that hasn't been lowered yet.
-    FunctionNotFound(String),
-    /// Invalid literal value (e.g., integer out of range for target type).
-    InvalidLiteral(String),
-    /// Feature not implemented for CTFE or const expressions.
-    NotImplemented(String),
     /// A name the typechecker accepted has no value yet.
     ///
     /// Reached for a module-level const, whose value is only known once it has
@@ -112,9 +104,6 @@ pub enum LowerError {
 impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
-            LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
-            LowerError::NotImplemented(msg) => write!(f, "not implemented: {}", msg),
             LowerError::BindingNotAvailable(name) => write!(f, "binding not available yet: {}", name),
         }
     }

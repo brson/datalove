@@ -226,9 +226,7 @@ What is left:
 no step limit and no allocation limit. A const calling a function that never
 terminates hangs `datalove script-ir`, which only compiles. Unbounded
 recursion is caught, by the IR walker's stack check, and reported as `const
-evaluation error: failed to lower const 'C': stack overflow`. There is a `ConstEvalError::GasExpired` and an arm mapping an error
-message containing "gas" to it, but nothing produces such a message, so the arm
-is dead.
+evaluation error: failed to lower const 'C': stack overflow`.
 
 Errors are reported thinly too. A const whose expression early-returns says
 `h::X: early return: const expression returned early via ! or ?` as a lowering
@@ -299,12 +297,9 @@ They should mostly not be lowering errors at all. What reaches users:
   implementation limit, which names the function and not the call that went
   over.
 
-Of `LowerError` itself only `BindingNotAvailable` is ever built:
-`FunctionNotFound`, whose doc still describes mutual recursion that
-`pre_register_func` now handles, `InvalidLiteral` and `NotImplemented` are
-dead, as is `ConstEvalError::DependencyFailed`. The lowering crate also has about a hundred panicking checks,
-some saying "typechecker should catch this"; the const cycle above is one of
-them being hit.
+`LowerError` has only `BindingNotAvailable` left. The lowering crate also has
+about a hundred panicking checks, some saying "typechecker should catch this";
+the const cycle above is one of them being hit.
 
 The fix is per error, in the phase that should have caught it, with a span;
 what is left in lowering then is the compiler's own bugs, for which a message

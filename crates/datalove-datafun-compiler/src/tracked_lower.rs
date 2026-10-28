@@ -988,10 +988,6 @@ pub fn lower_module_functions<'db>(
                     deferred.push(func_name);
                     continue;
                 }
-                Err(_) => {
-                    // Errors will be reported during the main lowering phase.
-                    continue;
-                }
             }
         }
     }
