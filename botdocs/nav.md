@@ -40,6 +40,7 @@
 - [A Parser That Reads Tokens in Place](plan-parser.md)
 - [A Plain-Data AST](plan-plain-ast.md)
 - [Parsing Large Collection Literals in Parallel](plan-parallel-collections.md)
+- [Lexical Scope at the Top Level](plan-lexical-scope.md)
 - [One Rule for Literals That Share a Type](plan-literal-typing.md)
 - [Carry/Bring](carry-bring.md)
 
