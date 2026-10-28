@@ -94,7 +94,7 @@ We do not prove correctness.
 _And_ this is a primer on reactive scripts.
 
 Thesis: rerun dependent code.
-Antithesis: hidden state problem.
+Antithesis: hidden state problem?
 
 Don't want to compare to existing systems.
 It's not really my goal to solve a _new_ problem, just _my_ problem.
@@ -294,6 +294,10 @@ Reevaluate just what needs to reevaluate.
 
 There are plenty of obstacles to doing this correctly and efficiently.
 todo probably need some anithesis here.
+
+We'll develop the rules Datalove follows to make
+these cases and more work correctly,
+then circle back to a live demonstration of how this particular script actually reacts to modifications.
 
 
 
