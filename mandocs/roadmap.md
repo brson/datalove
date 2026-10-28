@@ -25,18 +25,16 @@ and the language can perform no direct I/O.
 
 Focus on ergonomic scripting experience and the REPL.
 
-- [ ] UX
+- [ ] interactive CLI UX
 - [ ] module and script compile reactivity
 - [ ] script interpreter reactivity
 - [ ] repl error and abort semantics
 - [ ] assert statements
-- [ ] ergonomic conveniences
 - [ ] rational numbers
-- [ ] monadic math ops
+- [ ] numeric ergonomics
 - [ ] ?/! polymorphism
-- [ ] type synthesis for all literal forms
 - [ ] enum subtyping
-- [ ] filesystem workspaces
+- [x] filesystem workspaces
 - [ ] multiple concurrent interactive scripts
 - [ ] std docs, in-repl docs, generated docs
 - [ ] pipeline I/O
