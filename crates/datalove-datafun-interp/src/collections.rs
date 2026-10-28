@@ -31,7 +31,7 @@ impl IrInterpreter {
 
         // Create empty list at dest.
         unsafe {
-            datalove_rt::c::dtlv_rti_list_create_local(rt_handle, list_ptr, &*list_tydesc);
+            datalove_rt::c::dtlv_rti_list_create_local(rt_handle, rtdt::AnyOut::new(list_ptr), &*list_tydesc);
         }
 
         if elements.is_empty() {
@@ -42,7 +42,7 @@ impl IrInterpreter {
         unsafe {
             datalove_rt::c::dtlv_rti_list_reserve_local(
                 rt_handle,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
                 elements.len() as rtdt::IndexRepr,
             );
@@ -87,15 +87,15 @@ impl IrInterpreter {
         // insert is what knows an element is already there, and what destroys
         // the one it did not take.
         unsafe {
-            datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, dest.ptr, &*dest.tydesc);
+            datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, rtdt::AnyOut::new(dest.ptr), &*dest.tydesc);
         }
         for elem_op in elements {
             let elem = self.read_operand(elem_op, frame, frames);
             let mut added = false;
             unsafe {
                 datalove_rt::c::dtlv_rti_btreeset_insert_local(
-                    rt_handle, dest.ptr, &*dest.tydesc, elem.ptr, &*elem.tydesc,
-                    &mut added as *mut bool as *mut u8);
+                    rt_handle, rtdt::AnyMut::new(dest.ptr), &*dest.tydesc, rtdt::AnyOwned::new(elem.ptr), &*elem.tydesc,
+                    rtdt::AnyOut::new(&mut added as *mut bool as *mut u8));
             }
         }
     }
@@ -116,15 +116,15 @@ impl IrInterpreter {
         // knows the key is there already, and what lets go of the value it
         // replaced.
         unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, dest.ptr, &*dest.tydesc);
+            datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, rtdt::AnyOut::new(dest.ptr), &*dest.tydesc);
         }
         for (key_op, val_op) in entries {
             let key = self.read_operand(key_op, frame, frames);
             let val = self.read_operand(val_op, frame, frames);
             unsafe {
                 datalove_rt::c::dtlv_rti_btreemap_insert_local(
-                    rt_handle, dest.ptr, &*dest.tydesc,
-                    key.ptr, &*key.tydesc, val.ptr, &*val.tydesc);
+                    rt_handle, rtdt::AnyMut::new(dest.ptr), &*dest.tydesc,
+                    rtdt::AnyOwned::new(key.ptr), &*key.tydesc, rtdt::AnyOwned::new(val.ptr), &*val.tydesc);
             }
         }
     }
@@ -242,7 +242,7 @@ impl IrInterpreter {
 
         // Create empty table at dest.
         unsafe {
-            datalove_rt::c::dtlv_rti_table_create_local(rt_handle, table_ptr, &*table_tydesc);
+            datalove_rt::c::dtlv_rti_table_create_local(rt_handle, rtdt::AnyOut::new(table_ptr), &*table_tydesc);
         }
 
         // Push each row (rows are tuples).
@@ -252,9 +252,9 @@ impl IrInterpreter {
             unsafe {
                 datalove_rt::c::dtlv_rti_table_push_row_local(
                     rt_handle,
-                    table_ptr,
+                    rtdt::AnyMut::new(table_ptr),
                     &*table_tydesc,
-                    row_val.ptr,
+                    rtdt::AnyRef::new(row_val.ptr),
                     &*row_val.tydesc,
                 );
             }

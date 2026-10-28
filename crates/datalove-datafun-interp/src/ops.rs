@@ -356,13 +356,13 @@ impl IrInterpreter {
 
             let status = match op {
                 BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
-                    rt_handle, lhs_ptr, &*int_tydesc, rhs_ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                    rt_handle, rtdt::AnyRef::new(lhs_ptr), &*int_tydesc, rtdt::AnyRef::new(rhs_ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
                 ),
                 BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
-                    rt_handle, lhs_ptr, &*int_tydesc, rhs_ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                    rt_handle, rtdt::AnyRef::new(lhs_ptr), &*int_tydesc, rtdt::AnyRef::new(rhs_ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
                 ),
                 BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
-                    rt_handle, lhs_ptr, &*int_tydesc, rhs_ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                    rt_handle, rtdt::AnyRef::new(lhs_ptr), &*int_tydesc, rtdt::AnyRef::new(rhs_ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
                 ),
                 // Only Add/Sub/Mul widen; type checker ensures this.
                 _ => unreachable!("widening arithmetic not supported for {:?}", op),
@@ -393,13 +393,13 @@ impl IrInterpreter {
 
             let status = match op {
                 BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
-                    rt_handle, lhs.ptr, &*int_tydesc, rhs.ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                    rt_handle, rtdt::AnyRef::new(lhs.ptr), &*int_tydesc, rtdt::AnyRef::new(rhs.ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
                 ),
                 BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
-                    rt_handle, lhs.ptr, &*int_tydesc, rhs.ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                    rt_handle, rtdt::AnyRef::new(lhs.ptr), &*int_tydesc, rtdt::AnyRef::new(rhs.ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
                 ),
                 BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
-                    rt_handle, lhs.ptr, &*int_tydesc, rhs.ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                    rt_handle, rtdt::AnyRef::new(lhs.ptr), &*int_tydesc, rtdt::AnyRef::new(rhs.ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
                 ),
                 BinOp::Div => {
                     unreachable!();
@@ -407,7 +407,7 @@ impl IrInterpreter {
                 BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
                     use datalove_rt::c::RtOrdering;
                     let cmp = datalove_rt::c::dtlv_rti_cmp_local(
-                        rt_handle, lhs.ptr, &*int_tydesc, rhs.ptr, &*int_tydesc,
+                        rt_handle, rtdt::AnyRef::new(lhs.ptr), &*int_tydesc, rtdt::AnyRef::new(rhs.ptr), &*int_tydesc,
                     );
                     let result = match op {
                         BinOp::Eq => cmp == RtOrdering::Equal,
@@ -490,7 +490,7 @@ impl IrInterpreter {
         use datalove_rt::c::RtEq;
         let eq = unsafe {
             datalove_rt::c::dtlv_rti_eq_local(
-                self.runtime.handle(), lhs.ptr, &*lhs.tydesc, rhs.ptr, &*rhs.tydesc,
+                self.runtime.handle(), rtdt::AnyRef::new(lhs.ptr), &*lhs.tydesc, rtdt::AnyRef::new(rhs.ptr), &*rhs.tydesc,
             )
         };
         let equal = match eq {
@@ -613,7 +613,7 @@ impl IrInterpreter {
                     let rt_handle = self.runtime.handle();
                     let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
                     let status = datalove_rt::c::dtlv_rti_int_neg(
-                        rt_handle, src.ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                        rt_handle, rtdt::AnyRef::new(src.ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
                     );
                     if status != RtStatus::Ok {
                         unreachable!("Int negation failed");
@@ -718,13 +718,13 @@ impl IrInterpreter {
             let rt_handle = self.runtime.handle();
             let status = match op {
                 BinOp::Add => datalove_rt::c::dtlv_rti_int_add_assign(
-                    rt_handle, place.ptr, &*place.tydesc, rhs.ptr, &*rhs.tydesc,
+                    rt_handle, rtdt::AnyMut::new(place.ptr), &*place.tydesc, rtdt::AnyRef::new(rhs.ptr), &*rhs.tydesc,
                 ),
                 BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub_assign(
-                    rt_handle, place.ptr, &*place.tydesc, rhs.ptr, &*rhs.tydesc,
+                    rt_handle, rtdt::AnyMut::new(place.ptr), &*place.tydesc, rtdt::AnyRef::new(rhs.ptr), &*rhs.tydesc,
                 ),
                 BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul_assign(
-                    rt_handle, place.ptr, &*place.tydesc, rhs.ptr, &*rhs.tydesc,
+                    rt_handle, rtdt::AnyMut::new(place.ptr), &*place.tydesc, rtdt::AnyRef::new(rhs.ptr), &*rhs.tydesc,
                 ),
                 _ => unreachable!("{:?} on an int place, which typecheck refuses", op),
             };
@@ -751,7 +751,7 @@ impl IrInterpreter {
             if (*place.tydesc).type_tag == rtdt::TyTag::Int {
                 assert_eq!(op, BinOp::Div, "checked {:?} on an int place, which typecheck refuses", op);
                 let status = datalove_rt::c::dtlv_rti_int_div_assign_checked(
-                    self.runtime.handle(), place.ptr, &*place.tydesc, rhs.ptr, &*rhs.tydesc,
+                    self.runtime.handle(), rtdt::AnyMut::new(place.ptr), &*place.tydesc, rtdt::AnyRef::new(rhs.ptr), &*rhs.tydesc,
                 );
                 *(overflow_dest.ptr as *mut bool) = status != RtStatus::Ok;
                 return;
@@ -791,7 +791,7 @@ impl IrInterpreter {
             let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
 
             let status = datalove_rt::c::dtlv_rti_int_div_checked(
-                rt_handle, lhs.ptr, &*int_tydesc, rhs.ptr, &*int_tydesc, dest.ptr, &*int_tydesc,
+                rt_handle, rtdt::AnyRef::new(lhs.ptr), &*int_tydesc, rtdt::AnyRef::new(rhs.ptr), &*int_tydesc, rtdt::AnyOut::new(dest.ptr), &*int_tydesc,
             );
 
             *(overflow_dest.ptr as *mut bool) = status != RtStatus::Ok;
@@ -867,7 +867,7 @@ impl IrInterpreter {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_dyn_neg_checked(
                 self.runtime.handle(),
-                src.ptr, &*src.tydesc, dest.ptr, &*dest.tydesc,
+                rtdt::AnyRef::new(src.ptr), &*src.tydesc, rtdt::AnyOut::new(dest.ptr), &*dest.tydesc,
                 overflow_dest.ptr as *mut bool,
             )
         };

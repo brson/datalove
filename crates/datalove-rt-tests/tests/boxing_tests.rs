@@ -9,6 +9,7 @@ use rmx::prelude::*;
 
 use datalove_datalit::{Database, instantiate2};
 use datalove_datalit::tydesc_table::TyDescTable;
+use datalove_rtdt::{AnyOut, AnyOwned};
 
 #[salsa::tracked(returns(copy))]
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
@@ -45,9 +46,9 @@ fn round_trip(source_text: &str) -> AnyResult<datalove_rtdt::anypack::Tag> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_data_from_local(
             rt.handle(),
-            inst.ptr,
+            AnyOwned::new(inst.ptr.cast_mut()),
             inst.tydesc.as_ref(),
-            data_buffer.as_mut_ptr(),
+            AnyOut::new(data_buffer.as_mut_ptr()),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok, "{}", source_text);
@@ -96,7 +97,7 @@ fn round_trip(source_text: &str) -> AnyResult<datalove_rtdt::anypack::Tag> {
     unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
-            data_buffer.as_mut_ptr(),
+            AnyOwned::new(data_buffer.as_mut_ptr()),
             &data_tydesc,
         );
     }

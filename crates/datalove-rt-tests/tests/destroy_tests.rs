@@ -1,6 +1,7 @@
 //! Tests for destructor implementations (Int, List, Enum, Set).
 
 use rmx::prelude::*;
+use datalove_rtdt::{AnyOut, AnyOwned, AnyRef};
 
 use datalove_datalit::{Database, instantiate2};
 use datalove_datalit::tydesc_table::TyDescTable;
@@ -38,9 +39,9 @@ fn test_destroy_int_small() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -50,7 +51,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -66,7 +67,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -91,9 +92,9 @@ fn test_destroy_int_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -103,7 +104,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -119,7 +120,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -143,9 +144,9 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -155,7 +156,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -172,7 +173,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -196,9 +197,9 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -208,7 +209,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -225,7 +226,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -249,9 +250,9 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -261,7 +262,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -278,7 +279,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -302,9 +303,9 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -314,7 +315,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -331,7 +332,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -356,9 +357,9 @@ fn test_destroy_set_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -368,7 +369,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -384,7 +385,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -411,9 +412,9 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -423,7 +424,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -439,7 +440,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -466,9 +467,9 @@ fn test_destroy_set_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -478,7 +479,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -494,7 +495,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -521,9 +522,9 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -533,7 +534,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -549,7 +550,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -577,9 +578,9 @@ fn test_destroy_set_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -589,7 +590,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -605,7 +606,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -631,9 +632,9 @@ fn test_destroy_option_none() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -643,7 +644,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -654,7 +655,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -680,9 +681,9 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -692,7 +693,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -703,7 +704,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -729,9 +730,9 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -741,7 +742,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -752,7 +753,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -777,9 +778,9 @@ fn test_destroy_map_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -788,7 +789,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -803,7 +804,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -826,9 +827,9 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -837,7 +838,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -852,7 +853,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -875,9 +876,9 @@ fn test_destroy_map_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -886,7 +887,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -901,7 +902,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -924,9 +925,9 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -935,7 +936,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -950,7 +951,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -973,9 +974,9 @@ fn test_destroy_map_nested() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -984,7 +985,7 @@ fn test_destroy_map_nested() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -999,7 +1000,7 @@ fn test_destroy_map_nested() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -1031,9 +1032,9 @@ fn test_destroy_map_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1042,7 +1043,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1057,7 +1058,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
 
     // Clean up the instantiated value from the first runtime.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt1.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt1.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -1110,7 +1111,7 @@ proptest! {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                inst.ptr as *mut u8,
+                AnyOwned::new(inst.ptr as *mut u8),
                 inst.tydesc.as_ref(),
             )
         };
@@ -1159,7 +1160,7 @@ proptest! {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                inst.ptr as *mut u8,
+                AnyOwned::new(inst.ptr as *mut u8),
                 inst.tydesc.as_ref(),
             )
         };
@@ -1211,7 +1212,7 @@ proptest! {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                inst.ptr as *mut u8,
+                AnyOwned::new(inst.ptr as *mut u8),
                 inst.tydesc.as_ref(),
             )
         };
@@ -1254,9 +1255,9 @@ fn test_destroy_empty_table() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt2,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1266,7 +1267,7 @@ fn test_destroy_empty_table() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt2,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1283,7 +1284,7 @@ fn test_destroy_empty_table() -> AnyResult<()> {
 
     // Clean up original.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -1307,9 +1308,9 @@ fn test_destroy_table_with_rows() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt2,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1324,7 +1325,7 @@ fn test_destroy_table_with_rows() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt2,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1341,7 +1342,7 @@ fn test_destroy_table_with_rows() -> AnyResult<()> {
 
     // Clean up original.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())
@@ -1365,9 +1366,9 @@ fn test_destroy_table_with_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt2,
-            inst.ptr,
+            AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            cloned_buffer.as_mut_ptr(),
+            AnyOut::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1377,7 +1378,7 @@ fn test_destroy_table_with_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt2,
-            cloned_buffer.as_mut_ptr(),
+            AnyOwned::new(cloned_buffer.as_mut_ptr()),
             inst.tydesc.as_ref(),
         )
     };
@@ -1393,7 +1394,7 @@ fn test_destroy_table_with_strings() -> AnyResult<()> {
 
     // Clean up original.
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ref());
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), AnyOwned::new(inst.ptr as *mut u8), inst.tydesc.as_ref());
         datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ref(), 1, inst.ptr as *mut u8);
     }
     Ok(())

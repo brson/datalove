@@ -111,7 +111,8 @@ impl<'a> Decl<'a> {
     /// exclusive ones sound, rejecting a call that passes one value twice
     /// where either is `mut` (D010). A result is a `&mut MaybeUninit`, being
     /// written rather than read. A value at a type parameter, an option, a
-    /// tuple and nothing at all have no Rust type, so they are raw pointers.
+    /// tuple and nothing at all have no Rust type, so they are the `rtdt::Any`
+    /// pointer for what the mode lets the function do with them.
     fn rust_params(&self) -> Vec<String> {
         const TD: &str = "&rtdt::TyDesc";
         let mut out = vec!["datalove_rti::LocalRtHandle".to_string()];
@@ -120,14 +121,18 @@ impl<'a> Decl<'a> {
             out.push(match rust_type(ty) {
                 Some(t) if exclusive => format!("&mut {t}"),
                 Some(t) => format!("&{t}"),
-                None if exclusive => "*mut u8".to_string(),
-                None => "*const u8".to_string(),
+                None => match mode {
+                    "mut" => "rtdt::AnyMut<'_>",
+                    "out" => "rtdt::AnyOut<'_>",
+                    "in" if exclusive => "rtdt::AnyOwned<'_>",
+                    _ => "rtdt::AnyRef<'_>",
+                }.to_string(),
             });
             out.push(TD.to_string());
         }
         out.push(match self.ret.and_then(rust_type) {
             Some(t) => format!("&mut std::mem::MaybeUninit<{t}>"),
-            None => "*mut u8".to_string(),
+            None => "rtdt::AnyOut<'_>".to_string(),
         });
         out.push(TD.to_string());
         for tp in &self.type_params {

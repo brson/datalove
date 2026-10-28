@@ -2,6 +2,7 @@
 //! buffer, printing a value, destroying one.
 
 use super::*;
+use datalove_rtdt::{AnyMut, AnyOut, AnyOwned, AnyRef};
 
 impl IrInterpreter {
     /// Get the contents of the debug buffer.
@@ -43,7 +44,7 @@ impl IrInterpreter {
             let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let status = datalove_rt::c::dtlv_rti_string_create_local(
                 rt_handle,
-                output_string.as_mut_ptr() as *mut u8,
+                AnyOut::new(output_string.as_mut_ptr() as *mut u8),
                 &*string_tydesc,
             );
 
@@ -58,16 +59,16 @@ impl IrInterpreter {
             // Pretty-print the value.
             let status = datalove_rt::c::dtlv_rti_pretty_print_local(
                 rt_handle,
-                value.ptr,
+                AnyRef::new(value.ptr),
                 &*value.tydesc,
-                &mut output_string as *mut rtdt::String as *mut u8,
+                AnyMut::from_mut(&mut output_string),
                 &*string_tydesc,
             );
 
             if status != RtStatus::Ok {
                 datalove_rt::c::dtlv_rti_string_destroy_local(
                     rt_handle,
-                    &mut output_string as *mut rtdt::String as *mut u8,
+                    AnyOwned::new(&mut output_string as *mut rtdt::String as *mut u8),
                     &*string_tydesc,
                 );
                 return Err(InterpError::RuntimeError(
@@ -81,7 +82,7 @@ impl IrInterpreter {
             // Destroy the output string.
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt_handle,
-                &mut output_string as *mut rtdt::String as *mut u8,
+                AnyOwned::new(&mut output_string as *mut rtdt::String as *mut u8),
                 &*string_tydesc,
             );
 
@@ -94,7 +95,7 @@ impl IrInterpreter {
         unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 self.runtime.handle(),
-                value.ptr,
+                AnyOwned::new(value.ptr),
                 &*value.tydesc,
             );
         }

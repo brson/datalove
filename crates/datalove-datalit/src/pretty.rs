@@ -1,6 +1,7 @@
 use rmx::prelude::*;
 use crate::ast::*;
 use crate::tycheck::*;
+use datalove_rtdt::{AnyMut, AnyOut, AnyOwned, AnyRef};
 
 /// Pretty print a datalove literal expression.
 ///
@@ -46,7 +47,7 @@ pub fn pretty_print_runtime_value<'db>(
         let mut output_string = std::mem::MaybeUninit::<datalove_rtdt::String>::uninit();
         let status = datalove_rt::c::dtlv_rti_string_create_local(
             rt_handle,
-            output_string.as_mut_ptr() as *mut u8,
+            AnyOut::new(output_string.as_mut_ptr() as *mut u8),
             &string_tydesc,
         );
 
@@ -60,16 +61,16 @@ pub fn pretty_print_runtime_value<'db>(
         // Pretty-print value using runtime.
         let status = datalove_rt::c::dtlv_rti_pretty_print_local(
             rt_handle,
-            value_ptr,
+            AnyRef::new(value_ptr),
             &*tydesc_ptr,
-            &mut output_string as *mut datalove_rtdt::String as *mut u8,
+            AnyMut::from_mut(&mut output_string),
             &string_tydesc,
         );
 
         if status != datalove_rt::c::RtStatus::Ok {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt_handle,
-                &mut output_string as *mut datalove_rtdt::String as *mut u8,
+                AnyOwned::new(&mut output_string as *mut datalove_rtdt::String as *mut u8),
                 &string_tydesc,
             );
             datalove_rt::c::dtlv_rti_shutdown(rt_handle);
@@ -82,7 +83,7 @@ pub fn pretty_print_runtime_value<'db>(
         // Cleanup runtime string.
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt_handle,
-            &mut output_string as *mut datalove_rtdt::String as *mut u8,
+            AnyOwned::new(&mut output_string as *mut datalove_rtdt::String as *mut u8),
             &string_tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt_handle);

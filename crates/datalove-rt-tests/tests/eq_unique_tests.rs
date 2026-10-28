@@ -2,6 +2,7 @@
 //! This tests bitwise equality for floats (all bit patterns distinct).
 
 use rmx::prelude::*;
+use datalove_rtdt::{AnyOwned, AnyRef};
 
 use datalove_datalit::{Database, instantiate2};
 use datalove_datalit::tydesc_table::TyDescTable;
@@ -23,7 +24,7 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 /// Clean up an instantiated value.
 unsafe fn cleanup_value(rt: &Runtime, ptr: *const u8, tydesc: *const datalove_rtdt::TyDesc) {
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, &*tydesc);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), AnyOwned::new(ptr as *mut u8), &*tydesc);
         datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc, 1, ptr as *mut u8);
     }
 }
@@ -50,9 +51,9 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -85,9 +86,9 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -120,9 +121,9 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -155,9 +156,9 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -192,9 +193,9 @@ fn test_eq_unique_map_empty_equals() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -227,9 +228,9 @@ fn test_eq_unique_map_equals_same_contents() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -262,9 +263,9 @@ fn test_eq_unique_map_not_equals_different_keys() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -297,9 +298,9 @@ fn test_eq_unique_map_not_equals_different_values() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -332,9 +333,9 @@ fn test_eq_unique_map_not_equals_different_sizes() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -369,9 +370,9 @@ fn test_eq_unique_set_empty_equals() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -404,9 +405,9 @@ fn test_eq_unique_set_equals_same_contents() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -439,9 +440,9 @@ fn test_eq_unique_set_not_equals_different_elements() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -474,9 +475,9 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
-            ptr_a,
+            AnyRef::new(ptr_a),
             &*tydesc_a,
-            ptr_b,
+            AnyRef::new(ptr_b),
             &*tydesc_b,
         )
     };
@@ -495,6 +496,8 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
 use rmx::proptest::prelude::*;
 #[cfg(feature = "slow_tests")]
 use datalove_datalit::ast_gen::*;
+#[cfg(feature = "slow_tests")]
+use datalove_rtdt::AnyOut;
 
 #[cfg(feature = "slow_tests")]
 proptest! {
@@ -534,9 +537,9 @@ proptest! {
         let result = unsafe {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
-                ptr,
+                AnyRef::new(ptr),
                 &*tydesc,
-                ptr,
+                AnyRef::new(ptr),
                 &*tydesc,
             )
         };
@@ -590,9 +593,9 @@ proptest! {
         let result_xy = unsafe {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
-                ptr1,
+                AnyRef::new(ptr1),
                 &*tydesc1,
-                ptr2,
+                AnyRef::new(ptr2),
                 &*tydesc2,
             )
         };
@@ -600,9 +603,9 @@ proptest! {
         let result_yx = unsafe {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
-                ptr2,
+                AnyRef::new(ptr2),
                 &*tydesc2,
-                ptr1,
+                AnyRef::new(ptr1),
                 &*tydesc1,
             )
         };
@@ -647,9 +650,9 @@ proptest! {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
-                inst.ptr,
+                AnyRef::new(inst.ptr),
                 inst.tydesc.as_ref(),
-                clone_buffer.as_mut_ptr(),
+                AnyOut::new(clone_buffer.as_mut_ptr()),
                 inst.tydesc.as_ref(),
             )
         };
@@ -658,9 +661,9 @@ proptest! {
         let result = unsafe {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
-                inst.ptr,
+                AnyRef::new(inst.ptr),
                 inst.tydesc.as_ref(),
-                clone_buffer.as_ptr(),
+                AnyRef::new(clone_buffer.as_ptr()),
                 inst.tydesc.as_ref(),
             )
         };
@@ -670,7 +673,7 @@ proptest! {
 
         unsafe {
             cleanup_value(&rt, inst.ptr, inst.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ref());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), AnyOwned::new(clone_buffer.as_mut_ptr()), inst.tydesc.as_ref());
         }
     }
 
@@ -715,9 +718,9 @@ proptest! {
         let eq_unique_result = unsafe {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
-                ptr1,
+                AnyRef::new(ptr1),
                 &*tydesc1,
-                ptr2,
+                AnyRef::new(ptr2),
                 &*tydesc2,
             )
         };
@@ -726,9 +729,9 @@ proptest! {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    ptr1,
+                    AnyRef::new(ptr1),
                     &*tydesc1,
-                    ptr2,
+                    AnyRef::new(ptr2),
                     &*tydesc2,
                 )
             };
@@ -784,9 +787,9 @@ proptest! {
         let eq_unique_result = unsafe {
             datalove_rt::c::dtlv_rti_eq_unique_local(
                 std::ptr::null_mut(),
-                ptr1,
+                AnyRef::new(ptr1),
                 &*tydesc1,
-                ptr2,
+                AnyRef::new(ptr2),
                 &*tydesc2,
             )
         };
@@ -795,9 +798,9 @@ proptest! {
             let cmp_result = unsafe {
                 datalove_rt::c::dtlv_rti_cmp_total_local(
                     std::ptr::null_mut(),
-                    ptr1,
+                    AnyRef::new(ptr1),
                     &*tydesc1,
-                    ptr2,
+                    AnyRef::new(ptr2),
                     &*tydesc2,
                 )
             };

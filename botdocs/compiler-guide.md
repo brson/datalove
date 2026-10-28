@@ -1591,9 +1591,11 @@ only the compiler emits, which may use whatever ABI is convenient. The crate
 docs also describe a `dtlv_rt_*` family the language would call under a
 restricted ABI, but none exist yet. Everything but `init` takes a runtime
 handle, and every value pointer is followed by its tydesc. The tydescs are
-`&rtdt::TyDesc`: a reference is passed as a pointer, so the compiler's
-backends pass one as before, and a Rust caller is held to a live descriptor
-where it makes the call rather than the runtime taking one on trust.
+`&rtdt::TyDesc`, and the values `rtdt::AnyRef`, `AnyMut`, `AnyOwned` or
+`AnyOut` by what the function does with them, each a pointer that is never
+null. Both are passed as pointers, so the compiler's backends pass the same
+words as before, and a Rust caller says at the call what it is lending
+rather than the runtime taking a bare pointer on trust.
 
 ### Leak Checking
 

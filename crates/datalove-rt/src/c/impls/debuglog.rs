@@ -104,7 +104,7 @@ mod tests {
         unsafe {
             let rt = c::dtlv_rti_init();
             c::dtlv_rti_set_debug_mode(rt, c::impls::rt_local::DebugOutputMode::Buffer);
-            let status = c::dtlv_rti_debuglog_local(rt, &value as *const u64 as *const u8, &u64_tydesc);
+            let status = c::dtlv_rti_debuglog_local(rt, c::AnyRef::from_ref(&value), &u64_tydesc);
             assert_eq!(status, c::RtStatus::Ok);
             let mut ptr = std::ptr::null();
             let mut len = 0;

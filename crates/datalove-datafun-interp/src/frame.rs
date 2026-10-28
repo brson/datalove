@@ -19,6 +19,7 @@ use datalove_datafun_ir::frame_layout::tracking;
 use crate::error::InterpError;
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
+use datalove_rtdt::AnyOwned;
 
 /// The stack function frames are pushed on.
 ///
@@ -737,7 +738,7 @@ impl Frame {
             }
             let val = self.value(vid);
             unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, &*val.tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, AnyOwned::new(val.ptr), &*val.tydesc);
             }
             self.mark_value_dropped(vid);
         }
@@ -748,7 +749,7 @@ impl Frame {
             }
             let val = self.slot(sid);
             unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, &*val.tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, AnyOwned::new(val.ptr), &*val.tydesc);
             }
             self.mark_slot_dropped(sid);
         }

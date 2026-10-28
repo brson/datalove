@@ -433,7 +433,7 @@ fn a_built_descriptor_clones_like_a_static_one() {
     let value: [u32; 2] = [7, 9];
     let mut out: [u32; 2] = [0, 0];
     let status = unsafe {
-        c::dtlv_rti_clone_local(rt.handle(), value.as_ptr() as *const u8, &*pair, out.as_mut_ptr() as *mut u8, &*built)
+        c::dtlv_rti_clone_local(rt.handle(), rtdt::AnyRef::new(value.as_ptr() as *const u8), &*pair, rtdt::AnyOut::new(out.as_mut_ptr() as *mut u8), &*built)
     };
     assert_eq!(status, c::RtStatus::Ok);
     assert_eq!(out[1], 9);

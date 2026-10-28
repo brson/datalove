@@ -87,7 +87,7 @@ unsafe fn create_runtime_string(
         let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*string_tydesc,
         );
         let mut string = string.assume_init();
@@ -95,7 +95,7 @@ unsafe fn create_runtime_string(
         if !s.is_empty() {
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt,
-                &mut string as *mut rtdt::String as *mut u8,
+                rtdt::AnyMut::from_mut(&mut string),
                 &*string_tydesc,
                 s.as_ptr(),
                 (s.len() as u32).into(),
@@ -125,7 +125,7 @@ proptest! {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_create_local(
                 rt,
-                map_ptr,
+                rtdt::AnyOut::new(map_ptr),
                 &*map_tydesc,
             )
         };
@@ -144,11 +144,11 @@ proptest! {
             let status = unsafe {
                 datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 )
             };
@@ -162,7 +162,7 @@ proptest! {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_destroy_local(
                 rt,
-                map_ptr,
+                rtdt::AnyOwned::new(map_ptr),
                 &*map_tydesc,
             )
         };
@@ -190,7 +190,7 @@ proptest! {
         let map1_ptr = &mut map1 as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map1_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map1_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for (key, value) in &entries {
@@ -198,11 +198,11 @@ proptest! {
                 let mut value_val = *value;
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map1_ptr,
+                    rtdt::AnyMut::new(map1_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -218,7 +218,7 @@ proptest! {
         let map2_ptr = &mut map2 as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map2_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map2_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for (key, value) in &entries {
@@ -226,11 +226,11 @@ proptest! {
                 let mut value_val = *value;
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map2_ptr,
+                    rtdt::AnyMut::new(map2_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -242,9 +242,9 @@ proptest! {
 
         // Clean up.
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map1_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map1_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map2_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map2_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -269,7 +269,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Insert with first value.
@@ -277,11 +277,11 @@ proptest! {
             let mut value_val = values[0];
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key_val as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                 &*_key_tydesc,
-                &mut value_val as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                 &*_value_tydesc,
             );
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -294,11 +294,11 @@ proptest! {
                 let mut value_val = *value;
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -308,7 +308,7 @@ proptest! {
             }
 
             // Clean up.
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -330,7 +330,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Insert sequential keys.
@@ -339,11 +339,11 @@ proptest! {
                 let mut value_val = i as u32 * 100;
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -352,7 +352,7 @@ proptest! {
             prop_assert_eq!(map.len, rtdt::Index(num_entries as rtdt::IndexRepr));
 
             // Clean up.
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -374,7 +374,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Insert all entries.
@@ -383,11 +383,11 @@ proptest! {
                 let mut value_val = *value;
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -399,7 +399,7 @@ proptest! {
             // Clear the map.
             let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
             );
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -409,7 +409,7 @@ proptest! {
             prop_assert!(map.root.is_null());
 
             // Clean up.
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -433,7 +433,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for (is_insert, key, value) in operations {
@@ -442,18 +442,18 @@ proptest! {
                     let mut value_val = value;
                     let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                         rt,
-                        map_ptr,
+                        rtdt::AnyMut::new(map_ptr),
                         &*map_tydesc,
-                        &mut key_val as *mut u32 as *mut u8,
+                        rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                         &*_key_tydesc,
-                        &mut value_val as *mut u32 as *mut u8,
+                        rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                         &*_value_tydesc,
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
                 } else {
                     let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(
                         rt,
-                        map_ptr,
+                        rtdt::AnyMut::new(map_ptr),
                         &*map_tydesc,
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -462,7 +462,7 @@ proptest! {
             }
 
             // Clean up.
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -488,7 +488,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Insert the base key multiple times with different values.
@@ -497,11 +497,11 @@ proptest! {
                 let mut value_val = i as u32;
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -513,11 +513,11 @@ proptest! {
                 let mut value_val = *value;
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -533,7 +533,7 @@ proptest! {
             prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as rtdt::IndexRepr));
 
             // Clean up.
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -559,7 +559,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             let mut unique_keys = std::collections::HashSet::new();
@@ -574,11 +574,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -589,7 +589,7 @@ proptest! {
 
             prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as rtdt::IndexRepr));
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -613,7 +613,7 @@ proptest! {
         let map1_ptr = &mut map1 as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map1_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map1_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for (key, value) in &entries {
@@ -625,11 +625,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map1_ptr,
+                    rtdt::AnyMut::new(map1_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -647,7 +647,7 @@ proptest! {
         let map2_ptr = &mut map2 as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map2_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map2_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for (key, value) in &entries {
@@ -659,11 +659,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map2_ptr,
+                    rtdt::AnyMut::new(map2_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -676,9 +676,9 @@ proptest! {
         prop_assert_eq!(map1.len, map2.len);
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map1_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map1_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map2_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map2_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -703,7 +703,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             let key_str = format!("key_{}", key_num);
@@ -716,11 +716,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -730,7 +730,7 @@ proptest! {
                 // We must NOT destroy them here - the btreemap now owns them.
             }
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -752,7 +752,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for i in 0..num_entries {
@@ -764,11 +764,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -779,7 +779,7 @@ proptest! {
 
             prop_assert_eq!(map.len, rtdt::Index(num_entries as rtdt::IndexRepr));
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -801,7 +801,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for (key, value) in &entries {
@@ -813,11 +813,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -829,13 +829,13 @@ proptest! {
             let len_before_clear = map.len;
             prop_assert!(len_before_clear > rtdt::Index(0));
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(rt, rtdt::AnyMut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             prop_assert_eq!(map.len, rtdt::Index(0));
             prop_assert!(map.root.is_null());
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -859,7 +859,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             for (is_insert, key, value) in operations {
@@ -872,11 +872,11 @@ proptest! {
 
                     let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                         rt,
-                        map_ptr,
+                        rtdt::AnyMut::new(map_ptr),
                         &*map_tydesc,
-                        &mut key_rt as *mut rtdt::String as *mut u8,
+                        rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                         &*_key_tydesc,
-                        &mut value_rt as *mut rtdt::String as *mut u8,
+                        rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                         &*_value_tydesc,
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -884,13 +884,13 @@ proptest! {
                     // Note: key_rt and value_rt have been moved into the btreemap.
                     // We must NOT destroy them here - the btreemap now owns them.
                 } else {
-                    let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(rt, map_ptr, &*map_tydesc);
+                    let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(rt, rtdt::AnyMut::new(map_ptr), &*map_tydesc);
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
                     prop_assert_eq!(map.len, rtdt::Index(0));
                 }
             }
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -916,7 +916,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             let base_key_str = format!("key_{}", base_key);
@@ -929,11 +929,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -951,11 +951,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_rt as *mut rtdt::String as *mut u8),
                     &*_key_tydesc,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_rt as *mut rtdt::String as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -972,7 +972,7 @@ proptest! {
 
             prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as rtdt::IndexRepr));
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1034,7 +1034,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Track the last value for each key.
@@ -1049,11 +1049,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1067,11 +1067,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyRef::new(map_ptr),
                     &*map_tydesc,
-                    key as *const u32 as *const u8,
+                    rtdt::AnyRef::new(key as *const u32 as *const u8),
                     &*_key_tydesc,
-                    option_buffer.as_mut_ptr(),
+                    rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                     &*option_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1086,7 +1086,7 @@ proptest! {
                 prop_assert_eq!(retrieved_value, *expected_value);
             }
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1112,7 +1112,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Insert keys.
@@ -1124,11 +1124,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1142,11 +1142,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyRef::new(map_ptr),
                     &*map_tydesc,
-                    key as *const u32 as *const u8,
+                    rtdt::AnyRef::new(key as *const u32 as *const u8),
                     &*_key_tydesc,
-                    option_buffer.as_mut_ptr(),
+                    rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                     &*option_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1162,7 +1162,7 @@ proptest! {
                 }
             }
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1188,7 +1188,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc));
@@ -1200,11 +1200,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyMut::new(map_ptr),
                     &*map_tydesc,
-                    &mut key_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                     &*_key_tydesc,
-                    &mut value_val as *mut u32 as *mut u8,
+                    rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1214,11 +1214,11 @@ proptest! {
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
-                    map_ptr,
+                    rtdt::AnyRef::new(map_ptr),
                     &*map_tydesc,
-                    &key as *const u32 as *const u8,
+                    rtdt::AnyRef::from_ref(&key),
                     &*_key_tydesc,
-                    option_buffer.as_mut_ptr(),
+                    rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                     &*option_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1231,7 +1231,7 @@ proptest! {
                 prop_assert_eq!(retrieved_value, *value, "Mismatch after update {}", i);
             }
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1256,7 +1256,7 @@ proptest! {
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc));
@@ -1272,11 +1272,11 @@ proptest! {
 
                     let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                         rt,
-                        map_ptr,
+                        rtdt::AnyMut::new(map_ptr),
                         &*map_tydesc,
-                        &mut key_val as *mut u32 as *mut u8,
+                        rtdt::AnyOwned::new(&mut key_val as *mut u32 as *mut u8),
                         &*_key_tydesc,
-                        &mut value_val as *mut u32 as *mut u8,
+                        rtdt::AnyOwned::new(&mut value_val as *mut u32 as *mut u8),
                         &*_value_tydesc,
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1286,11 +1286,11 @@ proptest! {
 
                     let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                         rt,
-                        map_ptr,
+                        rtdt::AnyRef::new(map_ptr),
                         &*map_tydesc,
-                        &key as *const u32 as *const u8,
+                        rtdt::AnyRef::from_ref(&key),
                         &*_key_tydesc,
-                        option_buffer.as_mut_ptr(),
+                        rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                         &*option_tydesc,
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1311,7 +1311,7 @@ proptest! {
                 }
             }
 
-            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
+            let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             let status = datalove_rt::c::dtlv_rti_shutdown(rt);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);

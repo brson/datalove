@@ -103,7 +103,7 @@ unsafe fn create_runtime_u32_list(
         let mut list = std::mem::MaybeUninit::<rtdt::List>::uninit();
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(list.as_mut_ptr() as *mut u8),
             &*list_tydesc,
         );
         let mut list = list.assume_init();
@@ -112,9 +112,9 @@ unsafe fn create_runtime_u32_list(
             let mut v = value;
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                &mut list as *mut rtdt::List as *mut u8,
+                rtdt::AnyMut::from_mut(&mut list),
                 &*list_tydesc,
-                &mut v as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut v as *mut u32 as *mut u8),
                 &*element_tydesc,
             );
         }
@@ -161,10 +161,10 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -196,7 +196,7 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -248,10 +248,10 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -281,7 +281,7 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -326,10 +326,10 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -353,7 +353,7 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -398,10 +398,10 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -431,7 +431,7 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -481,10 +481,10 @@ fn test_tensor_create_mismatched_length() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -539,10 +539,10 @@ fn test_multiple_tensors() -> AnyResult<()> {
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
                 &*element_tydesc,
-                &mut shape_list as *mut rtdt::List as *mut u8,
+                rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
                 &*list_tydesc,
                 rtdt::TensorLayout::RowMajor as u8,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -566,7 +566,7 @@ fn test_multiple_tensors() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
-                tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOwned::new(tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -615,10 +615,10 @@ fn test_tensor_get_1d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -632,10 +632,10 @@ fn test_tensor_get_1d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -648,7 +648,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -659,7 +659,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -704,10 +704,10 @@ fn test_tensor_get_2d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -729,10 +729,10 @@ fn test_tensor_get_2d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -745,7 +745,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -756,7 +756,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -799,10 +799,10 @@ fn test_tensor_get_3d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -825,10 +825,10 @@ fn test_tensor_get_3d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -841,7 +841,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -852,7 +852,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -895,10 +895,10 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -917,10 +917,10 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -931,7 +931,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -977,10 +977,10 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1008,10 +1008,10 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1024,7 +1024,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1035,7 +1035,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1082,10 +1082,10 @@ fn test_tensor_set_1d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1099,10 +1099,10 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyMut::from_mut(&mut tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                &mut { new_value } as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut { new_value } as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1117,10 +1117,10 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1133,7 +1133,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1144,7 +1144,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1189,10 +1189,10 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1209,10 +1209,10 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyMut::from_mut(&mut tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                &mut { new_value } as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut { new_value } as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1235,10 +1235,10 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1251,7 +1251,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1262,7 +1262,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1305,10 +1305,10 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1321,10 +1321,10 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_set_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyMut::from_mut(&mut tensor),
             &*tensor_tydesc,
             indices.as_ptr(),
-            &mut { new_value } as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut { new_value } as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -1335,10 +1335,10 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            rtdt::AnyRef::from_ref(&tensor),
             &*tensor_tydesc,
             indices.as_ptr(),
-            element_value.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
             &*element_tydesc,
         )
     };
@@ -1351,7 +1351,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -1361,7 +1361,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1404,10 +1404,10 @@ fn test_tensor_set_3d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1424,10 +1424,10 @@ fn test_tensor_set_3d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyMut::from_mut(&mut tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                &mut { new_value } as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut { new_value } as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1441,10 +1441,10 @@ fn test_tensor_set_3d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &tensor as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1457,7 +1457,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1468,7 +1468,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1511,10 +1511,10 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1532,10 +1532,10 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyMut::from_mut(&mut tensor),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                &mut { new_value } as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut { new_value } as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1546,7 +1546,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1595,10 +1595,10 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1621,10 +1621,10 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1661,10 +1661,10 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
-                &transposed as *const rtdt::Tensor as *const u8,
+                rtdt::AnyRef::from_ref(&transposed),
                 &*tensor_tydesc,
                 indices.as_ptr(),
-                element_value.as_mut_ptr() as *mut u8,
+                rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1677,7 +1677,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1688,7 +1688,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1732,10 +1732,10 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1755,10 +1755,10 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1779,7 +1779,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1822,10 +1822,10 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1845,10 +1845,10 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1866,7 +1866,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1909,10 +1909,10 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1932,10 +1932,10 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1956,7 +1956,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -1999,10 +1999,10 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2022,10 +2022,10 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            rtdt::AnyRef::from_ref(&tensor),
             &*tensor_tydesc,
             perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2038,7 +2038,7 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2081,10 +2081,10 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2104,10 +2104,10 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            rtdt::AnyRef::from_ref(&tensor),
             &*tensor_tydesc,
             perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2117,7 +2117,7 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2160,10 +2160,10 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2176,10 +2176,10 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            rtdt::AnyRef::from_ref(&tensor),
             &*tensor_tydesc,
             indices.as_ptr(),
-            element_value.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
             &*element_tydesc,
         )
     };
@@ -2193,7 +2193,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -2206,10 +2206,10 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            rtdt::AnyRef::from_ref(&tensor),
             &*tensor_tydesc,
             indices.as_ptr(),
-            element_value.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(element_value.as_mut_ptr() as *mut u8),
             &*element_tydesc,
         )
     };
@@ -2222,7 +2222,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -2232,7 +2232,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2320,10 +2320,10 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2344,10 +2344,10 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -2388,7 +2388,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2430,10 +2430,10 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2452,10 +2452,10 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -2484,7 +2484,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2526,10 +2526,10 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2548,10 +2548,10 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -2578,7 +2578,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2620,10 +2620,10 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2642,10 +2642,10 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -2674,7 +2674,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2716,10 +2716,10 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2738,10 +2738,10 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -2762,7 +2762,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2805,10 +2805,10 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2828,10 +2828,10 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -2862,7 +2862,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -2909,10 +2909,10 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2d,
         )
     };
@@ -2931,11 +2931,11 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2d,
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -2973,7 +2973,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut reshaped_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut reshaped_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_3d,
         )
     };
@@ -3015,10 +3015,10 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3036,11 +3036,11 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -3068,7 +3068,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3110,10 +3110,10 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3132,10 +3132,10 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            slice_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(slice_result_buffer.as_mut_ptr()),
             &*slice_result_tydesc,
         )
     };
@@ -3167,11 +3167,11 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            reshape_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(reshape_result_buffer.as_mut_ptr()),
             &*reshape_result_tydesc,
         )
     };
@@ -3192,7 +3192,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3242,10 +3242,10 @@ fn test_tensor_create_empty_shape() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3291,10 +3291,10 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3314,11 +3314,11 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            reshape_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(reshape_result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -3339,7 +3339,7 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3382,10 +3382,10 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3405,10 +3405,10 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             ranges.as_ptr(),
-            slice_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(slice_result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -3442,11 +3442,11 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut sliced_tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut sliced_tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            reshape_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(reshape_result_buffer.as_mut_ptr()),
             &*result_1d_tydesc,
         )
     };
@@ -3466,7 +3466,7 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3501,7 +3501,7 @@ fn test_tensor_destroy_already_cleared() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3546,10 +3546,10 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc_2,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3569,10 +3569,10 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_0,  // rank-0 tydesc
             ranges.as_ptr(),
-            slice_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(slice_result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -3593,7 +3593,7 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3637,10 +3637,10 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc_2,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3659,11 +3659,11 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_0,  // rank-0 tydesc
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            reshape_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(reshape_result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -3684,7 +3684,7 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor_copy as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3728,10 +3728,10 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc_2,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3751,10 +3751,10 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            rtdt::AnyRef::from_ref(&tensor),
             &*tensor_tydesc_0,  // rank-0 tydesc
             perm.as_ptr(),
-            &mut tensor_out as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor_out as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_0,
         )
     };
@@ -3764,7 +3764,7 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3807,10 +3807,10 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::ColMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3834,11 +3834,11 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            reshape_result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(reshape_result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -3870,7 +3870,7 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut reshaped_tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut reshaped_tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc_2,
         )
     };
@@ -3916,10 +3916,10 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajor as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3944,10 +3944,10 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
             perm.as_ptr(),
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -3980,11 +3980,11 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
-            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
-            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut new_shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
-            result_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(result_buffer.as_mut_ptr()),
             &*result_tydesc,
         )
     };
@@ -4007,7 +4007,7 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut error_tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut error_tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -4055,10 +4055,10 @@ fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::RowMajorTransposed as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -4081,7 +4081,7 @@ fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -4125,10 +4125,10 @@ fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*element_tydesc,
-            &mut shape_list as *mut rtdt::List as *mut u8,
+            rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
             &*list_tydesc,
             rtdt::TensorLayout::ColMajorTransposed as u8,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -4151,7 +4151,7 @@ fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
-            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            rtdt::AnyOwned::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
             &*tensor_tydesc,
         )
     };
@@ -4201,10 +4201,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
                 &*element_tydesc,
-                &mut shape_list as *mut rtdt::List as *mut u8,
+                rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
                 &*list_tydesc,
                 rtdt::TensorLayout::RowMajor as u8,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4224,10 +4224,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
                 perm.as_ptr(),
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4242,7 +4242,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4271,10 +4271,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
                 &*element_tydesc,
-                &mut shape_list as *mut rtdt::List as *mut u8,
+                rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
                 &*list_tydesc,
                 rtdt::TensorLayout::ColMajorTransposed as u8,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4294,10 +4294,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
                 perm.as_ptr(),
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4308,7 +4308,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4337,10 +4337,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
                 &*element_tydesc,
-                &mut shape_list as *mut rtdt::List as *mut u8,
+                rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
                 &*list_tydesc,
                 rtdt::TensorLayout::ColMajor as u8,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4360,10 +4360,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
                 perm.as_ptr(),
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4374,7 +4374,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4403,10 +4403,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
                 slice_data.as_ptr() as *const u8,
                 (slice_data.len() as u32).into(),
                 &*element_tydesc,
-                &mut shape_list as *mut rtdt::List as *mut u8,
+                rtdt::AnyOwned::new(&mut shape_list as *mut rtdt::List as *mut u8),
                 &*list_tydesc,
                 rtdt::TensorLayout::RowMajorTransposed as u8,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4426,10 +4426,10 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_transpose_local(
                 rt,
-                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyRef::new(&mut tensor as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
                 perm.as_ptr(),
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOut::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };
@@ -4440,7 +4440,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
-                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                rtdt::AnyOwned::new(&mut transposed as *mut rtdt::Tensor as *mut u8),
                 &*tensor_tydesc,
             )
         };

@@ -225,7 +225,7 @@ impl Drop for IrInterpreter {
         for (mut storage, tydesc) in std::mem::take(&mut self.static_pool.entries) {
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
-                    self.runtime.handle(), storage.as_mut_ptr(), &*tydesc);
+                    self.runtime.handle(), rtdt::AnyOwned::new(storage.as_mut_ptr()), &*tydesc);
             }
         }
     }

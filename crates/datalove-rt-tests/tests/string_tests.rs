@@ -55,7 +55,7 @@ fn test_string_create_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         )
     };
@@ -80,7 +80,7 @@ fn test_string_create_wrong_type() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*wrong_tydesc,
         )
     };
@@ -104,7 +104,7 @@ fn test_string_destroy_empty() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -113,7 +113,7 @@ fn test_string_destroy_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         )
     };
@@ -136,7 +136,7 @@ fn test_string_destroy_with_data() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -147,7 +147,7 @@ fn test_string_destroy_with_data() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             data.as_ptr(),
             (data.len() as u32).into(),
@@ -159,7 +159,7 @@ fn test_string_destroy_with_data() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         )
     };
@@ -183,7 +183,7 @@ fn test_string_destroy_wrong_type() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*wrong_tydesc,
         )
     };
@@ -207,7 +207,7 @@ fn test_string_push_bytes_to_empty() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -217,7 +217,7 @@ fn test_string_push_bytes_to_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             data.as_ptr(),
             (data.len() as u32).into(),
@@ -233,7 +233,7 @@ fn test_string_push_bytes_to_empty() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -251,7 +251,7 @@ fn test_string_push_bytes_multiple() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -261,7 +261,7 @@ fn test_string_push_bytes_multiple() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b"hello".as_ptr(),
             5,
@@ -272,7 +272,7 @@ fn test_string_push_bytes_multiple() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b" ".as_ptr(),
             1,
@@ -283,7 +283,7 @@ fn test_string_push_bytes_multiple() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b"world".as_ptr(),
             5,
@@ -297,7 +297,7 @@ fn test_string_push_bytes_multiple() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -315,7 +315,7 @@ fn test_string_push_bytes_empty() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -325,7 +325,7 @@ fn test_string_push_bytes_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b"".as_ptr(),
             0,
@@ -349,7 +349,7 @@ fn test_string_push_bytes_large() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -360,7 +360,7 @@ fn test_string_push_bytes_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             large_data.as_ptr(),
             (large_data.len() as u32).into(),
@@ -375,7 +375,7 @@ fn test_string_push_bytes_large() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -394,7 +394,7 @@ fn test_string_push_bytes_wrong_type() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*wrong_tydesc,
             b"test".as_ptr(),
             4,
@@ -420,7 +420,7 @@ fn test_string_clear_empty() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -429,7 +429,7 @@ fn test_string_clear_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_clear_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
         )
     };
@@ -450,7 +450,7 @@ fn test_string_clear_with_data() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -460,7 +460,7 @@ fn test_string_clear_with_data() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b"hello world".as_ptr(),
             11,
@@ -474,7 +474,7 @@ fn test_string_clear_with_data() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_clear_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
         )
     };
@@ -488,7 +488,7 @@ fn test_string_clear_with_data() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -506,7 +506,7 @@ fn test_string_clear_then_push() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -516,7 +516,7 @@ fn test_string_clear_then_push() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b"hello".as_ptr(),
             5,
@@ -528,7 +528,7 @@ fn test_string_clear_then_push() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_clear_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
         );
     }
@@ -537,7 +537,7 @@ fn test_string_clear_then_push() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b"hi".as_ptr(),
             2,
@@ -551,7 +551,7 @@ fn test_string_clear_then_push() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -570,7 +570,7 @@ fn test_string_clear_wrong_type() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_clear_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*wrong_tydesc,
         )
     };
@@ -594,7 +594,7 @@ fn test_string_utf8_data() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -606,7 +606,7 @@ fn test_string_utf8_data() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             bytes.as_ptr(),
             (bytes.len() as u32).into(),
@@ -624,7 +624,7 @@ fn test_string_utf8_data() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -642,7 +642,7 @@ fn test_string_refuses_bytes_not_utf8() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -653,7 +653,7 @@ fn test_string_refuses_bytes_not_utf8() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             binary_data.as_ptr(),
             (binary_data.len() as u32).into(),
@@ -667,7 +667,7 @@ fn test_string_refuses_bytes_not_utf8() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             nulls.as_ptr(),
             (nulls.len() as u32).into(),
@@ -680,7 +680,7 @@ fn test_string_refuses_bytes_not_utf8() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -698,7 +698,7 @@ fn test_string_capacity_growth() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*tydesc,
         );
     }
@@ -708,7 +708,7 @@ fn test_string_capacity_growth() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             b"a".as_ptr(),
             1,
@@ -723,7 +723,7 @@ fn test_string_capacity_growth() -> AnyResult<()> {
         unsafe {
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt,
-                &mut string as *mut rtdt::String as *mut u8,
+                rtdt::AnyMut::from_mut(&mut string),
                 &*tydesc,
                 chunk.as_ptr(),
                 (chunk.len() as u32).into(),
@@ -739,7 +739,7 @@ fn test_string_capacity_growth() -> AnyResult<()> {
     unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string as *mut rtdt::String as *mut u8),
             &*tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
@@ -771,7 +771,7 @@ fn test_string_push_bytes_full_index() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt,
-            &mut string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut string),
             &*tydesc,
             bytes.as_ptr(),
             bytes.len() as rtdt::IndexRepr,

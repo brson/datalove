@@ -1,6 +1,7 @@
 //! Tests for bigint arithmetic runtime functions.
 
 use rmx::prelude::*;
+use datalove_rtdt::{AnyMut, AnyOut, AnyOwned, AnyRef};
 
 use datalove_datalit::{Database, instantiate2};
 use datalove_datalit::tydesc_table::TyDescTable;
@@ -23,7 +24,7 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 /// Clean up an instantiated value.
 unsafe fn cleanup_value(rt: &Runtime, ptr: *const u8, tydesc: *const datalove_rtdt::TyDesc) {
     unsafe {
-        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, &*tydesc);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), AnyOwned::new(ptr as *mut u8), &*tydesc);
         datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), &*tydesc, 1, ptr as *mut u8);
     }
 }
@@ -79,9 +80,9 @@ where
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr,
+            AnyRef::new(result_ptr),
             &*tydesc_a,
-            ptr_expected,
+            AnyRef::new(ptr_expected),
             &*tydesc_expected,
         )
     };
@@ -117,7 +118,7 @@ fn test_int_add_positive() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 5", ": int / 3", ": int / 8",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -135,7 +136,7 @@ fn test_int_add_zero() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 42", ": int / 0", ": int / 42",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -154,7 +155,7 @@ fn test_int_add_negative() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / -5", ": int / 3", ": int / -2",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -173,7 +174,7 @@ fn test_int_add_large() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 3000000000", ": int / 2000000000", ": int / 5000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -192,7 +193,7 @@ fn test_int_add_result_zero() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 5", ": int / -5", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -214,7 +215,7 @@ fn test_int_sub_positive() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 8", ": int / 3", ": int / 5",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_sub(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_sub(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -233,7 +234,7 @@ fn test_int_sub_result_negative() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 3", ": int / 8", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_sub(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_sub(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -252,7 +253,7 @@ fn test_int_sub_zero() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 5", ": int / 5", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_sub(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_sub(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -271,7 +272,7 @@ fn test_int_sub_large() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 5000000000", ": int / 3000000000", ": int / 2000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_sub(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_sub(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -293,7 +294,7 @@ fn test_int_mul_positive() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 6", ": int / 7", ": int / 42",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_mul(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_mul(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -311,7 +312,7 @@ fn test_int_mul_zero() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 42", ": int / 0", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_mul(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_mul(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -330,7 +331,7 @@ fn test_int_mul_negative() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / -6", ": int / 7", ": int / -42",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_mul(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_mul(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -349,7 +350,7 @@ fn test_int_mul_both_negative() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / -6", ": int / -7", ": int / 42",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_mul(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_mul(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -368,7 +369,7 @@ fn test_int_mul_large() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 1000000", ": int / 1000000", ": int / 1000000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_mul(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_mul(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -394,16 +395,16 @@ fn test_int_neg_positive() -> AnyResult<()> {
     assert!(!result_ptr.is_null());
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_int_neg(rt.handle(), ptr_a, &*tydesc_a, result_ptr, &*tydesc_a)
+        datalove_rt::c::dtlv_rti_int_neg(rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyOut::new(result_ptr), &*tydesc_a)
     };
     assert_eq!(status, RtStatus::Ok);
 
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr,
+            AnyRef::new(result_ptr),
             &*tydesc_a,
-            ptr_expected,
+            AnyRef::new(ptr_expected),
             &*tydesc_expected,
         )
     };
@@ -432,16 +433,16 @@ fn test_int_neg_negative() -> AnyResult<()> {
     assert!(!result_ptr.is_null());
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_int_neg(rt.handle(), ptr_a, &*tydesc_a, result_ptr, &*tydesc_a)
+        datalove_rt::c::dtlv_rti_int_neg(rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyOut::new(result_ptr), &*tydesc_a)
     };
     assert_eq!(status, RtStatus::Ok);
 
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr,
+            AnyRef::new(result_ptr),
             &*tydesc_a,
-            ptr_expected,
+            AnyRef::new(ptr_expected),
             &*tydesc_expected,
         )
     };
@@ -470,16 +471,16 @@ fn test_int_neg_zero() -> AnyResult<()> {
     assert!(!result_ptr.is_null());
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_int_neg(rt.handle(), ptr_a, &*tydesc_a, result_ptr, &*tydesc_a)
+        datalove_rt::c::dtlv_rti_int_neg(rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyOut::new(result_ptr), &*tydesc_a)
     };
     assert_eq!(status, RtStatus::Ok);
 
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr,
+            AnyRef::new(result_ptr),
             &*tydesc_a,
-            ptr_expected,
+            AnyRef::new(ptr_expected),
             &*tydesc_expected,
         )
     };
@@ -509,7 +510,7 @@ fn test_int_div_exact() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 42", ": int / 6", ": int / 7",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -528,7 +529,7 @@ fn test_int_div_truncate() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 43", ": int / 6", ": int / 7",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -547,7 +548,7 @@ fn test_int_div_negative_dividend() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / -42", ": int / 6", ": int / -7",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -566,7 +567,7 @@ fn test_int_div_negative_divisor() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 42", ": int / -6", ": int / -7",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -585,7 +586,7 @@ fn test_int_div_both_negative() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / -42", ": int / -6", ": int / 7",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -609,9 +610,9 @@ fn test_int_div_by_zero() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_int_div_checked(
             rt.handle(),
-            ptr_a, &*tydesc_a,
-            ptr_b, &*tydesc_b,
-            result_ptr, &*tydesc_a,
+            AnyRef::new(ptr_a), &*tydesc_a,
+            AnyRef::new(ptr_b), &*tydesc_b,
+            AnyOut::new(result_ptr), &*tydesc_a,
         )
     };
     assert_eq!(status, RtStatus::Error, "Division by zero should return Error");
@@ -637,7 +638,7 @@ fn test_int_div_large() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 1000000000000", ": int / 1000000", ": int / 1000000",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -656,7 +657,7 @@ fn test_int_div_zero_dividend() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 0", ": int / 42", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -684,7 +685,7 @@ fn test_int_div_multi_limb_divisor() -> AnyResult<()> {
             ": int / 10000000000",
             ": int / 1000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -706,7 +707,7 @@ fn test_int_div_multi_limb_exact() -> AnyResult<()> {
             ": int / 4294967297",
             ": int / 3",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -727,7 +728,7 @@ fn test_int_div_multi_limb_with_remainder() -> AnyResult<()> {
             ": int / 4294967297",
             ": int / 3",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -748,7 +749,7 @@ fn test_int_div_multi_limb_negative() -> AnyResult<()> {
             ": int / 4294967297",
             ": int / -3",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -769,7 +770,7 @@ fn test_int_div_dividend_smaller_than_divisor() -> AnyResult<()> {
             ": int / 4294967297",
             ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -799,7 +800,7 @@ fn test_int_div_multi_limb_no_shift() -> AnyResult<()> {
             ": int / 9223372036854775808",
             ": int / 2",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -826,7 +827,7 @@ fn test_int_add_very_large() -> AnyResult<()> {
             ": int / 18446744073709551616",
             ": int / 36893488147419103232",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -847,7 +848,7 @@ fn test_int_sub_very_large() -> AnyResult<()> {
             ": int / 18446744073709551616",
             ": int / 18446744073709551616",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_sub(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_sub(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -869,7 +870,7 @@ fn test_int_mul_very_large() -> AnyResult<()> {
             ": int / 4294967296",
             ": int / 18446744073709551616",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_mul(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_mul(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -889,7 +890,7 @@ fn test_int_add_different_sign_b_larger() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 3", ": int / -8", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -908,7 +909,7 @@ fn test_int_sub_a_is_zero() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 0", ": int / 5", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_sub(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_sub(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -927,7 +928,7 @@ fn test_int_add_a_is_zero() -> AnyResult<()> {
             &db, &rt, &mut tydesc_table,
             ": int / 0", ": int / -5", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_add(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_add(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -979,7 +980,7 @@ mod proptests {
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_add(
-                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, result1_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyRef::new(ptr_b), &*tydesc_b, AnyOut::new(result1_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
@@ -990,7 +991,7 @@ mod proptests {
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_add(
-                    rt.handle(), ptr_b, &*tydesc_b, ptr_a, &*tydesc_a, result2_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(ptr_b), &*tydesc_b, AnyRef::new(ptr_a), &*tydesc_a, AnyOut::new(result2_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -999,8 +1000,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result1_ptr, &*tydesc_a,
-                    result2_ptr, &*tydesc_a,
+                    AnyRef::new(result1_ptr), &*tydesc_a,
+                    AnyRef::new(result2_ptr), &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "a + b != b + a for a={}, b={}", a, b);
@@ -1031,7 +1032,7 @@ mod proptests {
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_mul(
-                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, result1_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyRef::new(ptr_b), &*tydesc_b, AnyOut::new(result1_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
@@ -1042,7 +1043,7 @@ mod proptests {
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_mul(
-                    rt.handle(), ptr_b, &*tydesc_b, ptr_a, &*tydesc_a, result2_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(ptr_b), &*tydesc_b, AnyRef::new(ptr_a), &*tydesc_a, AnyOut::new(result2_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -1051,8 +1052,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result1_ptr, &*tydesc_a,
-                    result2_ptr, &*tydesc_a,
+                    AnyRef::new(result1_ptr), &*tydesc_a,
+                    AnyRef::new(result2_ptr), &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "a * b != b * a for a={}, b={}", a, b);
@@ -1083,7 +1084,7 @@ mod proptests {
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_add(
-                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, tmp_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyRef::new(ptr_b), &*tydesc_b, AnyOut::new(tmp_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
@@ -1094,7 +1095,7 @@ mod proptests {
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_sub(
-                    rt.handle(), tmp_ptr, &*tydesc_a, ptr_b, &*tydesc_b, result_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(tmp_ptr), &*tydesc_a, AnyRef::new(ptr_b), &*tydesc_b, AnyOut::new(result_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -1103,8 +1104,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result_ptr, &*tydesc_a,
-                    ptr_a, &*tydesc_a,
+                    AnyRef::new(result_ptr), &*tydesc_a,
+                    AnyRef::new(ptr_a), &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "(a + b) - b != a for a={}, b={}", a, b);
@@ -1132,7 +1133,7 @@ mod proptests {
                 datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status1 = unsafe {
-                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), ptr_a, &*tydesc_a, neg1_ptr, &*tydesc_a)
+                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyOut::new(neg1_ptr), &*tydesc_a)
             };
             prop_assert_eq!(status1, RtStatus::Ok);
 
@@ -1141,7 +1142,7 @@ mod proptests {
                 datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc_a, 1)
             };
             let status2 = unsafe {
-                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), neg1_ptr, &*tydesc_a, neg2_ptr, &*tydesc_a)
+                datalove_rt::c::dtlv_rti_int_neg(rt.handle(), AnyRef::new(neg1_ptr), &*tydesc_a, AnyOut::new(neg2_ptr), &*tydesc_a)
             };
             prop_assert_eq!(status2, RtStatus::Ok);
 
@@ -1149,8 +1150,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    neg2_ptr, &*tydesc_a,
-                    ptr_a, &*tydesc_a,
+                    AnyRef::new(neg2_ptr), &*tydesc_a,
+                    AnyRef::new(ptr_a), &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "-(-a) != a for a={}", a);
@@ -1180,7 +1181,7 @@ mod proptests {
             };
             let status1 = unsafe {
                 datalove_rt::c::dtlv_rti_int_mul(
-                    rt.handle(), ptr_a, &*tydesc_a, ptr_b, &*tydesc_b, tmp_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(ptr_a), &*tydesc_a, AnyRef::new(ptr_b), &*tydesc_b, AnyOut::new(tmp_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status1, RtStatus::Ok);
@@ -1191,7 +1192,7 @@ mod proptests {
             };
             let status2 = unsafe {
                 datalove_rt::c::dtlv_rti_int_div_checked(
-                    rt.handle(), tmp_ptr, &*tydesc_a, ptr_b, &*tydesc_b, result_ptr, &*tydesc_a,
+                    rt.handle(), AnyRef::new(tmp_ptr), &*tydesc_a, AnyRef::new(ptr_b), &*tydesc_b, AnyOut::new(result_ptr), &*tydesc_a,
                 )
             };
             prop_assert_eq!(status2, RtStatus::Ok);
@@ -1200,8 +1201,8 @@ mod proptests {
             let eq_result = unsafe {
                 datalove_rt::c::dtlv_rti_eq_local(
                     std::ptr::null_mut(),
-                    result_ptr, &*tydesc_a,
-                    ptr_a, &*tydesc_a,
+                    AnyRef::new(result_ptr), &*tydesc_a,
+                    AnyRef::new(ptr_a), &*tydesc_a,
                 )
             };
             prop_assert!(matches!(eq_result, RtEq::Equals), "(a * b) / b != a for a={}, b={}", a, b);
@@ -1237,7 +1238,7 @@ fn test_int_div_knuth_refinement_three_limb_check() -> AnyResult<()> {
             ": int / 9223372041149743103",
             ": int / 4294967294",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -1261,7 +1262,7 @@ fn test_int_div_knuth_refinement_overflow_check() -> AnyResult<()> {
             ": int / 9223372036854775807",
             ": int / 4294967296",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -1286,7 +1287,7 @@ fn test_int_div_knuth_add_back() -> AnyResult<()> {
             ": int / 9223372041149743103",
             ": int / 4294967294",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -1309,7 +1310,7 @@ fn test_int_div_knuth_multiple_refinements() -> AnyResult<()> {
             ": int / 13835058055282163712",
             ": int / 5726623061",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -1333,7 +1334,7 @@ fn test_int_div_knuth_borrow_propagation() -> AnyResult<()> {
             ": int / 9223372041149743104",
             ": int / 18446744065119617027",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -1359,7 +1360,7 @@ fn test_int_div_knuth_refinement_break() -> AnyResult<()> {
             ": int / 9223372045444710399",
             ": int / 4294967294",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -1391,7 +1392,7 @@ fn test_int_from_limbs_zero() -> AnyResult<()> {
             std::ptr::null(),  // limbs_ptr (null is ok for zero)
             0,                 // limb_count
             false,             // negative
-            result_ptr,
+            AnyOut::new(result_ptr),
             &*tydesc_expected,
         )
     };
@@ -1401,8 +1402,8 @@ fn test_int_from_limbs_zero() -> AnyResult<()> {
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr, &*tydesc_expected,
-            ptr_expected, &*tydesc_expected,
+            AnyRef::new(result_ptr), &*tydesc_expected,
+            AnyRef::new(ptr_expected), &*tydesc_expected,
         )
     };
     assert!(matches!(eq_result, RtEq::Equals), "Zero from limbs does not match expected");
@@ -1435,7 +1436,7 @@ fn test_int_from_limbs_single_positive() -> AnyResult<()> {
             limbs.as_ptr(),
             1,
             false,
-            result_ptr,
+            AnyOut::new(result_ptr),
             &*tydesc_expected,
         )
     };
@@ -1444,8 +1445,8 @@ fn test_int_from_limbs_single_positive() -> AnyResult<()> {
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr, &*tydesc_expected,
-            ptr_expected, &*tydesc_expected,
+            AnyRef::new(result_ptr), &*tydesc_expected,
+            AnyRef::new(ptr_expected), &*tydesc_expected,
         )
     };
     assert!(matches!(eq_result, RtEq::Equals), "42 from limbs does not match expected");
@@ -1478,7 +1479,7 @@ fn test_int_from_limbs_single_negative() -> AnyResult<()> {
             limbs.as_ptr(),
             1,
             true,  // negative
-            result_ptr,
+            AnyOut::new(result_ptr),
             &*tydesc_expected,
         )
     };
@@ -1487,8 +1488,8 @@ fn test_int_from_limbs_single_negative() -> AnyResult<()> {
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr, &*tydesc_expected,
-            ptr_expected, &*tydesc_expected,
+            AnyRef::new(result_ptr), &*tydesc_expected,
+            AnyRef::new(ptr_expected), &*tydesc_expected,
         )
     };
     assert!(matches!(eq_result, RtEq::Equals), "-42 from limbs does not match expected");
@@ -1521,7 +1522,7 @@ fn test_int_from_limbs_multi_positive() -> AnyResult<()> {
             limbs.as_ptr(),
             2,
             false,
-            result_ptr,
+            AnyOut::new(result_ptr),
             &*tydesc_expected,
         )
     };
@@ -1530,8 +1531,8 @@ fn test_int_from_limbs_multi_positive() -> AnyResult<()> {
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr, &*tydesc_expected,
-            ptr_expected, &*tydesc_expected,
+            AnyRef::new(result_ptr), &*tydesc_expected,
+            AnyRef::new(ptr_expected), &*tydesc_expected,
         )
     };
     assert!(matches!(eq_result, RtEq::Equals), "4294967297 from limbs does not match expected");
@@ -1564,7 +1565,7 @@ fn test_int_from_limbs_multi_negative() -> AnyResult<()> {
             limbs.as_ptr(),
             2,
             true,  // negative
-            result_ptr,
+            AnyOut::new(result_ptr),
             &*tydesc_expected,
         )
     };
@@ -1573,8 +1574,8 @@ fn test_int_from_limbs_multi_negative() -> AnyResult<()> {
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr, &*tydesc_expected,
-            ptr_expected, &*tydesc_expected,
+            AnyRef::new(result_ptr), &*tydesc_expected,
+            AnyRef::new(ptr_expected), &*tydesc_expected,
         )
     };
     assert!(matches!(eq_result, RtEq::Equals), "-4294967297 from limbs does not match expected");
@@ -1607,7 +1608,7 @@ fn test_int_from_limbs_large() -> AnyResult<()> {
             limbs.as_ptr(),
             3,
             false,
-            result_ptr,
+            AnyOut::new(result_ptr),
             &*tydesc_expected,
         )
     };
@@ -1616,8 +1617,8 @@ fn test_int_from_limbs_large() -> AnyResult<()> {
     let eq_result = unsafe {
         datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
-            result_ptr, &*tydesc_expected,
-            ptr_expected, &*tydesc_expected,
+            AnyRef::new(result_ptr), &*tydesc_expected,
+            AnyRef::new(ptr_expected), &*tydesc_expected,
         )
     };
     assert!(matches!(eq_result, RtEq::Equals), "2^64 from limbs does not match expected");
@@ -1653,7 +1654,7 @@ fn test_int_div_wide_partial_product() -> AnyResult<()> {
             ": int / 1185984975656608777",
             ": int / 70289831572452108813",
             |rt, a, a_td, b, b_td, out, out_td| {
-                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
             },
         )?;
     }
@@ -1695,7 +1696,7 @@ fn test_int_div_matches_u128() -> AnyResult<()> {
                 &format!(": int / {divisor}"),
                 &format!(": int / {expected}"),
                 |rt, a, a_td, b, b_td, out, out_td| {
-                    datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                    datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
                 },
             ).with_context(|| format!("{dividend} / {divisor}"))?;
         }
@@ -1735,7 +1736,7 @@ proptest! {
                 &format!(": int / {divisor}"),
                 &format!(": int / {expected}"),
                 |rt, a, a_td, b, b_td, out, out_td| {
-                    datalove_rt::c::dtlv_rti_int_div_checked(rt, a, &*a_td, b, &*b_td, out, &*out_td)
+                    datalove_rt::c::dtlv_rti_int_div_checked(rt, AnyRef::new(a), &*a_td, AnyRef::new(b), &*b_td, AnyOut::new(out), &*out_td)
                 },
             ).expect("division matches");
         }
@@ -1773,12 +1774,12 @@ fn test_int_results_too_large() -> AnyResult<()> {
 
     unsafe {
         let status = datalove_rt::c::dtlv_rti_int_add(
-            rt.handle(), as_in(&huge), &*tydesc, zero_ptr, &*tydesc, result_ptr, &*tydesc);
+            rt.handle(), AnyRef::new(as_in(&huge)), &*tydesc, AnyRef::new(zero_ptr), &*tydesc, AnyOut::new(result_ptr), &*tydesc);
         assert_eq!(status, RtStatus::Error);
         assert_eq!(result.size_and_sign, 0);
 
         let status = datalove_rt::c::dtlv_rti_int_mul(
-            rt.handle(), as_in(&half), &*tydesc, as_in(&half), &*tydesc, result_ptr, &*tydesc);
+            rt.handle(), AnyRef::new(as_in(&half)), &*tydesc, AnyRef::new(as_in(&half)), &*tydesc, AnyOut::new(result_ptr), &*tydesc);
         assert_eq!(status, RtStatus::Error);
         assert_eq!(result.size_and_sign, 0);
 
@@ -1787,7 +1788,7 @@ fn test_int_results_too_large() -> AnyResult<()> {
             std::ptr::NonNull::<u32>::dangling().as_ptr(),
             i32::MAX as u32 + 1,
             false,
-            result_ptr,
+            AnyOut::new(result_ptr),
             &*tydesc,
         );
         assert_eq!(status, RtStatus::Error);
@@ -1803,12 +1804,12 @@ fn test_int_results_too_large() -> AnyResult<()> {
 // ============================================================================
 
 type BinaryIntOp = unsafe extern "C-unwind" fn(
-    *mut u8, *const u8, &datalove_rtdt::TyDesc, *const u8, &datalove_rtdt::TyDesc,
-    *mut u8, &datalove_rtdt::TyDesc,
+    *mut u8, AnyRef<'_>, &datalove_rtdt::TyDesc, AnyRef<'_>, &datalove_rtdt::TyDesc,
+    AnyOut<'_>, &datalove_rtdt::TyDesc,
 ) -> RtStatus;
 
 type AssignIntOp = unsafe extern "C-unwind" fn(
-    *mut u8, *mut u8, &datalove_rtdt::TyDesc, *const u8, &datalove_rtdt::TyDesc,
+    *mut u8, AnyMut<'_>, &datalove_rtdt::TyDesc, AnyRef<'_>, &datalove_rtdt::TyDesc,
 ) -> RtStatus;
 
 /// Values around the edges of a limb, either sign, and several limbs long.
@@ -1840,7 +1841,7 @@ fn assign_values<'db>(
 unsafe fn clone_int(rt: &Runtime, value: *const u8, tydesc: *const datalove_rtdt::TyDesc) -> *const u8 {
     unsafe {
         let copy = datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc, 1);
-        let status = datalove_rt::c::dtlv_rti_clone_local(rt.handle(), value, &*tydesc, copy, &*tydesc);
+        let status = datalove_rt::c::dtlv_rti_clone_local(rt.handle(), AnyRef::new(value), &*tydesc, AnyOut::new(copy), &*tydesc);
         assert_eq!(status, RtStatus::Ok);
         copy
     }
@@ -1872,8 +1873,8 @@ fn test_int_assign_agrees_with_binary_ops() -> AnyResult<()> {
             for (step, (binary, assign)) in run.iter().enumerate() {
                 unsafe {
                     let next = datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc, 1);
-                    let binary_status = binary(rt.handle(), expected, &*tydesc, b, &*tydesc, next, &*tydesc);
-                    let assign_status = assign(rt.handle(), place as *mut u8, &*tydesc, b, &*tydesc);
+                    let binary_status = binary(rt.handle(), AnyRef::new(expected), &*tydesc, AnyRef::new(b), &*tydesc, AnyOut::new(next), &*tydesc);
+                    let assign_status = assign(rt.handle(), AnyMut::new(place as *mut u8), &*tydesc, AnyRef::new(b), &*tydesc);
                     assert_eq!(binary_status, assign_status, "{a_expr} and {b_expr}, step {step}");
                     if binary_status == RtStatus::Ok {
                         cleanup_value(&rt, expected, tydesc);
@@ -1882,7 +1883,7 @@ fn test_int_assign_agrees_with_binary_ops() -> AnyResult<()> {
                         cleanup_value(&rt, next, tydesc);
                     }
                     let eq = datalove_rt::c::dtlv_rti_eq_local(
-                        std::ptr::null_mut(), place, &*tydesc, expected, &*tydesc);
+                        std::ptr::null_mut(), AnyRef::new(place), &*tydesc, AnyRef::new(expected), &*tydesc);
                     assert!(matches!(eq, RtEq::Equals), "{a_expr} and {b_expr}, step {step}");
                 }
             }
@@ -1920,14 +1921,14 @@ fn test_int_assign_from_itself() -> AnyResult<()> {
         for (step, (binary, assign)) in run.iter().enumerate() {
             unsafe {
                 let next = datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), &*tydesc, 1);
-                let status = binary(rt.handle(), expected, &*tydesc, expected, &*tydesc, next, &*tydesc);
+                let status = binary(rt.handle(), AnyRef::new(expected), &*tydesc, AnyRef::new(expected), &*tydesc, AnyOut::new(next), &*tydesc);
                 assert_eq!(status, RtStatus::Ok);
                 cleanup_value(&rt, expected, tydesc);
                 expected = next;
-                let status = assign(rt.handle(), place as *mut u8, &*tydesc, place, &*tydesc);
+                let status = assign(rt.handle(), AnyMut::new(place as *mut u8), &*tydesc, AnyRef::new(place), &*tydesc);
                 assert_eq!(status, RtStatus::Ok);
                 let eq = datalove_rt::c::dtlv_rti_eq_local(
-                    std::ptr::null_mut(), place, &*tydesc, expected, &*tydesc);
+                    std::ptr::null_mut(), AnyRef::new(place), &*tydesc, AnyRef::new(expected), &*tydesc);
                 assert!(matches!(eq, RtEq::Equals), "{a_expr}, step {step}");
             }
         }

@@ -139,7 +139,7 @@ fn test_btreemap_create_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -153,7 +153,7 @@ fn test_btreemap_create_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -184,7 +184,7 @@ fn test_btreemap_destroy_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -193,7 +193,7 @@ fn test_btreemap_destroy_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -228,7 +228,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -238,7 +238,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_clear_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -252,7 +252,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -283,7 +283,7 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -296,11 +296,11 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -314,7 +314,7 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -344,7 +344,7 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -358,11 +358,11 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -376,7 +376,7 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -406,7 +406,7 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -419,11 +419,11 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -437,11 +437,11 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key2 as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key2 as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value2 as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value2 as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -453,7 +453,7 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -483,7 +483,7 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -497,11 +497,11 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -515,7 +515,7 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -545,7 +545,7 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -559,11 +559,11 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -577,7 +577,7 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -607,7 +607,7 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -621,11 +621,11 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -639,7 +639,7 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -669,7 +669,7 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -683,11 +683,11 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -701,7 +701,7 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -756,7 +756,7 @@ unsafe fn create_runtime_string(
         let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*string_tydesc,
         );
         let mut string = string.assume_init();
@@ -764,7 +764,7 @@ unsafe fn create_runtime_string(
         if !s.is_empty() {
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt,
-                &mut string as *mut rtdt::String as *mut u8,
+                rtdt::AnyMut::from_mut(&mut string),
                 &*string_tydesc,
                 s.as_ptr(),
                 (s.len() as u32).into(),
@@ -795,7 +795,7 @@ fn test_btreemap_create_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -807,7 +807,7 @@ fn test_btreemap_create_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -837,7 +837,7 @@ fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -846,7 +846,7 @@ fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -879,7 +879,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -888,7 +888,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_clear_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -900,7 +900,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -930,7 +930,7 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -942,11 +942,11 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
 
         let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key_str as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut key_str as *mut rtdt::String as *mut u8),
             &*key_tydesc,
-            &mut value_str as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut value_str as *mut rtdt::String as *mut u8),
             &*value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -961,7 +961,7 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -991,7 +991,7 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1007,11 +1007,11 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
 
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key_str as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
-                &mut value_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut value_str as *mut rtdt::String as *mut u8),
                 &*value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1026,7 +1026,7 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1056,7 +1056,7 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1068,11 +1068,11 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
 
         let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key_str as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut key_str as *mut rtdt::String as *mut u8),
             &*key_tydesc,
-            &mut value_str as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut value_str as *mut rtdt::String as *mut u8),
             &*value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1086,11 +1086,11 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
 
         let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key_str2 as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut key_str2 as *mut rtdt::String as *mut u8),
             &*key_tydesc,
-            &mut value_str2 as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut value_str2 as *mut rtdt::String as *mut u8),
             &*value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1104,7 +1104,7 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1134,7 +1134,7 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1150,11 +1150,11 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
 
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key_str as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
-                &mut value_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut value_str as *mut rtdt::String as *mut u8),
                 &*value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1169,7 +1169,7 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1199,7 +1199,7 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1215,11 +1215,11 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
 
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key_str as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
-                &mut value_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut value_str as *mut rtdt::String as *mut u8),
                 &*value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", key);
@@ -1234,7 +1234,7 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1264,7 +1264,7 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1280,11 +1280,11 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
 
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key_str as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
-                &mut value_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut value_str as *mut rtdt::String as *mut u8),
                 &*value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", key);
@@ -1299,7 +1299,7 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1329,7 +1329,7 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1345,11 +1345,11 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
 
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key_str as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
-                &mut value_str as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut value_str as *mut rtdt::String as *mut u8),
                 &*value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", key);
@@ -1364,7 +1364,7 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1397,7 +1397,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1411,11 +1411,11 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
-            map_ptr,
+            rtdt::AnyRef::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1428,7 +1428,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1459,7 +1459,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1472,11 +1472,11 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -1489,11 +1489,11 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
-            map_ptr,
+            rtdt::AnyRef::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1513,7 +1513,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1544,7 +1544,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1558,11 +1558,11 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -1577,11 +1577,11 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
-            map_ptr,
+            rtdt::AnyRef::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1594,7 +1594,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1625,7 +1625,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1639,11 +1639,11 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -1660,11 +1660,11 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
-                map_ptr,
+                rtdt::AnyRef::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -1683,7 +1683,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1714,7 +1714,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1727,11 +1727,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -1744,11 +1744,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
-            map_ptr,
+            rtdt::AnyRef::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1768,11 +1768,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value2 as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value2 as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -1783,11 +1783,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
-            map_ptr,
+            rtdt::AnyRef::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
-            option_buffer2.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer2.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1805,7 +1805,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1836,7 +1836,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1850,11 +1850,11 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -1871,11 +1871,11 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
-                map_ptr,
+                rtdt::AnyRef::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -1899,11 +1899,11 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
-                map_ptr,
+                rtdt::AnyRef::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -1916,7 +1916,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1948,7 +1948,7 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -1959,9 +1959,9 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_remove_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
         )
     };
@@ -1971,7 +1971,7 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2001,7 +2001,7 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2014,11 +2014,11 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &mut key as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -2029,9 +2029,9 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_remove_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
         )
     };
@@ -2041,7 +2041,7 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2071,7 +2071,7 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2085,11 +2085,11 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2102,9 +2102,9 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_remove_local(
             rt,
-            map_ptr,
+            rtdt::AnyMut::new(map_ptr),
             &*map_tydesc,
-            &key as *const u32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
         )
     };
@@ -2114,7 +2114,7 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2144,7 +2144,7 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2158,11 +2158,11 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2176,9 +2176,9 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2189,7 +2189,7 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2219,7 +2219,7 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2233,11 +2233,11 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2251,9 +2251,9 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2265,7 +2265,7 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2295,7 +2295,7 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2309,11 +2309,11 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2327,9 +2327,9 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2340,7 +2340,7 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2372,7 +2372,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2387,11 +2387,11 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2406,9 +2406,9 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2432,11 +2432,11 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
             let status = unsafe {
                 datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
-                    map_ptr as *const u8,
+                    rtdt::AnyRef::new(map_ptr as *const u8),
                     &*map_tydesc,
-                    &key as *const u32 as *const u8,
+                    rtdt::AnyRef::from_ref(&key),
                     &*key_tydesc,
-                    option_result.as_mut_ptr(),
+                    rtdt::AnyOut::new(option_result.as_mut_ptr()),
                     &*option_tydesc,
                 )
             };
@@ -2460,9 +2460,9 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2477,7 +2477,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2508,7 +2508,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2522,11 +2522,11 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2540,9 +2540,9 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2561,11 +2561,11 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
-                map_ptr as *const u8,
+                rtdt::AnyRef::new(map_ptr as *const u8),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
-                option_result.as_mut_ptr(),
+                rtdt::AnyOut::new(option_result.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -2580,11 +2580,11 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
-                map_ptr as *const u8,
+                rtdt::AnyRef::new(map_ptr as *const u8),
                 &*map_tydesc,
-                &key as *const u32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
-                option_result.as_mut_ptr(),
+                rtdt::AnyOut::new(option_result.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -2596,7 +2596,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2627,7 +2627,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2648,11 +2648,11 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut rtdt::String as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2670,9 +2670,9 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const rtdt::String as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2682,7 +2682,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt,
-                &mut key as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
             )
         };
@@ -2694,7 +2694,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2725,7 +2725,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2746,11 +2746,11 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &mut key as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
-                &mut value as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut rtdt::String as *mut u8),
                 &*value_tydesc,
             )
         };
@@ -2768,9 +2768,9 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
-                map_ptr,
+                rtdt::AnyMut::new(map_ptr),
                 &*map_tydesc,
-                &key as *const rtdt::String as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
             )
         };
@@ -2780,7 +2780,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt,
-                &mut key as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut key as *mut rtdt::String as *mut u8),
                 &*key_tydesc,
             )
         };
@@ -2794,7 +2794,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2864,7 +2864,7 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
             ptr::null(),
             0,
             &*tuple_tydesc,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2875,7 +2875,7 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2919,7 +2919,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*tuple_tydesc,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -2935,11 +2935,11 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
-            map_ptr,
+            rtdt::AnyRef::new(map_ptr),
             &*map_tydesc,
-            &key as *const rtdt::U32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -2957,7 +2957,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -3004,7 +3004,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*tuple_tydesc,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -3022,11 +3022,11 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
-                map_ptr,
+                rtdt::AnyRef::new(map_ptr),
                 &*map_tydesc,
-                &key as *const rtdt::U32 as *const u8,
+                rtdt::AnyRef::from_ref(&key),
                 &*key_tydesc,
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -3045,7 +3045,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -3091,7 +3091,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
             slice_data.as_ptr() as *const u8,
             (slice_data.len() as u32).into(),
             &*tuple_tydesc,
-            map_ptr,
+            rtdt::AnyOut::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -3107,11 +3107,11 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
-            map_ptr,
+            rtdt::AnyRef::new(map_ptr),
             &*map_tydesc,
-            &key as *const rtdt::U32 as *const u8,
+            rtdt::AnyRef::from_ref(&key),
             &*key_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -3129,7 +3129,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
-            map_ptr,
+            rtdt::AnyOwned::new(map_ptr),
             &*map_tydesc,
         )
     };
@@ -3159,11 +3159,11 @@ fn test_btreemap_full_index_refuses_insert() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
-            &mut map as *mut rtdt::Map as *mut u8,
+            rtdt::AnyMut::from_mut(&mut map),
             &*map_tydesc,
-            &mut key as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut key as *mut u32 as *mut u8),
             &*key_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*value_tydesc,
         )
     };
@@ -3203,7 +3203,7 @@ fn test_btreemap_built_map_finds_every_key() -> AnyResult<()> {
         let mut values: Vec<u32> = (0..n).map(|k| k * 10).collect();
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
-                rt, map_ptr, &*key_td, &*value_td,
+                rt, rtdt::AnyOut::new(map_ptr), &*key_td, &*value_td,
                 keys.as_mut_ptr() as *mut u8, values.as_mut_ptr() as *mut u8, n.into(),
             )
         };
@@ -3212,7 +3212,7 @@ fn test_btreemap_built_map_finds_every_key() -> AnyResult<()> {
         let contains = |k: u32| unsafe {
             let mut found = false;
             let status = datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
-                rt, map_ptr, &*map_td, &k as *const u32 as *const u8, &*key_td, &mut found,
+                rt, rtdt::AnyRef::new(map_ptr), &*map_td, rtdt::AnyRef::from_ref(&k), &*key_td, &mut found,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             found
@@ -3225,7 +3225,7 @@ fn test_btreemap_built_map_finds_every_key() -> AnyResult<()> {
         for k in shuffled(n, n as u64) {
             let status = unsafe {
                 datalove_rt::c::dtlv_rti_btreemap_remove_local(
-                    rt, map_ptr, &*map_td, &k as *const u32 as *const u8, &*key_td,
+                    rt, rtdt::AnyMut::new(map_ptr), &*map_td, rtdt::AnyRef::from_ref(&k), &*key_td,
                 )
             };
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3238,7 +3238,7 @@ fn test_btreemap_built_map_finds_every_key() -> AnyResult<()> {
         assert!(map.root.is_null());
 
         unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_td);
+            datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, rtdt::AnyOwned::new(map_ptr), &*map_td);
             datalove_rt::c::dtlv_rti_shutdown(rt);
         }
     }

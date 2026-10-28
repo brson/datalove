@@ -261,9 +261,9 @@ impl IrInterpreter {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_data_from_local(
                 self.runtime.handle(),
-                inner.ptr,
+                rtdt::AnyOwned::new(inner.ptr),
                 &*inner.tydesc,
-                dest.ptr,
+                rtdt::AnyOut::new(dest.ptr),
             )
         };
         assert_eq!(

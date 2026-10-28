@@ -166,7 +166,7 @@ impl ValueGuard {
 impl Drop for ValueGuard {
     fn drop(&mut self) {
         unsafe {
-            crate::c::dtlv_rti_any_destroy_local(self.rt, self.ptr, &*self.tydesc);
+            crate::c::dtlv_rti_any_destroy_local(self.rt, rtdt::AnyOwned::new(self.ptr), &*self.tydesc);
             crate::c::dtlv_rti_mem_free_local(self.rt, &*self.tydesc, 1, self.ptr);
         }
     }

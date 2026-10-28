@@ -53,7 +53,7 @@ unsafe fn write_string_result(rt: LocalRtHandle, out: &mut MaybeUninit<rtdt::Str
             rt,
             s.as_ptr(),
             s.len() as rtdt::IndexRepr,
-            out.as_mut_ptr().cast(),
+            rtdt::AnyOut::from_uninit(out),
             out_td,
         )
     };
@@ -343,7 +343,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_get_byte(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let idx = *idx_ptr;
@@ -361,7 +361,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_find(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     pat_ptr: &rtdt::String, _pat_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let pat = pat_ptr.as_str();
@@ -377,7 +377,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_rfind(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     pat_ptr: &rtdt::String, _pat_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let pat = pat_ptr.as_str();
@@ -393,7 +393,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_strip_prefix(
     rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     prefix_ptr: &rtdt::String, _prefix_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let prefix = prefix_ptr.as_str();
@@ -408,7 +408,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_strip_suffix(
     rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     suffix_ptr: &rtdt::String, _suffix_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let suffix = suffix_ptr.as_str();
@@ -452,7 +452,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_push_str(
     rt: LocalRtHandle,
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
     other_ptr: &rtdt::String, _other_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let other = other_ptr.as_str();
     let mut s = unsafe { StringMut::new(rt, self_ptr, self_td) };
@@ -463,7 +463,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_push_str(
 pub unsafe extern "C-unwind" fn dlr_std__string_clear(
     rt: LocalRtHandle,
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe { StringMut::new(rt, self_ptr, self_td) }.clear();
     OK
@@ -474,7 +474,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_push_char(
     rt: LocalRtHandle,
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
     ch_ptr: &u32, _ch_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let Some(ch) = char::from_u32(*ch_ptr) else {
         return OK; // Invalid codepoint: no-op.
@@ -487,7 +487,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_push_char(
 pub unsafe extern "C-unwind" fn dlr_std__string_pop(
     rt: LocalRtHandle,
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     match unsafe { StringMut::new(rt, self_ptr, self_td) }.pop() {
         Some(ch) => unsafe { rider_helpers::write_option_some(out, ch as u32) },
@@ -501,7 +501,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_truncate(
     rt: LocalRtHandle,
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
     len_ptr: &rtdt::Index, _len_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let len = len_ptr.as_usize();
     unsafe { StringMut::new(rt, self_ptr, self_td) }.truncate(len);
@@ -513,7 +513,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_remove(
     rt: LocalRtHandle,
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let idx = idx_ptr.as_usize();
     match unsafe { StringMut::new(rt, self_ptr, self_td) }.remove(idx) {
@@ -529,7 +529,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_insert_char(
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
     ch_ptr: &u32, _ch_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let idx = idx_ptr.as_usize();
     let Some(ch) = char::from_u32(*ch_ptr) else {
@@ -545,7 +545,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_insert_str(
     self_ptr: &mut rtdt::String, self_td: &rtdt::TyDesc,
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
     other_ptr: &rtdt::String, _other_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let idx = idx_ptr.as_usize();
     let other = other_ptr.as_str();
@@ -560,7 +560,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_split_once(
     rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     delim_ptr: &rtdt::String, _delim_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let delim = delim_ptr.as_str();
@@ -581,7 +581,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_rsplit_once(
     rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     delim_ptr: &rtdt::String, _delim_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let delim = delim_ptr.as_str();
@@ -604,7 +604,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_char_at(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let idx = idx_ptr.as_usize();
@@ -620,7 +620,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_char_to_byte_index(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     idx_ptr: &rtdt::Index, _idx_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let char_idx = idx_ptr.as_usize();
@@ -639,7 +639,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_slice(
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     start_ptr: &rtdt::Index, _start_td: &rtdt::TyDesc,
     end_ptr: &rtdt::Index, _end_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let start = start_ptr.as_usize();
@@ -657,7 +657,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_slice_from(
     rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     start_ptr: &rtdt::Index, _start_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let start = start_ptr.as_usize();
@@ -674,7 +674,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_slice_to(
     rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
     end_ptr: &rtdt::Index, _end_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let end = end_ptr.as_usize();
@@ -692,7 +692,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_slice_to(
 pub unsafe extern "C-unwind" fn dlr_std__string_parse_u32(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     match s.parse::<u32>() {
@@ -706,7 +706,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_u32(
 pub unsafe extern "C-unwind" fn dlr_std__string_parse_i32(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     match s.parse::<i32>() {
@@ -720,7 +720,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_i32(
 pub unsafe extern "C-unwind" fn dlr_std__string_parse_f32(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     match s.parse::<f32>() {
@@ -870,7 +870,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_from_int(
 pub unsafe extern "C-unwind" fn dlr_std__string_parse_int(
     rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     let status = unsafe { rider_helpers::write_option_int_from_str(rt, out, s) };
@@ -891,7 +891,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_len(
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_list_len_local(
-            rt, std::ptr::from_ref(list_ptr).cast(), list_td, out.as_mut_ptr().cast(),
+            rt, rtdt::AnyRef::from_ref(list_ptr), list_td, rtdt::AnyOut::from_uninit(out),
         ) as u8
     }
 }
@@ -936,7 +936,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_get(
     rt: LocalRtHandle,
     list_ptr: &rtdt::List, list_td: &rtdt::TyDesc,
     index_ptr: &rtdt::Index, _index_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     let index = *index_ptr;
     let list_ty = rtdt::TyDescRef::from_ref(list_td);
@@ -944,7 +944,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_get(
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_get_local(
-            rt, std::ptr::from_ref(list_ptr).cast(), list_ty.as_ref(), index.0, out.cast(), out_ty.as_ref(),
+            rt, rtdt::AnyRef::from_ref(list_ptr), list_ty.as_ref(), index.0, out, out_ty.as_ref(),
         ) as u8
     }
 }
@@ -953,15 +953,15 @@ pub unsafe extern "C-unwind" fn dlr_std__list_get(
 pub unsafe extern "C-unwind" fn dlr_std__list_push(
     rt: LocalRtHandle,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
-    elem_ptr: *mut u8, elem_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    elem_ptr: rtdt::AnyOwned<'_>, elem_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let list_ty = rtdt::TyDescRef::from_ref(list_td);
     let elem_ty = rtdt::TyDescRef::from_ref(elem_td);
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_push_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), elem_ptr.cast(), elem_ty.as_ref(),
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_ty.as_ref(), elem_ptr, elem_ty.as_ref(),
         ) as u8
     }
 }
@@ -970,14 +970,14 @@ pub unsafe extern "C-unwind" fn dlr_std__list_push(
 pub unsafe extern "C-unwind" fn dlr_std__list_pop(
     rt: LocalRtHandle,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     let list_ty = rtdt::TyDescRef::from_ref(list_td);
     let out_ty = rtdt::TyDescRef::from_ref(out_td);
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_pop_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), out.cast(), out_ty.as_ref(),
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_ty.as_ref(), out, out_ty.as_ref(),
         ) as u8
     }
 }
@@ -986,11 +986,11 @@ pub unsafe extern "C-unwind" fn dlr_std__list_pop(
 pub unsafe extern "C-unwind" fn dlr_std__list_clear(
     rt: LocalRtHandle,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_list_clear_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_td,
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_td,
         ) as u8
     }
 }
@@ -1000,7 +1000,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_set(
     rt: LocalRtHandle,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
     index_ptr: &rtdt::Index, _index_td: &rtdt::TyDesc,
-    elem_ptr: *mut u8, elem_td: &rtdt::TyDesc,
+    elem_ptr: rtdt::AnyOwned<'_>, elem_td: &rtdt::TyDesc,
     _out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let index = *index_ptr;
@@ -1009,7 +1009,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_set(
 
     let status = unsafe {
         datalove_rti::call::dtlv_rti_list_set_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), index.0, elem_ptr.cast(), elem_ty.as_ref(),
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_ty.as_ref(), index.0, elem_ptr, elem_ty.as_ref(),
         )
     };
     // The runtime has taken the element either way.
@@ -1022,7 +1022,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_insert(
     rt: LocalRtHandle,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
     index_ptr: &rtdt::Index, _index_td: &rtdt::TyDesc,
-    elem_ptr: *mut u8, elem_td: &rtdt::TyDesc,
+    elem_ptr: rtdt::AnyOwned<'_>, elem_td: &rtdt::TyDesc,
     _out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let index = *index_ptr;
@@ -1031,7 +1031,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_insert(
 
     let status = unsafe {
         datalove_rti::call::dtlv_rti_list_insert_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), index.0, elem_ptr.cast(), elem_ty.as_ref(),
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_ty.as_ref(), index.0, elem_ptr, elem_ty.as_ref(),
         )
     };
     // The runtime has taken the element either way.
@@ -1044,7 +1044,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_remove(
     rt: LocalRtHandle,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
     index_ptr: &rtdt::Index, _index_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     let index = *index_ptr;
     let list_ty = rtdt::TyDescRef::from_ref(list_td);
@@ -1052,7 +1052,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_remove(
 
     unsafe {
         datalove_rti::call::dtlv_rti_list_remove_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_ty.as_ref(), index.0, out.cast(), out_ty.as_ref(),
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_ty.as_ref(), index.0, out, out_ty.as_ref(),
         ) as u8
     }
 }
@@ -1068,7 +1068,7 @@ pub unsafe extern "C-unwind" fn dlr_std__list_swap(
     let i = *i_ptr;
     let j = *j_ptr;
     let status = unsafe {
-        datalove_rti::call::dtlv_rti_list_swap_local(rt, std::ptr::from_mut(list_ptr).cast(), list_td, i.0, j.0)
+        datalove_rti::call::dtlv_rti_list_swap_local(rt, rtdt::AnyMut::from_mut(list_ptr), list_td, i.0, j.0)
     };
     out.write((status == datalove_rti::RtStatus::Ok) as u8);
     OK
@@ -1079,12 +1079,12 @@ pub unsafe extern "C-unwind" fn dlr_std__list_reserve(
     rt: LocalRtHandle,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
     n_ptr: &rtdt::Index, _n_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let n = *n_ptr;
     unsafe {
         datalove_rti::call::dtlv_rti_list_reserve_local(
-            rt, std::ptr::from_mut(list_ptr).cast(), list_td, n.0,
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_td, n.0,
         ) as u8
     }
 }
@@ -1102,7 +1102,7 @@ pub unsafe extern "C-unwind" fn dlr_std__map_len(
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_len_local(
-            rt, std::ptr::from_ref(map_ptr).cast(), map_td, out.as_mut_ptr().cast(),
+            rt, rtdt::AnyRef::from_ref(map_ptr), map_td, rtdt::AnyOut::from_uninit(out),
         ) as u8
     }
 }
@@ -1111,11 +1111,11 @@ pub unsafe extern "C-unwind" fn dlr_std__map_len(
 pub unsafe extern "C-unwind" fn dlr_std__map_clear(
     rt: LocalRtHandle,
     map_ptr: &mut rtdt::Map, map_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_clear_local(
-            rt, std::ptr::from_mut(map_ptr).cast(), map_td,
+            rt, rtdt::AnyMut::from_mut(map_ptr), map_td,
         ) as u8
     }
 }
@@ -1124,13 +1124,13 @@ pub unsafe extern "C-unwind" fn dlr_std__map_clear(
 pub unsafe extern "C-unwind" fn dlr_std__map_contains_key(
     rt: LocalRtHandle,
     map_ptr: &rtdt::Map, map_td: &rtdt::TyDesc,
-    key_ptr: *const u8, key_td: &rtdt::TyDesc,
+    key_ptr: rtdt::AnyRef<'_>, key_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_contains_key_local(
-            rt, std::ptr::from_ref(map_ptr).cast(), map_td,
-            key_ptr.cast(), key_td,
+            rt, rtdt::AnyRef::from_ref(map_ptr), map_td,
+            key_ptr, key_td,
             out.as_mut_ptr().cast(),
         ) as u8
     }
@@ -1140,16 +1140,16 @@ pub unsafe extern "C-unwind" fn dlr_std__map_contains_key(
 pub unsafe extern "C-unwind" fn dlr_std__map_get(
     rt: LocalRtHandle,
     map_ptr: &rtdt::Map, map_td: &rtdt::TyDesc,
-    key_ptr: *const u8, key_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    key_ptr: rtdt::AnyRef<'_>, key_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     let map_ty = rtdt::TyDescRef::from_ref(map_td);
     let out_ty = rtdt::TyDescRef::from_ref(out_td);
 
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_get_local(
-            rt, std::ptr::from_ref(map_ptr).cast(), map_ty.as_ref(), key_ptr.cast(), key_td,
-            out.cast(), out_ty.as_ref(),
+            rt, rtdt::AnyRef::from_ref(map_ptr), map_ty.as_ref(), key_ptr, key_td,
+            out, out_ty.as_ref(),
         ) as u8
     }
 }
@@ -1158,9 +1158,9 @@ pub unsafe extern "C-unwind" fn dlr_std__map_get(
 pub unsafe extern "C-unwind" fn dlr_std__map_insert(
     rt: LocalRtHandle,
     map_ptr: &mut rtdt::Map, map_td: &rtdt::TyDesc,
-    key_ptr: *mut u8, key_td: &rtdt::TyDesc,
-    value_ptr: *mut u8, value_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    key_ptr: rtdt::AnyOwned<'_>, key_td: &rtdt::TyDesc,
+    value_ptr: rtdt::AnyOwned<'_>, value_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let map_ty = rtdt::TyDescRef::from_ref(map_td);
     let key_ty = rtdt::TyDescRef::from_ref(key_td);
@@ -1168,8 +1168,8 @@ pub unsafe extern "C-unwind" fn dlr_std__map_insert(
 
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_insert_local(
-            rt, std::ptr::from_mut(map_ptr).cast(), map_ty.as_ref(),
-            key_ptr.cast(), key_ty.as_ref(), value_ptr.cast(), value_ty.as_ref(),
+            rt, rtdt::AnyMut::from_mut(map_ptr), map_ty.as_ref(),
+            key_ptr, key_ty.as_ref(), value_ptr, value_ty.as_ref(),
         ) as u8
     }
 }
@@ -1178,15 +1178,15 @@ pub unsafe extern "C-unwind" fn dlr_std__map_insert(
 pub unsafe extern "C-unwind" fn dlr_std__map_add(
     rt: LocalRtHandle,
     map_ptr: &mut rtdt::Map, map_td: &rtdt::TyDesc,
-    key_ptr: *const u8, key_td: &rtdt::TyDesc,
-    amount_ptr: *mut u8, amount_td: &rtdt::TyDesc,
+    key_ptr: rtdt::AnyRef<'_>, key_td: &rtdt::TyDesc,
+    amount_ptr: rtdt::AnyOwned<'_>, amount_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_add_local(
-            rt, std::ptr::from_mut(map_ptr).cast(), map_td,
-            key_ptr.cast(), key_td,
-            amount_ptr.cast(), amount_td,
+            rt, rtdt::AnyMut::from_mut(map_ptr), map_td,
+            key_ptr, key_td,
+            amount_ptr, amount_td,
             out.as_mut_ptr().cast(),
         ) as u8
     }
@@ -1196,13 +1196,13 @@ pub unsafe extern "C-unwind" fn dlr_std__map_add(
 pub unsafe extern "C-unwind" fn dlr_std__map_remove(
     rt: LocalRtHandle,
     map_ptr: &mut rtdt::Map, map_td: &rtdt::TyDesc,
-    key_ptr: *const u8, key_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    key_ptr: rtdt::AnyRef<'_>, key_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_remove_local(
-            rt, std::ptr::from_mut(map_ptr).cast(), map_td,
-            key_ptr.cast(), key_td,
+            rt, rtdt::AnyMut::from_mut(map_ptr), map_td,
+            key_ptr, key_td,
         ) as u8
     }
 }
@@ -1215,7 +1215,7 @@ pub unsafe extern "C-unwind" fn dlr_std__set_len(
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_len_local(
-            rt, std::ptr::from_ref(set_ptr).cast(), set_td, out.as_mut_ptr().cast(),
+            rt, rtdt::AnyRef::from_ref(set_ptr), set_td, rtdt::AnyOut::from_uninit(out),
         ) as u8
     }
 }
@@ -1224,11 +1224,11 @@ pub unsafe extern "C-unwind" fn dlr_std__set_len(
 pub unsafe extern "C-unwind" fn dlr_std__set_clear(
     rt: LocalRtHandle,
     set_ptr: &mut rtdt::Set, set_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_clear_local(
-            rt, std::ptr::from_mut(set_ptr).cast(), set_td,
+            rt, rtdt::AnyMut::from_mut(set_ptr), set_td,
         ) as u8
     }
 }
@@ -1240,12 +1240,12 @@ pub unsafe extern "C-unwind" fn dlr_std__map_keys_into(
     rt: LocalRtHandle,
     map_ptr: &rtdt::Map, map_td: &rtdt::TyDesc,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_keys_into_local(
-            rt, std::ptr::from_ref(map_ptr).cast(), map_td,
-            std::ptr::from_mut(list_ptr).cast(), list_td,
+            rt, rtdt::AnyRef::from_ref(map_ptr), map_td,
+            rtdt::AnyMut::from_mut(list_ptr), list_td,
         ) as u8
     }
 }
@@ -1255,12 +1255,12 @@ pub unsafe extern "C-unwind" fn dlr_std__map_values_into(
     rt: LocalRtHandle,
     map_ptr: &rtdt::Map, map_td: &rtdt::TyDesc,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_values_into_local(
-            rt, std::ptr::from_ref(map_ptr).cast(), map_td,
-            std::ptr::from_mut(list_ptr).cast(), list_td,
+            rt, rtdt::AnyRef::from_ref(map_ptr), map_td,
+            rtdt::AnyMut::from_mut(list_ptr), list_td,
         ) as u8
     }
 }
@@ -1270,12 +1270,12 @@ pub unsafe extern "C-unwind" fn dlr_std__map_entries_into(
     rt: LocalRtHandle,
     map_ptr: &rtdt::Map, map_td: &rtdt::TyDesc,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_entries_into_local(
-            rt, std::ptr::from_ref(map_ptr).cast(), map_td,
-            std::ptr::from_mut(list_ptr).cast(), list_td,
+            rt, rtdt::AnyRef::from_ref(map_ptr), map_td,
+            rtdt::AnyMut::from_mut(list_ptr), list_td,
         ) as u8
     }
 }
@@ -1285,12 +1285,12 @@ pub unsafe extern "C-unwind" fn dlr_std__set_into_list(
     rt: LocalRtHandle,
     set_ptr: &rtdt::Set, set_td: &rtdt::TyDesc,
     list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_into_list_local(
-            rt, std::ptr::from_ref(set_ptr).cast(), set_td,
-            std::ptr::from_mut(list_ptr).cast(), list_td,
+            rt, rtdt::AnyRef::from_ref(set_ptr), set_td,
+            rtdt::AnyMut::from_mut(list_ptr), list_td,
         ) as u8
     }
 }
@@ -1299,13 +1299,13 @@ pub unsafe extern "C-unwind" fn dlr_std__set_into_list(
 pub unsafe extern "C-unwind" fn dlr_std__set_contains(
     rt: LocalRtHandle,
     set_ptr: &rtdt::Set, set_td: &rtdt::TyDesc,
-    elem_ptr: *const u8, elem_td: &rtdt::TyDesc,
+    elem_ptr: rtdt::AnyRef<'_>, elem_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_contains_local(
-            rt, std::ptr::from_ref(set_ptr).cast(), set_td,
-            elem_ptr.cast(), elem_td, out.as_mut_ptr().cast(),
+            rt, rtdt::AnyRef::from_ref(set_ptr), set_td,
+            elem_ptr, elem_td, rtdt::AnyOut::from_uninit(out),
         ) as u8
     }
 }
@@ -1314,13 +1314,13 @@ pub unsafe extern "C-unwind" fn dlr_std__set_contains(
 pub unsafe extern "C-unwind" fn dlr_std__set_remove(
     rt: LocalRtHandle,
     set_ptr: &mut rtdt::Set, set_td: &rtdt::TyDesc,
-    elem_ptr: *const u8, elem_td: &rtdt::TyDesc,
+    elem_ptr: rtdt::AnyRef<'_>, elem_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_remove_local(
-            rt, std::ptr::from_mut(set_ptr).cast(), set_td,
-            elem_ptr.cast(), elem_td, out.as_mut_ptr().cast(),
+            rt, rtdt::AnyMut::from_mut(set_ptr), set_td,
+            elem_ptr, elem_td, rtdt::AnyOut::from_uninit(out),
         ) as u8
     }
 }
@@ -1329,7 +1329,7 @@ pub unsafe extern "C-unwind" fn dlr_std__set_remove(
 pub unsafe extern "C-unwind" fn dlr_std__set_insert(
     rt: LocalRtHandle,
     set_ptr: &mut rtdt::Set, set_td: &rtdt::TyDesc,
-    elem_ptr: *mut u8, elem_td: &rtdt::TyDesc,
+    elem_ptr: rtdt::AnyOwned<'_>, elem_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<u8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let set_ty = rtdt::TyDescRef::from_ref(set_td);
@@ -1337,7 +1337,7 @@ pub unsafe extern "C-unwind" fn dlr_std__set_insert(
 
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_insert_local(
-            rt, std::ptr::from_mut(set_ptr).cast(), set_ty.as_ref(), elem_ptr.cast(), elem_ty.as_ref(), out.as_mut_ptr().cast(),
+            rt, rtdt::AnyMut::from_mut(set_ptr), set_ty.as_ref(), elem_ptr, elem_ty.as_ref(), rtdt::AnyOut::from_uninit(out),
         ) as u8
     }
 }
@@ -1820,7 +1820,7 @@ pub unsafe extern "C-unwind" fn dlr_std__f32_rem(
 pub unsafe extern "C-unwind" fn dlr_std__f64_from_int(
     _rt: LocalRtHandle,
     n_ptr: &rtdt::Int, _n_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let text = unsafe { rider_helpers::int_to_string(n_ptr) };
     match text.parse::<f64>() {
@@ -1835,7 +1835,7 @@ pub unsafe extern "C-unwind" fn dlr_std__f64_from_int(
 pub unsafe extern "C-unwind" fn dlr_std__f32_from_int(
     _rt: LocalRtHandle,
     n_ptr: &rtdt::Int, _n_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let text = unsafe { rider_helpers::int_to_string(n_ptr) };
     match text.parse::<f32>() {
@@ -1852,7 +1852,7 @@ pub unsafe extern "C-unwind" fn dlr_std__f32_from_int(
 pub unsafe extern "C-unwind" fn dlr_std__int_to_u64(
     _rt: LocalRtHandle,
     n_ptr: &rtdt::Int, _n_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let n = unsafe { n_ptr.to_i128() };
     match n.and_then(|n| u64::try_from(n).ok()) {
@@ -1867,7 +1867,7 @@ pub unsafe extern "C-unwind" fn dlr_std__int_to_u64(
 pub unsafe extern "C-unwind" fn dlr_std__int_to_i64(
     _rt: LocalRtHandle,
     n_ptr: &rtdt::Int, _n_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let n = unsafe { n_ptr.to_i128() };
     match n.and_then(|n| i64::try_from(n).ok()) {
@@ -1923,7 +1923,7 @@ fn truncated_digits(value: f64) -> Option<String> {
 pub unsafe extern "C-unwind" fn dlr_std__int_from_f64(
     rt: LocalRtHandle,
     x_ptr: &f64, _x_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let x = *x_ptr;
     match truncated_digits(x) {
@@ -1940,7 +1940,7 @@ pub unsafe extern "C-unwind" fn dlr_std__int_from_f64(
 pub unsafe extern "C-unwind" fn dlr_std__int_from_f32(
     rt: LocalRtHandle,
     x_ptr: &f32, _x_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let x = *x_ptr;
     match truncated_digits(x as f64) {
@@ -1978,7 +1978,7 @@ pub unsafe extern "C-unwind" fn dlr_std__string_from_f32(
 pub unsafe extern "C-unwind" fn dlr_std__string_parse_f64(
     _rt: LocalRtHandle,
     s_ptr: &rtdt::String, _s_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     let s = s_ptr.as_str();
     match s.parse::<f64>() {
@@ -1995,13 +1995,13 @@ pub unsafe extern "C-unwind" fn dlr_std__string_parse_f64(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_abs(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 0, x, x_td,
-            out.cast(), out_td,
+            rt, 0, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2009,13 +2009,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_abs(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_sqrt(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 1, x, x_td,
-            out.cast(), out_td,
+            rt, 1, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2023,13 +2023,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_sqrt(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_floor(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 2, x, x_td,
-            out.cast(), out_td,
+            rt, 2, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2037,13 +2037,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_floor(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_ceil(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 3, x, x_td,
-            out.cast(), out_td,
+            rt, 3, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2051,13 +2051,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_ceil(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_round(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 4, x, x_td,
-            out.cast(), out_td,
+            rt, 4, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2065,13 +2065,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_round(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_trunc(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 5, x, x_td,
-            out.cast(), out_td,
+            rt, 5, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2079,13 +2079,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_trunc(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_fract(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 6, x, x_td,
-            out.cast(), out_td,
+            rt, 6, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2093,13 +2093,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_fract(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_recip(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 7, x, x_td,
-            out.cast(), out_td,
+            rt, 7, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2107,13 +2107,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_recip(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_signum(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 8, x, x_td,
-            out.cast(), out_td,
+            rt, 8, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2121,13 +2121,13 @@ pub unsafe extern "C-unwind" fn dlr_std__float_signum(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_neg(
     rt: LocalRtHandle,
-    x: *mut u8, x_td: &rtdt::TyDesc,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    x: rtdt::AnyOwned<'_>, x_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_unop(
-            rt, 9, x, x_td,
-            out.cast(), out_td,
+            rt, 9, x.as_ref(), x_td,
+            out, out_td,
         ) as u8
     }
 }
@@ -2139,12 +2139,12 @@ pub unsafe extern "C-unwind" fn dlr_std__float_neg(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__fixedint_zero(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_const(
-            rt, 0, out.cast(), out_td,
+            rt, 0, out, out_td,
             value_td,
         ) as u8
     }
@@ -2153,12 +2153,12 @@ pub unsafe extern "C-unwind" fn dlr_std__fixedint_zero(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__fixedint_one(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_const(
-            rt, 1, out.cast(), out_td,
+            rt, 1, out, out_td,
             value_td,
         ) as u8
     }
@@ -2167,12 +2167,12 @@ pub unsafe extern "C-unwind" fn dlr_std__fixedint_one(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__fixedint_min_value(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_const(
-            rt, 2, out.cast(), out_td,
+            rt, 2, out, out_td,
             value_td,
         ) as u8
     }
@@ -2181,12 +2181,12 @@ pub unsafe extern "C-unwind" fn dlr_std__fixedint_min_value(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__fixedint_max_value(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
         datalove_rti::call::dtlv_rti_dyn_const(
-            rt, 3, out.cast(), out_td,
+            rt, 3, out, out_td,
             value_td,
         ) as u8
     }
@@ -2198,8 +2198,8 @@ pub unsafe extern "C-unwind" fn dlr_std__fixedint_max_value(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__ord_compare(
     rt: LocalRtHandle,
-    a: *const u8, a_td: &rtdt::TyDesc,
-    b: *const u8, b_td: &rtdt::TyDesc,
+    a: rtdt::AnyRef<'_>, a_td: &rtdt::TyDesc,
+    b: rtdt::AnyRef<'_>, b_td: &rtdt::TyDesc,
     out: &mut MaybeUninit<i8>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2228,7 +2228,7 @@ pub unsafe extern "C-unwind" fn dlr_std__ord_compare(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_zero(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2242,7 +2242,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_zero(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_one(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2256,7 +2256,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_one(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_nan(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2270,7 +2270,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_nan(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_infinity(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2284,7 +2284,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_infinity(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_neg_infinity(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2298,7 +2298,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_neg_infinity(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_min_value(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2312,7 +2312,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_min_value(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_max_value(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2326,7 +2326,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_max_value(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_min_positive(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2340,7 +2340,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_min_positive(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_epsilon(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2354,7 +2354,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_epsilon(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_pi(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2368,7 +2368,7 @@ pub unsafe extern "C-unwind" fn dlr_std__float_pi(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__float_e(
     rt: LocalRtHandle,
-    out: *mut u8, out_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
     value_td: &rtdt::TyDesc,
 ) -> u8 {
     unsafe {
@@ -2388,17 +2388,17 @@ pub unsafe extern "C-unwind" fn dlr_std__float_e(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__mem_replace(
     _rt: LocalRtHandle,
-    dest_ptr: *mut u8, dest_td: &rtdt::TyDesc,
-    src_ptr: *mut u8, _src_td: &rtdt::TyDesc,
-    out: *mut u8, _out_td: &rtdt::TyDesc,
+    dest_ptr: rtdt::AnyMut<'_>, dest_td: &rtdt::TyDesc,
+    src_ptr: rtdt::AnyOwned<'_>, _src_td: &rtdt::TyDesc,
+    out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     // The caller gave `src` up, so its bytes move into `dest` and are not
     // destroyed there. Its slot is not written, since a copy value handed over
     // at a type parameter may still be the caller's.
     unsafe {
         let size = dest_td.size as usize;
-        std::ptr::copy(dest_ptr, out, size);
-        std::ptr::copy(src_ptr, dest_ptr, size);
+        std::ptr::copy(dest_ptr.as_ptr(), out.as_ptr(), size);
+        std::ptr::copy(src_ptr.as_ptr(), dest_ptr.as_ptr(), size);
     }
     OK
 }
@@ -2406,15 +2406,15 @@ pub unsafe extern "C-unwind" fn dlr_std__mem_replace(
 #[no_mangle]
 pub unsafe extern "C-unwind" fn dlr_std__mem_swap(
     _rt: LocalRtHandle,
-    a_ptr: *mut u8, a_td: &rtdt::TyDesc,
-    b_ptr: *mut u8, _b_td: &rtdt::TyDesc,
-    _out: *mut u8, _out_td: &rtdt::TyDesc,
+    a_ptr: rtdt::AnyMut<'_>, a_td: &rtdt::TyDesc,
+    b_ptr: rtdt::AnyMut<'_>, _b_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     // The two cannot overlap: two `mut` arguments rooted at one binding are
     // refused (D010).
     unsafe {
         let size = a_td.size as usize;
-        std::ptr::swap_nonoverlapping(a_ptr, b_ptr, size);
+        std::ptr::swap_nonoverlapping(a_ptr.as_ptr(), b_ptr.as_ptr(), size);
     }
     OK
 }

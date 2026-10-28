@@ -546,9 +546,9 @@ impl LitOpCommand {
                 let result = unsafe {
                     datalove::rt::c::dtlv_rti_eq_local(
                         std::ptr::null_mut(), // runtime handle not needed
-                        inst1.ptr,
+                        datalove::rt::c::AnyRef::new(inst1.ptr),
                         inst1.tydesc.as_ref(),
-                        inst2.ptr,
+                        datalove::rt::c::AnyRef::new(inst2.ptr),
                         inst2.tydesc.as_ref(),
                     )
                 };
@@ -564,9 +564,9 @@ impl LitOpCommand {
                 let result = unsafe {
                     datalove::rt::c::dtlv_rti_cmp_total_local(
                         std::ptr::null_mut(), // runtime handle not needed
-                        inst1.ptr,
+                        datalove::rt::c::AnyRef::new(inst1.ptr),
                         inst1.tydesc.as_ref(),
-                        inst2.ptr,
+                        datalove::rt::c::AnyRef::new(inst2.ptr),
                         inst2.tydesc.as_ref(),
                     )
                 };

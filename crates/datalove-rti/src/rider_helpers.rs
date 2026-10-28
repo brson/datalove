@@ -22,9 +22,9 @@ use crate::{LocalRtHandle, RtStatus};
 /// # Safety
 ///
 /// `out` must point to a valid, writable option-sized region.
-pub unsafe fn write_option_none(out: *mut u8) {
+pub unsafe fn write_option_none(out: rtdt::AnyOut<'_>) {
     unsafe {
-        *out = rtdt::OptionTag::None as u8;
+        *out.as_ptr() = rtdt::OptionTag::None as u8;
     }
 }
 
@@ -37,7 +37,8 @@ pub unsafe fn write_option_none(out: *mut u8) {
 ///
 /// `out` must point to a valid, writable option-sized region large enough
 /// for the tag + padding + payload.
-pub unsafe fn write_option_some<T: Copy>(out: *mut u8, val: T) {
+pub unsafe fn write_option_some<T: Copy>(out: rtdt::AnyOut<'_>, val: T) {
+    let out = out.as_ptr();
     unsafe {
         *out = rtdt::OptionTag::Some as u8;
         let payload_offset = align_up(1, std::mem::align_of::<T>());
@@ -56,9 +57,10 @@ pub unsafe fn write_option_some<T: Copy>(out: *mut u8, val: T) {
 /// enough for the option-of-string layout.
 pub unsafe fn write_option_some_string(
     rt: LocalRtHandle,
-    out: *mut u8,
+    out: rtdt::AnyOut<'_>,
     s: &str,
 ) -> RtStatus {
+    let out = out.as_ptr();
     unsafe {
         *out = rtdt::OptionTag::Some as u8;
         let payload_offset = align_up(1, std::mem::align_of::<rtdt::String>());
@@ -78,7 +80,7 @@ pub unsafe fn write_option_some_string(
                 rt,
                 s.as_ptr(),
                 s.len() as rtdt::IndexRepr,
-                payload_ptr,
+                rtdt::AnyOut::new(payload_ptr),
                 &tydesc,
             );
             if status != RtStatus::Ok {
@@ -101,10 +103,11 @@ pub unsafe fn write_option_some_string(
 /// enough for the `?(string, string)` layout.
 pub unsafe fn write_option_some_string_pair(
     rt: LocalRtHandle,
-    out: *mut u8,
+    out: rtdt::AnyOut<'_>,
     s0: &str,
     s1: &str,
 ) -> RtStatus {
+    let out = out.as_ptr();
     let string_size = std::mem::size_of::<rtdt::String>() as u32;
     let string_align = std::mem::align_of::<rtdt::String>() as u32;
 
@@ -156,7 +159,7 @@ unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus
                 rt,
                 s.as_ptr(),
                 s.len() as rtdt::IndexRepr,
-                dest,
+                rtdt::AnyOut::new(dest),
                 &tydesc,
             )
         }
@@ -179,7 +182,7 @@ pub unsafe fn write_string_list(
     out_td: &rtdt::TyDesc,
     parts: &[&str],
 ) -> RtStatus {
-    let element_td = rtdt::TyDescRef::from_ref(out_td).list_element_ty().as_ptr();
+    let element_td = rtdt::TyDescRef::from_ref(out_td).list_element_ty().as_ref();
 
     if parts.is_empty() {
         out.write(rtdt::List { data: std::ptr::null(), size: rtdt::Index::ZERO, capacity: rtdt::Index::ZERO });
@@ -208,8 +211,8 @@ pub unsafe fn write_string_list(
     unsafe {
         call::dtlv_rti_list_build_from_slice_local(
             rt,
-            out.as_mut_ptr().cast(),
-            &*element_td,
+            rtdt::AnyOut::from_uninit(out),
+            element_td,
             buf.as_mut_ptr() as *mut u8,
             parts.len() as rtdt::IndexRepr,
         )
@@ -234,7 +237,7 @@ unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
         unsafe {
             call::dtlv_rti_any_destroy_local(
                 rt,
-                s as *mut u8,
+                rtdt::AnyOwned::new(s as *mut u8),
                 &tydesc,
             );
         }
@@ -289,7 +292,7 @@ pub unsafe fn int_to_string(int: &rtdt::Int) -> String {
 /// region large enough for the `?int` layout.
 pub unsafe fn write_option_int_from_str(
     rt: LocalRtHandle,
-    out: *mut u8,
+    out: rtdt::AnyOut<'_>,
     s: &str,
 ) -> RtStatus {
     let s = s.trim();
@@ -331,6 +334,7 @@ pub unsafe fn write_option_int_from_str(
         type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
     };
 
+    let out = out.as_ptr();
     unsafe {
         *out = rtdt::OptionTag::Some as u8;
         let int_out = out.add(payload_offset);
@@ -339,7 +343,7 @@ pub unsafe fn write_option_int_from_str(
             limbs.as_ptr(),
             limb_count as u32,
             negative && limb_count > 0,
-            int_out,
+            rtdt::AnyOut::new(int_out),
             &tydesc,
         )
     }
@@ -494,7 +498,7 @@ impl<'a> StringMut<'a> {
         unsafe {
             call::dtlv_rti_string_push_bytes_local(
                 self.rt,
-                self.s as *mut rtdt::String as *mut u8,
+                rtdt::AnyMut::new(self.s as *mut rtdt::String as *mut u8),
                 &*self.td,
                 other.as_ptr(),
                 other.len() as rtdt::IndexRepr,

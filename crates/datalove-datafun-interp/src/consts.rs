@@ -2,6 +2,7 @@
 //! static const read by reference.
 
 use super::*;
+use datalove_rtdt::{AnyMut, AnyOut, AnyOwned};
 
 impl IrInterpreter {
     /// The address of the pool's copy of a static const of type `ty`,
@@ -81,7 +82,7 @@ impl IrInterpreter {
                         if limbs.is_empty() { std::ptr::null() } else { limbs.as_ptr() },
                         limbs.len() as u32,
                         *negative,
-                        dest.ptr,
+                        AnyOut::new(dest.ptr),
                         &*dest.tydesc,
                     );
                 }
@@ -97,7 +98,7 @@ impl IrInterpreter {
                         self.runtime.handle(),
                         bytes_ptr,
                         s.len() as rtdt::IndexRepr,
-                        dest.ptr,
+                        AnyOut::new(dest.ptr),
                         &*dest.tydesc,
                     );
                 }
@@ -243,7 +244,7 @@ impl IrInterpreter {
                     // Build list from slice.
                     datalove_rt::c::dtlv_rti_list_build_from_slice_local(
                         self.runtime.handle(),
-                        dest.ptr,
+                        AnyOut::new(dest.ptr),
                         &*element_tydesc,
                         elements_buffer.as_mut_ptr(),
                         num_elements as rtdt::IndexRepr,
@@ -274,7 +275,7 @@ impl IrInterpreter {
                         &*element_tydesc,
                         shape_values.as_ptr(),
                         shape_values.len() as u32,
-                        dest.ptr,
+                        AnyOut::new(dest.ptr),
                         &*dest.tydesc,
                     );
                 }
@@ -285,15 +286,15 @@ impl IrInterpreter {
                 ConstValue::Set(elements) => {
                     let element_tydesc = rtdt::TyDescRef::from_ptr(dest.tydesc).set_element_ty().as_ptr();
                     let rt = self.runtime.handle();
-                    datalove_rt::c::dtlv_rti_btreeset_create_local(rt, dest.ptr, &*dest.tydesc);
+                    datalove_rt::c::dtlv_rti_btreeset_create_local(rt, AnyOut::new(dest.ptr), &*dest.tydesc);
                     let mut scratch = datalove_rt::rust::AlignedBuffer::for_tydesc(&*element_tydesc);
                     for element_value in elements {
                         let element = Destination { ptr: scratch.as_mut_ptr(), tydesc: element_tydesc };
                         self.write_const(element_value, element);
                         let mut added = false;
                         datalove_rt::c::dtlv_rti_btreeset_insert_local(
-                            rt, dest.ptr, &*dest.tydesc, element.ptr, &*element.tydesc,
-                            &mut added as *mut bool as *mut u8);
+                            rt, AnyMut::new(dest.ptr), &*dest.tydesc, AnyOwned::new(element.ptr), &*element.tydesc,
+                            AnyOut::new(&mut added as *mut bool as *mut u8));
                     }
                 }
                 ConstValue::Map(entries) => {
@@ -301,7 +302,7 @@ impl IrInterpreter {
                     let key_tydesc = tydesc_ref.map_key_ty().as_ptr();
                     let value_tydesc = tydesc_ref.map_value_ty().as_ptr();
                     let rt = self.runtime.handle();
-                    datalove_rt::c::dtlv_rti_btreemap_create_local(rt, dest.ptr, &*dest.tydesc);
+                    datalove_rt::c::dtlv_rti_btreemap_create_local(rt, AnyOut::new(dest.ptr), &*dest.tydesc);
                     let mut key_scratch = datalove_rt::rust::AlignedBuffer::for_tydesc(&*key_tydesc);
                     let mut value_scratch = datalove_rt::rust::AlignedBuffer::for_tydesc(&*value_tydesc);
                     for (key_value, val_value) in entries {
@@ -310,7 +311,7 @@ impl IrInterpreter {
                         self.write_const(key_value, key);
                         self.write_const(val_value, val);
                         datalove_rt::c::dtlv_rti_btreemap_insert_local(
-                            rt, dest.ptr, &*dest.tydesc, key.ptr, &*key.tydesc, val.ptr, &*val.tydesc);
+                            rt, AnyMut::new(dest.ptr), &*dest.tydesc, AnyOwned::new(key.ptr), &*key.tydesc, AnyOwned::new(val.ptr), &*val.tydesc);
                     }
                 }
                 ConstValue::Table { columns: _, rows } => {
@@ -379,7 +380,7 @@ impl IrInterpreter {
                     // Build table from rows.
                     datalove_rt::c::dtlv_rti_table_build_from_rows_local(
                         self.runtime.handle(),
-                        dest.ptr,
+                        AnyOut::new(dest.ptr),
                         &*dest.tydesc,
                         rows_buffer.as_mut_ptr(),
                         &row_tydesc,
@@ -430,9 +431,9 @@ impl IrInterpreter {
                     // Now box the inner value into an Error at the destination.
                     datalove_rt::c::dtlv_rti_error_from_local(
                         self.runtime.handle(),
-                        inner_buffer,
+                        AnyOwned::new(inner_buffer),
                         &*inner_tydesc,
-                        dest.ptr,
+                        AnyOut::new(dest.ptr),
                     );
 
                     // Deallocate temp buffer.
@@ -463,9 +464,9 @@ impl IrInterpreter {
                     // Now box the inner value into a Data at the destination.
                     datalove_rt::c::dtlv_rti_data_from_local(
                         self.runtime.handle(),
-                        inner_buffer,
+                        AnyOwned::new(inner_buffer),
                         &*inner_tydesc,
-                        dest.ptr,
+                        AnyOut::new(dest.ptr),
                     );
 
                     // Deallocate temp buffer.

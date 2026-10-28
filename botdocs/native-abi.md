@@ -162,7 +162,7 @@ Three places have to agree, and all three derive from the same `.dli` line.
    #[no_mangle]
    pub unsafe extern "C-unwind" fn dlr_std__fixedint_zero(
        rt: LocalRtHandle,
-       out: *mut u8, out_td: &rtdt::TyDesc,
+       out: rtdt::AnyOut<'_>, out_td: &rtdt::TyDesc,
        value_td: &rtdt::TyDesc,
    ) -> u8 { ... }
    ```
@@ -173,10 +173,13 @@ Three places have to agree, and all three derive from the same `.dli` line.
    `&rtdt::TyDesc` for every descriptor -- and a result is a
    `&mut MaybeUninit<T>`, `&mut MaybeUninit<rtdt::Index>` for an `index`. A
    consumed aggregate is a `&mut`, being handed over to be taken. A value at a
-   type parameter, an option and a tuple have no Rust type and stay raw
-   pointers, read through their descriptors; `fixedint_zero` above returns
-   one. Any thin pointers and references are compatible in the C ABI, so the
-   types cost nothing at the call.
+   type parameter, an option and a tuple have no Rust type, and are the
+   `rtdt::Any` pointer for what the mode allows: `AnyRef` to read, `AnyMut`
+   to change, `AnyOwned` to take, `AnyOut` to write, as `fixedint_zero`
+   above returns. Each is a pointer that is never null, read through its
+   descriptor; not a reference, since there is no type for one to be a
+   reference to. Any thin pointers and references are compatible in the C
+   ABI, so the types cost nothing at the call.
 
    The `&mut`s are sound because no two arguments are the same value where
    either is `mut` or `out`: the ownership checker rejects such a call

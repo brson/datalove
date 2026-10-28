@@ -56,7 +56,7 @@ fn pretty_print_value(
         let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
         let status = datalove_rt::c::dtlv_rti_string_create_local(
             rt.handle(),
-            output_string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(output_string.as_mut_ptr() as *mut u8),
             &string_tydesc,
         );
         assert_eq!(status, RtStatus::Ok, "Failed to create output string");
@@ -65,9 +65,9 @@ fn pretty_print_value(
         // Pretty-print.
         let status = datalove_rt::c::dtlv_rti_pretty_print_local(
             rt.handle(),
-            inst.ptr,
+            rtdt::AnyRef::new(inst.ptr),
             inst.tydesc.as_ref(),
-            &mut output_string as *mut rtdt::String as *mut u8,
+            rtdt::AnyMut::from_mut(&mut output_string),
             &string_tydesc,
         );
         assert_eq!(status, RtStatus::Ok, "Pretty print failed");
@@ -77,7 +77,7 @@ fn pretty_print_value(
         // Clean up output string.
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt.handle(),
-            &mut output_string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut output_string as *mut rtdt::String as *mut u8),
             &string_tydesc,
         );
 
@@ -91,7 +91,7 @@ fn cleanup_value(rt: &datalove_rt::rust::Runtime, inst: &instantiate2::Instantia
         // Destroy contents.
         let status = datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
-            inst.ptr as *mut u8,
+            rtdt::AnyOwned::new(inst.ptr as *mut u8),
             inst.tydesc.as_ref(),
         );
         assert_eq!(status, RtStatus::Ok);

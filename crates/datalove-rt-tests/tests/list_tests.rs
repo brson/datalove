@@ -134,7 +134,7 @@ fn test_list_create_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -149,7 +149,7 @@ fn test_list_create_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -181,7 +181,7 @@ fn test_list_destroy_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -190,7 +190,7 @@ fn test_list_destroy_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -227,7 +227,7 @@ fn test_list_clear_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -237,7 +237,7 @@ fn test_list_clear_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_clear_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -250,7 +250,7 @@ fn test_list_clear_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -286,7 +286,7 @@ fn test_list_push_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -297,9 +297,9 @@ fn test_list_push_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_push_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -313,7 +313,7 @@ fn test_list_push_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -344,7 +344,7 @@ fn test_list_push_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -356,9 +356,9 @@ fn test_list_push_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -372,7 +372,7 @@ fn test_list_push_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -404,7 +404,7 @@ fn test_list_pop_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -417,9 +417,9 @@ fn test_list_pop_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -433,7 +433,7 @@ fn test_list_pop_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -465,7 +465,7 @@ fn test_list_push_pop() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -476,9 +476,9 @@ fn test_list_push_pop() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_push_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -492,9 +492,9 @@ fn test_list_push_pop() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -517,7 +517,7 @@ fn test_list_push_pop() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -553,7 +553,7 @@ fn test_list_get_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -566,10 +566,10 @@ fn test_list_get_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
-            list_ptr,
+            rtdt::AnyRef::new(list_ptr),
             &*list_tydesc,
             0,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -583,7 +583,7 @@ fn test_list_get_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -615,7 +615,7 @@ fn test_list_get_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -627,9 +627,9 @@ fn test_list_get_valid() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -643,10 +643,10 @@ fn test_list_get_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
-            list_ptr,
+            rtdt::AnyRef::new(list_ptr),
             &*list_tydesc,
             1,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -666,7 +666,7 @@ fn test_list_get_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -698,7 +698,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -710,9 +710,9 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -726,10 +726,10 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
-            list_ptr,
+            rtdt::AnyRef::new(list_ptr),
             &*list_tydesc,
             5,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -743,7 +743,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -778,7 +778,7 @@ fn test_list_capacity_growth() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -790,9 +790,9 @@ fn test_list_capacity_growth() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -811,7 +811,7 @@ fn test_list_capacity_growth() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -842,7 +842,7 @@ fn test_list_reserve() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -852,7 +852,7 @@ fn test_list_reserve() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             20,
         )
@@ -867,7 +867,7 @@ fn test_list_reserve() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -898,7 +898,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -908,7 +908,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             100,
         )
@@ -922,9 +922,9 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -935,7 +935,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_shrink_to_fit_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -949,7 +949,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -985,7 +985,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -997,9 +997,9 @@ fn test_list_insert_at_start() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1011,10 +1011,10 @@ fn test_list_insert_at_start() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             0,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -1029,10 +1029,10 @@ fn test_list_insert_at_start() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
-                list_ptr,
+                rtdt::AnyRef::new(list_ptr),
                 &*list_tydesc,
                 idx,
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -1052,7 +1052,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1084,7 +1084,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1096,9 +1096,9 @@ fn test_list_remove_middle() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -1112,10 +1112,10 @@ fn test_list_remove_middle() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_remove_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             2,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1138,7 +1138,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1225,7 +1225,7 @@ unsafe fn create_runtime_string(
         let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
         datalove_rt::c::dtlv_rti_string_create_local(
             rt,
-            string.as_mut_ptr() as *mut u8,
+            rtdt::AnyOut::new(string.as_mut_ptr() as *mut u8),
             &*string_tydesc,
         );
         let mut string = string.assume_init();
@@ -1233,7 +1233,7 @@ unsafe fn create_runtime_string(
         if !s.is_empty() {
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt,
-                &mut string as *mut rtdt::String as *mut u8,
+                rtdt::AnyMut::from_mut(&mut string),
                 &*string_tydesc,
                 s.as_ptr(),
                 (s.len() as u32).into(),
@@ -1267,7 +1267,7 @@ fn test_list_create_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1280,7 +1280,7 @@ fn test_list_create_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1311,7 +1311,7 @@ fn test_list_destroy_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1320,7 +1320,7 @@ fn test_list_destroy_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1355,7 +1355,7 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1364,7 +1364,7 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_clear_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1375,7 +1375,7 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1406,7 +1406,7 @@ fn test_list_push_single_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1416,9 +1416,9 @@ fn test_list_push_single_string() -> AnyResult<()> {
         let mut string_val = create_runtime_string(rt, "hello", element_tydesc);
         let status = datalove_rt::c::dtlv_rti_list_push_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            &mut string_val as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
             &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1430,7 +1430,7 @@ fn test_list_push_single_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1461,7 +1461,7 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1474,9 +1474,9 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1488,7 +1488,7 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1520,7 +1520,7 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1532,9 +1532,9 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1546,7 +1546,7 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1578,7 +1578,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1588,9 +1588,9 @@ fn test_list_push_pop_string() -> AnyResult<()> {
         let mut string_val = create_runtime_string(rt, "test_string", element_tydesc);
         let status = datalove_rt::c::dtlv_rti_list_push_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            &mut string_val as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
             &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1604,9 +1604,9 @@ fn test_list_push_pop_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1621,7 +1621,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOwned::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1630,7 +1630,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1662,7 +1662,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1674,10 +1674,10 @@ fn test_list_get_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
-            list_ptr,
+            rtdt::AnyRef::new(list_ptr),
             &*list_tydesc,
             0,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1689,7 +1689,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1721,7 +1721,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1734,9 +1734,9 @@ fn test_list_get_valid_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1749,10 +1749,10 @@ fn test_list_get_valid_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
-            list_ptr,
+            rtdt::AnyRef::new(list_ptr),
             &*list_tydesc,
             1,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1765,7 +1765,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOwned::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1774,7 +1774,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1806,7 +1806,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1818,9 +1818,9 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, &s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1833,10 +1833,10 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
             rt,
-            list_ptr,
+            rtdt::AnyRef::new(list_ptr),
             &*list_tydesc,
             5,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -1848,7 +1848,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1879,7 +1879,7 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1891,9 +1891,9 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, &s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1910,7 +1910,7 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1941,7 +1941,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1950,7 +1950,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             100,
         )
@@ -1964,9 +1964,9 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, &s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1976,7 +1976,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_shrink_to_fit_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -1988,7 +1988,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2019,7 +2019,7 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2030,9 +2030,9 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2043,10 +2043,10 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
         let mut string_val = create_runtime_string(rt, "first", element_tydesc);
         let status = datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             0,
-            &mut string_val as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
             &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2057,7 +2057,7 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2089,7 +2089,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2101,9 +2101,9 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, &s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2116,10 +2116,10 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_remove_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             2,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -2134,7 +2134,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOwned::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -2143,7 +2143,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2179,7 +2179,7 @@ fn test_list_set_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2191,9 +2191,9 @@ fn test_list_set_valid() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -2205,10 +2205,10 @@ fn test_list_set_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_set_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             1,
-            &mut new_value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut new_value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -2222,10 +2222,10 @@ fn test_list_set_valid() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
-                list_ptr,
+                rtdt::AnyRef::new(list_ptr),
                 &*list_tydesc,
                 idx,
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -2244,7 +2244,7 @@ fn test_list_set_valid() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2275,7 +2275,7 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2287,9 +2287,9 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -2301,10 +2301,10 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_set_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             5,
-            &mut new_value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut new_value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -2313,7 +2313,7 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2344,7 +2344,7 @@ fn test_list_set_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2356,9 +2356,9 @@ fn test_list_set_string() -> AnyResult<()> {
             let mut string_val = create_runtime_string(rt, s, element_tydesc);
             let status = datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut string_val as *mut rtdt::String as *mut u8,
+                rtdt::AnyOwned::new(&mut string_val as *mut rtdt::String as *mut u8),
                 &*element_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2370,10 +2370,10 @@ fn test_list_set_string() -> AnyResult<()> {
         let mut new_string = create_runtime_string(rt, "REPLACED", element_tydesc);
         let status = datalove_rt::c::dtlv_rti_list_set_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             1,
-            &mut new_string as *mut rtdt::String as *mut u8,
+            rtdt::AnyOwned::new(&mut new_string as *mut rtdt::String as *mut u8),
             &*element_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2384,7 +2384,7 @@ fn test_list_set_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2424,7 +2424,7 @@ fn test_list_create_from_slice_empty() -> AnyResult<()> {
             slice.as_ptr() as *const u8,
             0,
             &*element_tydesc,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2435,7 +2435,7 @@ fn test_list_create_from_slice_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2471,7 +2471,7 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
             slice.as_ptr() as *const u8,
             5,
             &*element_tydesc,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2488,10 +2488,10 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
-                list_ptr,
+                rtdt::AnyRef::new(list_ptr),
                 &*list_tydesc,
                 (idx as u32).into(),
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -2510,7 +2510,7 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2546,7 +2546,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2557,7 +2557,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             slice.as_ptr() as *const u8,
             3,
@@ -2576,10 +2576,10 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
-                list_ptr,
+                rtdt::AnyRef::new(list_ptr),
                 &*list_tydesc,
                 (idx as u32).into(),
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -2595,7 +2595,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2627,7 +2627,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2639,9 +2639,9 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -2655,7 +2655,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             slice.as_ptr() as *const u8,
             3,
@@ -2675,10 +2675,10 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
-                list_ptr,
+                rtdt::AnyRef::new(list_ptr),
                 &*list_tydesc,
                 (idx as u32).into(),
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -2694,7 +2694,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2725,7 +2725,7 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2737,9 +2737,9 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -2753,7 +2753,7 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             slice.as_ptr() as *const u8,
             0,
@@ -2768,7 +2768,7 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2803,7 +2803,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2813,7 +2813,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             50,
         )
@@ -2828,7 +2828,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_shrink_to_fit_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2841,7 +2841,7 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2873,7 +2873,7 @@ fn test_list_insert_at_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2885,9 +2885,9 @@ fn test_list_insert_at_end() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -2899,10 +2899,10 @@ fn test_list_insert_at_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             2, // index == size
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -2918,10 +2918,10 @@ fn test_list_insert_at_end() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
-                list_ptr,
+                rtdt::AnyRef::new(list_ptr),
                 &*list_tydesc,
                 idx,
-                option_buffer.as_mut_ptr(),
+                rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -2937,7 +2937,7 @@ fn test_list_insert_at_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2968,7 +2968,7 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -2980,9 +2980,9 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -2994,10 +2994,10 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_insert_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             5,
-            &mut value as *mut u32 as *mut u8,
+            rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
             &*element_tydesc,
         )
     };
@@ -3009,7 +3009,7 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3041,7 +3041,7 @@ fn test_list_remove_last() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3053,9 +3053,9 @@ fn test_list_remove_last() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -3069,10 +3069,10 @@ fn test_list_remove_last() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_remove_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             2, // last index
-            option_buffer.as_mut_ptr(),
+            rtdt::AnyOut::new(option_buffer.as_mut_ptr()),
             &*option_tydesc,
         )
     };
@@ -3095,10 +3095,10 @@ fn test_list_remove_last() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
-                list_ptr,
+                rtdt::AnyRef::new(list_ptr),
                 &*list_tydesc,
                 idx,
-                opt_buf.as_mut_ptr(),
+                rtdt::AnyOut::new(opt_buf.as_mut_ptr()),
                 &*option_tydesc,
             )
         };
@@ -3114,7 +3114,7 @@ fn test_list_remove_last() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3145,7 +3145,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3157,9 +3157,9 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -3173,7 +3173,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_clear_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3186,7 +3186,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3217,7 +3217,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_create_local(
             rt,
-            list_ptr,
+            rtdt::AnyOut::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3227,7 +3227,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             20,
         )
@@ -3243,9 +3243,9 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
-                list_ptr,
+                rtdt::AnyMut::new(list_ptr),
                 &*list_tydesc,
-                &mut value as *mut u32 as *mut u8,
+                rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8),
                 &*element_tydesc,
             )
         };
@@ -3256,7 +3256,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_reserve_local(
             rt,
-            list_ptr,
+            rtdt::AnyMut::new(list_ptr),
             &*list_tydesc,
             10,
         )
@@ -3269,7 +3269,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
-            list_ptr,
+            rtdt::AnyOwned::new(list_ptr),
             &*list_tydesc,
         )
     };
@@ -3301,14 +3301,14 @@ fn test_list_full_index_refuses_growth() -> AnyResult<()> {
 
     unsafe {
         let status = datalove_rt::c::dtlv_rti_list_push_local(
-            rt, list_ptr, &*list_tydesc, &mut element as *mut u32 as *mut u8, &*element_tydesc);
+            rt, rtdt::AnyMut::new(list_ptr), &*list_tydesc, rtdt::AnyOwned::new(&mut element as *mut u32 as *mut u8), &*element_tydesc);
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
-        let status = datalove_rt::c::dtlv_rti_list_reserve_local(rt, list_ptr, &*list_tydesc, 1);
+        let status = datalove_rt::c::dtlv_rti_list_reserve_local(rt, rtdt::AnyMut::new(list_ptr), &*list_tydesc, 1);
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
         let status = datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
-            rt, list_ptr, &*list_tydesc, &element as *const u32 as *const u8, 1, &*element_tydesc);
+            rt, rtdt::AnyMut::new(list_ptr), &*list_tydesc, &element as *const u32 as *const u8, 1, &*element_tydesc);
         assert_eq!(status, datalove_rt::c::RtStatus::Error);
     }
     assert_eq!(list.size, rtdt::Index(rtdt::IndexRepr::MAX));
@@ -3336,7 +3336,7 @@ fn test_list_swap() -> AnyResult<()> {
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
-    let status = unsafe { datalove_rt::c::dtlv_rti_list_create_local(rt, list_ptr, &*list_tydesc) };
+    let status = unsafe { datalove_rt::c::dtlv_rti_list_create_local(rt, rtdt::AnyOut::new(list_ptr), &*list_tydesc) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Push [0, 10, 20, 30, 40].
@@ -3344,7 +3344,7 @@ fn test_list_swap() -> AnyResult<()> {
         let mut value = i * 10;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_push_local(
-                rt, list_ptr, &*list_tydesc, &mut value as *mut u32 as *mut u8, &*element_tydesc,
+                rt, rtdt::AnyMut::new(list_ptr), &*list_tydesc, rtdt::AnyOwned::new(&mut value as *mut u32 as *mut u8), &*element_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3353,7 +3353,7 @@ fn test_list_swap() -> AnyResult<()> {
         unsafe { std::slice::from_raw_parts(list.data as *const u32, list.size.as_usize()).to_vec() }
     };
 
-    let swap = |i, j| unsafe { datalove_rt::c::dtlv_rti_list_swap_local(rt, list_ptr, &*list_tydesc, i, j) };
+    let swap = |i, j| unsafe { datalove_rt::c::dtlv_rti_list_swap_local(rt, rtdt::AnyMut::new(list_ptr), &*list_tydesc, i, j) };
     assert_eq!(swap(1, 3), datalove_rt::c::RtStatus::Ok);
     assert_eq!(elements(&list), vec![0, 30, 20, 10, 40]);
     assert_eq!(swap(4, 0), datalove_rt::c::RtStatus::Ok);
@@ -3364,7 +3364,7 @@ fn test_list_swap() -> AnyResult<()> {
     assert_eq!(swap(5, 5), datalove_rt::c::RtStatus::Error);
     assert_eq!(elements(&list), vec![40, 30, 20, 10, 0]);
 
-    let status = unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, &*list_tydesc) };
+    let status = unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, rtdt::AnyOwned::new(list_ptr), &*list_tydesc) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

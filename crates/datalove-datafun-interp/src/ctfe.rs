@@ -6,6 +6,7 @@
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstF32, ConstF64, ConstValue, CtfeError, CtfeEvaluator, IrCodeUnit, IrType};
 use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry, NativeResolver};
+use datalove_rtdt::AnyOwned;
 
 /// CTFE evaluator backed by the IR interpreter.
 pub struct InterpCtfeEvaluator {
@@ -110,7 +111,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         unsafe {
             datalove_rt::c::dtlv_rti_any_destroy_local(
                 self.interp.runtime_handle(),
-                written,
+                AnyOwned::new(written),
                 &*written_tydesc,
             );
         }
