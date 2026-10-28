@@ -98,3 +98,40 @@ fn a_name_starting_with_a_keyword_is_not_the_keyword() {
         InputParse::ReadMultiline(_),
     ));
 }
+
+fn reads_on(input: &str) -> bool {
+    matches!(parse_input(Input::Input(input.to_string())), InputParse::ReadMultiline(_))
+}
+
+/// A line that leaves a bracket open reads on to where it closes, whatever
+/// the line starts with.
+#[test]
+fn an_open_bracket_reads_on() {
+    assert!(reads_on("type Flag: enum {"));
+    assert!(reads_on("let xs = ["));
+    assert!(reads_on("[1, 2,"));
+    assert!(reads_on("f(1,"));
+    assert!(reads_on("let t = {| a: u32 |}["));
+    assert!(!reads_on("let xs = [1, 2]"));
+    assert!(!reads_on("f(1)"));
+}
+
+/// Brackets in strings and comments are not code, and do not hold the input
+/// open.
+#[test]
+fn a_bracket_in_a_string_or_comment_does_not_read_on() {
+    assert!(!reads_on(r#"let s = "(""#));
+    assert!(!reads_on(r#"let s = "\"[""#));
+    assert!(!reads_on("let x = 1 // (["));
+    assert!(!reads_on("let x = /* /* ( */ [ */ 1"));
+    assert!(reads_on(r#"let s = [")""#));
+}
+
+/// Submitted as multiline input, an open bracket is the parser's to report.
+#[test]
+fn an_open_bracket_in_multiline_input_is_a_unit() {
+    assert!(matches!(
+        parse_input(Input::Multiline("let xs = [".to_string())),
+        InputParse::Command(Command::Unit(Unit::Fragment(_))),
+    ));
+}

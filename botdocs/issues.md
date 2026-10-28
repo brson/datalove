@@ -25,7 +25,6 @@ home here.
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [A type declared in one unit is unknown to the next](#user-content-a-type-declared-in-one-unit-is-unknown-to-the-next)
-  - [The REPL never reads a brace-delimited input over several lines](#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines)
   - [The REPL shows a broken module only as a message](#user-content-the-repl-shows-a-broken-module-only-as-a-message)
   - [Lowering errors say what, never where](#user-content-lowering-errors-say-what-never-where)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
@@ -264,13 +263,6 @@ atom No }` in one unit and `let f: Flag = atom No` in the next fails with
 unit work. Script units carry bindings, functions, consts and module aliases
 forward (`binding_at`, `module_alias_at`), and nothing does the same for type
 aliases. Not looked into further.
-
-### The REPL never reads a brace-delimited input over several lines
-
-**Reasoned about, not tried.** `classify_input` (`datalove-repl/src/lib.rs`)
-opens multiline input only on a keyword that starts a block, and has no case
-for an open brace. So a line that opens a brace, as a long `type` or a list
-literal would, is submitted on its own.
 
 ### The REPL shows a broken module only as a message
 

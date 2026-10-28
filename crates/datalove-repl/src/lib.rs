@@ -250,8 +250,9 @@ impl UnitStep {
 
 /// Read what an input is.
 ///
-/// A single line that opens a block reads on to its `end`; the same line
-/// submitted as multiline input is the whole unit.
+/// A single line that opens a block reads on to its `end`, and one that leaves
+/// a bracket open reads on to where it closes; the same line submitted as
+/// multiline input is the whole unit.
 pub fn parse_input(input: Input) -> InputParse {
     let (text, multiline) = match input {
         Input::Input(text) => (text, false),
@@ -261,6 +262,7 @@ pub fn parse_input(input: Input) -> InputParse {
         InputKind::Whitespace => InputParse::Empty,
         InputKind::ReplCommand => InputParse::Command(Command::ReplCommand(ReplCommand::named(&text))),
         InputKind::MultilineStatement if !multiline => InputParse::ReadMultiline(text),
+        _ if !multiline && leaves_a_bracket_open(&text) => InputParse::ReadMultiline(text),
         _ => InputParse::Command(Command::Unit(read_unit(&text).expect("the text is code"))),
     }
 }
@@ -409,6 +411,47 @@ fn from_first_code_line(input: &str) -> &str {
 /// True if a line is a comment and nothing else.
 fn is_whole_line_comment(line: &str) -> bool {
     line.starts_with("//") || (line.starts_with("/*") && line.ends_with("*/"))
+}
+
+/// True if the code in `input` opens more brackets than it closes.
+///
+/// Brackets inside strings and comments are not counted, and a block comment
+/// nests, as the lexer has them.
+fn leaves_a_bracket_open(input: &str) -> bool {
+    let mut depth: i64 = 0;
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            '"' => {
+                while let Some(c) = chars.next() {
+                    match c {
+                        '"' => break,
+                        '\\' => { chars.next(); }
+                        _ => {}
+                    }
+                }
+            }
+            '/' if chars.peek() == Some(&'/') => {
+                while chars.next_if(|&c| c != '\n').is_some() {}
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                chars.next();
+                let mut comments = 1;
+                while comments > 0 {
+                    match chars.next() {
+                        Some('/') if chars.next_if_eq(&'*').is_some() => comments += 1,
+                        Some('*') if chars.next_if_eq(&'/').is_some() => comments -= 1,
+                        Some(_) => {}
+                        None => break,
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    depth > 0
 }
 
 /// The name a line starts with, which is all of it when it is one word: a

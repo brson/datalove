@@ -93,7 +93,7 @@ it is a command, a statement, or the start of a block that reads on to its
 and an input waited for its parse to come back before its eval was sent, so a
 later input's parse could overtake an earlier one's eval. Read in the app,
 commands go to the engine in the order they were typed, and an input that
-opens a block goes multiline as Enter is pressed.
+opens a block, or leaves a bracket open, goes multiline as Enter is pressed.
 
 `ReplExecutor` abstracts where evaluation happens. `ThreadedExecutor` puts the
 engine on a worker thread so the UI stays responsive. Everything crossing the
@@ -765,10 +765,6 @@ setup and the loop together.
 
 ## Known gaps
 
-- Multiline input opens on a leading `fun`, `if`, `match`, `loop` or `for`,
-  and reads to its `end`. A brace-delimited input cannot be typed across
-  lines: `classify_input` has no case for one. See
-  [issues.md](issues.md#user-content-the-repl-never-reads-a-brace-delimited-input-over-several-lines).
 - No cancellation. The worker has no way to be interrupted, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
 - `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete`,
