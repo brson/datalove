@@ -47,11 +47,12 @@ Focus on ergonomic scripting experience and the REPL.
 
 - repl ux
 - script reactivity
+- recursive types
 
 
 ## On deck
 
-- recursive types
+- work stacks for runtime traversals
 - interactive math ergonomics
 - rational numbers
 - saturating and wrapping math ops
