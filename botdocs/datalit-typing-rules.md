@@ -301,6 +301,15 @@ unfolding. Kept as the parts, it would come to the unfolding, which is not the
 type. So `[{ next = [] }, : rec L { next: [L] } / { next = [] }]` and the same
 list the other way round are both `[rec L { next: [L] }]`.
 
+That depends on a variable holding the literal's parts, as a collection's
+shared element variable does. A tuple's or struct's field, the payload of
+`some`, `ok` or a term, and a map's entry hold their parts directly, with no
+variable between, so there the first type in source order still wins:
+`[({ next = [] }, 1), (: rec L { next: [L] } / { next = [] }, 2)]` resolves
+the first tuple's field to `L`'s unfolding, and the second element's hint is
+then a mismatch (T040). Written the other way round, it is a
+`[(rec L { next: [L] }, int)]`.
+
 The shared variable of an empty collection, or of an empty table's columns,
 is `open`; with elements it is decided by them. The variable is what the
 elements are unified through, so `[]` names the list as needing a type and

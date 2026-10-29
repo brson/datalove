@@ -515,22 +515,15 @@ F090, the refusal phase 1 put in, is gone.
   go through the runtime's descriptor walks in every backend, so they follow
   the cyclic descriptors as they are.
 
-What is still unlike the plan:
-
-- **Passing a value does not unroll it.** A `rec T [?T]` is not accepted
-  where a `[?T]` is, so `list.push(mut t, ...)` with `t : rec T [?T]` is a
-  mismatch. Storage builds a `[?Tree]` and rolls it with `@`. Unrolling an
-  argument, a coercion with no cost, would make the benchmark direct, and
-  would also make types meet in one more place than iso-recursion says.
-- **`?` and `!` against a `rec` return type.** An early return whose
-  function returns a `rec` type that unfolds to an option or result is
-  refused, since the return type is not an option or result to the checker.
 - **`var x: T` with no value** took its slot type from the hint, with no
   aliases to resolve it by, so any alias, a `rec` one included, reached the
   IR as `IrType::Error` and the slot was read as garbage. It predated
-  recursive types and is fixed: the typechecker records the type each such
-  hint resolved to in `ExprTypes`, keyed by the hint, and lowering and
-  ownership read it there (`spec_037_var_without_value_of_an_alias`).
+  recursive types. The typechecker now records the type each such hint
+  resolved to in `ExprTypes`, keyed by the hint, and lowering and ownership
+  read it there (`spec_037_var_without_value_of_an_alias`).
+
+What is left is in
+[What exists, what is missing](#user-content-what-exists-what-is-missing).
 
 ## What exists, what is missing
 
@@ -544,13 +537,80 @@ What exists:
 - `TyDesc` children as raw pointers.
 - Recursive types in datalit and in Datafun, on every engine.
 
-What is missing:
+What is missing, as of October 2026. Each is a gap or a known fault, not a
+question; the questions are under
+[Open questions](#user-content-open-questions).
 
-- Some answer to drop, clone, equality and printing of deep values.
-- A borrowing `match ref` and `match mut`, deferred.
-- Generic recursive types, recursion groups, and recursive map keys and set
-  elements, refused in the first cut.
-- Storage, Json and Towers in `benchvs`.
+**Faults and limits in what is built**
+
+- **Deep values crash.** Drop, clone, equality, comparison, printing and
+  boxing in `datalove-rt` recurse on the Rust stack once per level of a
+  value. A recursive type is the first way to build a value of any depth at
+  run time, so a long chain, `rec L { elt: int, next: [L] }` built in a
+  loop, overflows the stack, most likely when it is dropped. The depth at
+  which each engine fails is not measured. Nested literals in source and data
+  files reach the same recursion at compile time (the parser, datalit's
+  `check` and `infer`, `instantiate2`, the data-file reader, the constant
+  writers, and the AST's derived `Hash`, `PartialEq` and `Drop`), with no
+  nesting limit; that half predates recursive types. The general fix is an
+  iterative, descriptor-driven traversal in the runtime with each operation a
+  visitor, and a nesting limit in the parsers. `stacker`, as rustc uses it,
+  is cheaper but switches stacks under JIT and AOT frames and does not work
+  on wasm or under Miri. A stopgap is to unlink the child before dropping
+  the parent in `destroy`, which covers dropping a chain and nothing else.
+- **Passing a value does not unroll it.** A `rec T [?T]` is not accepted
+  where a `[?T]` is, so `list.push(mut t, ...)` with `t : rec T [?T]` is a
+  mismatch. Storage builds a `[?Tree]` and rolls it with `@`.
+- **`?` and `!` against a `rec` return type.** An early return in a function
+  whose return type is a `rec` type unfolding to an option or result is
+  refused, since the return type is not an option or result to the checker.
+- **Inference depends on order inside a tuple or struct field.** A literal's
+  parts meeting a `rec` type take it only where a variable holds them, as a
+  collection's shared element variable does; a tuple or struct field, an
+  option, result or term payload, and a map entry hold their parts directly.
+  So in `[({ next = [] }, 1), (: L / { next = [] }, 2)]` the first tuple's
+  field resolves to `L`'s unfolding and the second element is refused (T040);
+  the other order works. A fresh variable per part in those inference rules
+  would fix it, at a variable per field of every literal. The fixtures
+  `rec_10_tuple_field_rec_first` and `err_rec_11_tuple_field_rec_second`
+  in `crates/datalove-datalit/tests/fixtures/tycheck` hold the behavior as it
+  is.
+- **Binder names in diagnostics can be stale.** The name is in a field that
+  equality ignores, by decision, so after an edit that only renames a binder
+  salsa may keep a memo and a message shows the old name.
+
+**First-cut limits, by decision**
+
+- No borrowing `match`: a recursive enum is consumed to be read, so walking
+  one in place clones each level.
+- No type parameter inside a `rec` body (T066), so no generic recursive
+  types. Fat generics would have to tie a descriptor's knot at run time.
+- No recursion groups: mutually recursive types nest, and the inner one taken
+  out of the outer is not equal to the same type written apart.
+- No recursive map keys or set elements (T065).
+- No `rec` type across the native rider boundary. Decided, but neither
+  enforced nor tested: nothing checks it.
+
+**Coverage**
+
+- The program generator writes no `rec` types, so worldgen's dual-engine
+  runs never exercise them; `coverage_tests.rs` lists `Rec` as not yet
+  generated, and `ast_gen.rs` and `funlit_equiv.rs` hold `todo!()`s for them.
+- Miri ran the recursive fixtures on the interpreter and the bytecode, which
+  covers `IrTyDescTable` and datalit's `TyDescTable`. It cannot run generated
+  code, so the Cranelift and C AOT descriptors are tested natively only.
+- The examples in botspec Section 3.8 and the code in this plan's
+  [Against the AWFY benchmarks](#user-content-against-the-awfy-benchmarks)
+  were written by hand and are not run; the fixtures are.
+
+**The benchmarks**
+
+- Storage, Json and Towers are not in `benchvs`. Storage's and Towers'
+  shapes are `crates/datalove-cli/tests/fixtures/backend/37_recursive_types.dfs`;
+  Json also needs AWFY's string parser.
+- Towers' allocation-free moves assume `list.pop` leaves the emptied list its
+  buffer. The fixture's output is right either way, so whether a move
+  allocates is unchecked.
 
 ## Phases
 
@@ -566,13 +626,14 @@ What is missing:
 
 - Is the loss of "at most one" and "exactly two" through `[_]` acceptable,
   or will the guard eventually need a slot of its own?
-- Does real data need mutual-recursion groups, or is nesting enough?
-- When does borrowing `match` land?
 - Should passing a value to a parameter of its unfolding's type unroll it?
-- Does an emptied list keep its buffer through `list.pop`? Towers'
-  allocation-free moves depend on it.
+  It costs nothing at run time, makes the Storage port direct, and makes
+  types meet in one more place than iso-recursion says.
+- Deep values: work stacks and a parser limit, a documented limit, or the
+  `destroy` stopgap alone, and what nesting limit for text?
+- When does borrowing `match` land?
+- Does real data need mutual-recursion groups, or is nesting enough?
 - Should List be ported with cloning, which measures allocation, or with
   `(which, skip)` handles, which leaves recursive types little to do?
-- Should map keys and set elements be allowed to recurse, once the first
-  cut is in? The values are finite, so structural order is defined, but every
-  comparison is deep.
+- Should map keys and set elements be allowed to recurse? The values are
+  finite, so structural order is defined, but every comparison is deep.
