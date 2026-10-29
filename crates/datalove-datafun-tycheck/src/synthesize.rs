@@ -543,6 +543,8 @@ fn equality_blocker<'db>(ty: &Type<'db>) -> Option<Type<'db>> {
         T::Enum(en) => en.variants.iter().find_map(|v| v.payload.as_deref().and_then(blocker)),
         T::List(_) | T::Map(_) | T::Set(_) | T::Result(_) | T::Tensor(_) | T::Table(_)
         | T::Data | T::Error | T::Var(_) => Some(ty.C()),
+        // A recursive type recurs inside a collection, which is refused.
+        T::Rec(_) | T::RecVar(_) => Some(ty.C()),
     }
 }
 

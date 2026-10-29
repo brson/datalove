@@ -76,7 +76,7 @@ kind_names!(param_mode_name, ParamMode, ParamMode, ALL_PARAM_MODES, [In, Out, Re
 kind_names!(type_name, TypeHint, TypeHint<'_>, ALL_TYPES, [
     Bool, U8, I8, U16, I16, U32, I32, U64, I64, Index, Offset, F32, F64, Int,
     String, AnonTuple, AnonStruct, List, Map, Set, Option, Result, Tensor,
-    Table, Data, Error, Alias, Atom, Term, Enum, ParseError,
+    Table, Data, Error, Alias, Atom, Term, Enum, Rec, ParseError,
 ]);
 
 /// Forms that are one variant of an enum with a field present or absent.
@@ -142,6 +142,7 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // A type parameter parses as an alias too, and those are everywhere.
     // `TypeParams` tells the two apart, so an alias count is alias references.
     ("type", "ParseError", "a parse error means the generator wrote something wrong"),
+    ("type", "Rec", "Datafun refuses recursive types until phase 2 of botdocs/plan-recursive-types.md (F090)"),
 ];
 
 /// What was seen, by category and kind.

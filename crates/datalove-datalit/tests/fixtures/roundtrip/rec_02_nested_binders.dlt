@@ -1,0 +1,4 @@
+: rec E enum {
+  term Lit int,
+  term Block [rec S enum { term Let E, term Seq [S] }],
+} / term Block [term Let term Lit 1, term Seq [term Let term Block []]]

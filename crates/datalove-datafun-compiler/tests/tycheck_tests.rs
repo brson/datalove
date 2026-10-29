@@ -63,6 +63,7 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::a
         TypeHint::Data => "data".to_string(),
         TypeHint::Error => "error".to_string(),
         TypeHint::ParseError(_) => "?".to_string(),
+        TypeHint::Rec(r) => format!("rec {} {}", r.name.as_str(db), type_hint_to_string(db, &r.body)),
         TypeHint::Table(_) => "table".to_string(),
         TypeHint::Alias(alias) => alias.name.as_str(db).to_string(),
         TypeHint::Atom(a) => format!("atom {}", a.name.as_str(db)),
@@ -281,6 +282,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
         TypeError::UnresolvedTypeAlias { name, local_index: _ } => {
             json!({
                 "kind": "UnresolvedTypeAlias",
+                "name": name
+            })
+        }
+        TypeError::RecursiveType { name, local_index: _ } => {
+            json!({
+                "kind": "RecursiveType",
                 "name": name
             })
         }

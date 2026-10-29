@@ -509,6 +509,13 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
                 below: self.below.type_aliases.contains_key(&name),
             });
         }
+        if let Err(TypeError::RecursiveType { name, local_index: Some(local_index) }) = &result {
+            self.pending_diagnostics.push(PendingDiagnostic::RecursiveType {
+                local_index: *local_index,
+                module_id: self.current_module_id,
+                name: InternedText::new(self.db, name.C()),
+            });
+        }
         result
     }
 
@@ -1350,6 +1357,13 @@ replace the view rather than the elements it shows. Index down to single element
                     module_id,
                     name,
                     below: self.type_aliases.contains_key(&name),
+                });
+            }
+            if let TypeError::RecursiveType { name, local_index: Some(local_index) } = error {
+                self.pending_diagnostics.push(PendingDiagnostic::RecursiveType {
+                    local_index: *local_index,
+                    module_id,
+                    name: InternedText::new(self.db, name.C()),
                 });
             }
             self.add_error(error.clone());

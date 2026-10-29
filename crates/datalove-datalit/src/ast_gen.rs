@@ -585,6 +585,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             Expr::Table(ExprTable { header, rows })
         }
         TypeHint::Alias(_) => Expr::None,
+        TypeHint::Rec(_) => todo!("gen_type_hint writes no recursive types"),
         TypeHint::Atom(th) => Expr::Atom(ExprAtom { name: th.name }),
         TypeHint::Term(th) => {
             let payload = gen_expr_full_inner(db, rng, *th.payload.clone(), config, depth + 1);

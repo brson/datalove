@@ -87,6 +87,9 @@ impl<'db> Class<'db> {
     fn admits(&self, db: &'db dyn crate::Db, ty: &PType<'db>) -> bool {
         match (self, ty) {
             (Class::Open, _) => true,
+            // A literal is a value of a recursive type when it is one of the
+            // type's unfolding, as checking has it.
+            (_, PType::Known(Type::Rec(rec))) => self.admits(db, &PType::Known(rec.unfold())),
             (Class::Adapt(from), PType::Known(to)) => can_adapt_to(db, from, to),
             // A type with parts still undecided: what the parts must be for
             // the value to adapt is worked out when the variable is bound.
@@ -158,6 +161,14 @@ impl<'db> Unifier<'db> {
         root
     }
 
+    /// The representative of a type's variable, if it is one.
+    fn root(&mut self, ty: &PType<'db>) -> Option<VarId> {
+        match ty {
+            PType::Var(var) => Some(self.find(*var)),
+            _ => None,
+        }
+    }
+
     /// A type with its outermost variable, if any, replaced by what it is
     /// bound to.
     ///
@@ -183,6 +194,8 @@ impl<'db> Unifier<'db> {
     /// Where they cannot, the first is kept and nothing is reported; the check
     /// that follows inference reports it.
     pub fn unify(&mut self, a: &PType<'db>, b: &PType<'db>) {
+        let a_root = self.root(a);
+        let b_root = self.root(b);
         let a = self.prune(a);
         let b = self.prune(b);
         let var = |ty: &PType<'db>| match ty {
@@ -197,6 +210,20 @@ impl<'db> Unifier<'db> {
         }
         match (&*a, &*b) {
             (PType::Known(_), PType::Known(_)) => {}
+            // A literal's parts meeting a recursive type: the literal is a
+            // value of the type, rolled, so what holds it takes the type and
+            // its parts go along with the type's unfolding. Kept as the
+            // literal's parts, it would resolve to the unfolding, which is
+            // not the type.
+            (PType::Known(known @ Type::Rec(rec)), other) | (other, PType::Known(known @ Type::Rec(rec))) => {
+                let holder = if matches!(&*a, PType::Known(_)) { b_root } else { a_root };
+                if let Some(holder) = holder {
+                    self.vars[holder as usize] = VarState::Bound(PType::Known(known.clone()));
+                }
+                if let Some(expanded) = expand(&rec.unfold()) {
+                    self.unify_parts(&expanded, other);
+                }
+            }
             (PType::Known(known), other) | (other, PType::Known(known)) => {
                 if let Some(expanded) = expand(known) {
                     self.unify_parts(&expanded, other);

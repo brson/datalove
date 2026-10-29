@@ -1,0 +1,1 @@
+: [rec L { elt: u8, next: [L] }] / [{elt = 1, next = []}, {elt = 2, next = [{elt = 3, next = []}]}]

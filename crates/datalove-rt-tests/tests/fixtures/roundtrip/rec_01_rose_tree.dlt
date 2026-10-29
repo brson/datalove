@@ -1,0 +1,7 @@
+: rec Node { name: string, kids: [Node] } / {
+  name = "root",
+  kids = [
+    { name = "a", kids = [] },
+    { name = "b", kids = [{ name = "c", kids = [] }] },
+  ],
+}

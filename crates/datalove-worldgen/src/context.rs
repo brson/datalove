@@ -417,7 +417,9 @@ pub fn is_linear_type(type_hint: &TypeHint<'_>) -> bool {
         | TypeHint::ParseError(_)
         | TypeHint::Atom(_)
         | TypeHint::Term(_)
-        | TypeHint::Enum(_) => true,
+        | TypeHint::Enum(_)
+        // A recursive type recurs inside a collection, so it holds one.
+        | TypeHint::Rec(_) => true,
     }
 }
 

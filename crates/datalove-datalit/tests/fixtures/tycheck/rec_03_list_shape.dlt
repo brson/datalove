@@ -1,0 +1,1 @@
+: rec List { elt: u32, next: [List] } / { elt = 1, next = [{ elt = 2, next = [{ elt = 3, next = [] }] }] }

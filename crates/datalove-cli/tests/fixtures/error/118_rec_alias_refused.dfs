@@ -1,0 +1,3 @@
+type Json: rec J enum { atom Null, term Arr [J] }
+
+let j: Json = atom Null

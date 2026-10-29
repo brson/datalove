@@ -1,0 +1,73 @@
+{
+  "ast": {
+    "expr": {
+      "Int": {
+        "value": "1"
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": {
+          "AnonStruct": {
+            "fields": [
+              {
+                "name": "b",
+                "type_hint": {
+                  "Rec": {
+                    "body": {
+                      "AnonStruct": {
+                        "fields": [
+                          {
+                            "name": "a",
+                            "type_hint": {
+                              "Alias": "A"
+                            }
+                          },
+                          {
+                            "name": "bs",
+                            "type_hint": {
+                              "List": {
+                                "element_type": {
+                                  "Alias": "B"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "name": "B"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "name": "A"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T064",
+      "labels": [
+        {
+          "message": "recurs inline",
+          "span": [
+            0,
+            42
+          ],
+          "text": ": rec A { b: rec B { a: A, bs: [B] } } / 1"
+        }
+      ],
+      "message": "`A` recurs without a collection between it and its `rec`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecUnguarded",
+      "name": "A"
+    }
+  ],
+  "root_type": null
+}

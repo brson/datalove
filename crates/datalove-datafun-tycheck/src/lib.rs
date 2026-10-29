@@ -142,6 +142,12 @@ pub enum PendingDiagnostic<'db> {
         /// Whether the scope declares it below the use.
         below: bool,
     },
+    /// F090: A recursive type, which Datafun does not support yet.
+    RecursiveType {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+    },
     /// F062: A `native fun` was written somewhere that has no rider.
     NativeFunOutsideRider {
         local_index: u32,
@@ -365,6 +371,9 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
 
         // Tables are not copy (they contain heap-allocated data).
         DatalitType::Table(_) => false,
+
+        // A recursive type recurs inside a collection, so it holds one.
+        DatalitType::Rec(_) | DatalitType::RecVar(_) => false,
 
         // Atom is always copy (no payload).
         DatalitType::Atom(_) => true,

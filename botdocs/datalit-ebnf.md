@@ -48,7 +48,7 @@ type_hint      = ":", ws, type, ws, "/" ;           (* no "/": D049 *)
 type           = option_type | result_type | list_type | tuple_type
                | struct_type | table_type | map_type | set_type
                | tensor_type | atom_type | term_type | enum_type
-               | scalar_type | type_name ;
+               | rec_type | scalar_type | type_name ;
 scalar_type    = "bool" | "u8" | "u16" | "u32" | "u64"
                | "i8" | "i16" | "i32" | "i64"
                | "index" | "offset" | "f32" | "f64"
@@ -68,7 +68,8 @@ term_type      = "term", ws, ident, ws, type ;      (* D052 *)
 enum_type      = "enum", ws, "{", ws, [ enum_variant_list ], ws, "}" ;  (* D032 *)
 enum_variant_list = enum_variant, { ws, ",", ws, enum_variant }, [ ws, "," ] ;
 enum_variant   = atom_type | term_type ;            (* else D053; names unique: D038 *)
-type_name      = ident ;                            (* parsed, always refused: T059 *)
+rec_type       = "rec", ws, ident, ws, type ;       (* no name: D056; a type word: D057 *)
+type_name      = ident ;                            (* a rec's name in its body, else T059 *)
 
 type_list      = type, { ws, ",", ws, type }, [ ws, "," ] ;
 type_field_list = type_field, { ws, ",", ws, type_field }, [ ws, "," ] ;
@@ -169,9 +170,15 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
   `term` are any `ident`, keywords included: `{none = 1}` and `atom true`
   parse. Datalit reserves no words; `true` is a keyword only where an
   expression is expected, and `True` there is D019. A `type_name` is any
-  `ident` not already a type keyword; every one is refused by the type checker
-  (T059), datalit having no aliases. A word beginning with a digit is no name
-  anywhere: `: 5 / 1` is D046.
+  `ident` not already a type keyword; the type checker refuses every one that
+  is not the name of a `rec` around it (T059), datalit having no aliases. A
+  word beginning with a digit is no name anywhere: `: 5 / 1` is D046.
+- **Recursive types.** `rec L T` names `T` as `L` inside `T`; the uses of `L`
+  parse as `type_name`s, and the type checker tells them apart. A `rec`'s name
+  is a name of a type, so it cannot be a word that is a type or starts one
+  (D057): `rec int [int]` and `rec rec [rec]` are refused. What a `rec` may
+  hold is the type checker's business (T062 to T065, in
+  [the typing rules](datalit-typing-rules.md)).
 - **Tensor shape.** Without a header, the body splits on runs of exactly
   rank minus one commas, and recursively below that; groups along one axis
   must have the same shape (D023). A comma run with nothing before or after it
@@ -233,6 +240,8 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D053 | An enum variant that is not `atom` or `term` | `type_hint.rs:363` |
 | D054 | A close bracket with no open | `mod.rs:37`, through `parser_util.rs` `emit_bracer_errors` |
 | D055 | An open bracket never closed | `mod.rs:37`, through `parser_util.rs` `emit_bracer_errors` |
+| D056 | `rec` type with no name | `type_hint.rs:130` |
+| D057 | `rec` type named with a word that is a type, or starts one | `type_hint.rs:132` |
 
 The parse codes start after the ownership codes (D001 to D015,
 [spec Section 11.1](botspec.md#user-content-111-errors)); D044 to D053 are

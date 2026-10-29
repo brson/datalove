@@ -28,6 +28,12 @@ pub struct TyDescTable<'db> {
     runtime_set_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<rtdt::TyDesc>>,
+    /// Storage for the descriptors of recursive types, which are written
+    /// after what points to them is made; see `create_rec`.
+    rec_tydescs: Vec<Box<std::cell::UnsafeCell<rtdt::TyDesc>>>,
+    /// The recursive types whose descriptors are being made, outermost
+    /// first.
+    recs_in_progress: Vec<Type<'db>>,
     /// Storage for flexible array members.
     tuple_fields: Vec<Vec<rtdt::TyInfoTupleField>>,
     struct_fields: Vec<Vec<rtdt::TyInfoStructField>>,
@@ -46,6 +52,8 @@ impl<'db> TyDescTable<'db> {
             runtime_map_cache: HashMap::new(),
             runtime_set_cache: HashMap::new(),
             tydescs: Vec::new(),
+            rec_tydescs: Vec::new(),
+            recs_in_progress: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
             enum_variants: Vec::new(),
@@ -65,11 +73,60 @@ impl<'db> TyDescTable<'db> {
         if let Some(&ptr) = self.cache.get(ty) {
             return ptr;
         }
+        if let Type::Rec(rec) = ty {
+            return self.create_rec(ty, rec);
+        }
 
         let tydesc = self.create_tydesc(ty);
         self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.cache.insert(ty.C(), ptr);
+        ptr
+    }
+
+    /// The descriptor of a recursive type, which the body's descriptors point
+    /// back to.
+    ///
+    /// A `rec` type and its unfolding have one layout, so the type's
+    /// descriptor is a copy of its unfolding's. It is filed before the
+    /// unfolding is made, for the uses of the type in it to find, and written
+    /// after. In between, what is made may read it: an option of the type
+    /// reads its size and whether it is plain, and a map of it its size to lay
+    /// out its nodes. So it stands as the unfolding made once already, in a
+    /// table of its own where the type is a stand-in. That copy is right
+    /// about everything read of it here: the type recurs only inside
+    /// collections, whose sizes do not depend on what they hold.
+    fn create_rec(&mut self, ty: &Type<'db>, rec: &TypeRec<'db>) -> *const rtdt::TyDesc {
+        let unfolded = rec.unfold();
+
+        let mut scratch = TyDescTable::new(self.db);
+        let stand_in = scratch.get_or_create(&unit_type());
+        scratch.recs_in_progress = self.recs_in_progress.clone();
+        scratch.recs_in_progress.push(ty.C());
+        for in_progress in &scratch.recs_in_progress {
+            scratch.cache.insert(in_progress.C(), stand_in);
+        }
+        let first = scratch.get_or_create(&unfolded);
+
+        // SAFETY: `first` is a live descriptor of `scratch`, and a descriptor
+        // owns nothing, so a copy of its bits is a descriptor too.
+        let cell = Box::new(std::cell::UnsafeCell::new(unsafe { std::ptr::read(first) }));
+        self.rec_tydescs.push(cell);
+        // Taken from the box where it is kept: moving a box asserts it is the
+        // only way to what it holds, so a pointer taken before the move would
+        // be invalidated by it, and the write through it below with it.
+        let ptr = self.rec_tydescs.last().expect("just pushed").get();
+        self.cache.insert(ty.C(), ptr as *const rtdt::TyDesc);
+
+        self.recs_in_progress.push(ty.C());
+        let body = self.get_or_create(&unfolded);
+        self.recs_in_progress.pop();
+        // SAFETY: both are live descriptors, and nothing holds a reference to
+        // the one written, only pointers.
+        unsafe { std::ptr::copy_nonoverlapping(body, ptr, 1) };
+
+        // The copy pointed into `scratch`, which can go now that it does not.
+        drop(scratch);
         ptr
     }
 
@@ -219,6 +276,10 @@ impl<'db> TyDescTable<'db> {
             Type::Var(name) => unreachable!(
                 "type parameter {name:?} reached tydesc construction; \
                  a generic's descriptors are built at run time",
+            ),
+            Type::Rec(_) => unreachable!("a recursive type's descriptor is made by create_rec"),
+            Type::RecVar(index) => unreachable!(
+                "rec index {index} reached tydesc construction; a type taken out of a rec body is unfolded",
             ),
             Type::Bool => {
                 Box::new(rtdt::TyDesc {

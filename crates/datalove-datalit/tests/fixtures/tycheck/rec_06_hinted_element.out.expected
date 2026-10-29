@@ -1,0 +1,138 @@
+{
+  "ast": {
+    "expr": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "elt",
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "name": "next",
+            "value": {
+              "expr": {
+                "List": {
+                  "elements": [
+                    {
+                      "expr": {
+                        "AnonStruct": {
+                          "fields": [
+                            {
+                              "name": "elt",
+                              "value": {
+                                "expr": {
+                                  "Int": {
+                                    "value": "2"
+                                  }
+                                },
+                                "type_hint": null
+                              }
+                            },
+                            {
+                              "name": "next",
+                              "value": {
+                                "expr": {
+                                  "List": {
+                                    "elements": []
+                                  }
+                                },
+                                "type_hint": null
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "type_hint": {
+                        "Rec": {
+                          "body": {
+                            "AnonStruct": {
+                              "fields": [
+                                {
+                                  "name": "elt",
+                                  "type_hint": "Int"
+                                },
+                                {
+                                  "name": "next",
+                                  "type_hint": {
+                                    "List": {
+                                      "element_type": {
+                                        "Alias": "M"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "name": "M"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": {
+          "AnonStruct": {
+            "fields": [
+              {
+                "name": "elt",
+                "type_hint": "Int"
+              },
+              {
+                "name": "next",
+                "type_hint": {
+                  "List": {
+                    "element_type": {
+                      "Alias": "L"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "name": "L"
+      }
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "body": {
+      "fields": [
+        {
+          "name": "elt",
+          "type": "int"
+        },
+        {
+          "name": "next",
+          "type": {
+            "element_type": {
+              "index": 0,
+              "kind": "RecVar"
+            },
+            "kind": "List"
+          }
+        }
+      ],
+      "kind": "AnonStruct"
+    },
+    "kind": "Rec",
+    "name": "L"
+  }
+}

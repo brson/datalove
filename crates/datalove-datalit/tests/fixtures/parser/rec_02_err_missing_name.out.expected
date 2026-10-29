@@ -1,0 +1,30 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "expected name after 'rec'"
+      }
+    },
+    "type_hint": {
+      "ParseError": {
+        "message": "expected name after 'rec'"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D056",
+      "labels": [
+        {
+          "message": "expected the recursive type's name",
+          "span": [
+            6,
+            19
+          ],
+          "text": "{ next: [L] }"
+        }
+      ],
+      "message": "expected name after 'rec'"
+    }
+  ]
+}

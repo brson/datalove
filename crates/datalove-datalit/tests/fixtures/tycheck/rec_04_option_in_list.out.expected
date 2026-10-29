@@ -1,0 +1,106 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Some": {
+                "payload": {
+                  "expr": {
+                    "List": {
+                      "elements": [
+                        {
+                          "expr": "None",
+                          "type_hint": null
+                        },
+                        {
+                          "expr": "None",
+                          "type_hint": null
+                        }
+                      ]
+                    }
+                  },
+                  "type_hint": null
+                }
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Some": {
+                "payload": {
+                  "expr": {
+                    "List": {
+                      "elements": [
+                        {
+                          "expr": {
+                            "Some": {
+                              "payload": {
+                                "expr": {
+                                  "List": {
+                                    "elements": [
+                                      {
+                                        "expr": "None",
+                                        "type_hint": null
+                                      }
+                                    ]
+                                  }
+                                },
+                                "type_hint": null
+                              }
+                            }
+                          },
+                          "type_hint": null
+                        }
+                      ]
+                    }
+                  },
+                  "type_hint": null
+                }
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": "None",
+            "type_hint": null
+          }
+        ]
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": {
+          "List": {
+            "element_type": {
+              "Option": {
+                "inner_type": {
+                  "Alias": "T"
+                }
+              }
+            }
+          }
+        },
+        "name": "T"
+      }
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "body": {
+      "element_type": {
+        "inner_type": {
+          "index": 0,
+          "kind": "RecVar"
+        },
+        "kind": "Option"
+      },
+      "kind": "List"
+    },
+    "kind": "Rec",
+    "name": "T"
+  }
+}

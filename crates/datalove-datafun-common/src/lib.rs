@@ -433,6 +433,12 @@ pub enum TypeError {
     /// `local_index` is the alias's key into the span table, so that whoever
     /// reports this can point at the name rather than at whatever encloses it.
     UnresolvedTypeAlias { name: String, local_index: Option<u32> },
+    /// F090: A recursive type, which datalit has and Datafun does not yet;
+    /// see `botdocs/plan-recursive-types.md`.
+    ///
+    /// `local_index` is the binder's key into the alias span table, which is
+    /// where the parser files it.
+    RecursiveType { name: String, local_index: Option<u32> },
     /// F061: A set or map was written over a type parameter with no order.
     CollectionKeyNotOrdered { param: String, position: String, fun_local_index: u32 },
     /// F063: A function with a return type can reach the end of its body.
@@ -561,6 +567,7 @@ impl std::fmt::Display for TypeError {
             TypeError::UndefinedVariable => write!(f, "cannot find variable in this scope"),
             TypeError::VariableNotMutable => write!(f, "cannot assign to an immutable variable"),
             TypeError::UnresolvedTypeAlias { name, .. } => write!(f, "unknown type `{name}`"),
+            TypeError::RecursiveType { name, .. } => write!(f, "the recursive type `rec {name}` is not supported in Datafun yet"),
             TypeError::CollectionKeyNotOrdered { param, position, .. } => {
                 write!(f, "`{param}` has not said it can be ordered, and {position} puts it in a set or a map")
             }
@@ -605,6 +612,10 @@ impl From<datalove_datalit::tycheck::TypeError> for TypeError {
             datalove_datalit::tycheck::TypeError::ArityMismatch { expected, actual } => {
                 TypeError::ArityMismatch { expected, actual }
             }
+            err @ (datalove_datalit::tycheck::TypeError::RecUnused(_)
+            | datalove_datalit::tycheck::TypeError::RecShadowed(_)
+            | datalove_datalit::tycheck::TypeError::RecUnguarded(_)
+            | datalove_datalit::tycheck::TypeError::RecInKey(_)) => TypeError::DatalitError(err.to_string()),
         }
     }
 }
@@ -727,6 +738,11 @@ pub fn types_equivalent<'db>(db: &'db dyn Db, t1: &Type<'db>, t2: &Type<'db>) ->
 // ============================================================================
 // Type Hint Conversion
 // ============================================================================
+
+/// The refusal of a `rec` type, which only datalit has so far.
+fn rec_refused<'db>(db: &'db dyn Db, rec: &datalit::ast::TypeHintRec<'db>) -> TypeError {
+    TypeError::RecursiveType { name: rec.name.as_str(db).to_string(), local_index: rec.local_index }
+}
 
 /// Convert a type hint to a type.
 pub fn convert_type_hint<'db>(
@@ -922,6 +938,7 @@ fn convert_type_hint_inner<'db>(
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        TypeHint::Rec(r) => return Err(rec_refused(db, &r)),
         TypeHint::Alias(alias) => {
             // Type alias cannot be resolved without alias map.
             return Err(TypeError::UnresolvedTypeAlias {
@@ -1164,6 +1181,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        TypeHint::Rec(r) => return Err(rec_refused(db, &r)),
 
         TypeHint::Alias(alias) => {
             // Look up the alias in the map.

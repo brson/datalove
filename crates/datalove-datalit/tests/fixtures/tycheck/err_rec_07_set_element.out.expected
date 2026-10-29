@@ -1,0 +1,52 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": []
+      }
+    },
+    "type_hint": {
+      "List": {
+        "element_type": {
+          "Set": {
+            "element_type": {
+              "Rec": {
+                "body": {
+                  "List": {
+                    "element_type": {
+                      "Alias": "L"
+                    }
+                  }
+                },
+                "name": "L"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T065",
+      "labels": [
+        {
+          "message": "recursive type in a key",
+          "span": [
+            0,
+            21
+          ],
+          "text": ": [#{rec L [L]}] / []"
+        }
+      ],
+      "message": "the recursive type `L` is a map's key or a set's element"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecInKey",
+      "name": "L"
+    }
+  ],
+  "root_type": null
+}

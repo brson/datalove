@@ -120,6 +120,28 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
             let payload = parse_type_hint(stream);
             ast::TypeHint::Term(ast::TypeHintTerm { name, payload: Box::new(payload) })
         }
+        Some("rec") => {
+            stream.eat_word("rec");
+            let name_ts = stream.peek_text_span();
+            let name = stream.eat_name();
+            // What goes wrong with the name is carried past the body, so that
+            // the body is read and not blamed on whatever follows the type.
+            let refused = match name {
+                None => Some(("expected name after 'rec'".S(), "D056", "expected the recursive type's name")),
+                Some(n) => crate::parser_util::reserved_for(n.as_str(db), crate::parser_util::NameKind::Type)
+                    .map(|why| (fmt!("a recursive type cannot be named `{}`", n.as_str(db)), "D057", why)),
+            };
+            let local_index = match refused {
+                None => Some(stream.alias_index(name_ts.clone())),
+                Some(_) => None,
+            };
+            let body = parse_type_hint(stream);
+            match (name, refused) {
+                (Some(name), None) => ast::TypeHint::Rec(ast::TypeHintRec { name, body: Box::new(body), local_index }),
+                (_, Some((message, code, label))) => stream.type_hint_error(name_ts, &message, code, label),
+                (None, None) => unreachable!("a missing name is refused"),
+            }
+        }
         Some("enum") => {
             let ts = stream.peek_text_span();
             stream.eat_word("enum");

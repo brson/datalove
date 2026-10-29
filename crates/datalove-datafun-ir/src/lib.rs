@@ -424,6 +424,7 @@ impl IrType {
         use datalove_datalit::ast::TypeHint;
 
         match ty {
+            TypeHint::Rec(_) => todo!("recursive types in the IR; Datafun refuses them until then (F090)"),
             TypeHint::Bool => IrType::Bool,
             TypeHint::U8 => IrType::U8,
             TypeHint::I8 => IrType::I8,
@@ -562,6 +563,9 @@ impl IrType {
         use datalove_datalit::tycheck::Type as DlType;
 
         match ty {
+            DlType::Rec(_) | DlType::RecVar(_) => {
+                todo!("recursive types in the IR; Datafun refuses them until then (F090)")
+            }
             DlType::Var(name) => match keep.iter().position(|p| p == name) {
                 Some(i) => IrType::Param(i as u32),
                 None => panic!("type variable {} is not a parameter of the function it is in",

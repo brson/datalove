@@ -42,6 +42,8 @@ pub enum TypeSyntax<'a> {
     /// `enum { atom A, term B T }`: each variant, with its payload if it is
     /// a term.
     Enum(Vec<(Cow<'a, str>, Option<TypeSyntax<'a>>)>),
+    /// `rec Name A`: a recursive type, whose name `A` refers to.
+    Rec(Cow<'a, str>, Box<TypeSyntax<'a>>),
     /// A function, which has no type syntax of its own, written as a
     /// function's head is: `fun(A, B): R`.
     Function(Vec<TypeSyntax<'a>>, Box<TypeSyntax<'a>>),
@@ -92,6 +94,7 @@ impl fmt::Display for TypeSyntax<'_> {
                 }
                 f.write_str(" }")
             }
+            TypeSyntax::Rec(name, body) => write!(f, "rec {name} {body}"),
             TypeSyntax::Function(params, ret) => write!(f, "fun({}): {ret}", Joined(params)),
         }
     }
@@ -155,6 +158,7 @@ mod tests {
             (TypeSyntax::Term("Foo".into(), Box::new(word("int"))), "term Foo int"),
             (TypeSyntax::Enum(vec![("Red".into(), None), ("Custom".into(), Some(word("string")))]),
                 "enum { atom Red, term Custom string }"),
+            (TypeSyntax::Rec("L".into(), Box::new(TypeSyntax::List(Box::new(word("L"))))), "rec L [L]"),
             (TypeSyntax::Function(vec![word("int"), word("string")], Box::new(word("bool"))), "fun(int, string): bool"),
         ];
         for (syntax, written) in cases {
@@ -178,6 +182,8 @@ mod tests {
             "enum { atom Red, term Custom string }",
             "data", "error", "index", "offset", "bool",
             "Point", "[Point]",
+            "rec L [L]", "rec T { v: int, kids: [T] }", "?rec L { next: [L] }",
+            "rec J enum { atom Null, term Arr [J], term Obj %{string = J} }",
         ];
         for written in types {
             let source = bct::input::Source::new(&db, fmt!(": {written} / 0"));

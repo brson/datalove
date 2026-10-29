@@ -24,6 +24,7 @@ Appendix B rather than described.
   - [3.5 Data and Error Types](#user-content-35-data-and-error-types)
   - [3.6 Atom, Term, and Enum Types](#user-content-36-atom-term-and-enum-types)
   - [3.7 Type Aliases](#user-content-37-type-aliases)
+  - [3.8 Recursive Types](#user-content-38-recursive-types)
 - [4. Type Hints](#user-content-4-type-hints)
 - [5. Copy and Linear Types](#user-content-5-copy-and-linear-types)
 - [6. Expressions](#user-content-6-expressions)
@@ -135,7 +136,7 @@ where such a name is declared (P064), and free everywhere else.
 | value (`let`, `var` and `const` names and patterns, `if`/`else` `\|name\|` and `case term` bindings, `for` names, the const `require data` binds) | `true` `false` `none` `some` `ok` `er` `data` `error` `atom` `term` `enum` `not` `icall` | they start an expression |
 | parameter | the value words, and `mut` `out` `ref` `const` | the mode is written where the name is |
 | function | the value words | a call is read like a value |
-| type alias, type parameter | `bool` `u8`..`u64` `i8`..`i64` `index` `offset` `f32` `f64` `int` `string` `data` `error` `atom` `term` `enum` | they are types, or start one |
+| type alias, type parameter, `rec` name | `bool` `u8`..`u64` `i8`..`i64` `index` `offset` `f32` `f64` `int` `string` `data` `error` `atom` `term` `enum` `rec` | they are types, or start one |
 | module or rider (the alias `require` gives it) | the value words | a qualified call is read like a value |
 | field, column, variant | nothing | no word means anything else there |
 
@@ -675,6 +676,38 @@ commonly given aliases:
 ```datalove
 type Color: enum { atom Red, atom Blue, term Custom string }
 ```
+
+### 3.8 Recursive Types
+
+`rec Name T` is the type `T`, in which `Name` stands for the whole. It is the
+one way to write a type that contains itself, since an alias cannot name
+itself. A value of one is written as the body is, with no mark:
+
+```datalove
+: rec Node { name: string, kids: [Node] } / {
+  name = "root",
+  kids = [{ name = "a", kids = [] }],
+}
+```
+
+The name is bound inside `T` only, so `rec` needs no statement and is the same
+in datalit. Each use of the name has a list, map, set or table between it and
+its `rec`, which is what keeps a value's size finite: `rec L { next: ?L }` is
+refused (T064). A cons list's tail is written `next: [L]`, holding at most
+one, by convention. A `rec` that never uses its name (T062), that takes the
+name of a `rec` around it (T063), or a recursive type in a map's key or a
+set's element (T065) is refused too. A `rec` may sit inside another and use
+its name: `rec E enum { term Lit int, term Block [rec S enum { term Let E }] }`.
+
+The name is no part of the type: `rec A [A]` and `rec B [B]` are one type. A
+recursive type is not the type its body unfolds to, `{ name: string, kids:
+[rec Node ...] }`; a value checked against the `rec` type is checked against
+the unfolding, so the two are written alike, but a hint of one is a mismatch
+with the other (T040).
+
+Datafun refuses recursive types for now (F090), in a type it is written and
+in data it takes in with `require data`. The design, and the work left, is in
+[Recursive Structural Types](plan-recursive-types.md).
 
 ## 4. Type Hints
 
@@ -2464,7 +2497,7 @@ The following features appear in design documents but are not yet implemented:
 
 - Tensor operations (transpose, slice, reshape), and mutation through a
   tensor view (Section 7.3)
-- Recursive types: an alias cannot name itself, `type L: ?(int, L)` (F064)
+- Recursive types in Datafun (F090); datalit has them (Section 3.8)
 - Table operations beyond literals: column projection, row access, adding rows
 - Arena blocks
 - Memoization

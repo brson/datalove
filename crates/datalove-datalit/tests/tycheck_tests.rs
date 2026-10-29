@@ -7,6 +7,15 @@ fn type_to_json(db: &datalove_datalit::Database, ty: &datalove_datalit::tycheck:
 
     match ty {
         Type::Var(name) => json!(name.as_str(db)),
+        Type::Rec(r) => json!({
+            "kind": "Rec",
+            "name": r.name.0.as_str(db),
+            "body": type_to_json(db, &r.body)
+        }),
+        Type::RecVar(index) => json!({
+            "kind": "RecVar",
+            "index": index
+        }),
         Type::Bool => json!("bool"),
         Type::U8 => json!("u8"),
         Type::I8 => json!("i8"),
@@ -191,6 +200,10 @@ fn error_to_json(error: &datalove_datalit::tycheck::TypeError) -> rmx::serde_jso
                 "actual": actual
             })
         }
+        TypeError::RecUnused(name) => json!({ "kind": "RecUnused", "name": name }),
+        TypeError::RecShadowed(name) => json!({ "kind": "RecShadowed", "name": name }),
+        TypeError::RecUnguarded(name) => json!({ "kind": "RecUnguarded", "name": name }),
+        TypeError::RecInKey(name) => json!({ "kind": "RecInKey", "name": name }),
     }
 }
 

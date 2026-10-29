@@ -1,0 +1,1 @@
+: rec J enum { term Arr [J], term Bool bool, atom Null, term Num f64, term Obj %{string = J}, term Str string } / enum { term Obj %{"head" = enum { term Obj %{"id" = enum { term Num 1.0 }} }, "operations" = enum { term Arr [enum { term Num 2.5 }, enum { atom Null }, enum { term Str "x" }, enum { term Arr [] }] }} }

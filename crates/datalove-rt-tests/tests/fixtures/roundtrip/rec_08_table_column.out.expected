@@ -1,0 +1,1 @@
+: rec T {| name: string, sub: T |} / {| name, sub; "a", {| name, sub; "b", {| name, sub |} |} |}

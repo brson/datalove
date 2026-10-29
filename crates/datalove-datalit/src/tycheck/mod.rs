@@ -40,6 +40,11 @@ pub use types::{
     TypeTerm,
     TypeEnum,
     TypeEnumVariant,
+    TypeRec,
+    RecName,
+    RecScope,
+    expose,
+    contains_rec,
     // Error type.
     TypeError,
     // Type predicates.

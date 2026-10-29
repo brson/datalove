@@ -1,0 +1,1 @@
+: rec A { b: rec B { a: A, bs: [B] } } / 1

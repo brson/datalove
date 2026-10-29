@@ -12,6 +12,7 @@ extend these.
 - [Notation](#user-content-notation)
 - [Syntax](#user-content-syntax)
 - [Type equivalence](#user-content-type-equivalence)
+- [Well-formed types](#user-content-well-formed-types)
 - [Synthesis](#user-content-synthesis)
 - [Inference](#user-content-inference)
 - [Checking](#user-content-checking)
@@ -87,9 +88,14 @@ T ::= bool | u8 | u16 | u32 | u64 | i8 | i16 | i32 | i64
     | atom a                           atom
     | term a T                         term
     | enum {v₁, ..., vₙ}               enum; enum {} is legal and has no values
+    | rec X T                          recursive: X stands for the whole in T
+    | X                                a rec's name, inside its body
 
 v ::= atom a | term a T                enum variant
 ```
+
+`T[U/X]` is `T` with `U` put where `X` is. The unfolding of `rec X T` is
+`T[rec X T / X]`: the body, one level down.
 
 `!T` has no error type parameter: the failure of every result is an `error`.
 
@@ -141,6 +147,33 @@ Everything else is positional and exact:
   implicit widening: `u8 ≢ u16`, `f32 ≢ f64`.
 - A type alias is a name for a structural type, so it is not a type of its own
   (datalit has no aliases; datafun expands them before comparing).
+- `rec X T ≡ rec Y U` iff `T` and `U` are equivalent with `X` and `Y` taken
+  for one another: the name a `rec` is written with is no part of the type.
+- Recursive types are *iso-recursive*: `rec X T` is not equivalent to its
+  unfolding, though a value of one has the layout of a value of the other.
+  `Check-Roll` is what moves between them.
+
+## Well-formed types
+
+Every type in a hint must be well formed. Each condition is checked as the
+hint is converted, and failing one is an error on the hinted expression.
+
+- **A `rec` uses its name** (T062). `rec L int` is refused, so that a type
+  has one spelling.
+- **A `rec` takes a name of its own** (T063). Its name is not one an enclosing
+  `rec` has: `rec L { a: [rec L [L]] }` is refused.
+- **A `rec`'s name is used inside a collection** (T064). Between each use of
+  the name and its own `rec` there is at least one list, map, set or table.
+  An option, a result, a tuple, a struct, a term, an enum or another `rec` is
+  not enough, because each holds its parts inline and the type would be
+  infinitely large: `rec L { next: ?L }` and `rec L L` are refused. So is
+  `rec A { b: rec B { a: A, bs: [B] } }`: the list guards `B`, not `A`.
+- **A recursive type is not ordered** (T065). No `rec`, and no use of a `rec`'s
+  name, is in a map's key or a set's element: `rec L %{L = int}` and
+  `#{rec L [L]}` are refused. A recursive value is finite, so it could be
+  ordered, but every comparison would be deep.
+- **A name in a type is a `rec`'s** (T059). Datalit has no aliases, so any
+  other is refused.
 
 ## Synthesis
 
@@ -260,6 +293,14 @@ The rules, with `α:c` a fresh variable of class `c`:
 ⊢ atom a ⇝ α          ⊢ term a e ⇝ α                 ⊢ enum {e} ⇝ α
 ```
 
+A recursive type meets a literal's parts through `Check-Roll`'s unfolding. A
+literal's class admits `rec X T` when it admits the unfolding. Where a
+variable bound to a literal's parts (a struct, a list) is unified with
+`rec X T`, the variable takes `rec X T` and the parts are unified with the
+unfolding. Kept as the parts, it would come to the unfolding, which is not the
+type. So `[{ next = [] }, : rec L { next: [L] } / { next = [] }]` and the same
+list the other way round are both `[rec L { next: [L] }]`.
+
 The shared variable of an empty collection, or of an empty table's columns,
 is `open`; with elements it is decided by them. The variable is what the
 elements are unified through, so `[]` names the list as needing a type and
@@ -310,6 +351,22 @@ T₀ ≡ T    ⊢ e ⇐ T
 A hint names the type of the expression it is on, and that must be the
 expected type. It is not a conversion: `: [u16] / [: u8 / 42]` fails, because
 the element is a `u8` where a `u16` is expected (T040).
+
+### Recursive types
+
+```
+⊢ e ⇐ T[rec X T / X]
+------------------------ (Check-Roll)
+⊢ e ⇐ rec X T
+```
+
+A value of a recursive type is written as a value of its unfolding, with no
+mark on it: `{ elt = 1, next = [] } ⇐ rec L { elt: int, next: [L] }` checks
+the struct against `{ elt: int, next: [rec L { elt: int, next: [L] }] }`, and
+each element of `next` against the `rec` type again. The rule applies after
+`Check-Hinted`, so a hint on `e` is compared with `rec X T` itself, and a hint
+of the unfolding is a mismatch (T040). A mismatch reports `rec X T` as the
+type expected, not the unfolding.
 
 ### Subsumption
 
@@ -470,12 +527,14 @@ The checker (`check` in `check.rs`) decides which in this order:
 
 1. A hinted expression is checked by `Check-Hinted`, whose premise
    `⊢ e ⇐ T` continues with the steps below.
-2. If a rule above matches the form of `e` and the head of `T`, it is the
+2. A recursive `T` is unfolded by `Check-Roll` until its head is not a `rec`,
+   and the steps below read that head.
+3. If a rule above matches the form of `e` and the head of `T`, it is the
    only rule tried. Failing a premise is an error; the checker does not fall
    back to subsumption. So `[1, 2] ⇐ [u8]` uses `Check-List` and checks each
    element against `u8`.
-3. `none` or `er e` against anything but an option or result is T032.
-4. Otherwise `Check-Subsume` applies. For `true`, `false` and string
+4. `none` or `er e` against anything but an option or result is T032.
+5. Otherwise `Check-Subsume` applies. For `true`, `false` and string
    literals its failure is reported as T022. For anything else it always
    fails, reported as T032 with the expression's inferred type, `_` standing
    for what is undecided: `: int / [none]` finds `[?_]`.
@@ -539,6 +598,10 @@ Some properties follow from the rules and are worth stating outright.
 | T058 | check | Enum literal against a type that is not an enum |
 | T059 | hint | A bare name in a hint; datalit has no type aliases |
 | T061 | check | Integer literal out of range for `offset` |
+| T062 | hint | A `rec` that never uses its name |
+| T063 | hint | A `rec` named as an enclosing `rec` is |
+| T064 | hint | A `rec`'s name used with no collection between it and its `rec` |
+| T065 | hint | A recursive type in a map's key or a set's element |
 
 ## Implementation
 
@@ -555,6 +618,15 @@ which is how datafun checks a `require data` file against its declared type.
 type parameter of an enclosing datafun generic function. Datalit itself
 never produces a `Var`; `Var(a) ≡ Var(b)` iff `a = b`, and a `Var` is
 equivalent to nothing else.
+
+A `rec` is `Type::Rec`, and a use of its name `Type::RecVar`, a de Bruijn
+index: 0 is the innermost `rec` around it. The name the `rec` was written
+with is kept for showing the type, and equality and hashing ignore it, so the
+derived comparison is equivalence up to the names. `TypeRec::unfold` makes the
+unfolding, and `expose` unfolds a type whose head is a `rec`. A type taken out
+of a body is unfolded, so it is closed, and a `RecVar` is only ever in a body.
+`RecScope` in `convert_type_hint` resolves the names and checks the
+conditions of [Well-formed types](#user-content-well-formed-types).
 
 The diagnostic codes T018 to T021, T051, T052 and T060 were for elements that
 differed from the first under the first-element rule this replaces. They are

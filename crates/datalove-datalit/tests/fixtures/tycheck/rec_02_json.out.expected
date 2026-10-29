@@ -1,0 +1,250 @@
+{
+  "ast": {
+    "expr": {
+      "Term": {
+        "name": "Obj",
+        "payload": {
+          "expr": {
+            "Map": {
+              "entries": [
+                {
+                  "key": {
+                    "expr": {
+                      "String": {
+                        "value": "\"head\""
+                      }
+                    },
+                    "type_hint": null
+                  },
+                  "value": {
+                    "expr": {
+                      "Term": {
+                        "name": "Obj",
+                        "payload": {
+                          "expr": {
+                            "Map": {
+                              "entries": [
+                                {
+                                  "key": {
+                                    "expr": {
+                                      "String": {
+                                        "value": "\"id\""
+                                      }
+                                    },
+                                    "type_hint": null
+                                  },
+                                  "value": {
+                                    "expr": {
+                                      "Term": {
+                                        "name": "Num",
+                                        "payload": {
+                                          "expr": {
+                                            "Float": {
+                                              "value": "1.0"
+                                            }
+                                          },
+                                          "type_hint": null
+                                        }
+                                      }
+                                    },
+                                    "type_hint": null
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "type_hint": null
+                        }
+                      }
+                    },
+                    "type_hint": null
+                  }
+                },
+                {
+                  "key": {
+                    "expr": {
+                      "String": {
+                        "value": "\"operations\""
+                      }
+                    },
+                    "type_hint": null
+                  },
+                  "value": {
+                    "expr": {
+                      "Term": {
+                        "name": "Arr",
+                        "payload": {
+                          "expr": {
+                            "List": {
+                              "elements": [
+                                {
+                                  "expr": {
+                                    "Term": {
+                                      "name": "Num",
+                                      "payload": {
+                                        "expr": {
+                                          "Float": {
+                                            "value": "2.5"
+                                          }
+                                        },
+                                        "type_hint": null
+                                      }
+                                    }
+                                  },
+                                  "type_hint": null
+                                },
+                                {
+                                  "expr": {
+                                    "Atom": {
+                                      "name": "Null"
+                                    }
+                                  },
+                                  "type_hint": null
+                                },
+                                {
+                                  "expr": {
+                                    "Term": {
+                                      "name": "Str",
+                                      "payload": {
+                                        "expr": {
+                                          "String": {
+                                            "value": "\"x\""
+                                          }
+                                        },
+                                        "type_hint": null
+                                      }
+                                    }
+                                  },
+                                  "type_hint": null
+                                },
+                                {
+                                  "expr": {
+                                    "Term": {
+                                      "name": "Arr",
+                                      "payload": {
+                                        "expr": {
+                                          "List": {
+                                            "elements": []
+                                          }
+                                        },
+                                        "type_hint": null
+                                      }
+                                    }
+                                  },
+                                  "type_hint": null
+                                }
+                              ]
+                            }
+                          },
+                          "type_hint": null
+                        }
+                      }
+                    },
+                    "type_hint": null
+                  }
+                }
+              ]
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "Null",
+                "payload": null
+              },
+              {
+                "name": "Bool",
+                "payload": "Bool"
+              },
+              {
+                "name": "Num",
+                "payload": "F64"
+              },
+              {
+                "name": "Str",
+                "payload": "String"
+              },
+              {
+                "name": "Arr",
+                "payload": {
+                  "List": {
+                    "element_type": {
+                      "Alias": "J"
+                    }
+                  }
+                }
+              },
+              {
+                "name": "Obj",
+                "payload": {
+                  "Map": {
+                    "key_type": "String",
+                    "value_type": {
+                      "Alias": "J"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "name": "J"
+      }
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "body": {
+      "kind": "Enum",
+      "variants": [
+        {
+          "name": "Arr",
+          "payload": {
+            "element_type": {
+              "index": 0,
+              "kind": "RecVar"
+            },
+            "kind": "List"
+          }
+        },
+        {
+          "name": "Bool",
+          "payload": "bool"
+        },
+        {
+          "name": "Null",
+          "payload": null
+        },
+        {
+          "name": "Num",
+          "payload": "f64"
+        },
+        {
+          "name": "Obj",
+          "payload": {
+            "key_type": "string",
+            "kind": "Map",
+            "value_type": {
+              "index": 0,
+              "kind": "RecVar"
+            }
+          }
+        },
+        {
+          "name": "Str",
+          "payload": "string"
+        }
+      ]
+    },
+    "kind": "Rec",
+    "name": "J"
+  }
+}

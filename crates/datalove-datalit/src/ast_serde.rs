@@ -45,7 +45,14 @@ pub enum TypeHint {
     Atom(TypeHintAtom),
     Term(TypeHintTerm),
     Enum(TypeHintEnum),
+    Rec(TypeHintRec),
     ParseError(TypeHintParseError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintRec {
+    pub name: String,
+    pub body: Box<TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -336,6 +343,10 @@ impl TypeHint {
                     name: v.name.as_str(db).to_string(),
                     payload: v.payload.as_ref().map(|p| Box::new(TypeHint::from_ast(db, *p.clone()))),
                 }).collect(),
+            }),
+            crate::ast::TypeHint::Rec(r) => TypeHint::Rec(TypeHintRec {
+                name: r.name.as_str(db).to_string(),
+                body: Box::new(TypeHint::from_ast(db, *r.body.clone())),
             }),
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
         }

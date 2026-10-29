@@ -1,0 +1,45 @@
+{
+  "ast": {
+    "expr": {
+      "Map": {
+        "entries": []
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": {
+          "Map": {
+            "key_type": {
+              "Alias": "L"
+            },
+            "value_type": "Int"
+          }
+        },
+        "name": "L"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T065",
+      "labels": [
+        {
+          "message": "recursive type in a key",
+          "span": [
+            0,
+            24
+          ],
+          "text": ": rec L %{L = int} / %{}"
+        }
+      ],
+      "message": "the recursive type `L` is a map's key or a set's element"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecInKey",
+      "name": "L"
+    }
+  ],
+  "root_type": null
+}

@@ -1,0 +1,40 @@
+{
+  "ast": {
+    "expr": {
+      "Int": {
+        "value": "1"
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": {
+          "Alias": "L"
+        },
+        "name": "L"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T064",
+      "labels": [
+        {
+          "message": "recurs inline",
+          "span": [
+            0,
+            13
+          ],
+          "text": ": rec L L / 1"
+        }
+      ],
+      "message": "`L` recurs without a collection between it and its `rec`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecUnguarded",
+      "name": "L"
+    }
+  ],
+  "root_type": null
+}

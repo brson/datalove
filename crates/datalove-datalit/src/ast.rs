@@ -144,6 +144,8 @@ pub enum TypeHint<'db> {
     Atom(TypeHintAtom<'db>),
     Term(TypeHintTerm<'db>),
     Enum(TypeHintEnum<'db>),
+    /// `rec Name T`: `T`, in which `Name` is `T` itself.
+    Rec(TypeHintRec<'db>),
     ParseError(TypeHintParseError<'db>),
 }
 
@@ -192,6 +194,7 @@ impl<'db> TypeHint<'db> {
             TypeHint::Enum(e) => TypeSyntax::Enum(e.variants.iter()
                 .map(|v| (Borrowed(v.name.as_str(db)), v.payload.as_ref().map(|p| p.syntax(db))))
                 .collect()),
+            TypeHint::Rec(r) => TypeSyntax::Rec(Borrowed(r.name.as_str(db)), boxed(&r.body)),
         }
     }
 }
@@ -272,6 +275,20 @@ pub struct TypeHintAlias<'db> {
     /// text without changing it leaves memoized work alone; see
     /// `DatafunSpans`. `None` for an alias that came from no source, which is
     /// what the worldfile generator builds to print.
+    pub local_index: Option<u32>,
+}
+
+/// A recursive type: a name for the type, bound within its body.
+///
+/// The name's uses in the body are parsed as aliases, which is what a bare
+/// name in type position is; converting the hint is what tells them apart.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct TypeHintRec<'db> {
+    pub name: InternedText<'db>,
+    pub body: Box<TypeHint<'db>>,
+    /// Position of the binder among the names in type position the parse
+    /// filed, as for [`TypeHintAlias::local_index`].
     pub local_index: Option<u32>,
 }
 

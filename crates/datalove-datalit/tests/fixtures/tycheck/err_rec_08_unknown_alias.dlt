@@ -1,0 +1,1 @@
+: rec L { a: [L], b: Other } / { a = [], b = 1 }

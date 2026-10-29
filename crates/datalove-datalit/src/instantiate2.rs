@@ -105,6 +105,11 @@ fn instantiate_expr_into<'db>(
     let expr_inner = expr.expr();
 
     match (expr_inner, ty) {
+        // A value of a recursive type is laid out as its unfolding is.
+        (_, Type::Rec(rec)) => {
+            instantiate_expr_into(db, rt, expr, &rec.unfold(), tydesc_table, dest_ptr, resolved)
+        }
+
         (Expr::True, Type::Bool) => instantiate_bool(rt, true, dest_ptr),
         (Expr::False, Type::Bool) => instantiate_bool(rt, false, dest_ptr),
 
@@ -2706,6 +2711,54 @@ mod tests {
             assert_eq!(col_infos.len(), 2);
             assert_eq!(col_infos[0].tydesc().type_tag(), rtdt::TyTag::String);
             assert_eq!(col_infos[1].tydesc().type_tag(), rtdt::TyTag::U32);
+        }
+        Ok(())
+    }
+
+    /// A recursive type's descriptor is one the type's uses point back to, so
+    /// the runtime walks a value of it through a cycle of descriptors.
+    #[test]
+    fn test_instantiate_rec_descriptor_cycles() -> AnyResult<()> {
+        let db = Database::default();
+        let source = r#": rec Node { name: string, kids: [Node] } / { name = "a", kids = [{ name = "b", kids = [] }] }"#;
+        let typechecked = compile_str(&db, source)?;
+        let rt = datalove_rt::rust::Runtime::new();
+        let guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Struct);
+            let kids = inst.tydesc.struct_info().field(1).expect("a kids field");
+            assert_eq!(kids.tydesc().type_tag(), rtdt::TyTag::List);
+            assert!(std::ptr::eq(kids.tydesc().list_element_ty().as_ptr(), inst.tydesc.as_ptr()));
+
+            // A clone walks the cycle, and is equal to what it was made from.
+            let tydesc = inst.tydesc.as_ref();
+            let copy = datalove_rt::c::dtlv_rti_mem_alloc_local(guard.handle(), tydesc, 1);
+            assert!(!copy.is_null());
+            let status = datalove_rt::c::dtlv_rti_clone_local(
+                guard.handle(),
+                rtdt::AnyRef::new(inst.ptr),
+                tydesc,
+                rtdt::AnyOut::new(copy),
+                tydesc,
+            );
+            assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+            let eq = datalove_rt::c::dtlv_rti_eq_local(
+                guard.handle(),
+                rtdt::AnyRef::new(inst.ptr),
+                tydesc,
+                rtdt::AnyRef::new(copy),
+                tydesc,
+            );
+            assert_eq!(eq, datalove_rt::c::RtEq::Equals);
+            datalove_rt::c::dtlv_rti_any_destroy_local(guard.handle(), rtdt::AnyOwned::new(copy), tydesc);
+            datalove_rt::c::dtlv_rti_mem_free_local(guard.handle(), tydesc, 1, copy);
         }
         Ok(())
     }

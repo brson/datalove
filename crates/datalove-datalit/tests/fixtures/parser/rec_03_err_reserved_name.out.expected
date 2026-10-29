@@ -1,0 +1,30 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "a recursive type cannot be named `int`"
+      }
+    },
+    "type_hint": {
+      "ParseError": {
+        "message": "a recursive type cannot be named `int`"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D057",
+      "labels": [
+        {
+          "message": "it is a type, or starts one",
+          "span": [
+            6,
+            9
+          ],
+          "text": "int"
+        }
+      ],
+      "message": "a recursive type cannot be named `int`"
+    }
+  ]
+}

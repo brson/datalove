@@ -5,8 +5,9 @@ iso-recursive semantics, and recursion that must pass through a collection
 rather than a box. Written October 2026 in response to
 `mandocs/drafts/recursive-structural-types.md`; not implemented. Checked on
 paper against the AWFY benchmarks that need recursive data. The decisions
-for a first cut are in [Decisions](#user-content-decisions); datalit is
-implemented first, then Datafun.
+for a first cut are in [Decisions](#user-content-decisions). Phase 1,
+datalit, is implemented (October 2026), and Datafun refuses recursive types
+(F090) until phase 2; see [Phase 1 as built](#user-content-phase-1-as-built).
 
 ## Contents
 
@@ -23,6 +24,7 @@ implemented first, then Datafun.
 - [The IR and the backends](#user-content-the-ir-and-the-backends)
 - [Against the AWFY benchmarks](#user-content-against-the-awfy-benchmarks)
 - [Prior art](#user-content-prior-art)
+- [Phase 1 as built](#user-content-phase-1-as-built)
 - [What exists, what is missing](#user-content-what-exists-what-is-missing)
 - [Phases](#user-content-phases)
 - [Open questions](#user-content-open-questions)
@@ -301,12 +303,12 @@ The type checker is the smaller part of the work. Behind it:
   C AOT. A rough count of matches on aggregate variants is 41 in the IR crate,
   36 in `crates/datalove-datafun-common/src/generics.rs`, about 40 in the
   Datafun checker and about 70 in datalit, plus the backends.
-- **Descriptor builders memoize too late.** `TydescTable::get_or_create`
-  (`crates/datalove-datalit/src/tydesc_table.rs`) inserts into its cache after
-  `create_tydesc` returns, so a recursive type would recurse before the entry
-  exists. The Cranelift emitter (`tydesc_emit.rs`) and C AOT's
-  `collect_type_recursive` and `type_depth` have the same shape. Each needs a
-  placeholder in its cache before it descends.
+- **Descriptor builders memoize too late.** A builder that files a
+  descriptor after making it recurses before the entry exists. Datalit's
+  `TyDescTable` ties the knot now (`create_rec`); the Cranelift emitter
+  (`tydesc_emit.rs`) and C AOT's `collect_type_recursive` and `type_depth`
+  still have the old shape, and need a placeholder in their caches before
+  they descend.
 - **C AOT orders its definitions by depth** (`type_depth`, sorted in
   `crates/datalove-datafun-c-aot/src/lib.rs`). With cycles that becomes
   forward declarations of the descriptors, then their definitions.
@@ -398,6 +400,58 @@ References:
 - Amadio and Cardelli, "Subtyping Recursive Types", TOPLAS 1993
 - Pierce, *Types and Programming Languages*, chapters 20 and 21
 
+## Phase 1 as built
+
+Datalit has recursive types, specified in botspec Section 3.8 and
+[the datalit typing rules](datalit-typing-rules.md) (`Check-Roll`, and
+T062 to T065 under "Well-formed types"); the grammar is in
+[the datalit grammar](datalit-ebnf.md) (D056, D057). The fixtures are the
+`rec_*` and `err_rec_*` files in `crates/datalove-datalit/tests/fixtures/`
+and the `rec_*` files in `crates/datalove-rt-tests/tests/fixtures/roundtrip`,
+which instantiate each shape and pretty-print, clone, compare and drop it
+through the runtime. What differed from the plan, or was found on the way:
+
+- **The parser reads only `rec Name T`.** A use of the name is a bare name in
+  type position, which already parses as an alias; converting the hint tells
+  the two apart with `RecScope`. The binder's name is filed in the alias span
+  table, which is what lets Datafun's F090 point at it.
+- **Inference needed one rule.** A list whose first element is an unhinted
+  literal and whose second is hinted with the `rec` type kept the literal's
+  structure as the element type, which resolves to the unfolding, and its
+  `[]` was left open. Now a variable holding a literal's parts takes the
+  `rec` type when it meets one, and the parts unify with the unfolding. The
+  same meeting inside a tuple's or struct's field, which is no variable, is
+  still order-dependent.
+- **Descriptors are tied through a scratch table.** `TyDescTable::create_rec`
+  files the type's descriptor before making the unfolding's, and the
+  descriptor stands meanwhile as the unfolding made once already in a table
+  of its own, where the type is a stand-in. That copy is what an option or a
+  map of the type reads its size from while it is made. Nested binders pass
+  the types in progress down to the scratch tables, which otherwise recursed
+  without end. Each `rec` is made twice, and each nested one twice more.
+- **Miri found a fault.** The descriptor's pointer was taken from its box
+  before the box was moved into storage, and moving a box invalidates such a
+  pointer, so the write through it and the box's free were undefined.
+- **`eq_tydesc` and `cmp_tydesc` walk descriptors structurally**
+  (`crates/datalove-rt/src/c/impls/cmp.rs`) and stop at pointer identity.
+  Within one table a `rec` type and its unfolding meet at the type's filed
+  descriptor after one level, so they finish. Two tables' descriptors of one
+  `rec` type, such as datalit's and Cranelift's, never meet, and the walk
+  would not end. Phase 4 has to carry the pairs being compared and take a
+  pair seen again as equal. Nothing in phase 1 compares two tables'
+  descriptors.
+- **Datafun refuses `rec` (F090)** in its two hint conversions
+  (`crates/datalove-datafun-common/src/lib.rs`) and in the type of data a
+  `require data` takes in with no type declared
+  (`crates/datalove-datafun-tycheck/src/datafile.rs`), which would otherwise
+  bring a `rec` type into a program. Behind the refusal, `todo!()`s stand at
+  the sites phase 2 and 3 replace: `IrType::from_type_hint` and
+  `from_datalit_inner` in `crates/datalove-datafun-ir/src/lib.rs`, and the
+  generated-literal paths that never see a `rec` (`ast_gen.rs`,
+  `funlit_equiv.rs`). The generator's coverage test lists `Rec` as not yet
+  generated. `generics.rs`, `is_copy_type`, `equality_blocker` and worldgen's
+  `is_linear_type` have their real answers already.
+
 ## What exists, what is missing
 
 What exists:
@@ -408,32 +462,29 @@ What exists:
   literal.
 - Collections that own heap storage.
 - `TyDesc` children as raw pointers.
+- Datalit's recursive types, from the parser to runtime values.
 
 What is missing:
 
-- The `rec` syntax in both grammars.
-- The two `Type` variants, binder-aware hint conversion, the guard check,
-  `expose`, and roll through `@`.
+- `rec` in Datafun: lifting F090, `expose` at the Datafun checker's
+  elimination sites, and roll through `@`.
 - `Rec` and `RecVar` in `IrType`, with `expose` at every IR consumer.
-- Knot-tying construction of descriptors in all three builders, and memoized
-  per-type glue in every backend.
+- Knot-tying construction of descriptors in Cranelift and C AOT, memoized
+  per-type glue in every backend, and descriptor comparison that ends on
+  cycles.
 - A borrowing `match ref` and `match mut`, deferred.
 - Some answer to drop, clone, equality and printing of deep values.
 
 ## Phases
 
-1. **Datalit.** Parse `rec`, convert hints to de Bruijn form, and check
-   guards, unused binders, shadowing and the first-cut limits. Roll in
-   checking mode, `expose` at datalit's elimination sites, knot-tied
-   descriptors in `TydescTable`, and loading recursive values. Tests for the
-   rose tree, JSON and list shapes, and for each ill-formed example above.
-   Datafun refuses `rec` with a diagnostic until phase 2.
+1. **Datalit.** Done; see [Phase 1 as built](#user-content-phase-1-as-built).
 2. **The Datafun checker.** `rec` in Datafun types, `expose` at its
    elimination sites, and roll through `@`.
 3. **The IR.** `Rec` and `RecVar` in `IrType`, lowering, and `expose` in the
    passes, ownership and layout.
-4. **Backends.** Knot-tied descriptors in Cranelift and C AOT, and memoized
-   glue in the interpreter, the JIT and C AOT. Run the engine tests on
+4. **Backends.** Knot-tied descriptors in Cranelift and C AOT, memoized glue
+   in the interpreter, the JIT and C AOT, and `eq_tydesc` and `cmp_tydesc`
+   that end on cycles. Run the engine tests on
    recursive values. Port Storage, Json and Towers to `benchvs` as the first
    real programs.
 5. **Deep values.** Measure the depth at which drop and clone overflow, then

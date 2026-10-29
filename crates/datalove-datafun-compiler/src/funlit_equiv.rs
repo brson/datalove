@@ -421,6 +421,9 @@ fn datalit_type_to_serde<'db>(
         // A funlit is a data literal, and a data literal has no enclosing
         // generic function to take a type parameter from.
         Type::Var(name) => unreachable!("type parameter {name:?} in a data literal"),
+        // The literals compared are generated, and the generator writes no
+        // recursive types; Datafun refuses them besides (F090).
+        Type::Rec(_) | Type::RecVar(_) => todo!("recursive types in funlit equivalence"),
         Type::Bool => TypeSerde::Bool,
         Type::U8 => TypeSerde::U8,
         Type::I8 => TypeSerde::I8,

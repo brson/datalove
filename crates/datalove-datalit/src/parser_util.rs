@@ -131,7 +131,7 @@ pub const PRIMITIVE_TYPE_NAMES: &[&str] = &[
 
 /// Words that are a type, or start one, where a type is read.
 pub fn is_type_word(word: &str) -> bool {
-    PRIMITIVE_TYPE_NAMES.contains(&word) || matches!(word, "atom" | "term" | "enum")
+    PRIMITIVE_TYPE_NAMES.contains(&word) || matches!(word, "atom" | "term" | "enum" | "rec")
 }
 
 /// Why a word cannot name a thing of this kind, if it cannot.

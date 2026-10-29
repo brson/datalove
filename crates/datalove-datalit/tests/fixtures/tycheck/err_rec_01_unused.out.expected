@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "expr": {
+      "Int": {
+        "value": "1"
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": "Int",
+        "name": "L"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T062",
+      "labels": [
+        {
+          "message": "never uses its name",
+          "span": [
+            0,
+            15
+          ],
+          "text": ": rec L int / 1"
+        }
+      ],
+      "message": "`rec L` never uses `L`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecUnused",
+      "name": "L"
+    }
+  ],
+  "root_type": null
+}

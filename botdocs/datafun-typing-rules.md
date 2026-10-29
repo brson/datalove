@@ -843,6 +843,7 @@ not reported again.
 | F087 | A `for` over something that is not a place, over a type it cannot walk, or binding the wrong number of names for its collection |
 | F088 | A const whose type mentions a type parameter |
 | F089 | A const that depends, through the functions it calls, on itself or on a const declared after it |
+| F090 | A recursive type, written in a type or in the type of data a `require data` takes in; datalit has them and Datafun does not yet |
 
 A code missing from the table is unassigned; F060 is retired. Two parse
 errors belong to the same rules: P074, a declaration inside a block, and

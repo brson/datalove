@@ -58,6 +58,16 @@ pub enum Type<'db> {
     Enum(TypeEnum<'db>),
     /// A type parameter of the enclosing generic function.
     Var(InternedText<'db>),
+    /// `rec Name T`: `T`, in which [`Type::RecVar`] refers back to the whole.
+    ///
+    /// Recursive types are iso-recursive: a `rec` type is not the type its
+    /// body unfolds to, though the two have the same layout. See
+    /// `botdocs/plan-recursive-types.md`.
+    Rec(TypeRec<'db>),
+    /// A use of an enclosing `rec` type's name, by de Bruijn index: 0 is the
+    /// innermost binder. Only a `rec` body holds one; a type taken out of a
+    /// body has been unfolded, and is closed.
+    RecVar(u32),
 }
 
 
@@ -80,6 +90,114 @@ pub struct TypeNamedField<'db> {
     pub ty: Box<Type<'db>>,
 }
 
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct TypeRec<'db> {
+    pub name: RecName<'db>,
+    pub body: Box<Type<'db>>,
+}
+
+/// The name a `rec` type was written with, for showing it.
+///
+/// The name is no part of the type: `rec A [A]` and `rec B [B]` are one
+/// type, so every two of these are equal and none hashes to anything. A memo
+/// whose only change is the name can then be backdated, and a diagnostic show
+/// the old one.
+#[derive(Clone, Copy)]
+#[derive(salsa::SalsaValue)]
+pub struct RecName<'db>(pub InternedText<'db>);
+
+impl PartialEq for RecName<'_> {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for RecName<'_> {}
+
+impl std::hash::Hash for RecName<'_> {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+
+impl<'db> TypeRec<'db> {
+    /// The body with the whole put back where its name was: the type a value
+    /// of this one is, one level down.
+    pub fn unfold(&self) -> Type<'db> {
+        let whole = Type::Rec(self.clone());
+        substitute(&self.body, 0, &whole)
+    }
+}
+
+/// `ty` with the binder `depth` levels out replaced by `whole`, which is
+/// closed.
+fn substitute<'db>(ty: &Type<'db>, depth: u32, whole: &Type<'db>) -> Type<'db> {
+    let sub = |t: &Type<'db>| Box::new(substitute(t, depth, whole));
+    let fields = |fs: &[TypeNamedField<'db>]| fs.iter()
+        .map(|f| TypeNamedField { name: f.name, ty: sub(&f.ty) })
+        .collect();
+    match ty {
+        Type::RecVar(index) if *index == depth => whole.clone(),
+        Type::RecVar(_) => ty.clone(),
+        Type::Rec(r) => Type::Rec(TypeRec { name: r.name, body: Box::new(substitute(&r.body, depth + 1, whole)) }),
+        Type::AnonTuple(t) => Type::AnonTuple(TypeAnonTuple { fields: t.fields.iter().map(|f| substitute(f, depth, whole)).collect() }),
+        Type::AnonStruct(s) => Type::AnonStruct(TypeAnonStruct { fields: fields(&s.fields) }),
+        Type::Table(t) => Type::Table(TypeTable { columns: fields(&t.columns) }),
+        Type::List(l) => Type::List(TypeList { element_type: sub(&l.element_type) }),
+        Type::Set(s) => Type::Set(TypeSet { element_type: sub(&s.element_type) }),
+        Type::Map(m) => Type::Map(TypeMap { key_type: sub(&m.key_type), value_type: sub(&m.value_type) }),
+        Type::Option(o) => Type::Option(TypeOption { inner_type: sub(&o.inner_type) }),
+        Type::Result(r) => Type::Result(TypeResult { inner_type: sub(&r.inner_type) }),
+        Type::Tensor(t) => Type::Tensor(TypeTensor { element_type: sub(&t.element_type), rank: t.rank }),
+        Type::Term(t) => Type::Term(TypeTerm { name: t.name, payload: sub(&t.payload) }),
+        Type::Enum(e) => Type::Enum(TypeEnum {
+            variants: e.variants.iter()
+                .map(|v| TypeEnumVariant { name: v.name, payload: v.payload.as_deref().map(sub) })
+                .collect(),
+        }),
+        Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16 | Type::U32 | Type::I32
+        | Type::U64 | Type::I64 | Type::Index | Type::Offset | Type::F32 | Type::F64
+        | Type::Int | Type::String | Type::Data | Type::Error | Type::Atom(_) | Type::Var(_) => ty.clone(),
+    }
+}
+
+/// Whether a recursive type is anywhere in a type.
+pub fn contains_rec(ty: &Type<'_>) -> bool {
+    let named = |fs: &[TypeNamedField<'_>]| fs.iter().any(|f| contains_rec(&f.ty));
+    match ty {
+        Type::Rec(_) | Type::RecVar(_) => true,
+        Type::AnonTuple(t) => t.fields.iter().any(contains_rec),
+        Type::AnonStruct(s) => named(&s.fields),
+        Type::Table(t) => named(&t.columns),
+        Type::List(l) => contains_rec(&l.element_type),
+        Type::Set(s) => contains_rec(&s.element_type),
+        Type::Map(m) => contains_rec(&m.key_type) || contains_rec(&m.value_type),
+        Type::Option(o) => contains_rec(&o.inner_type),
+        Type::Result(r) => contains_rec(&r.inner_type),
+        Type::Tensor(t) => contains_rec(&t.element_type),
+        Type::Term(t) => contains_rec(&t.payload),
+        Type::Enum(e) => e.variants.iter().any(|v| v.payload.as_deref().is_some_and(contains_rec)),
+        Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16 | Type::U32 | Type::I32
+        | Type::U64 | Type::I64 | Type::Index | Type::Offset | Type::F32 | Type::F64
+        | Type::Int | Type::String | Type::Data | Type::Error | Type::Atom(_) | Type::Var(_) => false,
+    }
+}
+
+/// A type with any `rec` at its head unfolded, so that its head is what a
+/// value of it is made of. Every place that takes a value apart by its type
+/// looks through this.
+pub fn expose<'t, 'db>(ty: &'t Type<'db>) -> Cow<'t, Type<'db>> {
+    match ty {
+        Type::Rec(r) => {
+            let mut unfolded = r.unfold();
+            while let Type::Rec(inner) = unfolded {
+                unfolded = inner.unfold();
+            }
+            Cow::Owned(unfolded)
+        }
+        _ => Cow::Borrowed(ty),
+    }
+}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
@@ -166,6 +284,15 @@ pub enum TypeError {
     IntOutOfRange,
     VariantNotFound(String),
     ArityMismatch { expected: usize, actual: usize },
+    /// A `rec` whose name its body never uses.
+    RecUnused(String),
+    /// A `rec` name that is already the name of an enclosing `rec`.
+    RecShadowed(String),
+    /// A use of a `rec` name with no collection between it and its binder,
+    /// which would make the type infinitely large.
+    RecUnguarded(String),
+    /// A recursive type in a map's key or a set's element.
+    RecInKey(String),
 }
 
 impl std::fmt::Display for TypeError {
@@ -181,6 +308,10 @@ impl std::fmt::Display for TypeError {
             TypeError::IntOutOfRange => write!(f, "integer literal out of range for its type"),
             TypeError::VariantNotFound(name) => write!(f, "no variant `{name}`"),
             TypeError::ArityMismatch { expected, actual } => write!(f, "expected {expected} elements, found {actual}"),
+            TypeError::RecUnused(name) => write!(f, "`rec {name}` never uses `{name}`"),
+            TypeError::RecShadowed(name) => write!(f, "`{name}` already names an enclosing recursive type"),
+            TypeError::RecUnguarded(name) => write!(f, "`{name}` recurs without a collection between it and its `rec`"),
+            TypeError::RecInKey(name) => write!(f, "the recursive type `{name}` is a map's key or a set's element"),
         }
     }
 }
@@ -263,6 +394,11 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         // parameter. Nothing else is equivalent to one.
         (Type::Var(a), Type::Var(b)) => a == b,
         (Type::Error, Type::Error) => true,
+
+        // The names are not compared: a de Bruijn index says which binder a
+        // use is of, so two bodies that agree are the same type.
+        (Type::Rec(r1), Type::Rec(r2)) => types_equivalent(db, &r1.body, &r2.body),
+        (Type::RecVar(a), Type::RecVar(b)) => a == b,
 
         (Type::AnonTuple(t1), Type::AnonTuple(t2)) => {
             let f1 = t1.fields.C();
@@ -400,6 +536,86 @@ pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,
     type_hint: &TypeHint<'db>,
 ) -> Result<Type<'db>, TypeError> {
+    convert_in(db, type_hint, &mut RecScope::default())
+}
+
+/// The `rec` binders around a part of a hint being converted, and what is
+/// between them and it.
+#[derive(Default)]
+pub struct RecScope<'db> {
+    /// Innermost last.
+    binders: Vec<RecBinder<'db>>,
+    /// How many collections the part is inside.
+    collections: u32,
+    /// Whether the part is in a map's key or a set's element.
+    in_key: bool,
+}
+
+struct RecBinder<'db> {
+    name: InternedText<'db>,
+    /// `RecScope::collections` at the binder.
+    collections: u32,
+    used: bool,
+}
+
+impl<'db> RecScope<'db> {
+    /// Enter the body of `rec name`.
+    pub fn bind(&mut self, db: &'db dyn crate::Db, name: InternedText<'db>) -> Result<(), TypeError> {
+        let text = || name.as_str(db).to_string();
+        if self.in_key {
+            return Err(TypeError::RecInKey(text()));
+        }
+        if self.binders.iter().any(|b| b.name == name) {
+            return Err(TypeError::RecShadowed(text()));
+        }
+        self.binders.push(RecBinder { name, collections: self.collections, used: false });
+        Ok(())
+    }
+
+    /// Leave the body of the innermost `rec`.
+    pub fn unbind(&mut self, db: &'db dyn crate::Db) -> Result<(), TypeError> {
+        let binder = self.binders.pop().expect("unbind follows bind");
+        if !binder.used {
+            return Err(TypeError::RecUnused(binder.name.as_str(db).to_string()));
+        }
+        Ok(())
+    }
+
+    /// The use of a `rec` name, if `name` is one in scope.
+    pub fn lookup(&mut self, db: &'db dyn crate::Db, name: InternedText<'db>) -> Option<Result<Type<'db>, TypeError>> {
+        let depth = self.binders.iter().rev().position(|b| b.name == name)?;
+        let collections = self.collections;
+        let in_key = self.in_key;
+        let binder = self.binders.iter_mut().rev().nth(depth).expect("found above");
+        binder.used = true;
+        let text = || name.as_str(db).to_string();
+        Some(if in_key {
+            Err(TypeError::RecInKey(text()))
+        } else if collections <= binder.collections {
+            Err(TypeError::RecUnguarded(text()))
+        } else {
+            Ok(Type::RecVar(depth as u32))
+        })
+    }
+
+    /// Run `f` inside a collection, and inside a key or element that is
+    /// ordered if `key`.
+    pub fn collection<T>(&mut self, key: bool, f: impl FnOnce(&mut Self) -> T) -> T {
+        let was_in_key = self.in_key;
+        self.collections += 1;
+        self.in_key |= key;
+        let result = f(self);
+        self.collections -= 1;
+        self.in_key = was_in_key;
+        result
+    }
+}
+
+fn convert_in<'db>(
+    db: &'db dyn crate::Db,
+    type_hint: &TypeHint<'db>,
+    scope: &mut RecScope<'db>,
+) -> Result<Type<'db>, TypeError> {
     let ty = match type_hint {
         TypeHint::Bool => Type::Bool,
         TypeHint::U8 => Type::U8,
@@ -423,7 +639,7 @@ pub fn convert_type_hint<'db>(
             let fields: Result<Vec<_>, _> = t
                 .fields
                 .iter()
-                .map(|f| convert_type_hint(db, f))
+                .map(|f| convert_in(db, f, scope))
                 .collect();
             Type::AnonTuple(TypeAnonTuple { fields: fields? })
         }
@@ -434,7 +650,7 @@ pub fn convert_type_hint<'db>(
                 .iter()
                 .map(|f| {
                     let name = f.name;
-                    let ty = convert_type_hint(db, &f.type_hint)?;
+                    let ty = convert_in(db, &f.type_hint, scope)?;
                     Ok(TypeNamedField { name, ty: Box::new(ty) })
                 })
                 .collect();
@@ -443,33 +659,33 @@ pub fn convert_type_hint<'db>(
 
 
         TypeHint::List(l) => {
-            let element_type = convert_type_hint(db, &l.element_type)?;
+            let element_type = scope.collection(false, |scope| convert_in(db, &l.element_type, scope))?;
             Type::List(TypeList { element_type: Box::new(element_type) })
         }
 
         TypeHint::Map(m) => {
-            let key_type = convert_type_hint(db, &m.key_type)?;
-            let value_type = convert_type_hint(db, &m.value_type)?;
+            let key_type = scope.collection(true, |scope| convert_in(db, &m.key_type, scope))?;
+            let value_type = scope.collection(false, |scope| convert_in(db, &m.value_type, scope))?;
             Type::Map(TypeMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
         }
 
         TypeHint::Set(s) => {
-            let element_type = convert_type_hint(db, &s.element_type)?;
+            let element_type = scope.collection(true, |scope| convert_in(db, &s.element_type, scope))?;
             Type::Set(TypeSet { element_type: Box::new(element_type) })
         }
 
         TypeHint::Option(o) => {
-            let inner_type = convert_type_hint(db, &o.inner_type)?;
+            let inner_type = convert_in(db, &o.inner_type, scope)?;
             Type::Option(TypeOption { inner_type: Box::new(inner_type) })
         }
 
         TypeHint::Result(r) => {
-            let inner_type = convert_type_hint(db, &r.inner_type)?;
+            let inner_type = convert_in(db, &r.inner_type, scope)?;
             Type::Result(TypeResult { inner_type: Box::new(inner_type) })
         }
 
         TypeHint::Tensor(t) => {
-            let element_type = convert_type_hint(db, &t.element_type)?;
+            let element_type = scope.collection(false, |scope| convert_in(db, &t.element_type, scope))?;
             Type::Tensor(TypeTensor { element_type: Box::new(element_type), rank: t.rank })
         }
 
@@ -479,7 +695,7 @@ pub fn convert_type_hint<'db>(
                 .iter()
                 .map(|c| {
                     let name = c.name;
-                    let ty = convert_type_hint(db, &c.type_hint)?;
+                    let ty = scope.collection(false, |scope| convert_in(db, &c.type_hint, scope))?;
                     Ok(TypeNamedField { name, ty: Box::new(ty) })
                 })
                 .collect();
@@ -491,7 +707,7 @@ pub fn convert_type_hint<'db>(
         }
 
         TypeHint::Term(t) => {
-            let payload = convert_type_hint(db, &t.payload)?;
+            let payload = convert_in(db, &t.payload, scope)?;
             Type::Term(TypeTerm { name: t.name, payload: Box::new(payload) })
         }
 
@@ -499,7 +715,7 @@ pub fn convert_type_hint<'db>(
             let variants: Result<Vec<_>, _> = e.variants.iter()
                 .map(|v| {
                     let payload = match &v.payload {
-                        Some(p) => Some(Box::new(convert_type_hint(db, p)?)),
+                        Some(p) => Some(Box::new(convert_in(db, p, scope)?)),
                         None => None,
                     };
                     Ok(TypeEnumVariant { name: v.name, payload })
@@ -510,11 +726,23 @@ pub fn convert_type_hint<'db>(
             Type::Enum(TypeEnum { variants })
         }
 
-        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
-        TypeHint::Alias(_) => {
-            // Type aliases are resolved by datafun typechecker, not datalit.
-            return Err(TypeError::CannotSynthesize);
+        TypeHint::Rec(r) => {
+            scope.bind(db, r.name)?;
+            let body = convert_in(db, &r.body, scope);
+            // What is wrong in the body is the thing to say, and a name it
+            // never reached is a consequence of it.
+            let unbound = scope.unbind(db);
+            let body = body?;
+            unbound?;
+            Type::Rec(TypeRec { name: RecName(r.name), body: Box::new(body) })
         }
+
+        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        TypeHint::Alias(alias) => match scope.lookup(db, alias.name) {
+            Some(use_) => use_?,
+            // Type aliases are resolved by datafun typechecker, not datalit.
+            None => return Err(TypeError::CannotSynthesize),
+        },
     };
 
     Ok(ty)
@@ -564,10 +792,24 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
 impl<'db> Type<'db> {
     /// This type, shaped as datalove writes it; see [`crate::type_syntax`].
     pub fn syntax(&self, db: &'db dyn crate::Db) -> TypeSyntax<'db> {
-        let boxed = |ty: &Type<'db>| Box::new(ty.syntax(db));
-        let fields = |fields: &[TypeNamedField<'db>]| fields.iter()
-            .map(|field| (Cow::Borrowed(field.name.as_str(db)), field.ty.syntax(db)))
-            .collect();
+        self.syntax_under(db, &mut Vec::new())
+    }
+
+    /// The syntax of a type under the `rec` binders named in `binders`,
+    /// innermost last.
+    fn syntax_under(&self, db: &'db dyn crate::Db, binders: &mut Vec<&'db str>) -> TypeSyntax<'db> {
+        fn boxed<'db>(ty: &Type<'db>, db: &'db dyn crate::Db, binders: &mut Vec<&'db str>) -> Box<TypeSyntax<'db>> {
+            Box::new(ty.syntax_under(db, binders))
+        }
+        fn fields<'db>(
+            fields: &[TypeNamedField<'db>],
+            db: &'db dyn crate::Db,
+            binders: &mut Vec<&'db str>,
+        ) -> Vec<(Cow<'db, str>, TypeSyntax<'db>)> {
+            fields.iter()
+                .map(|field| (Cow::Borrowed(field.name.as_str(db)), field.ty.syntax_under(db, binders)))
+                .collect()
+        }
         match self {
             Type::Bool => TypeSyntax::word("bool"),
             Type::U8 => TypeSyntax::word("u8"),
@@ -587,20 +829,35 @@ impl<'db> Type<'db> {
             Type::Data => TypeSyntax::word("data"),
             Type::Error => TypeSyntax::word("error"),
             Type::Var(name) => TypeSyntax::word(name.as_str(db)),
-            Type::AnonTuple(t) => TypeSyntax::Tuple(t.fields.iter().map(|f| f.syntax(db)).collect()),
-            Type::AnonStruct(s) => TypeSyntax::Struct(fields(&s.fields)),
-            Type::Table(t) => TypeSyntax::Table(fields(&t.columns)),
-            Type::List(l) => TypeSyntax::List(boxed(&l.element_type)),
-            Type::Set(s) => TypeSyntax::Set(boxed(&s.element_type)),
-            Type::Map(m) => TypeSyntax::Map(boxed(&m.key_type), boxed(&m.value_type)),
-            Type::Option(o) => TypeSyntax::Option(boxed(&o.inner_type)),
-            Type::Result(r) => TypeSyntax::Result(boxed(&r.inner_type)),
-            Type::Tensor(t) => TypeSyntax::Tensor(boxed(&t.element_type), t.rank),
+            Type::AnonTuple(t) => TypeSyntax::Tuple(t.fields.iter().map(|f| f.syntax_under(db, binders)).collect()),
+            Type::AnonStruct(s) => TypeSyntax::Struct(fields(&s.fields, db, binders)),
+            Type::Table(t) => TypeSyntax::Table(fields(&t.columns, db, binders)),
+            Type::List(l) => TypeSyntax::List(boxed(&l.element_type, db, binders)),
+            Type::Set(s) => TypeSyntax::Set(boxed(&s.element_type, db, binders)),
+            Type::Map(m) => {
+                let key = boxed(&m.key_type, db, binders);
+                TypeSyntax::Map(key, boxed(&m.value_type, db, binders))
+            }
+            Type::Option(o) => TypeSyntax::Option(boxed(&o.inner_type, db, binders)),
+            Type::Result(r) => TypeSyntax::Result(boxed(&r.inner_type, db, binders)),
+            Type::Tensor(t) => TypeSyntax::Tensor(boxed(&t.element_type, db, binders), t.rank),
             Type::Atom(a) => TypeSyntax::Atom(Cow::Borrowed(a.name.as_str(db))),
-            Type::Term(t) => TypeSyntax::Term(Cow::Borrowed(t.name.as_str(db)), boxed(&t.payload)),
+            Type::Term(t) => TypeSyntax::Term(Cow::Borrowed(t.name.as_str(db)), boxed(&t.payload, db, binders)),
             Type::Enum(e) => TypeSyntax::Enum(e.variants.iter()
-                .map(|v| (Cow::Borrowed(v.name.as_str(db)), v.payload.as_ref().map(|p| p.syntax(db))))
+                .map(|v| (Cow::Borrowed(v.name.as_str(db)), v.payload.as_ref().map(|p| p.syntax_under(db, binders))))
                 .collect()),
+            Type::Rec(r) => {
+                let name = r.name.0.as_str(db);
+                binders.push(name);
+                let body = boxed(&r.body, db, binders);
+                binders.pop();
+                TypeSyntax::Rec(Cow::Borrowed(name), body)
+            }
+            Type::RecVar(index) => {
+                let name = binders.iter().rev().nth(*index as usize)
+                    .expect("a rec name is used under its binder");
+                TypeSyntax::word(*name)
+            }
         }
     }
 }

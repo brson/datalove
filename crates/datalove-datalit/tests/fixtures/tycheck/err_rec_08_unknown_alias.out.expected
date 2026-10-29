@@ -1,0 +1,81 @@
+{
+  "ast": {
+    "expr": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "a",
+            "value": {
+              "expr": {
+                "List": {
+                  "elements": []
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
+    },
+    "type_hint": {
+      "Rec": {
+        "body": {
+          "AnonStruct": {
+            "fields": [
+              {
+                "name": "a",
+                "type_hint": {
+                  "List": {
+                    "element_type": {
+                      "Alias": "L"
+                    }
+                  }
+                }
+              },
+              {
+                "name": "b",
+                "type_hint": {
+                  "Alias": "Other"
+                }
+              }
+            ]
+          }
+        },
+        "name": "L"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T059",
+      "labels": [
+        {
+          "message": "not a type",
+          "span": [
+            0,
+            48
+          ],
+          "text": ": rec L { a: [L], b: Other } / { a = [], b = 1 }"
+        }
+      ],
+      "message": "unknown type `Other`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

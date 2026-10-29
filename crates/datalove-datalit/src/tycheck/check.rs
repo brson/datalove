@@ -40,7 +40,12 @@ pub fn check<'db>(
         }
     }
 
-    match (expr_inner, expected) {
+    // Rule: Check-Roll - a value of a recursive type is written as a value
+    // of the type's unfolding. What is reported is the type as it was
+    // expected, which is shorter.
+    let exposed = expose(expected);
+
+    match (expr_inner, exposed.as_ref()) {
         // Rule: Check-Group
         (Expr::Group(g), _) => check(ctx, &g.inner, expected),
 

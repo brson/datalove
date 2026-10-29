@@ -36,7 +36,13 @@ impl<'db> TypeContext<'db> {
     /// parser.
     pub fn convert_hint(&self, expr: &ExprFull<'db>, hint: &TypeHint<'db>) -> Result<Type<'db>, TypeError> {
         convert_type_hint(self.db, hint).map_err(|error| {
-            if let (Some(name), Some(ts)) = (first_alias(hint), self.get_span(expr)) {
+            if let Some(ts) = self.get_span(expr) {
+                if let Some(builder) = rec_diagnostic(self.db, &error, ts.clone()) {
+                    builder.emit_type();
+                    return error;
+                }
+            }
+            if let (Some(name), Some(ts)) = (first_alias(hint, &mut Vec::new()), self.get_span(expr)) {
                 let name = name.as_str(self.db);
                 let mut builder = DiagnosticBuilder::error(self.db, &rmx::std::format!("unknown type `{name}`"))
                     .code("T059")
@@ -58,21 +64,47 @@ impl<'db> TypeContext<'db> {
     }
 }
 
-/// The first bare name in a type hint, if it has one.
-fn first_alias<'db>(hint: &TypeHint<'db>) -> Option<InternedText<'db>> {
+/// The diagnostic for a malformed recursive type, if the error is one.
+///
+/// The span is the expression's: datalit keeps no spans for the names in a
+/// hint.
+pub fn rec_diagnostic<'db>(db: &'db dyn crate::Db, error: &TypeError, ts: TextSpan) -> Option<DiagnosticBuilder<'db>> {
+    let (code, label, note) = match error {
+        TypeError::RecUnused(_) => ("T062", "never uses its name", "a `rec` type is one whose body names it; without a use, write the body alone"),
+        TypeError::RecShadowed(_) => ("T063", "the name is taken", "a `rec` inside another takes a name of its own"),
+        TypeError::RecUnguarded(_) => ("T064", "recurs inline", "a recursive type recurs inside a list, map, set or table, so that its values have a size"),
+        TypeError::RecInKey(_) => ("T065", "recursive type in a key", "a map's key or a set's element cannot be a recursive type"),
+        _ => return None,
+    };
+    Some(DiagnosticBuilder::error(db, &rmx::std::format!("{error}"))
+        .code(code)
+        .primary_label(ts, label)
+        .note(note))
+}
+
+/// The first bare name in a type hint that no `rec` around it binds, if it
+/// has one.
+fn first_alias<'db>(hint: &TypeHint<'db>, bound: &mut Vec<InternedText<'db>>) -> Option<InternedText<'db>> {
     match hint {
+        TypeHint::Alias(alias) if bound.contains(&alias.name) => None,
         TypeHint::Alias(alias) => Some(alias.name),
-        TypeHint::AnonTuple(t) => t.fields.iter().find_map(first_alias),
-        TypeHint::AnonStruct(s) => s.fields.iter().find_map(|f| first_alias(&f.type_hint)),
-        TypeHint::Table(t) => t.columns.iter().find_map(|c| first_alias(&c.type_hint)),
-        TypeHint::List(l) => first_alias(&l.element_type),
-        TypeHint::Set(s) => first_alias(&s.element_type),
-        TypeHint::Map(m) => first_alias(&m.key_type).or_else(|| first_alias(&m.value_type)),
-        TypeHint::Option(o) => first_alias(&o.inner_type),
-        TypeHint::Result(r) => first_alias(&r.inner_type),
-        TypeHint::Tensor(t) => first_alias(&t.element_type),
-        TypeHint::Term(t) => first_alias(&t.payload),
-        TypeHint::Enum(e) => e.variants.iter().find_map(|v| v.payload.as_deref().and_then(first_alias)),
+        TypeHint::Rec(r) => {
+            bound.push(r.name);
+            let found = first_alias(&r.body, bound);
+            bound.pop();
+            found
+        }
+        TypeHint::AnonTuple(t) => t.fields.iter().find_map(|f| first_alias(f, bound)),
+        TypeHint::AnonStruct(s) => s.fields.iter().find_map(|f| first_alias(&f.type_hint, bound)),
+        TypeHint::Table(t) => t.columns.iter().find_map(|c| first_alias(&c.type_hint, bound)),
+        TypeHint::List(l) => first_alias(&l.element_type, bound),
+        TypeHint::Set(s) => first_alias(&s.element_type, bound),
+        TypeHint::Map(m) => first_alias(&m.key_type, bound).or_else(|| first_alias(&m.value_type, bound)),
+        TypeHint::Option(o) => first_alias(&o.inner_type, bound),
+        TypeHint::Result(r) => first_alias(&r.inner_type, bound),
+        TypeHint::Tensor(t) => first_alias(&t.element_type, bound),
+        TypeHint::Term(t) => first_alias(&t.payload, bound),
+        TypeHint::Enum(e) => e.variants.iter().find_map(|v| v.payload.as_deref().and_then(|p| first_alias(p, bound))),
         _ => None,
     }
 }

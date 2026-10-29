@@ -1,0 +1,11 @@
+// Datalit has recursive types and Datafun does not yet, so data of one is
+// refused at the `require` (F090), with a type declared or without.
+----------
+data local/app/tree
+----------
+: rec Node { name: string, kids: [Node] } / { name = "root", kids = [{ name = "a", kids = [] }] }
+----------
+scriptunit-fragment
+----------
+
+require data local/app/tree

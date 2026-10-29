@@ -1,0 +1,1 @@
+: rec L { elt: int, next: [L] } / { elt = 1, next = [: rec M { elt: int, next: [M] } / { elt = 2, next = [] }] }

@@ -162,11 +162,13 @@ pub fn substitute_type_params<'db>(
                 .collect(),
         }),
 
+        Type::Rec(t) => Type::Rec(datalit::tycheck::TypeRec { name: t.name, body: sub(&t.body) }),
+
         Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16
         | Type::U32 | Type::I32 | Type::U64 | Type::I64
         | Type::Index | Type::Offset | Type::F32 | Type::F64
         | Type::Int | Type::String | Type::Data | Type::Error
-        | Type::Atom(_) => ty.clone(),
+        | Type::Atom(_) | Type::RecVar(_) => ty.clone(),
     }
 }
 
@@ -194,12 +196,13 @@ pub fn contains_type_param(ty: &Type<'_>) -> bool {
         Type::Enum(t) => t.variants.iter().any(|v| {
             v.payload.as_ref().is_some_and(|p| contains_type_param(p))
         }),
+        Type::Rec(t) => contains_type_param(&t.body),
 
         Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16
         | Type::U32 | Type::I32 | Type::U64 | Type::I64
         | Type::Index | Type::Offset | Type::F32 | Type::F64
         | Type::Int | Type::String | Type::Data | Type::Error
-        | Type::Atom(_) => false,
+        | Type::Atom(_) | Type::RecVar(_) => false,
     }
 }
 
@@ -229,12 +232,13 @@ pub fn mentions_type_param<'db>(ty: &Type<'db>, name: InternedText<'db>) -> bool
         Type::Enum(t) => t.variants.iter().any(|v| {
             v.payload.as_ref().is_some_and(|p| mentions_type_param(p, name))
         }),
+        Type::Rec(t) => mentions_type_param(&t.body, name),
 
         Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16
         | Type::U32 | Type::I32 | Type::U64 | Type::I64
         | Type::Index | Type::Offset | Type::F32 | Type::F64
         | Type::Int | Type::String | Type::Data | Type::Error
-        | Type::Atom(_) => false,
+        | Type::Atom(_) | Type::RecVar(_) => false,
     }
 }
 
