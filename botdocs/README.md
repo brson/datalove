@@ -56,6 +56,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [A Plain-Data AST](plan-plain-ast.md)
 - [Parsing Large Collection Literals in Parallel](plan-parallel-collections.md)
 - [Lexical Scope at the Top Level](plan-lexical-scope.md)
+- [Recursive Structural Types](plan-recursive-types.md)
 - [Carry/Bring](carry-bring.md)
 
 ---

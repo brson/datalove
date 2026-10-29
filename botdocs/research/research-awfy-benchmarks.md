@@ -281,11 +281,14 @@ divisor would remove.
 
 Modest, in the order they unlock the most:
 
-1. **Recursive types, owned.** A type that contains itself through a list or an
-   option (`type Node: { v: u32, next: ?Node }`), boxed behind the scenes:
-   List, Storage and Json's tree port directly, and Towers' disks need no
-   arena. Owned recursion only: it does not give the shared references DeltaBlue
-   and CD need.
+1. **Recursive types, owned.** A type that contains itself through a
+   collection, as designed in [Recursive Structural Types](../plan-recursive-types.md):
+   `rec E { v: u32, next: [E] }`, with no `?Node` and no hidden box. Storage
+   and Json's tree port directly, and Towers' disks need no arena. List's type
+   ports, but `tail` shares sublists, so an owned port clones 16,451 nodes to
+   AWFY's 31 unless results become indices into the originals. Owned recursion
+   only: it does not give the shared references DeltaBlue and CD need. Reading
+   Json's tree in place also needs a borrowing `match`.
 2. **A monotonic clock** in `sys/std`, a native returning nanoseconds. AWFY's
    harness times each iteration in one process, which is how steady-state
    performance is measured once warmup is over; `benchvs` times whole
