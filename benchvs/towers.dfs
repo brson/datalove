@@ -1,0 +1,95 @@
+// Towers benchmark - the towers of Hanoi with each pile a linked list of
+// disks, moving 13 disks many times over. From Are We Fast Yet
+// (github.com/smarr/are-we-fast-yet), whose Towers makes 8191 moves each
+// time.
+//
+// A disk links to the one under it through a list of at most one, which is
+// how a recursive type holds an optional part. A move swaps the lists'
+// buffers rather than building new ones, so after the piles are built a move
+// allocates nothing.
+//
+// Prints the sum of the moves.
+
+require module sys/std/list
+require module sys/std/mem
+require module sys/std/u32
+
+const ITERATIONS: u32 = 9000
+
+type Disk: rec D { size: u32, next: [D] }
+
+// The size of the disk on top of a pile, if it has one.
+fun top_size(ref pile: [Disk]): ?u32
+  ret some pile[(: index / 0)]?.size
+end fun
+
+fun push_disk(mut piles: [[Disk]], pile: index, disk: Disk): !()
+  if top_size(ref piles[pile]!) |top|
+    if disk.size >= top
+      ret er error "Cannot put a big disk on a smaller one"
+    end if
+  end if
+  var d = disk
+  call mem.swap(mut d.next, mut piles[pile]!)
+  call list.push(mut piles[pile]!, d)
+  ret ok ()
+end fun
+
+fun pop_disk_from(mut piles: [[Disk]], pile: index): !Disk
+  if list.pop(mut piles[pile]!) |top|
+    var d = top
+    call mem.swap(mut piles[pile]!, mut d.next)
+    ret ok d
+  end if
+  ret er error "Attempting to remove a disk from an empty pile"
+end fun
+
+fun move_top_disk(mut piles: [[Disk]], from: index, to: index, mut moves: u32): !()
+  let d = pop_disk_from(mut piles, from)!
+  call push_disk(mut piles, to, d)!
+  set moves = u32.add_wrapping(moves, 1)
+  ret ok ()
+end fun
+
+fun move_disks(mut piles: [[Disk]], disks: u32, from: index, to: index, mut moves: u32): !()
+  if disks == 1
+    ret move_top_disk(mut piles, from, to, mut moves)
+  end if
+  let other = (3 -! from) -! to
+  call move_disks(mut piles, u32.sub_wrapping(disks, 1), from, other, mut moves)!
+  call move_top_disk(mut piles, from, to, mut moves)!
+  call move_disks(mut piles, u32.sub_wrapping(disks, 1), other, to, mut moves)!
+  ret ok ()
+end fun
+
+fun benchmark(): !u32
+  var piles: [[Disk]] = [[], [], []]
+  var size: u32 = 13
+  loop
+    call push_disk(mut piles, 0, { size = size, next = [] })!
+    if size == 0
+      break
+    end if
+    set size = u32.sub_wrapping(size, 1)
+  end loop
+  var moves: u32 = 0
+  call move_disks(mut piles, 13, 0, 1, mut moves)!
+  ret ok moves
+end fun
+
+fun run(): !u32
+  var total: u32 = 0
+  var n: u32 = 0
+  loop while n .< ITERATIONS
+    set total = u32.add_wrapping(total, benchmark()!)
+    set n = u32.add_wrapping(n, 1)
+  end loop
+  ret ok total
+end fun
+
+let result = run()
+if result |value|
+  debuglog(value)
+else |err|
+  debuglog(false)
+end if

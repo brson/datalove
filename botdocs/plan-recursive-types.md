@@ -605,12 +605,17 @@ question; the questions are under
 
 **The benchmarks**
 
-- Storage, Json and Towers are not in `benchvs`. Storage's and Towers'
-  shapes are `crates/datalove-cli/tests/fixtures/backend/37_recursive_types.dfs`;
-  Json also needs AWFY's string parser.
-- Towers' allocation-free moves assume `list.pop` leaves the emptied list its
-  buffer. The fixture's output is right either way, so whether a move
-  allocates is unchecked.
+- Storage, Json and Towers are in `benchvs`; the timings and profiles are in
+  [the AWFY survey](research/research-awfy-benchmarks.md#user-content-storage-towers-and-json).
+  Compiled, Datalove is 10.6x Java on Storage, 13.7x on Towers and faster than
+  Java on Json. None of it is the cost of recursive types themselves: it is
+  dropping trees value by value, generic `list.push`, small copies through
+  libc, and enum layouts computed per value.
+- Storage is written as a struct of its children rather than AWFY's array of
+  arrays, because rolling a built list with `@` copies it; the direct shape is
+  3.9x slower. This is the strongest case for unrolling at arguments.
+- List is not ported, and the choice between cloning and `(which, skip)`
+  handles is open.
 
 ## Phases
 

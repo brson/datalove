@@ -65,7 +65,7 @@ recursion (Permute's 8660 came out right), and walking an arena list linked by
 | Permute | 64 | Recursion through a `mut` list, swaps | Probed: gives 8660 |
 | Queens | 87 | Backtracking recursion over `mut` `[bool]`s | Like Permute |
 | Bounce | 89 | Structs in a list, branches, AWFY's `Random` | `Random` is a 16-bit LCG, a few lines |
-| Towers | 96 | Stacks pushed and popped in a recursion | Disks as an arena linked by `?index` keeps AWFY's shape; three `[u32]` stacks would be simpler but not the same benchmark |
+| Towers | 96 | Stacks pushed and popped in a recursion | Ported, with recursive types; see [Storage, Towers and Json](#user-content-storage-towers-and-json) |
 
 These are AWFY's micro benchmarks. Several are sized by AWFY's inner
 iterations to run for microseconds, so for `benchvs`'s whole-process timing
@@ -79,7 +79,7 @@ arena for every object graph and an enum for every class hierarchy.
 |---|---|---|---|
 | Richards | 438 | Application-shaped: a scheduler over tasks and packets, branchy, optional links, struct mutation | Tasks and packets in arenas linked by `?index`; the four task kinds' closures become an enum matched per step. The canonical macro benchmark |
 | Havlak | 663 | Collections in a real algorithm: lists, sets and maps of node numbers, union-find, many allocations | Blocks are already numbered, so the graph is indices by nature; `forEach` closures become loops. Exercises the runtime library the store demo's profile found to be the bottleneck |
-| Json | 563 | Parsing a string byte by byte, building a tree | The parser ports directly over `string.get_byte`; the tree of values is recursive, so it becomes an arena of nodes holding child indices |
+| Json | 563 | Parsing a string byte by byte, building a tree | Ported, with recursive types; see [Storage, Towers and Json](#user-content-storage-towers-and-json) |
 
 **Waiting on a language feature.** Porting these now would change what they
 measure.
@@ -87,7 +87,6 @@ measure.
 | Bench | Needs | Why |
 |---|---|---|
 | List | Recursive types | It builds linked lists recursively and recurses down them; over an arena it becomes index chasing |
-| Storage | Recursive types, or values taken back out of `data` | A tree of arrays nested seven deep, as an allocation benchmark; there is no type for it, and `data`, which could hold one, cannot be read back (`issues.md`, "Nothing takes a value back out of data or error") |
 | DeltaBlue | Objects, or a large arena rewrite | A constraint graph of variables and constraints pointing at each other, over a six-way class hierarchy; as arenas and enums it would be a different program |
 | CD | Objects, or a large arena rewrite | A red-black tree with parent links, plus vector arithmetic; 854 lines, the largest |
 
@@ -137,6 +136,71 @@ And why, from a profile of each:
   waiting for. (Fixed: OSR now enters an inner loop, carrying what the outer
   one makes as a variable; tiered runs in 537 ms, the same as compiling
   everything first.)
+
+## Storage, Towers and Json
+
+The three benchmarks recursive types opened ([Recursive Structural
+Types](../plan-recursive-types.md)) are in `benchvs` (October 2026), in the
+same five languages, at sizes where the fastest implementation takes about
+half a second: Storage 8000 times (5461 nodes each), Towers 9000 (8191 moves)
+and Json 2000 (156 operations). Java, JavaScript and Python follow AWFY's;
+Julia's is written to match. All eight implementations print the same totals.
+
+| Bench | interp | JIT | AOT | Python | Julia | Java | V8 |
+|---|---|---|---|---|---|---|---|
+| Storage (x8000) | 11245 | 3876 | 3704 | 7154 | 909 | 351 | 353 |
+| Towers (x9000) | 28544 | 3775 | 3691 | 11350 | 557 | 269 | 480 |
+| Json (x2000) | 10685 | 1021 | 967 | 10094 | 741 | 1107 | 538 |
+
+Times in ms, mean of at least three. Compiled Datalove is 10.6x Java on
+Storage, 13.7x on Towers, and 0.87x on Json, where it beats Java and is 1.8x
+V8. The JIT compiling everything first (`--jit-threshold 1`) is within a few
+percent of tiered in each. From a profile of each AOT executable:
+
+- **Storage, 10.6x Java: dropping and pushing.** A quarter of the run is the
+  runtime's generic destroy walking each tree when it goes out of scope;
+  Java's collector frees the tree in bulk. Another 29% is `list.push`: the
+  generic `sys/std` wrapper (13%) and the runtime's push behind it (16%), a
+  call and a descriptor per element where AWFY's `new Object[4]` is one
+  allocation. The leaves push 1 to 10 `none`s one at a time; there is no
+  `list.repeated` without a clone per element, which would not help.
+- **Towers, 13.7x Java: small copies through libc.** A third of the run is in
+  libc, which is `memcpy` of 8 to 24 bytes and `memset` of 1 to 24, called
+  from the generated `push_disk` and its neighbours: moving a `Disk`, its
+  list header and a pile's slot around is a library call each time rather
+  than a few loads and stores. The fills are of 0 and of 255. The move
+  functions themselves are the rest, with `mem.swap` (6%) and `list.push` and
+  `list.pop` (10%) calls. A move allocates nothing once the piles are built:
+  the allocator does not appear in the profile, so `list.pop` keeps the
+  buffer it empties, which the port's buffer swapping relies on.
+- **Json, 0.87x Java: enum layouts recomputed.** The runtime computes an
+  enum's layout again each time it destroys or clones a value of it
+  (`compute_enum_layout`, 12% counting what it calls), where the descriptor
+  could carry the variant offsets. The parser's own reading is the next
+  largest part. A first version of the port was 30% slower: `match` consumes
+  what it takes apart, so reading two fields out of the parsed object cloned
+  the whole value list; the port now finds both by reference and moves the
+  two values out.
+
+What the ports had to work around, which is the language rather than the
+backends:
+
+- **Storage's tree is a struct of its children,** `rec T { kids: [?T] }`, not
+  AWFY's array of arrays, `rec T [?T]`. A list built with `list.push` becomes
+  the recursive type only by `@`, which copies it, so at every level the whole
+  subtree is copied: written that way Storage runs in 14.3 s AOT, 3.9x the
+  struct's 3.6 s. Unrolling a value passed to a parameter of its unfolding's
+  type, or a roll that moves, would make the direct shape free.
+- **Remainders are fallible.** `u32.rem_checked` and `div_wrapping` return an
+  option even for a constant divisor, and `!` does not unwrap an option in a
+  function returning a result, so Storage has a `rem10` helper with an `if`
+  binding.
+- **Reading a part of a recursive enum moves the whole.** `match` consumes,
+  so a check that reads two values out of a parsed object either clones or
+  moves them out; a borrowing `match` would read them in place.
+- **Comparing a field of a list element reads it out.** Towers' bigger-disk
+  check goes through a helper taking the pile by `ref`, since `piles[p]![0]?`
+  would move the disk.
 
 ## A generics benchmark of our own
 
