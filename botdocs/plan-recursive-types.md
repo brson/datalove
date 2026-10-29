@@ -4,13 +4,15 @@ A design for recursive types in datalit and Datafun: an inline `rec` binder,
 iso-recursive semantics, and recursion that must pass through a collection
 rather than a box. Written October 2026 in response to
 `mandocs/drafts/recursive-structural-types.md`; not implemented. Checked on
-paper against the AWFY benchmarks that need recursive data. The back-end
-consequences are inferred from reading the code, not tested.
+paper against the AWFY benchmarks that need recursive data. The decisions
+for a first cut are in [Decisions](#user-content-decisions); datalit is
+implemented first, then Datafun.
 
 ## Contents
 
 - [The problem](#user-content-the-problem)
 - [The design in brief](#user-content-the-design-in-brief)
+- [Decisions](#user-content-decisions)
 - [Syntax](#user-content-syntax)
 - [The guard rule](#user-content-the-guard-rule)
 - [What no box costs](#user-content-what-no-box-costs)
@@ -18,6 +20,7 @@ consequences are inferred from reading the code, not tested.
 - [The type checker](#user-content-the-type-checker)
 - [Borrowing match](#user-content-borrowing-match)
 - [Runtime and backends](#user-content-runtime-and-backends)
+- [The IR and the backends](#user-content-the-ir-and-the-backends)
 - [Against the AWFY benchmarks](#user-content-against-the-awfy-benchmarks)
 - [Prior art](#user-content-prior-art)
 - [What exists, what is missing](#user-content-what-exists-what-is-missing)
@@ -50,6 +53,24 @@ no-ops at run time, though, and the checker inserts them, so a literal never
 mentions them. Internally the binder becomes a de Bruijn index. Type equality
 then remains the derived `PartialEq`, and salsa hashing is unaffected.
 
+## Decisions
+
+Settled before implementation, October 2026:
+
+- **The keyword is `rec`.**
+- **The binder name is kept** in a field that equality and hashing ignore,
+  and a diagnostic may show a stale name after salsa backdates a memo.
+- **The first cut is limited.** Lifting any of these limits later breaks
+  nothing:
+  - no recursion in a map's key or a set's element;
+  - no type parameter inside a `rec` body, so no generic `rec` types;
+  - no recursion groups, though one binder may nest inside another;
+  - no `rec` type across the native rider boundary.
+- **Borrowing `match` is deferred.** Recursive enums can be built and
+  consumed, but not read in place, until it lands.
+- **Datalit first.** It is self-contained and has no IR, so it proves the
+  checker design before Datafun takes it up.
+
 ## Syntax
 
 ```datalove
@@ -78,8 +99,7 @@ type Json: rec J enum {
 
 - `rec` starts a type, so it joins the "type alias, type parameter" row of
   the reserved-word table (botspec Section 2.1). The parser recognizes it by
-  the word alone, as that section requires. `recursive` would suit the
-  keyword-heavy style just as well.
+  the word alone, as that section requires.
 - `type Json: rec J ...` is an ordinary alias whose value is a `rec` type.
   A self-referencing alias without `rec` stays F064. A later ergonomic mode
   could desugar it.
@@ -219,12 +239,11 @@ and an audit of the elimination sites.
 
 ## Borrowing match
 
-`match` consumes its input (botspec Section 8.8). A recursive struct can be
+Deferred ([Decisions](#user-content-decisions)). `match` consumes its input (botspec Section 8.8). A recursive struct can be
 read without moving it, because a field projection is a borrow:
 `f(ref n.kids[0]?)`. A recursive enum cannot. Reading a `Json` or an AST
 means moving the value or cloning every level, so recursive enums can be
-built but not read in place. This plan therefore includes a borrowing
-`match`:
+built but not read in place. A borrowing `match` would fix that:
 
 ```datalove
 match ref v
@@ -246,7 +265,7 @@ them. Recursive enums are what make it necessary.
 
 ## Runtime and backends
 
-None of this has been checked against the code beyond reading `TyDesc`.
+These come from reading the code; none of them has been tried yet.
 
 - **Descriptors become cyclic.** A `rec` type's `TyDesc` points to itself
   through the collection's element descriptor. `TyDesc` children are raw
@@ -256,7 +275,8 @@ None of this has been checked against the code beyond reading `TyDesc`.
 - **Walkers over types must stop at collections.** `is_plain` and
   `computed_flags` are examples. The guard rule makes stopping there correct,
   since every cycle passes through a collection and a collection is never
-  plain. Whether `is_plain` already stops at lists is not yet known.
+  plain. `is_plain` already returns `false` at a list, map or set without
+  descending (`crates/datalove-rtdt/src/lib.rs`), so it needs no change.
 - **Generated per-type glue must be memoized.** Any backend that emits drop,
   clone, equality or print code by recursing over a type needs to memoize on
   `Rec`, so that the generated functions call each other instead of expanding
@@ -268,6 +288,31 @@ None of this has been checked against the code beyond reading `TyDesc`.
   rose trees will reach it less often than cons lists will. The AWFY
   benchmarks never recurse more than 15 deep, so they will not catch it. It
   needs its own test.
+
+## The IR and the backends
+
+The type checker is the smaller part of the work. Behind it:
+
+- **`IrType` is a second type tree.** `crates/datalove-datafun-ir/src/lib.rs`
+  mirrors the checker's `Type` with boxed children. Lowering a `rec` type into
+  today's `IrType` would never terminate, so `IrType` needs its own `Rec` and
+  `RecVar` and its own `expose`. That reaches every IR consumer: the passes,
+  ownership, layout, monomorphization, the interpreter, ctfe, Cranelift and
+  C AOT. A rough count of matches on aggregate variants is 41 in the IR crate,
+  36 in `crates/datalove-datafun-common/src/generics.rs`, about 40 in the
+  Datafun checker and about 70 in datalit, plus the backends.
+- **Descriptor builders memoize too late.** `TydescTable::get_or_create`
+  (`crates/datalove-datalit/src/tydesc_table.rs`) inserts into its cache after
+  `create_tydesc` returns, so a recursive type would recurse before the entry
+  exists. The Cranelift emitter (`tydesc_emit.rs`) and C AOT's
+  `collect_type_recursive` and `type_depth` have the same shape. Each needs a
+  placeholder in its cache before it descends.
+- **C AOT orders its definitions by depth** (`type_depth`, sorted in
+  `crates/datalove-datafun-c-aot/src/lib.rs`). With cycles that becomes
+  forward declarations of the descriptors, then their definitions.
+- **Fat generics instantiate descriptors at run time** from templates. A
+  generic `rec` type would need the knot tied inside instantiation, which is
+  one reason the first cut refuses type parameters in `rec` bodies.
 
 ## Against the AWFY benchmarks
 
@@ -369,28 +414,29 @@ What is missing:
 - The `rec` syntax in both grammars.
 - The two `Type` variants, binder-aware hint conversion, the guard check,
   `expose`, and roll through `@`.
-- A borrowing `match ref` and `match mut`.
-- Knot-tying construction of descriptors, and memoized per-type glue in every
-  backend.
+- `Rec` and `RecVar` in `IrType`, with `expose` at every IR consumer.
+- Knot-tying construction of descriptors in all three builders, and memoized
+  per-type glue in every backend.
+- A borrowing `match ref` and `match mut`, deferred.
 - Some answer to drop, clone, equality and printing of deep values.
 
 ## Phases
 
-1. **Front end.** Parse `rec` in datalit and Datafun, convert hints to de
-   Bruijn form, and check guards and unused binders. Add tests that reject
-   each ill-formed example above.
-2. **Checking.** Roll in checking mode, add `expose` at every elimination
-   site, and roll through `@`. Write datalit tests for the rose tree, JSON and
-   list shapes, and Datafun tests that walk them.
-3. **Borrowing match.** `match ref` and `match mut`, with ownership rules
-   for the bindings. This phase is independent of the others and can land
-   first.
-4. **Runtime.** Knot-tied descriptors, and a check of the type walkers. Load
-   recursive datalit values with the runtime datalit loader.
-5. **Backends.** Memoized glue in the interpreter, the JIT and C AOT. Run the
-   engine tests on recursive values. Port Storage, Json and Towers to
-   `benchvs` as the first real programs.
-6. **Deep values.** Measure the depth at which drop and clone overflow, then
+1. **Datalit.** Parse `rec`, convert hints to de Bruijn form, and check
+   guards, unused binders, shadowing and the first-cut limits. Roll in
+   checking mode, `expose` at datalit's elimination sites, knot-tied
+   descriptors in `TydescTable`, and loading recursive values. Tests for the
+   rose tree, JSON and list shapes, and for each ill-formed example above.
+   Datafun refuses `rec` with a diagnostic until phase 2.
+2. **The Datafun checker.** `rec` in Datafun types, `expose` at its
+   elimination sites, and roll through `@`.
+3. **The IR.** `Rec` and `RecVar` in `IrType`, lowering, and `expose` in the
+   passes, ownership and layout.
+4. **Backends.** Knot-tied descriptors in Cranelift and C AOT, and memoized
+   glue in the interpreter, the JIT and C AOT. Run the engine tests on
+   recursive values. Port Storage, Json and Towers to `benchvs` as the first
+   real programs.
+5. **Deep values.** Measure the depth at which drop and clone overflow, then
    decide between explicit work stacks and a documented limit.
 
 ## Open questions
@@ -398,11 +444,11 @@ What is missing:
 - Is the loss of "at most one" and "exactly two" through `[_]` acceptable,
   or will the guard eventually need a slot of its own?
 - Does real data need mutual-recursion groups, or is nesting enough?
-- In diagnostics, should binder names live in a field that equality ignores
-  (and risk stale names after backdating), or be generated?
+- When does borrowing `match` land?
 - Does an emptied list keep its buffer through `list.pop`? Towers'
   allocation-free moves depend on it.
 - Should List be ported with cloning, which measures allocation, or with
   `(which, skip)` handles, which leaves recursive types little to do?
-- Should map keys and set elements be allowed to recurse? The values are
-  finite, so structural order is defined, but every comparison is deep.
+- Should map keys and set elements be allowed to recurse, once the first
+  cut is in? The values are finite, so structural order is defined, but every
+  comparison is deep.
