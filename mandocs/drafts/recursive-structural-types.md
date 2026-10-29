@@ -33,7 +33,8 @@ Here's a datalit struct that contains an empty struct field:
 
 ```datalove
 {
-  recursive: ?{ } // what goes here?
+  elt: int,
+  next: ?{ } // what goes here?
 }
 ```
 
@@ -41,8 +42,9 @@ If we were to solve this the obvious and easy way it might
 create an alias and use a hypothetical `box` type:
 
 ```datalove
-type Recursive: {
-  recursive: ?box Recursive
+type List: {
+  elt: int,
+  next: ?box List
 }
 ```
 
@@ -72,11 +74,14 @@ It keeps me from piling on features that can't be rationalized in both contexts.
 ## What would a type alias in a type hint look like?
 
 ```datalove
-: type Recursive: {
-  recursive: ?box Recursive
+: type List: {
+  elt: int,
+  next: ?box List
 } / {
-  recursive: some box {
-    recursive: none
+  elt = 1,
+  next = some box {
+    elt = 2,
+    next = none
   }
 }
 ```
@@ -93,11 +98,14 @@ and then immediately defines the type alias.
 Could change the type alias syntax to fix this.
 
 ```datalove
-: type Recursive {
-  recursive: box Recursive
+: type List {
+  elt: int,
+  next: ?box List
 } / {
-  recursive: some box {
-    recursive: none
+  elt = 1,
+  next = some box {
+    elt = 2,
+    next = none
   }
 }
 ```
@@ -105,11 +113,96 @@ Could change the type alias syntax to fix this.
 As a statement this weakens the policy of `:` always preceding types:
 
 ```datalove
-type Recursive {
-  recursive: box Recursive
+type List {
+  elt: int,
+  next: box List
 }
 ```
+
+But maybe that can be rationalized.
 
 
 ## How can we surface the recursive boxing withot a box type?
 
+Use `recursive` as a keyword to indicate
+the cycle and as the word that heapifies the inner value.
+
+```datalove
+: type List {
+  elt: int,
+  next: ?recursive List
+} / {
+  elt = 1
+  next = some recursive {
+    elt = 2,
+    next = none
+  }
+}
+```
+
+As statements:
+
+```datalove
+type List {
+  elt: int,
+  next: ?recursive List
+}
+
+let next: List = {
+  elt = 2,
+  next = none
+}
+
+let list: List = {
+  elt = 1,
+  next = some recursive next
+}
+```
+
+Using `recursive` to mean "put this on the heap
+and insert it into a slot representing a pointer
+to a recursive instance"...
+can this make sense with structural types?
+We have to structurally verify
+the outer type is a recursive type somehow.
+Definitely needs a checking context.
+
+Without an explicit `box` type that also
+suggests that moving the inner field between
+two nodes will unbox and rebox instead of
+just moving the pointer.
+Could maybe awkwardly work around that with memswap functions.
+
+## Can we avoid the type alias?
+
+```datalove
+: {
+  elt: int,
+  next: ?recursive 1 // the index of the type-context stack
+} / {
+  elt = 1
+  next = some recursive {
+    elt = 2,
+    next = none
+  }
+}
+```
+
+```datalove
+: {
+  elt: int,
+  inner: {
+    next: ?recursive 2 // 2 levels deep
+  }
+} / {
+  elt = 1
+  inner = {
+    next = some recursive {
+    elt = 2,
+      inner = {
+        next = none
+      }
+    }
+  }
+}
+```
