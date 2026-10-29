@@ -115,6 +115,14 @@ declared, and one it declares itself shadows them.
 Equivalence `T ≡ U` is datalit's, extended by `α ≡ α` and nothing else: a
 type parameter is equivalent only to itself.
 
+A recursive type `rec X T` is datalit's (see
+[the datalit typing rules](datalit-typing-rules.md)), well formed under the
+same conditions, T062 to T065, reported at the name they are about. Datafun
+adds one: no type parameter is inside a `rec` body (T066), so a recursive type
+is never generic. A `rec` name may not be the name of an alias or type
+parameter in scope either (T063). An alias may name a recursive type, and
+`type Json: rec J ...` is the usual way to write one.
+
 Several rules test a type against a class:
 
 | Class | Members |
@@ -124,8 +132,8 @@ Several rules test a type against a class:
 | `Num` | `Fix ∪ Float ∪ {int}` |
 | `Eq` | `Num`, `bool`, `string`, `atom a`; and `()`, tuples, structs, `?T`, `term a T` and enums whose components are all in `Eq` |
 
-`Eq` excludes lists, sets, maps, tables, tensors, results, `data`, `error`
-and type parameters, at any depth.
+`Eq` excludes lists, sets, maps, tables, tensors, results, `data`, `error`,
+type parameters and recursive types, at any depth.
 
 A type parameter is in a class only by its bound: `α ∈ Float` when
 `α :: float ∈ Γ`, and `α ∈ Fix` when `α :: fixedint ∈ Γ`. Where a rule
@@ -161,6 +169,13 @@ And for negation of anything under a float:
 ---------------------- (Check-Neg)
 Γ ⊢ -e ⇐ F
 ```
+
+`Check-Roll` holds for the literal forms only: a tuple, struct, list, set,
+map, tensor, table, `none`, `some`, `ok`, `er`, atom, term or enum literal
+checked against `rec X T` is checked against its unfolding, and is of the
+recursive type. Anything else checked against a recursive type, a variable or
+a call, is checked by subsumption, so a value of the unfolding is a mismatch
+there (F016) and `@` rolls it (see [Adapt](#user-content-adapt)).
 
 These make `let x: i32 = -5` and `let y: f32 = -1.5` check, and pass a
 float expected type through the sign, so with `x : f32`, `let y: f64 = -x@`
@@ -332,6 +347,8 @@ The postfix `@` clones, and converts where a type is expected. `T ⇝ U`, "a
 - `index ⇝ int`, `offset ⇝ int`, `f32 ⇝ f64`.
 - `atom a ⇝ E` when `atom a ∈ E`, and `term a T ⇝ E` when `term a T' ∈ E`
   with `T ≡ T'`.
+- `T ⇝ rec X U` when `T ≡ U[rec X U / X]`, the unfolding: a roll, which moves
+  nothing.
 
 Nothing else adapts. There is no narrowing, and no enum adapts to another.
 
@@ -424,6 +441,14 @@ mode markers (F057). An unknown intrinsic or wrong argument count is F011.
 
 A projection on a type with no fields, tables included, is F068; a missing
 field F067; a tuple index out of range F069.
+
+**Unroll.** Every rule that takes a value apart by its type reads a
+recursive type as its unfolding, repeated until the head is not a `rec`:
+projection, indexing, `for`, `match`, a destructuring `let`, the binding `if`,
+and `?` and `!` on an operand. `n.kids` with `n : rec N {kids: [N]}` is a
+`[rec N {kids: [N]}]`, and `n.kids[0]!` a `rec N {kids: [N]}` again. Passing a
+value is not taking it apart: a `rec X [T]` is not a `[T]` to a parameter
+written as one.
 
 Indexing is defined over the element of a collection:
 
@@ -843,7 +868,7 @@ not reported again.
 | F087 | A `for` over something that is not a place, over a type it cannot walk, or binding the wrong number of names for its collection |
 | F088 | A const whose type mentions a type parameter |
 | F089 | A const that depends, through the functions it calls, on itself or on a const declared after it |
-| F090 | A recursive type, written in a type or in the type of data a `require data` takes in; datalit has them and Datafun does not yet |
+| T062-T066 | A recursive type that is not well formed; as in datalit, and T066 for a type parameter inside one |
 
 A code missing from the table is unassigned; F060 is retired. Two parse
 errors belong to the same rules: P074, a declaration inside a block, and

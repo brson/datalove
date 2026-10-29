@@ -1,0 +1,2 @@
+type L: rec L [L]
+type M: %{L = int}

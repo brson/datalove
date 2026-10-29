@@ -2762,4 +2762,31 @@ mod tests {
         }
         Ok(())
     }
+
+    /// Two tables make two descriptors of one recursive type, which lead back
+    /// to themselves without meeting; comparing values through them ends.
+    #[test]
+    fn test_rec_descriptors_of_two_tables_compare() -> AnyResult<()> {
+        let db = Database::default();
+        let source = r#": rec J enum { atom Null, term Arr [J], term Obj %{string = J} } / term Arr [term Obj %{ "k" = atom Null }, term Arr []]"#;
+        let rt = datalove_rt::rust::Runtime::new();
+        let guard = RtGuard::new(rt);
+        let mut table_a = TyDescTable::new(&db);
+        let mut table_b = TyDescTable::new(&db);
+        let a = InstGuard::new(guard.handle(), instantiate_value(&db, guard.handle(), &mut table_a, compile_str(&db, source)?)?);
+        let b = InstGuard::new(guard.handle(), instantiate_value(&db, guard.handle(), &mut table_b, compile_str(&db, source)?)?);
+        let (a, b) = (a.value(), b.value());
+        assert!(!std::ptr::eq(a.tydesc.as_ptr(), b.tydesc.as_ptr()));
+        unsafe {
+            let eq = datalove_rt::c::dtlv_rti_eq_local(
+                guard.handle(),
+                rtdt::AnyRef::new(a.ptr),
+                a.tydesc.as_ref(),
+                rtdt::AnyRef::new(b.ptr),
+                b.tydesc.as_ref(),
+            );
+            assert_eq!(eq, datalove_rt::c::RtEq::Equals);
+        }
+        Ok(())
+    }
 }

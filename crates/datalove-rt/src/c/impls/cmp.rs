@@ -189,6 +189,44 @@ pub(crate) fn cmp_tydesc(
     td_a: rtdt::TyDescRef,
     td_b: rtdt::TyDescRef,
 ) -> std::cmp::Ordering {
+    cmp_tydesc_in(td_a, td_b, &mut Vec::new())
+}
+
+/// `cmp_tydesc` partway through a walk, with the pairs of collections' descriptors
+/// the walk is inside.
+///
+/// A recursive type's descriptor is among its own parts, inside a collection,
+/// so two descriptors of one recursive type made apart lead back to
+/// themselves without ever meeting. A pair met again inside its own
+/// comparison has been found alike on every step since, and the walk from it
+/// would repeat, so it is taken as alike.
+fn cmp_tydesc_in(
+    td_a: rtdt::TyDescRef,
+    td_b: rtdt::TyDescRef,
+    seen: &mut Vec<(usize, usize)>,
+) -> std::cmp::Ordering {
+    let in_collection = !std::ptr::eq(td_a.as_ptr(), td_b.as_ptr()) && matches!(
+        td_a.type_tag(),
+        rtdt::TyTag::List | rtdt::TyTag::Set | rtdt::TyTag::Map | rtdt::TyTag::Tensor | rtdt::TyTag::Table,
+    );
+    if !in_collection {
+        return cmp_tydesc_parts(td_a, td_b, seen);
+    }
+    let pair = (td_a.as_ptr() as usize, td_b.as_ptr() as usize);
+    if seen.contains(&pair) {
+        return std::cmp::Ordering::Equal;
+    }
+    seen.push(pair);
+    let result = cmp_tydesc_parts(td_a, td_b, seen);
+    seen.pop();
+    result
+}
+
+fn cmp_tydesc_parts(
+    td_a: rtdt::TyDescRef,
+    td_b: rtdt::TyDescRef,
+    seen: &mut Vec<(usize, usize)>,
+) -> std::cmp::Ordering {
     use std::cmp::Ordering;
 
     if std::ptr::eq(td_a.as_ptr(), td_b.as_ptr()) {
@@ -242,7 +280,7 @@ pub(crate) fn cmp_tydesc(
                     Ordering::Equal => {}
                     ord => return ord,
                 }
-                match cmp_tydesc(field_a.tydesc(), field_b.tydesc()) {
+                match cmp_tydesc_in(field_a.tydesc(), field_b.tydesc(), seen) {
                     Ordering::Equal => {}
                     ord => return ord,
                 }
@@ -268,7 +306,7 @@ pub(crate) fn cmp_tydesc(
                     Ordering::Equal => {}
                     ord => return ord,
                 }
-                match cmp_tydesc(field_a.tydesc(), field_b.tydesc()) {
+                match cmp_tydesc_in(field_a.tydesc(), field_b.tydesc(), seen) {
                     Ordering::Equal => {}
                     ord => return ord,
                 }
@@ -280,7 +318,7 @@ pub(crate) fn cmp_tydesc(
             let (name_a, payload_a) = td_a.term_info();
             let (name_b, payload_b) = td_b.term_info();
             match name_a.cmp(name_b) {
-                Ordering::Equal => cmp_tydesc(payload_a, payload_b),
+                Ordering::Equal => cmp_tydesc_in(payload_a, payload_b, seen),
                 ord => ord,
             }
         }
@@ -309,7 +347,7 @@ pub(crate) fn cmp_tydesc(
                     (core::option::Option::None, core::option::Option::Some(_)) => return Ordering::Less,
                     (core::option::Option::Some(_), core::option::Option::None) => return Ordering::Greater,
                     (core::option::Option::Some(pa), core::option::Option::Some(pb)) => {
-                        match cmp_tydesc(pa, pb) {
+                        match cmp_tydesc_in(pa, pb, seen) {
                             Ordering::Equal => {}
                             ord => return ord,
                         }
@@ -319,19 +357,19 @@ pub(crate) fn cmp_tydesc(
             Ordering::Equal
         }
 
-        rtdt::TyTag::List => cmp_tydesc(td_a.list_element_ty(), td_b.list_element_ty()),
-        rtdt::TyTag::Set => cmp_tydesc(td_a.set_element_ty(), td_b.set_element_ty()),
+        rtdt::TyTag::List => cmp_tydesc_in(td_a.list_element_ty(), td_b.list_element_ty(), seen),
+        rtdt::TyTag::Set => cmp_tydesc_in(td_a.set_element_ty(), td_b.set_element_ty(), seen),
 
         rtdt::TyTag::Map => {
-            match cmp_tydesc(td_a.map_key_ty(), td_b.map_key_ty()) {
-                Ordering::Equal => cmp_tydesc(td_a.map_value_ty(), td_b.map_value_ty()),
+            match cmp_tydesc_in(td_a.map_key_ty(), td_b.map_key_ty(), seen) {
+                Ordering::Equal => cmp_tydesc_in(td_a.map_value_ty(), td_b.map_value_ty(), seen),
                 ord => ord,
             }
         }
 
         rtdt::TyTag::Tensor => {
             match td_a.tensor_rank().cmp(&td_b.tensor_rank()) {
-                Ordering::Equal => cmp_tydesc(td_a.tensor_element_ty(), td_b.tensor_element_ty()),
+                Ordering::Equal => cmp_tydesc_in(td_a.tensor_element_ty(), td_b.tensor_element_ty(), seen),
                 ord => ord,
             }
         }
@@ -346,7 +384,7 @@ pub(crate) fn cmp_tydesc(
                     Ordering::Equal => {}
                     ord => return ord,
                 }
-                match cmp_tydesc(col_a.tydesc(), col_b.tydesc()) {
+                match cmp_tydesc_in(col_a.tydesc(), col_b.tydesc(), seen) {
                     Ordering::Equal => {}
                     ord => return ord,
                 }
@@ -354,8 +392,8 @@ pub(crate) fn cmp_tydesc(
             Ordering::Equal
         }
 
-        rtdt::TyTag::Option => cmp_tydesc(td_a.option_inner_ty(), td_b.option_inner_ty()),
-        rtdt::TyTag::Result => cmp_tydesc(td_a.result_ok_ty(), td_b.result_ok_ty()),
+        rtdt::TyTag::Option => cmp_tydesc_in(td_a.option_inner_ty(), td_b.option_inner_ty(), seen),
+        rtdt::TyTag::Result => cmp_tydesc_in(td_a.result_ok_ty(), td_b.result_ok_ty(), seen),
     }
 }
 
@@ -369,6 +407,44 @@ pub(crate) fn cmp_tydesc(
 pub(crate) fn eq_tydesc(
     td_a: rtdt::TyDescRef,
     td_b: rtdt::TyDescRef,
+) -> bool {
+    eq_tydesc_in(td_a, td_b, &mut Vec::new())
+}
+
+/// `eq_tydesc` partway through a walk, with the pairs of collections' descriptors
+/// the walk is inside.
+///
+/// A recursive type's descriptor is among its own parts, inside a collection,
+/// so two descriptors of one recursive type made apart lead back to
+/// themselves without ever meeting. A pair met again inside its own
+/// comparison has been found alike on every step since, and the walk from it
+/// would repeat, so it is taken as alike.
+fn eq_tydesc_in(
+    td_a: rtdt::TyDescRef,
+    td_b: rtdt::TyDescRef,
+    seen: &mut Vec<(usize, usize)>,
+) -> bool {
+    let in_collection = !std::ptr::eq(td_a.as_ptr(), td_b.as_ptr()) && matches!(
+        td_a.type_tag(),
+        rtdt::TyTag::List | rtdt::TyTag::Set | rtdt::TyTag::Map | rtdt::TyTag::Tensor | rtdt::TyTag::Table,
+    );
+    if !in_collection {
+        return eq_tydesc_parts(td_a, td_b, seen);
+    }
+    let pair = (td_a.as_ptr() as usize, td_b.as_ptr() as usize);
+    if seen.contains(&pair) {
+        return true;
+    }
+    seen.push(pair);
+    let result = eq_tydesc_parts(td_a, td_b, seen);
+    seen.pop();
+    result
+}
+
+fn eq_tydesc_parts(
+    td_a: rtdt::TyDescRef,
+    td_b: rtdt::TyDescRef,
+    seen: &mut Vec<(usize, usize)>,
 ) -> bool {
     if std::ptr::eq(td_a.as_ptr(), td_b.as_ptr()) {
         return true;
@@ -416,7 +492,7 @@ pub(crate) fn eq_tydesc(
                     if field_a.offset() != field_b.offset() {
                         return false;
                     }
-                    if !eq_tydesc(field_a.tydesc(), field_b.tydesc()) {
+                    if !eq_tydesc_in(field_a.tydesc(), field_b.tydesc(), seen) {
                         return false;
                     }
                 }
@@ -442,7 +518,7 @@ pub(crate) fn eq_tydesc(
                     if field_a.offset() != field_b.offset() {
                         return false;
                     }
-                    if !eq_tydesc(field_a.tydesc(), field_b.tydesc()) {
+                    if !eq_tydesc_in(field_a.tydesc(), field_b.tydesc(), seen) {
                         return false;
                     }
                 }
@@ -451,7 +527,7 @@ pub(crate) fn eq_tydesc(
             rtdt::TyTag::Term => {
                 let (name_a, payload_a) = td_a.term_info();
                 let (name_b, payload_b) = td_b.term_info();
-                name_a == name_b && eq_tydesc(payload_a, payload_b)
+                name_a == name_b && eq_tydesc_in(payload_a, payload_b, seen)
             }
             rtdt::TyTag::Enum => {
                 let info_a = td_a.enum_info();
@@ -478,7 +554,7 @@ pub(crate) fn eq_tydesc(
                     match (variant_a.payload(), variant_b.payload()) {
                         (core::option::Option::None, core::option::Option::None) => {}
                         (core::option::Option::Some(payload_ty_a), core::option::Option::Some(payload_ty_b)) => {
-                            if !eq_tydesc(payload_ty_a, payload_ty_b) {
+                            if !eq_tydesc_in(payload_ty_a, payload_ty_b, seen) {
                                 return false;
                             }
                         }
@@ -490,20 +566,20 @@ pub(crate) fn eq_tydesc(
             rtdt::TyTag::List => {
                 let elem_ty_a = td_a.list_element_ty();
                 let elem_ty_b = td_b.list_element_ty();
-                eq_tydesc(elem_ty_a, elem_ty_b)
+                eq_tydesc_in(elem_ty_a, elem_ty_b, seen)
             }
             rtdt::TyTag::Map => {
                 let key_ty_a = td_a.map_key_ty();
                 let key_ty_b = td_b.map_key_ty();
                 let value_ty_a = td_a.map_value_ty();
                 let value_ty_b = td_b.map_value_ty();
-                eq_tydesc(key_ty_a, key_ty_b) &&
-                    eq_tydesc(value_ty_a, value_ty_b)
+                eq_tydesc_in(key_ty_a, key_ty_b, seen) &&
+                    eq_tydesc_in(value_ty_a, value_ty_b, seen)
             }
             rtdt::TyTag::Set => {
                 let elem_ty_a = td_a.set_element_ty();
                 let elem_ty_b = td_b.set_element_ty();
-                eq_tydesc(elem_ty_a, elem_ty_b)
+                eq_tydesc_in(elem_ty_a, elem_ty_b, seen)
             }
             rtdt::TyTag::Tensor => {
                 let elem_ty_a = td_a.tensor_element_ty();
@@ -511,7 +587,7 @@ pub(crate) fn eq_tydesc(
                 let rank_a = td_a.tensor_rank();
                 let rank_b = td_b.tensor_rank();
 
-                rank_a == rank_b && eq_tydesc(elem_ty_a, elem_ty_b)
+                rank_a == rank_b && eq_tydesc_in(elem_ty_a, elem_ty_b, seen)
             }
             rtdt::TyTag::Table => {
                 let num_cols_a = td_a.table_num_columns();
@@ -520,7 +596,7 @@ pub(crate) fn eq_tydesc(
                     return false;
                 }
                 for (col_a, col_b) in td_a.table_column_tydescs().zip(td_b.table_column_tydescs()) {
-                    if col_a.name() != col_b.name() || !eq_tydesc(col_a.tydesc(), col_b.tydesc()) {
+                    if col_a.name() != col_b.name() || !eq_tydesc_in(col_a.tydesc(), col_b.tydesc(), seen) {
                         return false;
                     }
                 }
@@ -529,12 +605,12 @@ pub(crate) fn eq_tydesc(
             rtdt::TyTag::Option => {
                 let inner_ty_a = td_a.option_inner_ty();
                 let inner_ty_b = td_b.option_inner_ty();
-                eq_tydesc(inner_ty_a, inner_ty_b)
+                eq_tydesc_in(inner_ty_a, inner_ty_b, seen)
             }
         rtdt::TyTag::Result => {
             let ok_ty_a = td_a.result_ok_ty();
             let ok_ty_b = td_b.result_ok_ty();
-            eq_tydesc(ok_ty_a, ok_ty_b)
+            eq_tydesc_in(ok_ty_a, ok_ty_b, seen)
         }
     }
 }

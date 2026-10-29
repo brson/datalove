@@ -77,8 +77,11 @@ fn bind_pattern<'db>(
     use datalit::tycheck::Type as T;
     let db = ctx.db;
     let ty_str = type_to_string(db, &ty);
+    // A name binds the value whole, as it is typed; any other pattern takes
+    // it apart, and so sees the parts of a recursive type's unfolding.
+    let exposed = ty.exposed();
     let bindings: Result<Vec<(bct::text::InternedText<'db>, Type<'db>)>, (String, &str)> =
-        match (binding, &ty) {
+        match (binding, exposed.as_ref()) {
             (Binding::Name(name), _) => Ok(vec![(*name, ty.C())]),
             (Binding::Tuple(names), Type::Datalit(T::AnonTuple(tuple))) => {
                 if names.len() == tuple.fields.len() {
@@ -474,7 +477,9 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     }
                 };
 
-                // Extract inner type from Option or Result.
+                // Extract inner type from Option or Result, unrolling a
+                // recursive type to the one it is.
+                let condition_ty = condition_ty.exposed().into_owned();
                 let inner_ty = match condition_ty {
                     Type::Datalit(datalit::tycheck::Type::Option(ref opt)) => {
                         opt.inner_type.clone()
@@ -670,7 +675,7 @@ Give the const a concrete type, or make it a `let`.")),
                 }
             };
 
-            let enum_ty = match &input_ty {
+            let enum_ty = match input_ty.exposed().as_ref() {
                 Type::Datalit(datalit::tycheck::Type::Enum(e)) => e.clone(),
                 _ => {
                     let actual_str = type_to_string(db, &input_ty);
@@ -992,7 +997,7 @@ Write `[k]?` or `[k]!` to update an element that is already there."),
         }
         None => {
             // Bare index (upsert): only valid for maps.
-            match base_ty {
+            match base_ty.exposed().as_ref() {
                 Type::Datalit(datalit::tycheck::Type::Map(map)) => {
                     let key_type = Type::Datalit(*map.key_type.clone());
                     let value_type = Type::Datalit(*map.value_type.clone());
@@ -1134,7 +1139,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
 
     let index = Type::Datalit(T::Index);
     let n = stmt.bindings.len();
-    let binding_types: Vec<Type<'db>> = match &iteratee_ty {
+    let binding_types: Vec<Type<'db>> = match iteratee_ty.exposed().as_ref() {
         Type::Datalit(T::List(list)) => {
             let elem = Type::Datalit((*list.element_type).clone());
             if n == 2 { vec![index, elem] } else { vec![elem] }

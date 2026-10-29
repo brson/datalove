@@ -1,0 +1,18 @@
+type Node: rec Node { name: string, kids: [Node] }
+
+fun leaf(name: string): Node
+    ret { name = name, kids = [] }
+end fun
+
+fun count(ref n: Node): int
+    var total: int = 1
+    for kid in ref n.kids
+        set total = total + count(ref kid)
+    end for
+    ret total
+end fun
+
+var root: Node = { name = "root", kids = [leaf("a"), { name = "b", kids = [leaf("c")] }] }
+let first: Node = root.kids[0]!@
+let name: string = root.kids[1]!.kids[0]!.name@
+let n = count(ref root)

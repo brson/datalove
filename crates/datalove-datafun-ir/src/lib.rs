@@ -173,6 +173,13 @@ pub enum IrType {
     /// itself lives where the pointer says. See `layout::layout_of` and
     /// `botdocs/plan-fat-generics.md`.
     Param(u32),
+    /// A recursive type: the body, in which `RecVar` refers back to the
+    /// whole. It is laid out as its body is, and a value of it is taken apart
+    /// as its unfolding; see `exposed` and `botdocs/plan-recursive-types.md`.
+    Rec(Box<IrType>),
+    /// A use of an enclosing `Rec`, by de Bruijn index: 0 is the innermost.
+    /// Only a `Rec` body holds one, and always inside a collection.
+    RecVar(u32),
 }
 
 /// Which runtime cursor walks a collection, and so how a cursor is laid out.
@@ -211,6 +218,72 @@ impl CursorKind {
 }
 
 impl IrType {
+    /// The type a value of this one is taken apart as: a `Rec` at the head
+    /// unfolded, until the head is not one.
+    pub fn exposed(&self) -> std::borrow::Cow<'_, IrType> {
+        match self {
+            IrType::Rec(_) => {
+                let mut ty = self.unfold();
+                while let IrType::Rec(_) = ty {
+                    ty = ty.unfold();
+                }
+                std::borrow::Cow::Owned(ty)
+            }
+            _ => std::borrow::Cow::Borrowed(self),
+        }
+    }
+
+    /// This type as a value of it is held in the IR: unfolded at its head,
+    /// and at the head of what a reference to it refers to.
+    ///
+    /// No value, slot or parameter has a recursive type at its head, so that
+    /// whatever takes a value apart by its type, in lowering or a backend,
+    /// finds the parts. A recursive type stays where it is inside a
+    /// collection, which is where it recurs, and where a descriptor of it is
+    /// made.
+    pub fn held(&self) -> IrType {
+        match self {
+            IrType::Ref(inner) => IrType::Ref(Box::new(inner.held())),
+            _ => self.exposed().into_owned(),
+        }
+    }
+
+    /// A `Rec`'s body with the whole put back where it refers to itself.
+    fn unfold(&self) -> IrType {
+        let IrType::Rec(body) = self else { panic!("unfold of {self}, which is not recursive") };
+        body.replace_rec_var(0, self)
+    }
+
+    /// This type with the binder `depth` levels out replaced by `whole`, which
+    /// is closed.
+    fn replace_rec_var(&self, depth: u32, whole: &IrType) -> IrType {
+        let sub = |t: &IrType| t.replace_rec_var(depth, whole);
+        let boxed = |t: &IrType| Box::new(t.replace_rec_var(depth, whole));
+        match self {
+            IrType::RecVar(index) if *index == depth => whole.clone(),
+            IrType::Rec(body) => IrType::Rec(Box::new(body.replace_rec_var(depth + 1, whole))),
+            IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
+            | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
+            | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Data
+            | IrType::Error | IrType::Atom(_) | IrType::Cursor(_) | IrType::Param(_)
+            | IrType::RecVar(_) => self.clone(),
+            IrType::Tuple(fields) => IrType::Tuple(fields.iter().map(sub).collect()),
+            IrType::Struct(fields) => IrType::Struct(fields.iter().map(|(n, t)| (n.clone(), sub(t))).collect()),
+            IrType::Enum(variants) => IrType::Enum(
+                variants.iter().map(|(n, p)| (n.clone(), p.as_ref().map(sub))).collect(),
+            ),
+            IrType::Table(columns) => IrType::Table(columns.iter().map(|(n, t)| (n.clone(), boxed(t))).collect()),
+            IrType::Term(name, inner) => IrType::Term(name.clone(), boxed(inner)),
+            IrType::List(inner) => IrType::List(boxed(inner)),
+            IrType::Set(inner) => IrType::Set(boxed(inner)),
+            IrType::Option(inner) => IrType::Option(boxed(inner)),
+            IrType::Result(inner) => IrType::Result(boxed(inner)),
+            IrType::Tensor(inner, rank) => IrType::Tensor(boxed(inner), *rank),
+            IrType::Ref(inner) => IrType::Ref(boxed(inner)),
+            IrType::Map(k, v) => IrType::Map(boxed(k), boxed(v)),
+        }
+    }
+
     /// Whether a type parameter appears anywhere in this type, which is what
     /// makes its layout unknown until a call.
     pub fn is_dynamic(&self) -> bool {
@@ -227,6 +300,8 @@ impl IrType {
             IrType::Term(_, inner) | IrType::List(inner) | IrType::Set(inner) | IrType::Option(inner)
             | IrType::Result(inner) | IrType::Tensor(inner, _) | IrType::Ref(inner) => inner.is_dynamic(),
             IrType::Map(k, v) => k.is_dynamic() || v.is_dynamic(),
+            IrType::Rec(body) => body.is_dynamic(),
+            IrType::RecVar(_) => false,
         }
     }
 
@@ -261,6 +336,8 @@ impl IrType {
             IrType::Tensor(inner, rank) => IrType::Tensor(boxed(inner), *rank),
             IrType::Ref(inner) => IrType::Ref(boxed(inner)),
             IrType::Map(k, v) => IrType::Map(boxed(k), boxed(v)),
+            IrType::Rec(body) => IrType::Rec(boxed(body)),
+            IrType::RecVar(_) => self.clone(),
         }
     }
 
@@ -366,6 +443,8 @@ impl std::fmt::Display for IrType {
                 write!(f, "cursor<{}>", kind)
             }
             IrType::Param(i) => write!(f, "param<{}>", i),
+            IrType::Rec(body) => write!(f, "rec<{}>", body),
+            IrType::RecVar(i) => write!(f, "self<{}>", i),
         }
     }
 }
@@ -393,6 +472,26 @@ impl<'a, I: Iterator<Item = (&'a String, &'a IrType)> + Clone> std::fmt::Display
             write!(f, "{}: {}", name, ty)?;
         }
         Ok(())
+    }
+}
+
+/// A function's type parameters, as the names a hint converted outside the
+/// typechecker can resolve.
+struct TypeParamNames<'a, 'db>(&'a [bct::text::InternedText<'db>]);
+
+impl<'db> datalove_datalit::tycheck::TypeNames<'db, datalove_datalit::tycheck::TypeError> for TypeParamNames<'_, 'db> {
+    fn resolve(
+        &self,
+        alias: &datalove_datalit::ast::TypeHintAlias<'db>,
+    ) -> Result<datalove_datalit::tycheck::Type<'db>, datalove_datalit::tycheck::TypeError> {
+        match self.0.contains(&alias.name) {
+            true => Ok(datalove_datalit::tycheck::Type::Var(alias.name)),
+            false => Err(datalove_datalit::tycheck::TypeError::CannotSynthesize),
+        }
+    }
+
+    fn is_named(&self, name: bct::text::InternedText<'db>) -> bool {
+        self.0.contains(&name)
     }
 }
 
@@ -424,7 +523,15 @@ impl IrType {
         use datalove_datalit::ast::TypeHint;
 
         match ty {
-            TypeHint::Rec(_) => todo!("recursive types in the IR; Datafun refuses them until then (F090)"),
+            // The names in a `rec` body are bound by its binders, which the
+            // datalit conversion keeps track of; the only others here are
+            // type parameters. An alias is no type here, as below.
+            TypeHint::Rec(_) => {
+                match datalove_datalit::tycheck::convert_type_hint_with(db, ty, &TypeParamNames(type_params)) {
+                    Ok(converted) => Self::from_datalit_inner(db, &converted, type_params),
+                    Err(_) => IrType::Error,
+                }
+            }
             TypeHint::Bool => IrType::Bool,
             TypeHint::U8 => IrType::U8,
             TypeHint::I8 => IrType::I8,
@@ -563,9 +670,8 @@ impl IrType {
         use datalove_datalit::tycheck::Type as DlType;
 
         match ty {
-            DlType::Rec(_) | DlType::RecVar(_) => {
-                todo!("recursive types in the IR; Datafun refuses them until then (F090)")
-            }
+            DlType::Rec(rec) => IrType::Rec(Box::new(Self::from_datalit_inner(db, &rec.body, keep))),
+            DlType::RecVar(index) => IrType::RecVar(*index),
             DlType::Var(name) => match keep.iter().position(|p| p == name) {
                 Some(i) => IrType::Param(i as u32),
                 None => panic!("type variable {} is not a parameter of the function it is in",
@@ -682,6 +788,8 @@ impl IrType {
 
             // Heap-allocated types are never copy.
             IrType::Int | IrType::String | IrType::Data | IrType::Error => false,
+            // A recursive type recurs inside a collection, so it holds one.
+            IrType::Rec(_) | IrType::RecVar(_) => false,
             IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) | IrType::Tensor(_, _) | IrType::Table(_) => false,
 
             // Composite types are copy if all fields are copy.

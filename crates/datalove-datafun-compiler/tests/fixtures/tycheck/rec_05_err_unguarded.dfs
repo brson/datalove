@@ -1,0 +1,1 @@
+type L: rec L { elt: int, next: ?L }

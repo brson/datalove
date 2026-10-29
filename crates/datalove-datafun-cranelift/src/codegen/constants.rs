@@ -1038,7 +1038,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ty: &IrType,
         value: &ConstValue,
     ) -> Result<(), CraneliftError> {
-        let ty = ty.clone();
+        // A value of a recursive type is written as its unfolding is.
+        let ty = ty.exposed().into_owned();
         let ty = &ty;
         let mem_flags = cranelift_codegen::ir::MemFlagsData::trusted();
         match value {

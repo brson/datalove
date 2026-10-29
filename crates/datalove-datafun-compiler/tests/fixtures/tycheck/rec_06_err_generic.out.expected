@@ -1,0 +1,40 @@
+{
+  "diagnostics": [
+    {
+      "code": "T066",
+      "labels": [
+        {
+          "message": "a type parameter",
+          "span": [
+            23,
+            24
+          ],
+          "text": "T"
+        }
+      ],
+      "message": "the type parameter `T` is inside a recursive type",
+      "notes": [
+        "a recursive type cannot hold a type parameter yet"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecGeneric",
+      "name": "T"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "f",
+      "params": [
+        {
+          "name": "x",
+          "type": "rec L {v: T, next: [L]}"
+        }
+      ],
+      "return_type": "u8"
+    }
+  ]
+}

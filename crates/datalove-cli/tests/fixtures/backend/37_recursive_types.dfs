@@ -1,0 +1,74 @@
+// Recursive types through the library's generic functions, on every backend:
+// the shapes of AWFY's Storage and Towers.
+
+require module sys/std/list
+require module sys/std/mem
+
+// Storage: a tree of lists, four children deep, whose leaves hold empties.
+type Tree: rec T [?T]
+
+fun build(depth: u32, mut count: u32): !Tree
+  set count = count +! 1
+  var arr: [?Tree] = []
+  if depth == 1
+    call list.push(mut arr, none)
+    call list.push(mut arr, none)
+    ret ok arr@
+  end if
+  var i: u32 = 0
+  loop while i .< 4
+    call list.push(mut arr, some build(depth -! 1, mut count)!)
+    set i = i +! 1
+  end loop
+  ret ok arr@
+end fun
+
+var count: u32 = 0
+let tree = build(4, mut count)
+debuglog count
+
+// Towers: three piles of disks, each pile a list of at most one, moved by
+// swapping buffers rather than building new ones.
+type Disk: rec D { size: u32, next: [D] }
+
+fun push_disk(mut piles: [[Disk]], pile: index, disk: Disk): !()
+  var d = disk
+  call mem.swap(mut d.next, mut piles[pile]!)
+  call list.push(mut piles[pile]!, d)
+  ret ok ()
+end fun
+
+fun pop_disk(mut piles: [[Disk]], pile: index): !Disk
+  var top = list.pop(mut piles[pile]!)
+  if top |t|
+    var d = t
+    call mem.swap(mut piles[pile]!, mut d.next)
+    ret ok d
+  end if
+  ret er error "empty pile"
+end fun
+
+fun move_disks(mut piles: [[Disk]], disks: u32, from: index, to: index, mut moves: u32): !()
+  if disks == 1
+    let d = pop_disk(mut piles, from)!
+    call push_disk(mut piles, to, d)!
+    set moves = moves +! 1
+    ret ok ()
+  end if
+  let other = (3 -! from) -! to
+  call move_disks(mut piles, disks -! 1, from, other, mut moves)!
+  call move_disks(mut piles, 1, from, to, mut moves)!
+  call move_disks(mut piles, disks -! 1, other, to, mut moves)!
+  ret ok ()
+end fun
+
+var piles: [[Disk]] = [[], [], []]
+var size: u32 = 6
+loop while size .> 0
+  let pushed = push_disk(mut piles, 0, { size = size, next = [] })
+  set size = size -! 1
+end loop
+var moves: u32 = 0
+debuglog move_disks(mut piles, 6, 0, 1, mut moves)
+debuglog moves
+debuglog piles[1]!

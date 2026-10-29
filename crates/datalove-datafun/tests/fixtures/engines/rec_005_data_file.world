@@ -1,0 +1,21 @@
+// Data of a recursive type, required with its type declared and without.
+----------
+data local/app/tree
+----------
+: rec Node { name: string, kids: [Node] } / { name = "root", kids = [{ name = "a", kids = [] }, { name = "b", kids = [{ name = "c", kids = [] }] }] }
+----------
+data local/app/doc
+----------
+term Arr [term Num 1.0, term Obj %{ "k" = atom Null }]
+----------
+scriptunit-fragment
+----------
+
+type Json: rec J enum { atom Null, term Num f64, term Arr [J], term Obj %{string = J} }
+
+require data local/app/tree
+require data local/app/doc: Json
+
+debuglog tree
+debuglog tree.kids[(: index / 1)]!.kids
+debuglog doc

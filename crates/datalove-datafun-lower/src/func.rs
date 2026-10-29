@@ -106,7 +106,7 @@ pub fn lower_function_body<'db>(
     ctx.return_type = match resolved_return_type {
         Some(ty) => Some(ir_type(&ty)),
         None => func.return_type().map(|hint| IrType::from_type_hint_generic(ctx.db, &hint, &type_params)),
-    };
+    }.map(|ty| ty.held());
 
     // Allocate ParamIds for parameters with correct types and modes.
     // Record binding operands to match analysis order.

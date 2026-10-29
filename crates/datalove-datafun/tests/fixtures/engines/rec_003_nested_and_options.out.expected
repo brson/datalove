@@ -1,0 +1,98 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = enum_variant 1 v0
+                        v2 = enum_variant 0 v1
+                        v3 = list []
+                        v4 = enum_variant 0 v3
+                        v5 = enum_variant 0 v4
+                        v6 = list [v5]
+                        v7 = enum_variant 1 v6
+                        v8 = list [v2, v7]
+                        v9 = enum_variant 0 v8
+                        debuglog v9
+                        v10 = none
+                        v11 = none
+                        v12 = list [v10, v11]
+                        v13 = some v12
+                        v14 = none
+                        v15 = list [v14]
+                        v16 = some v15
+                        v17 = list [v16]
+                        v18 = some v17
+                        v19 = none
+                        v20 = list [v13, v18, v19]
+                        v21 = clone v20
+                        debuglog v21
+                        v22 = call u0(v21)
+                        debuglog v22
+                        drop v22
+                        unit_end_drop v9
+                        unit_end_drop v20
+                        unit_end_drop v21
+                        unit_end
+                    
+                    fn depth(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block10, block2
+                    block2:
+                        v2 = cursorelem s1
+                        v3 = clone *v2
+                        v4, v5 = unwrap_option v3
+                        branch v5, block3, block7
+                    block3:
+                        v6 = call u0(v4)
+                        v7 = const 1int
+                        v8 = add v6, v7
+                        drop v6
+                        drop v7
+                        v9 = gt v8, s0
+                        branch v9, block4, block5
+                    block4:
+                        v10 = clone v8
+                        drop.tracked s0
+                        store.move.tracked s0, v10
+                        goto block6
+                    block5:
+                        goto block6
+                    block6:
+                        drop v4
+                        drop v8
+                        goto block8
+                    block7:
+                        goto block8
+                    block8:
+                        goto block9
+                    block9:
+                        cursoradvance s1, p0
+                        goto block1
+                    block10:
+                        v11 = load.move.tracked s0
+                        return v11
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("enum { term Block [enum { term Let enum { term Lit 1 } }, enum { term Seq [enum { term Let enum { term Block [] } }] }] }\n[some [none, none], some [some [none]], none]\n2\n"),
+        ),
+    ],
+)

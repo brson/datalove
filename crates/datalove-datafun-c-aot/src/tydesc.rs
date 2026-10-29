@@ -9,9 +9,17 @@ use crate::CAotCompiler;
 
 /// Collect a type and all its nested types.
 pub fn collect_type_recursive(ty: &IrType, types: &mut BTreeSet<IrType>) {
-    types.insert(ty.clone());
+    // A recursive type is among its own parts, so a walk that went on past a
+    // type it has seen would not end.
+    if !types.insert(ty.clone()) {
+        return;
+    }
 
     match ty {
+        // A recursive type's descriptor is its unfolding's, which names the
+        // descriptors of the unfolding's parts.
+        IrType::Rec(_) => collect_type_recursive(&ty.exposed(), types),
+        IrType::RecVar(index) => unreachable!("rec index {index} outside its rec"),
         IrType::List(elem) | IrType::Set(elem) => {
             collect_type_recursive(elem, types);
         }
@@ -101,6 +109,10 @@ pub fn type_depth(ty: &IrType) -> u32 {
         IrType::Ref(inner) => 1 + type_depth(inner),
         IrType::Cursor(_) => 0,
         IrType::Param(_) => 0,
+        // Recursive types are declared before any descriptor is written, so
+        // their place in the order is only for the order to be the same.
+        IrType::Rec(body) => 1 + type_depth(body),
+        IrType::RecVar(_) => 0,
     }
 }
 
@@ -140,6 +152,7 @@ fn type_tag(ty: &IrType) -> u8 {
         IrType::Ref(_) => 0x10, // Treat as pointer (U8 tag, but size is 8)
         IrType::Cursor(_) => 0x40,
         IrType::Param(_) => 0x80,
+        IrType::Rec(_) | IrType::RecVar(_) => unreachable!("a recursive type is written as its unfolding"),
     }
 }
 
@@ -150,6 +163,12 @@ pub fn emit_tydesc(
     ty: &IrType,
     compiler: &mut CAotCompiler,
 ) -> Result<(), crate::CAotError> {
+    // A recursive type and its unfolding have one layout, so its descriptor
+    // is the unfolding's, under its own name, which the unfolding's parts
+    // point back to.
+    if let IrType::Rec(_) = ty {
+        return emit_tydesc(out, name, &ty.exposed(), compiler);
+    }
     let layout = types::ir_type_to_crepr(ty).layout();
     let tag = type_tag(ty);
     // `TyDesc::PLAIN` where a value of the type owns nothing.
@@ -169,6 +188,8 @@ pub fn emit_tydesc(
             writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x{:02x}, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};",
                 name, tag, layout.size, layout.align).unwrap();
         }
+
+        IrType::Rec(_) | IrType::RecVar(_) => unreachable!("a recursive type is written as its unfolding"),
 
         // In a template; see `rtdt::TyInfoParam`.
         IrType::Param(index) => {

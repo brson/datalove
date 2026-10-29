@@ -1,0 +1,3 @@
+fun f<T>(x: rec L { v: T, next: [L] }): u8
+    ret 1
+end fun

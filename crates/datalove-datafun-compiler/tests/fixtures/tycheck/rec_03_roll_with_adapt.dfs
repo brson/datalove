@@ -1,0 +1,5 @@
+type L: rec L { elt: int, next: [L] }
+
+let unrolled: { elt: int, next: [L] } = { elt = 1, next = [] }
+let rolled: L = unrolled@
+let back = rolled.next@

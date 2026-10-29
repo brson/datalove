@@ -200,10 +200,7 @@ fn error_to_json(error: &datalove_datalit::tycheck::TypeError) -> rmx::serde_jso
                 "actual": actual
             })
         }
-        TypeError::RecUnused(name) => json!({ "kind": "RecUnused", "name": name }),
-        TypeError::RecShadowed(name) => json!({ "kind": "RecShadowed", "name": name }),
-        TypeError::RecUnguarded(name) => json!({ "kind": "RecUnguarded", "name": name }),
-        TypeError::RecInKey(name) => json!({ "kind": "RecInKey", "name": name }),
+        TypeError::Rec(rec) => json!({ "kind": fmt!("Rec{:?}", rec.kind), "name": rec.name }),
     }
 }
 

@@ -69,13 +69,8 @@ impl<'db> TypeContext<'db> {
 /// The span is the expression's: datalit keeps no spans for the names in a
 /// hint.
 pub fn rec_diagnostic<'db>(db: &'db dyn crate::Db, error: &TypeError, ts: TextSpan) -> Option<DiagnosticBuilder<'db>> {
-    let (code, label, note) = match error {
-        TypeError::RecUnused(_) => ("T062", "never uses its name", "a `rec` type is one whose body names it; without a use, write the body alone"),
-        TypeError::RecShadowed(_) => ("T063", "the name is taken", "a `rec` inside another takes a name of its own"),
-        TypeError::RecUnguarded(_) => ("T064", "recurs inline", "a recursive type recurs inside a list, map, set or table, so that its values have a size"),
-        TypeError::RecInKey(_) => ("T065", "recursive type in a key", "a map's key or a set's element cannot be a recursive type"),
-        _ => return None,
-    };
+    let TypeError::Rec(rec) = error else { return None };
+    let (code, label, note) = rec.kind.diagnostic();
     Some(DiagnosticBuilder::error(db, &rmx::std::format!("{error}"))
         .code(code)
         .primary_label(ts, label)

@@ -543,6 +543,14 @@ impl CAotCompiler {
         sorted_types.sort_by_key(|t| tydesc::type_depth(t));
 
         writeln!(out, "// Type descriptors").unwrap();
+        // A recursive type's descriptor and its parts' point at each other, so
+        // no order puts each after all it names, and they are declared first.
+        if sorted_types.iter().any(|t| matches!(t, IrType::Rec(_))) {
+            for ty in &sorted_types {
+                let name = self.get_tydesc_name(ty);
+                writeln!(out, "static const dtlv_tydesc_t {name};").unwrap();
+            }
+        }
         for ty in sorted_types {
             self.emit_tydesc(&mut out, ty)?;
         }

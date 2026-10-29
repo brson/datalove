@@ -1,0 +1,113 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "head"
+                        v1 = const "id"
+                        v2 = const 1f64
+                        v3 = enum_variant 3 v2
+                        v4 = %{v1: v3}
+                        v5 = enum_variant 4 v4
+                        v6 = const "ops"
+                        v7 = const 2.5f64
+                        v8 = enum_variant 3 v7
+                        v9 = enum_variant 2
+                        v10 = const "x"
+                        v11 = enum_variant 5 v10
+                        v12 = const true
+                        v13 = enum_variant 1 v12
+                        v14 = list [v13]
+                        v15 = enum_variant 0 v14
+                        v16 = list [v8, v9, v11, v15]
+                        v17 = enum_variant 0 v16
+                        v18 = %{v0: v5, v6: v17}
+                        v19 = enum_variant 4 v18
+                        debuglog v19
+                        v20 = clone v19
+                        v21 = call u0(v20)
+                        debuglog v21
+                        drop v21
+                        v22 = clone v19
+                        debuglog v22
+                        unit_end_drop v19
+                        unit_end_drop v22
+                        unit_end
+                    
+                    fn size(p0):
+                    block0:
+                        v0 = move p0
+                        v1 = enum_discriminant v0
+                        switch v1, [0 => block1, 4 => block6], default => block11
+                    block1:
+                        v2 = enum_payload v0 0
+                        v3 = const 1int
+                        store.move.tracked s0, v3
+                        cursorbegin s1, v2
+                        goto block2
+                    block2:
+                        v4 = cursordone s1
+                        branch v4, block5, block3
+                    block3:
+                        v5 = cursorelem s1
+                        v6 = clone *v5
+                        v7 = call u0(v6)
+                        v8 = add s0, v7
+                        drop v7
+                        drop.tracked s0
+                        store.move.tracked s0, v8
+                        goto block4
+                    block4:
+                        cursoradvance s1, v2
+                        goto block2
+                    block5:
+                        v9 = load.move.tracked s0
+                        drop v2
+                        return v9
+                    block6:
+                        v10 = enum_payload v0 4
+                        v11 = const 1int
+                        store.move.tracked s2, v11
+                        cursorbegin s3, v10
+                        goto block7
+                    block7:
+                        v12 = cursordone s3
+                        branch v12, block10, block8
+                    block8:
+                        v14 = cursorvalue s3
+                        v15 = clone *v14
+                        v16 = call u0(v15)
+                        v17 = add s2, v16
+                        drop v16
+                        drop.tracked s2
+                        store.move.tracked s2, v17
+                        goto block9
+                    block9:
+                        cursoradvance s3, v10
+                        goto block7
+                    block10:
+                        v18 = load.move.tracked s2
+                        drop v10
+                        return v18
+                    block11:
+                        drop v0
+                        v19 = const 1int
+                        return v19
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("enum { term Obj %{\"head\" = enum { term Obj %{\"id\" = enum { term Num 1.0 }} }, \"ops\" = enum { term Arr [enum { term Num 2.5 }, enum { atom Null }, enum { term Str \"x\" }, enum { term Arr [enum { term Bool true }] }] }} }\n9\nenum { term Obj %{\"head\" = enum { term Obj %{\"id\" = enum { term Num 1.0 }} }, \"ops\" = enum { term Arr [enum { term Num 2.5 }, enum { atom Null }, enum { term Str \"x\" }, enum { term Arr [enum { term Bool true }] }] }} }\n"),
+        ),
+    ],
+)

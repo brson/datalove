@@ -59,10 +59,7 @@ fn describe(error: &DatalitTypeError) -> String {
         DatalitTypeError::ArityMismatch { expected, actual } => {
             fmt!("expected {expected} elements, found {actual}")
         }
-        DatalitTypeError::RecUnused(_)
-        | DatalitTypeError::RecShadowed(_)
-        | DatalitTypeError::RecUnguarded(_)
-        | DatalitTypeError::RecInKey(_) => error.to_string(),
+        DatalitTypeError::Rec(rec) => rec.to_string(),
     }
 }
 
@@ -97,16 +94,6 @@ pub(crate) fn type_data_file<'db>(
     ctx.resolved_data.insert(path.C(), source);
     let query = DataFileQuery::new(db, source, expected.C());
     match data_file_type(db, query) {
-        // Datalit has recursive types and Datafun does not yet, so data of
-        // one cannot be taken in.
-        Ok(ty) if datalit::tycheck::contains_rec(ty) => {
-            let message = fmt!(
-                "data `{path}` is of a recursive type, which Datafun does not support yet",
-            );
-            let label = fmt!("of type `{}`", datalit::tycheck::type_to_string(db, ty));
-            ctx.push_coded(site, "F090", message.C(), label, None);
-            Err(TypeError::DatalitError(message))
-        }
         Ok(ty) => {
             let ty = Type::Datalit(ty.C());
             ctx.store_expr_type(expr, &ty);

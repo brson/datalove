@@ -43,6 +43,9 @@ impl<'db> Reader<'db> {
         let db = self.db;
         let expr_kind = expr.expr();
         let text = |value: &bct::text::InternedText<'db>| value.as_str(db).to_owned();
+        // A value of a recursive type is written as its unfolding is.
+        let ty = ty.exposed();
+        let ty = ty.as_ref();
         match (expr_kind, ty) {
             (Expr::Group(group), _) => self.read(&group.inner, ty),
             (Expr::Enum(literal), _) => self.read(&literal.variant, ty),

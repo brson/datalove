@@ -339,16 +339,20 @@ impl<'db> LowerCtx<'db> {
         IrType::from_type_hint_generic(self.db, hint, &self.body.type_params)
     }
 
+    /// The IR type of an expression's value, as the IR holds it; see
+    /// `IrType::held`. A literal checked against a recursive type is built as
+    /// a value of its unfolding.
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let key = expr.key();
-        match self.expr_types.get(expr) {
+        let ty = match self.expr_types.get(expr) {
             Some(datalove_datafun_common::Type::Datalit(dl)) => self.ir_type(dl),
             Some(ty) => IrType::from_tycheck(self.db, ty),
             None => panic!(
                 "Expression must have type from typechecker. {:?} but the table holds {} entries",
                 key, self.expr_types.len()
             ),
-        }
+        };
+        ty.held()
     }
 
     /// Create a context for lowering a script unit.
@@ -498,7 +502,7 @@ impl<'db> LowerCtx<'db> {
     pub fn fresh_param(&mut self, ty: IrType, mode: ParamMode) -> ParamId {
         let id = ParamId(self.body.next_param);
         self.body.next_param += 1;
-        self.body.param_types.push(ty);
+        self.body.param_types.push(ty.held());
         self.body.param_modes.push(mode);
         id
     }
@@ -534,7 +538,7 @@ impl<'db> LowerCtx<'db> {
     pub fn fresh_value(&mut self, ty: IrType) -> ValueId {
         let id = ValueId(self.body.next_value);
         self.body.next_value += 1;
-        self.body.value_types.push(ty);
+        self.body.value_types.push(ty.held());
         id
     }
 
@@ -542,7 +546,7 @@ impl<'db> LowerCtx<'db> {
     pub fn fresh_slot(&mut self, ty: IrType) -> SlotId {
         let id = SlotId(self.body.next_slot);
         self.body.next_slot += 1;
-        self.body.slot_types.push(ty);
+        self.body.slot_types.push(ty.held());
         id
     }
 
@@ -1595,3 +1599,4 @@ impl<'db> FuncIds<'db> for crate::FuncIdTable<'db> {
         self.get(&(module, name.to_string())).copied()
     }
 }
+

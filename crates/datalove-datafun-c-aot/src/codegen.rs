@@ -933,7 +933,8 @@ impl<'a> FunctionCodegenContext<'a> {
         ty: &IrType,
         value: &ConstValue,
     ) -> Result<(), CAotError> {
-        let ty = ty.clone();
+        // A value of a recursive type is written as its unfolding is.
+        let ty = ty.exposed().into_owned();
         let ty = &ty;
 
         match value {

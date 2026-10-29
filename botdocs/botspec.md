@@ -705,8 +705,28 @@ recursive type is not the type its body unfolds to, `{ name: string, kids:
 the unfolding, so the two are written alike, but a hint of one is a mismatch
 with the other (T040).
 
-Datafun refuses recursive types for now (F090), in a type it is written and
-in data it takes in with `require data`. The design, and the work left, is in
+In Datafun the literal forms build a value of a recursive type the same way,
+and `@` rolls any value of the unfolding into the type (Section 6.8). Anything
+that takes a value apart reads it as its unfolding: a projection, an index,
+`for`, `match`, a destructuring `let`, the binding `if`, `?` and `!`.
+
+```datalove
+type Node: rec Node { name: string, kids: [Node] }
+
+fun count(ref n: Node): int
+    var total: int = 1
+    for kid in ref n.kids
+        set total = total + count(ref kid)
+    end for
+    ret total
+end fun
+```
+
+Passing a value is not taking it apart, so a `rec T [?T]` is not accepted where
+a `[?T]` is; a list is built as one and rolled with `@`. A type parameter
+inside a `rec` is refused (T066), so a recursive type is not generic, though
+one is passed to a generic function like any other type: `list.push` takes a
+`[Node]` and a `Node`. The design, and the work left, is in
 [Recursive Structural Types](plan-recursive-types.md).
 
 ## 4. Type Hints
@@ -1028,6 +1048,16 @@ usable:
 type Color: enum { atom Red, atom Blue }
 let a = atom Red
 let c: Color = a@            // atom widens to enum
+```
+
+**Roll**: A value of a recursive type's unfolding becomes a value of the type
+(Section 3.8). The two have one layout, so nothing is converted, and the value
+is copied as any `@` copies:
+
+```datalove
+type L: rec L { elt: int, next: [L] }
+let parts: { elt: int, next: [L] } = { elt = 1, next = [] }
+let l: L = parts@
 ```
 
 **Widening needs a target; cloning does not.** Where an expected type is
@@ -2497,7 +2527,7 @@ The following features appear in design documents but are not yet implemented:
 
 - Tensor operations (transpose, slice, reshape), and mutation through a
   tensor view (Section 7.3)
-- Recursive types in Datafun (F090); datalit has them (Section 3.8)
+- Generic recursive types (T066), and borrowing `match` (Section 3.8)
 - Table operations beyond literals: column projection, row access, adding rows
 - Arena blocks
 - Memoization

@@ -422,7 +422,7 @@ fn datalit_type_to_serde<'db>(
         // generic function to take a type parameter from.
         Type::Var(name) => unreachable!("type parameter {name:?} in a data literal"),
         // The literals compared are generated, and the generator writes no
-        // recursive types; Datafun refuses them besides (F090).
+        // recursive types.
         Type::Rec(_) | Type::RecVar(_) => todo!("recursive types in funlit equivalence"),
         Type::Bool => TypeSerde::Bool,
         Type::U8 => TypeSerde::U8,

@@ -1,0 +1,4 @@
+type P: rec P { v: u8, kids: [P] }
+
+let p: P = { v = 1, kids = [] }
+let { v = v, kids = kids } = p

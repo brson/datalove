@@ -433,12 +433,11 @@ pub enum TypeError {
     /// `local_index` is the alias's key into the span table, so that whoever
     /// reports this can point at the name rather than at whatever encloses it.
     UnresolvedTypeAlias { name: String, local_index: Option<u32> },
-    /// F090: A recursive type, which datalit has and Datafun does not yet;
-    /// see `botdocs/plan-recursive-types.md`.
+    /// T062 to T066: A recursive type that is not well formed.
     ///
-    /// `local_index` is the binder's key into the alias span table, which is
-    /// where the parser files it.
-    RecursiveType { name: String, local_index: Option<u32> },
+    /// The error's `local_index` is the name's key into the alias span table,
+    /// which is where the parser files a binder as well as a use.
+    Rec(datalit::tycheck::RecError),
     /// F061: A set or map was written over a type parameter with no order.
     CollectionKeyNotOrdered { param: String, position: String, fun_local_index: u32 },
     /// F063: A function with a return type can reach the end of its body.
@@ -567,7 +566,7 @@ impl std::fmt::Display for TypeError {
             TypeError::UndefinedVariable => write!(f, "cannot find variable in this scope"),
             TypeError::VariableNotMutable => write!(f, "cannot assign to an immutable variable"),
             TypeError::UnresolvedTypeAlias { name, .. } => write!(f, "unknown type `{name}`"),
-            TypeError::RecursiveType { name, .. } => write!(f, "the recursive type `rec {name}` is not supported in Datafun yet"),
+            TypeError::Rec(error) => write!(f, "{error}"),
             TypeError::CollectionKeyNotOrdered { param, position, .. } => {
                 write!(f, "`{param}` has not said it can be ordered, and {position} puts it in a set or a map")
             }
@@ -612,10 +611,7 @@ impl From<datalove_datalit::tycheck::TypeError> for TypeError {
             datalove_datalit::tycheck::TypeError::ArityMismatch { expected, actual } => {
                 TypeError::ArityMismatch { expected, actual }
             }
-            err @ (datalove_datalit::tycheck::TypeError::RecUnused(_)
-            | datalove_datalit::tycheck::TypeError::RecShadowed(_)
-            | datalove_datalit::tycheck::TypeError::RecUnguarded(_)
-            | datalove_datalit::tycheck::TypeError::RecInKey(_)) => TypeError::DatalitError(err.to_string()),
+            datalove_datalit::tycheck::TypeError::Rec(error) => TypeError::Rec(error),
         }
     }
 }
@@ -739,235 +735,13 @@ pub fn types_equivalent<'db>(db: &'db dyn Db, t1: &Type<'db>, t2: &Type<'db>) ->
 // Type Hint Conversion
 // ============================================================================
 
-/// The refusal of a `rec` type, which only datalit has so far.
-fn rec_refused<'db>(db: &'db dyn Db, rec: &datalit::ast::TypeHintRec<'db>) -> TypeError {
-    TypeError::RecursiveType { name: rec.name.as_str(db).to_string(), local_index: rec.local_index }
-}
-
-/// Convert a type hint to a type.
+/// Convert a type hint to a type, with no aliases in scope.
 pub fn convert_type_hint<'db>(
     db: &'db dyn Db,
     type_hint: TypeHint<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    convert_type_hint_inner(db, type_hint)
-}
-
-fn convert_type_hint_inner<'db>(
-    db: &'db dyn Db,
-    type_hint: TypeHint<'db>,
-) -> Result<Type<'db>, TypeError> {
-    let ty = match type_hint {
-        TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
-        TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
-        TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
-        TypeHint::U16 => Type::Datalit(datalit::tycheck::Type::U16),
-        TypeHint::I16 => Type::Datalit(datalit::tycheck::Type::I16),
-        TypeHint::U32 => Type::Datalit(datalit::tycheck::Type::U32),
-        TypeHint::I32 => Type::Datalit(datalit::tycheck::Type::I32),
-        TypeHint::U64 => Type::Datalit(datalit::tycheck::Type::U64),
-        TypeHint::I64 => Type::Datalit(datalit::tycheck::Type::I64),
-        TypeHint::Index => Type::Datalit(datalit::tycheck::Type::Index),
-        TypeHint::Offset => Type::Datalit(datalit::tycheck::Type::Offset),
-        TypeHint::F32 => Type::Datalit(datalit::tycheck::Type::F32),
-        TypeHint::F64 => Type::Datalit(datalit::tycheck::Type::F64),
-        TypeHint::Int => Type::Datalit(datalit::tycheck::Type::Int),
-        TypeHint::String => Type::Datalit(datalit::tycheck::Type::String),
-        TypeHint::Data => Type::Datalit(datalit::tycheck::Type::Data),
-        TypeHint::Error => Type::Datalit(datalit::tycheck::Type::Error),
-
-        TypeHint::AnonTuple(t) => {
-            let fields: Result<Vec<_>, TypeError> = t.fields.iter()
-                .map(|f| {
-                    let f_ty = convert_type_hint_inner(db, f.clone())?;
-                    match f_ty {
-                        Type::Datalit(dt) => Ok(dt.clone()),
-                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                    }
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::AnonTuple(
-                datalit::tycheck::TypeAnonTuple { fields: fields? }
-            ))
-        }
-
-        TypeHint::AnonStruct(s) => {
-            let fields: Result<Vec<_>, TypeError> = s.fields.iter()
-                .map(|f| {
-                    let name = f.name;
-                    let f_ty = convert_type_hint_inner(db, (*f.type_hint).clone())?;
-                    let dt = match f_ty {
-                        Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                    };
-                    Ok(datalit::tycheck::TypeNamedField {
-                        name,
-                        ty: Box::new(dt),
-                    })
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::AnonStruct(
-                datalit::tycheck::TypeAnonStruct { fields: fields? }
-            ))
-        }
-
-
-        TypeHint::List(l) => {
-            let elem_ty = convert_type_hint_inner(db, (*l.element_type).clone())?;
-            let dt = match elem_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::List(
-                datalit::tycheck::TypeList {
-                    element_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Map(m) => {
-            let key_ty = convert_type_hint_inner(db, (*m.key_type).clone())?;
-            let key_dt = match key_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            let value_ty = convert_type_hint_inner(db, (*m.value_type).clone())?;
-            let value_dt = match value_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Map(
-                datalit::tycheck::TypeMap {
-                    key_type: Box::new(key_dt),
-                    value_type: Box::new(value_dt),
-                }
-            ))
-        }
-
-        TypeHint::Set(s) => {
-            let elem_ty = convert_type_hint_inner(db, (*s.element_type).clone())?;
-            let dt = match elem_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Set(
-                datalit::tycheck::TypeSet {
-                    element_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Option(o) => {
-            let inner_ty = convert_type_hint_inner(db, (*o.inner_type).clone())?;
-            let dt = match inner_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Option(
-                datalit::tycheck::TypeOption {
-                    inner_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Result(r) => {
-            let inner_ty = convert_type_hint_inner(db, (*r.inner_type).clone())?;
-            let dt = match inner_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Result(
-                datalit::tycheck::TypeResult {
-                    inner_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Tensor(t) => {
-            let elem_ty = convert_type_hint_inner(db, (*t.element_type).clone())?;
-            let dt = match elem_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Tensor(
-                datalit::tycheck::TypeTensor {
-                    element_type: Box::new(dt),
-                    rank: t.rank,
-                }
-            ))
-        }
-
-        TypeHint::Atom(a) => {
-            Type::Datalit(datalit::tycheck::Type::Atom(
-                datalit::tycheck::TypeAtom { name: a.name }
-            ))
-        }
-
-        TypeHint::Term(t) => {
-            let payload_ty = convert_type_hint_inner(db, (*t.payload).clone())?;
-            let dt = match payload_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Term(
-                datalit::tycheck::TypeTerm { name: t.name, payload: Box::new(dt) }
-            ))
-        }
-
-        TypeHint::Enum(e) => {
-            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
-                .map(|v| {
-                    let payload = match &v.payload {
-                        Some(p) => {
-                            let p_ty = convert_type_hint_inner(db, (**p).clone())?;
-                            let dt = match p_ty {
-                                Type::Datalit(dt) => dt.clone(),
-                                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                            };
-                            Some(Box::new(dt))
-                        }
-                        None => None,
-                    };
-                    Ok(datalit::tycheck::TypeEnumVariant { name: v.name, payload })
-                })
-                .collect();
-            let mut variants = variants?;
-            variants.sort_by(|a, b| a.name.as_str(db).cmp(b.name.as_str(db)));
-            Type::Datalit(datalit::tycheck::Type::Enum(
-                datalit::tycheck::TypeEnum { variants }
-            ))
-        }
-
-        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
-        TypeHint::Rec(r) => return Err(rec_refused(db, &r)),
-        TypeHint::Alias(alias) => {
-            // Type alias cannot be resolved without alias map.
-            return Err(TypeError::UnresolvedTypeAlias {
-                name: alias.name.as_str(db).to_string(),
-                local_index: alias.local_index,
-            });
-        }
-        TypeHint::Table(t) => {
-            let columns: Result<Vec<_>, TypeError> = t.columns.iter()
-                .map(|c| {
-                    let name = c.name;
-                    let c_ty = convert_type_hint_inner(db, (*c.type_hint).clone())?;
-                    let dt = match c_ty {
-                        Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                    };
-                    Ok(datalit::tycheck::TypeNamedField {
-                        name,
-                        ty: Box::new(dt),
-                    })
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::Table(
-                datalit::tycheck::TypeTable { columns: columns? }
-            ))
-        }
-    };
-
-    Ok(ty)
+    let aliases = bct::lookup::LookupMap::new();
+    convert_type_hint_with_aliases(db, type_hint, &aliases)
 }
 
 /// Convert a type hint to a type, resolving type aliases.
@@ -976,7 +750,7 @@ pub fn convert_type_hint_with_aliases<'db>(
     type_hint: TypeHint<'db>,
     aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
-    convert_type_hint_with_aliases_inner(db, type_hint, aliases, &|_| None)
+    convert_type_hint_inheriting(db, type_hint, aliases, &|_| None)
 }
 
 /// Convert a type hint to a type, resolving a type alias not in `aliases`
@@ -990,235 +764,38 @@ pub fn convert_type_hint_inheriting<'db>(
     aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
     inherited: &dyn Fn(InternedText<'db>) -> Option<Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
-    convert_type_hint_with_aliases_inner(db, type_hint, aliases, inherited)
+    let names = AliasNames { db, aliases, inherited };
+    datalit::tycheck::convert_type_hint_with(db, &type_hint, &names).map(Type::Datalit)
 }
 
-fn convert_type_hint_with_aliases_inner<'db>(
+/// The aliases and type parameters in scope where a hint is written.
+struct AliasNames<'a, 'db> {
     db: &'db dyn Db,
-    type_hint: TypeHint<'db>,
-    aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
-    inherited: &dyn Fn(InternedText<'db>) -> Option<Type<'db>>,
-) -> Result<Type<'db>, TypeError> {
-    let ty = match type_hint {
-        TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
-        TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
-        TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
-        TypeHint::U16 => Type::Datalit(datalit::tycheck::Type::U16),
-        TypeHint::I16 => Type::Datalit(datalit::tycheck::Type::I16),
-        TypeHint::U32 => Type::Datalit(datalit::tycheck::Type::U32),
-        TypeHint::I32 => Type::Datalit(datalit::tycheck::Type::I32),
-        TypeHint::U64 => Type::Datalit(datalit::tycheck::Type::U64),
-        TypeHint::I64 => Type::Datalit(datalit::tycheck::Type::I64),
-        TypeHint::Index => Type::Datalit(datalit::tycheck::Type::Index),
-        TypeHint::Offset => Type::Datalit(datalit::tycheck::Type::Offset),
-        TypeHint::F32 => Type::Datalit(datalit::tycheck::Type::F32),
-        TypeHint::F64 => Type::Datalit(datalit::tycheck::Type::F64),
-        TypeHint::Int => Type::Datalit(datalit::tycheck::Type::Int),
-        TypeHint::String => Type::Datalit(datalit::tycheck::Type::String),
-        TypeHint::Data => Type::Datalit(datalit::tycheck::Type::Data),
-        TypeHint::Error => Type::Datalit(datalit::tycheck::Type::Error),
+    aliases: &'a bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
+    inherited: &'a dyn Fn(InternedText<'db>) -> Option<Type<'db>>,
+}
 
-        TypeHint::AnonTuple(t) => {
-            let fields: Result<Vec<_>, TypeError> = t.fields.iter()
-                .map(|f| {
-                    let f_ty = convert_type_hint_with_aliases_inner(db, f.clone(), aliases, inherited)?;
-                    match f_ty {
-                        Type::Datalit(dt) => Ok(dt.clone()),
-                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                    }
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::AnonTuple(
-                datalit::tycheck::TypeAnonTuple { fields: fields? }
-            ))
-        }
+impl<'db> AliasNames<'_, 'db> {
+    fn lookup(&self, name: InternedText<'db>) -> Option<Type<'db>> {
+        self.aliases.get(&name).cloned().or_else(|| (self.inherited)(name))
+    }
+}
 
-        TypeHint::AnonStruct(s) => {
-            let fields: Result<Vec<_>, TypeError> = s.fields.iter()
-                .map(|f| {
-                    let name = f.name;
-                    let f_ty = convert_type_hint_with_aliases_inner(db, (*f.type_hint).clone(), aliases, inherited)?;
-                    let dt = match f_ty {
-                        Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                    };
-                    Ok(datalit::tycheck::TypeNamedField {
-                        name,
-                        ty: Box::new(dt),
-                    })
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::AnonStruct(
-                datalit::tycheck::TypeAnonStruct { fields: fields? }
-            ))
-        }
-
-
-        TypeHint::List(l) => {
-            let elem_ty = convert_type_hint_with_aliases_inner(db, (*l.element_type).clone(), aliases, inherited)?;
-            let dt = match elem_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::List(
-                datalit::tycheck::TypeList {
-                    element_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Map(m) => {
-            let key_ty = convert_type_hint_with_aliases_inner(db, (*m.key_type).clone(), aliases, inherited)?;
-            let key_dt = match key_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            let value_ty = convert_type_hint_with_aliases_inner(db, (*m.value_type).clone(), aliases, inherited)?;
-            let value_dt = match value_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Map(
-                datalit::tycheck::TypeMap {
-                    key_type: Box::new(key_dt),
-                    value_type: Box::new(value_dt),
-                }
-            ))
-        }
-
-        TypeHint::Set(s) => {
-            let elem_ty = convert_type_hint_with_aliases_inner(db, (*s.element_type).clone(), aliases, inherited)?;
-            let dt = match elem_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Set(
-                datalit::tycheck::TypeSet {
-                    element_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Option(o) => {
-            let inner_ty = convert_type_hint_with_aliases_inner(db, (*o.inner_type).clone(), aliases, inherited)?;
-            let dt = match inner_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Option(
-                datalit::tycheck::TypeOption {
-                    inner_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Result(r) => {
-            let inner_ty = convert_type_hint_with_aliases_inner(db, (*r.inner_type).clone(), aliases, inherited)?;
-            let dt = match inner_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Result(
-                datalit::tycheck::TypeResult {
-                    inner_type: Box::new(dt)
-                }
-            ))
-        }
-
-        TypeHint::Tensor(t) => {
-            let elem_ty = convert_type_hint_with_aliases_inner(db, (*t.element_type).clone(), aliases, inherited)?;
-            let dt = match elem_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Tensor(
-                datalit::tycheck::TypeTensor {
-                    element_type: Box::new(dt),
-                    rank: t.rank,
-                }
-            ))
-        }
-
-        TypeHint::Atom(a) => {
-            Type::Datalit(datalit::tycheck::Type::Atom(
-                datalit::tycheck::TypeAtom { name: a.name }
-            ))
-        }
-
-        TypeHint::Term(t) => {
-            let payload_ty = convert_type_hint_with_aliases_inner(db, (*t.payload).clone(), aliases, inherited)?;
-            let dt = match payload_ty {
-                Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-            };
-            Type::Datalit(datalit::tycheck::Type::Term(
-                datalit::tycheck::TypeTerm { name: t.name, payload: Box::new(dt) }
-            ))
-        }
-
-        TypeHint::Enum(e) => {
-            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
-                .map(|v| {
-                    let payload = match &v.payload {
-                        Some(p) => {
-                            let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases, inherited)?;
-                            let dt = match p_ty {
-                                Type::Datalit(dt) => dt.clone(),
-                                Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                            };
-                            Some(Box::new(dt))
-                        }
-                        None => None,
-                    };
-                    Ok(datalit::tycheck::TypeEnumVariant { name: v.name, payload })
-                })
-                .collect();
-            let mut variants = variants?;
-            variants.sort_by(|a, b| a.name.as_str(db).cmp(b.name.as_str(db)));
-            Type::Datalit(datalit::tycheck::Type::Enum(
-                datalit::tycheck::TypeEnum { variants }
-            ))
-        }
-
-        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
-        TypeHint::Rec(r) => return Err(rec_refused(db, &r)),
-
-        TypeHint::Alias(alias) => {
-            // Look up the alias in the map.
-            if let Some(resolved_ty) = aliases.get(&alias.name) {
-                return Ok(resolved_ty.clone());
-            }
-            if let Some(resolved_ty) = inherited(alias.name) {
-                return Ok(resolved_ty);
-            }
-            return Err(TypeError::UnresolvedTypeAlias {
-                name: alias.name.as_str(db).to_string(),
+impl<'db> datalit::tycheck::TypeNames<'db, TypeError> for AliasNames<'_, 'db> {
+    fn resolve(&self, alias: &datalit::ast::TypeHintAlias<'db>) -> Result<datalit::tycheck::Type<'db>, TypeError> {
+        match self.lookup(alias.name) {
+            Some(Type::Datalit(ty)) => Ok(ty),
+            Some(Type::Function(_)) => unreachable!("an alias names no function type"),
+            None => Err(TypeError::UnresolvedTypeAlias {
+                name: alias.name.as_str(self.db).to_string(),
                 local_index: alias.local_index,
-            });
+            }),
         }
+    }
 
-        TypeHint::Table(t) => {
-            let columns: Result<Vec<_>, TypeError> = t.columns.iter()
-                .map(|c| {
-                    let name = c.name;
-                    let c_ty = convert_type_hint_with_aliases_inner(db, (*c.type_hint).clone(), aliases, inherited)?;
-                    let dt = match c_ty {
-                        Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                    };
-                    Ok(datalit::tycheck::TypeNamedField {
-                        name,
-                        ty: Box::new(dt),
-                    })
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::Table(
-                datalit::tycheck::TypeTable { columns: columns? }
-            ))
-        }
-    };
-
-    Ok(ty)
+    fn is_named(&self, name: InternedText<'db>) -> bool {
+        self.lookup(name).is_some()
+    }
 }
 
 // ============================================================================
@@ -1232,6 +809,18 @@ pub fn type_to_string<'db>(db: &'db dyn Db, ty: &Type<'db>) -> String {
 }
 
 impl<'db> Type<'db> {
+    /// This type with any `rec` at its head unfolded; see
+    /// [`datalit::tycheck::expose`]. What takes a value apart looks through
+    /// this, and so finds the parts a value of a recursive type has.
+    pub fn exposed(&self) -> std::borrow::Cow<'_, Type<'db>> {
+        match self {
+            Type::Datalit(dt @ datalit::tycheck::Type::Rec(_)) => {
+                std::borrow::Cow::Owned(Type::Datalit(datalit::tycheck::expose(dt).into_owned()))
+            }
+            _ => std::borrow::Cow::Borrowed(self),
+        }
+    }
+
     /// This type, shaped as datalove writes it; see
     /// [`datalit::type_syntax`].
     pub fn syntax(&self, db: &'db dyn Db) -> datalit::type_syntax::TypeSyntax<'db> {

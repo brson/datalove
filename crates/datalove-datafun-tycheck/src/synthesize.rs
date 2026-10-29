@@ -1235,7 +1235,7 @@ fn synthesize_try_option<'db>(
     let operand_ty = ctx.synthesize_expr(ctx.expr(try_op.operand))?;
 
     // Operand must be Option<T>.
-    let inner_ty = match operand_ty {
+    let inner_ty = match operand_ty.exposed().as_ref() {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => opt.inner_type.clone(),
         _ => {
             return Err(ctx.error_try_type_mismatch(
@@ -1272,7 +1272,7 @@ fn synthesize_try_result<'db>(
     let operand_ty = ctx.synthesize_expr(ctx.expr(try_op.operand))?;
 
     // Operand must be Result<T>.
-    let inner_ty = match operand_ty {
+    let inner_ty = match operand_ty.exposed().as_ref() {
         Type::Datalit(datalit::tycheck::Type::Result(res)) => res.inner_type.clone(),
         _ => {
             return Err(ctx.error_try_type_mismatch(
@@ -1433,7 +1433,10 @@ pub(crate) fn resolve_field_type<'db>(
     base_ty: &Type<'db>,
     selector: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let base_datalit_ty = match base_ty {
+    // Rule: Unroll - a value of a recursive type has the parts of its
+    // unfolding. The type reported is the one written.
+    let exposed = base_ty.exposed();
+    let base_datalit_ty = match exposed.as_ref() {
         Type::Datalit(dt) => dt,
         _ => {
             return Err(TypeError::ProjectionOnNonAggregate {
@@ -1489,7 +1492,7 @@ pub(crate) fn resolve_index_types<'db>(
     db: &'db dyn crate::Db,
     base_ty: &Type<'db>,
 ) -> Result<(Type<'db>, Type<'db>), String> {
-    match base_ty {
+    match base_ty.exposed().as_ref() {
         Type::Datalit(datalit::tycheck::Type::List(list)) => {
             Ok((
                 Type::Datalit(*list.element_type.clone()),
@@ -1523,7 +1526,7 @@ pub(crate) fn resolve_index_types<'db>(
 /// Returns true when indexing this type produces a view rather than
 /// a direct reference. Today: only tensor with rank > 1.
 pub(crate) fn is_view_producing_index(base_ty: &Type) -> bool {
-    matches!(base_ty, Type::Datalit(datalit::tycheck::Type::Tensor(t)) if t.rank > 1)
+    matches!(base_ty.exposed().as_ref(), Type::Datalit(datalit::tycheck::Type::Tensor(t)) if t.rank > 1)
 }
 
 /// Synthesize type through a field step in a place expression.

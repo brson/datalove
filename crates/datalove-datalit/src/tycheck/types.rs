@@ -14,7 +14,7 @@
 
 use rmx::prelude::*;
 use bct::text::InternedText;
-use crate::ast::TypeHint;
+use crate::ast::{TypeHint, TypeHintAlias};
 use crate::type_syntax::TypeSyntax;
 use std::borrow::Cow;
 
@@ -284,15 +284,65 @@ pub enum TypeError {
     IntOutOfRange,
     VariantNotFound(String),
     ArityMismatch { expected: usize, actual: usize },
+    /// A recursive type that is not well formed.
+    Rec(RecError),
+}
+
+/// What is wrong with a recursive type, and the name it is wrong about.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct RecError {
+    pub kind: RecErrorKind,
+    pub name: String,
+    /// The name's position among the names in type position its parse
+    /// filed: the binder's, or the use's.
+    pub local_index: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum RecErrorKind {
     /// A `rec` whose name its body never uses.
-    RecUnused(String),
-    /// A `rec` name that is already the name of an enclosing `rec`.
-    RecShadowed(String),
+    Unused,
+    /// A `rec` name that is already the name of an enclosing `rec`, or of an
+    /// alias or type parameter.
+    Shadowed,
     /// A use of a `rec` name with no collection between it and its binder,
     /// which would make the type infinitely large.
-    RecUnguarded(String),
+    Unguarded,
     /// A recursive type in a map's key or a set's element.
-    RecInKey(String),
+    InKey,
+    /// A type parameter inside a `rec` body.
+    Generic,
+}
+
+impl RecErrorKind {
+    /// The diagnostic code, a label for the name, and a note saying why.
+    pub fn diagnostic(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            RecErrorKind::Unused => ("T062", "never uses its name",
+                "a `rec` type is one whose body names it; without a use, write the body alone"),
+            RecErrorKind::Shadowed => ("T063", "the name is taken",
+                "a `rec` takes a name no enclosing `rec`, alias or type parameter has"),
+            RecErrorKind::Unguarded => ("T064", "recurs inline",
+                "a recursive type recurs inside a list, map, set or table, so that its values have a size"),
+            RecErrorKind::InKey => ("T065", "recursive type in a key",
+                "a map's key or a set's element cannot be a recursive type"),
+            RecErrorKind::Generic => ("T066", "a type parameter",
+                "a recursive type cannot hold a type parameter yet"),
+        }
+    }
+}
+
+impl std::fmt::Display for RecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = &self.name;
+        match self.kind {
+            RecErrorKind::Unused => write!(f, "`rec {name}` never uses `{name}`"),
+            RecErrorKind::Shadowed => write!(f, "`{name}` already names a type here"),
+            RecErrorKind::Unguarded => write!(f, "`{name}` recurs without a collection between it and its `rec`"),
+            RecErrorKind::InKey => write!(f, "the recursive type `{name}` is a map's key or a set's element"),
+            RecErrorKind::Generic => write!(f, "the type parameter `{name}` is inside a recursive type"),
+        }
+    }
 }
 
 impl std::fmt::Display for TypeError {
@@ -308,10 +358,7 @@ impl std::fmt::Display for TypeError {
             TypeError::IntOutOfRange => write!(f, "integer literal out of range for its type"),
             TypeError::VariantNotFound(name) => write!(f, "no variant `{name}`"),
             TypeError::ArityMismatch { expected, actual } => write!(f, "expected {expected} elements, found {actual}"),
-            TypeError::RecUnused(name) => write!(f, "`rec {name}` never uses `{name}`"),
-            TypeError::RecShadowed(name) => write!(f, "`{name}` already names an enclosing recursive type"),
-            TypeError::RecUnguarded(name) => write!(f, "`{name}` recurs without a collection between it and its `rec`"),
-            TypeError::RecInKey(name) => write!(f, "the recursive type `{name}` is a map's key or a set's element"),
+            TypeError::Rec(error) => write!(f, "{error}"),
         }
     }
 }
@@ -501,8 +548,9 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
 /// Whether `@` converts a value of one type to another.
 ///
 /// It clones a value to its own type, widens an integer to one that holds
-/// every value of it, widens `f32` to `f64`, and makes an atom or term a value
-/// of an enum that lists it. Nothing else: no narrowing, and no enum adapts to
+/// every value of it, widens `f32` to `f64`, makes an atom or term a value
+/// of an enum that lists it, and rolls a value of a recursive type's
+/// unfolding into the type. Nothing else: no narrowing, and no enum adapts to
 /// another.
 pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db>) -> bool {
     if types_equivalent(db, from, to) || can_widen_to(from, to) {
@@ -523,6 +571,9 @@ pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db
             v.name == t.name
                 && v.payload.as_ref().is_some_and(|p| types_equivalent(db, &t.payload, p))
         }),
+        // A value of a recursive type's unfolding is rolled into the type,
+        // which moves nothing: the two have one layout.
+        (_, Type::Rec(rec)) => types_equivalent(db, from, &rec.unfold()),
         _ => false,
     }
 }
@@ -536,13 +587,44 @@ pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,
     type_hint: &TypeHint<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    convert_in(db, type_hint, &mut RecScope::default())
+    // Datalit has no aliases: a name in a type is a `rec`'s, or nothing.
+    convert_type_hint_with(db, type_hint, &NoAliases)
+}
+
+/// What the bare names in a hint that no `rec` binds resolve to.
+pub trait TypeNames<'db, E> {
+    /// The type an alias or type parameter names, or why it names none.
+    fn resolve(&self, alias: &TypeHintAlias<'db>) -> Result<Type<'db>, E>;
+    /// Whether a name is taken by an alias or a type parameter, which a
+    /// `rec` may not take as well.
+    fn is_named(&self, name: InternedText<'db>) -> bool;
+}
+
+struct NoAliases;
+
+impl<'db> TypeNames<'db, TypeError> for NoAliases {
+    fn resolve(&self, _alias: &TypeHintAlias<'db>) -> Result<Type<'db>, TypeError> {
+        Err(TypeError::CannotSynthesize)
+    }
+    fn is_named(&self, _name: InternedText<'db>) -> bool {
+        false
+    }
+}
+
+/// Convert a type hint to a type, resolving the names no `rec` binds with
+/// `names`.
+pub fn convert_type_hint_with<'db, E: From<TypeError>>(
+    db: &'db dyn crate::Db,
+    type_hint: &TypeHint<'db>,
+    names: &dyn TypeNames<'db, E>,
+) -> Result<Type<'db>, E> {
+    convert_in(db, type_hint, &mut RecScope::default(), names)
 }
 
 /// The `rec` binders around a part of a hint being converted, and what is
 /// between them and it.
 #[derive(Default)]
-pub struct RecScope<'db> {
+struct RecScope<'db> {
     /// Innermost last.
     binders: Vec<RecBinder<'db>>,
     /// How many collections the part is inside.
@@ -553,54 +635,76 @@ pub struct RecScope<'db> {
 
 struct RecBinder<'db> {
     name: InternedText<'db>,
+    local_index: Option<u32>,
     /// `RecScope::collections` at the binder.
     collections: u32,
     used: bool,
 }
 
+fn rec_error(db: &dyn crate::Db, kind: RecErrorKind, name: InternedText<'_>, local_index: Option<u32>) -> TypeError {
+    TypeError::Rec(RecError { kind, name: name.as_str(db).to_string(), local_index })
+}
+
 impl<'db> RecScope<'db> {
     /// Enter the body of `rec name`.
-    pub fn bind(&mut self, db: &'db dyn crate::Db, name: InternedText<'db>) -> Result<(), TypeError> {
-        let text = || name.as_str(db).to_string();
+    fn bind(&mut self, db: &'db dyn crate::Db, rec: &crate::ast::TypeHintRec<'db>, taken: bool) -> Result<(), TypeError> {
+        let error = |kind| rec_error(db, kind, rec.name, rec.local_index);
         if self.in_key {
-            return Err(TypeError::RecInKey(text()));
+            return Err(error(RecErrorKind::InKey));
         }
-        if self.binders.iter().any(|b| b.name == name) {
-            return Err(TypeError::RecShadowed(text()));
+        if taken || self.binders.iter().any(|b| b.name == rec.name) {
+            return Err(error(RecErrorKind::Shadowed));
         }
-        self.binders.push(RecBinder { name, collections: self.collections, used: false });
+        self.binders.push(RecBinder {
+            name: rec.name,
+            local_index: rec.local_index,
+            collections: self.collections,
+            used: false,
+        });
         Ok(())
     }
 
     /// Leave the body of the innermost `rec`.
-    pub fn unbind(&mut self, db: &'db dyn crate::Db) -> Result<(), TypeError> {
+    fn unbind(&mut self, db: &'db dyn crate::Db) -> Result<(), TypeError> {
         let binder = self.binders.pop().expect("unbind follows bind");
         if !binder.used {
-            return Err(TypeError::RecUnused(binder.name.as_str(db).to_string()));
+            return Err(rec_error(db, RecErrorKind::Unused, binder.name, binder.local_index));
         }
         Ok(())
     }
 
-    /// The use of a `rec` name, if `name` is one in scope.
-    pub fn lookup(&mut self, db: &'db dyn crate::Db, name: InternedText<'db>) -> Option<Result<Type<'db>, TypeError>> {
-        let depth = self.binders.iter().rev().position(|b| b.name == name)?;
+    /// The use of a `rec` name, if the alias is one in scope.
+    fn lookup(&mut self, db: &'db dyn crate::Db, alias: &TypeHintAlias<'db>) -> Option<Result<Type<'db>, TypeError>> {
+        let depth = self.binders.iter().rev().position(|b| b.name == alias.name)?;
         let collections = self.collections;
         let in_key = self.in_key;
         let binder = self.binders.iter_mut().rev().nth(depth).expect("found above");
         binder.used = true;
-        let text = || name.as_str(db).to_string();
+        let error = |kind| rec_error(db, kind, alias.name, alias.local_index);
         Some(if in_key {
-            Err(TypeError::RecInKey(text()))
+            Err(error(RecErrorKind::InKey))
         } else if collections <= binder.collections {
-            Err(TypeError::RecUnguarded(text()))
+            Err(error(RecErrorKind::Unguarded))
         } else {
             Ok(Type::RecVar(depth as u32))
         })
     }
 
+    /// Check what an alias or type parameter names against where it is used.
+    fn check_named(&self, db: &'db dyn crate::Db, alias: &TypeHintAlias<'db>, ty: &Type<'db>) -> Result<(), TypeError> {
+        let error = |kind| rec_error(db, kind, alias.name, alias.local_index);
+        if self.in_key && contains_rec(ty) {
+            return Err(error(RecErrorKind::InKey));
+        }
+        if !self.binders.is_empty() && contains_var(ty) {
+            return Err(error(RecErrorKind::Generic));
+        }
+        Ok(())
+    }
+
     /// Run `f` inside a collection, and inside a key or element that is
     /// ordered if `key`.
-    pub fn collection<T>(&mut self, key: bool, f: impl FnOnce(&mut Self) -> T) -> T {
+    fn collection<T>(&mut self, key: bool, f: impl FnOnce(&mut Self) -> T) -> T {
         let was_in_key = self.in_key;
         self.collections += 1;
         self.in_key |= key;
@@ -611,11 +715,35 @@ impl<'db> RecScope<'db> {
     }
 }
 
-fn convert_in<'db>(
+/// Whether a type parameter is anywhere in a type.
+fn contains_var(ty: &Type<'_>) -> bool {
+    let named = |fs: &[TypeNamedField<'_>]| fs.iter().any(|f| contains_var(&f.ty));
+    match ty {
+        Type::Var(_) => true,
+        Type::Rec(r) => contains_var(&r.body),
+        Type::AnonTuple(t) => t.fields.iter().any(contains_var),
+        Type::AnonStruct(s) => named(&s.fields),
+        Type::Table(t) => named(&t.columns),
+        Type::List(l) => contains_var(&l.element_type),
+        Type::Set(s) => contains_var(&s.element_type),
+        Type::Map(m) => contains_var(&m.key_type) || contains_var(&m.value_type),
+        Type::Option(o) => contains_var(&o.inner_type),
+        Type::Result(r) => contains_var(&r.inner_type),
+        Type::Tensor(t) => contains_var(&t.element_type),
+        Type::Term(t) => contains_var(&t.payload),
+        Type::Enum(e) => e.variants.iter().any(|v| v.payload.as_deref().is_some_and(contains_var)),
+        Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16 | Type::U32 | Type::I32
+        | Type::U64 | Type::I64 | Type::Index | Type::Offset | Type::F32 | Type::F64
+        | Type::Int | Type::String | Type::Data | Type::Error | Type::Atom(_) | Type::RecVar(_) => false,
+    }
+}
+
+fn convert_in<'db, E: From<TypeError>>(
     db: &'db dyn crate::Db,
     type_hint: &TypeHint<'db>,
     scope: &mut RecScope<'db>,
-) -> Result<Type<'db>, TypeError> {
+    names: &dyn TypeNames<'db, E>,
+) -> Result<Type<'db>, E> {
     let ty = match type_hint {
         TypeHint::Bool => Type::Bool,
         TypeHint::U8 => Type::U8,
@@ -636,21 +764,21 @@ fn convert_in<'db>(
         TypeHint::Error => Type::Error,
 
         TypeHint::AnonTuple(t) => {
-            let fields: Result<Vec<_>, _> = t
+            let fields: Result<Vec<_>, E> = t
                 .fields
                 .iter()
-                .map(|f| convert_in(db, f, scope))
+                .map(|f| convert_in(db, f, scope, names))
                 .collect();
             Type::AnonTuple(TypeAnonTuple { fields: fields? })
         }
 
         TypeHint::AnonStruct(s) => {
-            let fields: Result<Vec<_>, _> = s
+            let fields: Result<Vec<_>, E> = s
                 .fields
                 .iter()
                 .map(|f| {
                     let name = f.name;
-                    let ty = convert_in(db, &f.type_hint, scope)?;
+                    let ty = convert_in(db, &f.type_hint, scope, names)?;
                     Ok(TypeNamedField { name, ty: Box::new(ty) })
                 })
                 .collect();
@@ -659,43 +787,43 @@ fn convert_in<'db>(
 
 
         TypeHint::List(l) => {
-            let element_type = scope.collection(false, |scope| convert_in(db, &l.element_type, scope))?;
+            let element_type = scope.collection(false, |scope| convert_in(db, &l.element_type, scope, names))?;
             Type::List(TypeList { element_type: Box::new(element_type) })
         }
 
         TypeHint::Map(m) => {
-            let key_type = scope.collection(true, |scope| convert_in(db, &m.key_type, scope))?;
-            let value_type = scope.collection(false, |scope| convert_in(db, &m.value_type, scope))?;
+            let key_type = scope.collection(true, |scope| convert_in(db, &m.key_type, scope, names))?;
+            let value_type = scope.collection(false, |scope| convert_in(db, &m.value_type, scope, names))?;
             Type::Map(TypeMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
         }
 
         TypeHint::Set(s) => {
-            let element_type = scope.collection(true, |scope| convert_in(db, &s.element_type, scope))?;
+            let element_type = scope.collection(true, |scope| convert_in(db, &s.element_type, scope, names))?;
             Type::Set(TypeSet { element_type: Box::new(element_type) })
         }
 
         TypeHint::Option(o) => {
-            let inner_type = convert_in(db, &o.inner_type, scope)?;
+            let inner_type = convert_in(db, &o.inner_type, scope, names)?;
             Type::Option(TypeOption { inner_type: Box::new(inner_type) })
         }
 
         TypeHint::Result(r) => {
-            let inner_type = convert_in(db, &r.inner_type, scope)?;
+            let inner_type = convert_in(db, &r.inner_type, scope, names)?;
             Type::Result(TypeResult { inner_type: Box::new(inner_type) })
         }
 
         TypeHint::Tensor(t) => {
-            let element_type = scope.collection(false, |scope| convert_in(db, &t.element_type, scope))?;
+            let element_type = scope.collection(false, |scope| convert_in(db, &t.element_type, scope, names))?;
             Type::Tensor(TypeTensor { element_type: Box::new(element_type), rank: t.rank })
         }
 
         TypeHint::Table(t) => {
-            let columns: Result<Vec<_>, _> = t
+            let columns: Result<Vec<_>, E> = t
                 .columns
                 .iter()
                 .map(|c| {
                     let name = c.name;
-                    let ty = scope.collection(false, |scope| convert_in(db, &c.type_hint, scope))?;
+                    let ty = scope.collection(false, |scope| convert_in(db, &c.type_hint, scope, names))?;
                     Ok(TypeNamedField { name, ty: Box::new(ty) })
                 })
                 .collect();
@@ -707,15 +835,15 @@ fn convert_in<'db>(
         }
 
         TypeHint::Term(t) => {
-            let payload = convert_in(db, &t.payload, scope)?;
+            let payload = convert_in(db, &t.payload, scope, names)?;
             Type::Term(TypeTerm { name: t.name, payload: Box::new(payload) })
         }
 
         TypeHint::Enum(e) => {
-            let variants: Result<Vec<_>, _> = e.variants.iter()
+            let variants: Result<Vec<_>, E> = e.variants.iter()
                 .map(|v| {
                     let payload = match &v.payload {
-                        Some(p) => Some(Box::new(convert_in(db, p, scope)?)),
+                        Some(p) => Some(Box::new(convert_in(db, p, scope, names)?)),
                         None => None,
                     };
                     Ok(TypeEnumVariant { name: v.name, payload })
@@ -727,8 +855,8 @@ fn convert_in<'db>(
         }
 
         TypeHint::Rec(r) => {
-            scope.bind(db, r.name)?;
-            let body = convert_in(db, &r.body, scope);
+            scope.bind(db, r, names.is_named(r.name))?;
+            let body = convert_in(db, &r.body, scope, names);
             // What is wrong in the body is the thing to say, and a name it
             // never reached is a consequence of it.
             let unbound = scope.unbind(db);
@@ -737,11 +865,14 @@ fn convert_in<'db>(
             Type::Rec(TypeRec { name: RecName(r.name), body: Box::new(body) })
         }
 
-        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
-        TypeHint::Alias(alias) => match scope.lookup(db, alias.name) {
+        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize.into()),
+        TypeHint::Alias(alias) => match scope.lookup(db, alias) {
             Some(use_) => use_?,
-            // Type aliases are resolved by datafun typechecker, not datalit.
-            None => return Err(TypeError::CannotSynthesize),
+            None => {
+                let ty = names.resolve(alias)?;
+                scope.check_named(db, alias, &ty)?;
+                ty
+            }
         },
     };
 

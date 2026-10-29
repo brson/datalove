@@ -1,0 +1,43 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const {name = "root", kids = [{name = "a", kids = []}, {name = "b", kids = [{name = "c", kids = []}]}]}
+                        v1 = const enum Arr([enum Num(1f64), enum Obj(%{"k" = enum Null})])
+                        debuglog v0
+                        v2 = getfieldref v0.1
+                        v3 = const 1index
+                        v4 = listboundscheck *v2[v3]
+                        branch v4, block2, block1
+                    block1:
+                        v5 = const "index out of bounds"
+                        v6 = error_from v5
+                        v7 = err v6
+                        unit_early_return v7
+                    block2:
+                        v8 = listelementref *v2[v3]
+                        v9 = getfieldref *v8.1
+                        debuglog *v9
+                        debuglog v1
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{name = \"root\", kids = [{name = \"a\", kids = []}, {name = \"b\", kids = [{name = \"c\", kids = []}]}]}\n[{name = \"c\", kids = []}]\nenum { term Arr [enum { term Num 1.0 }, enum { term Obj %{\"k\" = enum { atom Null }} }] }\n"),
+        ),
+    ],
+)

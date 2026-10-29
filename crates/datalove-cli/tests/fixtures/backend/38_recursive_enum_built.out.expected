@@ -1,0 +1,2 @@
+enum { term Obj %{"a" = enum { term Arr [enum { term Num 1.5 }, enum { term Num 1.5 }, enum { term Num 1.5 }] }, "b" = enum { atom Null }} }
+6

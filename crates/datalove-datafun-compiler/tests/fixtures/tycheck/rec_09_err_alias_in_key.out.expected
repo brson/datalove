@@ -1,0 +1,28 @@
+{
+  "diagnostics": [
+    {
+      "code": "T065",
+      "labels": [
+        {
+          "message": "recursive type in a key",
+          "span": [
+            28,
+            29
+          ],
+          "text": "L"
+        }
+      ],
+      "message": "the recursive type `L` is a map's key or a set's element",
+      "notes": [
+        "a map's key or a set's element cannot be a recursive type"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecInKey",
+      "name": "L"
+    }
+  ],
+  "judgements": []
+}

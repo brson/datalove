@@ -356,7 +356,8 @@ impl<'db> Unifier<'db> {
     /// is inside: the payload of an option, a field of a struct.
     pub fn shallow(&mut self, ty: &PType<'db>) -> PType<'db> {
         match self.prune(ty).into_owned() {
-            PType::Known(known) => expand(&known).unwrap_or(PType::Known(known)),
+            // What is read off a recursive type is read off its unfolding.
+            PType::Known(known) => expand(&expose(&known)).unwrap_or(PType::Known(known)),
             other => other,
         }
     }

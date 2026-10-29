@@ -285,10 +285,10 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
-        TypeError::RecursiveType { name, local_index: _ } => {
+        TypeError::Rec(error) => {
             json!({
-                "kind": "RecursiveType",
-                "name": name
+                "kind": format!("Rec{:?}", error.kind),
+                "name": error.name
             })
         }
         TypeError::DuplicateTypeAlias { name, .. } => {

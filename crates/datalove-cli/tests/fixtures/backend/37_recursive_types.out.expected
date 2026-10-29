@@ -1,0 +1,4 @@
+85
+ok ()
+63
+[{size = 1, next = [{size = 2, next = [{size = 3, next = [{size = 4, next = [{size = 5, next = [{size = 6, next = []}]}]}]}]}]}]

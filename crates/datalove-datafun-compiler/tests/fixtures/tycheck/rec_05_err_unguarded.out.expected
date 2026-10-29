@@ -1,0 +1,28 @@
+{
+  "diagnostics": [
+    {
+      "code": "T064",
+      "labels": [
+        {
+          "message": "recurs inline",
+          "span": [
+            33,
+            34
+          ],
+          "text": "L"
+        }
+      ],
+      "message": "`L` recurs without a collection between it and its `rec`",
+      "notes": [
+        "a recursive type recurs inside a list, map, set or table, so that its values have a size"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecUnguarded",
+      "name": "L"
+    }
+  ],
+  "judgements": []
+}

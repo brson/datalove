@@ -602,6 +602,7 @@ Some properties follow from the rules and are worth stating outright.
 | T063 | hint | A `rec` named as an enclosing `rec` is |
 | T064 | hint | A `rec`'s name used with no collection between it and its `rec` |
 | T065 | hint | A recursive type in a map's key or a set's element |
+| T066 | hint | A type parameter inside a recursive type; datafun only, datalit having none |
 
 ## Implementation
 

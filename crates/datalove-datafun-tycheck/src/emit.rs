@@ -328,12 +328,12 @@ drop the return type.")
             }
             builder
         }
-        PendingDiagnostic::RecursiveType { local_index, module_id: _, name } => {
-            DiagnosticBuilder::error(db, &format!("the recursive type `rec {}` is not supported in Datafun yet", name.as_str(db)))
-                .code("F090")
-                .primary_label(spans.lookup_alias(db, *local_index)?, "a recursive type")
-                .note("datalit has recursive types, and Datafun will; until then a Datafun \
-program cannot name one or take in data of one.")
+        PendingDiagnostic::Rec { local_index, module_id: _, error } => {
+            let (code, label, note) = error.kind.diagnostic();
+            DiagnosticBuilder::error(db, &error.to_string())
+                .code(code)
+                .primary_label(spans.lookup_alias(db, *local_index)?, label)
+                .note(note)
         }
         PendingDiagnostic::Coded { site, module_id: _, code, message, label, note } => {
             let ts = match site {

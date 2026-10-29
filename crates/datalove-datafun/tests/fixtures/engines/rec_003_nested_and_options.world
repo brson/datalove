@@ -1,0 +1,33 @@
+// Binders inside binders, a recursive type whose body is a list of options,
+// and a value rolled with `@`.
+----------
+scriptunit-fragment
+----------
+
+type E: rec E enum {
+    term Lit int,
+    term Block [rec S enum { term Let E, term Seq [S] }],
+}
+
+type T: rec T [?T]
+
+fun depth(ref t: T): int
+    var best: int = 0
+    for slot in ref t
+        if slot@ |inner|
+            let d = depth(ref inner) + 1
+            if d .> best
+                set best = d@
+            end if
+        end if
+    end for
+    ret best
+end fun
+
+let program: E = term Block [term Let term Lit 1, term Seq [term Let term Block []]]
+debuglog program
+
+let unrolled: [?T] = [some [none, none], some [some [none]], none]
+let t: T = unrolled@
+debuglog t
+debuglog depth(ref t)

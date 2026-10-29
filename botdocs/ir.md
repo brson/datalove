@@ -128,6 +128,8 @@ descriptors are computed from.
 | `Ref(Box<IrType>)` | A pointer to a value of the inner type |
 | `Cursor(CursorKind)` | A `for` loop's walk: `Stride`, `Row` or `Tree`, laid out as the runtime's cursor of that kind |
 | `Param(u32)` | A type parameter of the enclosing function, by position |
+| `Rec(Box<IrType>)` | A recursive type: its body, laid out as the body is |
+| `RecVar(u32)` | A use of an enclosing `Rec`, by de Bruijn index, only inside a collection |
 
 Two ordering rules matter and differ.
 
@@ -140,6 +142,17 @@ with nothing else: datalit compares two table types column by column, the
 typechecker makes a literal's header match its type, and a literal's cells are
 lowered left to right. A table whose columns were not already alphabetical had
 every cell written at another column's offset.
+
+**No value has a recursive type at its head.** Lowering and ownership hold
+every value, slot, parameter and return type as `IrType::held` gives it:
+unfolded at its head, and at the head of what a `Ref` points at. So anything
+that takes a value apart by its type finds the parts without unfolding, in
+lowering and in every backend. A `Rec` is left only where it recurs, inside a
+collection, which is where a backend meets it: as the element type of a
+descriptor it builds. The four descriptor builders (`IrTyDescTable`, the
+Cranelift emitter, C AOT and datalit's `TyDescTable`) each tie the knot their
+own way; see `botdocs/plan-recursive-types.md`. A constant's value is walked
+against its type, so the two constant writers unfold at each level.
 
 `IrType::Ref` has no source-level counterpart. It is produced by the
 projection instructions (`GetFieldRef`, `ListElementRef`, `MapValueRef`,

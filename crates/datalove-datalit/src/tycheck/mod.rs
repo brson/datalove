@@ -42,7 +42,10 @@ pub use types::{
     TypeEnumVariant,
     TypeRec,
     RecName,
-    RecScope,
+    RecError,
+    RecErrorKind,
+    TypeNames,
+    convert_type_hint_with,
     expose,
     contains_rec,
     // Error type.

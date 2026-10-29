@@ -1,0 +1,28 @@
+{
+  "diagnostics": [
+    {
+      "code": "T063",
+      "labels": [
+        {
+          "message": "the name is taken",
+          "span": [
+            35,
+            40
+          ],
+          "text": "Point"
+        }
+      ],
+      "message": "`Point` already names a type here",
+      "notes": [
+        "a `rec` takes a name no enclosing `rec`, alias or type parameter has"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "RecShadowed",
+      "name": "Point"
+    }
+  ],
+  "judgements": []
+}

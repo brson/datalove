@@ -1,0 +1,28 @@
+// Writing into a recursive value through its places.
+----------
+scriptunit-fragment
+----------
+
+type L: rec L { elt: int, next: [L] }
+
+fun sum(ref l: L): int
+    var total: int = l.elt@
+    for n in ref l.next
+        set total = total + sum(ref n)
+    end for
+    ret total
+end fun
+
+fun bump(mut l: L): !()
+    set l.elt = l.elt + 10
+    set l.next[(: index / 0)]!.elt = 100
+    ret ok ()
+end fun
+
+var l: L = { elt = 1, next = [{ elt = 2, next = [{ elt = 3, next = [] }] }] }
+debuglog sum(ref l)
+debuglog bump(mut l)
+debuglog l
+debuglog sum(ref l)
+set l.next = []
+debuglog l

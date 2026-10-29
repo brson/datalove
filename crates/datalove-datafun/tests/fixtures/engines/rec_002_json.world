@@ -1,0 +1,42 @@
+// JSON as a recursive enum through a list and a map's values: built,
+// matched, walked, and printed.
+----------
+scriptunit-fragment
+----------
+
+type Json: rec J enum {
+    atom Null,
+    term Bool bool,
+    term Num f64,
+    term Str string,
+    term Arr [J],
+    term Obj %{string = J},
+}
+
+fun size(j: Json): int
+    match j
+    case term Arr items
+        var total: int = 1
+        for item in ref items
+            set total = total + size(item@)
+        end for
+        ret total
+    case term Obj fields
+        var total: int = 1
+        for key, value in ref fields
+            set total = total + size(value@)
+        end for
+        ret total
+    case default
+        ret 1
+    end match
+end fun
+
+let doc: Json = term Obj %{
+    "head" = term Obj %{ "id" = term Num 1.0 },
+    "ops" = term Arr [term Num 2.5, atom Null, term Str "x", term Arr [term Bool true]],
+}
+debuglog doc
+debuglog size(doc@)
+let copy = doc@
+debuglog copy

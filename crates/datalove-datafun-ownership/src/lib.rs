@@ -831,10 +831,11 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             .unwrap_or(IrType::Unit)
     }
 
-    /// The IR type of a typechecker type in the function being analyzed.
+    /// The IR type of a typechecker type in the function being analyzed, as
+    /// lowering holds it; see `IrType::held`.
     fn ir_type(&self, ty: &Type<'db>) -> IrType {
         match ty {
-            Type::Datalit(ty) => IrType::from_datalit_generic(self.db, ty, self.type_params),
+            Type::Datalit(ty) => IrType::from_datalit_generic(self.db, ty, self.type_params).held(),
             Type::Function(_) => todo!("function types in IR"),
         }
     }
@@ -1335,7 +1336,7 @@ pub fn analyze_function<'db>(
         // Use resolved type if available, otherwise fall back to AST type hint.
         let ty = match resolved_param_types {
             Some(types) => ctx.ir_type(&types[i]),
-            None => IrType::from_type_hint_generic(db, &param.type_hint, ctx.type_params),
+            None => IrType::from_type_hint_generic(db, &param.type_hint, ctx.type_params).held(),
         };
         // A const parameter is a constant, and like any other const is
         // borrowed wherever it is named. It arrives by reference.
@@ -1775,7 +1776,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
 
         // Uninitialized var - get type from type hint.
         let ty = stmt.type_hint.as_ref()
-            .map(|th| IrType::from_type_hint(ctx.db, th))
+            .map(|th| IrType::from_type_hint(ctx.db, th).held())
             .unwrap_or(IrType::Unit);
 
         // Create binding, then mark as uninitialized.

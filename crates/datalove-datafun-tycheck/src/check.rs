@@ -51,6 +51,41 @@ pub fn check_expr<'db>(
         }
     }
 
+    // Rule: Check-Roll - a value of a recursive type is built as a value of
+    // its unfolding, and is of the recursive type. Anything else checks
+    // against the recursive type as it is.
+    if let Type::Datalit(rec @ datalit::tycheck::Type::Rec(_)) = expected {
+        if builds_a_value(&expr_kind) {
+            let unfolded = Type::Datalit(datalit::tycheck::expose(rec).into_owned());
+            check_unhinted(ctx, expr, expr_kind, &unfolded)?;
+            ctx.store_expr_type(expr, expected);
+            return Ok(());
+        }
+    }
+
+    check_unhinted(ctx, expr, expr_kind, expected)
+}
+
+/// Whether an expression is a literal that builds a value of its type from
+/// parts, which a value of a recursive type is built as.
+fn builds_a_value(kind: &ExprFunKind<'_>) -> bool {
+    matches!(kind,
+        ExprFunKind::None(_) | ExprFunKind::Some(_) | ExprFunKind::Ok(_) | ExprFunKind::Er(_)
+        | ExprFunKind::Table(_) | ExprFunKind::List(_) | ExprFunKind::Set(_) | ExprFunKind::Map(_)
+        | ExprFunKind::Tensor(_) | ExprFunKind::AnonTuple(_) | ExprFunKind::Tuple(_)
+        | ExprFunKind::AnonStruct(_) | ExprFunKind::Atom(_) | ExprFunKind::Term(_)
+        | ExprFunKind::EnumLiteral(_))
+}
+
+/// Check an expression against an expected type, its hint, if it has one,
+/// already checked.
+fn check_unhinted<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    expr_kind: &'db ExprFunKind<'db>,
+    expected: &Type<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
     match expr_kind {
         // The file is checked against what is expected of it, so that its
         // literals take their types from there as any literal does.

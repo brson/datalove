@@ -142,11 +142,12 @@ pub enum PendingDiagnostic<'db> {
         /// Whether the scope declares it below the use.
         below: bool,
     },
-    /// F090: A recursive type, which Datafun does not support yet.
-    RecursiveType {
+    /// T062 to T066: A recursive type that is not well formed, at the name
+    /// it is wrong about.
+    Rec {
         local_index: u32,
         module_id: Option<ModuleId<'db>>,
-        name: InternedText<'db>,
+        error: datalove_datalit::tycheck::RecError,
     },
     /// F062: A `native fun` was written somewhere that has no rider.
     NativeFunOutsideRider {

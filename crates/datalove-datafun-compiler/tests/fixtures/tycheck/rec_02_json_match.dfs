@@ -1,0 +1,21 @@
+type Json: rec J enum { atom Null, term Num f64, term Arr [J], term Obj %{string = J} }
+
+fun size(j: Json): int
+    match j
+    case atom Null
+        ret 1
+    case term Num n
+        ret 1
+    case term Arr items
+        var total: int = 1
+        for item in ref items
+            set total = total + size(item@)
+        end for
+        ret total
+    case term Obj fields
+        ret 1
+    end match
+end fun
+
+let doc: Json = term Obj %{ "a" = term Arr [term Num 1.0, atom Null] }
+let s = size(doc)

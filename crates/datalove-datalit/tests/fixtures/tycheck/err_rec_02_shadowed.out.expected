@@ -61,7 +61,7 @@
           "text": ": rec L { a: [rec L [L]] } / { a = [] }"
         }
       ],
-      "message": "`L` already names an enclosing recursive type"
+      "message": "`L` already names a type here"
     }
   ],
   "errors": [

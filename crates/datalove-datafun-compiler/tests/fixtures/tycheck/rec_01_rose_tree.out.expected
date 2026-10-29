@@ -1,0 +1,43 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "leaf",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "return_type": "Node"
+    },
+    {
+      "kind": "function",
+      "name": "count",
+      "params": [
+        {
+          "name": "n",
+          "type": "Node"
+        }
+      ],
+      "return_type": "int"
+    },
+    {
+      "kind": "variable",
+      "name": "first",
+      "type": "rec Node { name: string, kids: [Node] }"
+    },
+    {
+      "kind": "variable",
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "kind": "variable",
+      "name": "n",
+      "type": "int"
+    }
+  ]
+}

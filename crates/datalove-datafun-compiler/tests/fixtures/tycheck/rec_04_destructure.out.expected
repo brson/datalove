@@ -1,0 +1,16 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "p",
+      "type": "rec P { v: u8, kids: [P] }"
+    },
+    {
+      "kind": "variable",
+      "name": "v, kids",
+      "type": "rec P { v: u8, kids: [P] }"
+    }
+  ]
+}

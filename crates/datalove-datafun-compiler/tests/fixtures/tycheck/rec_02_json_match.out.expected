@@ -1,0 +1,27 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "size",
+      "params": [
+        {
+          "name": "j",
+          "type": "Json"
+        }
+      ],
+      "return_type": "int"
+    },
+    {
+      "kind": "variable",
+      "name": "doc",
+      "type": "rec J enum { term Arr [J], atom Null, term Num f64, term Obj %{string = J} }"
+    },
+    {
+      "kind": "variable",
+      "name": "s",
+      "type": "int"
+    }
+  ]
+}

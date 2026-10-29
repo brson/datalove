@@ -3,11 +3,13 @@
 A design for recursive types in datalit and Datafun: an inline `rec` binder,
 iso-recursive semantics, and recursion that must pass through a collection
 rather than a box. Written October 2026 in response to
-`mandocs/drafts/recursive-structural-types.md`; not implemented. Checked on
-paper against the AWFY benchmarks that need recursive data. The decisions
-for a first cut are in [Decisions](#user-content-decisions). Phase 1,
-datalit, is implemented (October 2026), and Datafun refuses recursive types
-(F090) until phase 2; see [Phase 1 as built](#user-content-phase-1-as-built).
+`mandocs/drafts/recursive-structural-types.md`. Checked on paper against the
+AWFY benchmarks that need recursive data. The decisions for a first cut are
+in [Decisions](#user-content-decisions). Phases 1 to 4 are implemented
+(October 2026): recursive types in datalit, and in Datafun on every engine;
+see [Phase 1 as built](#user-content-phase-1-as-built) and
+[Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built). Deep values,
+phase 5, are not done.
 
 ## Contents
 
@@ -25,6 +27,7 @@ datalit, is implemented (October 2026), and Datafun refuses recursive types
 - [Against the AWFY benchmarks](#user-content-against-the-awfy-benchmarks)
 - [Prior art](#user-content-prior-art)
 - [Phase 1 as built](#user-content-phase-1-as-built)
+- [Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built)
 - [What exists, what is missing](#user-content-what-exists-what-is-missing)
 - [Phases](#user-content-phases)
 - [Open questions](#user-content-open-questions)
@@ -293,7 +296,9 @@ These come from reading the code; none of them has been tried yet.
 
 ## The IR and the backends
 
-The type checker is the smaller part of the work. Behind it:
+The type checker is the smaller part of the work. Behind it, as found before
+phase 2; what was done about each is in
+[Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built):
 
 - **`IrType` is a second type tree.** `crates/datalove-datafun-ir/src/lib.rs`
   mirrors the checker's `Type` with boxed children. Lowering a `rec` type into
@@ -305,10 +310,8 @@ The type checker is the smaller part of the work. Behind it:
   Datafun checker and about 70 in datalit, plus the backends.
 - **Descriptor builders memoize too late.** A builder that files a
   descriptor after making it recurses before the entry exists. Datalit's
-  `TyDescTable` ties the knot now (`create_rec`); the Cranelift emitter
-  (`tydesc_emit.rs`) and C AOT's `collect_type_recursive` and `type_depth`
-  still have the old shape, and need a placeholder in their caches before
-  they descend.
+  `TyDescTable` ties the knot (`create_rec`), as the Cranelift emitter
+  (`tydesc_emit.rs`) and C AOT's `collect_type_recursive` came to.
 - **C AOT orders its definitions by depth** (`type_depth`, sorted in
   `crates/datalove-datafun-c-aot/src/lib.rs`). With cycles that becomes
   forward declarations of the descriptors, then their definitions.
@@ -452,6 +455,82 @@ through the runtime. What differed from the plan, or was found on the way:
   generated. `generics.rs`, `is_copy_type`, `equality_blocker` and worldgen's
   `is_linear_type` have their real answers already.
 
+## Phases 2 to 4 as built
+
+Datafun takes recursive types on the interpreter, the bytecode engine, the
+JIT and its tiered and chaos configurations, Cranelift AOT and C AOT. The
+fixtures are `rec_*` in `crates/datalove-datafun-compiler/tests/fixtures/tycheck`
+and `crates/datalove-datafun/tests/fixtures/engines`, and
+`crates/datalove-cli/tests/fixtures/backend/37_recursive_types.dfs` and
+`38_recursive_enum_built.dfs`, which are Storage's and Towers' shapes and a
+JSON tree built with `list.push`, run through the binary with `sys/std`.
+F090, the refusal phase 1 put in, is gone.
+
+- **One conversion.** Datafun's two hint conversions were near copies of
+  datalit's, differing in how a bare name resolves. They are now datalit's
+  `convert_type_hint_with` with a `TypeNames` that resolves aliases and type
+  parameters, so the `rec` rules are in one place. The `rec` errors became
+  one `TypeError::Rec(RecError)` with a kind and the name's span index, which
+  Datafun reports at the name, under the datalit codes. Datafun adds T066, a
+  type parameter inside a `rec` body, and an alias or type parameter taken as
+  a `rec` name is T063.
+- **The checker.** `check_expr` checks a literal form against a `rec` type's
+  unfolding and records the `rec` type; anything else meets the `rec` type by
+  subsumption. `Type::exposed` is applied where a value is taken apart:
+  `resolve_field_type` and `resolve_index_types`, which every projection and
+  index goes through, `for`, `match`, destructuring, the binding `if`, the
+  bare-index `set`, and `?` and `!`. The unifier's `shallow` unfolds, so
+  inference reads parts off a `rec` type too. `@` rolls.
+- **No value has a `rec` type at its head.** This replaced auditing every
+  backend's elimination sites. `IrType::held` unfolds a type at its head and
+  under a `Ref`, and lowering and ownership hold every value, slot, parameter
+  and return type that way, `expr_type` included. Backends, which take
+  values apart by their IR types, find parts without knowing about `Rec`. A
+  `Rec` survives only nested, as an element type, which is where a
+  descriptor of it is made. Ownership needed it too: before, a `match` on a
+  `rec` enum leaked its payload.
+- **Layout** of a `Rec` is its body's, with no unfolding: the guard rule
+  puts every use under a collection, and `layout_of` does not descend into a
+  collection. So `RecVar` is unreachable in `layout_of`.
+- **Descriptors, four ways.** The interpreter's `IrTyDescTable` files a
+  stand-in of the right size that is not plain, which is all that is read of
+  it while the unfolding is made, then copies the unfolding's descriptor over
+  it; with `layout_of` it needs no scratch table. Cranelift reserves the
+  `rec` type's data and the unfolding's emitter defines into it, so the two
+  share one descriptor; an unfolding emitted earlier is set aside while that
+  happens. C AOT writes the `rec` type's descriptor as its unfolding's under
+  the `rec` type's name, and declares every descriptor in the file first when
+  one is recursive, since no order puts each after what it names. Datalit's
+  is as in phase 1.
+- **Constants.** A data file's value is read against its type, and the two
+  AOT constant writers walk a constant against its type, so each unfolds at
+  every level. The interpreter and the JIT needed nothing.
+- **`eq_tydesc` and `cmp_tydesc` end on cycles.** Each carries the pairs of
+  collection descriptors it is inside, and a pair met again is alike: the
+  steps since were alike and the walk would repeat. Only collections are
+  tracked, since every cycle passes through one, and identical pointers
+  return before any of it. A test compares two values of one `rec` type made
+  through two datalit tables, which overflowed the stack before.
+- **No per-type glue needed memoizing.** Drop, clone, equality and printing
+  go through the runtime's descriptor walks in every backend, so they follow
+  the cyclic descriptors as they are.
+
+What is still unlike the plan:
+
+- **Passing a value does not unroll it.** A `rec T [?T]` is not accepted
+  where a `[?T]` is, so `list.push(mut t, ...)` with `t : rec T [?T]` is a
+  mismatch. Storage builds a `[?Tree]` and rolls it with `@`. Unrolling an
+  argument, a coercion with no cost, would make the benchmark direct, and
+  would also make types meet in one more place than iso-recursion says.
+- **`?` and `!` against a `rec` return type.** An early return whose
+  function returns a `rec` type that unfolds to an option or result is
+  refused, since the return type is not an option or result to the checker.
+- **`var x: T` with no value** takes its slot type from the hint, which has no
+  aliases there: an alias of any kind, a `rec` one included, comes out as
+  `IrType::Error` (`IrType::from_type_hint`). That was so before recursive
+  types; it is worth knowing because `var root: Node` is a natural thing to
+  write.
+
 ## What exists, what is missing
 
 What exists:
@@ -462,31 +541,23 @@ What exists:
   literal.
 - Collections that own heap storage.
 - `TyDesc` children as raw pointers.
-- Datalit's recursive types, from the parser to runtime values.
+- Recursive types in datalit and in Datafun, on every engine.
 
 What is missing:
 
-- `rec` in Datafun: lifting F090, `expose` at the Datafun checker's
-  elimination sites, and roll through `@`.
-- `Rec` and `RecVar` in `IrType`, with `expose` at every IR consumer.
-- Knot-tying construction of descriptors in Cranelift and C AOT, memoized
-  per-type glue in every backend, and descriptor comparison that ends on
-  cycles.
-- A borrowing `match ref` and `match mut`, deferred.
 - Some answer to drop, clone, equality and printing of deep values.
+- A borrowing `match ref` and `match mut`, deferred.
+- Generic recursive types, recursion groups, and recursive map keys and set
+  elements, refused in the first cut.
+- Storage, Json and Towers in `benchvs`.
 
 ## Phases
 
 1. **Datalit.** Done; see [Phase 1 as built](#user-content-phase-1-as-built).
-2. **The Datafun checker.** `rec` in Datafun types, `expose` at its
-   elimination sites, and roll through `@`.
-3. **The IR.** `Rec` and `RecVar` in `IrType`, lowering, and `expose` in the
-   passes, ownership and layout.
-4. **Backends.** Knot-tied descriptors in Cranelift and C AOT, memoized glue
-   in the interpreter, the JIT and C AOT, and `eq_tydesc` and `cmp_tydesc`
-   that end on cycles. Run the engine tests on
-   recursive values. Port Storage, Json and Towers to `benchvs` as the first
-   real programs.
+2. **The Datafun checker.** Done.
+3. **The IR.** Done.
+4. **Backends.** Done, but for porting Storage, Json and Towers to
+   `benchvs`; see [Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built).
 5. **Deep values.** Measure the depth at which drop and clone overflow, then
    decide between explicit work stacks and a documented limit.
 
@@ -496,6 +567,7 @@ What is missing:
   or will the guard eventually need a slot of its own?
 - Does real data need mutual-recursion groups, or is nesting enough?
 - When does borrowing `match` land?
+- Should passing a value to a parameter of its unfolding's type unroll it?
 - Does an emptied list keep its buffer through `list.pop`? Towers'
   allocation-free moves depend on it.
 - Should List be ported with cloning, which measures allocation, or with

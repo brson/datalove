@@ -112,6 +112,12 @@ pub fn layout_of(ty: &IrType) -> TypeLayout {
         IrType::Enum(variants) => enum_layout(variants),
         IrType::Option(inner) => option_layout(inner),
         IrType::Result(ok_ty) => result_layout(ok_ty),
+
+        // A recursive type is laid out as its body. The body refers to the
+        // whole only inside collections, whose layouts do not depend on what
+        // they hold, so the walk never reaches a use.
+        IrType::Rec(body) => layout_of(body),
+        IrType::RecVar(_) => unreachable!("a recursive type's use is inside a collection"),
     }
 }
 

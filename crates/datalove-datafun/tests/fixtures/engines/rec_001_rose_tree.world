@@ -1,0 +1,28 @@
+// A rose tree: a recursive type through a list. Built, walked by reference,
+// projected and indexed through, printed whole, and dropped.
+----------
+scriptunit-fragment
+----------
+
+type Node: rec Node { name: string, kids: [Node] }
+
+fun leaf(name: string): Node
+    ret { name = name, kids = [] }
+end fun
+
+fun count(ref n: Node): int
+    var total: int = 1
+    for kid in ref n.kids
+        set total = total + count(ref kid)
+    end for
+    ret total
+end fun
+
+fun second_name(ref n: Node): !string
+    ret ok n.kids[(: index / 1)]!.name@
+end fun
+
+let t: Node = { name = "root", kids = [leaf("a"), { name = "b", kids = [leaf("c")] }] }
+debuglog t
+debuglog count(ref t)
+debuglog second_name(ref t)

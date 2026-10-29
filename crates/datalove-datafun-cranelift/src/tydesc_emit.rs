@@ -145,6 +145,9 @@ pub struct TyDescEmitter {
     tydescs: HashMap<IrType, DataId>,
     /// Counter for unique names.
     counter: u32,
+    /// Data declared for a type before the type's descriptor is made, which
+    /// the descriptor is then defined into; see `emit_rec`.
+    reserved: HashMap<IrType, DataId>,
 }
 
 impl TyDescEmitter {
@@ -153,6 +156,7 @@ impl TyDescEmitter {
         Self {
             tydescs: HashMap::new(),
             counter: 0,
+            reserved: HashMap::new(),
         }
     }
 
@@ -167,6 +171,12 @@ impl TyDescEmitter {
 
         // Handle types with inner type references.
         match ty {
+            IrType::Rec(_) => {
+                return self.emit_rec(module, ty);
+            }
+            IrType::RecVar(index) => {
+                unreachable!("rec index {index} reached a descriptor; a type taken out of a rec body is unfolded");
+            }
             IrType::Unit => {
                 // Unit is an empty tuple.
                 return self.emit_tuple_tydesc(module, ty, &[]);
@@ -225,9 +235,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare tydesc data: {}", e)))?;
+        let data_id = self.declare_tydesc(module, ty, &name, "declare tydesc data: {}")?;
 
         // Define data.
         let mut data_desc = DataDescription::new();
@@ -239,6 +247,52 @@ impl TyDescEmitter {
             .map_err(|e| CraneliftError::Module(format!("define tydesc data: {}", e)))?;
 
         self.tydescs.insert(ty.clone(), data_id);
+        Ok(data_id)
+    }
+
+    /// Declare the data a type's descriptor is defined into: what was
+    /// reserved for it, or new data.
+    fn declare_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        ty: &IrType,
+        name: &str,
+        what: &str,
+    ) -> Result<DataId, CraneliftError> {
+        if let Some(id) = self.reserved.remove(ty) {
+            return Ok(id);
+        }
+        module
+            .declare_data(name, Linkage::Local, false, false)
+            .map_err(|e| CraneliftError::Module(format!("{what}: {e}")))
+    }
+
+    /// Emit the descriptor of a recursive type, which its unfolding's parts
+    /// point back to.
+    ///
+    /// A recursive type and its unfolding have one layout, so they share one
+    /// descriptor. Its data is declared and filed under the recursive type
+    /// before the unfolding's descriptor is made, so that the parts' uses of
+    /// the type are relocated to it, and the unfolding's descriptor is then
+    /// defined into it.
+    fn emit_rec<M: Module>(&mut self, module: &mut M, ty: &IrType) -> Result<DataId, CraneliftError> {
+        let name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| CraneliftError::Module(format!("declare rec tydesc: {}", e)))?;
+        self.tydescs.insert(ty.clone(), data_id);
+        let unfolded = ty.exposed().into_owned();
+        // A descriptor of the unfolding made before this one is set aside, so
+        // that one is made into the reserved data, and put back after: the
+        // two are alike, and what already points at the first may go on.
+        let earlier = self.tydescs.remove(&unfolded);
+        self.reserved.insert(unfolded.clone(), data_id);
+        let defined = self.emit(module, &unfolded)?;
+        assert_eq!(defined, data_id, "the unfolding's descriptor is defined into the reserved data");
+        if let Some(earlier) = earlier {
+            self.tydescs.insert(unfolded, earlier);
+        }
         Ok(data_id)
     }
 
@@ -275,9 +329,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare list tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, &list_ty, &name, "declare list tydesc: {}")?;
 
         // Define data with relocation to element tydesc.
         let mut data_desc = DataDescription::new();
@@ -331,9 +383,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare set tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, &set_ty, &name, "declare set tydesc: {}")?;
 
         // Define data with relocation to element tydesc.
         let mut data_desc = DataDescription::new();
@@ -389,9 +439,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare map tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, &map_ty, &name, "declare map tydesc: {}")?;
 
         // Define data with relocations to key and value tydescs.
         let mut data_desc = DataDescription::new();
@@ -454,9 +502,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare tensor tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, &tensor_ty, &name, "declare tensor tydesc: {}")?;
 
         // Define data with relocation to element tydesc.
         let mut data_desc = DataDescription::new();
@@ -510,9 +556,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare option tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, &option_ty, &name, "declare option tydesc: {}")?;
 
         // Define data with relocation to inner tydesc.
         let mut data_desc = DataDescription::new();
@@ -566,9 +610,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare result tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, &result_ty, &name, "declare result tydesc: {}")?;
 
         // Define data with relocation to ok tydesc.
         let mut data_desc = DataDescription::new();
@@ -655,9 +697,7 @@ impl TyDescEmitter {
         let name = format!("__tydesc_ref_{}", self.counter);
         self.counter += 1;
 
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare ref tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, ref_ty, &name, "declare ref tydesc: {}")?;
 
         let mut data_desc = DataDescription::new();
         data_desc.define(bytes.into_boxed_slice());
@@ -775,9 +815,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare tuple tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, original_ty, &name, "declare tuple tydesc: {}")?;
 
         // Define data with relocation to fields array.
         let mut data_desc = DataDescription::new();
@@ -928,9 +966,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare struct tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, original_ty, &name, "declare struct tydesc: {}")?;
 
         // Define data with relocation to fields array.
         let mut data_desc = DataDescription::new();
@@ -1086,9 +1122,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare enum tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, original_ty, &name, "declare enum tydesc: {}")?;
 
         // Define data with relocation to variants array.
         let mut data_desc = DataDescription::new();
@@ -1151,9 +1185,7 @@ impl TyDescEmitter {
         let tydesc_name = format!("__tydesc_{}", self.counter);
         self.counter += 1;
 
-        let data_id = module
-            .declare_data(&tydesc_name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare atom tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, original_ty, &tydesc_name, "declare atom tydesc: {}")?;
 
         let mut data_desc = DataDescription::new();
         data_desc.define(bytes.into_boxed_slice());
@@ -1218,9 +1250,7 @@ impl TyDescEmitter {
         let tydesc_name = format!("__tydesc_{}", self.counter);
         self.counter += 1;
 
-        let data_id = module
-            .declare_data(&tydesc_name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare term tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, original_ty, &tydesc_name, "declare term tydesc: {}")?;
 
         let mut data_desc = DataDescription::new();
         data_desc.define(bytes.into_boxed_slice());
@@ -1365,9 +1395,7 @@ impl TyDescEmitter {
         self.counter += 1;
 
         // Declare data.
-        let data_id = module
-            .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare table tydesc: {}", e)))?;
+        let data_id = self.declare_tydesc(module, original_ty, &name, "declare table tydesc: {}")?;
 
         // Define data with relocation to columns array.
         let mut data_desc = DataDescription::new();

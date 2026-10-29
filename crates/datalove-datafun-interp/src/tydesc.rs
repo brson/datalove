@@ -20,6 +20,9 @@ pub struct IrTyDescTable {
     cache: FxHashMap<IrType, *const TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<TyDesc>>,
+    /// Storage for the descriptors of recursive types, which are written
+    /// after what points to them is made; see `create_rec`.
+    rec_tydescs: Vec<Box<std::cell::UnsafeCell<TyDesc>>>,
     /// Storage for tuple field arrays.
     tuple_fields: Vec<Vec<rtdt::TyInfoTupleField>>,
     /// Storage for struct field arrays.
@@ -37,6 +40,7 @@ impl IrTyDescTable {
         Self {
             cache: FxHashMap::default(),
             tydescs: Vec::new(),
+            rec_tydescs: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
             enum_variants: Vec::new(),
@@ -50,6 +54,9 @@ impl IrTyDescTable {
         if let Some(&ptr) = self.cache.get(ty) {
             return ptr;
         }
+        if let IrType::Rec(_) = ty {
+            return self.create_rec(ty);
+        }
         let mut tydesc = self.create_tydesc(ty);
         // The descriptors it points to were made first, so its own flags can
         // be read off them.
@@ -60,8 +67,45 @@ impl IrTyDescTable {
         ptr
     }
 
+    /// The descriptor of a recursive type, which the descriptors of its
+    /// unfolding point back to.
+    ///
+    /// A recursive type and its unfolding have one layout, so the type's
+    /// descriptor is a copy of its unfolding's. It is filed before the
+    /// unfolding is made, for the uses of the type in it to find, and written
+    /// after. In between, what is made may read it: a map of the type reads its
+    /// size to lay out its nodes, and an option of it whether it is plain. So it
+    /// stands as a descriptor of the type's size that is not plain, which is
+    /// true of the type, since it holds a collection.
+    fn create_rec(&mut self, ty: &IrType) -> *const TyDesc {
+        let layout = datalove_datafun_ir::layout::layout_of(ty);
+        let stand_in = TyDesc {
+            type_tag: rtdt::TyTag::List,
+            flags: 0,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo { list: rtdt::TyInfoList { element_tydesc: std::ptr::null() } },
+        };
+        self.rec_tydescs.push(Box::new(std::cell::UnsafeCell::new(stand_in)));
+        // Taken from the box where it is kept: moving a box asserts it is the
+        // only way to what it holds, so a pointer taken before the move would
+        // be invalidated by it.
+        let ptr = self.rec_tydescs.last().expect("just pushed").get();
+        self.cache.insert(ty.clone(), ptr as *const TyDesc);
+        let body = self.get_or_create(&ty.exposed());
+        // SAFETY: both are live descriptors, and nothing holds a reference to
+        // the one written, only pointers. A descriptor owns nothing, so a copy
+        // of its bits is a descriptor too.
+        unsafe { std::ptr::copy_nonoverlapping(body, ptr, 1) };
+        ptr
+    }
+
     fn create_tydesc(&mut self, ty: &IrType) -> Box<TyDesc> {
         match ty {
+            IrType::Rec(_) => unreachable!("a recursive type's descriptor is made by create_rec"),
+            IrType::RecVar(index) => unreachable!(
+                "rec index {index} reached a descriptor; a type taken out of a rec body is unfolded",
+            ),
             IrType::Unit => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Tuple,
                 flags: 0,
