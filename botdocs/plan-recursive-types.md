@@ -525,11 +525,12 @@ What is still unlike the plan:
 - **`?` and `!` against a `rec` return type.** An early return whose
   function returns a `rec` type that unfolds to an option or result is
   refused, since the return type is not an option or result to the checker.
-- **`var x: T` with no value** takes its slot type from the hint, which has no
-  aliases there: an alias of any kind, a `rec` one included, comes out as
-  `IrType::Error` (`IrType::from_type_hint`). That was so before recursive
-  types; it is worth knowing because `var root: Node` is a natural thing to
-  write.
+- **`var x: T` with no value** took its slot type from the hint, with no
+  aliases to resolve it by, so any alias, a `rec` one included, reached the
+  IR as `IrType::Error` and the slot was read as garbage. It predated
+  recursive types and is fixed: the typechecker records the type each such
+  hint resolved to in `ExprTypes`, keyed by the hint, and lowering and
+  ownership read it there (`spec_037_var_without_value_of_an_alias`).
 
 ## What exists, what is missing
 

@@ -1,0 +1,77 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack struct {v0, v1}
+                        store.copy s0, v2
+                        debuglog s0
+                        v3 = call u0()
+                        debuglog v3
+                        v4 = const "r"
+                        v5 = const "k"
+                        v6 = list []
+                        v7 = pack struct {v5, v6}
+                        v8 = list [v7]
+                        v9 = pack struct {v4, v8}
+                        drop.tracked s1
+                        store.move.tracked s1, v9
+                        debuglog s1
+                        v10 = const "a"
+                        v11 = const "b"
+                        v12 = const false
+                        v13 = call u1(v10, v11, v12) <string>
+                        debuglog v13
+                        drop v13
+                        unit_end_drop.tracked s1
+                        unit_end_drop v10
+                        unit_end_drop v11
+                        unit_end
+                    
+                    fn make():
+                    block0:
+                        v0 = const 3u32
+                        v1 = const 4u32
+                        v2 = pack struct {v0, v1}
+                        store.copy s0, v2
+                        v3 = load.copy s0
+                        return v3
+                    
+                    fn pick(p0, p1, p2):
+                      desc0 = param<0>
+                    block0:
+                        v0 = copy p2
+                        branch v0, block1, block2
+                    block1:
+                        v1 = clone p0
+                        drop.tracked s0
+                        store.move.tracked s0, v1
+                        goto block3
+                    block2:
+                        v2 = clone p1
+                        drop.tracked s0
+                        store.move.tracked s0, v2
+                        goto block3
+                    block3:
+                        v3 = load.move.tracked s0
+                        return v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{x = 1, y = 2}\n{x = 3, y = 4}\n{name = \"r\", kids = [{name = \"k\", kids = []}]}\n\"b\"\n"),
+        ),
+    ],
+)

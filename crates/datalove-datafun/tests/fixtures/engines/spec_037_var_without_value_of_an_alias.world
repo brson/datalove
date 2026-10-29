@@ -1,0 +1,36 @@
+// A `var` declared without a value takes its type from its hint, which the
+// typechecker resolves. A hint naming an alias used to reach the IR
+// unresolved, as an error type, and the slot it made was read as garbage.
+----------
+scriptunit-fragment
+----------
+
+type Point: { x: u32, y: u32 }
+type Node: rec Node { name: string, kids: [Node] }
+
+fun make(): Point
+    var p: Point
+    set p = { x = 3, y = 4 }
+    ret p
+end fun
+
+fun pick<T>(ref a: T, ref b: T, first: bool): T
+    var out: T
+    if first
+        set out = a@
+    else
+        set out = b@
+    end if
+    ret out
+end fun
+
+var p: Point
+set p = { x = 1, y = 2 }
+debuglog p
+debuglog make()
+var root: Node
+set root = { name = "r", kids = [{ name = "k", kids = [] }] }
+debuglog root
+let a = "a"
+let b = "b"
+debuglog pick(ref a, ref b, false)

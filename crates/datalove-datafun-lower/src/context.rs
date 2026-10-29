@@ -333,10 +333,14 @@ impl<'db> LowerCtx<'db> {
         IrType::from_datalit_generic(self.db, ty, &self.body.type_params)
     }
 
-    /// The IR type of a type hint written in the function being lowered; see
-    /// `ir_type`.
-    pub fn hint_type(&self, hint: &datalove_datalit::ast::TypeHint<'db>) -> IrType {
-        IrType::from_type_hint_generic(self.db, hint, &self.body.type_params)
+    /// The IR type of the hint of a `var` with no value, as the typechecker
+    /// resolved it, aliases and all.
+    pub fn var_hint_type(&self, hint: &datalove_datalit::ast::TypeHint<'db>) -> IrType {
+        match self.expr_types.hint(hint) {
+            Some(datalove_datafun_common::Type::Datalit(ty)) => self.ir_type(ty),
+            Some(datalove_datafun_common::Type::Function(_)) => unreachable!("a hint is of no function type"),
+            None => panic!("the typechecker records the type of a var without a value"),
+        }
     }
 
     /// The IR type of an expression's value, as the IR holds it; see

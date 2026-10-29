@@ -21,7 +21,56 @@ use datalove_datafun_ir::IrType;
 /// inserts and lookups were the largest single item in typechecking and a
 /// percent of lowering. An expression's key is now its body and its place in
 /// that body's arena, so the table is one dense vector per body.
-pub type ExprTypes<'db> = BodyTable<'db, datalove_datafun_common::Type<'db>>;
+///
+/// It holds the types of the hints of `var`s declared with no value too,
+/// which have no expression to file them under; see `ExprTypes::hint`.
+#[derive(Clone, Hash, PartialEq, Eq, Default)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprTypes<'db> {
+    exprs: BodyTable<'db, datalove_datafun_common::Type<'db>>,
+    hints: Vec<(datalove_datalit::ast::TypeHint<'db>, datalove_datafun_common::Type<'db>)>,
+}
+
+impl<'db> ExprTypes<'db> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The type of `expr`.
+    pub fn get(&self, expr: ExprFun<'db>) -> Option<&datalove_datafun_common::Type<'db>> {
+        self.exprs.get(expr)
+    }
+
+    pub fn insert(&mut self, expr: ExprFun<'db>, ty: datalove_datafun_common::Type<'db>) {
+        self.exprs.insert(expr, ty)
+    }
+
+    /// How many expressions have a type.
+    pub fn len(&self) -> usize {
+        self.exprs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.exprs.is_empty()
+    }
+
+    /// The type the hint of a `var` with no value resolved to.
+    ///
+    /// Only the typechecker knows the aliases a hint names, and such a `var`
+    /// has no expression to record its type against, so the hint is the key.
+    /// A hint naming nothing means the same anywhere, and a name in one carries
+    /// the place it was written, so no two `var`s' hints are mistaken for each
+    /// other.
+    pub fn hint(&self, hint: &datalove_datalit::ast::TypeHint<'db>) -> Option<&datalove_datafun_common::Type<'db>> {
+        self.hints.iter().find(|(h, _)| h == hint).map(|(_, ty)| ty)
+    }
+
+    pub fn insert_hint(&mut self, hint: datalove_datalit::ast::TypeHint<'db>, ty: datalove_datafun_common::Type<'db>) {
+        if self.hint(&hint).is_none() {
+            self.hints.push((hint, ty));
+        }
+    }
+}
 
 /// Resolved call targets, by call.
 ///

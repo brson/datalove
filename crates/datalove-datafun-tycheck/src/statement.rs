@@ -221,13 +221,16 @@ pub fn check_statement<'db>(
                 None => {
                     // Uninitialized var - type hint is required (parser enforces this).
                     if let Some(hint) = stmt.type_hint.clone() {
-                        match ctx.convert_hint(hint) {
+                        match ctx.convert_hint(hint.C()) {
                             Ok(ty) => {
                                 if let Some(err) = unordered_binding_error(ctx, &ty, None) {
                                     ctx.add_error(err);
                                 }
                                 let name = stmt.binding.as_name()
                                     .expect("the parser requires a plain name without a value");
+                                // Lowering makes the variable's slot from this,
+                                // having no aliases of its own to read the hint by.
+                                ctx.expr_types.insert_hint(hint.C(), ty.C());
                                 ctx.add_variable(name, ty, true);
                             }
                             Err(e) => {

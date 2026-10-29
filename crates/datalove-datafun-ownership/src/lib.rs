@@ -1774,10 +1774,12 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
             .expect("the parser requires a plain name without a value")
             .text(ctx.db).S();
 
-        // Uninitialized var - get type from type hint.
-        let ty = stmt.type_hint.as_ref()
-            .map(|th| IrType::from_type_hint(ctx.db, th).held())
-            .unwrap_or(IrType::Unit);
+        // Uninitialized var - its type is what the typechecker resolved its
+        // hint to.
+        let hint = stmt.type_hint.as_ref()
+            .expect("the parser requires a type for a var without a value");
+        let ty = ctx.ir_type(ctx.expr_types.hint(hint)
+            .expect("the typechecker records the type of a var without a value"));
 
         // Create binding, then mark as uninitialized.
         let id = ctx.alloc_binding(name, ty, true, None);
