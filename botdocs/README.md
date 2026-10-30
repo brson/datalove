@@ -46,6 +46,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
 - [Testing the Engines Against One Reference](plan-engine-tests.md)
 - [Tuning the JIT](plan-jit-tuning.md)
+- [Values in Registers for the Cranelift Backend](plan-values-in-registers.md)
 - [Consts Built Once](plan-static-consts.md)
 - [A Runtime Datalit Loader](plan-datalit-loader.md)
 - [One Rule for Literals That Share a Type](plan-literal-typing.md)
