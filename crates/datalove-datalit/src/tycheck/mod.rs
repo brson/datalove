@@ -61,7 +61,6 @@ pub use types::{
     types_equivalent,
     can_widen_to,
     can_adapt_to,
-    check_type_coercion,
     // Unit and shape helpers.
     unit_type,
     check_tensor_element_count,

@@ -8,9 +8,8 @@
 //! 5. Type hint conversion - AST to types
 //! 6. Type to string - types to strings for errors
 //! 7. Unit and shape helpers - type constructors
-//! 8. Coercion - checking a type against an expected one
-//! 9. Integer range checking - literal validation
-//! 10. Diagnostic helpers - error message helpers
+//! 8. Integer range checking - literal validation
+//! 9. Diagnostic helpers - error message helpers
 
 use rmx::prelude::*;
 use bct::text::InternedText;
@@ -561,8 +560,7 @@ pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db
         (Type::U8, Type::I16 | Type::I32 | Type::I64 | Type::Int) => true,
         (Type::U16, Type::I32 | Type::I64 | Type::Int) => true,
         (Type::U32, Type::I64 | Type::Int) => true,
-        // Every f32 is exactly an f64. This is not in `can_widen_to`, which
-        // datalit also uses for implicit coercion, and floats only widen by `@`.
+        // Every f32 is exactly an f64.
         (Type::F32, Type::F64) => true,
         (Type::Atom(a), Type::Enum(e)) => {
             e.variants.iter().any(|v| v.name == a.name && v.payload.is_none())
@@ -1009,70 +1007,6 @@ pub fn check_tensor_element_count(shape: &[u32], actual: usize) -> Result<(), Ty
         return Err(TypeError::ArityMismatch { expected, actual });
     }
     Ok(())
-}
-
-// ============================================================================
-// Coercion
-// ============================================================================
-
-/// Check if a type can be coerced to an expected type.
-///
-/// Coercion rules:
-/// - Exact type match (via types_equivalent)
-/// - Numeric widening (via can_widen_to)
-/// - Any type coerces to Data
-pub fn check_type_coercion<'db>(
-    db: &'db dyn crate::Db,
-    actual: &Type<'db>,
-    expected: &Type<'db>,
-) -> Result<(), TypeError> {
-    if types_equivalent(db, actual, expected) {
-        return Ok(());
-    }
-
-    if can_widen_to(actual, expected) {
-        return Ok(());
-    }
-
-    if let Type::Data = expected {
-        return Ok(());
-    }
-
-    check_coercion_arity_or_mismatch(db, actual, expected)
-}
-
-/// Helper for check_type_coercion that distinguishes arity mismatches from type mismatches.
-fn check_coercion_arity_or_mismatch<'db>(
-    db: &'db dyn crate::Db,
-    actual: &Type<'db>,
-    expected: &Type<'db>,
-) -> Result<(), TypeError> {
-    if let (Type::AnonStruct(actual_struct), Type::AnonStruct(expected_struct)) = (actual, expected) {
-        let actual_count = actual_struct.fields.len();
-        let expected_count = expected_struct.fields.len();
-        if actual_count != expected_count {
-            return Err(TypeError::ArityMismatch {
-                expected: expected_count,
-                actual: actual_count,
-            });
-        }
-    }
-
-    if let (Type::AnonTuple(actual_tuple), Type::AnonTuple(expected_tuple)) = (actual, expected) {
-        let actual_count = actual_tuple.fields.len();
-        let expected_count = expected_tuple.fields.len();
-        if actual_count != expected_count {
-            return Err(TypeError::ArityMismatch {
-                expected: expected_count,
-                actual: actual_count,
-            });
-        }
-    }
-
-    Err(TypeError::TypeMismatch {
-        expected: type_to_string(db, expected),
-        actual: type_to_string(db, actual),
-    })
 }
 
 // ============================================================================
