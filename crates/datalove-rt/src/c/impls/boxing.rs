@@ -127,7 +127,7 @@ pub unsafe fn error_from_local(
 
     // Move inner value to heap storage (bitwise copy).
     unsafe {
-        std::ptr::copy_nonoverlapping(inner_in, moved_ptr, inner_size);
+        rtdt::bytes::copy_value(inner_in, moved_ptr, inner_size);
     }
 
     // Write Error struct to destination.
@@ -172,7 +172,7 @@ pub unsafe fn data_from_local(
 
     // Move inner value to heap storage (bitwise copy).
     unsafe {
-        std::ptr::copy_nonoverlapping(inner_in, moved_ptr, inner_size);
+        rtdt::bytes::copy_value(inner_in, moved_ptr, inner_size);
     }
 
     // Write Data struct to destination.

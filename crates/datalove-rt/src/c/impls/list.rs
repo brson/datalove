@@ -263,7 +263,7 @@ pub unsafe fn list_set_impl(
     }
 
     // Copy new element.
-    unsafe { std::ptr::copy_nonoverlapping(element_in, element_ptr, element_size) };
+    unsafe { rtdt::bytes::copy_value(element_in, element_ptr, element_size) };
 
     RtStatus::Ok
 }
@@ -309,7 +309,7 @@ pub unsafe fn list_push_impl(
 
     // Copy element to end.
     let element_size = element_tydesc.size() as usize;
-    unsafe { std::ptr::copy_nonoverlapping(element_in, list.end_ptr(), element_size) };
+    unsafe { rtdt::bytes::copy_value(element_in, list.end_ptr(), element_size) };
 
     list.set_size(list.size() + 1);
 
@@ -342,11 +342,7 @@ pub unsafe fn list_pop_impl(
     let last_index = list.size() - 1;
     let element_size = element_ty.size() as usize;
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            list.element_ptr(last_index),
-            opt.payload_ptr(),
-            element_size,
-        );
+        rtdt::bytes::copy_value(list.element_ptr(last_index), opt.payload_ptr(), element_size);
     }
 
     list.set_size(last_index);
@@ -422,7 +418,7 @@ pub unsafe fn list_insert_impl(
     } else {
         list.end_ptr()
     };
-    unsafe { std::ptr::copy_nonoverlapping(element_in, dest_ptr, element_size) };
+    unsafe { rtdt::bytes::copy_value(element_in, dest_ptr, element_size) };
 
     list.set_size(size + 1);
 
@@ -458,7 +454,7 @@ pub unsafe fn list_remove_impl(
     let element_ptr = list.element_ptr_mut(index);
 
     // Move element to option payload.
-    unsafe { std::ptr::copy_nonoverlapping(element_ptr, opt.payload_ptr(), element_size) };
+    unsafe { rtdt::bytes::copy_value(element_ptr, opt.payload_ptr(), element_size) };
 
     // Shift elements left.
     if index < size - 1 {
@@ -493,7 +489,7 @@ pub unsafe fn list_swap_impl(
         // SAFETY: two distinct elements of the list, each `element_size`
         // bytes, so they do not overlap.
         unsafe {
-            std::ptr::swap_nonoverlapping(list.element_ptr_mut(i), list.element_ptr_mut(j), element_size)
+            rtdt::bytes::swap_value(list.element_ptr_mut(i), list.element_ptr_mut(j), element_size)
         };
     }
     RtStatus::Ok

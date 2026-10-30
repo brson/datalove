@@ -70,7 +70,7 @@ unsafe fn clone_impl(
         TyTag::F32 | TyTag::F64 |
         TyTag::Atom => {
             unsafe {
-                std::ptr::copy_nonoverlapping(value_in, value_out, ty.size() as usize);
+                rtdt::bytes::copy_value(value_in, value_out, ty.size() as usize);
             }
             RtStatus::Ok
         }
@@ -134,7 +134,7 @@ unsafe fn clone_impl(
         // and asking first, for every value, cost the string paths their
         // inlining.
         TyTag::Tuple | TyTag::Struct | TyTag::Enum | TyTag::Term | TyTag::Option if ty.is_plain() => {
-            unsafe { std::ptr::copy_nonoverlapping(value_in, value_out, ty.size() as usize) };
+            unsafe { rtdt::bytes::copy_value(value_in, value_out, ty.size() as usize) };
             RtStatus::Ok
         }
 

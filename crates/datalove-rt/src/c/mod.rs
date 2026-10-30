@@ -265,7 +265,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_move_value_local(
     debug_assert_aligned(dst_out.as_ptr(), tydesc, "move_value_local:dst");
     unsafe {
         let size = tydesc.size as usize;
-        std::ptr::copy_nonoverlapping(src_ref.as_ptr(), dst_out.as_ptr(), size);
+        rtdt::bytes::copy_value(src_ref.as_ptr(), dst_out.as_ptr(), size);
     }
     RtStatus::Ok
 }

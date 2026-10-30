@@ -2397,8 +2397,8 @@ pub unsafe extern "C-unwind" fn dlr_std__mem_replace(
     // at a type parameter may still be the caller's.
     unsafe {
         let size = dest_td.size as usize;
-        std::ptr::copy(dest_ptr.as_ptr(), out.as_ptr(), size);
-        std::ptr::copy(src_ptr.as_ptr(), dest_ptr.as_ptr(), size);
+        rtdt::bytes::copy_value(dest_ptr.as_ptr(), out.as_ptr(), size);
+        rtdt::bytes::copy_value(src_ptr.as_ptr(), dest_ptr.as_ptr(), size);
     }
     OK
 }
@@ -2414,7 +2414,7 @@ pub unsafe extern "C-unwind" fn dlr_std__mem_swap(
     // refused (D010).
     unsafe {
         let size = a_td.size as usize;
-        std::ptr::swap_nonoverlapping(a_ptr.as_ptr(), b_ptr.as_ptr(), size);
+        rtdt::bytes::swap_value(a_ptr.as_ptr(), b_ptr.as_ptr(), size);
     }
     OK
 }
