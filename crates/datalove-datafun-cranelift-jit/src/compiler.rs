@@ -44,6 +44,36 @@ fn unique_symbol(func: &IrCodeUnit) -> String {
     format!("{}__jit{}", func.name, n)
 }
 
+/// Naming compiled code for `perf`, which otherwise sees only addresses.
+///
+/// With `DATALOVE_PERF_MAP` set, each function compiled is appended to
+/// `/tmp/perf-<pid>.map` as its address, size and name, the format `perf report`
+/// reads for code a JIT made. An entry at a loop header has `[osr]` after the
+/// name.
+mod perf_map {
+    use std::io::Write;
+    use std::sync::{Mutex, OnceLock};
+
+    /// The map file, or none if `DATALOVE_PERF_MAP` is unset.
+    fn file() -> Option<&'static Mutex<std::fs::File>> {
+        static FILE: OnceLock<Option<Mutex<std::fs::File>>> = OnceLock::new();
+        FILE.get_or_init(|| {
+            std::env::var_os("DATALOVE_PERF_MAP")?;
+            let path = format!("/tmp/perf-{}.map", std::process::id());
+            let file = std::fs::OpenOptions::new().create(true).append(true).open(&path)
+                .unwrap_or_else(|e| panic!("opening {path}: {e}"));
+            Some(Mutex::new(file))
+        }).as_ref()
+    }
+
+    pub(super) fn record(code: *const u8, size: usize, name: &str, osr: bool) {
+        let Some(file) = file() else { return };
+        let osr = if osr { " [osr]" } else { "" };
+        writeln!(file.lock().unwrap(), "{:x} {:x} {name}{osr}", code as usize, size)
+            .expect("writing the perf map");
+    }
+}
+
 /// Wrap a JIT compilation error with context about arena exhaustion.
 ///
 /// When the arena runs out of space, cranelift reports a generic allocation
@@ -400,6 +430,7 @@ impl JitCompiler {
         compiler.set_static_consts(static_consts_of(func, interp));
         compiler.abandon_on_interpreter_errors();
 
+        let is_osr = osr.is_some();
         let defined = match osr {
             None => compiler.compile_as(&unique_symbol(func)),
             Some(spec) => compiler.compile_osr_as(&unique_symbol(func), spec),
@@ -412,6 +443,7 @@ impl JitCompiler {
         // Get the code pointer and size.
         let code_ptr = self.jit_module.get_finalized_function(defined.id);
         let code_size = defined.code_size as usize;
+        perf_map::record(code_ptr, code_size, &func.name, is_osr);
 
         // Determine if function uses sret.
         let func_ctx = func.function_context()

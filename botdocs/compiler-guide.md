@@ -1704,6 +1704,14 @@ comes from. The interpreter's call path takes frames off a `FrameStack`
 (`interp/src/frame.rs`) and layouts from a `LayoutCache` (`interp/src/layout.rs`);
 reusing frames and layouts made it 1.5-1.8x faster on call-heavy code.
 
+**Profiling the JIT.** With `DATALOVE_PERF_MAP` set, the JIT appends each
+function it compiles to `/tmp/perf-<pid>.map`, which `perf report` reads to name
+code that is otherwise bare addresses; an OSR entry is marked `[osr]`. `perf
+annotate` cannot read code that was never in a file, so for instruction-level
+detail annotate the same program compiled AOT, which goes through the same
+codegen. Call graphs through libc's `memcpy`, which has no frame pointer, lose
+their callers, so read self time rather than inclusive.
+
 **What keeps the JIT fast is checked by counts, not times.** A fast path
 falling back to its slow one gives the same answers more slowly, which no
 output comparison sees. `jit_path_tests` in `datalove-cli` read `--jit-stats`
