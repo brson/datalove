@@ -142,8 +142,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // - Aggregate slots: 0xFF poison makes uninitialized reads obvious
             // - Tracking bytes: 0x00 (UNINIT), so DropTracked skips them
             if let Some(frame_slot) = self.frame_slot {
-                // Fill aggregate slots with 0xFF poison pattern.
-                for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate() {
+                // Fill aggregate slots with 0xFF poison pattern, in a debug
+                // build only, as the interpreter does its frames. Nothing
+                // reads a slot before writing it, and the fill is a store per
+                // word of every slot on every call.
+                let poison = cfg!(debug_assertions);
+                for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate().filter(|_| poison) {
                     if dynamic::is_dynamic_value(slot_ty) {
                         continue;
                     }
