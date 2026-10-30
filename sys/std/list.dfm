@@ -43,6 +43,7 @@ end fun
 
 // Append an element.
 fun push<T>(mut self: [T], elem: T)
+  inline
   call list_push(mut self, elem)
 end fun
 
@@ -227,11 +228,13 @@ end fun
 
 // Make room for at least n more elements.
 fun reserve<T>(mut self: [T], n: index)
+  inline
   call list_reserve(mut self, n)
 end fun
 
 // Drop every element, leaving an empty list.
 fun clear<T>(mut self: [T])
+  inline
   call list_clear(mut self)
 end fun
 

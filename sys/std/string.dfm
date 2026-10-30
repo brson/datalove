@@ -238,11 +238,13 @@ end fun
 
 // Appends a character (codepoint) to the string.
 fun push_char(mut self: string, ch: u32)
+  inline
   call string_push_char(mut self, ch)
 end fun
 
 // Appends another string.
 fun push_str(mut self: string, ref other: string)
+  inline
   call string_push_str(mut self, ref other)
 end fun
 
@@ -254,21 +256,25 @@ end fun
 
 // Truncates the string to the given byte length.
 fun truncate(mut self: string, new_len: index)
+  inline
   call string_truncate(mut self, new_len)
 end fun
 
 // Clears the string, making it empty.
 fun clear(mut self: string)
+  inline
   call string_clear(mut self)
 end fun
 
 // Inserts a character at the given byte index.
 fun insert_char(mut self: string, index: index, ch: u32)
+  inline
   call string_insert_char(mut self, index, ch)
 end fun
 
 // Inserts a string at the given byte index.
 fun insert_str(mut self: string, index: index, ref other: string)
+  inline
   call string_insert_str(mut self, index, ref other)
 end fun
 

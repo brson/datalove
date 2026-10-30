@@ -43,6 +43,7 @@ end fun
 
 // Insert an entry, replacing any value already under the key.
 fun insert<K, V>(mut self: %{K = V}, key: K, value: V) where { K is ord, }
+  inline
   call map_insert(mut self, key, value)
 end fun
 
@@ -60,6 +61,7 @@ end fun
 
 // Drop every entry.
 fun clear<K, V>(mut self: %{K = V}) where { K is ord, }
+  inline
   call map_clear(mut self)
 end fun
 

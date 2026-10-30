@@ -44,6 +44,7 @@ end fun
 
 // Drop every element.
 fun clear<T>(mut self: #{T}) where { T is ord, }
+  inline
   call set_clear(mut self)
 end fun
 
