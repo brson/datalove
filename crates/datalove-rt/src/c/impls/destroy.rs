@@ -210,7 +210,6 @@ pub unsafe fn any_destroy_local(
             // Enum - check tag and destroy payload.
             rtdt::TyTag::Enum => {
                 let enum_info = ty.enum_info();
-                let layout = rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ref(tydesc));
 
                 // Read the discriminant (u32 at offset 0).
                 let discriminant_ptr = value_in as *const u32;
@@ -221,8 +220,7 @@ pub unsafe fn any_destroy_local(
                     if let core::option::Option::Some(variant) = enum_info.variant(discriminant as usize) {
                         // If variant has payload, destroy it.
                         if let core::option::Option::Some(payload_ty) = variant.payload() {
-                            let payload_offset = layout.variant_offsets[discriminant as usize];
-                            let payload_ptr = value_in.add(payload_offset as usize);
+                            let payload_ptr = value_in.add(variant.offset() as usize);
                             let status = any_destroy_local(rt, payload_ptr, payload_ty.as_ref());
                             if status != RtStatus::Ok {
                                 return status;
