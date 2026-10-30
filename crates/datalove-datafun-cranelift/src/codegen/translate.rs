@@ -151,18 +151,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     if let CraneliftRepr::Aggregate(layout) = repr {
                         let slot_offset = self.layout.slot_offset(slot_idx as u32);
                         let addr = frame_slot.addr(&mut builder, slot_offset as i32);
-                        let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                        let poison = builder.ins().iconst(cl_types::I8, 0xFF_u8 as i64);
-                        builder.call_memset(self.isa.frontend_config(), addr, poison, size);
+                        self.fill_bytes(&mut builder, addr, 0xFF, layout.size as u64);
                     }
                 }
 
                 // Zero-init tracking bytes.
                 if self.layout.tracking_count > 0 {
                     let track_addr = frame_slot.addr(&mut builder, self.layout.tracking_offset as i32);
-                    let size = builder.ins().iconst(PTR_TYPE, self.layout.tracking_count as i64);
-                    let zero = builder.ins().iconst(cl_types::I8, 0);
-                    builder.call_memset(self.isa.frontend_config(), track_addr, zero, size);
+                    self.fill_bytes(&mut builder, track_addr, 0, self.layout.tracking_count as u64);
                 }
             }
             self.enter_dynamic(&mut builder)?;

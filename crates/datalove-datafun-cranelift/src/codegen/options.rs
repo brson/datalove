@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::{IrType, Operand, ValueId};
 use datalove_rtdt::{Error as RtError, OptionTag, ResultTag};
 
-use crate::types::{self, CraneliftRepr, PTR_TYPE};
+use crate::types::{self, CraneliftRepr};
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -128,8 +128,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Copy Error value to payload location.
         let payload_addr = self.payload_addr(builder, dest_addr, &dest_ty, 0)?;
         let inner_ptr = self.get_operand_ptr(builder, inner)?;
-        let size = builder.ins().iconst(PTR_TYPE, error_size as i64);
-        builder.call_memcpy(self.isa.frontend_config(), payload_addr, inner_ptr, size);
+        self.copy_bytes(builder, payload_addr, inner_ptr, error_size as u64);
 
         // Store pointer to Result in values map.
         self.values.insert(dest, dest_addr);

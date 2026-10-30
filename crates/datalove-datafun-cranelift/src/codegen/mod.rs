@@ -73,6 +73,8 @@ mod signature;
 mod statics;
 /// Tracking bytes.
 mod tracking;
+/// Copying and filling runs of bytes of a known length.
+mod bytes;
 
 /// Why defining a function failed, with the verifier's own account where it
 /// is the verifier that refused it: `ModuleError` says only "Verifier errors".

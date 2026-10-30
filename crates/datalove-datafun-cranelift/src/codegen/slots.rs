@@ -6,7 +6,7 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::{IrType, Operand, ParamId, SlotDest, SlotId, ValueId};
 
-use crate::types::{self, CraneliftRepr, PTR_TYPE};
+use crate::types::{self, CraneliftRepr};
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -66,13 +66,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // before this store instruction.
                 let dest_addr = frame_slot.addr(builder, slot_offset as i32);
                 let src_ptr = self.get_operand_ptr(builder, value)?;
-                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
+                self.copy_bytes(builder, dest_addr, src_ptr, layout.size as u64);
 
                 if !is_copy {
                     // Zero out the source to complete the move (prevents double-free).
-                    let zero = builder.ins().iconst(cranelift_codegen::ir::types::I8, 0);
-                    builder.call_memset(self.isa.frontend_config(), src_ptr, zero, size);
+                    self.fill_bytes(builder, src_ptr, 0, layout.size as u64);
                 }
             }
         }
@@ -132,10 +130,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let src = frame_slot.addr(builder, slot_offset as i32);
                 let dest_offset = self.layout.value_offset(dest.0);
                 let dst = frame_slot.addr(builder, dest_offset as i32);
-                if layout.size > 0 {
-                    let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                    builder.call_memcpy(self.isa.frontend_config(), dst, src, size);
-                }
+                self.copy_bytes(builder, dst, src, layout.size as u64);
                 self.values.insert(dest, dst);
             }
         }

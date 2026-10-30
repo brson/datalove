@@ -248,8 +248,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             for (i, elem) in elements.iter().enumerate() {
                 let src = self.get_operand_ptr(builder, elem)?;
                 let dst = builder.ins().stack_addr(PTR_TYPE, data_slot, (i as u32 * elem_size) as i32);
-                let size_val = builder.ins().iconst(PTR_TYPE, elem_size as i64);
-                builder.call_memcpy(self.isa.frontend_config(), dst, src, size_val);
+                self.copy_bytes(builder, dst, src, elem_size as u64);
             }
             builder.ins().stack_addr(PTR_TYPE, data_slot, 0)
         };

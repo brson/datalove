@@ -238,8 +238,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(layout) => {
                 let src = self.get_operand_ptr(builder, value)?;
-                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                builder.call_memcpy(self.isa.frontend_config(), elem_addr, src, size);
+                self.copy_bytes(builder, elem_addr, src, layout.size as u64);
             }
         }
         builder.ins().jump(after, &[]);

@@ -308,6 +308,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         src: cl_ir::Value,
         ty: &IrType,
     ) -> Result<(), CraneliftError> {
+        if !is_dynamic_value(ty) {
+            self.copy_bytes(builder, dst, src, types::ir_type_size(ty) as u64);
+            return Ok(());
+        }
         let size = self.value_size(builder, ty)?;
         builder.call_memcpy(self.isa.frontend_config(), dst, src, size);
         Ok(())
