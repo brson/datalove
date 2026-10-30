@@ -523,6 +523,21 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
     }
 }
 
+/// Whether a value of `actual` may stand where `expected` is wanted: the two
+/// are equivalent, or are once a recursive type at the head of one is
+/// unfolded.
+///
+/// A recursive type and its unfolding mean the same thing and have one
+/// layout, and are told apart only so that equivalence stays syntactic. Where
+/// a value meets the type expected of it, they meet at the head: a `rec T [?T]`
+/// is a `[?(rec T [?T])]`, and the other way round. Inside a type they stay
+/// apart, so `[rec T [?T]]` is not `[[?(rec T [?T])]]`.
+pub fn types_equivalent_at_head<'db>(db: &'db dyn crate::Db, actual: &Type<'db>, expected: &Type<'db>) -> bool {
+    types_equivalent(db, actual, expected)
+        || (matches!(actual, Type::Rec(_)) && types_equivalent(db, &expose(actual), expected))
+        || (matches!(expected, Type::Rec(_)) && types_equivalent(db, actual, &expose(expected)))
+}
+
 /// Check if a type can widen to another type.
 ///
 /// Supports numeric widening chains:
@@ -546,13 +561,13 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
 
 /// Whether `@` converts a value of one type to another.
 ///
-/// It clones a value to its own type, widens an integer to one that holds
-/// every value of it, widens `f32` to `f64`, makes an atom or term a value
-/// of an enum that lists it, and rolls a value of a recursive type's
-/// unfolding into the type. Nothing else: no narrowing, and no enum adapts to
+/// It clones a value to its own type, or to one equivalent at the head (see
+/// `types_equivalent_at_head`), widens an integer to one that holds every value
+/// of it, widens `f32` to `f64`, and makes an atom or term a value of an enum
+/// that lists it. Nothing else: no narrowing, and no enum adapts to
 /// another.
 pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db>) -> bool {
-    if types_equivalent(db, from, to) || can_widen_to(from, to) {
+    if types_equivalent_at_head(db, from, to) || can_widen_to(from, to) {
         return true;
     }
     match (from, to) {
@@ -569,9 +584,6 @@ pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db
             v.name == t.name
                 && v.payload.as_ref().is_some_and(|p| types_equivalent(db, &t.payload, p))
         }),
-        // A value of a recursive type's unfolding is rolled into the type,
-        // which moves nothing: the two have one layout.
-        (_, Type::Rec(rec)) => types_equivalent(db, from, &rec.unfold()),
         _ => false,
     }
 }

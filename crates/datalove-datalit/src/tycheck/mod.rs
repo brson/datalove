@@ -59,6 +59,7 @@ pub use types::{
     is_bool_type,
     // Type equivalence.
     types_equivalent,
+    types_equivalent_at_head,
     can_widen_to,
     can_adapt_to,
     // Unit and shape helpers.

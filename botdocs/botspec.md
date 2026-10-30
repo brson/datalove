@@ -699,14 +699,20 @@ name of a `rec` around it (T063), or a recursive type in a map's key or a
 set's element (T065) is refused too. A `rec` may sit inside another and use
 its name: `rec E enum { term Lit int, term Block [rec S enum { term Let E }] }`.
 
-The name is no part of the type: `rec A [A]` and `rec B [B]` are one type. A
-recursive type is not the type its body unfolds to, `{ name: string, kids:
-[rec Node ...] }`; a value checked against the `rec` type is checked against
-the unfolding, so the two are written alike, but a hint of one is a mismatch
-with the other (T040).
+The name is no part of the type: `rec A [A]` and `rec B [B]` are one type.
+A recursive type is not the same type as the one its body unfolds to,
+`{ name: string, kids: [rec Node ...] }`, but the two have one layout and mean
+the same thing, and they **meet at the head**: wherever a value meets the type
+expected of it, a value of either is accepted as the other. That is a hint
+against the type expected, an argument against its parameter, whether passed
+`ref`, `mut` or by value, a `let` or `var` against its annotation, a `set`
+against its place, and a `ret` against the return type. Nothing is converted
+or copied; a `mut` argument is the same place, seen as the other type for the
+call. Inside a type they stay apart: `[rec Node ...]` is not a list of the
+unfolding, though each of its elements meets one.
 
-In Datafun the literal forms build a value of a recursive type the same way,
-and `@` rolls any value of the unfolding into the type (Section 6.8). Anything
+So a literal of the unfolding builds a value of the recursive type, and in
+Datafun a value of one is passed, bound and returned as the other. Anything
 that takes a value apart reads it as its unfolding: a projection, an index,
 `for`, `match`, a destructuring `let`, the binding `if`, `?` and `!`.
 
@@ -722,11 +728,22 @@ fun count(ref n: Node): int
 end fun
 ```
 
-Passing a value is not taking it apart, so a `rec T [?T]` is not accepted where
-a `[?T]` is; a list is built as one and rolled with `@`. A type parameter
-inside a `rec` is refused (T066), so a recursive type is not generic, though
-one is passed to a generic function like any other type: `list.push` takes a
-`[Node]` and a `Node`. The design, and the work left, is in
+A tree whose nodes are lists is pushed into as the list it is:
+
+```datalove
+type Tree: rec T [?T]
+
+fun leaf(): Tree
+    var node: Tree = []
+    call list.push(mut node, none)
+    ret node
+end fun
+```
+
+A type parameter inside a `rec` is refused (T066), so a recursive type is not
+generic, though one is passed to a generic function like any other type:
+`list.push` takes a `[Node]` and a `Node`, or a `Tree` as the `[?Tree]` it
+unfolds to. The design, and the work left, is in
 [Recursive Structural Types](plan-recursive-types.md).
 
 ## 4. Type Hints
@@ -1050,15 +1067,8 @@ let a = atom Red
 let c: Color = a@            // atom widens to enum
 ```
 
-**Roll**: A value of a recursive type's unfolding becomes a value of the type
-(Section 3.8). The two have one layout, so nothing is converted, and the value
-is copied as any `@` copies:
-
-```datalove
-type L: rec L { elt: int, next: [L] }
-let parts: { elt: int, next: [L] } = { elt = 1, next = [] }
-let l: L = parts@
-```
+A recursive type and its unfolding meet at the head (Section 3.8), so `@`
+between them is a clone, as between two values of one type.
 
 **Widening needs a target; cloning does not.** Where an expected type is
 known, `@` converts to it. Where none is, `@` clones, and the clone has the

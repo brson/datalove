@@ -4,10 +4,9 @@
 // (github.com/smarr/are-we-fast-yet), an allocation benchmark whose tree has
 // 5461 nodes each time.
 //
-// AWFY's tree is an array of arrays, `rec T [?T]`. A list built with
-// `list.push` becomes that type only by `@`, which copies it, so each node
-// here is a struct of its children, which has the same layout and is pushed
-// into through a projection.
+// The tree is AWFY's array of arrays, `rec T [?T]`. A node is pushed into as
+// the list it unfolds to and returned as the tree, with no copy: a recursive
+// type and its unfolding meet at the head.
 //
 // Prints the sum of the counts.
 
@@ -17,7 +16,7 @@ require module sys/std/u32
 
 const ITERATIONS: u32 = 8000
 
-type Tree: rec T { kids: [?T] }
+type Tree: rec T [?T]
 
 // AWFY's Random: a 16-bit linear congruential generator.
 fun next_random(mut seed: u32): u32
@@ -36,19 +35,19 @@ end fun
 
 fun build(depth: u32, mut seed: u32, mut count: u32): !Tree
   set count = u32.add_wrapping(count, 1)
-  var node: Tree = { kids = [] }
+  var node: Tree = []
   if depth == 1
     let slots = u32.add_wrapping(rem10(next_random(mut seed)), 1)
     var i: u32 = 0
     loop while i .< slots
-      call list.push(mut node.kids, none)
+      call list.push(mut node, none)
       set i = u32.add_wrapping(i, 1)
     end loop
     ret ok node
   end if
   var i: u32 = 0
   loop while i .< 4
-    call list.push(mut node.kids, some build(u32.sub_wrapping(depth, 1), mut seed, mut count)!)
+    call list.push(mut node, some build(u32.sub_wrapping(depth, 1), mut seed, mut count)!)
     set i = u32.add_wrapping(i, 1)
   end loop
   ret ok node

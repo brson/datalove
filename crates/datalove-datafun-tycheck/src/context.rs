@@ -1637,9 +1637,9 @@ fn format_adapt_description<'db>(
     from: &Type<'db>,
     to: &Type<'db>,
 ) -> String {
-    use datalove_datafun_common::{type_to_string, types_equivalent};
+    use datalove_datafun_common::{type_to_string, types_equivalent_at_head};
 
-    if types_equivalent(db, from, to) {
+    if types_equivalent_at_head(db, from, to) {
         "clone the value".to_string()
     } else {
         format!("convert from `{}` to `{}`", type_to_string(db, from), type_to_string(db, to))

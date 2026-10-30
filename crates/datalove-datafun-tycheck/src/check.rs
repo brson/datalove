@@ -44,7 +44,7 @@ pub fn check_expr<'db>(
     // `u32` with a hint that went unread.
     if let Some(type_hint) = expr_kind.type_hint().cloned() {
         let hinted = ctx.convert_hint(type_hint)?;
-        if !types_equivalent(db, &hinted, expected) {
+        if !types_equivalent_at_head(db, &hinted, expected) {
             let expected_str = type_to_string(db, expected);
             let hinted_str = type_to_string(db, &hinted);
             return Err(ctx.error_type_mismatch(expr, &expected_str, &hinted_str, "the type hint disagrees with the expected type"));
@@ -316,7 +316,7 @@ fn check_unhinted<'db>(
                     }
                     // Otherwise, synthesize and compare.
                     let synthesized = ctx.synthesize_unhinted(expr)?;
-                    if types_equivalent(db, &synthesized, expected) {
+                    if types_equivalent_at_head(db, &synthesized, expected) {
                         Ok(())
                     } else {
                         let expected_str = type_to_string(db, expected);
@@ -360,7 +360,7 @@ fn check_unhinted<'db>(
                     }
                     // Otherwise, synthesize and compare.
                     let synthesized = ctx.synthesize_unhinted(expr)?;
-                    if types_equivalent(db, &synthesized, expected) {
+                    if types_equivalent_at_head(db, &synthesized, expected) {
                         Ok(())
                     } else {
                         let expected_str = type_to_string(db, expected);
@@ -410,7 +410,7 @@ fn check_unhinted<'db>(
             // int and refuses a fixed-width integer: bare `-` is not defined
             // there, only `-?` and `-!`.
             let synthesized = ctx.synthesize_unhinted(expr)?;
-            if types_equivalent(db, &synthesized, expected) {
+            if types_equivalent_at_head(db, &synthesized, expected) {
                 return Ok(());
             }
             let expected_str = type_to_string(db, expected);
@@ -454,7 +454,7 @@ fn check_unhinted<'db>(
             // Note: Bare arithmetic on fixed ints is a type error - they must use
             // @ to widen first, or use checked/optional operators (+!, +?, etc.).
             let synthesized = ctx.synthesize_unhinted(expr)?;
-            if types_equivalent(db, &synthesized, expected) {
+            if types_equivalent_at_head(db, &synthesized, expected) {
                 return Ok(());
             }
             Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
@@ -589,7 +589,7 @@ fn check_unhinted<'db>(
             // straight to the call skips it. Lowering reads the table and
             // panics rather than guessing.
             ctx.store_expr_type(expr, &synthesized);
-            if types_equivalent(db, &synthesized, expected) {
+            if types_equivalent_at_head(db, &synthesized, expected) {
                 return Ok(());
             }
             Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
@@ -599,7 +599,7 @@ fn check_unhinted<'db>(
             let synthesized = ctx.synthesize_unhinted(expr)?;
 
             // Check for exact type match first.
-            if types_equivalent(db, &synthesized, expected) {
+            if types_equivalent_at_head(db, &synthesized, expected) {
                 return Ok(());
             }
 

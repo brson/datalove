@@ -93,28 +93,25 @@
       }
     }
   },
-  "diagnostics": [
-    {
-      "code": "T040",
-      "labels": [
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "body": {
+      "fields": [
         {
-          "message": "expected `rec L { next: [L] }`, found `{ next: [rec L { next: [L] }] }`",
-          "span": [
-            34,
-            83
-          ],
-          "text": ": { next: [rec L { next: [L] }] } / { next = [] }"
+          "name": "next",
+          "type": {
+            "element_type": {
+              "index": 0,
+              "kind": "RecVar"
+            },
+            "kind": "List"
+          }
         }
       ],
-      "message": "mismatched types"
-    }
-  ],
-  "errors": [
-    {
-      "actual": "{ next: [rec L { next: [L] }] }",
-      "expected": "rec L { next: [L] }",
-      "kind": "TypeMismatch"
-    }
-  ],
-  "root_type": null
+      "kind": "AnonStruct"
+    },
+    "kind": "Rec",
+    "name": "L"
+  }
 }

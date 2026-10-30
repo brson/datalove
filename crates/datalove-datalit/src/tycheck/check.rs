@@ -20,10 +20,11 @@ pub fn check<'db>(
     let expr_inner = expr.expr();
 
     // Rule: Check-Hinted - a hint says what the expression is, and it has to
-    // be what is expected. Nothing converts on the way from one to the other.
+    // be what is expected, up to a recursive type at the head (Meet-Head).
+    // Nothing converts on the way from one to the other.
     if let Some(type_hint) = expr.type_hint() {
         let hinted = ctx.convert_hint(expr, &type_hint)?;
-        if !types_equivalent(db, &hinted, expected) {
+        if !types_equivalent_at_head(db, &hinted, expected) {
             if let Some(ts) = ctx.get_span(expr) {
                 DiagnosticBuilder::error(db, "mismatched types")
                     .code("T040")

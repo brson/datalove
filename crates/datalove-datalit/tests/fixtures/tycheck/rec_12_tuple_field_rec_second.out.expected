@@ -102,28 +102,45 @@
     },
     "type_hint": null
   },
-  "diagnostics": [
-    {
-      "code": "T040",
-      "labels": [
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "element_type": {
+      "fields": [
         {
-          "message": "expected `{ next: [rec L { next: [L] }] }`, found `rec L { next: [L] }`",
-          "span": [
-            22,
-            59
+          "fields": [
+            {
+              "name": "next",
+              "type": {
+                "element_type": {
+                  "body": {
+                    "fields": [
+                      {
+                        "name": "next",
+                        "type": {
+                          "element_type": {
+                            "index": 0,
+                            "kind": "RecVar"
+                          },
+                          "kind": "List"
+                        }
+                      }
+                    ],
+                    "kind": "AnonStruct"
+                  },
+                  "kind": "Rec",
+                  "name": "L"
+                },
+                "kind": "List"
+              }
+            }
           ],
-          "text": ": rec L { next: [L] } / { next = [] }"
-        }
+          "kind": "AnonStruct"
+        },
+        "int"
       ],
-      "message": "mismatched types"
-    }
-  ],
-  "errors": [
-    {
-      "actual": "rec L { next: [L] }",
-      "expected": "{ next: [rec L { next: [L] }] }",
-      "kind": "TypeMismatch"
-    }
-  ],
-  "root_type": null
+      "kind": "AnonTuple"
+    },
+    "kind": "List"
+  }
 }

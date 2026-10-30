@@ -151,7 +151,24 @@ Everything else is positional and exact:
   for one another: the name a `rec` is written with is no part of the type.
 - Recursive types are *iso-recursive*: `rec X T` is not equivalent to its
   unfolding, though a value of one has the layout of a value of the other.
-  `Check-Roll` is what moves between them.
+
+Where a typed value meets the type expected of it, types are compared by a
+looser relation, `T ≈ U`, *meeting at the head*: `T ≡ U`, or one of them is a
+recursive type that, unfolded until its head is not a `rec`, is equivalent to
+the other.
+
+```
+T ≡ U              unfold*(T) ≡ U          T ≡ unfold*(U)
+---------- (Meet)    ------------- (Meet-Unroll)   ------------- (Meet-Roll)
+T ≈ U              T ≈ U                   T ≈ U
+```
+
+`≈` holds at the head only: `[rec L [L]] ≉ [[rec L [L]]]`, though an element
+of either is one of the other. A recursive type and its unfolding mean the
+same thing, and are told apart only so that `≡` stays syntactic; `≈` lets a
+value of one stand for the other where nothing about the type is being taken
+apart. In datalit that is a hint (`Check-Hinted`); datafun applies it wherever
+a value meets an expected type.
 
 ## Well-formed types
 
@@ -307,8 +324,9 @@ shared element variable does. A tuple's or struct's field, the payload of
 variable between, so there the first type in source order still wins:
 `[({ next = [] }, 1), (: rec L { next: [L] } / { next = [] }, 2)]` resolves
 the first tuple's field to `L`'s unfolding, and the second element's hint is
-then a mismatch (T040). Written the other way round, it is a
-`[(rec L { next: [L] }, int)]`.
+accepted against it by `≈`. Written the other way round, the list is a
+`[(rec L { next: [L] }, int)]`. Either checks; which of the two equivalent
+types the field takes depends on the order.
 
 The shared variable of an empty collection, or of an empty table's columns,
 is `open`; with elements it is decided by them. The variable is what the
@@ -352,13 +370,13 @@ of the types unified. The check after it is one more linear walk.
 ### Annotation
 
 ```
-T₀ ≡ T    ⊢ e ⇐ T
+T₀ ≈ T    ⊢ e ⇐ T
 --------------------- (Check-Hinted)
 ⊢ (: T₀ / e) ⇐ T
 ```
 
 A hint names the type of the expression it is on, and that must be the
-expected type. It is not a conversion: `: [u16] / [: u8 / 42]` fails, because
+expected type, up to a recursive type at the head (`≈`). It is not a conversion: `: [u16] / [: u8 / 42]` fails, because
 the element is a `u8` where a `u16` is expected (T040).
 
 ### Recursive types
@@ -373,9 +391,9 @@ A value of a recursive type is written as a value of its unfolding, with no
 mark on it: `{ elt = 1, next = [] } ⇐ rec L { elt: int, next: [L] }` checks
 the struct against `{ elt: int, next: [rec L { elt: int, next: [L] }] }`, and
 each element of `next` against the `rec` type again. The rule applies after
-`Check-Hinted`, so a hint on `e` is compared with `rec X T` itself, and a hint
-of the unfolding is a mismatch (T040). A mismatch reports `rec X T` as the
-type expected, not the unfolding.
+`Check-Hinted`, so a hint on `e` is compared with `rec X T` itself, by `≈`: a
+hint of the unfolding is accepted. A mismatch reports `rec X T` as the type
+expected, not the unfolding.
 
 ### Subsumption
 

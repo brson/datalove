@@ -1,0 +1,92 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call u3()
+                        store.move.tracked s0, v0
+                        v1 = call u0(s0)
+                        debuglog v1
+                        drop v1
+                        v2 = call u3()
+                        v3 = call u1(s0, v2)
+                        debuglog s0
+                        v4 = load.move.tracked s0
+                        v5 = call u2(v4)
+                        v6 = call u0(v5)
+                        debuglog v6
+                        drop v6
+                        v7 = list []
+                        store.move.tracked s1, v7
+                        drop.tracked s1
+                        store.move.tracked s1, v5
+                        debuglog s1
+                        unit_end_drop.tracked s0
+                        unit_end_drop.tracked s1
+                        unit_end
+                    
+                    fn slots(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block4, block2
+                    block2:
+                        v3 = const 1int
+                        v4 = add s0, v3
+                        drop v3
+                        drop.tracked s0
+                        store.move.tracked s0, v4
+                        goto block3
+                    block3:
+                        cursoradvance s1, p0
+                        goto block1
+                    block4:
+                        v5 = load.move.tracked s0
+                        return v5
+                    
+                    fn grow(p0, p1):
+                    block0:
+                        v0 = clone p0
+                        v1 = some v0
+                        v2 = move p1
+                        v3 = some v2
+                        v4 = list [v1, v3]
+                        drop p0
+                        store p0, v4
+                        return
+                    
+                    fn wrap(p0):
+                    block0:
+                        v0 = move p0
+                        return v0
+                    
+                    fn make():
+                    block0:
+                        v0 = none
+                        v1 = none
+                        v2 = list [v0, v1]
+                        store.move.tracked s0, v2
+                        v3 = load.move.tracked s0
+                        return v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("2\n[some [none, none], some [none, none]]\n2\n[some [none, none], some [none, none]]\n"),
+        ),
+    ],
+)

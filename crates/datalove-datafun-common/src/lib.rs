@@ -717,6 +717,15 @@ pub fn is_bool_type(ty: &Type<'_>) -> bool {
 // Type Equivalence
 // ============================================================================
 
+/// Whether a value of `actual` may stand where `expected` is wanted; see
+/// `datalit::tycheck::types_equivalent_at_head`.
+pub fn types_equivalent_at_head<'db>(db: &'db dyn Db, actual: &Type<'db>, expected: &Type<'db>) -> bool {
+    match (actual, expected) {
+        (Type::Datalit(a), Type::Datalit(e)) => datalit::tycheck::types_equivalent_at_head(db, a, e),
+        _ => types_equivalent(db, actual, expected),
+    }
+}
+
 /// Check if two types are equivalent.
 pub fn types_equivalent<'db>(db: &'db dyn Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
     match (t1, t2) {
@@ -854,7 +863,7 @@ pub fn check_element_compatible<'db>(
     expected: &Type<'db>,
     actual: &Type<'db>,
 ) -> Result<(), TypeError> {
-    if !types_equivalent(db, expected, actual) {
+    if !types_equivalent_at_head(db, actual, expected) {
         return Err(TypeError::TypeMismatch {
             expected: type_to_string(db, expected),
             actual: type_to_string(db, actual),

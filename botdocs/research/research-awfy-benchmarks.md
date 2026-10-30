@@ -148,16 +148,17 @@ Julia's is written to match. All eight implementations print the same totals.
 
 | Bench | interp | JIT | AOT | Python | Julia | Java | V8 |
 |---|---|---|---|---|---|---|---|
-| Storage (x8000) | 11245 | 3876 | 3704 | 7154 | 909 | 351 | 353 |
+| Storage (x8000) | 11149 | 3525 | 3418 | 7165 | 938 | 344 | 352 |
 | Towers (x9000) | 28544 | 3775 | 3691 | 11350 | 557 | 269 | 480 |
 | Json (x2000) | 10685 | 1021 | 967 | 10094 | 741 | 1107 | 538 |
 
-Times in ms, mean of at least three. Compiled Datalove is 10.6x Java on
-Storage, 13.7x on Towers, and 0.87x on Json, where it beats Java and is 1.8x
+Times in ms, mean of at least three; Storage's row is its port in AWFY's
+shape, measured after meeting at the head (see below). Compiled Datalove is
+9.9x Java on Storage, 13.7x on Towers, and 0.87x on Json, where it beats Java and is 1.8x
 V8. The JIT compiling everything first (`--jit-threshold 1`) is within a few
 percent of tiered in each. From a profile of each AOT executable:
 
-- **Storage, 10.6x Java: dropping and pushing.** A quarter of the run is the
+- **Storage, 9.9x Java: dropping and pushing.** A quarter of the run is the
   runtime's generic destroy walking each tree when it goes out of scope;
   Java's collector frees the tree in bulk. Another 29% is `list.push`: the
   generic `sys/std` wrapper (13%) and the runtime's push behind it (16%), a
@@ -185,12 +186,14 @@ percent of tiered in each. From a profile of each AOT executable:
 What the ports had to work around, which is the language rather than the
 backends:
 
-- **Storage's tree is a struct of its children,** `rec T { kids: [?T] }`, not
-  AWFY's array of arrays, `rec T [?T]`. A list built with `list.push` becomes
-  the recursive type only by `@`, which copies it, so at every level the whole
-  subtree is copied: written that way Storage runs in 14.3 s AOT, 3.9x the
-  struct's 3.6 s. Unrolling a value passed to a parameter of its unfolding's
-  type, or a roll that moves, would make the direct shape free.
+- **Storage's tree was first a struct of its children,** `rec T { kids: [?T] }`,
+  not AWFY's array of arrays, `rec T [?T]`. A list built with `list.push`
+  became the recursive type only by `@`, which copies it, so at every level
+  the whole subtree was copied: written that way Storage ran in 14.3 s AOT,
+  3.9x the struct's 3.7 s. Since a recursive type and its unfolding meet at
+  the head ([Recursive Structural Types](../plan-recursive-types.md#user-content-meeting-at-the-head)),
+  the port is in AWFY's shape, pushed into as the list it is and returned with
+  no copy: 3.42 s AOT, 3.53 s JIT, 11.1 s interpreted.
 - **Remainders are fallible.** `u32.rem_checked` and `div_wrapping` return an
   option even for a constant divisor, and `!` does not unwrap an option in a
   function returning a result, so Storage has a `rem10` helper with an `if`

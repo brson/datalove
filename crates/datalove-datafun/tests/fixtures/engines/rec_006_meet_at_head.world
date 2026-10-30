@@ -1,0 +1,40 @@
+// A recursive type and its unfolding meet at the head wherever a value meets
+// the type expected of it: passed `ref`, `mut` and `in`, bound, set and
+// returned, with no `@` and so no copy.
+----------
+scriptunit-fragment
+----------
+
+type Tree: rec T [?T]
+
+fun slots(ref xs: [?Tree]): int
+    var n: int = 0
+    for x in ref xs
+        set n = n + 1
+    end for
+    ret n
+end fun
+
+fun grow(mut xs: [?Tree], tail: [?Tree])
+    set xs = [some xs@, some tail]
+end fun
+
+fun wrap(xs: [?Tree]): Tree
+    ret xs
+end fun
+
+fun make(): Tree
+    var parts: [?Tree] = [none, none]
+    ret parts
+end fun
+
+var t: Tree = make()
+debuglog slots(ref t)
+call grow(mut t, make())
+debuglog t
+let unrolled: [?Tree] = t
+let rolled: Tree = wrap(unrolled)
+debuglog slots(ref rolled)
+var back: Tree = []
+set back = rolled
+debuglog back

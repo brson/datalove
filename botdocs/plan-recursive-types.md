@@ -28,6 +28,7 @@ phase 5, are not done.
 - [Prior art](#user-content-prior-art)
 - [Phase 1 as built](#user-content-phase-1-as-built)
 - [Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built)
+- [Meeting at the head](#user-content-meeting-at-the-head)
 - [What exists, what is missing](#user-content-what-exists-what-is-missing)
 - [Phases](#user-content-phases)
 - [Open questions](#user-content-open-questions)
@@ -181,11 +182,10 @@ inserting them silently does not hide any work.
 
   A chain of projections lands back on the `rec` type rather than on a
   growing unfolding.
-- **Anything else is a mismatch.** A value whose type is the unfolding, such
-  as an unhinted literal bound to a variable, is not accepted where the `rec`
-  type is expected. Adapt (`@`) performs the roll: it already means "clone,
-  widen or coerce", and roll is the coercion that costs nothing. Unroll never
-  needs `@`, because elimination does it.
+- **Anything else meets at the head.** As first built, a value whose type is
+  the unfolding was refused where the `rec` type was expected, and `@` rolled
+  it, with a copy. That was replaced; see
+  [Meeting at the head](#user-content-meeting-at-the-head).
 
 ## The type checker
 
@@ -525,6 +525,42 @@ F090, the refusal phase 1 put in, is gone.
 What is left is in
 [What exists, what is missing](#user-content-what-exists-what-is-missing).
 
+## Meeting at the head
+
+Decided October 2026, after the benchmarks: a recursive type and its
+unfolding are accepted for each other wherever a value meets the type
+expected of it, `T ≈ U` in the typing rules. Before, only a literal crossed
+between them, by `Check-Roll`; any other value needed `@`, which copies, and
+a `mut` place could not cross at all, since `@` makes a temporary. So
+`list.push(mut t, x)` with `t : rec T [?T]` was refused, and Storage in AWFY's
+shape copied every subtree on its way up, 3.9x slower than a workaround.
+
+- **What it is.** `types_equivalent_at_head` in
+  `crates/datalove-datalit/src/tycheck/types.rs`: equivalent, or equivalent
+  once a `rec` at the head of one side is unfolded. Datalit's `Check-Hinted`
+  uses it, and so do datafun's hint check, every `Check-Subsume` fallback in
+  `check.rs`, `check_element_compatible`, and `@`'s clone case. Operator
+  operands and function types still compare by `≡`.
+- **Why it is not subtyping.** The relation is symmetric: each type stands for
+  the other, with one layout and the same meaning. Subtyping is not, and is why
+  mutable references are invariant elsewhere; a `mut` place borrowed as a
+  supertype could be written a value of the wrong type. Here every value of
+  one is a value of the other, so a place of either type is sound to borrow
+  as the other. No other conversion has that property: a widening or an enum
+  injection changes the layout, so it can only make a new value.
+- **Why only at the head.** Applied inside a type it becomes equi-recursion,
+  whose equivalence is coinductive and whose hashing needs canonical forms.
+  At the head it is one unfolding and a syntactic comparison, and it matches
+  the IR, which holds every value unfolded at its head: a value of either type
+  already has the same IR type, so lowering needed nothing.
+- **What changed.** Datalit's hint of an unfolding against its `rec` type is
+  accepted (`rec_11_unfolded_hint`, which was an error), and so is the tuple
+  case inference used to refuse (`rec_12_tuple_field_rec_second`). Datafun's
+  `rec_08_unfolded_value` and the engine fixture `rec_006_meet_at_head` pass a
+  `rec` value `ref`, `mut` and by value as its unfolding, and bind, set and
+  return one as the other. Storage is back in AWFY's shape and runs in 3.42 s
+  AOT, where the workaround took 3.70 and the copies 14.3.
+
 ## What exists, what is missing
 
 What exists:
@@ -558,23 +594,19 @@ question; the questions are under
   is cheaper but switches stacks under JIT and AOT frames and does not work
   on wasm or under Miri. A stopgap is to unlink the child before dropping
   the parent in `destroy`, which covers dropping a chain and nothing else.
-- **Passing a value does not unroll it.** A `rec T [?T]` is not accepted
-  where a `[?T]` is, so `list.push(mut t, ...)` with `t : rec T [?T]` is a
-  mismatch. Storage builds a `[?Tree]` and rolls it with `@`.
 - **`?` and `!` against a `rec` return type.** An early return in a function
   whose return type is a `rec` type unfolding to an option or result is
   refused, since the return type is not an option or result to the checker.
-- **Inference depends on order inside a tuple or struct field.** A literal's
+- **Inference picks one of two equivalent types by order.** A literal's
   parts meeting a `rec` type take it only where a variable holds them, as a
   collection's shared element variable does; a tuple or struct field, an
   option, result or term payload, and a map entry hold their parts directly.
   So in `[({ next = [] }, 1), (: L / { next = [] }, 2)]` the first tuple's
-  field resolves to `L`'s unfolding and the second element is refused (T040);
-  the other order works. A fresh variable per part in those inference rules
-  would fix it, at a variable per field of every literal. The fixtures
-  `rec_10_tuple_field_rec_first` and `err_rec_11_tuple_field_rec_second`
-  in `crates/datalove-datalit/tests/fixtures/tycheck` hold the behavior as it
-  is.
+  field resolves to `L`'s unfolding, and the other order to `L`. Since meeting
+  at the head both check, so this decides only which of two equivalent types
+  the field is given. The fixtures `rec_10_tuple_field_rec_first` and
+  `rec_12_tuple_field_rec_second` in
+  `crates/datalove-datalit/tests/fixtures/tycheck` hold it.
 - **Binder names in diagnostics can be stale.** The name is in a field that
   equality ignores, by decision, so after an edit that only renames a binder
   salsa may keep a memo and a message shows the old name.
@@ -607,13 +639,13 @@ question; the questions are under
 
 - Storage, Json and Towers are in `benchvs`; the timings and profiles are in
   [the AWFY survey](research/research-awfy-benchmarks.md#user-content-storage-towers-and-json).
-  Compiled, Datalove is 10.6x Java on Storage, 13.7x on Towers and faster than
+  Compiled, Datalove is 9.9x Java on Storage, 13.7x on Towers and faster than
   Java on Json. None of it is the cost of recursive types themselves: it is
   dropping trees value by value, generic `list.push`, small copies through
   libc, and enum layouts computed per value.
-- Storage is written as a struct of its children rather than AWFY's array of
-  arrays, because rolling a built list with `@` copies it; the direct shape is
-  3.9x slower. This is the strongest case for unrolling at arguments.
+- Storage is in AWFY's shape, `rec T [?T]`, since meeting at the head; it was
+  a struct of its children while rolling a built list needed `@`, which
+  copied.
 - List is not ported, and the choice between cloning and `(which, skip)`
   handles is open.
 
@@ -631,9 +663,6 @@ question; the questions are under
 
 - Is the loss of "at most one" and "exactly two" through `[_]` acceptable,
   or will the guard eventually need a slot of its own?
-- Should passing a value to a parameter of its unfolding's type unroll it?
-  It costs nothing at run time, makes the Storage port direct, and makes
-  types meet in one more place than iso-recursion says.
 - Deep values: work stacks and a parser limit, a documented limit, or the
   `destroy` stopgap alone, and what nesting limit for text?
 - When does borrowing `match` land?

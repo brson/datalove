@@ -1,0 +1,16 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "unrolled",
+      "type": "{ elt: int, next: [rec L { elt: int, next: [L] }] }"
+    },
+    {
+      "kind": "variable",
+      "name": "rolled",
+      "type": "{ elt: int, next: [rec L { elt: int, next: [L] }] }"
+    }
+  ]
+}

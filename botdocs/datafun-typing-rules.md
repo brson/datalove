@@ -170,12 +170,27 @@ And for negation of anything under a float:
 Γ ⊢ -e ⇐ F
 ```
 
-`Check-Roll` holds for the literal forms only: a tuple, struct, list, set,
-map, tensor, table, `none`, `some`, `ok`, `er`, atom, term or enum literal
-checked against `rec X T` is checked against its unfolding, and is of the
-recursive type. Anything else checked against a recursive type, a variable or
-a call, is checked by subsumption, so a value of the unfolding is a mismatch
-there (F016) and `@` rolls it (see [Adapt](#user-content-adapt)).
+`Check-Roll` holds for the literal forms: a tuple, struct, list, set, map,
+tensor, table, `none`, `some`, `ok`, `er`, atom, term or enum literal checked
+against `rec X T` is checked against its unfolding, and is of the recursive
+type. Anything else, a variable or a call, is checked by subsumption, which
+in datafun compares by `≈`, meeting at the head (see
+[the datalit typing rules](datalit-typing-rules.md)):
+
+```
+Γ ⊢ e ⇒ T'    T' ≈ T
+--------------------- (Check-Subsume)
+Γ ⊢ e ⇐ T
+```
+
+So a value of a recursive type and a value of its unfolding stand for each
+other wherever one is checked against an expected type: a `let` or `var`
+annotation, a `set`, a `ret`, a hint, and every argument. A `ref`, `mut` or
+`out` argument is a place, and `≈` lets the place of one type be borrowed as
+the other: the two have one layout, and every value of either is a value of
+the other, so a callee writing through the borrow leaves a valid value
+behind. `list.push(mut t, x)` with `t : rec T [?T]` pushes onto `t` as the
+`[?(rec T [?T])]` it unfolds to.
 
 These make `let x: i32 = -5` and `let y: f32 = -1.5` check, and pass a
 float expected type through the sign, so with `x : f32`, `let y: f64 = -x@`
@@ -347,8 +362,8 @@ The postfix `@` clones, and converts where a type is expected. `T ⇝ U`, "a
 - `index ⇝ int`, `offset ⇝ int`, `f32 ⇝ f64`.
 - `atom a ⇝ E` when `atom a ∈ E`, and `term a T ⇝ E` when `term a T' ∈ E`
   with `T ≡ T'`.
-- `T ⇝ rec X U` when `T ≡ U[rec X U / X]`, the unfolding: a roll, which moves
-  nothing.
+- `T ⇝ U` when `T ≈ U`, meeting at the head: a clone, as between two values
+  of one type.
 
 Nothing else adapts. There is no narrowing, and no enum adapts to another.
 
@@ -447,8 +462,9 @@ recursive type as its unfolding, repeated until the head is not a `rec`:
 projection, indexing, `for`, `match`, a destructuring `let`, the binding `if`,
 and `?` and `!` on an operand. `n.kids` with `n : rec N {kids: [N]}` is a
 `[rec N {kids: [N]}]`, and `n.kids[0]!` a `rec N {kids: [N]}` again. Passing a
-value is not taking it apart: a `rec X [T]` is not a `[T]` to a parameter
-written as one.
+value is not taking it apart, but its type meets the parameter's at the head
+(`Check-Subsume`), so a `rec X [T]` is passed to a parameter written as the
+list it unfolds to.
 
 Indexing is defined over the element of a collection:
 
@@ -520,11 +536,13 @@ however deeply its calls and operators nest
 
 `check_expr` in `check.rs` chooses a rule in this order:
 
-1. A hinted expression `: T₀ / e` compares `T₀` with the expected type
-   (F016, "the type hint disagrees"), then continues with `e`.
-2. If a checking rule matches the expression form and the expected type, it
+1. A hinted expression `: T₀ / e` compares `T₀` with the expected type by
+   `≈` (F016, "the type hint disagrees"), then continues with `e`.
+2. A literal form checked against a recursive type is checked against its
+   unfolding (`Check-Roll`), and the steps below read that.
+3. If a checking rule matches the expression form and the expected type, it
    is used. Its failure is an error.
-3. Otherwise `Check-Subsume`: synthesize, then compare by `≡`. A failure is
+4. Otherwise `Check-Subsume`: synthesize, then compare by `≈`. A failure is
    F016, with a note suggesting `@` where `Check-Adapt` would have succeeded.
 
 Synthesis is syntax-directed throughout, and nothing is tried and undone:

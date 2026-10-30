@@ -9,18 +9,18 @@ type Tree: rec T [?T]
 
 fun build(depth: u32, mut count: u32): !Tree
   set count = count +! 1
-  var arr: [?Tree] = []
+  var arr: Tree = []
   if depth == 1
     call list.push(mut arr, none)
     call list.push(mut arr, none)
-    ret ok arr@
+    ret ok arr
   end if
   var i: u32 = 0
   loop while i .< 4
     call list.push(mut arr, some build(depth -! 1, mut count)!)
     set i = i +! 1
   end loop
-  ret ok arr@
+  ret ok arr
 end fun
 
 var count: u32 = 0
