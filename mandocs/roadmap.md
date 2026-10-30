@@ -52,6 +52,7 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## On deck
 
+- split @ into clone/coerce
 - work stacks for runtime traversals
 - interactive math ergonomics
 - rational numbers
