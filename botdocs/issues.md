@@ -47,7 +47,7 @@ home here.
   - [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
   - [The C backend emits code the size of the data](#user-content-the-c-backend-emits-code-the-size-of-the-data)
   - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
-  - [The allocator maps a page per large block and keeps every small page](#user-content-the-allocator-maps-a-page-per-large-block-and-keeps-every-small-page)
+  - [The allocator keeps every block it has ever handed out](#user-content-the-allocator-keeps-every-block-it-has-ever-handed-out)
 
 - [Compilation pipeline and incrementality](#user-content-compilation-pipeline-and-incrementality)
   - [Pruning stops at the module](#user-content-pruning-stops-at-the-module)
@@ -623,23 +623,19 @@ Salsa also hashes a module's consts whole wherever they are a tracked
 function's argument (`lower_module_functions`, `ModulePreResolvedConsts`), once
 per compile of the module. That is a hash, not a copy.
 
-### The allocator maps a page per large block and keeps every small page
+### The allocator keeps every block it has ever handed out
 
-**Reasoned from `datalove-rt/src/c/impls/alloc.rs`; none of it measured as a
-cost.** Three structural costs in the runtime allocator:
+**Reasoned from `datalove-rt/src/c/impls/alloc.rs`; not measured as a cost.**
+The size classes go up to 128 KiB, and a freed block goes back on its class's
+free list. Its mapping stays until shutdown. A program's footprint is therefore
+its peak in each class, and up to twice that, since the classes are powers of
+two. That is fine for a short process, but not for a REPL or anything
+long-lived that has one large spike.
 
-- **Every block from 2049 to 4096 bytes is its own `mmap`.** The largest size
-  class is 4096 and `PAGE_SIZE` is 4096, so `allocate_page_for_size_class` makes
-  one block per page. Freed blocks go back on the free list and are reused, so
-  this costs a syscall per *live* block, not per allocation. Above 4096 every
-  allocation is an `mmap` and every free a `munmap`, with no cache in front.
-- **`free_large` scans `large_pages` linearly** to find the page, so freeing one
-  of *n* live large blocks is O(n) and a workload holding many is quadratic.
-- **Small pages are never returned.** `free_small` pushes onto the free list and
-  the page stays mapped until shutdown. Fine for a short process, not for a REPL
-  or anything long-lived.
-
-A program working in buffers of a few kilobytes would find the first two.
+Each block of a class above a page is its own `mmap`. Because blocks are
+reused, that is one system call per *live* block, not one per allocation.
+Above 128 KiB each allocation is mapped on its own, and the last four freed
+mappings (at most 32 MiB) are kept for reuse.
 
 ## Compilation pipeline and incrementality
 

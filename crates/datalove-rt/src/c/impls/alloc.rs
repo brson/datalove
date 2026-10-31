@@ -2,6 +2,11 @@
 //!
 //! On Unix platforms: Single-threaded allocator using mmap for page allocation.
 //! On wasm32: Uses Rust's global allocator.
+//!
+//! On Unix, sizes up to 128 KiB are served from free lists of power-of-two
+//! size classes, and freed blocks are kept for reuse rather than given back.
+//! Larger sizes are each mapped on their own, with the last few freed mappings
+//! kept for reuse.
 
 use datalove_rtdt::IndexRepr;
 
@@ -13,12 +18,29 @@ use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
 const PAGE_SIZE: usize = 4096;
+/// The size classes: the powers of two from 8 bytes to 128 KiB.
+///
+/// The top class is where mainstream allocators stop using size classes:
+/// glibc's malloc maps anything larger on its own by default
+/// (`M_MMAP_THRESHOLD`), mimalloc's medium objects end there, and tcmalloc's
+/// classes stop at 256 KiB. Before the classes went past a page, a list or
+/// string of more than 4 KiB was mapped and unmapped every time it was made,
+/// and the page faults were 11% of a parser's time.
 #[cfg(not(target_arch = "wasm32"))]
-const SIZE_CLASSES: &[usize] = &[8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+const SIZE_CLASSES: &[usize] = &[
+    8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096,
+    8192, 16384, 32768, 65536, 131072,
+];
 #[cfg(not(target_arch = "wasm32"))]
-const MAX_SMALL_SIZE: usize = 4096;
+const MAX_SMALL_SIZE: usize = 128 * 1024;
 #[cfg(not(target_arch = "wasm32"))]
 const NUM_SIZE_CLASSES: usize = SIZE_CLASSES.len();
+/// How many bytes of freed large mappings are kept for reuse.
+#[cfg(not(target_arch = "wasm32"))]
+const LARGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
+/// How many freed large mappings are kept for reuse.
+#[cfg(not(target_arch = "wasm32"))]
+const LARGE_CACHE_LEN: usize = 4;
 
 /// Whether the allocator keeps a record of every live allocation, and what it
 /// does with what is left at shutdown.
@@ -76,7 +98,7 @@ mod unix_impl {
         next: *mut FreeListNode,
     }
 
-    /// Tracks a page allocated via mmap.
+    /// A mapping made with mmap.
     struct Page {
         ptr: *mut u8,
         size: usize,
@@ -94,10 +116,13 @@ mod unix_impl {
     pub struct AllocLocal {
         /// Free lists for each size class.
         free_lists: [*mut FreeListNode; NUM_SIZE_CLASSES],
-        /// Pages allocated for small allocations.
+        /// Mappings carved into blocks of the size classes.
         small_pages: Vec<Page>,
-        /// Large allocations (each is its own mmap).
-        large_pages: Vec<Page>,
+        /// Large allocations, each its own mapping, by the address given out.
+        large_pages: HashMap<*mut u8, Page>,
+        /// Mappings of freed large allocations kept for reuse, the most
+        /// recently freed last.
+        large_cache: Vec<Page>,
         /// Active allocations for leak detection.
         active_allocations: HashMap<*mut u8, AllocationInfo>,
         /// Leak detection mode.
@@ -110,7 +135,8 @@ mod unix_impl {
             AllocLocal {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
                 small_pages: Vec::new(),
-                large_pages: Vec::new(),
+                large_pages: HashMap::new(),
+                large_cache: Vec::new(),
                 active_allocations: HashMap::new(),
                 leak_check_mode: LeakCheckMode::from_env(),
             }
@@ -122,7 +148,8 @@ mod unix_impl {
             AllocLocal {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
                 small_pages: Vec::new(),
-                large_pages: Vec::new(),
+                large_pages: HashMap::new(),
+                large_cache: Vec::new(),
                 active_allocations: HashMap::new(),
                 leak_check_mode: mode,
             }
@@ -136,7 +163,7 @@ mod unix_impl {
             let align = align.max(std::mem::align_of::<*mut u8>() as u32) as usize;
 
             unsafe {
-                let ptr = if total_size > MAX_SMALL_SIZE {
+                let ptr = if is_large(total_size, align) {
                     self.alloc_large(total_size, align)
                 } else {
                     self.alloc_small(total_size, align)
@@ -188,7 +215,7 @@ mod unix_impl {
             }
 
             unsafe {
-                if total_size > MAX_SMALL_SIZE {
+                if is_large(total_size, align) {
                     self.free_large(ptr);
                 } else {
                     self.free_small(total_size, align, ptr);
@@ -247,85 +274,70 @@ mod unix_impl {
             }
         }
 
+        /// A mapping of its own for an allocation too large for the size
+        /// classes, or more aligned than a page, reusing a freed one if one
+        /// fits.
+        #[cold]
+        #[inline(never)]
         unsafe fn alloc_large(&mut self, size: usize, align: usize) -> *mut u8 {
-            let alloc_size = size + align;
+            // A mapping is page-aligned, so only a larger alignment needs
+            // room to move up into.
+            let slack = if align > PAGE_SIZE { align } else { 0 };
+            let map_size = (size + slack).next_multiple_of(PAGE_SIZE);
 
-            unsafe {
-                let ptr = rmx::libc::mmap(
-                    ptr::null_mut(),
-                    alloc_size,
-                    rmx::libc::PROT_READ | rmx::libc::PROT_WRITE,
-                    rmx::libc::MAP_PRIVATE | rmx::libc::MAP_ANONYMOUS,
-                    -1,
-                    0,
-                );
+            // Reuse a freed mapping no more than twice the size needed.
+            let cached = self.large_cache.iter()
+                .rposition(|page| page.size >= map_size && page.size / 2 <= map_size);
+            let page = match cached {
+                Some(idx) => self.large_cache.remove(idx),
+                None => Page { ptr: unsafe { map(map_size) }, size: map_size },
+            };
 
-                if ptr == rmx::libc::MAP_FAILED {
-                    panic!("mmap failed for large allocation");
-                }
-
-                let ptr = ptr as *mut u8;
-                let aligned_ptr = align_up_ptr(ptr, align);
-
-                self.large_pages.push(Page {
-                    ptr,
-                    size: alloc_size,
-                });
-
-                aligned_ptr
-            }
+            let aligned_ptr = unsafe { align_up_ptr(page.ptr, align) };
+            self.large_pages.insert(aligned_ptr, page);
+            aligned_ptr
         }
 
+        /// Keep a large allocation's mapping for reuse, unmapping the oldest
+        /// kept to stay within the cache's bounds.
+        #[cold]
+        #[inline(never)]
         unsafe fn free_large(&mut self, ptr: *mut u8) {
-            if let Some(idx) = self.large_pages.iter().position(|page| {
-                let page_start = page.ptr as usize;
-                let page_end = page_start + page.size;
-                let ptr_addr = ptr as usize;
-                ptr_addr >= page_start && ptr_addr < page_end
-            }) {
-                let page = self.large_pages.swap_remove(idx);
-                unsafe {
-                    let result = rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size);
-                    if result != 0 {
-                        panic!("munmap failed for large allocation");
-                    }
-                }
-            } else {
-                panic!("attempted to free invalid large allocation");
+            let page = self.large_pages.remove(&ptr)
+                .expect("attempted to free invalid large allocation");
+            if page.size > LARGE_CACHE_BYTES {
+                unsafe { unmap(page) };
+                return;
+            }
+            self.large_cache.push(page);
+            while self.large_cache.len() > LARGE_CACHE_LEN
+                || self.large_cache.iter().map(|page| page.size).sum::<usize>() > LARGE_CACHE_BYTES
+            {
+                unsafe { unmap(self.large_cache.remove(0)) };
             }
         }
 
+        /// Map memory for a size class and put its blocks on the class's
+        /// free list: a page of blocks for the classes up to a page, one
+        /// block for the classes above.
         #[cold]
         unsafe fn allocate_page_for_size_class(&mut self, size_class_idx: usize) {
             let block_size = SIZE_CLASSES[size_class_idx];
+            let map_size = block_size.max(PAGE_SIZE);
 
             unsafe {
-                let ptr = rmx::libc::mmap(
-                    ptr::null_mut(),
-                    PAGE_SIZE,
-                    rmx::libc::PROT_READ | rmx::libc::PROT_WRITE,
-                    rmx::libc::MAP_PRIVATE | rmx::libc::MAP_ANONYMOUS,
-                    -1,
-                    0,
-                );
+                let ptr = map(map_size);
+                self.small_pages.push(Page { ptr, size: map_size });
 
-                if ptr == rmx::libc::MAP_FAILED {
-                    panic!("mmap failed for small allocation page");
-                }
-
-                let ptr = ptr as *mut u8;
-
-                self.small_pages.push(Page {
-                    ptr,
-                    size: PAGE_SIZE,
-                });
-
-                let num_blocks = PAGE_SIZE / block_size;
-                for i in 0..num_blocks {
-                    let block_ptr = ptr.add(i * block_size);
-                    self.push_free_list(size_class_idx, block_ptr);
+                for i in 0..map_size / block_size {
+                    self.push_free_list(size_class_idx, ptr.add(i * block_size));
                 }
             }
+        }
+
+        #[cfg(test)]
+        pub(super) fn large_cache_len(&self) -> usize {
+            self.large_cache.len()
         }
 
         #[inline]
@@ -358,9 +370,11 @@ mod unix_impl {
         ///
         /// Nothing may use a pointer this allocator gave out again.
         pub unsafe fn discard_all(&mut self) {
-            for page in self.small_pages.drain(..).chain(self.large_pages.drain(..)) {
-                let result = unsafe { rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size) };
-                assert_eq!(result, 0, "munmap of a page the allocator mapped failed");
+            let pages = self.small_pages.drain(..)
+                .chain(self.large_pages.drain().map(|(_, page)| page))
+                .chain(self.large_cache.drain(..));
+            for page in pages {
+                unsafe { unmap(page) };
             }
             self.free_lists = [ptr::null_mut(); NUM_SIZE_CLASSES];
             self.active_allocations.clear();
@@ -436,6 +450,35 @@ mod unix_impl {
         let index = (usize::BITS - (size - 1).leading_zeros()) as usize - 3;
         debug_assert!(size <= SIZE_CLASSES[index] && (index == 0 || size > SIZE_CLASSES[index - 1]));
         index
+    }
+
+    /// Whether an allocation is too large for the size classes.
+    ///
+    /// A block of a class above a page is aligned only to a page, so an
+    /// alignment past that is large too.
+    #[inline]
+    fn is_large(size: usize, align: usize) -> bool {
+        size.max(align) > MAX_SMALL_SIZE || align > PAGE_SIZE
+    }
+
+    unsafe fn map(size: usize) -> *mut u8 {
+        let ptr = unsafe {
+            rmx::libc::mmap(
+                ptr::null_mut(),
+                size,
+                rmx::libc::PROT_READ | rmx::libc::PROT_WRITE,
+                rmx::libc::MAP_PRIVATE | rmx::libc::MAP_ANONYMOUS,
+                -1,
+                0,
+            )
+        };
+        assert!(ptr != rmx::libc::MAP_FAILED, "mmap of {size} bytes failed");
+        ptr as *mut u8
+    }
+
+    unsafe fn unmap(page: Page) {
+        let result = unsafe { rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size) };
+        assert_eq!(result, 0, "munmap of a mapping the allocator made failed");
     }
 
     unsafe fn align_up_ptr(ptr: *mut u8, align: usize) -> *mut u8 {
@@ -647,7 +690,7 @@ mod tests {
     fn test_large_alloc() {
         let mut rt = AllocLocal::new_raw();
         unsafe {
-            let sizes = [4097, 8192, 16384, 65536];
+            let sizes = [4097, 8192, 16384, 65536, 131073, 262144, 1 << 20];
             for size in sizes {
                 let ptr = rt.alloc(size, 8, 1);
                 assert!(!ptr.is_null());
@@ -656,6 +699,68 @@ mod tests {
                 test_write_read(ptr, size as usize);
 
                 rt.free(size, 8, 1, ptr);
+            }
+            rt.shutdown();
+        }
+    }
+
+    /// A mapping freed is kept, and serves the next large allocation it fits.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_large_mapping_reused() {
+        let mut rt = AllocLocal::new_raw();
+        unsafe {
+            let ptr1 = rt.alloc(300_000, 8, 1);
+            test_write_read(ptr1, 300_000);
+            rt.free(300_000, 8, 1, ptr1);
+
+            let ptr2 = rt.alloc(290_000, 8, 1);
+            assert_eq!(ptr1, ptr2);
+            rt.free(290_000, 8, 1, ptr2);
+
+            // More than twice what is asked for is not reused.
+            let ptr3 = rt.alloc(140_000, 8, 1);
+            assert_ne!(ptr1, ptr3);
+            rt.free(140_000, 8, 1, ptr3);
+            rt.shutdown();
+        }
+    }
+
+    /// The freed mappings kept are bounded in number and in bytes.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_large_cache_bounded() {
+        let mut rt = AllocLocal::new_raw();
+        unsafe {
+            let ptrs: Vec<_> = (0..LARGE_CACHE_LEN + 2).map(|_| rt.alloc(1 << 20, 8, 1)).collect();
+            for ptr in ptrs {
+                rt.free(1 << 20, 8, 1, ptr);
+            }
+            assert_eq!(rt.large_cache_len(), LARGE_CACHE_LEN);
+
+            let huge = (LARGE_CACHE_BYTES + 1) as u32;
+            let ptr = rt.alloc(huge, 8, 1);
+            rt.free(huge, 8, 1, ptr);
+            assert_eq!(rt.large_cache_len(), LARGE_CACHE_LEN);
+
+            let big = (LARGE_CACHE_BYTES - (1 << 20)) as u32;
+            let ptr = rt.alloc(big, 8, 1);
+            rt.free(big, 8, 1, ptr);
+            assert!(rt.large_cache_len() < LARGE_CACHE_LEN);
+            rt.shutdown();
+        }
+    }
+
+    /// Alignments past a page are met, by mapping, at every size.
+    #[test]
+    fn test_alignment_larger_than_page() {
+        let mut rt = AllocLocal::new_raw();
+        unsafe {
+            for (size, align) in [(64, 8192), (10_000, 16384), (200_000, 65536)] {
+                let ptr = rt.alloc(size, align, 1);
+                assert!(is_aligned(ptr, align as usize));
+                test_write_read(ptr, size as usize);
+                rt.free(size, align, 1, ptr);
             }
             rt.shutdown();
         }
@@ -820,7 +925,7 @@ mod tests {
     #[test]
     fn test_size_class_boundaries() {
         let mut rt = AllocLocal::new_raw();
-        let test_sizes = [7, 8, 9, 15, 16, 17, 31, 32, 33, 4095, 4096, 4097];
+        let test_sizes = [7, 8, 9, 15, 16, 17, 31, 32, 33, 4095, 4096, 4097, 131071, 131072, 131073];
 
         unsafe {
             for size in test_sizes {
@@ -1011,11 +1116,10 @@ mod tests {
     proptest! {
         #[test]
         fn proptest_size_boundaries(offset in 0i32..10) {
-            let boundaries = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
             let mut rt = AllocLocal::new_raw();
 
             unsafe {
-                for base in boundaries {
+                for &base in SIZE_CLASSES {
                     let size = (base as i32 + offset).max(1) as u32;
                     let ptr = rt.alloc(size, 8, 1u32.into());
                     prop_assert!(!ptr.is_null());
