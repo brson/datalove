@@ -50,6 +50,7 @@ fun string_hash(ref s: string): index
 end fun
 
 fun read(mut p: Parser)
+  inline
   if p.current == 10
     set p.line = u32.add_wrapping(p.line, 1)
     set p.column = 0
@@ -62,6 +63,7 @@ fun read(mut p: Parser)
 end fun
 
 fun read_char(mut p: Parser, ch: u32): bool
+  inline
   if p.current != ch
     ret false
   end if
@@ -70,10 +72,12 @@ fun read_char(mut p: Parser, ch: u32): bool
 end fun
 
 fun is_digit(ref p: Parser): bool
+  inline
   ret p.current >= 48 and p.current <= 57
 end fun
 
 fun read_digit(mut p: Parser): bool
+  inline
   if not is_digit(ref p)
     ret false
   end if
@@ -82,22 +86,26 @@ fun read_digit(mut p: Parser): bool
 end fun
 
 fun is_white_space(ref p: Parser): bool
+  inline
   ret p.current == 32 or p.current == 9 or p.current == 10 or p.current == 13
 end fun
 
 fun skip_white_space(mut p: Parser)
+  inline
   loop while is_white_space(ref p)
     call read(mut p)
   end loop
 end fun
 
 fun start_capture(mut p: Parser)
+  inline
   set p.capture_start = index.sub_wrapping(p.next, 1)
 end fun
 
 // One past the end of what is captured: the position of `current`, or of the
 // end of the input.
 fun capture_end(ref p: Parser): index
+  inline
   if p.current == END
     ret p.next@
   end if
@@ -147,6 +155,7 @@ fun expected(ref p: Parser, ref what: string): error
 end fun
 
 fun read_required_char(mut p: Parser, ch: u32): !()
+  inline
   if not read_char(mut p, ch)
     ret er expected(ref p, ref "a letter of a literal")
   end if
