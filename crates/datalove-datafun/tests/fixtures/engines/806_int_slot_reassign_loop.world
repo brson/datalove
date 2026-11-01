@@ -5,7 +5,8 @@ scriptunit-fragment
 // Fibonacci-like pattern that exercises int slot reassignment in a loop.
 // This tests that:
 // 1. Old values in destination slots are properly destroyed
-// 2. Source values are zeroed after move to prevent double-free
+// 2. A moved source is never destroyed again, nor a moved-from var before
+//    its next value
 // Without proper handling, this causes memory corruption/double-free.
 
 fun fib(n: u32): !int

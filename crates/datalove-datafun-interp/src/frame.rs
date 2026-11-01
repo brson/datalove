@@ -490,8 +490,12 @@ impl Frame {
 
     /// Mark a value as holding nothing, having been moved or destroyed.
     #[inline(always)]
+    ///
+    /// A value of a copied type is left as it is: a move of one copies it.
     pub fn mark_value_dropped(&self, id: ValueId) {
-        self.set_kept_live(id.0 as usize, false);
+        if !self.layout().value_is_copy[id.0 as usize] {
+            self.set_kept_live(id.0 as usize, false);
+        }
     }
 
     /// Get destination for a value.
@@ -630,9 +634,15 @@ impl Frame {
 
     /// Check, in a debug build where liveness is kept, that a slot about to be
     /// moved into holds nothing, since overwriting what it held would leak it.
+    ///
+    /// A slot of a type that owns nothing has nothing to leak. Such a slot can
+    /// still read as occupied: a generic's instance at a copy type keeps the
+    /// generic's precise drops, and a drop of a copy type is no instruction at
+    /// all to the bytecode, so nothing marks the slot emptied.
     #[inline]
     pub fn check_slot_empty(&self, id: SlotId) {
-        debug_assert!(self.kept_live(self.slot_index(id)) != Some(true), "move into occupied slot {:?}", id);
+        debug_assert!(self.kept_live(self.slot_index(id)) != Some(true) || self.layout().slot_is_copy[id.0 as usize],
+            "move into occupied slot {:?}", id);
     }
 
     /// Mark slot as holding something.
@@ -646,11 +656,16 @@ impl Frame {
 
     /// Mark slot as holding nothing, having been moved or destroyed.
     #[inline]
+    ///
+    /// Of a copied type, it still holds what it did as far as the debug checks
+    /// go: a move of one copies it.
     pub fn mark_slot_dropped(&self, id: SlotId) {
         if let Some(offset) = self.layout().slot_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);
         }
-        self.set_kept_live(self.slot_index(id), false);
+        if !self.layout().slot_is_copy[id.0 as usize] {
+            self.set_kept_live(self.slot_index(id), false);
+        }
     }
 
     /// Read param (dereferences pointer to caller's data).
@@ -715,11 +730,16 @@ impl Frame {
 
     /// Mark param as holding nothing, having been moved or destroyed.
     #[inline]
+    ///
+    /// Of a copied type, it still holds what it did as far as the debug checks
+    /// go: a move of one copies it.
     pub fn mark_param_dropped(&self, id: ParamId) {
         if let Some(offset) = self.layout().param_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);
         }
-        self.set_kept_live(self.param_index(id), false);
+        if !self.layout().param_is_copy[id.0 as usize] {
+            self.set_kept_live(self.param_index(id), false);
+        }
     }
 
     /// Destroy unit_end bindings (values/slots) in this frame.

@@ -45,13 +45,13 @@ Analysis(
                     fn set_elem(p0, p1, p2, p3):
                     block0:
                         v0 = move p0
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = copy p3
                         v2 = tensorboundscheck s0[p1]
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        drop.tracked s0
+                        drop s0
                         return v3
                     block2:
                         v4 = tensorindexref s0[p1]
@@ -59,10 +59,10 @@ Analysis(
                         branch v5, block4, block3
                     block3:
                         v6 = none
-                        drop.tracked s0
+                        drop s0
                         return v6
                     block4:
-                        v7 = load.move.tracked s0
+                        v7 = load.move s0
                         v8 = some v7
                         return v8
                 """,

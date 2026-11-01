@@ -1406,6 +1406,13 @@ impl<'db> LowerCtx<'db> {
         self.body.lowered_places.insert(expr.key().local_index);
     }
 
+    /// Whether the `set` being lowered writes a precise var holding nothing;
+    /// see `DropSchedule::set_over_moved`.
+    pub fn set_is_over_moved(&self) -> bool {
+        self.body.current_stmt_idx
+            .is_some_and(|stmt_idx| self.body.drop_schedule.set_over_moved.contains(&stmt_idx))
+    }
+
     /// Emit drops scheduled before a set-target early return (index OOB).
     ///
     /// The value and the keys have been evaluated by then, so what they moved

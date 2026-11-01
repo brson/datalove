@@ -52,32 +52,32 @@ Analysis(
                         v1 = const 42u32
                         v2 = call m0.u0(v1, s0) <u32>
                         v3 = const "before"
-                        store.move.tracked s1, v3
+                        store.move s1, v3
                         v4 = const "after"
-                        drop.tracked s1
+                        drop s1
                         v5 = call m0.u0(v4, s1) <string>
                         v6 = const 1int
-                        store.move.tracked s2, v6
+                        store.move s2, v6
                         v7 = const 99999999999999999999int
-                        drop.tracked s2
+                        drop s2
                         v8 = call m0.u0(v7, s2) <int>
                         v9 = none
-                        store.move.tracked s3, v9
+                        store.move s3, v9
                         v10 = const "wrapped"
-                        drop.tracked s3
+                        drop s3
                         v11 = call m0.u1(v10, s3) <string>
                         v12 = const 0u32
                         store.copy s4, v12
                         v13 = const ""
-                        store.move.tracked s5, v13
+                        store.move s5, v13
                         v14 = const 7u32
                         v15 = const "second"
-                        drop.tracked s5
+                        drop s5
                         v16 = call m0.u2(v14, v15, s4, s5) <u32, string>
                         v17 = const 1u32
                         v18 = const "replaced"
                         v19 = pack tuple/2 {v17, v18}
-                        store.move.tracked s6, v19
+                        store.move s6, v19
                         v20 = const 5u32
                         v21 = getfieldref s6.0
                         v22 = call m0.u0(v20, *v21) <u32>
@@ -86,12 +86,12 @@ Analysis(
                         drop.ref v24
                         v25 = call m0.u0(v23, *v24) <string>
                         v26 = load.copy s0
-                        v27 = load.move.tracked s1
-                        v28 = load.move.tracked s2
-                        v29 = load.move.tracked s3
+                        v27 = load.move s1
+                        v28 = load.move s2
+                        v29 = load.move s3
                         v30 = load.copy s4
-                        v31 = load.move.tracked s5
-                        v32 = load.move.tracked s6
+                        v31 = load.move s5
+                        v32 = load.move s6
                         v33 = pack tuple/7 {v26, v27, v28, v29, v30, v31, v32}
                         return v33
                 """,

@@ -46,16 +46,16 @@ Analysis(
                     fn set_inner(p0, p1, p2):
                     block0:
                         v0 = move p0
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = move p2
                         v2 = listset s0[p1] = v1
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        drop.tracked s0
+                        drop s0
                         return v3
                     block2:
-                        v4 = load.move.tracked s0
+                        v4 = load.move s0
                         v5 = some v4
                         return v5
                 """,

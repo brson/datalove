@@ -157,13 +157,13 @@ Analysis(
                     fn n4(p0, p1):
                     block0:
                         v0 = const "x"
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1, v2 = listget p0[p1]
                         branch v2, block2, block1
                     block1:
                         v3 = none
                         drop p0
-                        drop.tracked s0
+                        drop s0
                         return v3
                     block2:
                         v4 = call u2(v1, s0)

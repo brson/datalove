@@ -44,7 +44,7 @@ Analysis(
                     fn count(p0):
                     block0:
                         v0 = const 1int
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = getfieldref p0.1
                         cursorbegin s1, *v1
                         goto block1
@@ -56,14 +56,14 @@ Analysis(
                         v4 = call u1(*v3)
                         v5 = add s0, v4
                         drop v4
-                        drop.tracked s0
-                        store.move.tracked s0, v5
+                        drop s0
+                        store.move s0, v5
                         goto block3
                     block3:
                         cursoradvance s1, *v1
                         goto block1
                     block4:
-                        v6 = load.move.tracked s0
+                        v6 = load.move s0
                         return v6
                     
                     fn second_name(p0):

@@ -43,7 +43,7 @@ Analysis(
                     fn set_elem_x(p0, p1, p2):
                     block0:
                         v0 = move p0
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = copy p2
                         v2 = listboundscheck s0[p1]
                         branch v2, block2, block1
@@ -51,13 +51,13 @@ Analysis(
                         v3 = const "index out of bounds"
                         v4 = error_from v3
                         v5 = err v4
-                        drop.tracked s0
+                        drop s0
                         return v5
                     block2:
                         v6 = listelementref s0[p1]
                         v7 = getfieldref *v6.0
                         refstore *v7, v1
-                        v8 = load.move.tracked s0
+                        v8 = load.move s0
                         v9 = ok v8
                         return v9
                 """,

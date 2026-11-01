@@ -30,9 +30,9 @@ Analysis(
                     fn test():
                     block0:
                         v0 = const 100int
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = call m0.u0(s0)
-                        drop.tracked s0
+                        drop s0
                         return v1
                 """,
             ),

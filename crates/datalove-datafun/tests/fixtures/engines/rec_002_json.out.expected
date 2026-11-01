@@ -53,7 +53,7 @@ Analysis(
                     block1:
                         v2 = enum_payload v0 0
                         v3 = const 1int
-                        store.move.tracked s0, v3
+                        store.move s0, v3
                         cursorbegin s1, v2
                         goto block2
                     block2:
@@ -65,20 +65,20 @@ Analysis(
                         v7 = call u0(v6)
                         v8 = add s0, v7
                         drop v7
-                        drop.tracked s0
-                        store.move.tracked s0, v8
+                        drop s0
+                        store.move s0, v8
                         goto block4
                     block4:
                         cursoradvance s1, v2
                         goto block2
                     block5:
-                        v9 = load.move.tracked s0
+                        v9 = load.move s0
                         drop v2
                         return v9
                     block6:
                         v10 = enum_payload v0 4
                         v11 = const 1int
-                        store.move.tracked s2, v11
+                        store.move s2, v11
                         cursorbegin s3, v10
                         goto block7
                     block7:
@@ -90,14 +90,14 @@ Analysis(
                         v16 = call u0(v15)
                         v17 = add s2, v16
                         drop v16
-                        drop.tracked s2
-                        store.move.tracked s2, v17
+                        drop s2
+                        store.move s2, v17
                         goto block9
                     block9:
                         cursoradvance s3, v10
                         goto block7
                     block10:
-                        v18 = load.move.tracked s2
+                        v18 = load.move s2
                         drop v10
                         return v18
                     block11:

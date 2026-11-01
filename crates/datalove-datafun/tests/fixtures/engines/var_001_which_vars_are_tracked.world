@@ -1,0 +1,48 @@
+----------
+scriptunit-fragment
+----------
+
+// Which vars keep a tracking byte. One whose state ownership analysis fixes at
+// every point is precise: its drops and moves need no byte, and a `set` over
+// it after a move destroys nothing. Three are not, and stay tracked: one
+// declared without a value, which may be given one on some paths only; one a
+// loop body gives a value it was entered without, which holds nothing on the
+// first pass and something after; and a script unit's, which later units read.
+
+fun fixed(n: u32): string
+  var s = "a"
+  if n == 0
+    set s = "b"
+  end if
+  let gone = s
+  set s = "c"
+  ret s
+end fun
+
+fun given_on_one_path(flag: bool): string
+  var s: string
+  if flag
+    set s = "set"
+  end if
+  ret "done"
+end fun
+
+fun given_by_a_loop(n: u32): string
+  var s = "first"
+  let gone = s
+  var i: u32 = 0
+  loop
+    set s = "again"
+    set i = icall add_wrapping_u32(i, 1)
+    if i == n
+      break
+    end if
+  end loop
+  ret s
+end fun
+
+var t = "x"
+let u = t
+set t = "y"
+
+debuglog (fixed(0), fixed(1), given_on_one_path(true), given_on_one_path(false), given_by_a_loop(3), t, u)

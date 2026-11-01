@@ -20,7 +20,7 @@ Analysis(
                     fn leave(p0, p1, p2):
                     block0:
                         v0 = const 0int
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         cursorbegin s1, p0
                         goto block1
                     block1:
@@ -42,8 +42,8 @@ Analysis(
                         v6 = const 1int
                         v7 = add s0, v6
                         drop v6
-                        drop.tracked s0
-                        store.move.tracked s0, v7
+                        drop s0
+                        store.move s0, v7
                         drop v3
                         goto block6
                     block6:
@@ -75,7 +75,7 @@ Analysis(
                         cursoradvance s3, p2
                         goto block12
                     block15:
-                        v13 = load.move.tracked s0
+                        v13 = load.move s0
                         return v13
                     
                     fn keyed(p0):

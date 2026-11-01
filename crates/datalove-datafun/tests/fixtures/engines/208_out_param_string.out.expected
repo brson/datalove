@@ -23,10 +23,10 @@ Analysis(
                     fn test():
                     block0:
                         v0 = const ""
-                        store.move.tracked s0, v0
-                        drop.tracked s0
+                        store.move s0, v0
+                        drop s0
                         v1 = call m0.u0(s0)
-                        v2 = load.move.tracked s0
+                        v2 = load.move s0
                         return v2
                 """,
             ),

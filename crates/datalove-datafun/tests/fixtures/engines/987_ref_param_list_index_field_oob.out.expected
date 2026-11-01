@@ -33,19 +33,19 @@ Analysis(
                         v4 = const 40u32
                         v5 = pack tuple/2 {v3, v4}
                         v6 = list [v2, v5]
-                        store.move.tracked s0, v6
+                        store.move s0, v6
                         v7 = const 5index
                         v8 = listboundscheck s0[v7]
                         branch v8, block2, block1
                     block1:
                         v9 = none
-                        drop.tracked s0
+                        drop s0
                         return v9
                     block2:
                         v10 = listelementref s0[v7]
                         v11 = getfieldref *v10.0
                         v12 = call u0(*v11)
-                        drop.tracked s0
+                        drop s0
                         return v12
                 """,
             ),

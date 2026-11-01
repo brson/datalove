@@ -877,6 +877,12 @@ pub struct DropSchedule {
     /// Key is (match_stmt_idx, arm_idx).
     pub match_arm_exit: BTreeMap<(usize, usize), Vec<BindingId>>,
 
+    /// The plain `set`s, by statement index, that write a precise `var`
+    /// holding nothing: one its value moved out of, earlier or on the way to
+    /// the write. Every other `set` of a precise `var` destroys what it held
+    /// first; a tracked one asks its tracking byte.
+    pub set_over_moved: std::collections::BTreeSet<usize>,
+
     /// Drops to emit where control runs off the end of a function body.
     ///
     /// A `ret` schedules its own drops against its statement index, but a body

@@ -84,6 +84,11 @@ pub struct IrLayout {
     /// does not track it because destroying it does nothing either way. The
     /// frame's debug checks need to know which those are.
     pub slot_is_copy: Vec<bool>,
+    /// Whether each value's type is copied, for the frame's debug checks: a
+    /// move of one copies it, and leaves it to be read again.
+    pub value_is_copy: Vec<bool>,
+    /// Whether each parameter's type is copied, as `value_is_copy`.
+    pub param_is_copy: Vec<bool>,
     /// Which cursor each slot of a cursor type holds, which the cursor
     /// instructions dispatch on.
     pub slot_cursor_kinds: Vec<Option<CursorKind>>,
@@ -313,6 +318,8 @@ impl IrLayout {
             param_moves: Vec::new(),
             slot_tracking: frame.slots.iter().map(|s| s.tracking_byte).collect(),
             slot_is_copy: slot_types.iter().map(|ty| ty.is_copy()).collect(),
+            value_is_copy: value_types.iter().map(|ty| ty.is_copy()).collect(),
+            param_is_copy: param_types.iter().map(|ty| ty.is_copy()).collect(),
             slot_cursor_kinds: slot_types.iter().map(|ty| match ty {
                 IrType::Cursor(kind) => Some(*kind),
                 _ => None,

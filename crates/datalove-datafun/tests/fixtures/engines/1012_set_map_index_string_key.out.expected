@@ -24,7 +24,7 @@ Analysis(
                         v0 = const "a"
                         v1 = const 1int
                         v2 = %{v0: v1}
-                        store.move.tracked s0, v2
+                        store.move s0, v2
                         v3 = const 3int
                         v4 = const "a"
                         v5 = mapsetvalue s0[v4] = v3
@@ -34,7 +34,7 @@ Analysis(
                         v7 = error_from v6
                         v8 = err v7
                         drop v4
-                        drop.tracked s0
+                        drop s0
                         return v8
                     block2:
                         drop v4
@@ -48,14 +48,14 @@ Analysis(
                         v14 = err v13
                         drop v9
                         drop v10
-                        drop.tracked s0
+                        drop s0
                         return v14
                     block4:
                         v15 = mapvalueref s0[v10]
                         add.assign *v15, v9
                         drop v9
                         drop v10
-                        v16 = load.move.tracked s0
+                        v16 = load.move s0
                         v17 = ok v16
                         return v17
                 """,

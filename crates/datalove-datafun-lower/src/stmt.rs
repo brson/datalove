@@ -788,13 +788,17 @@ pub(crate) fn store_external_slot<'db>(ctx: &mut LowerCtx<'db>, name: &str, unit
 }
 
 /// Replace what a local slot holds with `value_id`, dropping what it held.
+///
+/// A tracked slot asks its tracking byte whether it holds something. A
+/// precise one holds something unless ownership analysis found this `set`
+/// writing over a moved value.
 fn store_slot<'db>(ctx: &mut LowerCtx<'db>, slot: SlotId, value_id: ValueId) {
     let is_copy = ctx.slot_type(slot).expect("slot must have a type").is_copy();
     if !is_copy {
         let operand = Operand::Slot(slot);
         if ctx.is_operand_tracked(operand) {
             ctx.emit(Instruction::DropTracked { operand });
-        } else {
+        } else if !ctx.set_is_over_moved() {
             ctx.emit(Instruction::Drop { operand });
         }
     }

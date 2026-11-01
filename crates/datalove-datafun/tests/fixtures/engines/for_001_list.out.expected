@@ -15,7 +15,7 @@ Analysis(
                     fn sum(p0):
                     block0:
                         v0 = const 0int
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         cursorbegin s1, p0
                         goto block1
                     block1:
@@ -26,14 +26,14 @@ Analysis(
                         v3 = widen *v2
                         v4 = add s0, v3
                         drop v3
-                        drop.tracked s0
-                        store.move.tracked s0, v4
+                        drop s0
+                        store.move s0, v4
                         goto block3
                     block3:
                         cursoradvance s1, p0
                         goto block1
                     block4:
-                        v5 = load.move.tracked s0
+                        v5 = load.move s0
                         return v5
                     
                     fn index_of(p0, p1):
@@ -65,7 +65,7 @@ Analysis(
                     fn odd_sum_below(p0, p1):
                     block0:
                         v0 = const 0int
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         cursorbegin s1, p0
                         goto block1
                     block1:
@@ -94,14 +94,14 @@ Analysis(
                         goto block8
                     block8:
                         v9 = add s0, *v2
-                        drop.tracked s0
-                        store.move.tracked s0, v9
+                        drop s0
+                        store.move s0, v9
                         goto block9
                     block9:
                         cursoradvance s1, p0
                         goto block1
                     block10:
-                        v10 = load.move.tracked s0
+                        v10 = load.move s0
                         drop p1
                         return v10
                     
@@ -130,7 +130,7 @@ Analysis(
                     fn joined(p0):
                     block0:
                         v0 = list []
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         cursorbegin s1, p0
                         goto block1
                     block1:
@@ -141,14 +141,14 @@ Analysis(
                         v3 = clone *v2
                         v4 = clone *v2
                         v5 = list [v3, v4]
-                        drop.tracked s0
-                        store.move.tracked s0, v5
+                        drop s0
+                        store.move s0, v5
                         goto block3
                     block3:
                         cursoradvance s1, p0
                         goto block1
                     block4:
-                        v6 = load.move.tracked s0
+                        v6 = load.move s0
                         return v6
                     
                     fn main():

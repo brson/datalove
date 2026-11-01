@@ -29,11 +29,11 @@ Analysis(
                     fn upsert(p0, p1, p2):
                     block0:
                         v0 = move p0
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = copy p2
                         v2 = copy p1
                         mapupsert s0[v2] = v1
-                        v3 = load.move.tracked s0
+                        v3 = load.move s0
                         return v3
                 """,
             ),

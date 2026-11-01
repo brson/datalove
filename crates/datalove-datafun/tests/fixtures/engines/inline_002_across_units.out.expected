@@ -74,12 +74,12 @@ Analysis(
                     fn fresh():
                     block0:
                         v0 = list []
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v3 = const 0u32
                         v6 = const 1u32
                         v7 = intrinsic AddWrappingU32(v3, v6)
                         v5 = call unit0.u2(s0, v7)
-                        v2 = load.move.tracked s0
+                        v2 = load.move s0
                         return v2
                 """,
             ),

@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 0index
                         store.copy s0, v0
                         v1 = const 0int
-                        store.move.tracked s1, v1
+                        store.move s1, v1
                         cursorbegin s2, p0
                         goto block1
                     block1:
@@ -29,15 +29,15 @@ Analysis(
                         v5 = intrinsic AddWrappingIndex(s0, v4)
                         store.copy s0, v5
                         v6 = add s1, *v3
-                        drop.tracked s1
-                        store.move.tracked s1, v6
+                        drop s1
+                        store.move s1, v6
                         goto block3
                     block3:
                         cursoradvance s2, p0
                         goto block1
                     block4:
                         v7 = load.copy s0
-                        v8 = load.move.tracked s1
+                        v8 = load.move s1
                         v9 = pack tuple/2 {v7, v8}
                         return v9
                     
@@ -46,9 +46,9 @@ Analysis(
                         v0 = const 0index
                         store.copy s0, v0
                         v1 = const 0int
-                        store.move.tracked s1, v1
+                        store.move s1, v1
                         v2 = none
-                        store.move.tracked s2, v2
+                        store.move s2, v2
                         cursorbegin s3, p0
                         goto block1
                     block1:
@@ -61,20 +61,20 @@ Analysis(
                         v7 = intrinsic AddWrappingIndex(s0, v6)
                         store.copy s0, v7
                         v8 = add s1, *v5
-                        drop.tracked s1
-                        store.move.tracked s1, v8
+                        drop s1
+                        store.move s1, v8
                         v9 = clone *v4
                         v10 = some v9
-                        drop.tracked s2
-                        store.move.tracked s2, v10
+                        drop s2
+                        store.move s2, v10
                         goto block3
                     block3:
                         cursoradvance s3, p0
                         goto block1
                     block4:
                         v11 = load.copy s0
-                        v12 = load.move.tracked s1
-                        v13 = load.move.tracked s2
+                        v12 = load.move s1
+                        v13 = load.move s2
                         v14 = pack tuple/3 {v11, v12, v13}
                         return v14
                     
@@ -89,9 +89,9 @@ Analysis(
                         v0 = const 0index
                         store.copy s0, v0
                         v1 = none
-                        store.move.tracked s1, v1
+                        store.move s1, v1
                         v2 = none
-                        store.move.tracked s2, v2
+                        store.move s2, v2
                         cursorbegin s3, p0
                         goto block1
                     block1:
@@ -105,20 +105,20 @@ Analysis(
                         store.copy s0, v7
                         v8 = clone *v4
                         v9 = some v8
-                        drop.tracked s1
-                        store.move.tracked s1, v9
+                        drop s1
+                        store.move s1, v9
                         v10 = clone *v5
                         v11 = some v10
-                        drop.tracked s2
-                        store.move.tracked s2, v11
+                        drop s2
+                        store.move s2, v11
                         goto block3
                     block3:
                         cursoradvance s3, p0
                         goto block1
                     block4:
                         v12 = load.copy s0
-                        v13 = load.move.tracked s1
-                        v14 = load.move.tracked s2
+                        v13 = load.move s1
+                        v14 = load.move s2
                         v15 = pack tuple/3 {v12, v13, v14}
                         return v15
                     

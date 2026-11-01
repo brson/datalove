@@ -46,9 +46,9 @@ Analysis(
                     fn shapes(p0):
                     block0:
                         v0 = list []
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = list []
-                        store.move.tracked s1, v1
+                        store.move s1, v1
                         v2 = const 0u64
                         v3 = pack struct {v2}
                         store.copy s2, v3
@@ -65,13 +65,13 @@ Analysis(
                         v8 = copy *v6
                         v9 = pack tuple/2 {v8, v7}
                         v10 = list [v9]
-                        drop.tracked s0
-                        store.move.tracked s0, v10
+                        drop s0
+                        store.move s0, v10
                         v11 = copy *v6
                         v12 = call m0.u0(*v6)
                         v13 = list [v11, v12]
-                        drop.tracked s1
-                        store.move.tracked s1, v13
+                        drop s1
+                        store.move s1, v13
                         v14 = copy *v6
                         v15 = pack struct {v14}
                         store.copy s2, v15
@@ -82,8 +82,8 @@ Analysis(
                         cursoradvance s4, p0
                         goto block1
                     block4:
-                        v17 = load.move.tracked s0
-                        v18 = load.move.tracked s1
+                        v17 = load.move s0
+                        v18 = load.move s1
                         v19 = load.copy s2
                         v20 = load.copy s3
                         v21 = pack tuple/4 {v17, v18, v19, v20}
@@ -92,7 +92,7 @@ Analysis(
                     fn rows(p0):
                     block0:
                         v0 = list []
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         cursorbegin s1, p0
                         goto block1
                     block1:
@@ -105,14 +105,14 @@ Analysis(
                         v5 = clone *v2
                         v6 = pack tuple/2 {v4, v5}
                         v7 = list [v6]
-                        drop.tracked s0
-                        store.move.tracked s0, v7
+                        drop s0
+                        store.move s0, v7
                         goto block3
                     block3:
                         cursoradvance s1, p0
                         goto block1
                     block4:
-                        v8 = load.move.tracked s0
+                        v8 = load.move s0
                         return v8
                     
                     fn main():

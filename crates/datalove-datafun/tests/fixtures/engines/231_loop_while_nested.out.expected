@@ -26,7 +26,7 @@ Analysis(
                         branch v3, block2, block6
                     block2:
                         v4 = const 0int
-                        store.move.tracked s2, v4
+                        store.move s2, v4
                         goto block3
                     block3:
                         v5 = const 3int
@@ -42,8 +42,8 @@ Analysis(
                         v9 = const 1int
                         v10 = add s2, v9
                         drop v9
-                        drop.tracked s2
-                        store.move.tracked s2, v10
+                        drop s2
+                        store.move s2, v10
                         goto block3
                     block5:
                         v11 = const 1int
@@ -51,7 +51,7 @@ Analysis(
                         drop v11
                         drop.tracked s1
                         store.move.tracked s1, v12
-                        drop.tracked s2
+                        drop s2
                         goto block1
                     block6:
                         unit_end_drop.tracked s0

@@ -33,18 +33,18 @@ Analysis(
                         v1 = const 20u32
                         v2 = const 30u32
                         v3 = [| v0 v1 v2 |]
-                        store.move.tracked s0, v3
+                        store.move s0, v3
                         v4 = const 5index
                         v5 = tensorboundscheck s0[v4]
                         branch v5, block2, block1
                     block1:
                         v6 = none
-                        drop.tracked s0
+                        drop s0
                         return v6
                     block2:
                         v7 = tensorindexref s0[v4]
                         v8 = call u0(*v7)
-                        v9 = load.move.tracked s0
+                        v9 = load.move s0
                         v10 = some v9
                         return v10
                 """,

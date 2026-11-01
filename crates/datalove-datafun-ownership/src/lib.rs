@@ -130,6 +130,9 @@ struct AnalysisCtx<'a, 'db> {
     errors: Vec<AnalysisError<'db>>,
     /// Computed drop schedule.
     schedule: DropSchedule,
+    /// The `var`s whose state the analysis cannot fix at every point, and
+    /// which keep a tracking byte; see `compute_tracking`.
+    stays_tracked: std::collections::HashSet<BindingId>,
     /// The ways out of each loop currently being analyzed, innermost last.
     ///
     /// `break` and `continue` carry no label, so both always belong to the
@@ -271,6 +274,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             call_targets,
             errors: Vec::new(),
             schedule: DropSchedule::default(),
+            stays_tracked: Default::default(),
             loop_exits: Vec::new(),
             walked: Vec::new(),
             arena: None,
@@ -433,19 +437,26 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     ///
     /// Categories:
     /// - Copy: type is copy (no tracking needed)
-    /// - Tracked: var slots, Out params
-    /// - Precise: let bindings, In/Ref/Mut params
+    /// - Tracked: out params, and the vars whose state is not fixed
+    /// - Precise: let bindings, In/Ref/Mut params, and the other vars
     ///
     /// Precise bindings have deterministic lifecycle:
     /// - In params: owned, always initialized
     /// - Ref/Mut params: borrowed, always initialized, cannot be moved/dropped
     /// - Let bindings: single assignment, drop point statically known
+    /// - Vars: whether one holds a value is as fixed as a let's. Branches that
+    ///   meet agree on it (D008), a loop gives back what it was given (D007),
+    ///   and a `set` over one that holds nothing says so (`set_over_moved`).
+    ///   Three kinds are not: a var of a script unit, which other units read
+    ///   and write; one declared without a value, which may be given one on
+    ///   some paths only; and one a loop body gives a value it was entered
+    ///   without, which holds nothing on the first pass and something after.
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
-        self.bindings.iter().map(|info| {
+        self.bindings.iter().enumerate().map(|(i, info)| {
+            let id = BindingId(i as u32);
             if info.ty.is_copy() {
                 TrackingCategory::Copy
-            } else if info.is_slot {
-                // Var bindings: reassignable, state varies.
+            } else if info.is_slot && (info.is_script_unit || self.is_external(id) || self.stays_tracked.contains(&id)) {
                 TrackingCategory::Tracked
             } else if info.param_mode == Some(ParamMode::Out) {
                 // Out params: may be uninitialized, dynamic state.
@@ -1786,6 +1797,10 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
 
         // Mark as uninitialized (reuse Out param init tracking).
         ctx.set_out_param_init(id, OutParamInitState::Uninitialized);
+
+        // Whether it has been given a value can differ between the ways into
+        // a point, which the init state merges rather than refuses.
+        ctx.stays_tracked.insert(id);
     }
 }
 
@@ -1871,6 +1886,9 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         // Simple name assignment.
         let name = place.root.text(ctx.db);
         if let Some(id) = ctx.lookup(name) {
+            if ctx.get_state(id) == Some(BindingState::Moved) {
+                ctx.schedule.set_over_moved.insert(stmt_idx);
+            }
             ctx.set_state(id, BindingState::Live);
             if let Some(frame) = ctx.scope_stack.last_mut() {
                 frame.assigned_at.insert(id, expr.key());
@@ -2554,6 +2572,22 @@ fn check_loop_repeats<'db>(
     entry: &LoopEntry<'db>,
 ) {
     let body_reaches_head = body_completes(body);
+
+    // A var entered with nothing and given a value by the body holds nothing
+    // on the first pass and something on the next: its state is not fixed.
+    for (id, &state) in &entry.state_before {
+        let info = &ctx.bindings[id.0 as usize];
+        if state != BindingState::Moved || !info.is_slot || info.ty.is_copy() {
+            continue;
+        }
+        let live_at_body_end = body_reaches_head && ctx.get_state(id) != Some(BindingState::Moved);
+        let live_at_continue = exits.continues.iter()
+            .any(|state| state.get(&id).copied().unwrap_or(BindingState::Live) == BindingState::Live);
+        if live_at_body_end || live_at_continue {
+            ctx.stays_tracked.insert(id);
+        }
+    }
+
     for id in &entry.outer_live {
         let moved_at_body_end = body_reaches_head
             && ctx.get_state(*id) == Some(BindingState::Moved);

@@ -47,7 +47,7 @@ Analysis(
                     fn set_nested(p0, p1, p2, p3):
                     block0:
                         v0 = move p0
-                        store.move.tracked s0, v0
+                        store.move s0, v0
                         v1 = copy p3
                         v2 = listboundscheck s0[p1]
                         branch v2, block2, block1
@@ -55,7 +55,7 @@ Analysis(
                         v3 = const "index out of bounds"
                         v4 = error_from v3
                         v5 = err v4
-                        drop.tracked s0
+                        drop s0
                         return v5
                     block2:
                         v6 = listelementref s0[p1]
@@ -65,10 +65,10 @@ Analysis(
                         v8 = const "index out of bounds"
                         v9 = error_from v8
                         v10 = err v9
-                        drop.tracked s0
+                        drop s0
                         return v10
                     block4:
-                        v11 = load.move.tracked s0
+                        v11 = load.move s0
                         v12 = ok v11
                         return v12
                 """,
