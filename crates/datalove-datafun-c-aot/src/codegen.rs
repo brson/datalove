@@ -2050,10 +2050,6 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
-        // Zero source for non-copy types to implement move semantics.
-        if !inner_ty.is_copy() {
-            self.emit_zero(out, &inner_addr, &inner_ty);
-        }
         Ok(())
     }
 
@@ -2093,10 +2089,6 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
-        // Zero source for non-copy types to implement move semantics.
-        if !inner_ty.is_copy() {
-            self.emit_zero(out, &inner_addr, &inner_ty);
-        }
         Ok(())
     }
 
@@ -2116,10 +2108,8 @@ impl<'a> FunctionCodegenContext<'a> {
         // Set tag to Err (2).
         writeln!(out, "    *(uint8_t*){} = RESULT_ERR;", dest_addr).unwrap();
 
-        // Move error value (copy then zero source to prevent double-free).
         let payload_addr = format!("({} + {})", dest_addr, payload_offset);
         writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, error_size).unwrap();
-        writeln!(out, "    memset({}, 0, {});", inner_addr, error_size).unwrap();
         Ok(())
     }
 
@@ -2273,16 +2263,7 @@ impl<'a> FunctionCodegenContext<'a> {
 
         writeln!(out, "    dtlv_rti_error_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
 
-        // Zero source to implement move semantics (prevents double-free/leak).
-        self.emit_zero(out, &inner_addr, &inner_ty);
         Ok(())
-    }
-
-    /// Zero a value of `ty` at `addr`, which is how a move leaves its source.
-    fn emit_zero(&self, out: &mut String, addr: &str, ty: &IrType) {
-        if ty.is_dynamic() || types::ir_type_to_crepr(ty).layout().size > 0 {
-            writeln!(out, "    memset({}, 0, {});", addr, self.size_expr(ty)).unwrap();
-        }
     }
 
     /// Emit data from.
@@ -2294,8 +2275,6 @@ impl<'a> FunctionCodegenContext<'a> {
 
         writeln!(out, "    dtlv_rti_data_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
 
-        // Zero source to implement move semantics (prevents double-free/leak).
-        self.emit_zero(out, &inner_addr, &inner_ty);
         Ok(())
     }
 

@@ -250,9 +250,14 @@ falls back to memory. Every use not taught words asks for an address and gets
 the value's home with the words just stored there. An OSR entry holds nothing
 as words, since its carried values are the interpreter's.
 
-The zeroing question has its answer here: a value held as words is not
-cleared when it is moved, and the suite under `DATALOVE_LEAK_CHECK=panic`
-finds no double free.
+The zeroing question has its answer: it guarded nothing any longer. It came
+in, in January 2026, when the JIT's slot store destroyed what the slot held
+itself and the source was destroyed too. Since then a store destroys nothing,
+a drop in front of it does, ownership of a value is precise, and a slot or
+parameter that may have been moved has a tracking byte; lowering moves into a
+slot only from a value, and `simplify` forwards only copies, of copy types.
+The interpreter and the bytecode never zeroed. Neither compiled backend does
+now: not Cranelift's slot store, nor C's wraps, `ErrorFrom` and `DataFrom`.
 
 **Layer 2** is `signature.rs`. An `in` argument of a scalar or a type held as
 words is passed by value, and such a result comes back in registers; the rest

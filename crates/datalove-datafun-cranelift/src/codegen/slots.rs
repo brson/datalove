@@ -12,13 +12,16 @@ use crate::CraneliftError;
 use super::FunctionCompiler;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
-    /// Compile a SlotStore instruction.
+    /// Compile a SlotStore instruction, a copy or a move alike.
+    ///
+    /// A move leaves its source as it was: nothing reads a moved value
+    /// again, and a slot or parameter that may have been moved has a
+    /// tracking byte to say so.
     pub(super) fn compile_slot_store(
         &mut self,
         builder: &mut FunctionBuilder,
         dest: &SlotDest,
         value: &Operand,
-        is_copy: bool,
     ) -> Result<(), CraneliftError> {
         let slot_id = match dest {
             SlotDest::Local(id) => *id,
@@ -45,11 +48,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let src_ptr = self.get_operand_ptr(builder, value)?;
             let size = self.value_size(builder, &slot_ty)?;
             builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
-            if !is_copy {
-                let moved = self.moved_size(builder, &slot_ty)?;
-                let zero = builder.ins().iconst(cranelift_codegen::ir::types::I8, 0);
-                builder.call_memset(self.isa.frontend_config(), src_ptr, zero, moved);
-            }
             return Ok(());
         }
 
@@ -65,19 +63,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // The old value (if any) is destroyed by explicit drop.tracked in the IR
                 // before this store instruction.
                 let dest_addr = frame_slot.addr(builder, slot_offset as i32);
-                // Words move without a source to clear: nothing reads them
-                // after a move.
                 if let Some(words) = self.words_of(value) {
                     Self::store_words_at(builder, dest_addr, slot_ty, words);
                     return Ok(());
                 }
                 let src_ptr = self.get_operand_ptr(builder, value)?;
                 self.copy_bytes(builder, dest_addr, src_ptr, layout.size as u64);
-
-                if !is_copy {
-                    // Zero out the source to complete the move (prevents double-free).
-                    self.fill_bytes(builder, src_ptr, 0, layout.size as u64);
-                }
             }
         }
 

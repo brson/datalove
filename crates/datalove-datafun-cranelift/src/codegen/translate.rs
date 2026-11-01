@@ -465,10 +465,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_call(builder, *dest, func, args, bindings)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
-                self.compile_slot_store(builder, dest, value, true)?;
+                self.compile_slot_store(builder, dest, value)?;
             }
             Instruction::SlotStoreMove { dest, value } => {
-                self.compile_slot_store(builder, dest, value, false)?;
+                self.compile_slot_store(builder, dest, value)?;
             }
             Instruction::SlotLoadCopy { dest, slot } => {
                 self.compile_slot_load(builder, *dest, *slot, true)?;
@@ -584,13 +584,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // Slot tracking variants - write slot tracking bytes
             // ================================================================
             Instruction::SlotStoreCopyTracked { dest, value } => {
-                self.compile_slot_store(builder, dest, value, true)?;
+                self.compile_slot_store(builder, dest, value)?;
                 if let SlotDest::Local(sid) = dest {
                     self.mark_slot_live(builder, *sid);
                 }
             }
             Instruction::SlotStoreMoveTracked { dest, value } => {
-                self.compile_slot_store(builder, dest, value, false)?;
+                self.compile_slot_store(builder, dest, value)?;
                 if let SlotDest::Local(sid) = dest {
                     self.mark_slot_live(builder, *sid);
                 }

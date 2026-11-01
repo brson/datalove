@@ -286,19 +286,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(builder.ins().iconst(PTR_TYPE, types::ir_type_size(ty) as i64))
     }
 
-    /// How many bytes of a moved-from value of dynamic `ty` to zero: its size,
-    /// or none for a plain one.
-    ///
-    /// Zeroing is what keeps a moved value from being freed twice, and a plain
-    /// value owns nothing to free. Its source may also be the caller's own copy
-    /// value, handed to a `T` by pointer and still the caller's to read.
-    pub(super) fn moved_size(&mut self, builder: &mut FunctionBuilder, ty: &IrType) -> Result<cl_ir::Value, CraneliftError> {
-        let size = self.value_size(builder, ty)?;
-        let plain = self.is_plain(builder, ty)?;
-        let zero = builder.ins().iconst(PTR_TYPE, 0);
-        Ok(builder.ins().select(plain, zero, size))
-    }
-
     /// Whether a value of dynamic `ty` owns nothing, as its descriptor says:
     /// nonzero if so.
     pub(super) fn is_plain(&mut self, builder: &mut FunctionBuilder, ty: &IrType) -> Result<cl_ir::Value, CraneliftError> {
