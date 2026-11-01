@@ -24,6 +24,31 @@ const LIST_DATA_OFFSET: i32 = std::mem::offset_of!(datalove_rtdt::List, data) as
 const LIST_SIZE_OFFSET: i32 = std::mem::offset_of!(datalove_rtdt::List, size) as i32;
 const LIST_CAPACITY_OFFSET: i32 = std::mem::offset_of!(datalove_rtdt::List, capacity) as i32;
 
+/// A list's size and capacity, as read for a push or a pop.
+///
+/// Each is read and written as itself. What reads a list's header as words
+/// reads its counts as halves too (`load_words`), so it forwards from the
+/// half stored here.
+struct Counts {
+    size: cl_ir::Value,
+    capacity: cl_ir::Value,
+}
+
+impl Counts {
+    fn load(builder: &mut FunctionBuilder, list: cl_ir::Value) -> Counts {
+        let flags = MemFlagsData::new();
+        let size = builder.ins().load(INDEX_TYPE, flags, list, LIST_SIZE_OFFSET);
+        let capacity = builder.ins().load(INDEX_TYPE, flags, list, LIST_CAPACITY_OFFSET);
+        Counts { size, capacity }
+    }
+
+    /// Store the size `delta` from what it was.
+    fn store_size(&self, builder: &mut FunctionBuilder, list: cl_ir::Value, delta: i64) {
+        let size = builder.ins().iadd_imm_s(self.size, delta);
+        builder.ins().store(MemFlagsData::new(), size, list, LIST_SIZE_OFFSET);
+    }
+}
+
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Do the work of a call to intrinsic native `intrinsic` in place, if its
     /// types are static; false if not, for the caller to call the native.
@@ -54,6 +79,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match intrinsic {
             NativeIntrinsic::ListPush => self.open_list_push(builder, &first_ty, args)?,
             NativeIntrinsic::ListPop => return self.open_list_pop(builder, &first_ty, dest, args).map(|()| true),
+            NativeIntrinsic::MemSwap if self.field_place_among(args).is_some() => {
+                // A field of a slot held in registers, exchanged with memory.
+                let (place, other) = self.field_place_among(args).expect("checked");
+                let other = self.get_operand_ptr(builder, other)?;
+                let in_place = self.field_place_words(builder, &place);
+                let from_other = Self::load_words(builder, other, &place.ty);
+                Self::store_words_at(builder, other, &place.ty, &in_place);
+                self.set_field_place_words(builder, &place, &from_other);
+            }
+            NativeIntrinsic::MemReplace if matches!(&args[0], Operand::ValueRef(r) if self.field_places.contains_key(r)) => {
+                let Operand::ValueRef(r) = &args[0] else { unreachable!("matched") };
+                let place = self.field_places[r].clone();
+                let old = self.field_place_words(builder, &place);
+                let new = self.operand_words(builder, &args[1], &place.ty)?;
+                self.set_field_place_words(builder, &place, &new);
+                self.define_words(builder, dest, old)?;
+                return Ok(true);
+            }
             NativeIntrinsic::MemSwap => {
                 let a = self.get_operand_ptr(builder, &args[0])?;
                 let b = self.get_operand_ptr(builder, &args[1])?;
@@ -80,6 +123,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(true)
     }
 
+    /// The field place in a slot's registers among a swap's arguments, and the
+    /// other argument.
+    fn field_place_among<'o>(&self, args: &'o [Operand]) -> Option<(super::slot_vars::FieldPlace, &'o Operand)> {
+        let i = args.iter().position(|a| matches!(a, Operand::ValueRef(r) if self.field_places.contains_key(r)))?;
+        let Operand::ValueRef(r) = &args[i] else { unreachable!("found") };
+        Some((self.field_places[r].clone(), &args[1 - i]))
+    }
+
     /// `list_push`: the element stored after the last if there is room, and
     /// the runtime's push, which grows the list, if not.
     fn open_list_push(
@@ -99,9 +150,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             || matches!(types::ir_type_to_cranelift(elem_ty), types::CraneliftRepr::Scalar(_));
         let elem = if in_registers { None } else { Some(self.get_operand_ptr(builder, &args[1])?) };
         let flags = MemFlagsData::new();
-        let size = builder.ins().load(INDEX_TYPE, flags, list, LIST_SIZE_OFFSET);
-        let capacity = builder.ins().load(INDEX_TYPE, flags, list, LIST_CAPACITY_OFFSET);
-        let has_room = builder.ins().icmp(cl_ir::condcodes::IntCC::UnsignedLessThan, size, capacity);
+        let counts = Counts::load(builder, list);
+        let size = counts.size;
+        let has_room = builder.ins().icmp(cl_ir::condcodes::IntCC::UnsignedLessThan, size, counts.capacity);
 
         let store = builder.create_block();
         let grow = builder.create_block();
@@ -117,8 +168,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Some(elem) => self.copy_bytes(builder, slot, elem, elem_size as u64),
             None => self.put_value(builder, slot, elem_ty, &args[1])?,
         }
-        let grown = builder.ins().iadd_imm_s(size, 1);
-        builder.ins().store(flags, grown, list, LIST_SIZE_OFFSET);
+        counts.store_size(builder, list, 1);
         builder.ins().jump(done, &[]);
 
         builder.set_cold_block(grow);
@@ -158,7 +208,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let option_ty = self.func.value_types[dest.0 as usize].clone();
         let list = self.get_operand_ptr(builder, &args[0])?;
         let flags = MemFlagsData::new();
-        let size = builder.ins().load(INDEX_TYPE, flags, list, LIST_SIZE_OFFSET);
+        let counts = Counts::load(builder, list);
+        let size = counts.size;
 
         // Held as words, the option is built in registers on both arms and
         // meets at the end as block parameters.
@@ -181,15 +232,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             builder.switch_to_block(take);
             builder.seal_block(take);
             let last = builder.ins().iadd_imm_s(size, -1);
-            builder.ins().store(flags, last, list, LIST_SIZE_OFFSET);
+            counts.store_size(builder, list, -1);
             let data = builder.ins().load(PTR_TYPE, flags, list, LIST_DATA_OFFSET);
             let at = self.element_offset(builder, last, elem_size);
             let slot = builder.ins().iadd(data, at);
             let some = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
             let mut parts = vec![(0, some)];
-            for &(at, t) in &elem_cut {
-                let w = builder.ins().load(t, flags, slot, at);
-                parts.push((payload_at + at as u32, w));
+            if !elem_cut.is_empty() {
+                let words = Self::load_words(builder, slot, elem_ty);
+                parts.extend(elem_cut.iter().zip(words).map(|(&(at, _), w)| (payload_at + at as u32, w)));
             }
             let words = Self::compose_words(builder, &option_ty, &parts).expect("checked to fit");
             let args: Vec<cl_ir::BlockArg> = words.into_iter().map(Into::into).collect();
@@ -219,7 +270,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.switch_to_block(take);
         builder.seal_block(take);
         let last = builder.ins().iadd_imm_s(size, -1);
-        builder.ins().store(flags, last, list, LIST_SIZE_OFFSET);
+        counts.store_size(builder, list, -1);
         let data = builder.ins().load(PTR_TYPE, flags, list, LIST_DATA_OFFSET);
         let at = self.element_offset(builder, last, elem_size);
         let slot = builder.ins().iadd(data, at);

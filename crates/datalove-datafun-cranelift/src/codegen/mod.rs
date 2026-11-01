@@ -79,6 +79,8 @@ mod bytes;
 mod native_intrinsics;
 /// Small aggregates held as words, in registers.
 mod words;
+/// Slots held in registers.
+mod slot_vars;
 pub use words::word_pieces;
 
 /// Why defining a function failed, with the verifier's own account where it
@@ -158,6 +160,11 @@ pub struct FunctionCompiler<'a, M: Module> {
     word_values: std::collections::HashSet<ValueId>,
     /// The words of each value held so, in place of an entry in `values`.
     words: HashMap<ValueId, Vec<cl_ir::Value>>,
+    /// The variables of each slot held in registers; see `slot_vars`.
+    slot_vars: HashMap<SlotId, Vec<Variable>>,
+    /// The references to a field of a slot held in registers, kept as where
+    /// the field is.
+    field_places: HashMap<ValueId, slot_vars::FieldPlace>,
     /// Mapping from IR BlockId to Cranelift Block.
     blocks: HashMap<BlockId, cl_ir::Block>,
     /// Mapping from IR ParamId to Cranelift Value (user params, not rt_handle).
@@ -290,6 +297,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             values: HashMap::new(),
             word_values: std::collections::HashSet::new(),
             words: HashMap::new(),
+            slot_vars: HashMap::new(),
+            field_places: HashMap::new(),
             blocks: HashMap::new(),
             param_values: HashMap::new(),
             param_regs: HashMap::new(),

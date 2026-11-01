@@ -71,6 +71,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Create function builder context.
         let mut fb_ctx = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(&mut cl_func, &mut fb_ctx);
+        let (register_slots, field_places) = self.find_register_slots();
+        self.declare_slot_vars(&mut builder, &register_slots);
+        self.field_places = field_places;
 
         // The blocks to compile: every one, or for an OSR entry, those the
         // header reaches.

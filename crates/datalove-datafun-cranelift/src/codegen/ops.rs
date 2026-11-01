@@ -720,7 +720,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(());
         }
 
-        let place_ptr = self.get_operand_ptr(builder, place)?;
         let old = self.get_operand_value(builder, place)?;
         let rhs_val = self.get_operand_value(builder, rhs)?;
         let new = match (op, &ty) {
@@ -730,7 +729,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             (BinOp::Div, IrType::F32 | IrType::F64) => builder.ins().fdiv(old, rhs_val),
             _ => panic!("{:?} on a {:?} place, which lowering doesn't emit as an update", op, ty),
         };
-        builder.ins().store(MemFlagsData::new(), new, place_ptr, 0);
+        self.write_scalar_place(builder, place, new)
+    }
+
+    /// Write `value` to scalar place `place`: a slot held in registers by
+    /// defining its variable, anything else through its address.
+    fn write_scalar_place(&mut self, builder: &mut FunctionBuilder, place: &Operand, value: cl_ir::Value) -> Result<(), CraneliftError> {
+        if let Operand::Slot(s) = place
+            && self.slot_vars.contains_key(s)
+        {
+            self.set_slot_regs(builder, *s, &[value]);
+            return Ok(());
+        }
+        let place_ptr = self.get_operand_ptr(builder, place)?;
+        builder.ins().store(MemFlagsData::new(), value, place_ptr, 0);
         Ok(())
     }
 
@@ -760,12 +772,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(());
         }
 
-        let place_ptr = self.get_operand_ptr(builder, place)?;
         let old = self.get_operand_value(builder, place)?;
         let rhs_val = self.get_operand_value(builder, rhs)?;
         let (result, overflow) = Self::checked_values(builder, op, &ty, old, rhs_val);
         let kept = builder.ins().select(overflow, old, result);
-        builder.ins().store(MemFlagsData::new(), kept, place_ptr, 0);
+        self.write_scalar_place(builder, place, kept)?;
         self.values.insert(overflow_dest, overflow);
         Ok(())
     }

@@ -54,6 +54,32 @@ pub(super) fn parts_fit(ty: &IrType, parts: &[(u32, u32)]) -> bool {
     parts.iter().all(|&(off, n)| cut.iter().any(|&(at, t)| off >= at as u32 && off + n <= at as u32 + t.bytes()))
 }
 
+/// The offsets, from `base`, of the 32-bit counts in a value of `ty`: a
+/// list's or a string's size and capacity, wherever one is inside it.
+fn counts_at(ty: &IrType, base: u32, out: &mut Vec<u32>) {
+    use datalove_datafun_ir::layout as ir_layout;
+    match ty {
+        IrType::List(_) | IrType::String if crate::index_types::INDEX_TYPE == cl_types::I32 => {
+            out.push(base + std::mem::offset_of!(datalove_rtdt::List, size) as u32);
+            out.push(base + std::mem::offset_of!(datalove_rtdt::List, capacity) as u32);
+        }
+        IrType::Tuple(_) | IrType::Struct(_) => {
+            let fields: Vec<IrType> = match ty {
+                IrType::Tuple(tys) => tys.clone(),
+                IrType::Struct(flds) => flds.iter().map(|(_, t)| t.clone()).collect(),
+                _ => unreachable!("matched"),
+            };
+            for (field, at) in fields.iter().zip(types::compute_tuple_field_offsets(&fields)) {
+                counts_at(field, base + at, out);
+            }
+        }
+        IrType::Option(inner) => counts_at(inner, base + ir_layout::option_payload_offset(inner) as u32, out),
+        IrType::Result(ok) => counts_at(ok, base + ir_layout::result_payload_offset(ok) as u32, out),
+        IrType::Term(_, payload) => counts_at(payload, base, out),
+        _ => {}
+    }
+}
+
 /// One part of an aggregate being built: a scalar at a byte offset.
 pub(super) type Part = (u32, cl_ir::Value);
 
@@ -180,9 +206,29 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Load the words of a value of `ty` at `addr`.
+    ///
+    /// A word holding a list's or a string's two counts, its size and its
+    /// capacity, is loaded as the two and put together. What stored them may
+    /// have stored only one -- a push the size, the runtime's growing each
+    /// as a field of its own -- and a load the processor can forward from a
+    /// store is one the store covers.
     pub(super) fn load_words(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType) -> Vec<cl_ir::Value> {
         let cut = word_pieces(ty).expect("words are of a type that can be held as words");
-        cut.iter().map(|&(at, t)| builder.ins().load(t, MemFlagsData::new(), addr, at)).collect()
+        let mut counts = Vec::new();
+        counts_at(ty, 0, &mut counts);
+        let flags = MemFlagsData::new();
+        cut.iter().map(|&(at, t)| {
+            if t == cl_types::I64 && counts.contains(&(at as u32)) && counts.contains(&(at as u32 + 4)) {
+                let low = builder.ins().load(cl_types::I32, flags, addr, at);
+                let high = builder.ins().load(cl_types::I32, flags, addr, at + 4);
+                let low = builder.ins().uextend(cl_types::I64, low);
+                let high = builder.ins().uextend(cl_types::I64, high);
+                let high = builder.ins().ishl_imm_u(high, 32);
+                builder.ins().bor(low, high)
+            } else {
+                builder.ins().load(t, flags, addr, at)
+            }
+        }).collect()
     }
 
     /// Define `dest` as `words`: held so if it is to be, and otherwise stored
@@ -211,6 +257,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(super) fn operand_words(&mut self, builder: &mut FunctionBuilder, op: &Operand, ty: &IrType) -> Result<Vec<cl_ir::Value>, CraneliftError> {
         if let Some(words) = self.words_of(op) {
             return Ok(words.clone());
+        }
+        if let Operand::Slot(s) = op
+            && let Some(regs) = self.slot_regs(builder, *s)
+        {
+            return Ok(regs);
         }
         let addr = self.get_operand_ptr(builder, op)?;
         Ok(Self::load_words(builder, addr, ty))

@@ -270,6 +270,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         src: &Operand,
         field_index: u32,
     ) -> Result<(), CraneliftError> {
+        // A place in a slot's registers, which the swap or replace it is
+        // handed to works on.
+        if self.field_places.contains_key(&dest) {
+            return Ok(());
+        }
         let src_ty = self.get_operand_type(src)?;
         let repr = types::ir_type_to_cranelift(&src_ty);
 

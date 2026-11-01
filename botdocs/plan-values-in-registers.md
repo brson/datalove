@@ -284,4 +284,29 @@ Measured on Towers and Storage, in cycles:
 Store-to-load forwards on Towers went from 3.65G to 1.38G a run. Storage
 is mostly instructions (33G against Java's 4.4G) and gained less.
 
-Layer 3 has not been tried.
+**Layer 3** is `codegen/slot_vars.rs`, after vars stopped being tracked
+when their state is fixed (`compute_tracking`; a var declared without a
+value, one a loop gives a value it was entered without, and a script unit's
+stay tracked). A slot is held in registers, one Cranelift variable per word,
+if it is untracked, of a static type held as words or a scalar, and nothing
+writes through its address or keeps it: a `mut` or `out` argument, a field
+write or drop, an update of a collection in it, and a `GetFieldRef` rule it
+out. A use reading through its address gets its home written first. Writing
+through the home and reading the slot back after was tried and was slower
+than memory: a narrow store into the home and the wide loads after it are a
+store the processor cannot forward. A scalar's update (`set i +!= 1`)
+defines the variable anew, and a reference to a field handed only to an
+open-coded `mem_swap` or `mem_replace` is kept as a place in the slot's
+words, which the swap exchanges in registers.
+
+The same forwarding rule turned up at the list headers. A push or pop stores
+the size alone, the runtime grows a list storing size and capacity apart, and
+a swap or a move reads the header as words; so a word holding a list's or
+a string's two counts is loaded as the two halves and put together
+(`load_words`). Loaded as the word, Towers waited on it for a sixth of its
+time; stored as the word instead, Storage did.
+
+Measured against the precise vars alone, in cycles: Mandelbrot 46% fewer
+AOT, Towers 16%, N-body 13% (17% under the JIT), Sum 7%; the rest within
+noise. The JIT gains less: a loop entered by OSR keeps its slots in memory,
+which is all of Mandelbrot's, and its time.

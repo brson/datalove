@@ -61,6 +61,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // This is important for mut params: we pass the slot address so writes
         // go to the original slot, not a copy.
         if let Operand::Slot(slot_id) = operand {
+            if let Some(home) = self.materialize_slot(builder, *slot_id) {
+                return Ok(home);
+            }
             if let Some(&ptr) = self.dyn_slot_storage.get(slot_id) {
                 return Ok(ptr);
             }
@@ -185,6 +188,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         // For aggregates, return the pointer itself.
                         Ok(param_ptr)
                     }
+                }
+            }
+            Operand::Slot(slot_id) if self.slot_vars.contains_key(slot_id) => {
+                if types::ir_type_to_cranelift(&self.func.slot_types[slot_id.0 as usize]).is_scalar() {
+                    Ok(self.slot_regs(builder, *slot_id).expect("held in registers")[0])
+                } else {
+                    Ok(self.materialize_slot(builder, *slot_id).expect("held in registers"))
                 }
             }
             Operand::Slot(slot_id) if self.dyn_slot_storage.contains_key(slot_id) => {

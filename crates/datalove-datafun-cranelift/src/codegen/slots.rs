@@ -33,6 +33,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
+        if self.slot_vars.contains_key(&slot_id) {
+            return self.store_slot_regs(builder, slot_id, value);
+        }
+
         let frame_slot = self.frame_slot.ok_or_else(|| {
             CraneliftError::Codegen("no frame slot for slot store".into())
         })?;
@@ -87,6 +91,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         slot: SlotId,
         _is_copy: bool,
     ) -> Result<(), CraneliftError> {
+        if self.slot_vars.contains_key(&slot) {
+            return self.load_slot_regs(builder, dest, slot);
+        }
         let frame_slot = self.frame_slot.ok_or_else(|| {
             CraneliftError::Codegen("no frame slot for slot load".into())
         })?;
