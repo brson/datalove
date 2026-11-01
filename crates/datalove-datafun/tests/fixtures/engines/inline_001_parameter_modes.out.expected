@@ -228,7 +228,7 @@ Analysis(
                         goto block1
                     block1:
                         v2 = lt s1, p0
-                        branch v2, block10, block2
+                        branch v2, block8, block2
                     block2:
                         v13 = const 0u32
                         v45 = copy s0
@@ -239,67 +239,53 @@ Analysis(
                         v39, v40 = add.checked v45, v13
                         branch v40, block5, block4
                     block4:
-                        v44 = ok v39
-                        goto block7(v44)
-                    block5:
-                        v41 = const "arithmetic overflow"
-                        v42 = error_from v41
-                        v43 = err v42
-                        goto block7(v43)
-                    block6:
-                        v36 = const "zero"
-                        v37 = error_from v36
-                        v38 = err v37
-                        goto block7(v38)
-                    block7(v14):
-                        v15, v16, v17 = unwrap_result v14
-                        branch v17, block9, block8
-                    block8:
-                        v18 = err v16
-                        return v18
-                    block9:
-                        store.copy s0, v15
+                        store.copy s0, v39
                         v19 = load.copy s0
                         v20 = ok v19
                         return v20
-                    block10:
+                    block5:
+                        v41 = const "arithmetic overflow"
+                        v42 = error_from v41
+                        goto block7(v42)
+                    block6:
+                        v36 = const "zero"
+                        v37 = error_from v36
+                        goto block7(v37)
+                    block7(v48):
+                        v16 = move v48
+                        v18 = err v16
+                        return v18
+                    block8:
                         v32 = copy s0
                         v33 = copy s1
                         v21 = const 0u32
                         v22 = eq v33, v21
-                        branch v22, block14, block11
-                    block11:
+                        branch v22, block13, block9
+                    block9:
                         v26, v27 = add.checked v32, v33
-                        branch v27, block13, block12
-                    block12:
-                        v31 = ok v26
-                        goto block15(v31)
-                    block13:
-                        v28 = const "arithmetic overflow"
-                        v29 = error_from v28
-                        v30 = err v29
-                        goto block15(v30)
-                    block14:
-                        v23 = const "zero"
-                        v24 = error_from v23
-                        v25 = err v24
-                        goto block15(v25)
-                    block15(v3):
-                        v4, v5, v6 = unwrap_result v3
-                        branch v6, block17, block16
-                    block16:
-                        v7 = err v5
-                        return v7
-                    block17:
-                        store.copy s0, v4
+                        branch v27, block12, block10
+                    block10:
+                        store.copy s0, v26
                         v8 = const 1u32
                         v9 = add.assign.checked s1, v8
-                        branch v9, block18, block1
-                    block18:
+                        branch v9, block11, block1
+                    block11:
                         v10 = const "arithmetic overflow"
                         v11 = error_from v10
                         v12 = err v11
                         return v12
+                    block12:
+                        v28 = const "arithmetic overflow"
+                        v29 = error_from v28
+                        goto block14(v29)
+                    block13:
+                        v23 = const "zero"
+                        v24 = error_from v23
+                        goto block14(v24)
+                    block14(v47):
+                        v5 = move v47
+                        v7 = err v5
+                        return v7
                     
                     fn moves(p0):
                     block0:

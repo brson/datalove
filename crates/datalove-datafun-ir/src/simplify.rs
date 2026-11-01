@@ -16,6 +16,10 @@
 //!   passing a `some` goes straight to the branch for something, the payload
 //!   moved where the unwrap's would have been, and one passing a `none` to the
 //!   other branch.
+//! - **Results built to be unwrapped**, the same way: an edge passing an `ok`
+//!   goes to the branch for `ok`, one passing an `err` to the other. Where
+//!   more than one passes the same, they meet first in a block of their own
+//!   that defines what the unwrap did, once.
 //! - **Jumps to a block with one way in**, which is merged into the block that
 //!   jumps, and **jumps to a block that only jumps on**, which go straight on.
 //!
@@ -31,7 +35,7 @@ use crate::*;
 pub fn simplify(unit: &mut IrCodeUnit) {
     loop {
         let forwarded = forward_copies(unit);
-        let threaded = thread_known_options(unit);
+        let threaded = thread_known_options(unit) | thread_known_results(unit);
         let substituted = substitute_block_params(unit);
         let merged = merge_blocks(unit);
         let skipped = skip_empty_blocks(unit);
@@ -320,6 +324,123 @@ fn thread_known_options(unit: &mut IrCodeUnit) -> bool {
         }
     }
     any
+}
+
+/// Blocks that only unwrap the result their one parameter holds and branch on
+/// whether it is `ok`, bypassed by every edge into them that passes a result
+/// built for the occasion. Whether any were.
+///
+/// As `thread_known_options`, with the `err` side carrying a value too. An
+/// inlined function returning `!T` from more than one place leaves several
+/// `err`s and an `ok` meeting at the unwrap, so the edges passing one kind
+/// each go to a block of their own, which defines the unwrap's destination
+/// from its one parameter and goes on to the branch. A kind only one edge
+/// passes is defined where it was built, as an option's payload is.
+fn thread_known_results(unit: &mut IrCodeUnit) -> bool {
+    let mut any = false;
+    for b in 1..unit.blocks.len() {
+        let block = &unit.blocks[b];
+        let ([param], [Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src: Operand::Value(src) }]) =
+            (block.params.as_slice(), block.instructions.as_slice()) else { continue };
+        let Terminator::Branch { cond: Operand::Value(cond), then_block, then_args, else_block, else_args } = &block.terminator
+            else { continue };
+        if src != param || cond != is_ok || !then_args.is_empty() || !else_args.is_empty() || then_block == else_block {
+            continue;
+        }
+        let (target, flag) = (block.id, *is_ok);
+        let sides = [(*ok_dest, *then_block), (*err_dest, *else_block)];
+        let preds = predecessors(unit);
+        let uses = uses(unit);
+        let defs = definitions(unit);
+        // Each side's destination is defined on the way to its branch, which
+        // the unwrap reached by one edge: what reaches it now has to be all
+        // that does.
+        if sides.iter().any(|&(_, to)| preds[to.0 as usize] != 1) || uses.get(&flag).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        // Every edge in, with which side it passes and what, has to be one
+        // this can bypass.
+        let mut edges: Vec<(usize, usize, usize, usize, Operand)> = Vec::new();
+        for (p, pred) in unit.blocks.iter().enumerate() {
+            if (p != 0 && preds[p] == 0) || !pred.terminator.successors().contains(&target) {
+                continue;
+            }
+            let mut terminator = pred.terminator.clone();
+            let Some(args) = edge_args_mut(&mut terminator, target) else { edges.clear(); break };
+            let [Operand::Value(w)] = args.as_slice() else { edges.clear(); break };
+            let Some(&(db, di)) = defs.get(w) else { edges.clear(); break };
+            if uses.get(w).copied().unwrap_or(0) != 1 {
+                edges.clear();
+                break;
+            }
+            match &unit.blocks[db].instructions[di] {
+                Instruction::WrapOk { inner, .. } => edges.push((p, db, di, 0, inner.clone())),
+                Instruction::WrapErr { inner, .. } => edges.push((p, db, di, 1, inner.clone())),
+                _ => {
+                    edges.clear();
+                    break;
+                }
+            }
+        }
+        if edges.is_empty() {
+            continue;
+        }
+
+        for side in 0..2 {
+            let (dest, to) = sides[side];
+            let on_side: Vec<_> = edges.iter().filter(|e| e.3 == side).cloned().collect();
+            let define = |dest: ValueId, src: Operand, unit: &IrCodeUnit| match unit.value_types[dest.0 as usize].is_copy() {
+                true => Instruction::Copy { dest, src },
+                false => Instruction::Move { dest, src },
+            };
+            match on_side.as_slice() {
+                [] => {}
+                [(p, db, di, _, inner)] => {
+                    unit.blocks[*db].instructions[*di] = define(dest, inner.clone(), unit);
+                    retarget_edge(&mut unit.blocks[*p].terminator, target, to, Vec::new());
+                }
+                many => {
+                    // A block of the side's own, where the edges meet.
+                    let ty = unit.value_types[dest.0 as usize].clone();
+                    let param = ValueId(unit.value_count);
+                    unit.value_count += 1;
+                    unit.value_types.push(ty);
+                    let landing = BlockId(unit.blocks.len() as u32);
+                    let instructions = vec![define(dest, Operand::Value(param), unit)];
+                    unit.blocks.push(IrBlock {
+                        id: landing,
+                        params: vec![param],
+                        instructions,
+                        terminator: Terminator::Goto { target: to, args: Vec::new() },
+                    });
+                    for (p, db, di, _, inner) in many {
+                        unit.blocks[*db].instructions[*di] = Instruction::Nop;
+                        retarget_edge(&mut unit.blocks[*p].terminator, target, landing, vec![inner.clone()]);
+                    }
+                }
+            }
+        }
+        any = true;
+    }
+    if any {
+        for block in &mut unit.blocks {
+            block.instructions.retain(|instr| !matches!(instr, Instruction::Nop));
+        }
+    }
+    any
+}
+
+/// Point the edge of `term` to `from` at `to`, passing `args`.
+fn retarget_edge(term: &mut Terminator, from: BlockId, to: BlockId, args: Vec<Operand>) {
+    *term = match term.clone() {
+        Terminator::Goto { .. } => Terminator::Goto { target: to, args },
+        Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
+            let (t, then_args) = if then_block == from { (to, args.clone()) } else { (then_block, then_args) };
+            let (e, else_args) = if else_block == from { (to, args) } else { (else_block, else_args) };
+            Terminator::Branch { cond, then_block: t, then_args, else_block: e, else_args }
+        }
+        other => unreachable!("an edge with arguments from {other:?}"),
+    };
 }
 
 /// Jumps to a block with one way in and no parameters, the block merged into

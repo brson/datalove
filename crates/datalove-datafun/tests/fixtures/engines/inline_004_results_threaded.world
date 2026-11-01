@@ -1,0 +1,34 @@
+----------
+scriptunit-fragment
+----------
+
+// An inline function returning a result from more than one place, whose
+// caller unwraps it: each `ok` and `err` goes straight to the caller's branch
+// for it, and two `err`s meet first. Which error arrives, and that an owned
+// `ok` is the value built, is what is checked.
+
+fun pick(n: u32, s: string): !string
+  inline
+  if n == 0
+    ret er error "zero"
+  end if
+  if n == 1
+    ret er error "one"
+  end if
+  ret ok s
+end fun
+
+fun describe(n: u32): string
+  if pick(n, "kept") |s|
+    ret s
+  else |e|
+    ret "failed"
+  end if
+end fun
+
+fun forward(n: u32): !string
+  let s = pick(n, "forwarded")!
+  ret ok s
+end fun
+
+debuglog (describe(0), describe(1), describe(2), forward(0), forward(1), forward(2))
