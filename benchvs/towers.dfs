@@ -20,10 +20,12 @@ type Disk: rec D { size: u32, next: [D] }
 
 // The size of the disk on top of a pile, if it has one.
 fun top_size(ref pile: [Disk]): ?u32
+  inline
   ret some pile[(: index / 0)]?.size
 end fun
 
 fun push_disk(mut piles: [[Disk]], pile: index, disk: Disk): !()
+  inline
   if top_size(ref piles[pile]!) |top|
     if disk.size >= top
       ret er error "Cannot put a big disk on a smaller one"
@@ -36,6 +38,7 @@ fun push_disk(mut piles: [[Disk]], pile: index, disk: Disk): !()
 end fun
 
 fun pop_disk_from(mut piles: [[Disk]], pile: index): !Disk
+  inline
   if list.pop(mut piles[pile]!) |top|
     var d = top
     call mem.swap(mut piles[pile]!, mut d.next)
@@ -45,6 +48,7 @@ fun pop_disk_from(mut piles: [[Disk]], pile: index): !Disk
 end fun
 
 fun move_top_disk(mut piles: [[Disk]], from: index, to: index, mut moves: u32): !()
+  inline
   let d = pop_disk_from(mut piles, from)!
   call push_disk(mut piles, to, d)!
   set moves = u32.add_wrapping(moves, 1)
