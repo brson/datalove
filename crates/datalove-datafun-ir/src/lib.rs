@@ -14,6 +14,7 @@ pub mod frame_layout;
 pub mod inline;
 pub mod instantiate;
 pub mod layout;
+pub mod list_access;
 pub mod params;
 pub mod registry;
 pub mod simplify;

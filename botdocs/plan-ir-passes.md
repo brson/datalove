@@ -41,6 +41,7 @@ inline and mints a new handle for its module, which salsa then compares whole.
 | Const inlining, constant branches, dead blocks, dead code | `datafun-const/inline.rs`, `dce.rs` | modules: 5d, per module; scripts: phase 4 |
 | Const-parameter specialization | `compiler/specialize.rs` | modules: 5c, graph-wide, only if a call has const arguments; scripts: phase 5 |
 | Inlining, with `simplify` after | `ir/inline.rs`, `ir/simplify.rs` | modules: 5c', graph-wide; scripts: phase 5b |
+| Repeated list element checks and references, with `simplify` after if any | `ir/list_access.rs` | modules: 5d, in `optimize::finish`; scripts: phase 5b |
 | Dead code after inlining | `dce.rs` | modules: 5d (as above); scripts: phase 5b |
 | Const promotion | `datafun-const/promote.rs` | modules: 5d; scripts: phase 6 |
 
@@ -60,18 +61,22 @@ One order for both, each step per function:
    for those values. Graph-wide, since it makes functions, and gated as now.
 3. **Inlining**, with `simplify` as its last step: each call to an `inline`
    function replaced by the callee's body as steps 1 and 2 left it.
-4. **Dead code**, for what inlining left unread.
-5. **Const promotion**, last, since specialization reads const arguments out
+4. **List elements reached once** (`ir/list_access.rs`): a bounds check or
+   element reference repeating one on the only way in, with nothing between
+   that names the list, replaced by the first; after inlining, so that a
+   callee's reach and its caller's are one. `simplify` again if it found any.
+5. **Dead code**, for what inlining left unread.
+6. **Const promotion**, last, since specialization reads const arguments out
    of the `Const` instructions it replaces.
 
-Steps 1 and 3 to 5 touch one function at a time and read nothing but that
+Steps 1 and 3 to 6 touch one function at a time and read nothing but that
 function and, for step 3, the bodies of inline functions. That is what lets
 them run where the function's module is assembled.
 
 ## Per function, in the module's query
 
 For modules, step 1 moves to just after const evaluation (5b), a memoized
-query per module (`const_inlined_module`), and steps 3 to 5 move into phase
+query per module (`const_inlined_module`), and steps 3 to 6 move into phase
 5d's `lower_module`, which is already a query per module and already runs in
 parallel. The graph-wide phase 5c' goes. `lower_module` is given the handles
 of the modules that define an inline function (`InlineModules`, interned, so
@@ -94,7 +99,7 @@ the check is per module.
 The module is the finest key the pipeline has: phase 5a lowers a module's
 functions together, and its result is one handle. A query per function would
 need a handle per function out of 5a, so that editing one function's body
-changes one key. With that, steps 3 to 5 become `optimized_function`, a query
+changes one key. With that, steps 3 to 6 become `optimized_function`, a query
 per function reading its callees' expanded bodies through queries of their
 own, and an edit re-optimizes the function and what inlined it.
 
@@ -154,7 +159,7 @@ module consts. Nothing is in the way of those 952 semantically:
 ## Phases
 
 1. **The order, per function** (done): const inlining moved before
-   specialization for modules, as phase 5b'; steps 3 to 5 in `lower_module`
+   specialization for modules, as phase 5b'; steps 3 to 6 in `lower_module`
    and in the script pipeline through one function; phase 5c' removed.
    Specialization now removes the code that built the const arguments of the
    calls it rewrites, which module const inlining used to do after it.

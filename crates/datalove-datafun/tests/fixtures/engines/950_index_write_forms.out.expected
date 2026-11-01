@@ -53,62 +53,28 @@ Analysis(
                     block2:
                         v6 = listelementref s0[v3]
                         debuglog *v6
-                        v7 = const 0index
-                        v8 = listboundscheck s0[v7]
-                        branch v8, block4, block3
-                    block3:
-                        v9 = none
-                        drop.tracked s0
-                        return v9
-                    block4:
-                        v10 = listelementref s0[v7]
-                        v11 = call u0(*v10)
-                        v12 = const 0index
-                        v13 = listboundscheck s0[v12]
-                        branch v13, block6, block5
-                    block5:
-                        v14 = none
-                        return v14
-                    block6:
-                        v15 = listelementref s0[v12]
-                        debuglog *v15
-                        v16 = const 0index
-                        v17 = listboundscheck s0[v16]
-                        branch v17, block8, block7
-                    block7:
-                        v18 = none
-                        drop.tracked s0
-                        return v18
-                    block8:
-                        v19 = listelementref s0[v16]
-                        drop.ref v19
-                        v20 = call u1(*v19)
-                        v21 = const 0index
-                        v22 = listboundscheck s0[v21]
-                        branch v22, block10, block9
-                    block9:
-                        v23 = none
-                        return v23
-                    block10:
-                        v24 = listelementref s0[v21]
-                        debuglog *v24
+                        v11 = call u0(*v6)
+                        debuglog *v6
+                        drop.ref v6
+                        v20 = call u1(*v6)
+                        debuglog *v6
                         v25 = const 50int
                         v26 = const 0index
                         v27 = listset s0[v26] = v25
-                        branch v27, block12, block11
-                    block11:
+                        branch v27, block4, block3
+                    block3:
                         v28 = none
                         drop.tracked s0
                         return v28
-                    block12:
+                    block4:
                         v29 = const 0index
                         v30 = listboundscheck s0[v29]
-                        branch v30, block14, block13
-                    block13:
+                        branch v30, block6, block5
+                    block5:
                         v31 = none
                         drop.tracked s0
                         return v31
-                    block14:
+                    block6:
                         v32 = listelementref s0[v29]
                         v33 = clone *v32
                         v34 = some v33

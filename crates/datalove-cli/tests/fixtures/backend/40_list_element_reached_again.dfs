@@ -1,0 +1,50 @@
+// An element of a list reached more than once in a function, which is
+// reached once where nothing between can change the list: after an element is
+// changed in place the second reach sees the change, and after the list
+// itself is popped or pushed, it is reached afresh -- out of bounds now, or in
+// a buffer that has moved.
+
+require module sys/std/list
+require module sys/std/mem
+
+fun bump(mut x: u32)
+  set x = icall add_wrapping_u32(x, 1)
+end fun
+
+fun twice(mut xs: [u32], i: index): !u32
+  call bump(mut xs[i]!)
+  call bump(mut xs[i]!)
+  ret ok xs[i]!
+end fun
+
+fun pop_between(mut xs: [u32]): !u32
+  call bump(mut xs[0]!)
+  let gone = list.pop(mut xs)
+  call bump(mut xs[0]!)
+  ret ok 0
+end fun
+
+fun push_between(mut xs: [u32]): !u32
+  call bump(mut xs[0]!)
+  call list.push(mut xs, 9)
+  call bump(mut xs[0]!)
+  ret ok xs[0]!
+end fun
+
+fun swap_between(mut xss: [[u32]]): !index
+  var other: [u32] = [1, 2, 3]
+  call mem.swap(mut other, mut xss[0]!)
+  call list.push(mut xss[0]!, 4)
+  ret ok list.len(ref xss[0]!)
+end fun
+
+fun run(): !(u32, u32, index)
+  var a: [u32] = [5, 6]
+  var b: [u32] = [5]
+  var c: [u32] = [5]
+  var d: [[u32]] = [[]]
+  debuglog(pop_between(mut b))
+  ret ok (twice(mut a, 1)!, push_between(mut c)!, swap_between(mut d)!)
+end fun
+
+debuglog(run())

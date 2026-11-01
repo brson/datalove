@@ -11,16 +11,24 @@ use std::sync::Arc;
 
 use datalove_datafun_const::{eliminate_dead_code_unit, promote_function_consts};
 use datalove_datafun_ir::inline::{calls_inline, Inliner};
+use datalove_datafun_ir::list_access::{may_repeat, reuse_list_accesses};
+use datalove_datafun_ir::simplify::simplify;
 use datalove_datafun_ir::IrCodeUnit;
 
 /// Finish a function: each call to an inline function replaced by its body,
-/// what that leaves simplified and its dead code removed, and, where consts
-/// were inlined, the function's consts promoted to statics.
+/// list elements it reaches more than once reached once, what that leaves
+/// simplified and its dead code removed, and, where consts were inlined, the
+/// function's consts promoted to statics.
 ///
 /// Nothing here can fail: a cycle of inline functions, the one thing inlining
 /// cannot do, is refused by typecheck (F085).
 pub fn finish(func: &mut IrCodeUnit, inliner: &mut Inliner<'_>, promote: bool) {
-    if calls_inline(func, inliner.resolver()) && inliner.inline(func) {
+    let inlined = calls_inline(func, inliner.resolver()) && inliner.inline(func);
+    let reused = reuse_list_accesses(func);
+    if reused {
+        simplify(func);
+    }
+    if inlined || reused {
         eliminate_dead_code_unit(func);
     }
     if promote && !func.const_values.is_empty() {
@@ -31,7 +39,7 @@ pub fn finish(func: &mut IrCodeUnit, inliner: &mut Inliner<'_>, promote: bool) {
 /// `finish` for a function behind a handle, which stays shared where nothing
 /// changes it.
 pub fn finish_shared(unit: &mut Arc<IrCodeUnit>, inliner: &mut Inliner<'_>, promote: bool) {
-    if calls_inline(unit, inliner.resolver()) || promote && !unit.const_values.is_empty() {
+    if calls_inline(unit, inliner.resolver()) || may_repeat(unit) || promote && !unit.const_values.is_empty() {
         finish(Arc::make_mut(unit), inliner, promote);
     }
 }
