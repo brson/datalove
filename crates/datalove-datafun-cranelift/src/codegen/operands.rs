@@ -41,8 +41,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) -> Result<cl_ir::Value, CraneliftError> {
+        if let Operand::Value(vid) = operand {
+            if let Some(home) = self.materialize_words(builder, *vid) {
+                return Ok(home);
+            }
+        }
+
         // Params are already passed by pointer - just return the pointer.
         if let Operand::Param(pid) = operand {
+            if let Some(home) = self.materialize_param(builder, *pid) {
+                return Ok(home);
+            }
             return self.param_values.get(pid).copied().ok_or_else(|| {
                 CraneliftError::Codegen(format!("undefined param: {:?}", pid))
             });
@@ -121,7 +130,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         op: &Operand,
     ) -> Result<cl_ir::Value, CraneliftError> {
         match op {
-            Operand::Value(vid) => self.value(builder, *vid),
+            Operand::Value(vid) => match self.materialize_words(builder, *vid) {
+                Some(home) => Ok(home),
+                None => self.value(builder, *vid),
+            },
             Operand::ValueRef(vid) => {
                 // ValueRef: the stored value is a pointer. Dereference it.
                 let ptr = self.value(builder, *vid)?;
@@ -145,6 +157,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         // For aggregates, return the pointer itself.
                         Ok(ptr)
                     }
+                }
+            }
+            Operand::Param(pid) if self.param_regs.contains_key(pid) => {
+                let param_ty = &self.func_ctx.param_types[pid.0 as usize];
+                if types::ir_type_to_cranelift(param_ty).is_scalar() {
+                    Ok(self.param_regs[pid].0[0])
+                } else {
+                    Ok(self.materialize_param(builder, *pid).expect("kept in registers"))
                 }
             }
             Operand::Param(pid) => {

@@ -310,14 +310,17 @@ impl JitCompiler {
     /// the context the function runs in, which is where its callees are looked
     /// up.
     ///
-    /// Returns (code_ptr, uses_sret, code_size).
+    /// Returns the entry from outside compiled code, an adapter with the
+    /// pointer convention `bridge::call_jit` calls by; whether it takes
+    /// `sret`; the code's size; and the function itself, which compiled
+    /// callers call through its code cell.
     pub fn compile_function<'a>(
         &mut self,
         func: &IrCodeUnit,
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
-    ) -> Result<(*const u8, bool, usize), JitError> {
+    ) -> Result<(*const u8, bool, usize, *const u8), JitError> {
         self.compile_entry(func, ctx, registry, interp, None)
     }
 
@@ -333,9 +336,13 @@ impl JitCompiler {
         spec: codegen::OsrSpec,
     ) -> Result<(*const u8, bool, usize), JitError> {
         self.compile_entry(func, ctx, registry, interp, Some(spec))
+            .map(|(entry, sret, size, _)| (entry, sret, size))
     }
 
-    /// Compile `func`, entered at its start or, given `osr`, at a loop header.
+    /// Compile `func`, entered at its start or, given `osr`, at a loop header:
+    /// the entry from outside compiled code, whether it takes `sret`, the
+    /// code's size, and the code compiled callers call. An OSR entry is only
+    /// entered from outside, and is both.
     fn compile_entry<'a>(
         &mut self,
         func: &IrCodeUnit,
@@ -343,7 +350,7 @@ impl JitCompiler {
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
         osr: Option<codegen::OsrSpec>,
-    ) -> Result<(*const u8, bool, usize), JitError> {
+    ) -> Result<(*const u8, bool, usize, *const u8), JitError> {
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
 
@@ -431,10 +438,21 @@ impl JitCompiler {
         compiler.abandon_on_interpreter_errors();
 
         let is_osr = osr.is_some();
+        let symbol = unique_symbol(func);
         let defined = match osr {
-            None => compiler.compile_as(&unique_symbol(func)),
-            Some(spec) => compiler.compile_osr_as(&unique_symbol(func), spec),
+            None => compiler.compile_as(&symbol),
+            Some(spec) => compiler.compile_osr_as(&symbol, spec),
         }.map_err(|e| codegen_err("compile", e))?;
+
+        // Entered from outside through an adapter with the pointer
+        // convention, unless it is an OSR entry, which has it.
+        let entry = if is_osr {
+            None
+        } else {
+            Some(codegen::define_entry_adapter(
+                &mut self.jit_module, self.isa.as_ref(), func, defined.id, &format!("{symbol}$entry"))
+                .map_err(|e| codegen_err("compile entry", e))?)
+        };
 
         // Finalize to get executable code.
         self.jit_module.finalize_definitions()
@@ -444,13 +462,21 @@ impl JitCompiler {
         let code_ptr = self.jit_module.get_finalized_function(defined.id);
         let code_size = defined.code_size as usize;
         perf_map::record(code_ptr, code_size, &func.name, is_osr);
+        let entry_ptr = match entry {
+            Some(entry) => {
+                let ptr = self.jit_module.get_finalized_function(entry.id);
+                perf_map::record(ptr, entry.code_size as usize, &format!("{}$entry", func.name), false);
+                ptr
+            }
+            None => code_ptr,
+        };
 
         // Determine if function uses sret.
         let func_ctx = func.function_context()
             .expect("function must be a function code unit");
         let sret = uses_sret(&func_ctx.return_type);
 
-        Ok((code_ptr, sret, code_size))
+        Ok((entry_ptr, sret, code_size, code_ptr))
     }
 
     /// Collect all unique Call targets in a code unit.
@@ -556,8 +582,9 @@ impl JitCompiler {
         builder.switch_to_block(direct_block);
         builder.seal_block(direct_block);
         let sig_ref = builder.import_signature(sig.clone());
-        builder.ins().call_indirect(sig_ref, code_ptr, &params);
-        builder.ins().return_(&[]);
+        let call = builder.ins().call_indirect(sig_ref, code_ptr, &params);
+        let results = builder.inst_results(call).to_vec();
+        builder.ins().return_(&results);
 
         builder.switch_to_block(dispatch_block);
         builder.seal_block(dispatch_block);
@@ -565,26 +592,42 @@ impl JitCompiler {
         // rt_handle is always first param.
         let rt_handle = params[0];
 
-        // Determine if callee uses sret.
         let callee_ctx = callee.function_context()
             .expect("callee must be a function code unit");
-        let callee_uses_sret = uses_sret(&callee_ctx.return_type);
+        let (passes, ret) = codegen::convention_of(callee_ctx);
 
         // Get sret ptr if applicable.
-        let (sret_ptr, user_args_start) = if callee_uses_sret {
+        let (sret_ptr, user_args_start) = if ret == codegen::RetPass::Sret {
             (Some(params[1]), 2)
         } else {
             (None, 1)
         };
 
-        // User arguments, and after them the descriptors for the parameters
-        // whose own type does not describe what arrives. Both have to go
-        // across: what the stub hands the call to works out each argument's
-        // type from the callee's signature, and for those parameters the
-        // signature says `data` where the caller has something else.
-        let user_args_end = user_args_start + callee_ctx.param_types.len();
-        let user_args = &params[user_args_start..user_args_end].to_vec();
-        let descriptors = params[user_args_end..].to_vec();
+        // User arguments, each as a pointer, and after them the descriptors
+        // for the parameters whose own type does not describe what arrives.
+        // Both have to go across: what the stub hands the call to works out
+        // each argument's type from the callee's signature, and for those
+        // parameters the signature says `data` where the caller has
+        // something else. An argument passed by value is put in memory here.
+        let mut next = user_args_start;
+        let mut user_args = Vec::with_capacity(passes.len());
+        for (pass, ty) in passes.iter().zip(&callee_ctx.param_types) {
+            match pass {
+                codegen::ArgPass::Pointer => {
+                    user_args.push(params[next]);
+                    next += 1;
+                }
+                codegen::ArgPass::Value(tys) => {
+                    let regs = &params[next..next + tys.len()];
+                    next += tys.len();
+                    let addr = stack_room(&mut builder, ty);
+                    store_regs(&mut builder, addr, ty, regs);
+                    user_args.push(addr);
+                }
+            }
+        }
+        let user_args = &user_args;
+        let descriptors = params[next..].to_vec();
 
         // Build args array on stack.
         // Allocate stack slot for args array.
@@ -632,13 +675,12 @@ impl JitCompiler {
         let encoded_key = EncodedFuncKey::from_identity(key);
         let encoded_key_val = builder.ins().iconst(cl_types::I64, encoded_key.as_u64() as i64);
 
-        // Get return destination pointer.
-        // All non-Unit returns use sret. Get the return destination pointer.
-        let ret_dest = if let Some(sret) = sret_ptr {
-            sret
-        } else {
-            // Unit return - null pointer.
-            builder.ins().iconst(PTR_TYPE, 0)
+        // Where the result is written: through the caller's sret, into room
+        // here for one that goes back in registers, or nowhere for unit.
+        let ret_dest = match (&ret, sret_ptr) {
+            (_, Some(sret)) => sret,
+            (codegen::RetPass::Value(_), None) => stack_room(&mut builder, &callee_ctx.return_type),
+            _ => builder.ins().iconst(PTR_TYPE, 0),
         };
 
         // arg_count.
@@ -652,8 +694,13 @@ impl JitCompiler {
         ];
         builder.ins().call(dispatch_ref, &call_args);
 
-        // All stubs return void. Sret results are written by the callee.
-        builder.ins().return_(&[]);
+        // A result that goes back in registers is loaded from where it was
+        // written.
+        let results = match &ret {
+            codegen::RetPass::Value(_) => load_regs(&mut builder, ret_dest, &callee_ctx.return_type),
+            _ => Vec::new(),
+        };
+        builder.ins().return_(&results);
 
         builder.finalize(self.jit_module.target_config());
 
@@ -667,6 +714,36 @@ impl JitCompiler {
 
         Ok(())
     }
+}
+
+/// Room on the stack for a value of `ty`, as an address.
+fn stack_room(builder: &mut FunctionBuilder, ty: &IrType) -> cl_ir::Value {
+    let size = datalove_datafun_cranelift::types::ir_type_size(ty).max(1);
+    let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+        cl_ir::StackSlotKind::ExplicitSlot, size, 3));
+    builder.ins().stack_addr(PTR_TYPE, slot, 0)
+}
+
+/// The Cranelift type of each register a value of `ty` passed by value is
+/// in, with where it lies in the value.
+fn reg_pieces(ty: &IrType) -> Vec<(i32, cl_ir::Type)> {
+    use datalove_datafun_cranelift::types::{ir_type_to_cranelift, CraneliftRepr};
+    match ir_type_to_cranelift(ty) {
+        CraneliftRepr::Scalar(t) => vec![(0, t)],
+        CraneliftRepr::Aggregate(_) => codegen::word_pieces(ty).expect("passed by value"),
+    }
+}
+
+/// Store `regs`, a value of `ty` passed by value, at `addr`.
+fn store_regs(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType, regs: &[cl_ir::Value]) {
+    for ((at, _), &r) in reg_pieces(ty).iter().zip(regs) {
+        builder.ins().store(MemFlagsData::new(), r, addr, *at);
+    }
+}
+
+/// Load a value of `ty` at `addr` into the registers it is passed by value in.
+fn load_regs(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType) -> Vec<cl_ir::Value> {
+    reg_pieces(ty).into_iter().map(|(at, t)| builder.ins().load(t, MemFlagsData::new(), addr, at)).collect()
 }
 
 /// Check that every runtime function compiled code may import has an

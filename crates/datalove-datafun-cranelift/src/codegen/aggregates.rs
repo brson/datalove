@@ -19,6 +19,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         src: &Operand,
     ) -> Result<(), CraneliftError> {
+        if let Some(words) = self.words_of(src).cloned() {
+            return self.define_words(builder, dest, words);
+        }
         let val = self.get_operand_value(builder, src)?;
         self.values.insert(dest, val);
         Ok(())
@@ -46,10 +49,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             }
             CraneliftRepr::Aggregate(_layout) => {
-                // Allocate in frame and store fields.
-
-                let base = self.dest_addr(builder, dest)?;
-
                 // Get field offsets.
                 let field_types: Vec<_> = match dest_ty {
                     IrType::Unit => Vec::new(),  // Unit is empty tuple.
@@ -61,6 +60,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 };
 
                 let dest_ty = dest_ty.clone();
+                if !dest_ty.is_dynamic() {
+                    let offsets = types::compute_tuple_field_offsets(&field_types);
+                    let rest: Vec<(&Operand, IrType, u32)> = fields.iter().zip(&field_types).zip(&offsets)
+                        .map(|((op, ty), &at)| (op, ty.clone(), at))
+                        .collect();
+                    if self.build_words(builder, dest, Vec::new(), &rest)? {
+                        return Ok(());
+                    }
+                }
+
+                // Allocate in frame and store fields.
+                let base = self.dest_addr(builder, dest)?;
+
                 for (i, field_op) in fields.iter().enumerate() {
                     let field_val = self.get_operand_value(builder, field_op)?;
                     let field_ty = &field_types[i];
@@ -122,9 +134,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             }
             CraneliftRepr::Aggregate(_) => {
-                // Source is a pointer to aggregate; load fields.
-                let base = self.get_operand_value(builder, src)?;
-
                 let field_types: Vec<_> = match &src_ty {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
@@ -132,6 +141,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         panic!("`unpack` of {:?}, which is neither a tuple nor a struct", src_ty);
                     }
                 };
+
+                if let Some(words) = self.words_of(src).cloned() {
+                    let offsets = types::compute_tuple_field_offsets(&field_types);
+                    let parts: Option<Vec<_>> = field_types.iter().zip(&offsets)
+                        .map(|(ty, &at)| Self::extract_part(builder, &src_ty, &words, at, ty))
+                        .collect();
+                    if let Some(parts) = parts {
+                        for (&dest, part) in dests.iter().zip(parts) {
+                            self.define_part(builder, dest, part)?;
+                        }
+                        return Ok(());
+                    }
+                }
+
+                // Source is a pointer to aggregate; load fields.
+                let base = self.get_operand_value(builder, src)?;
 
                 for (i, &dest) in dests.iter().enumerate() {
                     let field_ty = &field_types[i];
@@ -142,6 +167,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         CraneliftRepr::Scalar(field_cl_ty) => {
                             let val = builder.ins().load(field_cl_ty, MemFlagsData::new(), addr, 0);
                             self.values.insert(dest, val);
+                        }
+                        CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
+                            let words = Self::load_words(builder, addr, field_ty);
+                            self.words.insert(dest, words);
                         }
                         CraneliftRepr::Aggregate(_) => {
                             // Return pointer to field.
@@ -177,9 +206,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             }
             CraneliftRepr::Aggregate(_) => {
-                // Source is a pointer to aggregate; load the field.
-                let base = self.get_operand_value(builder, src)?;
-
                 let field_types: Vec<_> = match &src_ty {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
@@ -196,6 +222,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     )));
                 }
 
+                if let Some(words) = self.words_of(src).cloned() {
+                    let at = types::compute_tuple_field_offsets(&field_types)[field_index as usize];
+                    if let Some(part) = Self::extract_part(builder, &src_ty, &words, at, &field_types[field_index as usize]) {
+                        return self.define_part(builder, dest, part);
+                    }
+                }
+
+                // Source is a pointer to aggregate; load the field.
+                let base = self.get_operand_value(builder, src)?;
+
                 let field_ty = field_types[field_index as usize].clone();
                 let field_repr = types::ir_type_to_cranelift(&field_ty);
                 let field_addr = self.field_addr(builder, base, &src_ty, field_index)?;
@@ -204,6 +240,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftRepr::Scalar(field_cl_ty) => {
                         let val = builder.ins().load(field_cl_ty, MemFlagsData::new(), field_addr, 0);
                         self.values.insert(dest, val);
+                    }
+                    CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
+                        let words = Self::load_words(builder, field_addr, &field_ty);
+                        self.words.insert(dest, words);
                     }
                     CraneliftRepr::Aggregate(_) => {
                         // Copy the field into the dest's own place.

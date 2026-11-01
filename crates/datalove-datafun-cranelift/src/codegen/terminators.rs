@@ -4,7 +4,7 @@ use cranelift_codegen::ir::{BlockArg, InstBuilder};
 use cranelift_frontend::{FunctionBuilder, Switch};
 use cranelift_module::Module;
 
-use datalove_datafun_ir::Terminator;
+use datalove_datafun_ir::{BlockId, Operand, Terminator};
 
 use crate::types;
 use crate::CraneliftError;
@@ -12,6 +12,29 @@ use crate::CraneliftError;
 use super::FunctionCompiler;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
+    /// The Cranelift arguments of a jump to `target` passing `args`: the
+    /// words of each to a parameter held as words, the value or address of
+    /// each to any other.
+    fn block_args(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        target: BlockId,
+        args: &[Operand],
+    ) -> Result<Vec<BlockArg>, CraneliftError> {
+        let func = self.func;
+        let params = &func.blocks.iter().find(|b| b.id == target).expect("a jump's target is a block").params;
+        let mut cl_args = Vec::with_capacity(args.len());
+        for (arg, &param) in args.iter().zip(params) {
+            if self.block_param_words(param).is_some() {
+                let ty = &func.value_types[param.0 as usize];
+                cl_args.extend(self.operand_words(builder, arg, ty)?.into_iter().map(BlockArg::from));
+            } else {
+                cl_args.push(BlockArg::from(self.get_operand_value(builder, arg)?));
+            }
+        }
+        Ok(cl_args)
+    }
+
     /// Compile a terminator.
     pub(super) fn compile_terminator(
         &mut self,
@@ -21,27 +44,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match term {
             Terminator::Goto { target, args } => {
                 let block = self.blocks[target];
-                // Collect block argument values.
-                let cl_args: Vec<BlockArg> = args.iter()
-                    .map(|op| self.get_operand_value(builder, op).map(BlockArg::from))
-                    .collect::<Result<_, _>>()?;
+                let cl_args = self.block_args(builder, *target, args)?;
                 builder.ins().jump(block, &cl_args);
             }
             Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
                 let cond_val = self.get_operand_value(builder, cond)?;
                 let then_blk = self.blocks[then_block];
                 let else_blk = self.blocks[else_block];
-                // Collect block argument values for each branch.
-                let cl_then_args: Vec<BlockArg> = then_args.iter()
-                    .map(|op| self.get_operand_value(builder, op).map(BlockArg::from))
-                    .collect::<Result<_, _>>()?;
-                let cl_else_args: Vec<BlockArg> = else_args.iter()
-                    .map(|op| self.get_operand_value(builder, op).map(BlockArg::from))
-                    .collect::<Result<_, _>>()?;
+                let cl_then_args = self.block_args(builder, *then_block, then_args)?;
+                let cl_else_args = self.block_args(builder, *else_block, else_args)?;
                 builder.ins().brif(cond_val, then_blk, &cl_then_args, else_blk, &cl_else_args);
             }
+            Terminator::Return { value: Some(val_op) } if matches!(self.ret, crate::codegen::RetPass::Value(_)) => {
+                let ret_ty = self.func_ctx.return_type.clone();
+                let regs = match types::ir_type_to_cranelift(&ret_ty) {
+                    types::CraneliftRepr::Scalar(_) => vec![self.get_operand_value(builder, val_op)?],
+                    types::CraneliftRepr::Aggregate(_) => self.operand_words(builder, val_op, &ret_ty)?,
+                };
+                self.leave_dynamic(builder);
+                builder.ins().return_(&regs);
+            }
             Terminator::Return { value } => {
-                // Function return. All non-Unit returns use sret convention.
+                // Function return through `sret`.
                 if let Some(val_op) = value {
                     let sret_ptr = self.sret_param.expect("non-Unit return requires sret param");
                     let ret_ty = &self.func_ctx.return_type;
@@ -51,6 +75,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             // Scalar: store value directly to sret pointer.
                             let val = self.get_operand_value(builder, val_op)?;
                             builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, sret_ptr, 0);
+                        }
+                        types::CraneliftRepr::Aggregate(_) if self.words_of(val_op).is_some() => {
+                            let words = self.words_of(val_op).expect("checked").clone();
+                            Self::store_words_at(builder, sret_ptr, ret_ty, &words);
                         }
                         types::CraneliftRepr::Aggregate(_) => {
                             // Aggregate: memcpy from source pointer to sret

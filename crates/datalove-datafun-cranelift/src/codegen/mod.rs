@@ -77,6 +77,9 @@ mod tracking;
 mod bytes;
 /// Natives the compiler knows the meaning of, done in place of the call.
 mod native_intrinsics;
+/// Small aggregates held as words, in registers.
+mod words;
+pub use words::word_pieces;
 
 /// Why defining a function failed, with the verifier's own account where it
 /// is the verifier that refused it: `ModuleError` says only "Verifier errors".
@@ -101,7 +104,10 @@ pub struct Defined {
     pub id: FuncId,
     pub code_size: u32,
 }
-pub use signature::{build_native_signature, build_signature_for_func, uses_sret, LocalCallee};
+pub use signature::{
+    arg_pass, build_entry_signature_for_func, define_entry_adapter, build_native_signature, build_signature_for_func,
+    convention_of, ret_pass, uses_sret, ArgPass, LocalCallee, RetPass,
+};
 pub use statics::{empty_function_unit, static_const_key, StaticConstLoc, StaticConsts};
 use osr::{reachable_from, OsrState};
 use signature::return_slot_values;
@@ -148,10 +154,21 @@ pub struct FunctionCompiler<'a, M: Module> {
     module: &'a mut M,
     /// Mapping from IR ValueId to Cranelift Value.
     values: HashMap<ValueId, cl_ir::Value>,
+    /// The values chosen to be held as words; see `words`.
+    word_values: std::collections::HashSet<ValueId>,
+    /// The words of each value held so, in place of an entry in `values`.
+    words: HashMap<ValueId, Vec<cl_ir::Value>>,
     /// Mapping from IR BlockId to Cranelift Block.
     blocks: HashMap<BlockId, cl_ir::Block>,
     /// Mapping from IR ParamId to Cranelift Value (user params, not rt_handle).
     param_values: HashMap<ParamId, cl_ir::Value>,
+    /// The parameters passed by value and kept in registers, in place of an
+    /// entry in `param_values`: each one's value or words, and the stack slot
+    /// it is written to when an address of it is asked for.
+    param_regs: HashMap<ParamId, (Vec<cl_ir::Value>, cl_ir::StackSlot)>,
+    /// How this function gives its result back: `ret_pass`'s say, or for an
+    /// OSR entry, through `sret` as the interpreter takes it.
+    ret: RetPass,
     /// Functions compiled beside this one, by their IR id.
     local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
     /// Functions in a script unit that finished before this one.
@@ -271,8 +288,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             isa,
             module,
             values: HashMap::new(),
+            word_values: std::collections::HashSet::new(),
+            words: HashMap::new(),
             blocks: HashMap::new(),
             param_values: HashMap::new(),
+            param_regs: HashMap::new(),
+            ret: RetPass::Unit,
             local_funcs: HashMap::new(),
             external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),

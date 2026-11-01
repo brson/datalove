@@ -375,7 +375,7 @@ impl JitEngine {
 
         let start = Instant::now();
         match self.compiler.compile_function(func, ctx, registry, interp) {
-            Ok((code_ptr, uses_sret, code_size)) => {
+            Ok((code_ptr, uses_sret, code_size, internal)) => {
                 let compile_time = start.elapsed();
                 self.stats.compiled_count += 1;
                 self.stats.total_compile_time += compile_time;
@@ -386,7 +386,7 @@ impl JitEngine {
 
                 let entry = CompiledEntry { code_ptr, uses_sret, at_loop: false };
                 *tier = Tier::Compiled(entry);
-                self.compiler.publish(key, code_ptr);
+                self.compiler.publish(key, internal);
                 Ok(Recorded::Compiled { entry, compiled_now: Some(code_size) })
             }
             Err(JitError::Unsupported(why)) => {
@@ -520,7 +520,7 @@ mod tests {
             symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
                 params,
-                param_modes: vec![],
+                param_modes: vec![datalove_datafun_ir::ParamMode::In; param_types.len()],
                 param_types,
                 return_type,
                 tracked_params: vec![],

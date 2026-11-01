@@ -9,7 +9,7 @@ use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamMode, Value
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
 
-use super::{uses_sret, FunctionCompiler, LocalCallee};
+use super::{convention_of, uses_sret, ArgPass, FunctionCompiler, LocalCallee, RetPass};
 use datalove_rt::c::{self, RtHeader};
 
 /// Where in what the runtime handle points at compiled code finds whether its
@@ -34,20 +34,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// Whether `code_ref`'s signature takes a pointer to return through.
-    fn callee_uses_sret(&self, code_ref: &CodeRef) -> bool {
+    /// How a call to `code_ref` passes each argument and gets its result.
+    fn callee_convention(&self, code_ref: &CodeRef) -> (Vec<ArgPass>, RetPass) {
         match code_ref {
             CodeRef::Local(_) | CodeRef::External { .. } => {
-                self.declared_callee(code_ref)
-                    .expect("resolve_code_ref rejects a callee never declared")
-                    .uses_sret
+                let callee = self.declared_callee(code_ref)
+                    .expect("resolve_code_ref rejects a callee never declared");
+                (callee.args.clone(), callee.ret.clone())
             }
             CodeRef::Module { module, id } => {
                 let registry = self.registry.expect("a module callee is resolved through the registry");
                 let unit = registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
                     .expect("resolve_code_ref rejects a callee never declared");
                 let ctx = unit.function_context().expect("a module callee that is not native is a function");
-                uses_sret(&ctx.return_type)
+                convention_of(ctx)
             }
         }
     }
@@ -56,7 +56,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ///
     /// The instruction says what to pass but not how the callee takes it, and
     /// an `out` parameter is the caller's to clear.
-    fn callee_param_modes(&self, code_ref: &CodeRef) -> Vec<ParamMode> {
+    pub(super) fn callee_param_modes(&self, code_ref: &CodeRef) -> Vec<ParamMode> {
         match code_ref {
             CodeRef::Local(_) | CodeRef::External { .. } => {
                 self.declared_callee(code_ref)
@@ -69,7 +69,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     return Vec::new();
                 };
                 registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
-                    .and_then(|unit| unit.function_context().map(|c| c.param_modes.clone()))
+                    .and_then(|unit| match unit.function_context() {
+                        Some(c) => Some(c.param_modes.clone()),
+                        None => unit.native_context().map(|n| n.param_modes.clone()),
+                    })
                     .unwrap_or_default()
             }
         }
@@ -175,7 +178,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // pointer; a generic returning `T` does even where this call bound `T`
         // to `()`.
         let dest_ty = &self.func.value_types[dest.0 as usize];
-        let callee_uses_sret = self.callee_uses_sret(code_ref);
+        let (arg_passes, ret) = self.callee_convention(code_ref);
+        let callee_uses_sret = ret == RetPass::Sret;
 
         // Build call arguments: [rt_handle, sret?, user_args...]
         let mut call_args = Vec::with_capacity(2 + args.len());
@@ -196,6 +200,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     // Will load after call below.
                 }
             }
+        } else if matches!(ret, RetPass::Value(_)) {
+            // Defined from the call's results below.
         } else {
             // A unit return travels in no register and needs no room written
             // to, but it is still a value here, and something may go on to
@@ -215,10 +221,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
 
-        // Add user arguments, passed by pointer.
-        for arg in args {
-            let arg_val = self.get_operand_ptr(builder, arg)?;
-            call_args.push(arg_val);
+        // Each argument by pointer, or by value where the callee takes it so.
+        let param_types = self.callee_param_types(code_ref);
+        for (i, arg) in args.iter().enumerate() {
+            match &arg_passes[i] {
+                ArgPass::Pointer => {
+                    let arg_val = self.get_operand_ptr(builder, arg)?;
+                    call_args.push(arg_val);
+                }
+                ArgPass::Value(_) => {
+                    let ty = &param_types[i];
+                    match types::ir_type_to_cranelift(ty) {
+                        CraneliftRepr::Scalar(_) => call_args.push(self.get_operand_value(builder, arg)?),
+                        CraneliftRepr::Aggregate(_) => call_args.extend(self.operand_words(builder, arg, ty)?),
+                    }
+                }
+            }
         }
 
         // Then a descriptor for each of the callee's type parameters, for what
@@ -228,8 +246,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             call_args.push(value);
         }
 
-        self.emit_function_call(builder, callee_func_id, &call_args);
+        let results = self.emit_function_call(builder, callee_func_id, &call_args);
         self.return_if_abandoning(builder)?;
+        if matches!(ret, RetPass::Value(_)) {
+            match types::ir_type_to_cranelift(dest_ty) {
+                CraneliftRepr::Scalar(_) => {
+                    self.values.insert(dest, results[0]);
+                }
+                CraneliftRepr::Aggregate(_) => self.define_words(builder, dest, results)?,
+            }
+        }
 
         self.mark_out_destinations_live(builder, code_ref, args);
         let modes = self.callee_param_modes(code_ref);
@@ -249,36 +275,57 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Call a function compiled from IR, which returns nothing: through its
-    /// code cell when it has one, see `set_code_cells`, and otherwise as it
-    /// was declared.
-    fn emit_function_call(&mut self, builder: &mut FunctionBuilder, callee: FuncId, args: &[cl_ir::Value]) {
+    /// Call a function compiled from IR, giving back what it returns in
+    /// registers: through its code cell when it has one, see
+    /// `set_code_cells`, and otherwise as it was declared.
+    fn emit_function_call(&mut self, builder: &mut FunctionBuilder, callee: FuncId, args: &[cl_ir::Value]) -> Vec<cl_ir::Value> {
         let callee_ref = self.module.declare_func_in_func(callee, builder.func);
         let Some(&cell) = self.code_cells.get(&callee) else {
-            builder.ins().call(callee_ref, args);
-            return;
+            let call = builder.ins().call(callee_ref, args);
+            return builder.inst_results(call).to_vec();
         };
         let cell_addr = builder.ins().iconst(PTR_TYPE, cell as i64);
         let code = builder.ins().load(PTR_TYPE, MemFlagsData::trusted(), cell_addr, 0);
         let direct = builder.create_block();
         let via_stub = builder.create_block();
         let done = builder.create_block();
+        let sig = builder.func.dfg.ext_funcs[callee_ref].signature;
+        let ret_tys: Vec<cl_ir::Type> = builder.func.dfg.signatures[sig].returns.iter().map(|r| r.value_type).collect();
+        for &t in &ret_tys {
+            builder.append_block_param(done, t);
+        }
         builder.ins().brif(code, direct, &[], via_stub, &[]);
 
         builder.switch_to_block(direct);
         builder.seal_block(direct);
-        let sig = builder.func.dfg.ext_funcs[callee_ref].signature;
-        builder.ins().call_indirect(sig, code, args);
-        builder.ins().jump(done, &[]);
+        let call = builder.ins().call_indirect(sig, code, args);
+        let results: Vec<cl_ir::BlockArg> = builder.inst_results(call).iter().map(|&v| v.into()).collect();
+        builder.ins().jump(done, &results);
 
         builder.set_cold_block(via_stub);
         builder.switch_to_block(via_stub);
         builder.seal_block(via_stub);
-        builder.ins().call(callee_ref, args);
-        builder.ins().jump(done, &[]);
+        let call = builder.ins().call(callee_ref, args);
+        let results: Vec<cl_ir::BlockArg> = builder.inst_results(call).iter().map(|&v| v.into()).collect();
+        builder.ins().jump(done, &results);
 
         builder.switch_to_block(done);
         builder.seal_block(done);
+        builder.block_params(done).to_vec()
+    }
+
+    /// The types `code_ref` declares its parameters as.
+    fn callee_param_types(&self, code_ref: &CodeRef) -> Vec<IrType> {
+        match code_ref {
+            CodeRef::Local(_) | CodeRef::External { .. } => self.declared_callee(code_ref)
+                .map(|c| c.param_types.clone())
+                .unwrap_or_default(),
+            CodeRef::Module { module, id } => self.registry
+                .and_then(|r| r.get_module_function_as_unit(*module, CodeUnitId(id.0)))
+                .and_then(|u| u.function_context())
+                .map(|c| c.param_types.clone())
+                .unwrap_or_default(),
+        }
     }
 
     /// In a function's entry, stop rather than overflow the stack if it is past
@@ -305,7 +352,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if self.abandon_on_errors {
             let reason = builder.ins().iconst(cl_ir::types::I8, c::ABANDONED_FOR_STACK as i64);
             builder.ins().store(MemFlagsData::new(), reason, rt_handle, ABANDONING_OFFSET);
-            builder.ins().return_(&[]);
+            self.return_abandoned(builder);
         } else {
             let overflow = self.module.declare_func_in_func(self.runtime.stack_overflow, builder.func);
             builder.ins().call(overflow, &[rt_handle]);
@@ -333,7 +380,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.ins().brif(flag, abandon, &[], carry_on, &[]);
         builder.switch_to_block(abandon);
         builder.seal_block(abandon);
-        builder.ins().return_(&[]);
+        self.return_abandoned(builder);
         builder.switch_to_block(carry_on);
         builder.seal_block(carry_on);
         Ok(())

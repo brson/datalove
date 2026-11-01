@@ -1,7 +1,8 @@
 # Values in Registers for the Cranelift Backend
 
-Written October 2026, after profiling the AWFY benchmarks under the JIT; not
-implemented. Measurements are from `benchvs` at commit `80b5d68cd`.
+Written October 2026, after profiling the AWFY benchmarks under the JIT.
+Measurements are from `benchvs` at commit `80b5d68cd`. Layers 1 and 2 are
+implemented; see [Where it stands](#user-content-where-it-stands).
 
 ## Contents
 
@@ -13,6 +14,7 @@ implemented. Measurements are from `benchvs` at commit `80b5d68cd`.
 - [What exists, what is missing](#user-content-what-exists-what-is-missing)
 - [Phases](#user-content-phases)
 - [Open questions](#user-content-open-questions)
+- [Where it stands](#user-content-where-it-stands)
 
 ## The problem
 
@@ -232,3 +234,49 @@ Missing:
 - **Does anything read a compiled frame?** If an error report, a debugger
   helper or a test inspects compiled frames for values, values held as words
   will not be there.
+
+## Where it stands
+
+Layers 1 and 2 were done in November 2026.
+
+**Layer 1** is `codegen/words.rs`. A value is held as words if its type is a
+static aggregate of at most 32 bytes and no use keeps or writes through its
+address (`find_word_values`): `GetFieldRef`, `DropField`, `OpAssign`, the
+collection operand of the mutating and reference-making collection
+instructions, a cursor's collection, and a call argument the callee takes
+`mut` or `out`. Words are cut as `bytes::pieces` cuts a copy, and a part is
+shifted in or out of the piece holding it; a part that would straddle two
+falls back to memory. Every use not taught words asks for an address and gets
+the value's home with the words just stored there. An OSR entry holds nothing
+as words, since its carried values are the interpreter's.
+
+The zeroing question has its answer here: a value held as words is not
+cleared when it is moved, and the suite under `DATALOVE_LEAK_CHECK=panic`
+finds no double free.
+
+**Layer 2** is `signature.rs`. An `in` argument of a scalar or a type held as
+words is passed by value, and such a result comes back in registers; the rest
+are pointers and `sret` as before. Compiled functions use the tail calling
+convention, which has eight integer return registers on x86-64 where the
+system's has two, so a four-word result needs no return area. A callee keeps a
+parameter passed by value in registers unless it is tracked or a use needs its
+address, in which case it stores it to a home of its own at entry. The JIT
+compiles an adapter with the pointer convention beside each function
+(`define_entry_adapter`) for the bridge and planned calls; a code cell holds
+the function itself, and a stub has its signature, putting arguments in
+memory only on the way to the dispatcher. An OSR entry keeps
+`(rt, sret, frame)`. AOT needs no adapters: only `main` calls in, to a
+function that takes the runtime handle alone.
+
+Measured on Towers and Storage, in cycles:
+
+| | before | layer 1 | layer 2 |
+|---|---:|---:|---:|
+| Towers, JIT | 8.73G | 7.82G | 4.89G |
+| Towers, AOT | 9.71G | 7.87G | 4.39G |
+| Storage, JIT | 11.11G | 9.33G | 8.74G |
+
+Store-to-load forwards on Towers went from 3.65G to 1.38G a run. Storage
+is mostly instructions (33G against Java's 4.4G) and gained less.
+
+Layer 3 has not been tried.

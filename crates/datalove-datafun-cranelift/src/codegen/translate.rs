@@ -50,6 +50,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile the function body using the given FuncId and signature.
     pub(super) fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<Defined, CraneliftError> {
         self.check_dynamic_support()?;
+        self.ret = match &self.osr_spec {
+            Some(_) if uses_sret(&self.func_ctx.return_type) => RetPass::Sret,
+            Some(_) => RetPass::Unit,
+            None => ret_pass(&self.func_ctx.return_type),
+        };
+        // Built into the caller's result slot only where there is one.
+        if self.ret != RetPass::Sret {
+            self.return_slot.clear();
+        }
+        let (word_values, held_params) = self.find_word_values();
+        self.word_values = word_values;
 
         // Create Cranelift function.
         let mut cl_func = cl_ir::Function::with_name_signature(
@@ -83,8 +94,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             let cl_block = builder.create_block();
 
-            // Add block params for IR block params.
+            // Add block params for IR block params: one per word for a value
+            // held as words.
             for &param_value_id in &block.params {
+                if let Some(word_tys) = self.block_param_words(param_value_id) {
+                    for t in word_tys {
+                        builder.append_block_param(cl_block, t);
+                    }
+                    continue;
+                }
                 let param_ty = self.func.value_types.get(param_value_id.0 as usize)
                     .cloned()
                     .unwrap_or(IrType::Unit);
@@ -115,25 +133,41 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.rt_handle_param = Some(param_values[0]);
             self.check_stack(&mut builder)?;
 
-            // Check if this function uses sret.
-            let has_sret = uses_sret(&self.func_ctx.return_type);
-            let user_param_start = if has_sret {
-                // Second param is sret pointer.
+            // Second param is sret pointer, if the result goes back through one.
+            let mut next = 1;
+            if self.ret == RetPass::Sret {
                 self.sret_param = Some(param_values[1]);
-                2
-            } else {
-                1
-            };
-
-            // User params start after implicit params, and the type parameter
-            // descriptors the caller supplied follow them.
-            let user_param_count = self.func_ctx.param_types.len();
-            for (i, &val) in param_values[user_param_start..].iter().take(user_param_count).enumerate() {
-                let param_id = ParamId(i as u32);
-                // Track param values for get_operand_value.
-                self.param_values.insert(param_id, val);
+                next = 2;
             }
-            let type_param_start = user_param_start + user_param_count;
+
+            // Each parameter is a pointer, or its value or words. One passed
+            // by value is kept in registers unless something needs it in
+            // memory, in which case it is put in a home of its own here.
+            let func_ctx = self.func_ctx;
+            for (i, (mode, ty)) in func_ctx.param_modes.iter().zip(&func_ctx.param_types).enumerate() {
+                let param_id = ParamId(i as u32);
+                match arg_pass(*mode, ty) {
+                    ArgPass::Pointer => {
+                        self.param_values.insert(param_id, param_values[next]);
+                        next += 1;
+                    }
+                    ArgPass::Value(tys) => {
+                        let regs = param_values[next..next + tys.len()].to_vec();
+                        next += tys.len();
+                        let size = types::ir_type_size(ty).max(1);
+                        let home = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+                            cl_ir::StackSlotKind::ExplicitSlot, size, 3));
+                        if held_params.contains(&param_id) {
+                            self.param_regs.insert(param_id, (regs, home));
+                        } else {
+                            let addr = builder.ins().stack_addr(PTR_TYPE, home, 0);
+                            Self::store_regs_at(&mut builder, addr, ty, &regs);
+                            self.param_values.insert(param_id, addr);
+                        }
+                    }
+                }
+            }
+            let type_param_start = next;
             self.type_param_values = param_values[type_param_start..].iter().copied()
                 .take(self.func_ctx.type_param_count as usize)
                 .collect();
@@ -214,7 +248,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // 1. Ensure value semantics (each iteration sees independent data)
             // 2. Prevent aliasing when source and dest overlap (loop carry case)
             let cl_params = builder.block_params(cl_block).to_vec();
-            for (ir_value_id, &cl_param) in ir_block.params.iter().zip(cl_params.iter()) {
+            let mut cl_params = cl_params.into_iter();
+            for ir_value_id in &ir_block.params {
+                if let Some(word_tys) = self.block_param_words(*ir_value_id) {
+                    let words = cl_params.by_ref().take(word_tys.len()).collect();
+                    self.words.insert(*ir_value_id, words);
+                    continue;
+                }
+                let cl_param = cl_params.next().expect("a block parameter for each IR one");
                 let param_ty = self.func.value_types.get(ir_value_id.0 as usize)
                     .cloned()
                     .unwrap_or(IrType::Unit);

@@ -17,7 +17,7 @@ use super::FunctionCompiler;
 const INLINE_LIMIT: u64 = 64;
 
 /// The pieces a run of `size` bytes is split into, as offset and width.
-fn pieces(size: u64) -> impl Iterator<Item = (i32, cl_ir::Type)> {
+pub(super) fn pieces(size: u64) -> impl Iterator<Item = (i32, cl_ir::Type)> {
     let mut offset = 0;
     std::iter::from_fn(move || {
         let left = size - offset;

@@ -1587,9 +1587,10 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
 
   Its function ABI is its own: `RET f(rt, [sret,] p0..pn, tp0..tpk)`, one
   descriptor per type parameter of a generic. It differs from
-  cranelift's in returning small scalars by value where cranelift always uses
-  sret, which is allowed because no program mixes the two -- the one ABI they
-  must agree on is the runtime's, and that one is fixed. A rider is called
+  cranelift's, which passes small `in` arguments and returns small results by
+  value in registers (see [Values in Registers](plan-values-in-registers.md)),
+  which is allowed because no program mixes the two -- the one ABI they must
+  agree on is the runtime's, and that one is fixed. A rider is called
   through it the same way every backend does: `(ptr, tydesc)` per argument, the
   result through an out pair, and a status back.
 

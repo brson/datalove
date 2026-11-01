@@ -34,6 +34,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         let (dest_ty, inner_ty) = (dest_ty.clone(), inner_ty.clone());
+        if self.holds_words(dest) {
+            let tag = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
+            let at = super::dynamic::static_payload_offset(&dest_ty, 0)?;
+            if self.build_words(builder, dest, vec![(0, tag)], &[(inner, inner_ty.clone(), at)])? {
+                return Ok(());
+            }
+        }
         let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (Some = 2).
@@ -55,6 +62,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
     ) -> Result<(), CraneliftError> {
+        let tag = builder.ins().iconst(cl_types::I8, OptionTag::None as i64);
+        if self.build_words(builder, dest, vec![(0, tag)], &[])? {
+            return Ok(());
+        }
         let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (None = 1).
@@ -87,6 +98,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         let (dest_ty, ok_ty) = (dest_ty.clone(), ok_ty.clone());
+        if self.holds_words(dest) {
+            let tag = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
+            let at = super::dynamic::static_payload_offset(&dest_ty, 0)?;
+            if self.build_words(builder, dest, vec![(0, tag)], &[(inner, ok_ty.clone(), at)])? {
+                return Ok(());
+            }
+        }
         let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (Ok = 1).
@@ -119,6 +137,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
         let error_size = std::mem::size_of::<RtError>() as u32;
         let dest_ty = dest_ty.clone();
+        if self.holds_words(dest) {
+            let tag = builder.ins().iconst(cl_types::I8, ResultTag::Err as i64);
+            let at = super::dynamic::static_payload_offset(&dest_ty, 0)?;
+            let inner_ty = self.get_operand_type(inner)?;
+            if self.build_words(builder, dest, vec![(0, tag)], &[(inner, inner_ty, at)])? {
+                return Ok(());
+            }
+        }
         let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (Err = 2).
@@ -158,39 +184,40 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         let inner_ty = inner_ty.clone();
-
-        // Get source address.
-        let src_addr = self.get_operand_ptr(builder, src)?;
-
-        // Load tag.
-        let tag = builder.ins().load(cl_types::I8, MemFlagsData::new(), src_addr, 0);
-
-        // is_some = (tag == Some = 2).
         let some_tag = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
-        let is_some_val = builder.ins().icmp(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            tag,
-            some_tag,
-        );
+
+        // Held as words, the tag and the payload are shifted out of them.
+        let from_words = self.words_of(src).cloned().and_then(|ws| {
+            let at = super::dynamic::static_payload_offset(&src_ty, 0).ok()?;
+            let payload = Self::extract_part(builder, &src_ty, &ws, at, &inner_ty)?;
+            Some((Self::tag_of_words(builder, &src_ty, &ws), payload))
+        });
+        let is_some_val = if let Some((tag, payload)) = from_words {
+            self.define_part(builder, dest, payload)?;
+            builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, tag, some_tag)
+        } else {
+            let src_addr = self.get_operand_ptr(builder, src)?;
+            let tag = builder.ins().load(cl_types::I8, MemFlagsData::new(), src_addr, 0);
+            let payload_addr = self.payload_addr(builder, src_addr, &src_ty, 0)?;
+
+            // A payload is undefined for a none, which is all right: what reads
+            // it looks at `is_some` first.
+            match types::ir_type_to_cranelift(&inner_ty) {
+                CraneliftRepr::Scalar(cl_ty) => {
+                    let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
+                    self.values.insert(dest, val);
+                }
+                CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
+                    let words = Self::load_words(builder, payload_addr, &inner_ty);
+                    self.words.insert(dest, words);
+                }
+                CraneliftRepr::Aggregate(_) => {
+                    self.values.insert(dest, payload_addr);
+                }
+            }
+            builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, tag, some_tag)
+        };
         self.values.insert(is_some, is_some_val);
-
-        // Compute payload address.
-        let payload_addr = self.payload_addr(builder, src_addr, &src_ty, 0)?;
-
-        // For dest, either load the value (scalar) or store the pointer (aggregate).
-        let inner_repr = types::ir_type_to_cranelift(&inner_ty);
-        match inner_repr {
-            CraneliftRepr::Scalar(cl_ty) => {
-                // Load payload value. Value is undefined if None, but that's ok
-                // since caller should check is_some first.
-                let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
-                self.values.insert(dest, val);
-            }
-            CraneliftRepr::Aggregate(_) => {
-                // Store pointer to payload.
-                self.values.insert(dest, payload_addr);
-            }
-        }
 
         // Conditionally mark dest as LIVE based on is_some.
         // Only valid if it was Some.
@@ -230,6 +257,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let payload_ty = variants[variant_index as usize].1.clone();
         let dest_ty = dest_ty.clone();
+        if matches!(dest_ty, IrType::Enum(_)) && self.holds_words(dest) {
+            let disc = builder.ins().iconst(cl_types::I32, variant_index as i64);
+            let at = super::dynamic::static_payload_offset(&dest_ty, variant_index)?;
+            let rest: Vec<(&Operand, IrType, u32)> = match (payload, &payload_ty) {
+                (Some(op), Some(ty)) => vec![(op, ty.clone(), at)],
+                _ => Vec::new(),
+            };
+            if self.build_words(builder, dest, vec![(0, disc)], &rest)? {
+                return Ok(());
+            }
+        }
         let dest_addr = self.dest_addr(builder, dest)?;
 
         // Write discriminant (variant_index as u32) at offset 0.
@@ -259,6 +297,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         src: &Operand,
     ) -> Result<(), CraneliftError> {
+        if let Some(words) = self.words_of(src).cloned() {
+            let src_ty = self.get_operand_type(src)?;
+            if let Some(disc) = Self::extract_scalar(builder, &src_ty, &words, 0, cl_types::I32) {
+                self.values.insert(dest, disc);
+                return Ok(());
+            }
+        }
+
         // Get source address (enum is always aggregate).
         let src_addr = self.get_operand_ptr(builder, src)?;
 
@@ -288,6 +334,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let payload_ty = variants[variant_index as usize].1.clone()
             .ok_or_else(|| CraneliftError::Codegen("EnumPayload variant has no payload type".into()))?;
 
+        if let Some(words) = self.words_of(src).cloned() {
+            let at = super::dynamic::static_payload_offset(&src_ty, variant_index)?;
+            if let Some(part) = Self::extract_part(builder, &src_ty, &words, at, &payload_ty) {
+                return self.define_part(builder, dest, part);
+            }
+        }
+
         // Get source address.
         let src_addr = self.get_operand_ptr(builder, src)?;
         let payload_addr = self.payload_addr(builder, src_addr, &src_ty, variant_index)?;
@@ -298,6 +351,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Scalar(cl_ty) => {
                 let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
                 self.values.insert(dest, val);
+            }
+            CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
+                let words = Self::load_words(builder, payload_addr, &payload_ty);
+                self.words.insert(dest, words);
             }
             CraneliftRepr::Aggregate(_) => {
                 let dest_addr = self.dest_addr(builder, dest)?;
@@ -332,39 +389,43 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         let ok_ty = ok_ty.clone();
-
-        // Get source address.
-        let src_addr = self.get_operand_ptr(builder, src)?;
-
-        // Load tag.
-        let tag = builder.ins().load(cl_types::I8, MemFlagsData::new(), src_addr, 0);
-
-        // is_ok = (tag == Ok = 1).
+        let err_ty = self.func.value_types[err_dest.0 as usize].clone();
         let ok_tag = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
-        let is_ok_val = builder.ins().icmp(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            tag,
-            ok_tag,
-        );
+
+        // Held as words, the tag and the payloads are shifted out of them.
+        let from_words = self.words_of(src).cloned().and_then(|ws| {
+            let at = super::dynamic::static_payload_offset(&src_ty, 0).ok()?;
+            let ok = Self::extract_part(builder, &src_ty, &ws, at, &ok_ty)?;
+            let err = Self::extract_part(builder, &src_ty, &ws, at, &err_ty)?;
+            Some((Self::tag_of_words(builder, &src_ty, &ws), ok, err))
+        });
+        let tag = if let Some((tag, ok, err)) = from_words {
+            self.define_part(builder, ok_dest, ok)?;
+            self.define_part(builder, err_dest, err)?;
+            tag
+        } else {
+            let src_addr = self.get_operand_ptr(builder, src)?;
+            let tag = builder.ins().load(cl_types::I8, MemFlagsData::new(), src_addr, 0);
+            let payload_addr = self.payload_addr(builder, src_addr, &src_ty, 0)?;
+            for (dest, ty) in [(ok_dest, &ok_ty), (err_dest, &err_ty)] {
+                match types::ir_type_to_cranelift(ty) {
+                    CraneliftRepr::Scalar(cl_ty) => {
+                        let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
+                        self.values.insert(dest, val);
+                    }
+                    CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
+                        let words = Self::load_words(builder, payload_addr, ty);
+                        self.words.insert(dest, words);
+                    }
+                    CraneliftRepr::Aggregate(_) => {
+                        self.values.insert(dest, payload_addr);
+                    }
+                }
+            }
+            tag
+        };
+        let is_ok_val = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, tag, ok_tag);
         self.values.insert(is_ok, is_ok_val);
-
-        // Compute payload address.
-        let payload_addr = self.payload_addr(builder, src_addr, &src_ty, 0)?;
-
-        // For ok_dest, either load value (scalar) or store pointer (aggregate).
-        let ok_repr = types::ir_type_to_cranelift(&ok_ty);
-        match ok_repr {
-            CraneliftRepr::Scalar(cl_ty) => {
-                let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
-                self.values.insert(ok_dest, val);
-            }
-            CraneliftRepr::Aggregate(_) => {
-                self.values.insert(ok_dest, payload_addr);
-            }
-        }
-
-        // For err_dest, always store pointer to payload (Error is aggregate).
-        self.values.insert(err_dest, payload_addr);
 
         // Conditionally mark ok_dest or err_dest as LIVE based on is_ok.
         // Only one of them is valid at runtime.

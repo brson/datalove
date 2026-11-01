@@ -25,6 +25,22 @@ const TYDESC_SIZE_OFFSET: i32 = std::mem::offset_of!(TyDesc, size) as i32;
 const TYDESC_ALIGN_OFFSET: i32 = std::mem::offset_of!(TyDesc, align) as i32;
 const TYDESC_FLAGS_OFFSET: i32 = std::mem::offset_of!(TyDesc, flags) as i32;
 
+/// Where the payload of an option, result, term or enum of static type `ty`
+/// is: of variant `index`, for an enum.
+pub(super) fn static_payload_offset(ty: &IrType, index: u32) -> Result<u32, CraneliftError> {
+    use datalove_datafun_ir::layout as ir_layout;
+    Ok(match ty {
+        IrType::Option(inner) => ir_layout::option_payload_offset(inner),
+        IrType::Result(ok) => ir_layout::result_payload_offset(ok),
+        IrType::Term(..) => 0,
+        IrType::Enum(variants) => match &variants[index as usize].1 {
+            Some(payload) => ir_layout::enum_payload_offset(payload),
+            None => 0,
+        },
+        other => return Err(CraneliftError::Codegen(format!("a payload of {other}"))),
+    } as u32)
+}
+
 /// Whether a type is held as a dynamic value: dynamic, and not a reference.
 pub(super) fn is_dynamic_value(ty: &IrType) -> bool {
     ty.is_dynamic() && !matches!(ty, IrType::Ref(_))
@@ -331,18 +347,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ty: &IrType,
         index: u32,
     ) -> Result<cl_ir::Value, CraneliftError> {
-        use datalove_datafun_ir::layout as ir_layout;
         if !ty.is_dynamic() {
-            let offset = match ty {
-                IrType::Option(inner) => ir_layout::option_payload_offset(inner),
-                IrType::Result(ok) => ir_layout::result_payload_offset(ok),
-                IrType::Term(..) => 0,
-                IrType::Enum(variants) => match &variants[index as usize].1 {
-                    Some(payload) => ir_layout::enum_payload_offset(payload),
-                    None => 0,
-                },
-                other => return Err(CraneliftError::Codegen(format!("a payload of {other}"))),
-            };
+            let offset = static_payload_offset(ty, index)?;
             return Ok(builder.ins().iadd_imm_s(base, offset as i64));
         }
         let desc = self.static_tydesc(builder, ty)?;
@@ -398,6 +404,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(MemFlagsData::new(), val, addr, 0);
             }
             CraneliftRepr::Aggregate(_) => {
+                if let Some(words) = self.words_of(value) {
+                    Self::store_words_at(builder, addr, ty, words);
+                    return Ok(());
+                }
                 let src = self.get_operand_ptr(builder, value)?;
                 self.copy_value_bytes(builder, addr, src, ty)?;
             }

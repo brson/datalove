@@ -1,7 +1,10 @@
 //! Calling convention bridge between interpreter and JIT code.
 //!
 //! Converts between interpreter's Value/Destination and JIT's raw pointer convention.
-//! All function returns use sret (pointer-based), so the bridge only needs void dispatch.
+//! The bridge enters a function through its adapter, which takes every argument
+//! by pointer and writes every result through sret, so it only needs void
+//! dispatch; compiled functions call each other by a register convention of
+//! their own (`codegen::build_signature_for_func`).
 
 use datalove_datafun_interp::Destination;
 use datalove_datafun_ir::IrCodeUnit;
