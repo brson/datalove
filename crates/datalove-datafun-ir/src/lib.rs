@@ -2764,6 +2764,10 @@ pub struct NativeContext {
     /// call site passes a descriptor for what it bound it to. Every other
     /// native has this empty.
     pub undetermined_type_params: Vec<u32>,
+    /// What the native does, if the compiler knows it: declared `intrinsic
+    /// native fun`. A backend may do its work in place of the call.
+    #[serde(default)]
+    pub intrinsic: Option<datalove_datafun_intrinsics::NativeIntrinsic>,
 }
 
 impl NativeContext {
@@ -2775,6 +2779,7 @@ impl NativeContext {
         param_types: Vec<IrType>,
         return_type: IrType,
         undetermined_type_params: Vec<u32>,
+        intrinsic: Option<datalove_datafun_intrinsics::NativeIntrinsic>,
     ) -> Self {
         Self {
             param_modes,
@@ -2782,6 +2787,7 @@ impl NativeContext {
             return_type,
             symbol: native_symbol(rider, function),
             undetermined_type_params,
+            intrinsic,
         }
     }
 

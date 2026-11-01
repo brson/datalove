@@ -1233,6 +1233,13 @@ discriminants for serialization, covering bitwise ops, shifts, bit counting and
 casts. The interpreter implements them in `interp/src/intrinsics.rs`; the
 compiled backends emit instructions directly.
 
+An `icall` takes scalars by value. A generic operation with modes -- a list
+push, a swap -- is an **intrinsic native** instead: a rider native declared
+`intrinsic native fun`, called as any native, which a backend may do in place
+of the call. `NativeContext::intrinsic` says which; Cranelift open-codes them
+where the types are static (`codegen/native_intrinsics.rs`) and calls the
+native otherwise. See [Intrinsic natives](native-abi.md#user-content-intrinsic-natives).
+
 ## Salsa Patterns
 
 See [salsa-patterns.md](salsa-patterns.md) for how the four salsa kinds are

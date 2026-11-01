@@ -200,6 +200,12 @@ fn rider_interfaces<'db>(
         let module_id = ModuleId::new(db, rider_path);
         let generic_functions = generic_natives(
             db, parse_result.parsed.statements(db), &collected.functions);
+        let intrinsic_functions = parse_result.parsed.statements(db).iter()
+            .filter_map(|statement| match statement {
+                datalove_datafun_ast::ast::Statement::NativeFun(native) if native.intrinsic => Some(native.name),
+                _ => None,
+            })
+            .collect();
         let function_stubs = collected.functions.iter()
             .map(|(func_name, func_type)| {
                 (*func_name, native_stub(db, module_id, *func_name, *func_type, &generic_functions))
@@ -212,6 +218,7 @@ fn rider_interfaces<'db>(
             function_stubs,
             type_aliases: collected.type_aliases,
             generic_functions,
+            intrinsic_functions,
         });
     }
     interfaces

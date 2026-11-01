@@ -151,7 +151,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         // determines, from what this call bound it to.
                         let undetermined = native.undetermined_bindings(bindings);
                         let modes = native.param_modes.clone();
-                        self.compile_native_call(builder, dest, code_ref, args, &undetermined)?;
+                        let open_coded = match native.intrinsic {
+                            Some(intrinsic) => self.compile_native_intrinsic(builder, intrinsic, &modes, dest, args)?,
+                            None => false,
+                        };
+                        if !open_coded {
+                            self.compile_native_call(builder, dest, code_ref, args, &undetermined)?;
+                        }
                         return self.mark_in_arguments_moved(builder, &modes, args);
                     }
                 }
@@ -381,9 +387,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);
         let _call_inst = builder.ins().call(callee_ref, &call_args);
 
-        // Result was written to dest_ptr by the callee.
-        // For scalars, load the value; for aggregates, use the pointer.
-        match types::ir_type_to_cranelift(&dest_ty) {
+        self.bind_written_dest(builder, dest, dest_ptr);
+        Ok(())
+    }
+
+    /// Make `dest` the value a native wrote at `dest_ptr`: loaded, for a
+    /// scalar, and for anything else the pointer.
+    pub(super) fn bind_written_dest(&mut self, builder: &mut FunctionBuilder, dest: ValueId, dest_ptr: cl_ir::Value) {
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+        match types::ir_type_to_cranelift(dest_ty) {
             CraneliftRepr::Scalar(scalar_ty) => {
                 let loaded = builder.ins().load(scalar_ty, MemFlagsData::new(), dest_ptr, 0);
                 self.values.insert(dest, loaded);
@@ -392,8 +404,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.values.insert(dest, dest_ptr);
             }
         }
-
-        Ok(())
     }
 
     /// Resolve a CodeRef to a Cranelift FuncId.

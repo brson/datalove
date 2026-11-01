@@ -258,6 +258,8 @@ pub struct StmtNativeFun {
     pub type_bounds: Vec<Option<String>>,
     pub params: Vec<FunParam>,
     pub return_type: Option<datalove_datalit::ast_serde::TypeHint>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub intrinsic: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -671,6 +673,7 @@ impl StmtNativeFun {
             type_bounds: bounds(&ast.type_bounds),
             params: ast.params.iter().map(|p| FunParam::from_ast(db, p)).collect(),
             return_type: ast.return_type.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
+            intrinsic: ast.intrinsic,
         }
     }
 }

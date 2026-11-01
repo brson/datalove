@@ -106,8 +106,8 @@ native fun string_parse_int(ref self: string): ?int
 // off the list's descriptor, so there is one of each for every element type.
 native fun list_len<T>(ref self: [T]): index
 native fun list_get<T>(ref self: [T], i: index): ?T
-native fun list_push<T>(mut self: [T], elem: T)
-native fun list_pop<T>(mut self: [T]): ?T
+intrinsic native fun list_push<T>(mut self: [T], elem: T)
+intrinsic native fun list_pop<T>(mut self: [T]): ?T
 native fun list_clear<T>(mut self: [T])
 native fun list_set<T>(mut self: [T], i: index, elem: T): bool
 native fun list_insert<T>(mut self: [T], i: index, elem: T): bool
@@ -279,5 +279,5 @@ native fun float_e<T>(): T where { T is float, }
 // handed another in the same step. These do both at once. Each is a move of
 // the bytes the descriptor says the type has, and nothing is cloned or
 // destroyed. See `sys/std/mem`.
-native fun mem_replace<T>(mut dest: T, src: T): T
-native fun mem_swap<T>(mut a: T, mut b: T)
+intrinsic native fun mem_replace<T>(mut dest: T, src: T): T
+intrinsic native fun mem_swap<T>(mut a: T, mut b: T)

@@ -1,0 +1,10 @@
+none
+700
+some "c"
+("a", "b")
+ok ["x", "y"]
+(3, 1, 2)
+ok 1
+ok 12
+ok some 2
+ok some "q"

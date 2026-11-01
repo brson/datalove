@@ -136,6 +136,8 @@ pub struct RiderInterface<'db> {
     /// The generic natives, by name. A native with no type parameters is left
     /// out, which is nearly all of them.
     pub generic_functions: Vec<(InternedText<'db>, NativeGenerics<'db>)>,
+    /// The natives declared `intrinsic native fun`, by name.
+    pub intrinsic_functions: Vec<InternedText<'db>>,
 }
 
 /// What a call site needs to know about a generic native.

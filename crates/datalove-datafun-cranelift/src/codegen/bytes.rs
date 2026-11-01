@@ -56,6 +56,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
+    /// Exchange `size` bytes at `a` with as many at `b`, which do not overlap.
+    pub(super) fn swap_bytes(
+        &self,
+        builder: &mut FunctionBuilder,
+        a: cl_ir::Value,
+        b: cl_ir::Value,
+        size: u64,
+    ) {
+        if size > INLINE_LIMIT {
+            let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+                cl_ir::StackSlotKind::ExplicitSlot, size as u32, 3));
+            let tmp = builder.ins().stack_addr(PTR_TYPE, slot, 0);
+            let len = builder.ins().iconst(PTR_TYPE, size as i64);
+            let config = self.isa.frontend_config();
+            builder.call_memcpy(config, tmp, a, len);
+            builder.call_memcpy(config, a, b, len);
+            builder.call_memcpy(config, b, tmp, len);
+            return;
+        }
+        let flags = MemFlagsData::new();
+        for (at, ty) in pieces(size) {
+            let from_a = builder.ins().load(ty, flags, a, at);
+            let from_b = builder.ins().load(ty, flags, b, at);
+            builder.ins().store(flags, from_b, a, at);
+            builder.ins().store(flags, from_a, b, at);
+        }
+    }
+
     /// Set `size` bytes at `dst` to `byte`.
     pub(super) fn fill_bytes(
         &self,

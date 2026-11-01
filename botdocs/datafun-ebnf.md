@@ -92,8 +92,10 @@ fun_def       = "fun", value_name, [ type_params ], param_list, [ ":", type ],
                 [ where_clause ], EOLS,
                 [ "inline", EOLS ],            (* elsewhere: P076 *)
                 block, end_line("fun") ;     (* no name: P010; no "(": P002 *)
-native_fun    = "native", "fun", value_name, [ type_params ], param_list,
-                [ ":", type ], [ where_clause ] ;   (* P028, P029, P030 *)
+native_fun    = [ "intrinsic" ], "native", "fun", value_name, [ type_params ], param_list,
+                [ ":", type ], [ where_clause ] ;   (* P028, P029, P030;
+                                                       an intrinsic the compiler
+                                                       does not know: P085 *)
 type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;
 param_list    = "(", [ param, { ",", param }, [ "," ] ], ")" ;
 param         = [ "const" ], [ "ref" | "mut" | "out" ], param_name, ":", type ;

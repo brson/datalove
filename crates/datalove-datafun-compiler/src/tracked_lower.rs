@@ -802,6 +802,11 @@ fn native_rider_units<'db>(
                 let undetermined_type_params = generics
                     .map(|g| g.undetermined.clone())
                     .unwrap_or_default();
+                // The parser refused an intrinsic native the compiler does
+                // not know.
+                let intrinsic = rider.intrinsic_functions.contains(func_name)
+                    .then(|| datalove_datafun_intrinsics::NativeIntrinsic::lookup(&name)
+                        .expect("an intrinsic native the parser accepted is known"));
 
                 let native_ctx = NativeContext::new(
                     alias_str,
@@ -810,6 +815,7 @@ fn native_rider_units<'db>(
                     param_types,
                     return_type,
                     undetermined_type_params,
+                    intrinsic,
                 );
                 let code_unit = datalove_datafun_ir::IrCodeUnit::native(
                     CodeUnitId(func_id.0),

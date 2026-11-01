@@ -852,6 +852,10 @@ pub struct StmtNativeFun<'db> {
     pub type_bounds: Vec<Option<TypeBound>>,
     pub params: Vec<FunParam<'db>>,
     pub return_type: Option<datalit::ast::TypeHint<'db>>,
+    /// Declared `intrinsic native fun`: a native the compiler knows the
+    /// meaning of, which a backend may open-code (see
+    /// `datalove_datafun_intrinsics::NativeIntrinsic`).
+    pub intrinsic: bool,
     /// Index into the same span table a `fun` uses, so a diagnostic about
     /// this declaration can point at it.
     pub local_index: u32,

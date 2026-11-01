@@ -75,6 +75,8 @@ mod statics;
 mod tracking;
 /// Copying and filling runs of bytes of a known length.
 mod bytes;
+/// Natives the compiler knows the meaning of, done in place of the call.
+mod native_intrinsics;
 
 /// Why defining a function failed, with the verifier's own account where it
 /// is the verifier that refused it: `ModuleError` says only "Verifier errors".

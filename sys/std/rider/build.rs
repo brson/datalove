@@ -60,7 +60,8 @@ fn main() {
         .unwrap_or_else(|e| panic!("unable to write {}: {e}", out.display()));
 }
 
-/// A `native fun` declaration: `native fun name<T, ...>(params): ret where {...}`.
+/// A `native fun` declaration: `native fun name<T, ...>(params): ret where {...}`,
+/// or the same declared `intrinsic native fun`, which is a native all the same.
 struct Decl<'a> {
     name: &'a str,
     type_params: Vec<&'a str>,
@@ -72,7 +73,8 @@ struct Decl<'a> {
 
 impl<'a> Decl<'a> {
     fn parse(line: &'a str) -> Option<Decl<'a>> {
-        let rest = line.trim().strip_prefix("native fun ")?;
+        let line = line.trim();
+        let rest = line.strip_prefix("intrinsic ").unwrap_or(line).strip_prefix("native fun ")?;
         let open = rest
             .find('(')
             .unwrap_or_else(|| panic!("native fun declaration has no parameters: {rest}"));

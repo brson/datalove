@@ -38,7 +38,7 @@ impl<'db> Parser<'db> {
             Some("continue") => self.parse_continue(),
             Some("debuglog") => self.parse_debuglog(),
             Some("type") => self.parse_type_alias(),
-            Some("native") => self.parse_native_fun(),
+            Some("native" | "intrinsic") => self.parse_native_fun(),
             Some("match") => self.parse_match(remaining_lines),
             Some("call") => self.parse_call(),
             Some("inline") => {
@@ -83,7 +83,7 @@ impl<'db> Parser<'db> {
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> ast::Statement<'db> {
         if let Some(token @ TreeToken::Token(first)) = &line.first() {
-            if let Some(word @ ("require" | "import" | "fun" | "native" | "type")) = first.word_str(self.text()) {
+            if let Some(word @ ("require" | "import" | "fun" | "native" | "intrinsic" | "type")) = first.word_str(self.text()) {
                 self.had_error = true;
                 let ts = self.extract_text_span(token);
                 DiagnosticBuilder::error(self.db, &fmt!("`{word}` inside a block"))
@@ -110,7 +110,7 @@ impl<'db> Parser<'db> {
         let Some(word) = self.peek_word() else {
             return;
         };
-        if matches!(word, "require" | "import" | "fun" | "native" | "type" | "const") {
+        if matches!(word, "require" | "import" | "fun" | "native" | "intrinsic" | "type" | "const") {
             return;
         }
         self.had_error = true;
@@ -134,7 +134,7 @@ statements that run belong in a function or a script")
         let Some(word) = self.peek_word() else {
             return;
         };
-        if matches!(word, "native" | "type") {
+        if matches!(word, "native" | "intrinsic" | "type") {
             return;
         }
         self.had_error = true;
@@ -1423,11 +1423,25 @@ statements that run belong in a function or a script")
         })
     }
 
+    /// A `native fun`, or an `intrinsic native fun`: a native the compiler
+    /// knows the meaning of, by its name (P085 if it knows no such one).
     fn parse_native_fun(&mut self) -> ast::Statement<'db> {
         // Recorded in the same table a `fun` uses, so a diagnostic about the
         // declaration has somewhere to point.
         let native_span = self.peek_text_span();
-        let local_index = self.record_fun_span(native_span);
+        let local_index = self.record_fun_span(native_span.clone());
+        let intrinsic = self.peek_word() == Some("intrinsic");
+        if intrinsic {
+            self.eat_word("intrinsic");
+            if self.peek_word() != Some("native") {
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
+                    "expected 'native' after 'intrinsic'",
+                    "P028",
+                    "expected 'native'",
+                );
+            }
+        }
         self.eat_word("native");
 
         if self.peek_word() != Some("fun") {
@@ -1489,12 +1503,22 @@ statements that run belong in a function or a script")
 
         let type_bounds = self.parse_where_clause(&type_params, type_bounds);
 
+        if intrinsic && datalove_datafun_intrinsics::NativeIntrinsic::lookup(name.as_str(self.db)).is_none() {
+            self.had_error = true;
+            DiagnosticBuilder::error(self.db, &fmt!("no intrinsic native `{}`", name.as_str(self.db)))
+                .code("P085")
+                .primary_label(native_span, "the compiler knows no native by this name")
+                .help("an intrinsic native is one of `list_push`, `list_pop`, `mem_swap` and `mem_replace`")
+                .emit_parse();
+        }
+
         ast::Statement::NativeFun(ast::StmtNativeFun {
             name,
             type_params,
             type_bounds,
             params,
             return_type,
+            intrinsic,
             local_index,
         })
     }

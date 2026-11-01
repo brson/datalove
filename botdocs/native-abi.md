@@ -11,6 +11,7 @@ current with the four backends as of October 2026.
 - [Writing the result](#user-content-writing-the-result)
 - [Ownership](#user-content-ownership)
 - [Declaring a native](#user-content-declaring-a-native)
+- [Intrinsic natives](#user-content-intrinsic-natives)
 - [Borrowing a `data`](#user-content-borrowing-a-data)
 - [Arity](#user-content-arity)
 
@@ -204,6 +205,34 @@ Three places have to agree, and all three derive from the same `.dli` line.
    script may not (F082). A script reaches a native through a module function
    that calls it, since an import is not exported again: `std.fixedint_zero`
    is reached as `fixedint.zero`, the wrapper in `sys/std/fixedint.dfm`.
+
+## Intrinsic natives
+
+A push onto a list of `Disk`s calls `dlr_std__list_push` with the list, the
+element and two descriptors, and the native reads the element's size off a
+descriptor to copy it. Where the call site's types are static, the compiler
+already knows everything the native works out, and the push is a compare and
+a store. So a native the compiler knows the meaning of is declared so:
+
+```
+intrinsic native fun list_push<T>(mut self: [T], elem: T)
+```
+
+It is called as any native is, and is one: it has its implementation and its
+symbol, and a backend that does not open-code a call -- or cannot, for a type
+parameter bound to a dynamic type -- calls it. Which natives can be intrinsic
+is the compiler's list, `datalove_datafun_intrinsics::NativeIntrinsic`, by
+name; any other is P085. A backend relies on the declared signature, and
+checks the modes when it open-codes.
+
+| Native | Open-coded by Cranelift, where the types are static |
+|---|---|
+| `list_push<T>(mut self: [T], elem: T)` | the element stored after the last if there is room; else `dtlv_rti_list_push_local`, which grows the list |
+| `list_pop<T>(mut self: [T]): ?T` | the last element moved into the option, or none |
+| `mem_swap<T>(mut a: T, mut b: T)` | the two values' bytes exchanged |
+| `mem_replace<T>(mut dest: T, src: T): T` | the old value out, `src` in |
+
+The interpreter, the bytecode and the C backend call the native.
 
 ## Borrowing a `data`
 

@@ -1,0 +1,92 @@
+// The intrinsic natives, which the compiled backends open-code where the
+// types are static: list push and pop, through growth and down past empty, of
+// plain and owned elements, small and large; mem swap and replace of scalars,
+// owned values and parts of aggregates; and the same from a generic, where the
+// types are dynamic and the native is called.
+
+require module sys/std/list
+require module sys/std/mem
+
+type Disk: rec D { size: u32, next: [D] }
+
+type Wide: { a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64 }
+
+fun bytes(): u32
+  var xs: [u8] = []
+  var i: u32 = 0
+  loop while i .< 100
+    call list.push(mut xs, 7)
+    set i = icall add_wrapping_u32(i, 1)
+  end loop
+  var total: u32 = 0
+  loop
+    if list.pop(mut xs) |x|
+      set total = icall add_wrapping_u32(total, x@)
+    else
+      break
+    end if
+  end loop
+  debuglog(list.pop(mut xs))
+  ret total
+end fun
+
+fun strings(): ![string]
+  var names: [string] = []
+  call list.push(mut names, "a")
+  call list.push(mut names, "b")
+  call list.push(mut names, "c")
+  debuglog(list.pop(mut names))
+  var s = "x"
+  call mem.swap(mut s, mut names[0]!)
+  let old = mem.replace(mut names[1]!, "y")
+  debuglog((s, old))
+  ret ok names
+end fun
+
+fun scalars(): (u64, u64, u64)
+  var a: u64 = 1
+  var b: u64 = 2
+  call mem.swap(mut a, mut b)
+  let was = mem.replace(mut a, 3)
+  ret (a, b, was)
+end fun
+
+fun disks(): !index
+  var piles: [[Disk]] = [[], []]
+  call list.push(mut piles[0]!, { size = 2, next = [] })
+  if list.pop(mut piles[0]!) |top|
+    var d = top
+    call mem.swap(mut piles[0]!, mut d.next)
+    call list.push(mut piles[1]!, d)
+  end if
+  ret ok list.len(ref piles[1]!)
+end fun
+
+fun wide(): !u64
+  var ws: [Wide] = []
+  call list.push(mut ws, { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8, i = 9, j = 10 })
+  var w: Wide = { a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0, i = 0, j = 11 }
+  call mem.swap(mut w, mut ws[0]!)
+  if list.pop(mut ws) |x|
+    ret ok icall add_wrapping_u64(w.a, x.j)
+  end if
+  ret ok 0
+end fun
+
+fun cycle<T>(x: T, y: T): !?T
+  var xs: [T] = []
+  call list.push(mut xs, x)
+  var z = y
+  call mem.swap(mut z, mut xs[0]!)
+  let back = mem.replace(mut xs[0]!, z)
+  call list.push(mut xs, back)
+  ret ok list.pop(mut xs)
+end fun
+
+debuglog(bytes())
+debuglog(strings())
+debuglog(scalars())
+debuglog(disks())
+debuglog(wide())
+debuglog(cycle(1, 2))
+debuglog(cycle("p", "q"))

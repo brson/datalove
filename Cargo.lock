@@ -1386,6 +1386,7 @@ dependencies = [
  "bcts",
  "datalove-ct",
  "datalove-datafun-ast",
+ "datalove-datafun-intrinsics",
  "datalove-datalit",
  "datalove-diagnostic",
  "rustmax",

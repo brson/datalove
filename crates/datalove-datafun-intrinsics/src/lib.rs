@@ -1258,6 +1258,40 @@ pub fn get_intrinsic(id: IntrinsicId) -> Option<&'static IntrinsicDef> {
     INTRINSICS.iter().find(|def| def.id == id)
 }
 
+/// A native the compiler knows the meaning of, so that a backend can emit its
+/// work in place of the call.
+///
+/// Declared in a rider interface as `intrinsic native fun`, and called as any
+/// native is. The native is still the definition: an engine that does not
+/// open-code a call, or a call it cannot (a backend may decline a type
+/// parameter bound to a dynamic type), calls it. So the declaration's
+/// signature is the one a backend relies on, and each is checked against the
+/// shape documented here when it is open-coded.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum NativeIntrinsic {
+    /// `list_push<T>(mut self: [T], elem: T)`
+    ListPush,
+    /// `list_pop<T>(mut self: [T]): ?T`
+    ListPop,
+    /// `mem_swap<T>(mut a: T, mut b: T)`
+    MemSwap,
+    /// `mem_replace<T>(mut dest: T, src: T): T`
+    MemReplace,
+}
+
+impl NativeIntrinsic {
+    /// The intrinsic native declared under `name`, if there is one.
+    pub fn lookup(name: &str) -> Option<NativeIntrinsic> {
+        Some(match name {
+            "list_push" => NativeIntrinsic::ListPush,
+            "list_pop" => NativeIntrinsic::ListPop,
+            "mem_swap" => NativeIntrinsic::MemSwap,
+            "mem_replace" => NativeIntrinsic::MemReplace,
+            _ => return None,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
