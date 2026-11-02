@@ -439,3 +439,168 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         word_pieces(&self.func.value_types[vid.0 as usize]).map(|cut| cut.into_iter().map(|(_, t)| t).collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! The words helpers, run: each test compiles a small function around
+    //! one, calls it, and compares what it wrote with the bytes laid out
+    //! here by the layout's own offsets.
+
+    use cranelift_codegen::ir::{AbiParam, Signature};
+    use cranelift_frontend::FunctionBuilderContext;
+    use cranelift_jit::{JITBuilder, JITModule};
+
+    use super::*;
+    use crate::types::PTR_TYPE;
+
+    type Fc<'a> = FunctionCompiler<'a, JITModule>;
+
+    /// Compile a function of `params`, returning nothing, whose body `body`
+    /// writes from its parameters, and give its code. The module is the
+    /// code's, and has to outlive every call.
+    fn compile(params: &[cl_ir::Type], body: impl FnOnce(&mut FunctionBuilder, &[cl_ir::Value])) -> (JITModule, *const u8) {
+        let mut module = JITModule::new(JITBuilder::new(cranelift_module::default_libcall_names()).unwrap());
+        let mut sig = Signature::new(module.isa().default_call_conv());
+        sig.params.extend(params.iter().map(|&t| AbiParam::new(t)));
+        let id = module.declare_function("f", cranelift_module::Linkage::Local, &sig).unwrap();
+        let mut ctx = module.make_context();
+        ctx.func.signature = sig;
+        let frontend = module.isa().frontend_config();
+        let mut fb_ctx = FunctionBuilderContext::new();
+        let mut builder = FunctionBuilder::new(&mut ctx.func, &mut fb_ctx);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        builder.seal_block(entry);
+        let args = builder.block_params(entry).to_vec();
+        body(&mut builder, &args);
+        builder.ins().return_(&[]);
+        builder.finalize(frontend);
+        module.define_function(id, &mut ctx).unwrap();
+        module.finalize_definitions().unwrap();
+        let code = module.get_finalized_function(id);
+        (module, code)
+    }
+
+    /// `(u8, u32, u16, f64, i8)`: 25 bytes of fields, padded to 32.
+    fn mixed() -> (IrType, Vec<u32>) {
+        let fields = vec![IrType::U8, IrType::U32, IrType::U16, IrType::F64, IrType::I8];
+        let offsets = types::compute_tuple_field_offsets(&fields);
+        (IrType::Tuple(fields), offsets)
+    }
+
+    /// The bytes of `mixed()` holding these fields, padding zero.
+    fn mixed_bytes(offsets: &[u32], (a, b, c, d, e): (u8, u32, u16, f64, i8)) -> [u8; 32] {
+        let mut bytes = [0u8; 32];
+        let mut put = |i: usize, field: &[u8]| {
+            let at = offsets[i] as usize;
+            bytes[at..at + field.len()].copy_from_slice(field);
+        };
+        put(0, &a.to_ne_bytes());
+        put(1, &b.to_ne_bytes());
+        put(2, &c.to_ne_bytes());
+        put(3, &d.to_ne_bytes());
+        put(4, &e.to_ne_bytes());
+        bytes
+    }
+
+    const FIELDS: (u8, u32, u16, f64, i8) = (0xa5, 0xdead_beef, 0xc0de, -1.5e300, -7);
+
+    #[test]
+    fn a_value_is_cut_into_words_then_what_its_alignment_leaves() {
+        let pieces = |ty: &IrType| -> Vec<cl_ir::Type> { word_pieces(ty).unwrap().into_iter().map(|(_, t)| t).collect() };
+        assert_eq!(pieces(&mixed().0), [cl_types::I64; 4], "padded to eight-byte alignment");
+        let ty = IrType::Tuple(vec![IrType::U32, IrType::U32, IrType::U16]);
+        assert_eq!(pieces(&ty), [cl_types::I64, cl_types::I32]);
+        assert_eq!(word_pieces(&IrType::Tuple(vec![IrType::U64; 5])), None, "40 bytes is too many");
+        assert_eq!(reg_pieces(&IrType::F32), Some(vec![(0, cl_types::F32)]));
+    }
+
+    #[test]
+    fn a_part_straddling_two_pieces_does_not_fit() {
+        let ty = IrType::Tuple(vec![IrType::U64, IrType::U64]);
+        assert!(parts_fit(&ty, &[(0, 8), (12, 4)]));
+        assert!(!parts_fit(&ty, &[(6, 4)]));
+    }
+
+    #[test]
+    fn composed_words_store_the_fields_where_the_layout_puts_them() {
+        let (ty, offsets) = mixed();
+        let params = [PTR_TYPE, cl_types::I8, cl_types::I32, cl_types::I16, cl_types::F64, cl_types::I8];
+        let (_module, code) = compile(&params, |b, args| {
+            let parts: Vec<Part> = offsets.iter().zip(&args[1..]).map(|(&at, &v)| (at, v)).collect();
+            let words = Fc::compose_words(b, &ty, &parts).expect("every field within a piece");
+            store_words_at(b, args[0], &ty, &words);
+        });
+        let f: extern "C" fn(*mut u8, u8, u32, u16, f64, i8) = unsafe { std::mem::transmute(code) };
+        let mut out = [0xffu8; 32];
+        let (a, b, c, d, e) = FIELDS;
+        f(out.as_mut_ptr(), a, b, c, d, e);
+        let expected = mixed_bytes(&offsets, FIELDS);
+        let size = types::ir_type_size(&ty) as usize;
+        assert_eq!(out[..size], expected[..size]);
+    }
+
+    #[test]
+    fn each_field_extracted_from_loaded_words_is_the_field() {
+        let (ty, offsets) = mixed();
+        let field_tys = [cl_types::I8, cl_types::I32, cl_types::I16, cl_types::F64, cl_types::I8];
+        let src = mixed_bytes(&offsets, FIELDS);
+        for (i, (&at, &want)) in offsets.iter().zip(&field_tys).enumerate() {
+            let (_module, code) = compile(&[PTR_TYPE, PTR_TYPE], |b, args| {
+                let words = load_words(b, args[0], &ty);
+                let v = Fc::extract_scalar(b, &ty, &words, at, want).expect("a field within a piece");
+                b.ins().store(MemFlagsData::new(), v, args[1], 0);
+            });
+            let f: extern "C" fn(*const u8, *mut u8) = unsafe { std::mem::transmute(code) };
+            let mut out = [0u8; 8];
+            f(src.as_ptr(), out.as_mut_ptr());
+            let n = want.bytes() as usize;
+            assert_eq!(out[..n], src[at as usize..at as usize + n], "field {i}");
+        }
+    }
+
+    #[test]
+    fn an_aggregate_part_is_extracted_as_its_own_words() {
+        // `((u16, u32), u64)`: the inner tuple is the first piece.
+        let inner = IrType::Tuple(vec![IrType::U16, IrType::U32]);
+        let ty = IrType::Tuple(vec![inner.clone(), IrType::U64]);
+        let src: [u8; 16] = std::array::from_fn(|i| (i as u8).wrapping_mul(17) | 1);
+        let (_module, code) = compile(&[PTR_TYPE, PTR_TYPE], |b, args| {
+            let words = load_words(b, args[0], &ty);
+            let Some(Err(part)) = Fc::extract_part(b, &ty, &words, 0, &inner) else { panic!("an aggregate part") };
+            store_words_at(b, args[1], &inner, &part);
+        });
+        let f: extern "C" fn(*const u8, *mut u8) = unsafe { std::mem::transmute(code) };
+        let mut out = [0u8; 8];
+        f(src.as_ptr(), out.as_mut_ptr());
+        assert_eq!(out, src[..8]);
+    }
+
+    #[test]
+    fn an_aggregate_part_across_two_pieces_is_refused() {
+        // `(u32, (u32, u32), u32)`: the inner tuple straddles the first two
+        // pieces.
+        let inner = IrType::Tuple(vec![IrType::U32, IrType::U32]);
+        let ty = IrType::Tuple(vec![IrType::U32, inner.clone(), IrType::U32]);
+        compile(&[PTR_TYPE], |b, args| {
+            let words = load_words(b, args[0], &ty);
+            assert!(Fc::extract_part(b, &ty, &words, 4, &inner).is_none());
+        });
+    }
+
+    #[test]
+    fn a_list_header_loaded_by_its_halves_is_the_header() {
+        let ty = IrType::Tuple(vec![IrType::U8, IrType::List(Box::new(IrType::U32))]);
+        let size = types::ir_type_size(&ty) as usize;
+        let src: Vec<u8> = (0..size).map(|i| (i as u8).wrapping_mul(29) | 1).collect();
+        let (_module, code) = compile(&[PTR_TYPE, PTR_TYPE], |b, args| {
+            let regs = load_regs(b, args[0], &ty);
+            store_regs(b, args[1], &ty, &regs);
+        });
+        let f: extern "C" fn(*const u8, *mut u8) = unsafe { std::mem::transmute(code) };
+        let mut out = vec![0u8; size];
+        f(src.as_ptr(), out.as_mut_ptr());
+        assert_eq!(out, src);
+    }
+}
