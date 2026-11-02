@@ -371,8 +371,9 @@ The compiler can track precise data dependencies statically,
 and know exactly which code can mutate which data.
 
 _Fast incremental recompilation_.
-Every pass of the compiler is memoized (and parallelized).
-Editing any code only recompiles its dependents.
+The compiler's analyses are memoized,
+and modules are compiled in parallel.
+Editing a unit or a module only recompiles what depends on it.
 The compiler design is aided by and informs the restrictions of the language design.
 
 A language that doesn't do any I/O is quite limited.
@@ -437,8 +438,9 @@ Scripts and script units are allowed to return the type `!()`,
 
 In this example all three units compile and execute successfully.
 The third binds `c` to 10.
-Previous units both compile and execute prior to subsequent units,
-as the results of execution may affect which bindings are subsequently available.
+Each unit compiles and runs before the next.
+A later unit compiles against the bindings earlier units provide,
+and runs only if the units it reads from ran to their end.
 
 
 
@@ -459,8 +461,9 @@ the session must end up as a fresh run of the current code
 from the top would leave it.
 That's the rule every step below is held to.
 
-After a unit declares a binding,
-later units may perform four kinds of _operations_ on it:
+The unit that declares a binding is its _provider_.
+After it,
+later units may perform four kinds of _operations_ on the binding:
 
 - _read_ it, leaving it as it was,
 - _take_ it, moving the value out and leaving the binding empty,
@@ -670,7 +673,7 @@ the last time it ran:
 | update    | restore | restore |
 
 A _restore_ puts a binding back as the triggering unit first found it.
-It reruns the unit that made the binding,
+It reruns the binding's provider,
 then, in order, the units between that one and the triggering unit
 that wrote it.
 Units in between that only read it are left alone.
@@ -688,10 +691,10 @@ gets the union of their rows.
 
 Then the units after the triggering unit.
 One that reads, takes or updates a binding
-the triggering unit made or wrote
+the triggering unit provided or wrote
 sees a new value,
 so it reruns,
-and so on down the session for whatever the reruns make or write.
+and so on down the session for whatever the reruns provide or write.
 A later unit that overwrites the binding
 doesn't care what it held,
 so does not rerun,
@@ -760,7 +763,7 @@ which needs nothing,
 so unit 2 runs alone, finds 251,
 and computes an incorrect 252.
 A fresh run gives 126.
-Two units wrote `b` since unit 1 made it:
+Two units wrote `b` since unit 1 provided it:
 unit 2 itself, with code that no longer exists,
 and unit 3, which runs after it.
 
@@ -824,7 +827,7 @@ That's unit 3 in step 2.
 
 The forward rule now has two codes to look at.
 A later unit that reads, takes or updates a binding
-that either the old or the new code made or wrote
+that either the old or the new code provided or wrote
 may see a different value,
 so it reruns.
 
@@ -999,7 +1002,7 @@ let x = y
 Retracting a revive is a restore like any other:
 `b` goes back to what it held before unit 3,
 which is nothing.
-Unit 1 made `b`,
+Unit 1 provides `b`,
 so it reruns,
 and unit 2, between it and unit 3, takes `b` again.
 Forward, it's a take added back.
@@ -1061,7 +1064,7 @@ Forward it undoes a take.
 | update    | restore | restore if a later unit took or wrote it | - |
 | revive    | restore | nothing | are fixed; removing the revive breaks them |
 
-A restore reruns the unit that made the binding,
+A restore reruns the binding's provider,
 then, in order, the units between that one and the triggering unit
 that took or wrote it.
 Before revives, nothing between them could have taken it.
@@ -1134,9 +1137,9 @@ set b = 0
 Edit unit 4.
 It reads `b`, which unit 5 overwrote after it,
 so `b` has to be restored.
-The restore doesn't have to start at unit 1, which made `b`.
+The restore doesn't have to start at unit 1, which provides `b`.
 Any unit that set `b` without reading it,
-by making, overwriting or reviving it,
+by providing, overwriting or reviving it,
 rebuilds it from nothing,
 so the restore starts at the nearest one, unit 3.
 But unit 3 also updates `z`,
@@ -1226,7 +1229,7 @@ _Therefore_ we propose an algorithm and suggest it is complete.
 -->
 
 A session is a list of units, run in order.
-A unit makes bindings of its own,
+A unit provides bindings of its own,
 and performs _operations_ on the bindings of earlier units:
 
 | operation | what it does to the binding |
@@ -1271,24 +1274,29 @@ A modification of a unit `T` calls for more of them.
   `T` won't look at what it held.
 - **Restore.**
   To restore a binding,
-  rerun the nearest unit before `T` that made, overwrote or revived it.
+  rerun the nearest unit before `T` that provided, overwrote or revived it.
   That rebuilds it from nothing.
-  A binding whose maker no longer runs has nothing to restore.
+  A binding whose provider no longer runs has nothing to restore.
 - **Undone work.**
-  A unit that runs again rebuilds everything it makes and writes,
+  A unit that runs again rebuilds everything it provides and writes,
   which undoes whatever later units took or wrote of it,
   so those units rerun.
 - **Changed values.**
   A later unit reruns if it reads, takes or updates a binding
   whose value may have changed:
-  one the old or the new code made or wrote,
+  one the old or the new code provided or wrote,
   before anything overwrites it again.
   A unit rerun to restore a binding finds what it found before,
   so it changes no values.
   A unit rerun for a changed value may change values in turn.
+  An overwrite stops a change only while it writes what it wrote before.
+  If the provider now gives the binding another type,
+  or makes it a `let`,
+  the overwrite compiles to something else,
+  and is an edit or a break of its own.
 - **Changed names.**
   A later unit breaks when a name it uses is no longer available to it:
-  its maker broke or was deleted,
+  its provider broke or was deleted,
   a take of it was added,
   or a revive of it was removed.
   It's fixed when the name is available again.
@@ -1296,6 +1304,9 @@ A modification of a unit `T` calls for more of them.
 Every rerun, break and fix these rules call for
 is a modification of its own unit,
 and the rules apply to it in turn.
+What new code does to earlier bindings
+is only known once it is compiled,
+so each unit is compiled as it is collected.
 Collect them until nothing new is added,
 then run the collected units in order.
 Each unit joins at most once,
@@ -1318,6 +1329,9 @@ early returns, which block later readers like a break (return-early, return-earl
 Optimizations the algebra doesn't need:
 a rerun that produces the same value (same-value),
 and what rerunning costs.
+Where the engine does more than the algebra:
+a delete or an insert renumbers every later unit,
+so the engine recompiles and reruns all of them (delete, insert).
 -->
 
 todo
