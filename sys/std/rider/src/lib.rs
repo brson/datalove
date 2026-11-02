@@ -1089,6 +1089,22 @@ pub unsafe extern "C-unwind" fn dlr_std__list_reserve(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C-unwind" fn dlr_std__list_fill(
+    rt: LocalRtHandle,
+    list_ptr: &mut rtdt::List, list_td: &rtdt::TyDesc,
+    elem_ptr: rtdt::AnyRef<'_>, _elem_td: &rtdt::TyDesc,
+    n_ptr: &rtdt::Index, _n_td: &rtdt::TyDesc,
+    _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
+) -> u8 {
+    let n = *n_ptr;
+    unsafe {
+        datalove_rti::call::dtlv_rti_list_fill_local(
+            rt, rtdt::AnyMut::from_mut(list_ptr), list_td, elem_ptr, n.0,
+        ) as u8
+    }
+}
+
 // --- Maps and sets ---
 //
 // Same shape as the lists above: the container comes with a descriptor naming

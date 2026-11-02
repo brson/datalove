@@ -512,6 +512,54 @@ pub unsafe fn list_reserve_impl(
     unsafe { reserve(rt, list_value_mut as *mut List, element_ty, additional) }
 }
 
+/// Append `n` clones of the element at `element_in`.
+///
+/// An element that owns nothing is copied, a byte one by a fill and any other
+/// by doubling what has been written. Otherwise each is cloned in turn, the
+/// size kept up as it goes, so that a clone failing leaves the list holding
+/// the ones before it.
+pub unsafe fn list_fill_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    element_in: *const u8,
+    n: rtdt::IndexRepr,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let list_ptr = list_value_mut as *mut List;
+    let status = unsafe { reserve(rt, list_ptr, element_ty, n) };
+    if status != RtStatus::Ok {
+        return status;
+    }
+    let mut list = unsafe { ListMut::new(list_ptr, element_ty) };
+    let size = element_ty.size() as usize;
+    if element_ty.is_plain() {
+        let start = list.end_ptr();
+        let total = n as usize * size;
+        if size == 1 {
+            unsafe { std::ptr::write_bytes(start, element_in.read(), total) };
+        } else if total > 0 {
+            unsafe { rtdt::bytes::copy_value(element_in, start, size) };
+            let mut done = size;
+            while done < total {
+                let run = done.min(total - done);
+                unsafe { std::ptr::copy_nonoverlapping(start, start.add(done), run) };
+                done += run;
+            }
+        }
+        list.set_size(list.size() + n);
+        return RtStatus::Ok;
+    }
+    for _ in 0..n {
+        let status = unsafe { crate::c::impls::clone::clone_value(rt, element_in, element_ty.as_ref(), list.end_ptr()) };
+        if status != RtStatus::Ok {
+            return status;
+        }
+        list.set_size(list.size() + 1);
+    }
+    RtStatus::Ok
+}
+
 /// Make room for `additional` more elements.
 ///
 /// Every path that adds elements comes through here first, so that a list's

@@ -2101,6 +2101,33 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_reserve_local(
     }
 }
 
+/// Append `n` clones of `element` to the list.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_fill_local(
+    rt: LocalRtHandle,
+    list_value_mut: rtdt::AnyMut<'_>,
+    list_tydesc: &rtdt::TyDesc,
+    element: rtdt::AnyRef<'_>,
+    n: rtdt::IndexRepr,
+) -> RtStatus {
+    lend!("list_fill_local";
+        list_value_mut: list_tydesc.size as usize,
+        element: rtdt::TyDescRef::from_ref(list_tydesc).list_element_ty().size() as usize,
+    );
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert_aligned(list_value_mut.as_ptr(), list_tydesc, "list_fill:list");
+    unsafe {
+        let rt_ref = rt_local::from_handle(rt);
+        crate::c::impls::list::list_fill_impl(
+            rt_ref,
+            list_value_mut.as_ptr(),
+            rtdt::TyDescRef::from_ref(list_tydesc),
+            element.as_ptr(),
+            n,
+        )
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_shrink_to_fit_local(
     rt: LocalRtHandle,

@@ -881,6 +881,17 @@ pub unsafe fn dtlv_rti_list_reserve_local(rt: LocalRtHandle, list_value_mut: rtd
     unsafe { (crate::table(rt).dtlv_rti_list_reserve_local)(rt, list_value_mut, list_tydesc, additional) }
 }
 
+/// Calls [`RtiTable::dtlv_rti_list_fill_local`](crate::table::RtiTable::dtlv_rti_list_fill_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_list_fill_local(rt: LocalRtHandle, list_value_mut: rtdt::AnyMut<'_>, list_tydesc: &rtdt::TyDesc, element: rtdt::AnyRef<'_>, n: rtdt::IndexRepr) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_list_fill_local)(rt, list_value_mut, list_tydesc, element, n) }
+}
+
 /// Calls [`RtiTable::dtlv_rti_list_shrink_to_fit_local`](crate::table::RtiTable::dtlv_rti_list_shrink_to_fit_local).
 ///
 /// # Safety

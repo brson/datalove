@@ -81,17 +81,11 @@ pub unsafe fn any_destroy_local(
                 let list_ptr = value_in as *mut rtdt::List;
                 let list = &*list_ptr;
                 let element_ty = ty.list_element_ty();
-                let element_tydesc = element_ty.as_ref();
 
-                // Recursively destroy each element, unless they own nothing.
-                if !list.data.is_null() && list.size > rtdt::Index::ZERO && !element_ty.is_plain() {
-                    let element_size = element_ty.size() as usize;
-                    for i in 0..list.size.0 {
-                        let element_ptr = (list.data as *mut u8).add((i as usize) * element_size);
-                        let status = any_destroy_local(rt, element_ptr, element_tydesc);
-                        if status != RtStatus::Ok {
-                            return status;
-                        }
+                if !list.data.is_null() {
+                    let status = destroy_elements(rt, list.data as *mut u8, list.size.0 as usize, element_ty);
+                    if status != RtStatus::Ok {
+                        return status;
                     }
                 }
 
@@ -298,6 +292,42 @@ pub unsafe fn any_destroy_local(
             }
         }
     }
+}
+
+/// Destroy `count` values of `ty` laid out one after another, a list's
+/// elements.
+///
+/// An option's tag is read here rather than in a call per element, and only
+/// a payload is handed on: of a tree whose nodes are lists of options, that
+/// call was most of what destroying it cost.
+unsafe fn destroy_elements(rt: &mut rt_local::RtLocal, values: *mut u8, count: usize, ty: rtdt::TyDescRef) -> RtStatus {
+    if ty.is_plain() {
+        return RtStatus::Ok;
+    }
+    let size = ty.size() as usize;
+    unsafe {
+        if ty.type_tag() == rtdt::TyTag::Option {
+            let inner = ty.option_inner_ty();
+            let payload_offset = rtdt::layout::option_payload_offset(inner.align()) as usize;
+            for i in 0..count {
+                let value = values.add(i * size);
+                if (*(value as *const rtdt::Option)).tag == rtdt::OptionTag::Some {
+                    let status = any_destroy_local(rt, value.add(payload_offset), inner.as_ref());
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+                }
+            }
+            return RtStatus::Ok;
+        }
+        for i in 0..count {
+            let status = any_destroy_local(rt, values.add(i * size), ty.as_ref());
+            if status != RtStatus::Ok {
+                return status;
+            }
+        }
+    }
+    RtStatus::Ok
 }
 
 /// Destroy and free the value a `data` or `error` points to.

@@ -98,6 +98,7 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_list_remove_local: c::dtlv_rti_list_remove_local,
     dtlv_rti_list_swap_local: c::dtlv_rti_list_swap_local,
     dtlv_rti_list_reserve_local: c::dtlv_rti_list_reserve_local,
+    dtlv_rti_list_fill_local: c::dtlv_rti_list_fill_local,
     dtlv_rti_list_shrink_to_fit_local: c::dtlv_rti_list_shrink_to_fit_local,
     dtlv_rti_list_extend_from_slice_local: c::dtlv_rti_list_extend_from_slice_local,
     dtlv_rti_tensor_create_from_slice_local: c::dtlv_rti_tensor_create_from_slice_local,
@@ -146,6 +147,6 @@ pub static TABLE: RtiTable = RtiTable {
 /// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 122,
+    datalove_rti::table::EXPORTED == 123,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

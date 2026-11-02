@@ -114,6 +114,7 @@ native fun list_insert<T>(mut self: [T], i: index, elem: T): bool
 native fun list_remove<T>(mut self: [T], i: index): ?T
 native fun list_swap<T>(mut self: [T], i: index, j: index): bool
 native fun list_reserve<T>(mut self: [T], n: index)
+native fun list_fill<T>(mut self: [T], ref elem: T, n: index)
 
 // Maps and sets. Generic over their key, value or element type, which the
 // implementation reads off the container's descriptor. A key or element being

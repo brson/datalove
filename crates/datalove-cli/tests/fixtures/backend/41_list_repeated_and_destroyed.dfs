@@ -1,0 +1,31 @@
+// `list.repeated` fills a list in one runtime call: a byte element by a
+// fill, any other that owns nothing by doubling the run written, and one that
+// owns something by a clone each. And a list of options is destroyed by
+// reading each tag in place, handing on only a payload.
+
+require module sys/std/list
+
+type Tree: rec T [?T]
+
+fun tree(depth: u32): Tree
+  var node: Tree = []
+  if depth == 0
+    call list.push(mut node, none)
+    call list.push(mut node, none)
+    ret node
+  end if
+  call list.push(mut node, some tree(icall sub_wrapping_u32(depth, 1)))
+  call list.push(mut node, none)
+  call list.push(mut node, some tree(icall sub_wrapping_u32(depth, 1)))
+  ret node
+end fun
+
+let bytes = list.repeated(ref true, 5)
+let words = list.repeated(ref (: u32 / 7), 9)
+let pairs = list.repeated(ref ((: u8 / 1), (: u16 / 300)), 3)
+let none_of = list.repeated(ref (: u64 / 1), 0)
+let strings = list.repeated(ref "ab", 4)
+let lists = list.repeated(ref ["x", "y"], 3)
+let options = list.repeated(ref some "z", 2)
+debuglog (bytes, words, pairs, none_of, strings, lists, options)
+debuglog tree(2)

@@ -22,6 +22,7 @@ import std.list_insert
 import std.list_remove
 import std.list_swap
 import std.list_reserve
+import std.list_fill
 
 // The number of elements.
 fun len<T>(ref self: [T]): index
@@ -96,12 +97,7 @@ end fun
 // A list of n clones of one element.
 fun repeated<T>(ref elem: T, n: index): [T]
   var built: [T] = []
-  call list_reserve(mut built, n)
-  var i: index = 0
-  loop while i .< n
-    call push(mut built, elem@)
-    set i = icall add_wrapping_index(i, 1)
-  end loop
+  call list_fill(mut built, ref elem, n)
   ret built
 end fun
 
