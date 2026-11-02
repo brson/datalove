@@ -4,8 +4,10 @@
 // (github.com/smarr/are-we-fast-yet), an allocation benchmark whose tree has
 // 5461 nodes each time.
 //
-// The tree is AWFY's array of arrays, `rec T [?T]`. A node is pushed into as
-// the list it unfolds to and returned as the tree, with no copy: a recursive
+// The tree is AWFY's array of arrays, `rec T [?T]`. Each array is made at its
+// final size, as AWFY's are: a leaf is its empty slots, made in one call, and
+// a node has room for its four children before they are pushed into it as the
+// list it unfolds to. It is returned as the tree, with no copy: a recursive
 // type and its unfolding meet at the head.
 //
 // Prints the sum of the counts.
@@ -35,16 +37,13 @@ end fun
 
 fun build(depth: u32, mut seed: u32, mut count: u32): !Tree
   set count = u32.add_wrapping(count, 1)
-  var node: Tree = []
   if depth == 1
     let slots = u32.add_wrapping(rem10(next_random(mut seed)), 1)
-    var i: u32 = 0
-    loop while i .< slots
-      call list.push(mut node, none)
-      set i = u32.add_wrapping(i, 1)
-    end loop
-    ret ok node
+    let empty: ?Tree = none
+    ret ok list.repeated(ref empty, index.from_u32(slots))
   end if
+  var node: Tree = []
+  call list.reserve(mut node, 4)
   var i: u32 = 0
   loop while i .< 4
     call list.push(mut node, some build(u32.sub_wrapping(depth, 1), mut seed, mut count)!)
