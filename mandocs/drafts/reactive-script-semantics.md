@@ -1354,12 +1354,13 @@ The corresponding tables are the expected outcome.
 
 Ok that's not quite true.
 These aren't truly live, but they were verified at time of writing.
-The actual live test cases are in [_this more comprehensive document_](../../botdocs/script-reactivity-cases.md).
-They are a bit more verbose.
+The actual live test cases are in [this more comprehensive document](../../botdocs/script-reactivity-cases.md).
 They cover these cases and more.
+The text around them is less scrutinized.
+They are maintained by LLMs.
 
-As I wrote this experiment iteratively I also
-had LLMs validate it as a test suite while they implemented
+As I wrote this experiment iteratively (with my human brain and words)
+I also had LLMs validate it as a test suite while they implemented
 the rules in the engine.
 All three activities iterating together.
 Blog-driven and test-driven development.
@@ -1422,25 +1423,25 @@ expect unit 2 is edited to read `b`
 | 3 | updates `b` (1) | reruns | rerun: updates `b` from unit 1, which reran | - |
 ```
 
-The `expect` worldfile sections are the exact markdown tables in the document.
+The `expect` worldfile sections are inputs to the markdown tables in the document.
 The `scriptunit-edit` sections indicate edits to a script unit.
-They are a representation of the same commands as executed by a human user
-of the scripting environment.
+They are representations of the same commands as executed by a human user of the scripting environment.
+Their code is merged into the `expect` tables as a "code" column when rendered to the document.
 
 The "uses", "this step" and "holds after" columns of the table
 are validated. The "because" column is documentation for the reader.
 
 I don't want to say more about the specifics of the test suite.
-What I do want to say is that I love testing,
-and I love this kind of elaborate, bespoke test suite for a single subsystem.
-In the past I have made test suites like this when paid to do it,
+What I do want to say is that I love thorough testing.
+This kind of elaborate and bespoke single-subsystem test suite can be useful.
+But I don't always write them.
+In the past I have made elaborate and bespoke test suites when paid to do it,
 when I deemed the subsystem important enough to warrant maintaining it,
 and when I had the motivation to spend weeks writing it.
 LLMs can write and maintain this easily.
 LLMs also need thoughtful guiderails to help them maintain software in the direction I want.
 This test suite contains both the specification and its validation in a form that is easy for LLMs to maintain.
 This test suite is also in a form that is easy and useful for humans to read.
-I'm optimistic about it.
 
 
 
