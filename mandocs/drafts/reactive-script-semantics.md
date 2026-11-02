@@ -32,25 +32,24 @@ Datalove is an interactive scripting language and environment.
 The compiler quickly re-compiles the program
 whenever its code changes.
 The program quickly re-runs whenever its code or data changes.
-We say that it is _reactive_ to changes to both code and data.
+It is _reactive_ to changes to both code and data.
 Reruns are deterministic and,
 in the absence of semantic changes,
 identical from run to run.
 
 Until now though the CLI REPL has only barely functioned,
-and the precise semantics of what happens
-as code is recompiled and rerun have been left to future work.
+and the precise semantics have been left to future work.
 Ok, future is now.
 Let's figure it out.
 
-We develop a simple recursive algebra for deciding which code
+I developed a simple recursive algebra for deciding which code
 must be recompiled and rerun when individual script units
 are interactively modified or their inputs change.
-This algebra is based entirely on an analysis of variable bindings
+This algebra is based on an analysis of variable bindings
 and their subsequent usage within a linear type system.
-We do this by progressively developing verifiable counter-examples
+I did this by progressively developing verifiable counter-examples
 until we are satisfied of its correctness.
-We do not prove correctness.
+I did not prove correctness.
 
 
 
