@@ -260,7 +260,6 @@ impl Outcome {
     fn parse(text: &str) -> Outcome {
         let (recompiles, ran) = match text {
             "untouched" => (false, Ran::No),
-            dropped if dropped.trim_matches('_').ends_with(" dropped") => (false, Ran::No),
             "recompiles" => (true, Ran::No),
             "reruns" => (false, Ran::Runs),
             "compiles, runs" | "recompiles, runs" => (true, Ran::Runs),
@@ -292,10 +291,9 @@ impl Outcome {
     /// Whether the engine doing `self` is what the rule's `rule` looks like
     /// from outside.
     ///
-    /// A fixup runs nothing, so it is seen as untouched, and the values tell
-    /// the two apart. A unit that fails is not asked whether it recompiled:
-    /// the doc says "recompile fails" whether or not the failing analysis
-    /// was one salsa kept.
+    /// A unit that fails is not asked whether it recompiled: the doc says
+    /// "recompile fails" whether or not the failing analysis was one salsa
+    /// kept.
     fn is_seen_as(self, rule: Outcome) -> bool {
         match rule.ran {
             Ran::Fails | Ran::Deleted => self.ran == rule.ran,

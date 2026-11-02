@@ -43,7 +43,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData, ExternalBinding,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, ExportBinding, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_tycheck::{
@@ -88,6 +88,33 @@ struct HeldGraph {
     changed: Vec<BTreeSet<String>>,
     /// What each unit took of earlier units' bindings.
     takes: Vec<BTreeSet<String>>,
+    /// How each unit provided each of its bindings; see [`binding_shape`].
+    shapes: Vec<HashMap<String, BindingShape>>,
+}
+
+/// How a unit provides a binding: as a slot or a value, and of which type.
+///
+/// What a later unit that writes the binding without reading it is compiled
+/// against. While it stays the same, rerunning that unit writes what it wrote
+/// before.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct BindingShape {
+    slot: bool,
+    ty: String,
+}
+
+/// How `record` says its unit provides `name`, if it does.
+fn binding_shape(record: &UnitLowerRecord, name: &str) -> Option<BindingShape> {
+    let (_, export) = record.exports.iter().find(|(bound, _)| bound == name)?;
+    let (_, ty) = record.types.iter().find(|(bound, _)| bound == name)?;
+    Some(BindingShape { slot: matches!(export, ExportBinding::Slot(_)), ty: ty.C() })
+}
+
+/// Every binding `record` says its unit provides, by name, with its shape.
+fn binding_shapes(record: &UnitLowerRecord) -> HashMap<String, BindingShape> {
+    record.exports.iter()
+        .filter_map(|(name, _)| Some((name.C(), binding_shape(record, name)?)))
+        .collect()
 }
 
 /// Output from ownership phase.
@@ -603,18 +630,35 @@ impl<'db> ScriptCompiler<'db> {
     /// that took or wrote an earlier unit's binding left it changed: moved out
     /// of, or holding what a `set` put there. Running it again would read the
     /// change, and dropping it would leave the change behind. So the splice
-    /// starts at that binding's provider instead, which builds the binding
-    /// again. The units between are run again as well, so what they changed
-    /// counts too, and the point moves back until nothing earlier is changed.
+    /// starts earlier, at the nearest unit before it that sets the binding
+    /// without reading it: its provider, or an overwrite or revival after
+    /// that. Running that unit again builds the binding as the splice point
+    /// found it. The units between are run again as well, so what they
+    /// changed counts too, and the point moves back until nothing earlier is
+    /// changed.
     fn rerun_start(&self, at: usize) -> usize {
         let held = self.held_graph();
-        let provider = |unit: usize, name: &String| {
-            (0..unit).rev().find(|earlier| held.provides[*earlier].contains(name))
+        let records = &self.unit_records;
+        let rebuilds = |unit: usize, name: &String| {
+            records[unit].overwrites.contains(name) || records[unit].revives.contains(name)
+        };
+        let setter = |from: usize, unit: usize, name: &String| {
+            // A unit before the splice point stays and runs again, and if it
+            // writes the binding without reading it, it needs nothing of what
+            // the binding held.
+            if unit < at && rebuilds(unit, name) {
+                return None;
+            }
+            let provider = (0..unit).rev().find(|earlier| held.provides[*earlier].contains(name))?;
+            let setter = (provider + 1..unit).rev()
+                .find(|earlier| rebuilds(*earlier, name))
+                .unwrap_or(provider);
+            (setter < from).then_some(setter)
         };
         let mut from = at;
         loop {
             let earliest = (from..held.changed.len())
-                .flat_map(|unit| held.changed[unit].iter().filter_map(move |name| provider(unit, name)))
+                .flat_map(|unit| held.changed[unit].iter().filter_map(move |name| setter(from, unit, name)))
                 .min();
             match earliest {
                 Some(source) if source < from => from = source,
@@ -813,6 +857,12 @@ impl<'db> ScriptCompiler<'db> {
             })
         };
 
+        // Whether unit `provider` provides `name` other than it did before
+        // the edit.
+        let reshaped = |provider: usize, name: &String| {
+            held.shapes[provider].get(name) != binding_shape(&self.unit_records[provider], name).as_ref()
+        };
+
         let mut rerun_starts = BTreeSet::new();
         loop {
             let mut rederived = vec![false; count];
@@ -820,8 +870,10 @@ impl<'db> ScriptCompiler<'db> {
             for unit in 0..count {
                 // A unit that writes a binding without reading it does not
                 // care how an earlier unit left it, only what the binding is,
-                // which its provider says. If its write was retracted it is
-                // rerun.
+                // which its provider says. While the provider provides it as
+                // it did, the unit writes what it wrote before, so the units
+                // after it see no new value. It is rerun, since its provider
+                // undid its write.
                 //
                 // Nor does a unit after a take that is still there: the
                 // binding holds nothing after it, as it did before.
@@ -833,7 +885,8 @@ impl<'db> ScriptCompiler<'db> {
                                 && self.unit_records[source].takes.contains(name);
                             rederived[source]
                                 && !still_taken
-                                && (provides[source].contains(name) || !writes_without_reading(unit, name))
+                                && (!writes_without_reading(unit, name)
+                                    || (provides[source].contains(name) && reshaped(source, name)))
                         })
                     });
                 restoring[unit] = !rederived[unit]
@@ -891,6 +944,7 @@ impl<'db> ScriptCompiler<'db> {
                 .map(|record| record.takes.iter().chain(&record.writes).cloned().collect())
                 .collect(),
             takes: self.unit_records.iter().map(|record| set(&record.takes)).collect(),
+            shapes: self.unit_records.iter().map(binding_shapes).collect(),
         }
     }
 

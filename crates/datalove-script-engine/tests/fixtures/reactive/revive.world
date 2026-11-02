@@ -64,19 +64,10 @@ expect unit 3 is broken
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | _`b` dropped_ | fixup: unit 3 revived `b` when it last ran, and is retracted | `b` moved |
-| 2 | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 1 | - | reruns | rerun: unit 3 revived `b` when it last ran, and is retracted | `b` moved |
+| 2 | takes `b` (1) | reruns | rerun: takes `b` from unit 1, which reran | `b_moved` = 125 |
 | 3 | revives `b` (1) | recompile fails | edited | - |
 | 4 | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
-
-----------
-engine
-----------
-
-| unit | this step | note |
-|------|-----------|------|
-| 1 | reruns | treats the revival like any other write, and reruns rather than dropping `b` |
-| 2 | reruns | takes `b` again after unit 1 reruns |
 
 ----------
 scriptunit-edit 3

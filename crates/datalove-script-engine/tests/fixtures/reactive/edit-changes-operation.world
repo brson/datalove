@@ -1,0 +1,43 @@
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+set b = b * 2
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = b + 1
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 251 |
+| 2 | updates `b` (1) | compiles, runs | new | - |
+| 3 | updates `b` (1) | compiles, runs | new | - |
+
+----------
+scriptunit-edit 2
+----------
+
+let c = b + 1
+
+----------
+expect unit 2 is edited to read `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 2 updated `b` when it last ran, and the edit retracts that | `b` = 126 |
+| 2 | reads `b` (1) | recompiles, runs | edited | `c` = 126 |
+| 3 | updates `b` (1) | reruns | rerun: updates `b` from unit 1, which reran | - |

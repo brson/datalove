@@ -1,0 +1,75 @@
+----------
+scriptunit-fragment 1
+----------
+
+var b = 1
+
+----------
+scriptunit-fragment 2
+----------
+
+set b = 5
+
+----------
+scriptunit-fragment 3
+----------
+
+let c = b == 5
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 5 |
+| 2 | overwrites `b` (1) | compiles, runs | new | - |
+| 3 | reads `b` (1) | compiles, runs | new | `c` = true |
+
+----------
+scriptunit-edit 1
+----------
+
+var b = 2
+
+----------
+expect unit 1 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `b` = 5 |
+| 2 | overwrites `b` (1) | reruns | rerun: overwrites `b` from unit 1, which reran | - |
+| 3 | reads `b` (1) | untouched | `b` is 5 after unit 2, as before | `c` = true |
+
+----------
+scriptunit-edit 1
+----------
+
+var b: u32 = 2
+
+----------
+expect unit 1 is edited so `b` is a `u32`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `b` = 5 |
+| 2 | overwrites `b` (1) | recompiles, runs | writes a `u32` now | - |
+| 3 | reads `b` (1) | recompiles, runs | reads `b` after unit 2, which writes a `u32` now | `c` = true |
+
+----------
+scriptunit-edit 1
+----------
+
+let b: u32 = 2
+
+----------
+expect unit 1 is edited so `b` cannot be written
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `b` = 2 |
+| 2 | overwrites `b` (1) | recompile fails | `b` is not a `var` | - |
+| 3 | reads `b` (1) | recompiles, runs | reads `b` after unit 2, which no longer overwrites it | `c` = false |

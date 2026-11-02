@@ -97,6 +97,12 @@ it if salsa asks to.
 what the unit's previous code did to earlier bindings; apply runs its current
 code. "Undo" and "redo" are not used for these.
 
+**triggering unit**. The unit a step's modification is of; the rules are
+stated relative to it.
+
+**restore**. Put a binding back as the triggering unit found it. Done by a
+rerun.
+
 **Edit**, **Break**, **Delete**, **Fix**, **Add**. The modifications.
 Capitalised, Edit is an edit that compiles (retract, then apply); Break one
 that does not (retract); Fix one that makes a unit compile that did not
@@ -113,16 +119,13 @@ bindings it reads or changed. Not "back" or "reverse".
 **rerun**. Restoring a binding by running units again: the nearest unit before
 that sets the binding without reading it (its provider, or a later overwrite
 or revival), then the units between that took or wrote it. In a step table's
-because column, `rerun:`. Also the plain verb for running a unit again.
+because column, `rerun:`. As a modification, a retract and an apply of the
+same code. Also the plain verb for running a unit again.
 `ScriptExecutor::rerun_unit`.
 
-**rerun start**. The unit a rerun begins at. For an edit it is the nearest
-setter; a splice uses the provider (`ScriptCompiler::rerun_start`). Distinct
-from the provider only when an overwrite or revival is nearer.
-
-**fixup**. Restoring a binding without running anything, possible when it
-held nothing, as before a revival: `` `b` dropped `` in a step table, `fixup:`
-in its because column.
+**rerun start**. The unit a rerun begins at: the nearest setter, for an edit
+and for a splice (`ScriptCompiler::rerun_start`). Distinct from the provider
+only when an overwrite or revival is nearer.
 
 "Rewind" and "replay" are retired from the algebra; both were reruns.
 

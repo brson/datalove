@@ -257,8 +257,14 @@ the same. The reach uses them three ways:
 - A reached unit that writes a binding without reading it needs nothing of
   what the binding held, so it does not reach back for it.
 - Nor is it re-derived because an earlier unit changed the binding, since only
-  what the binding is matters to it, and its provider says that. If its write
-  was retracted, it reruns.
+  what the binding is matters to it, and its provider says that. So when its
+  provider is re-derived it is only rerun, to write the binding again, and the
+  units after it that read the binding are left alone. That holds while the
+  provider provides the binding as it did, as a slot or a value and of the
+  same type (`BindingShape`, compared against the held records). Otherwise
+  the write itself compiles to something else -- a literal of another type,
+  or no write at all -- and the unit is re-derived. If its write was
+  retracted, it reruns.
 - The unit a rerun starts from, to rebuild a binding as a reader finds it, is
   the nearest unit before the reader that sets it without reading it: its
   provider, or an overwrite or revival after that. So a rerun starts from the
@@ -282,9 +288,10 @@ and did not run to its end -- returned early, or was blocked -- keeps its
 record, so it is assumed to have taken what it would take. The cost of that is
 rerunning its provider for nothing; see
 [issues.md](issues.md#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken).
-Retracting a revival also does more than it needs to: it reruns the provider
-and the take after it, where a fixup, emptying the binding, would do. See
-[script-reactivity-cases.md](script-reactivity-cases.md#user-content-where-the-engine-does-more-than-the-rules).
+Retracting a revival restores the binding like any other retract, by
+rerunning its provider and the take after it. Since the binding held nothing
+before the revival, emptying it would do as well without running anything;
+that is an optimization not taken.
 
 ## Splices
 
@@ -304,12 +311,14 @@ goes took or wrote an earlier binding.
 
 That is the rerun of section 5 again. A unit that goes, or runs again as part
 of the suffix, may have taken or written a binding before the splice point.
-`rerun_start` moves the start of the splice back to that binding's provider,
-and further back while the units in between changed something earlier still.
-The splice re-derives from there, so `truncate_units` returns a `Splice` like
-the others. A splice does not skip readers: it reruns every unit from the
-rerun start on. `rerun_start` does not yet use the overwrite rules, so it
-starts at the provider even when a nearer unit overwrites the binding.
+`rerun_start` moves the start of the splice back to the nearest unit that sets
+that binding without reading it, as an edit's rerun does: its provider, or an
+overwrite or revival after that. It moves further back while the units in
+between changed something earlier still, except what a unit before the splice
+point overwrites or revives, since that unit runs again and needs nothing of
+what the binding held. The splice re-derives from there, so `truncate_units`
+returns a `Splice` like the others. A splice does not skip readers: it reruns
+every unit from the rerun start on.
 
 Two things each splice needs that an edit does not:
 
@@ -525,8 +534,8 @@ units directly when the question is about validity.
   record lists what it would take and write. So a blocked unit makes the names
   it would take unusable after it, and its provider reruns for it, though
   nothing was taken.
-- **Splices rerun from the provider, not the nearest overwrite**, and rerun
-  every unit from there; see [Splices](#user-content-splices).
+- **Splices rerun every unit from the rerun start on**, readers included; see
+  [Splices](#user-content-splices).
 - **The engine keeps no history.** The REPL's `/undo` and `/redo` keep it,
   and need nothing new of the engine: undoing an edit *is* an edit, undoing an
   append is `truncate_units`, and undoing an insert or a delete is the opposite

@@ -1,0 +1,57 @@
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+set b = 500
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = b + 1
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b * 2
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 501 |
+| 2 | overwrites `b` (1) | compiles, runs | new | - |
+| 3 | updates `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 1002 |
+
+----------
+scriptunit-delete 3
+----------
+
+----------
+expect unit 3 is deleted
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 2 overwrites `b` after it | `b` = 500 |
+| 2 | overwrites `b` (1) | reruns | rerun: unit 3 updated `b` when it last ran, and is deleted, and unit 2 is the nearest to set it without reading it | - |
+| 3 | updates `b` (1) | deleted | deleted | - |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 1000 |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 4 | recompiles, runs | a removal renumbers every later unit, so they are typechecked under new keys |
