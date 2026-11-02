@@ -51,7 +51,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(super) fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<Defined, CraneliftError> {
         self.check_dynamic_support()?;
         self.ret = match &self.osr_spec {
-            Some(_) if uses_sret(&self.func_ctx.return_type) => RetPass::Sret,
+            Some(_) if has_result(&self.func_ctx.return_type) => RetPass::Sret,
             Some(_) => RetPass::Unit,
             None => ret_pass(&self.func_ctx.return_type),
         };
@@ -128,35 +128,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             builder.switch_to_block(entry_block);
             // Don't seal yet - wait until all blocks are compiled for loop back-edges.
 
-            // Extract block parameters.
-            // Layout: [rt_handle, sret? (if aggregate return), user_param_0, user_param_1, ...]
             let param_values: Vec<_> = builder.block_params(entry_block).to_vec();
-
-            // First param is always rt_handle (implicit).
-            self.rt_handle_param = Some(param_values[0]);
+            let func_ctx = self.func_ctx;
+            let layout = ParamLayout::of(func_ctx);
+            self.rt_handle_param = Some(param_values[ParamLayout::RT]);
             self.check_stack(&mut builder)?;
-
-            // Second param is sret pointer, if the result goes back through one.
-            let mut next = 1;
-            if self.ret == RetPass::Sret {
-                self.sret_param = Some(param_values[1]);
-                next = 2;
-            }
+            self.sret_param = layout.sret.map(|at| param_values[at]);
 
             // Each parameter is a pointer, or its value or words. One passed
             // by value is kept in registers unless something needs it in
             // memory, in which case it is put in a home of its own here.
-            let func_ctx = self.func_ctx;
-            for (i, (mode, ty)) in func_ctx.param_modes.iter().zip(&func_ctx.param_types).enumerate() {
+            for (i, ((pass, at), ty)) in layout.args.iter().zip(&func_ctx.param_types).enumerate() {
                 let param_id = ParamId(i as u32);
-                match arg_pass(*mode, ty) {
+                match pass {
                     ArgPass::Pointer => {
-                        self.param_values.insert(param_id, param_values[next]);
-                        next += 1;
+                        self.param_values.insert(param_id, param_values[at.start]);
                     }
-                    ArgPass::Value(tys) => {
-                        let regs = param_values[next..next + tys.len()].to_vec();
-                        next += tys.len();
+                    ArgPass::Value(_) => {
+                        let regs = param_values[at.clone()].to_vec();
                         let size = types::ir_type_size(ty).max(1);
                         let home = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
                             cl_ir::StackSlotKind::ExplicitSlot, size, 3));
@@ -164,16 +153,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             self.param_regs.insert(param_id, (regs, home));
                         } else {
                             let addr = builder.ins().stack_addr(PTR_TYPE, home, 0);
-                            Self::store_regs_at(&mut builder, addr, ty, &regs);
+                            super::words::store_regs(&mut builder, addr, ty, &regs);
                             self.param_values.insert(param_id, addr);
                         }
                     }
                 }
             }
-            let type_param_start = next;
-            self.type_param_values = param_values[type_param_start..].iter().copied()
-                .take(self.func_ctx.type_param_count as usize)
-                .collect();
+            self.type_param_values = param_values[layout.descriptors].to_vec();
 
             // Initialize aggregate slots and tracking bytes region.
             // - Aggregate slots: 0xFF poison makes uninitialized reads obvious

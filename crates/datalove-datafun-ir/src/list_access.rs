@@ -9,7 +9,9 @@
 //! piles[pile]!)` does that -- but not the list: a `mut` borrow of an element
 //! reaches the element and nothing else, and no other argument may be rooted
 //! at the same binding (D010). So what changes the list is what names it: a
-//! store to it, a move out of it, or passing it to a call.
+//! store to it, a drop of it, or passing it to a call, as
+//! `Instruction::for_each_place_use` says. A move out of it leaves nothing
+//! to reach it by until a store fills it again.
 //!
 //! What is known flows along the edges in reverse postorder, and a block with
 //! more than one way in knows what they all agree on -- the same value for
@@ -197,51 +199,22 @@ fn unchanging_index(unit: &IrCodeUnit, op: &Operand) -> bool {
     }
 }
 
-/// Forget what `instr` may change: every element of a list it names, and,
-/// unless it only reads, every element reached through a reference, which it
-/// may write through or replace.
+/// Forget what `instr` may change: every element of a list it writes, drops
+/// or passes to a call, and, if it does any of those, every element reached
+/// through a reference, which may be the same place.
 fn forget_what_it_may_change(known: &mut HashMap<Key, Known>, instr: &Instruction) {
-    if known.is_empty() || only_reads(instr) {
+    if known.is_empty() {
         return;
     }
-    let mut named: Vec<Operand> = Vec::new();
-    instr.for_each_operand(|op| named.push(*op));
-    match instr {
-        Instruction::SlotStoreCopy { dest: SlotDest::Local(s), .. }
-        | Instruction::SlotStoreCopyTracked { dest: SlotDest::Local(s), .. }
-        | Instruction::SlotStoreMove { dest: SlotDest::Local(s), .. }
-        | Instruction::SlotStoreMoveTracked { dest: SlotDest::Local(s), .. }
-        | Instruction::SetField { slot: SlotDest::Local(s), .. }
-        | Instruction::SetFieldTracked { slot: SlotDest::Local(s), .. }
-        | Instruction::SlotLoadMove { slot: s, .. }
-        | Instruction::SlotLoadMoveTracked { slot: s, .. }
-        | Instruction::CursorBegin { cursor: s, .. }
-        | Instruction::CursorAdvance { cursor: s, .. } => named.push(Operand::Slot(*s)),
-        Instruction::ParamStore { param, .. }
-        | Instruction::ParamStoreTracked { param, .. }
-        | Instruction::ParamSetField { param, .. }
-        | Instruction::ParamSetFieldTracked { param, .. } => named.push(Operand::Param(*param)),
-        _ => {}
+    let mut changed: Vec<Operand> = Vec::new();
+    instr.for_each_place_use(|op, place_use| {
+        if !matches!(place_use, PlaceUse::Read | PlaceUse::Lent) {
+            changed.push(op);
+        }
+    });
+    if !changed.is_empty() {
+        known.retain(|(list, _), _| !matches!(list, Operand::ValueRef(_)) && !changed.contains(list));
     }
-    known.retain(|(list, _), _| !matches!(list, Operand::ValueRef(_)) && !named.contains(list));
-}
-
-/// Whether `instr` changes nothing it is handed: it reads its operands and
-/// defines its destinations, and that is all.
-fn only_reads(instr: &Instruction) -> bool {
-    use Instruction as I;
-    matches!(instr,
-        I::Const { .. } | I::StaticRef { .. } | I::Copy { .. } | I::BinOp { .. } | I::UnaryOp { .. }
-        | I::BinOpChecked { .. } | I::UnaryOpChecked { .. } | I::Widen { .. } | I::WidenFixed { .. }
-        | I::Clone { .. } | I::Pack { .. } | I::Unpack { .. } | I::GetField { .. } | I::GetFieldRef { .. }
-        | I::WrapSome { .. } | I::WrapNone { .. } | I::WrapOk { .. } | I::WrapErr { .. }
-        | I::EnumVariant { .. } | I::EnumDiscriminant { .. } | I::EnumPayload { .. }
-        | I::UnwrapOption { .. } | I::UnwrapResult { .. } | I::ErrorFrom { .. } | I::DataFrom { .. }
-        | I::ListNew { .. } | I::SetNew { .. } | I::MapNew { .. } | I::TensorNew { .. } | I::TableNew { .. }
-        | I::SlotLoadCopy { .. } | I::ListGet { .. } | I::ListBoundsCheck { .. } | I::ListElementRef { .. }
-        | I::MapGet { .. } | I::MapContainsKey { .. } | I::MapValueRef { .. } | I::TensorGet { .. }
-        | I::TensorBoundsCheck { .. } | I::TensorIndexRef { .. } | I::CursorDone { .. } | I::CursorElem { .. }
-        | I::CursorIndex { .. } | I::CursorValue { .. } | I::DebugLog { .. } | I::Intrinsic { .. } | I::Nop)
 }
 
 /// The blocks the entry reaches, each after every block that dominates it.
@@ -433,5 +406,61 @@ mod tests {
         reuse_list_accesses(&mut unit);
         // Block 1 is reached again after the call, and checks again.
         assert!(matches!(unit.blocks[1].instructions[0], Instruction::ListBoundsCheck { .. }));
+    }
+    #[test]
+    fn a_drop_of_the_list_forgets_its_elements() {
+        let mut unit = twice_around(Instruction::Drop { operand: LIST }, INDEX);
+        assert!(!reuse_list_accesses(&mut unit));
+    }
+
+    #[test]
+    fn a_walk_over_the_list_keeps_its_elements() {
+        let walk = Instruction::CursorBegin { cursor: SlotId(0), coll: LIST };
+        let mut unit = twice_around(walk, INDEX);
+        assert!(reuse_list_accesses(&mut unit));
+    }
+
+    /// `xs[i]!` twice for a list reached through reference `v20`, with
+    /// `between` between.
+    fn twice_through_a_reference(between: Instruction) -> IrCodeUnit {
+        let list = Operand::ValueRef(ValueId(20));
+        let check = |v| Instruction::ListBoundsCheck { is_valid: ValueId(v), list, index: INDEX };
+        let element = |v| Instruction::ListElementRef { dest: ValueId(v), list, index: INDEX };
+        function(vec![
+            block(0, vec![check(0)], branch(0, 1, 4)),
+            block(1, vec![element(1), between], goto(2)),
+            block(2, vec![check(2)], branch(2, 3, 4)),
+            block(3, vec![element(3)], ret()),
+            block(4, Vec::new(), ret()),
+        ])
+    }
+
+    #[test]
+    fn a_write_through_any_reference_forgets_what_references_reach() {
+        let write = Instruction::RefStore { dest: Operand::ValueRef(ValueId(21)), value: Operand::Value(ValueId(9)) };
+        let mut unit = twice_through_a_reference(write);
+        assert!(!reuse_list_accesses(&mut unit));
+    }
+
+    #[test]
+    fn a_read_through_a_reference_keeps_what_references_reach() {
+        let read = Instruction::Copy { dest: ValueId(9), src: Operand::ValueRef(ValueId(21)) };
+        let mut unit = twice_through_a_reference(read);
+        assert!(reuse_list_accesses(&mut unit));
+    }
+
+    #[test]
+    fn equal_constant_indices_are_one_element() {
+        let zero = |v| Instruction::Const { dest: ValueId(v), value: ConstValue::Index(0) };
+        let at = |v| Operand::Value(ValueId(v));
+        let mut unit = function(vec![
+            block(0, vec![zero(20), check(0, at(20))], branch(0, 1, 4)),
+            block(1, vec![element(1, at(20))], goto(2)),
+            block(2, vec![zero(21), check(2, at(21))], branch(2, 3, 4)),
+            block(3, vec![element(3, at(21))], ret()),
+            block(4, Vec::new(), ret()),
+        ]);
+        assert!(reuse_list_accesses(&mut unit));
+        assert_eq!((checks(&unit), elements(&unit)), (1, 1));
     }
 }

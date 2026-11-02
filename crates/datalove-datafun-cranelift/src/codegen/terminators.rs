@@ -78,7 +78,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         }
                         types::CraneliftRepr::Aggregate(_) if self.words_of(val_op).is_some() => {
                             let words = self.words_of(val_op).expect("checked").clone();
-                            Self::store_words_at(builder, sret_ptr, ret_ty, &words);
+                            super::words::store_words_at(builder, sret_ptr, ret_ty, &words);
                         }
                         types::CraneliftRepr::Aggregate(_) => {
                             // Aggregate: memcpy from source pointer to sret

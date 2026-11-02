@@ -489,9 +489,9 @@ impl Frame {
     }
 
     /// Mark a value as holding nothing, having been moved or destroyed.
-    #[inline(always)]
     ///
     /// A value of a copied type is left as it is: a move of one copies it.
+    #[inline(always)]
     pub fn mark_value_dropped(&self, id: ValueId) {
         if !self.layout().value_is_copy[id.0 as usize] {
             self.set_kept_live(id.0 as usize, false);
@@ -655,10 +655,10 @@ impl Frame {
     }
 
     /// Mark slot as holding nothing, having been moved or destroyed.
-    #[inline]
     ///
     /// Of a copied type, it still holds what it did as far as the debug checks
     /// go: a move of one copies it.
+    #[inline]
     pub fn mark_slot_dropped(&self, id: SlotId) {
         if let Some(offset) = self.layout().slot_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);
@@ -729,10 +729,10 @@ impl Frame {
     }
 
     /// Mark param as holding nothing, having been moved or destroyed.
-    #[inline]
     ///
     /// Of a copied type, it still holds what it did as far as the debug checks
     /// go: a move of one copies it.
+    #[inline]
     pub fn mark_param_dropped(&self, id: ParamId) {
         if let Some(offset) = self.layout().param_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);

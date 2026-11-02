@@ -208,7 +208,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     self.values.insert(dest, val);
                 }
                 CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
-                    let words = Self::load_words(builder, payload_addr, &inner_ty);
+                    let words = super::words::load_words(builder, payload_addr, &inner_ty);
                     self.words.insert(dest, words);
                 }
                 CraneliftRepr::Aggregate(_) => {
@@ -353,7 +353,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.values.insert(dest, val);
             }
             CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
-                let words = Self::load_words(builder, payload_addr, &payload_ty);
+                let words = super::words::load_words(builder, payload_addr, &payload_ty);
                 self.words.insert(dest, words);
             }
             CraneliftRepr::Aggregate(_) => {
@@ -414,7 +414,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         self.values.insert(dest, val);
                     }
                     CraneliftRepr::Aggregate(_) if self.holds_words(dest) => {
-                        let words = Self::load_words(builder, payload_addr, ty);
+                        let words = super::words::load_words(builder, payload_addr, ty);
                         self.words.insert(dest, words);
                     }
                     CraneliftRepr::Aggregate(_) => {

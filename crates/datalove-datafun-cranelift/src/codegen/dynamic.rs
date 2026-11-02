@@ -392,7 +392,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(_) => {
                 if let Some(words) = self.words_of(value) {
-                    Self::store_words_at(builder, addr, ty, words);
+                    super::words::store_words_at(builder, addr, ty, words);
                     return Ok(());
                 }
                 let src = self.get_operand_ptr(builder, value)?;

@@ -84,8 +84,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let (place, other) = self.field_place_among(args).expect("checked");
                 let other = self.get_operand_ptr(builder, other)?;
                 let in_place = self.field_place_words(builder, &place);
-                let from_other = Self::load_words(builder, other, &place.ty);
-                Self::store_words_at(builder, other, &place.ty, &in_place);
+                let from_other = super::words::load_words(builder, other, &place.ty);
+                super::words::store_words_at(builder, other, &place.ty, &in_place);
                 self.set_field_place_words(builder, &place, &from_other);
             }
             NativeIntrinsic::MemReplace if matches!(&args[0], Operand::ValueRef(r) if self.field_places.contains_key(r)) => {
@@ -108,7 +108,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let place = self.get_operand_ptr(builder, &args[0])?;
                 let size = types::ir_type_size(&first_ty) as u64;
                 if self.holds_words(dest) {
-                    let old = Self::load_words(builder, place, &first_ty);
+                    let old = super::words::load_words(builder, place, &first_ty);
                     self.put_value(builder, place, &first_ty, &args[1])?;
                     self.words.insert(dest, old);
                     return Ok(true);
@@ -239,7 +239,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let some = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
             let mut parts = vec![(0, some)];
             if !elem_cut.is_empty() {
-                let words = Self::load_words(builder, slot, elem_ty);
+                let words = super::words::load_words(builder, slot, elem_ty);
                 parts.extend(elem_cut.iter().zip(words).map(|(&(at, _), w)| (payload_at + at as u32, w)));
             }
             let words = Self::compose_words(builder, &option_ty, &parts).expect("checked to fit");

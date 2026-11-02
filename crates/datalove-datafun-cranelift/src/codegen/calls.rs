@@ -9,7 +9,7 @@ use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamMode, Value
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
 
-use super::{convention_of, uses_sret, ArgPass, FunctionCompiler, LocalCallee, RetPass};
+use super::{has_result, ArgPass, FunctionCompiler, LocalCallee, ParamLayout, RetPass};
 use datalove_rt::c::{self, RtHeader};
 
 /// Where in what the runtime handle points at compiled code finds whether its
@@ -34,20 +34,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// How a call to `code_ref` passes each argument and gets its result.
-    fn callee_convention(&self, code_ref: &CodeRef) -> (Vec<ArgPass>, RetPass) {
+    /// Where a call to `code_ref` passes each argument, and how it gets its
+    /// result.
+    fn callee_layout(&self, code_ref: &CodeRef) -> ParamLayout {
         match code_ref {
             CodeRef::Local(_) | CodeRef::External { .. } => {
-                let callee = self.declared_callee(code_ref)
-                    .expect("resolve_code_ref rejects a callee never declared");
-                (callee.args.clone(), callee.ret.clone())
+                self.declared_callee(code_ref)
+                    .expect("resolve_code_ref rejects a callee never declared")
+                    .layout
+                    .clone()
             }
             CodeRef::Module { module, id } => {
                 let registry = self.registry.expect("a module callee is resolved through the registry");
                 let unit = registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
                     .expect("resolve_code_ref rejects a callee never declared");
                 let ctx = unit.function_context().expect("a module callee that is not native is a function");
-                convention_of(ctx)
+                ParamLayout::of(ctx)
             }
         }
     }
@@ -159,6 +161,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             None => false,
                         };
                         if !open_coded {
+                            // A field place has no address to hand the native;
+                            // `find_register_slots` makes one only for a call
+                            // that is open-coded.
+                            assert!(
+                                !args.iter().any(|a| matches!(a, Operand::ValueRef(r) if self.field_places.contains_key(r))),
+                                "a field place handed to a native call that was not open-coded"
+                            );
                             self.compile_native_call(builder, dest, code_ref, args, &undetermined)?;
                         }
                         return self.mark_in_arguments_moved(builder, &modes, args);
@@ -178,17 +187,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // pointer; a generic returning `T` does even where this call bound `T`
         // to `()`.
         let dest_ty = &self.func.value_types[dest.0 as usize];
-        let (arg_passes, ret) = self.callee_convention(code_ref);
-        let callee_uses_sret = ret == RetPass::Sret;
-
-        // Build call arguments: [rt_handle, sret?, user_args...]
-        let mut call_args = Vec::with_capacity(2 + args.len());
-        call_args.push(rt_handle);
+        let layout = self.callee_layout(code_ref);
+        let callee_uses_sret = layout.sret.is_some();
+        let mut call_args = vec![rt_handle; layout.len()];
 
         // Allocate space in caller's frame and pass sret pointer.
-        if callee_uses_sret && uses_sret(dest_ty) {
+        if callee_uses_sret && has_result(dest_ty) {
             let ptr = self.dest_addr(builder, dest)?;
-            call_args.push(ptr);
+            call_args[layout.sret.expect("checked")] = ptr;
 
             // For aggregates, the pointer IS the value (used by downstream as address).
             // For scalars, we load the value from sret location after the call.
@@ -200,7 +206,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     // Will load after call below.
                 }
             }
-        } else if matches!(ret, RetPass::Value(_)) {
+        } else if matches!(layout.ret, RetPass::Value(_)) {
             // Defined from the call's results below.
         } else {
             // A unit return travels in no register and needs no room written
@@ -215,40 +221,37 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.values.insert(dest, ptr);
             // A generic returning a `T` bound to `()` still takes the
             // pointer, and writes nothing through it.
-            if callee_uses_sret {
-                call_args.push(ptr);
+            if let Some(at) = layout.sret {
+                call_args[at] = ptr;
             }
         }
 
-
         // Each argument by pointer, or by value where the callee takes it so.
         let param_types = self.callee_param_types(code_ref);
-        for (i, arg) in args.iter().enumerate() {
-            match &arg_passes[i] {
-                ArgPass::Pointer => {
-                    let arg_val = self.get_operand_ptr(builder, arg)?;
-                    call_args.push(arg_val);
-                }
+        assert_eq!(args.len(), layout.args.len(), "an argument per parameter");
+        for (arg, ((pass, at), ty)) in args.iter().zip(layout.args.iter().zip(&param_types)) {
+            match pass {
+                ArgPass::Pointer => call_args[at.start] = self.get_operand_ptr(builder, arg)?,
                 ArgPass::Value(_) => {
-                    let ty = &param_types[i];
-                    match types::ir_type_to_cranelift(ty) {
-                        CraneliftRepr::Scalar(_) => call_args.push(self.get_operand_value(builder, arg)?),
-                        CraneliftRepr::Aggregate(_) => call_args.extend(self.operand_words(builder, arg, ty)?),
-                    }
+                    let regs = match types::ir_type_to_cranelift(ty) {
+                        CraneliftRepr::Scalar(_) => vec![self.get_operand_value(builder, arg)?],
+                        CraneliftRepr::Aggregate(_) => self.operand_words(builder, arg, ty)?,
+                    };
+                    call_args[at.clone()].copy_from_slice(&regs);
                 }
             }
         }
 
         // Then a descriptor for each of the callee's type parameters, for what
         // this call bound it to.
-        for binding in bindings {
-            let value = self.static_tydesc(builder, binding)?;
-            call_args.push(value);
+        assert_eq!(bindings.len(), layout.descriptors.len(), "a binding per type parameter");
+        for (at, binding) in layout.descriptors.clone().zip(bindings) {
+            call_args[at] = self.static_tydesc(builder, binding)?;
         }
 
         let results = self.emit_function_call(builder, callee_func_id, &call_args);
         self.return_if_abandoning(builder)?;
-        if matches!(ret, RetPass::Value(_)) {
+        if matches!(layout.ret, RetPass::Value(_)) {
             match types::ir_type_to_cranelift(dest_ty) {
                 CraneliftRepr::Scalar(_) => {
                     self.values.insert(dest, results[0]);
@@ -262,7 +265,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.mark_in_arguments_moved(builder, &modes, args)?;
 
         // For scalar sret returns, load the value from the sret location.
-        if callee_uses_sret && uses_sret(dest_ty) {
+        if callee_uses_sret && has_result(dest_ty) {
             if let CraneliftRepr::Scalar(scalar_ty) = types::ir_type_to_cranelift(dest_ty) {
                 let frame_slot = self.frame_slot.unwrap();
                 let dest_offset = self.layout.value_offset(dest.0);
@@ -318,13 +321,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     fn callee_param_types(&self, code_ref: &CodeRef) -> Vec<IrType> {
         match code_ref {
             CodeRef::Local(_) | CodeRef::External { .. } => self.declared_callee(code_ref)
-                .map(|c| c.param_types.clone())
-                .unwrap_or_default(),
+                .expect("resolve_code_ref rejects a callee never declared")
+                .param_types
+                .clone(),
             CodeRef::Module { module, id } => self.registry
                 .and_then(|r| r.get_module_function_as_unit(*module, CodeUnitId(id.0)))
                 .and_then(|u| u.function_context())
-                .map(|c| c.param_types.clone())
-                .unwrap_or_default(),
+                .expect("resolve_code_ref rejects a callee never declared")
+                .param_types
+                .clone(),
         }
     }
 

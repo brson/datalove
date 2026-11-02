@@ -1,7 +1,7 @@
 # Values in Registers for the Cranelift Backend
 
 Written October 2026, after profiling the AWFY benchmarks under the JIT.
-Measurements are from `benchvs` at commit `80b5d68cd`. Layers 1 and 2 are
+Measurements are from `benchvs` at commit `80b5d68cd`. All three layers are
 implemented; see [Where it stands](#user-content-where-it-stands).
 
 ## Contents
@@ -193,13 +193,11 @@ Exists:
 - `Instruction::for_each_operand` and `Terminator::for_each_operand`, which the
   use analysis walks.
 
-Missing:
-
-- The words representation, the use analysis that chooses it, and the two
-  operand accessors.
-- Words through block parameters, OSR entry loads of words, and `Return` from
-  words.
-- The internal entry, its adapter, and stubs with the register convention.
+Missing, when this was written: the words representation and the analysis
+choosing it, words through block parameters and `Return`, and the internal
+entry, its adapter and stubs with the register convention. All of it exists
+now except words at an OSR entry; see
+[Where it stands](#user-content-where-it-stands).
 
 ## Phases
 
@@ -237,14 +235,24 @@ Missing:
 
 ## Where it stands
 
-Layers 1 and 2 were done in November 2026.
+All three layers were done in November 2026.
+
+Each layer keeps something somewhere other than its home, and is only right
+if it knows every use that writes the home or keeps its address. That is the
+IR's to say, for every instruction: `Instruction::for_each_place_use`
+(`crates/datalove-datafun-ir/src/lib.rs`) is exhaustive, so a new instruction
+does not compile until it says how it uses each place it names, and both
+analyses below read it rather than keeping lists of their own. Likewise the
+order of a call's parameters is written down once, in `ParamLayout`
+(`codegen/signature.rs`), which the signature, a call, a function's entry
+block, the JIT's adapter and its stubs all place their values by.
 
 **Layer 1** is `codegen/words.rs`. A value is held as words if its type is a
 static aggregate of at most 32 bytes and no use keeps or writes through its
-address (`find_word_values`): `GetFieldRef`, `DropField`, `OpAssign`, the
-collection operand of the mutating and reference-making collection
-instructions, a cursor's collection, and a call argument the callee takes
-`mut` or `out`. Words are cut as `bytes::pieces` cuts a copy, and a part is
+address (`find_word_values`): a use that changes, replaces or lends it, or a
+call argument the callee takes `mut` or `out`. A collection whose element is
+reached or which is walked stays in memory too, though such a use only reads
+it, because each would store it to its home again. Words are cut as `bytes::pieces` cuts a copy, and a part is
 shifted in or out of the piece holding it; a part that would straddle two
 falls back to memory. Every use not taught words asks for an address and gets
 the value's home with the words just stored there. An OSR entry holds nothing
@@ -288,9 +296,11 @@ is mostly instructions (33G against Java's 4.4G) and gained less.
 when their state is fixed (`compute_tracking`; a var declared without a
 value, one a loop gives a value it was entered without, and a script unit's
 stay tracked). A slot is held in registers, one Cranelift variable per word,
-if it is untracked, of a static type held as words or a scalar, and nothing
-writes through its address or keeps it: a `mut` or `out` argument, a field
-write or drop, an update of a collection in it, and a `GetFieldRef` rule it
+if it is untracked, of a static type held as words or a scalar, and every use
+of it is one compiled against the registers (`find_register_slots`): a read,
+a drop, a slot store, a scalar's update, an `in` or `ref` argument, and a
+`GetFieldRef` whose reference only an open-coded swap takes. A `mut` or `out`
+argument, a field write or drop, and an update of a collection in it rule it
 out. A use reading through its address gets its home written first. Writing
 through the home and reading the slot back after was tried and was slower
 than memory: a narrow store into the home and the wide loads after it are a

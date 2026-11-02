@@ -1,6 +1,8 @@
 //! Signatures: what a datalove function, a native and a local callee are
 //! called with.
 
+use std::ops::Range;
+
 use super::*;
 
 /// How a compiled function is handed one argument by another.
@@ -26,13 +28,7 @@ pub enum RetPass {
 /// The Cranelift types a value of `ty` is passed as by value, if it can be: a
 /// scalar's, or a small static aggregate's words.
 fn by_value(ty: &IrType) -> Option<Vec<cl_ir::Type>> {
-    if ty.is_dynamic() {
-        return None;
-    }
-    match types::ir_type_to_cranelift(ty) {
-        CraneliftRepr::Scalar(t) => Some(vec![t]),
-        CraneliftRepr::Aggregate(_) => super::words::word_pieces(ty).map(|cut| cut.into_iter().map(|(_, t)| t).collect()),
-    }
+    super::words::reg_pieces(ty).map(|cut| cut.into_iter().map(|(_, t)| t).collect())
 }
 
 /// How an argument for a parameter of `mode` and type `ty` is passed between
@@ -47,7 +43,7 @@ pub fn arg_pass(mode: ParamMode, ty: &IrType) -> ArgPass {
 
 /// How a result of type `ty` is given back between compiled functions.
 pub fn ret_pass(ty: &IrType) -> RetPass {
-    if !uses_sret(ty) {
+    if !has_result(ty) {
         return RetPass::Unit;
     }
     match by_value(ty) {
@@ -56,13 +52,73 @@ pub fn ret_pass(ty: &IrType) -> RetPass {
     }
 }
 
-/// Build the signature compiled functions call `func` by.
+/// Where each part of a call between compiled functions goes among the
+/// signature's parameters, and how its result comes back.
 ///
 /// The runtime handle comes first, then the `sret` pointer if the result goes
 /// back through one, then each argument as `arg_pass` says, and a descriptor
-/// for each type parameter last. A result `ret_pass` gives back by value comes
-/// back in registers. The calling convention is the tail one, which has
-/// registers for up to eight words of results where the system's has two.
+/// for each type parameter last. This is the one account of that order: the
+/// signature, a call, the function's own entry block, the adapter into it and
+/// the JIT's stub for it all place their values by it.
+#[derive(Clone, Debug)]
+pub struct ParamLayout {
+    /// Where the `sret` pointer is, if the result goes back through one.
+    pub sret: Option<usize>,
+    /// How each argument is passed, and where.
+    pub args: Vec<(ArgPass, Range<usize>)>,
+    /// Where the type parameters' descriptors are.
+    pub descriptors: Range<usize>,
+    pub ret: RetPass,
+}
+
+impl ParamLayout {
+    /// Where the runtime handle is.
+    pub const RT: usize = 0;
+
+    /// The layout of a call to a function of context `ctx`.
+    pub fn of(ctx: &FunctionContext) -> Self {
+        let ret = ret_pass(&ctx.return_type);
+        let mut next = Self::RT + 1;
+        let mut take = |n: usize| {
+            next += n;
+            next - n..next
+        };
+        let sret = (ret == RetPass::Sret).then(|| take(1).start);
+        let args = ctx.param_modes.iter().zip(&ctx.param_types)
+            .map(|(mode, ty)| {
+                let pass = arg_pass(*mode, ty);
+                let n = match &pass {
+                    ArgPass::Pointer => 1,
+                    ArgPass::Value(tys) => tys.len(),
+                };
+                (pass, take(n))
+            })
+            .collect();
+        let descriptors = take(ctx.type_param_count as usize);
+        ParamLayout { sret, args, descriptors, ret }
+    }
+
+    /// How many parameters there are.
+    pub fn len(&self) -> usize {
+        self.descriptors.end
+    }
+
+    /// The type of each parameter, in order.
+    fn param_types(&self) -> Vec<cl_ir::Type> {
+        let mut tys = vec![PTR_TYPE; self.len()];
+        for (pass, at) in &self.args {
+            if let ArgPass::Value(arg_tys) = pass {
+                tys[at.clone()].copy_from_slice(arg_tys);
+            }
+        }
+        tys
+    }
+}
+
+/// Build the signature compiled functions call `func` by, as `ParamLayout`
+/// lays it out. A result `ret_pass` gives back by value comes back in
+/// registers. The calling convention is the tail one, which has registers for
+/// up to eight words of results where the system's has two.
 ///
 /// Panics if the code unit is not a function.
 pub fn build_signature_for_func(
@@ -71,22 +127,10 @@ pub fn build_signature_for_func(
 ) -> cl_ir::Signature {
     let func_ctx = func.function_context()
         .expect("build_signature_for_func requires a function code unit");
+    let layout = ParamLayout::of(func_ctx);
     let mut sig = cl_ir::Signature::new(cranelift_codegen::isa::CallConv::Tail);
-    sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-    let ret = ret_pass(&func_ctx.return_type);
-    if ret == RetPass::Sret {
-        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-    }
-    for (mode, ty) in func_ctx.param_modes.iter().zip(&func_ctx.param_types) {
-        match arg_pass(*mode, ty) {
-            ArgPass::Pointer => sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)),
-            ArgPass::Value(tys) => sig.params.extend(tys.into_iter().map(cl_ir::AbiParam::new)),
-        }
-    }
-    for _ in 0..func_ctx.type_param_count {
-        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-    }
-    if let RetPass::Value(tys) = ret {
+    sig.params.extend(layout.param_types().into_iter().map(cl_ir::AbiParam::new));
+    if let RetPass::Value(tys) = layout.ret {
         sig.returns.extend(tys.into_iter().map(cl_ir::AbiParam::new));
     }
     sig
@@ -113,12 +157,8 @@ pub fn build_entry_signature_for_func(
     // Implicit rt_handle as first param (pointer to runtime).
     sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
 
-    // For non-Unit returns, add sret pointer as second param.
-    // Caller allocates space and passes pointer; callee writes result there.
-    // All returns use sret to avoid ABI complexity around register types.
-    let ret_ty = &func_ctx.return_type;
-    let has_sret = uses_sret(ret_ty);
-    if has_sret {
+    // Every result but unit goes back through a pointer the caller passes.
+    if has_result(&func_ctx.return_type) {
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
@@ -131,8 +171,6 @@ pub fn build_entry_signature_for_func(
     for _ in 0..func_ctx.type_param_count {
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
-
-    // No register return values. All returns use sret.
 
     sig
 }
@@ -176,20 +214,13 @@ pub fn build_native_signature(
     sig
 }
 
-/// Check if a return type uses sret (structure return) convention.
+/// Whether a function returning `ret_ty` gives anything back: whether its
+/// result is not unit.
 ///
-/// All non-Unit returns use sret. The caller allocates space and passes a
-/// pointer; the callee writes the result there. This avoids ABI complexity
-/// around integer vs float register returns.
-pub fn uses_sret(ret_ty: &IrType) -> bool {
+/// An entry from outside compiled code takes an `sret` pointer for every such
+/// result; a call between compiled functions does as `ret_pass` says.
+pub fn has_result(ret_ty: &IrType) -> bool {
     !matches!(ret_ty, IrType::Unit)
-}
-
-/// How a call to a function with this context passes each argument and gets
-/// its result back.
-pub fn convention_of(ctx: &FunctionContext) -> (Vec<ArgPass>, RetPass) {
-    let params = ctx.param_modes.iter().zip(&ctx.param_types).map(|(m, t)| arg_pass(*m, t)).collect();
-    (params, ret_pass(&ctx.return_type))
 }
 
 /// A function compiled beside this one, and what its signature asks for.
@@ -209,26 +240,24 @@ pub struct LocalCallee {
     pub type_param_count: u32,
     /// The types the callee declares its parameters as.
     pub param_types: Vec<IrType>,
-    /// How each argument is passed; see `arg_pass`.
-    pub args: Vec<ArgPass>,
-    /// How the result comes back, which is the callee's own return type's to
-    /// say: a generic returning `T` returns through `sret`, whatever a caller
-    /// bound `T` to.
-    pub ret: RetPass,
+    /// Where each argument goes, and how the result comes back, which is the
+    /// callee's own return type's to say: a generic returning `T` returns
+    /// through `sret`, whatever a caller bound `T` to.
+    pub layout: ParamLayout,
 }
 
 impl LocalCallee {
     /// What a call to `unit` has to pass, given the id it was declared under.
+    ///
+    /// Panics if the code unit is not a function.
     pub fn of(unit: &IrCodeUnit, func_id: FuncId) -> Self {
-        let ctx = unit.function_context();
-        let (args, ret) = ctx.map(convention_of).unwrap_or((Vec::new(), RetPass::Unit));
+        let ctx = unit.function_context().expect("a local callee is a function");
         LocalCallee {
             func_id,
-            param_modes: ctx.map(|c| c.param_modes.clone()).unwrap_or_default(),
-            type_param_count: ctx.map(|c| c.type_param_count).unwrap_or(0),
-            param_types: ctx.map(|c| c.param_types.clone()).unwrap_or_default(),
-            args,
-            ret,
+            param_modes: ctx.param_modes.clone(),
+            type_param_count: ctx.type_param_count,
+            param_types: ctx.param_types.clone(),
+            layout: ParamLayout::of(ctx),
         }
     }
 }
@@ -289,49 +318,33 @@ pub fn define_entry_adapter<M: Module>(
     builder.seal_block(entry);
     let params = builder.block_params(entry).to_vec();
 
-    let (passes, ret) = convention_of(func_ctx);
-    let mut next = 1;
-    let sret = uses_sret(&func_ctx.return_type).then(|| {
-        next = 2;
-        params[1]
-    });
-    let mut args = vec![params[0]];
-    if ret == RetPass::Sret {
-        args.push(sret.expect("a result through sret has one"));
+    // The entry's own parameters: the runtime handle, an `sret` for any
+    // result, a pointer per argument, and the descriptors.
+    let sret = has_result(&func_ctx.return_type).then(|| params[1]);
+    let mut entry_args = params[1 + sret.iter().count()..].iter().copied();
+
+    let layout = ParamLayout::of(func_ctx);
+    let mut args = vec![params[0]; layout.len()];
+    if let Some(at) = layout.sret {
+        args[at] = sret.expect("a result through sret has one");
     }
-    let flags = MemFlagsData::new();
-    for (pass, ty) in passes.iter().zip(&func_ctx.param_types) {
-        let ptr = params[next];
-        next += 1;
+    for ((pass, at), ty) in layout.args.iter().zip(&func_ctx.param_types) {
+        let ptr = entry_args.next().expect("an entry pointer per argument");
         match pass {
-            ArgPass::Pointer => args.push(ptr),
-            ArgPass::Value(_) => match types::ir_type_to_cranelift(ty) {
-                CraneliftRepr::Scalar(t) => args.push(builder.ins().load(t, flags, ptr, 0)),
-                CraneliftRepr::Aggregate(_) => {
-                    for (at, t) in super::words::word_pieces(ty).expect("passed by value") {
-                        args.push(builder.ins().load(t, flags, ptr, at));
-                    }
-                }
-            },
+            ArgPass::Pointer => args[at.start] = ptr,
+            ArgPass::Value(_) => args[at.clone()].copy_from_slice(&super::words::load_regs(&mut builder, ptr, ty)),
         }
     }
-    args.extend_from_slice(&params[next..]);
+    for (at, descriptor) in layout.descriptors.clone().zip(entry_args) {
+        args[at] = descriptor;
+    }
 
     let callee = module.declare_func_in_func(internal, builder.func);
     let call = builder.ins().call(callee, &args);
     let results = builder.inst_results(call).to_vec();
-    if let RetPass::Value(_) = ret {
+    if let RetPass::Value(_) = layout.ret {
         let sret = sret.expect("a result in registers has an sret to go through here");
-        match types::ir_type_to_cranelift(&func_ctx.return_type) {
-            CraneliftRepr::Scalar(_) => {
-                builder.ins().store(flags, results[0], sret, 0);
-            }
-            CraneliftRepr::Aggregate(_) => {
-                for ((at, _), &w) in super::words::word_pieces(&func_ctx.return_type).expect("returned by value").iter().zip(&results) {
-                    builder.ins().store(flags, w, sret, *at);
-                }
-            }
-        }
+        super::words::store_regs(&mut builder, sret, &func_ctx.return_type, &results);
     }
     builder.ins().return_(&[]);
     builder.finalize(isa.frontend_config());

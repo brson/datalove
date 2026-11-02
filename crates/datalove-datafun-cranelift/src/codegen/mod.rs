@@ -81,7 +81,7 @@ mod native_intrinsics;
 mod words;
 /// Slots held in registers.
 mod slot_vars;
-pub use words::word_pieces;
+pub use words::{load_regs, reg_pieces, store_regs, word_pieces};
 
 /// Why defining a function failed, with the verifier's own account where it
 /// is the verifier that refused it: `ModuleError` says only "Verifier errors".
@@ -108,7 +108,7 @@ pub struct Defined {
 }
 pub use signature::{
     arg_pass, build_entry_signature_for_func, define_entry_adapter, build_native_signature, build_signature_for_func,
-    convention_of, ret_pass, uses_sret, ArgPass, LocalCallee, RetPass,
+    has_result, ret_pass, ArgPass, LocalCallee, ParamLayout, RetPass,
 };
 pub use statics::{empty_function_unit, static_const_key, StaticConstLoc, StaticConsts};
 use osr::{reachable_from, OsrState};

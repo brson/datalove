@@ -2178,7 +2178,9 @@ file, as the REPL does.
 | `lower/src/const_expr.rs` | `lower_const_binding()`, `try_extract_literal()` |
 | `const/src/eval.rs` | `evaluate_prepared_const()` |
 | `const/src/inline.rs` | `inline_script_consts()`, `inline_module_functions()` |
-| `ir/src/lib.rs` | `IrCodeUnit`, `CodeRef`, `IrType`, `Instruction` |
+| `ir/src/lib.rs` | `IrCodeUnit`, `CodeRef`, `IrType`, `Instruction`; `Instruction::for_each_place_use`, how each instruction uses the places it names, which every analysis keeping a place out of its home reads |
+| `ir/src/simplify.rs` | `simplify`: copy forwarding, threading of options and results built to be unwrapped, block merging |
+| `ir/src/list_access.rs` | `reuse_list_accesses`: a list element reached once where nothing between changes the list |
 | `ir/src/layout.rs` | The layout authority for `IrType` |
 | `ir/src/frame_layout.rs` | Frame layout shared by every backend, the interpreter's `IrLayout` included |
 | `ir/src/registry.rs` | `ModuleFunctionRegistry`, `UnitFunctionRegistry` |
@@ -2199,5 +2201,8 @@ file, as the REPL does.
 | `sys/std/rider/build.rs` | Generates `symbols()` from `rider.dli` |
 | `interp/src/native.rs` | `NativeFunctionTable`, the C ABI bridge (`call_c`) |
 | `interp/src/dispatch.rs` | `CallDispatcher`, `DispatchResult` |
+| `cranelift/src/codegen/signature.rs` | `ParamLayout`, the order of a call's parameters between compiled functions; `define_entry_adapter`, the JIT's entry with the pointer convention |
+| `cranelift/src/codegen/words.rs` | Values held as words (layer 1 of [Values in Registers](plan-values-in-registers.md)); `reg_pieces`, `store_regs`, `load_regs` |
+| `cranelift/src/codegen/slot_vars.rs` | Slots held in registers (layer 3) |
 | `cranelift-jit/src/optimizing.rs` | Tiering dispatcher, and chaos mode for testing |
 | `cranelift-jit/src/stats.rs` | `JitStats`: what was compiled, and the crossings between the jit and the interpreter |

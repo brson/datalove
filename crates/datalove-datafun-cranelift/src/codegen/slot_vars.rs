@@ -9,9 +9,11 @@
 //!
 //! A use that reads through the slot's address gets its home with the slot
 //! just written there, as a value held as words does. A use that writes
-//! through it, or keeps it past its instruction, rules the slot out: a `mut`
-//! or `out` argument, a field write or drop, an update of a collection in
-//! it, and a `GetFieldRef`, whose reference is used later. Writing through
+//! through it, or keeps it past its instruction, rules the slot out unless it
+//! is one compiled against the registers: a `mut` or `out` argument, a field
+//! write or drop, an update of a collection in it, and a `GetFieldRef`, whose
+//! reference is used later. What each instruction does to the places it names
+//! the IR says (`Instruction::for_each_place_use`), for every instruction. Writing through
 //! the home and reading the slot back after was tried, and was slower than
 //! memory: a narrow store into the home and the wide loads after it are a
 //! store the processor cannot forward. Two writes are done in registers
@@ -25,17 +27,17 @@
 
 use std::collections::{HashMap, HashSet};
 
-use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
+use cranelift_codegen::ir as cl_ir;
 use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::Module;
 
 use datalove_datafun_intrinsics::NativeIntrinsic;
-use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrType, Operand, ParamMode, SlotDest, SlotId, ValueId};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrType, Operand, PlaceUse, SlotId, ValueId};
 
 use crate::types::{self, CraneliftRepr};
 use crate::CraneliftError;
 
-use super::words::word_pieces;
+use super::words::{reads_argument, reg_pieces, store_regs, word_pieces};
 use super::FunctionCompiler;
 
 /// A reference to a field of a slot held in registers, kept as where the
@@ -46,18 +48,6 @@ pub(super) struct FieldPlace {
     /// The field's offset in the slot.
     pub at: u32,
     pub ty: IrType,
-}
-
-/// How each word of a value of `ty` is held in a register: its offset and
-/// type, one for a scalar.
-fn reg_pieces(ty: &IrType) -> Option<Vec<(i32, cl_ir::Type)>> {
-    if ty.is_dynamic() {
-        return None;
-    }
-    match types::ir_type_to_cranelift(ty) {
-        CraneliftRepr::Scalar(t) => Some(vec![(0, t)]),
-        CraneliftRepr::Aggregate(_) => word_pieces(ty),
-    }
 }
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -75,36 +65,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .map(|(id, _)| id)
             .collect();
 
-        // A slot written through its address, or handed where it may be.
-        let mut pin = |op: &Operand| {
-            if let Operand::Slot(s) = op {
-                chosen.remove(s);
-            }
-        };
+        // A slot written through its address, or handed where it may be: any
+        // use but those compiled against the registers.
         for inst in self.func.blocks.iter().flat_map(|b| &b.instructions) {
-            match inst {
-                Instruction::Call { func, args, .. } | Instruction::ComptimeCall { func, args, .. } => {
-                    let modes = self.callee_param_modes(func);
-                    for (i, arg) in args.iter().enumerate() {
-                        if !matches!(modes.get(i), Some(ParamMode::In | ParamMode::Ref)) {
-                            pin(arg);
-                        }
-                    }
+            let modes = inst.call_target().map(|func| self.callee_param_modes(func)).unwrap_or_default();
+            inst.for_each_place_use(|op, place_use| {
+                let Operand::Slot(s) = op else { return };
+                let in_registers = match place_use {
+                    PlaceUse::Read | PlaceUse::Dropped => true,
+                    PlaceUse::Replaced => matches!(inst,
+                        Instruction::SlotStoreCopy { .. } | Instruction::SlotStoreCopyTracked { .. }
+                        | Instruction::SlotStoreMove { .. } | Instruction::SlotStoreMoveTracked { .. }),
+                    PlaceUse::Changed => matches!(inst,
+                        Instruction::OpAssign { .. } | Instruction::OpAssignChecked { .. })
+                        && types::ir_type_to_cranelift(&self.func.slot_types[s.0 as usize]).is_scalar(),
+                    // Decided below, with the field references.
+                    PlaceUse::Lent => matches!(inst, Instruction::GetFieldRef { .. }),
+                    PlaceUse::Passed(i) => reads_argument(&modes, i),
+                };
+                if !in_registers {
+                    chosen.remove(&s);
                 }
-                Instruction::OpAssign { place, .. } | Instruction::OpAssignChecked { place, .. } => {
-                    let scalar = self.get_operand_type(place).is_ok_and(|ty| types::ir_type_to_cranelift(&ty).is_scalar());
-                    if !scalar {
-                        pin(place);
-                    }
-                }
-                Instruction::SetField { slot: SlotDest::Local(s), .. }
-                | Instruction::SetFieldTracked { slot: SlotDest::Local(s), .. } => pin(&Operand::Slot(*s)),
-                Instruction::DropField { base, .. } => pin(base),
-                Instruction::ListSet { list, .. } => pin(list),
-                Instruction::MapSetValue { map, .. } | Instruction::MapUpsert { map, .. } => pin(map),
-                Instruction::TensorSet { tensor, .. } => pin(tensor),
-                _ => {}
-            }
+            });
         }
 
         // How each value is used, for the field references.
@@ -226,10 +208,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(super) fn materialize_slot(&self, builder: &mut FunctionBuilder, s: SlotId) -> Option<cl_ir::Value> {
         let regs = self.slot_regs(builder, s)?;
         let home = self.slot_home(builder, s);
-        let cut = reg_pieces(&self.func.slot_types[s.0 as usize]).expect("held in registers");
-        for ((at, _), r) in cut.iter().zip(regs) {
-            builder.ins().store(MemFlagsData::new(), r, home, *at);
-        }
+        store_regs(builder, home, &self.func.slot_types[s.0 as usize], &regs);
         Some(home)
     }
 

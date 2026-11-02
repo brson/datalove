@@ -459,7 +459,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     ///   some paths only; and one a loop body gives a value it was entered
     ///   without, which holds nothing on the first pass and something after.
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
-        self.bindings.iter().enumerate().map(|(i, info)| {
+        let tracking: Vec<TrackingCategory> = self.bindings.iter().enumerate().map(|(i, info)| {
             let id = BindingId(i as u32);
             if info.ty.is_copy() {
                 TrackingCategory::Copy
@@ -472,7 +472,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // In/Ref/Mut params and let bindings: deterministic state.
                 TrackingCategory::Precise
             }
-        }).collect()
+        }).collect();
+        // A var dropped where it may have been moved is dropped by its
+        // tracking byte; a precise one would be dropped twice.
+        for id in &self.maybe_held {
+            assert_ne!(tracking[id.0 as usize], TrackingCategory::Precise, "a var that may be held is tracked");
+        }
+        tracking
     }
 
     /// Allocate a new binding ID.

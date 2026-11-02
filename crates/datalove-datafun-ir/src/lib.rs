@@ -2440,6 +2440,140 @@ impl Instruction {
             }
         }
     }
+
+    /// Visit every place an instruction names, and how it uses it.
+    ///
+    /// The places are its operands, and the slots and parameters it names
+    /// outside them: a store's destination, a load's source, a walk's cursor.
+    /// An operand of reference type names the place it points at.
+    ///
+    /// Exhaustive, so a new instruction has to say. A backend that keeps a
+    /// place somewhere other than its home -- in registers -- has to know every
+    /// use that writes it or keeps its address, and one it was not told of
+    /// would change the home and leave the registers stale.
+    pub fn for_each_place_use(&self, mut f: impl FnMut(Operand, PlaceUse)) {
+        use Instruction as I;
+        use PlaceUse::*;
+        let local = |dest: &SlotDest| match dest {
+            SlotDest::Local(s) => Operand::Slot(*s),
+            SlotDest::External { unit, slot } => Operand::ExternalSlot { unit: *unit, slot: *slot },
+        };
+        match self {
+            I::Const { .. } | I::StaticRef { .. } | I::WrapNone { .. } | I::Nop => {}
+            I::Copy { src, .. } | I::Move { src, .. } | I::Widen { src, .. } | I::WidenFixed { src, .. }
+            | I::Clone { src, .. } | I::Unpack { src, .. } | I::GetField { src, .. }
+            | I::EnumDiscriminant { src, .. } | I::EnumPayload { src, .. }
+            | I::UnwrapOption { src, .. } | I::UnwrapResult { src, .. } => f(*src, Read),
+            I::WrapSome { inner, .. } | I::WrapOk { inner, .. } | I::WrapErr { inner, .. }
+            | I::ErrorFrom { inner, .. } | I::DataFrom { inner, .. } => f(*inner, Read),
+            I::UnaryOp { operand, .. } | I::UnaryOpChecked { operand, .. } | I::DebugLog { operand } => {
+                f(*operand, Read)
+            }
+            I::BinOp { lhs, rhs, .. } | I::BinOpChecked { lhs, rhs, .. } => {
+                f(*lhs, Read);
+                f(*rhs, Read);
+            }
+            I::OpAssign { place, rhs, .. } | I::OpAssignChecked { place, rhs, .. } => {
+                f(*place, Changed);
+                f(*rhs, Read);
+            }
+            I::Call { args, .. } | I::ComptimeCall { args, .. } => {
+                for (i, arg) in args.iter().enumerate() {
+                    f(*arg, Passed(i));
+                }
+            }
+            I::Intrinsic { args, .. } | I::Pack { fields: args, .. } | I::ListNew { elements: args, .. }
+            | I::SetNew { elements: args, .. } | I::TensorNew { elements: args, .. }
+            | I::TableNew { rows: args, .. } => args.iter().for_each(|a| f(*a, Read)),
+            I::EnumVariant { payload, .. } => payload.iter().for_each(|p| f(*p, Read)),
+            I::MapNew { entries, .. } => {
+                for (k, v) in entries {
+                    f(*k, Read);
+                    f(*v, Read);
+                }
+            }
+            I::GetFieldRef { src, .. } => f(*src, Lent),
+            I::SlotStoreCopy { dest, value } | I::SlotStoreCopyTracked { dest, value }
+            | I::SlotStoreMove { dest, value } | I::SlotStoreMoveTracked { dest, value } => {
+                f(local(dest), Replaced);
+                f(*value, Read);
+            }
+            I::SetField { slot, value, .. } | I::SetFieldTracked { slot, value, .. } => {
+                f(local(slot), Changed);
+                f(*value, Read);
+            }
+            I::ParamStore { param, value } | I::ParamStoreTracked { param, value } => {
+                f(Operand::Param(*param), Replaced);
+                f(*value, Read);
+            }
+            I::ParamSetField { param, value, .. } | I::ParamSetFieldTracked { param, value, .. } => {
+                f(Operand::Param(*param), Changed);
+                f(*value, Read);
+            }
+            I::RefStore { dest, value } | I::RefStoreTracked { dest, value } => {
+                f(*dest, Replaced);
+                f(*value, Read);
+            }
+            I::RefSetField { dest, value, .. } | I::RefSetFieldTracked { dest, value, .. } => {
+                f(*dest, Changed);
+                f(*value, Read);
+            }
+            I::SlotLoadCopy { slot, .. } | I::SlotLoadMove { slot, .. } | I::SlotLoadMoveTracked { slot, .. } => {
+                f(Operand::Slot(*slot), Read)
+            }
+            I::Drop { operand } | I::DropTracked { operand } | I::UnitEndDrop { operand }
+            | I::UnitEndDropTracked { operand } => f(*operand, Dropped),
+            I::DropViaRef { ref_value } => f(Operand::Value(*ref_value), Dropped),
+            I::DropField { base, .. } => f(*base, Changed),
+            I::ListGet { list: coll, index: key, .. } | I::ListBoundsCheck { list: coll, index: key, .. }
+            | I::ListElementRef { list: coll, index: key, .. } | I::MapGet { map: coll, key, .. }
+            | I::MapContainsKey { map: coll, key, .. } | I::MapValueRef { map: coll, key, .. }
+            | I::TensorGet { tensor: coll, index: key, .. } | I::TensorBoundsCheck { tensor: coll, index: key, .. }
+            | I::TensorIndexRef { tensor: coll, index: key, .. } => {
+                f(*coll, Read);
+                f(*key, Read);
+            }
+            I::ListSet { list: coll, index: key, value, .. } | I::MapSetValue { map: coll, key, value, .. }
+            | I::MapUpsert { map: coll, key, value } | I::TensorSet { tensor: coll, index: key, value, .. } => {
+                f(*coll, Changed);
+                f(*key, Read);
+                f(*value, Read);
+            }
+            I::CursorBegin { cursor, coll } => {
+                f(Operand::Slot(*cursor), Replaced);
+                f(*coll, Read);
+            }
+            I::CursorAdvance { cursor, coll } => {
+                f(Operand::Slot(*cursor), Changed);
+                f(*coll, Read);
+            }
+            I::CursorDone { cursor, .. } | I::CursorElem { cursor, .. } | I::CursorIndex { cursor, .. }
+            | I::CursorValue { cursor, .. } => f(Operand::Slot(*cursor), Read),
+        }
+    }
+}
+
+/// How an instruction uses a place it names; see
+/// [`Instruction::for_each_place_use`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceUse {
+    /// Reads what is there, or moves it out, and leaves the place itself as
+    /// it was. A reference it makes reaches only what the place owns -- a
+    /// list's element, a map's value -- and a walk copies the collection's
+    /// data pointers, so neither keeps the place's address.
+    Read,
+    /// Writes a whole new value over it.
+    Replaced,
+    /// Changes it where it is: a field of it, or a collection in it.
+    Changed,
+    /// Makes a reference into the place itself, which outlives the
+    /// instruction.
+    Lent,
+    /// Destroys what is there.
+    Dropped,
+    /// Passes it as argument `i` of a call, which reads, lends or changes it
+    /// as the callee's parameter's mode says.
+    Passed(usize),
 }
 
 impl Terminator {

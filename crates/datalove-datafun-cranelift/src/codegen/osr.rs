@@ -128,7 +128,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub fn compile_osr_as(mut self, symbol: &str, spec: OsrSpec) -> Result<Defined, CraneliftError> {
         let mut sig = cl_ir::Signature::new(self.isa.default_call_conv());
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-        if uses_sret(&self.func_ctx.return_type) {
+        if has_result(&self.func_ctx.return_type) {
             sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
         }
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
@@ -175,7 +175,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.switch_to_block(entry);
         let params = builder.block_params(entry).to_vec();
         self.rt_handle_param = Some(params[0]);
-        let has_sret = uses_sret(&self.func_ctx.return_type);
+        let has_sret = has_result(&self.func_ctx.return_type);
         if has_sret {
             self.sret_param = Some(params[1]);
         }

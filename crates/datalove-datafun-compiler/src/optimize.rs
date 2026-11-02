@@ -36,10 +36,23 @@ pub fn finish(func: &mut IrCodeUnit, inliner: &mut Inliner<'_>, promote: bool) {
     }
 }
 
+/// Whether `finish` may change `func`: a condition for each of its passes.
+///
+/// A pass added to `finish` needs one here too, or `finish_shared` skips it
+/// for every shared function. A debug build checks that `finish` leaves as it
+/// was a function this rules out.
+fn may_change(func: &IrCodeUnit, inliner: &Inliner<'_>, promote: bool) -> bool {
+    calls_inline(func, inliner.resolver()) || may_repeat(func) || promote && !func.const_values.is_empty()
+}
+
 /// `finish` for a function behind a handle, which stays shared where nothing
 /// changes it.
 pub fn finish_shared(unit: &mut Arc<IrCodeUnit>, inliner: &mut Inliner<'_>, promote: bool) {
-    if calls_inline(unit, inliner.resolver()) || may_repeat(unit) || promote && !unit.const_values.is_empty() {
+    if may_change(unit, inliner, promote) {
         finish(Arc::make_mut(unit), inliner, promote);
+    } else if cfg!(debug_assertions) {
+        let mut finished = IrCodeUnit::clone(unit);
+        finish(&mut finished, inliner, promote);
+        assert!(finished == **unit, "`finish` changed {}, which `may_change` ruled out", unit.name);
     }
 }

@@ -68,7 +68,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // before this store instruction.
                 let dest_addr = frame_slot.addr(builder, slot_offset as i32);
                 if let Some(words) = self.words_of(value) {
-                    Self::store_words_at(builder, dest_addr, slot_ty, words);
+                    super::words::store_words_at(builder, dest_addr, slot_ty, words);
                     return Ok(());
                 }
                 let src_ptr = self.get_operand_ptr(builder, value)?;
@@ -133,7 +133,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // here for the same reason.
                 let src = frame_slot.addr(builder, slot_offset as i32);
                 if self.holds_words(dest) {
-                    let words = Self::load_words(builder, src, slot_ty);
+                    let words = super::words::load_words(builder, src, slot_ty);
                     self.words.insert(dest, words);
                     return Ok(());
                 }
@@ -247,7 +247,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(_) => {
                 if let Some(words) = self.words_of(value) {
-                    Self::store_words_at(builder, addr, ty, words);
+                    super::words::store_words_at(builder, addr, ty, words);
                     return Ok(());
                 }
                 let src_ptr = self.get_operand_ptr(builder, value)?;

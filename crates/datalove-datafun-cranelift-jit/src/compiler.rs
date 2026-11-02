@@ -15,7 +15,7 @@ use target_lexicon::Triple;
 
 use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrCodeUnit, IrModuleId, IrType};
 use datalove_datafun_interp::{ExecutionContext, FuncIdentity, FunctionRegistry, IrInterpreter};
-use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
+use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, has_result};
 use datalove_datafun_cranelift::CraneliftError;
 use datalove_datafun_cranelift::runtime::RuntimeImports;
 use datalove_datafun_cranelift::tydesc_emit::TyDescEmitter;
@@ -162,6 +162,20 @@ pub struct JitCompiler {
 pub struct SendPtr(*const u8);
 unsafe impl Send for SendPtr {}
 unsafe impl Sync for SendPtr {}
+
+/// A function the JIT compiled.
+pub struct CompiledCode {
+    /// The entry from outside compiled code: an adapter with the pointer
+    /// convention `bridge::call_jit` calls by.
+    pub entry: *const u8,
+    /// Whether the entry takes an `sret` pointer.
+    pub uses_sret: bool,
+    /// The size of the function's code in bytes.
+    pub code_size: usize,
+    /// The function itself, which compiled callers call through its code
+    /// cell.
+    pub internal: *const u8,
+}
 
 impl JitCompiler {
     /// Create a new JIT compiler for the host target.
@@ -310,23 +324,20 @@ impl JitCompiler {
     /// the context the function runs in, which is where its callees are looked
     /// up.
     ///
-    /// Returns the entry from outside compiled code, an adapter with the
-    /// pointer convention `bridge::call_jit` calls by; whether it takes
-    /// `sret`; the code's size; and the function itself, which compiled
-    /// callers call through its code cell.
+    /// Compile a function to native code.
     pub fn compile_function<'a>(
         &mut self,
         func: &IrCodeUnit,
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
-    ) -> Result<(*const u8, bool, usize, *const u8), JitError> {
+    ) -> Result<CompiledCode, JitError> {
         self.compile_entry(func, ctx, registry, interp, None)
     }
 
     /// Compile an entry into `func` at a loop header, for a frame the
-    /// interpreter is running it in; see `codegen::OsrSpec`. Returns the code,
-    /// whether it takes `sret`, and its size in bytes.
+    /// interpreter is running it in; see `codegen::OsrSpec`. An OSR entry is
+    /// only entered from outside, and its `entry` and `internal` are the same.
     pub fn compile_osr<'a>(
         &mut self,
         func: &IrCodeUnit,
@@ -334,15 +345,11 @@ impl JitCompiler {
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
         spec: codegen::OsrSpec,
-    ) -> Result<(*const u8, bool, usize), JitError> {
+    ) -> Result<CompiledCode, JitError> {
         self.compile_entry(func, ctx, registry, interp, Some(spec))
-            .map(|(entry, sret, size, _)| (entry, sret, size))
     }
 
-    /// Compile `func`, entered at its start or, given `osr`, at a loop header:
-    /// the entry from outside compiled code, whether it takes `sret`, the
-    /// code's size, and the code compiled callers call. An OSR entry is only
-    /// entered from outside, and is both.
+    /// Compile `func`, entered at its start or, given `osr`, at a loop header.
     fn compile_entry<'a>(
         &mut self,
         func: &IrCodeUnit,
@@ -350,7 +357,7 @@ impl JitCompiler {
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
         osr: Option<codegen::OsrSpec>,
-    ) -> Result<(*const u8, bool, usize, *const u8), JitError> {
+    ) -> Result<CompiledCode, JitError> {
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
 
@@ -471,12 +478,14 @@ impl JitCompiler {
             None => code_ptr,
         };
 
-        // Determine if function uses sret.
         let func_ctx = func.function_context()
             .expect("function must be a function code unit");
-        let sret = uses_sret(&func_ctx.return_type);
-
-        Ok((entry_ptr, sret, code_size, code_ptr))
+        Ok(CompiledCode {
+            entry: entry_ptr,
+            uses_sret: has_result(&func_ctx.return_type),
+            code_size,
+            internal: code_ptr,
+        })
     }
 
     /// Collect all unique Call targets in a code unit.
@@ -589,19 +598,12 @@ impl JitCompiler {
         builder.switch_to_block(dispatch_block);
         builder.seal_block(dispatch_block);
 
-        // rt_handle is always first param.
-        let rt_handle = params[0];
-
         let callee_ctx = callee.function_context()
             .expect("callee must be a function code unit");
-        let (passes, ret) = codegen::convention_of(callee_ctx);
-
-        // Get sret ptr if applicable.
-        let (sret_ptr, user_args_start) = if ret == codegen::RetPass::Sret {
-            (Some(params[1]), 2)
-        } else {
-            (None, 1)
-        };
+        let layout = codegen::ParamLayout::of(callee_ctx);
+        let ret = &layout.ret;
+        let rt_handle = params[codegen::ParamLayout::RT];
+        let sret_ptr = layout.sret.map(|at| params[at]);
 
         // User arguments, each as a pointer, and after them the descriptors
         // for the parameters whose own type does not describe what arrives.
@@ -609,25 +611,19 @@ impl JitCompiler {
         // each argument's type from the callee's signature, and for those
         // parameters the signature says `data` where the caller has
         // something else. An argument passed by value is put in memory here.
-        let mut next = user_args_start;
-        let mut user_args = Vec::with_capacity(passes.len());
-        for (pass, ty) in passes.iter().zip(&callee_ctx.param_types) {
+        let mut user_args = Vec::with_capacity(layout.args.len());
+        for ((pass, at), ty) in layout.args.iter().zip(&callee_ctx.param_types) {
             match pass {
-                codegen::ArgPass::Pointer => {
-                    user_args.push(params[next]);
-                    next += 1;
-                }
-                codegen::ArgPass::Value(tys) => {
-                    let regs = &params[next..next + tys.len()];
-                    next += tys.len();
+                codegen::ArgPass::Pointer => user_args.push(params[at.start]),
+                codegen::ArgPass::Value(_) => {
                     let addr = stack_room(&mut builder, ty);
-                    store_regs(&mut builder, addr, ty, regs);
+                    codegen::store_regs(&mut builder, addr, ty, &params[at.clone()]);
                     user_args.push(addr);
                 }
             }
         }
         let user_args = &user_args;
-        let descriptors = params[next..].to_vec();
+        let descriptors = params[layout.descriptors.clone()].to_vec();
 
         // Build args array on stack.
         // Allocate stack slot for args array.
@@ -677,7 +673,7 @@ impl JitCompiler {
 
         // Where the result is written: through the caller's sret, into room
         // here for one that goes back in registers, or nowhere for unit.
-        let ret_dest = match (&ret, sret_ptr) {
+        let ret_dest = match (ret, sret_ptr) {
             (_, Some(sret)) => sret,
             (codegen::RetPass::Value(_), None) => stack_room(&mut builder, &callee_ctx.return_type),
             _ => builder.ins().iconst(PTR_TYPE, 0),
@@ -696,8 +692,8 @@ impl JitCompiler {
 
         // A result that goes back in registers is loaded from where it was
         // written.
-        let results = match &ret {
-            codegen::RetPass::Value(_) => load_regs(&mut builder, ret_dest, &callee_ctx.return_type),
+        let results = match ret {
+            codegen::RetPass::Value(_) => codegen::load_regs(&mut builder, ret_dest, &callee_ctx.return_type),
             _ => Vec::new(),
         };
         builder.ins().return_(&results);
@@ -722,28 +718,6 @@ fn stack_room(builder: &mut FunctionBuilder, ty: &IrType) -> cl_ir::Value {
     let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
         cl_ir::StackSlotKind::ExplicitSlot, size, 3));
     builder.ins().stack_addr(PTR_TYPE, slot, 0)
-}
-
-/// The Cranelift type of each register a value of `ty` passed by value is
-/// in, with where it lies in the value.
-fn reg_pieces(ty: &IrType) -> Vec<(i32, cl_ir::Type)> {
-    use datalove_datafun_cranelift::types::{ir_type_to_cranelift, CraneliftRepr};
-    match ir_type_to_cranelift(ty) {
-        CraneliftRepr::Scalar(t) => vec![(0, t)],
-        CraneliftRepr::Aggregate(_) => codegen::word_pieces(ty).expect("passed by value"),
-    }
-}
-
-/// Store `regs`, a value of `ty` passed by value, at `addr`.
-fn store_regs(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType, regs: &[cl_ir::Value]) {
-    for ((at, _), &r) in reg_pieces(ty).iter().zip(regs) {
-        builder.ins().store(MemFlagsData::new(), r, addr, *at);
-    }
-}
-
-/// Load a value of `ty` at `addr` into the registers it is passed by value in.
-fn load_regs(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType) -> Vec<cl_ir::Value> {
-    reg_pieces(ty).into_iter().map(|(at, t)| builder.ins().load(t, MemFlagsData::new(), addr, at)).collect()
 }
 
 /// Check that every runtime function compiled code may import has an

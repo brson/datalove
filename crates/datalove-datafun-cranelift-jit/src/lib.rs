@@ -43,7 +43,7 @@ use datalove_datafun_interp::{
 };
 use datalove_rt::c::LocalRtHandle;
 
-use compiler::JitCompiler;
+use compiler::{CompiledCode, JitCompiler};
 
 /// Error type for JIT operations.
 #[derive(Debug)]
@@ -220,7 +220,7 @@ impl JitEngine {
         };
         let start = Instant::now();
         match self.compiler.compile_osr(body, call_ctx.exec_ctx, call_ctx.registry, call_ctx.interp, spec) {
-            Ok((code_ptr, uses_sret, code_size)) => {
+            Ok(CompiledCode { entry: code_ptr, uses_sret, code_size, .. }) => {
                 let compile_time = start.elapsed();
                 self.stats.osr_compiled_count += 1;
                 self.stats.total_compile_time += compile_time;
@@ -375,7 +375,7 @@ impl JitEngine {
 
         let start = Instant::now();
         match self.compiler.compile_function(func, ctx, registry, interp) {
-            Ok((code_ptr, uses_sret, code_size, internal)) => {
+            Ok(CompiledCode { entry: code_ptr, uses_sret, code_size, internal }) => {
                 let compile_time = start.elapsed();
                 self.stats.compiled_count += 1;
                 self.stats.total_compile_time += compile_time;

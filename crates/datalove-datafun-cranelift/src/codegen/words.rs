@@ -10,11 +10,13 @@
 //! every field allows: a scalar never straddles two pieces.
 //!
 //! Which values are held so is decided before the body is compiled
-//! (`word_values`), from the value's type and its uses: a value whose address
-//! some use keeps, or writes through, stays in memory. Anything that has not
-//! been taught words asks for an address as before, and gets the value's home
-//! with the words just stored there, which is always right since a value never
-//! changes and its home is its own. See `botdocs/plan-values-in-registers.md`.
+//! (`word_values`), from the value's type and its uses as the IR describes
+//! them (`Instruction::for_each_place_use`): a value whose address some use
+//! keeps, or writes through, stays in memory. Anything that has not been
+//! taught words asks for an address as before, and gets the value's home with
+//! the words just stored there, which is right for a use that only reads, the
+//! only kind a value held as words has. See
+//! `botdocs/plan-values-in-registers.md`.
 
 use std::collections::HashSet;
 
@@ -22,7 +24,7 @@ use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFl
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
-use datalove_datafun_ir::{Instruction, IrType, Operand, ParamId, ParamMode, ValueId};
+use datalove_datafun_ir::{Instruction, IrType, Operand, ParamId, ParamMode, PlaceUse, ValueId};
 
 use crate::types::{self, CraneliftRepr};
 use crate::CraneliftError;
@@ -80,6 +82,81 @@ fn counts_at(ty: &IrType, base: u32, out: &mut Vec<u32>) {
     }
 }
 
+/// Whether a call with a callee of parameter modes `modes` only reads its
+/// argument `i`: passes it `in` or `ref`. A callee whose modes are unknown is
+/// taken to write through every argument.
+pub(super) fn reads_argument(modes: &[ParamMode], i: usize) -> bool {
+    matches!(modes.get(i), Some(ParamMode::In | ParamMode::Ref))
+}
+
+/// How a value of `ty` is held in registers, as each register's offset in it
+/// and type: one for a scalar, its words for a small aggregate. None for one
+/// that cannot be: of a dynamic type, or a larger aggregate.
+///
+/// What is passed by value between compiled functions, and what a slot held
+/// in registers is held as.
+pub fn reg_pieces(ty: &IrType) -> Option<Vec<(i32, cl_ir::Type)>> {
+    if ty.is_dynamic() {
+        return None;
+    }
+    match types::ir_type_to_cranelift(ty) {
+        CraneliftRepr::Scalar(t) => Some(vec![(0, t)]),
+        CraneliftRepr::Aggregate(_) => word_pieces(ty),
+    }
+}
+
+/// Store `regs`, the registers of a value of `ty`, at `addr`.
+pub fn store_regs(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType, regs: &[cl_ir::Value]) {
+    match types::ir_type_to_cranelift(ty) {
+        CraneliftRepr::Scalar(_) => {
+            builder.ins().store(MemFlagsData::new(), regs[0], addr, 0);
+        }
+        CraneliftRepr::Aggregate(_) => store_words_at(builder, addr, ty, regs),
+    }
+}
+
+/// Load a value of `ty` at `addr` into the registers it is held in.
+pub fn load_regs(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType) -> Vec<cl_ir::Value> {
+    match types::ir_type_to_cranelift(ty) {
+        CraneliftRepr::Scalar(t) => vec![builder.ins().load(t, MemFlagsData::new(), addr, 0)],
+        CraneliftRepr::Aggregate(_) => load_words(builder, addr, ty),
+    }
+}
+
+/// Store `words`, of type `ty`, at `addr`.
+pub(super) fn store_words_at(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType, words: &[cl_ir::Value]) {
+    let cut = word_pieces(ty).expect("words are of a type that can be held as words");
+    for ((at, _), &w) in cut.iter().zip(words) {
+        builder.ins().store(MemFlagsData::new(), w, addr, *at);
+    }
+}
+
+/// Load the words of a value of `ty` at `addr`.
+///
+/// A word holding a list's or a string's two counts, its size and its
+/// capacity, is loaded as the two and put together. What stored them may
+/// have stored only one -- a push the size, the runtime's growing each
+/// as a field of its own -- and a load the processor can forward from a
+/// store is one the store covers.
+pub(super) fn load_words(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType) -> Vec<cl_ir::Value> {
+    let cut = word_pieces(ty).expect("words are of a type that can be held as words");
+    let mut counts = Vec::new();
+    counts_at(ty, 0, &mut counts);
+    let flags = MemFlagsData::new();
+    cut.iter().map(|&(at, t)| {
+        if t == cl_types::I64 && counts.contains(&(at as u32)) && counts.contains(&(at as u32 + 4)) {
+            let low = builder.ins().load(cl_types::I32, flags, addr, at);
+            let high = builder.ins().load(cl_types::I32, flags, addr, at + 4);
+            let low = builder.ins().uextend(cl_types::I64, low);
+            let high = builder.ins().uextend(cl_types::I64, high);
+            let high = builder.ins().ishl_imm_u(high, 32);
+            builder.ins().bor(low, high)
+        } else {
+            builder.ins().load(t, flags, addr, at)
+        }
+    }).collect()
+}
+
 /// One part of an aggregate being built: a scalar at a byte offset.
 pub(super) type Part = (u32, cl_ir::Value);
 
@@ -107,42 +184,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             _ => {}
         };
-        for block in &self.func.blocks {
-            for inst in &block.instructions {
-                match inst {
-                    Instruction::GetFieldRef { src, .. } => pin(src),
-                    Instruction::DropField { base, .. } => pin(base),
-                    Instruction::OpAssign { place, .. } | Instruction::OpAssignChecked { place, .. } => pin(place),
-                    Instruction::ListSet { list, .. } | Instruction::ListElementRef { list, .. } => pin(list),
-                    Instruction::MapSetValue { map, .. } | Instruction::MapUpsert { map, .. }
-                    | Instruction::MapValueRef { map, .. } => pin(map),
-                    Instruction::TensorSet { tensor, .. } | Instruction::TensorIndexRef { tensor, .. } => pin(tensor),
-                    Instruction::CursorBegin { coll, .. } | Instruction::CursorAdvance { coll, .. } => pin(coll),
-                    Instruction::Call { func, args, .. } | Instruction::ComptimeCall { func, args, .. } => {
-                        let modes = self.callee_param_modes(func);
-                        for (i, arg) in args.iter().enumerate() {
-                            // A callee whose modes are unknown is taken to write
-                            // through every argument.
-                            if !matches!(modes.get(i), Some(ParamMode::In | ParamMode::Ref)) {
-                                pin(arg);
-                            }
-                        }
-                    }
-                    _ => {}
+        for inst in self.func.blocks.iter().flat_map(|b| &b.instructions) {
+            let modes = inst.call_target().map(|func| self.callee_param_modes(func)).unwrap_or_default();
+            inst.for_each_place_use(|op, place_use| {
+                let kept_or_written = match place_use {
+                    PlaceUse::Read | PlaceUse::Dropped => false,
+                    PlaceUse::Replaced | PlaceUse::Changed | PlaceUse::Lent => true,
+                    PlaceUse::Passed(i) => !reads_argument(&modes, i),
+                };
+                if kept_or_written {
+                    pin(&op);
                 }
+            });
+            // A collection whose element is reached, or which is walked, is
+            // only read, but each reach would store it to its home again.
+            match inst {
+                Instruction::ListElementRef { list: coll, .. } | Instruction::MapValueRef { map: coll, .. }
+                | Instruction::TensorIndexRef { tensor: coll, .. } | Instruction::CursorBegin { coll, .. }
+                | Instruction::CursorAdvance { coll, .. } => pin(coll),
+                _ => {}
             }
         }
         (chosen, params)
-    }
-
-    /// Store `regs`, the value or words of a value of `ty`, at `addr`.
-    pub(super) fn store_regs_at(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType, regs: &[cl_ir::Value]) {
-        match types::ir_type_to_cranelift(ty) {
-            CraneliftRepr::Scalar(_) => {
-                builder.ins().store(MemFlagsData::new(), regs[0], addr, 0);
-            }
-            CraneliftRepr::Aggregate(_) => Self::store_words_at(builder, addr, ty, regs),
-        }
     }
 
     /// Write parameter `pid`, kept in registers, to its home, and give the
@@ -150,7 +213,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(super) fn materialize_param(&self, builder: &mut FunctionBuilder, pid: ParamId) -> Option<cl_ir::Value> {
         let (regs, home) = self.param_regs.get(&pid)?;
         let addr = builder.ins().stack_addr(crate::types::PTR_TYPE, *home, 0);
-        Self::store_regs_at(builder, addr, &self.func_ctx.param_types[pid.0 as usize], regs);
+        store_regs(builder, addr, &self.func_ctx.param_types[pid.0 as usize], regs);
         Some(addr)
     }
 
@@ -193,42 +256,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let frame = self.frame_slot.expect("a value held as words has a home in the frame");
         let home = frame.addr(builder, self.layout.value_offset(vid.0) as i32);
         let ty = &self.func.value_types[vid.0 as usize];
-        Self::store_words_at(builder, home, ty, words);
+        store_words_at(builder, home, ty, words);
         Some(home)
-    }
-
-    /// Store `words`, of type `ty`, at `addr`.
-    pub(super) fn store_words_at(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType, words: &[cl_ir::Value]) {
-        let cut = word_pieces(ty).expect("words are of a type that can be held as words");
-        for ((at, _), &w) in cut.iter().zip(words) {
-            builder.ins().store(MemFlagsData::new(), w, addr, *at);
-        }
-    }
-
-    /// Load the words of a value of `ty` at `addr`.
-    ///
-    /// A word holding a list's or a string's two counts, its size and its
-    /// capacity, is loaded as the two and put together. What stored them may
-    /// have stored only one -- a push the size, the runtime's growing each
-    /// as a field of its own -- and a load the processor can forward from a
-    /// store is one the store covers.
-    pub(super) fn load_words(builder: &mut FunctionBuilder, addr: cl_ir::Value, ty: &IrType) -> Vec<cl_ir::Value> {
-        let cut = word_pieces(ty).expect("words are of a type that can be held as words");
-        let mut counts = Vec::new();
-        counts_at(ty, 0, &mut counts);
-        let flags = MemFlagsData::new();
-        cut.iter().map(|&(at, t)| {
-            if t == cl_types::I64 && counts.contains(&(at as u32)) && counts.contains(&(at as u32 + 4)) {
-                let low = builder.ins().load(cl_types::I32, flags, addr, at);
-                let high = builder.ins().load(cl_types::I32, flags, addr, at + 4);
-                let low = builder.ins().uextend(cl_types::I64, low);
-                let high = builder.ins().uextend(cl_types::I64, high);
-                let high = builder.ins().ishl_imm_u(high, 32);
-                builder.ins().bor(low, high)
-            } else {
-                builder.ins().load(t, flags, addr, at)
-            }
-        }).collect()
     }
 
     /// Define `dest` as `words`: held so if it is to be, and otherwise stored
@@ -247,7 +276,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
         let ty = self.func.value_types[dest.0 as usize].clone();
         let home = self.dest_addr(builder, dest)?;
-        Self::store_words_at(builder, home, &ty, &words);
+        store_words_at(builder, home, &ty, &words);
         self.values.insert(dest, home);
         Ok(())
     }
@@ -264,7 +293,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(regs);
         }
         let addr = self.get_operand_ptr(builder, op)?;
-        Ok(Self::load_words(builder, addr, ty))
+        Ok(load_words(builder, addr, ty))
     }
 
     /// The parts of operand `op`, of type `ty`, placed `at` bytes into what is
