@@ -318,5 +318,15 @@ time; stored as the word instead, Storage did.
 
 Measured against the precise vars alone, in cycles: Mandelbrot 46% fewer
 AOT, Towers 16%, N-body 13% (17% under the JIT), Sum 7%; the rest within
-noise. The JIT gains less: a loop entered by OSR keeps its slots in memory,
-which is all of Mandelbrot's, and its time.
+noise.
+
+An OSR entry first kept its slots in memory, and the JIT missed most of
+that: Mandelbrot's loop, like any long one in a function called once, is
+entered by OSR. It now holds them as a function does, read from the
+interpreter's frame on entry (`load_slots_from_frame`). Nothing has to be
+written back: OSR code runs the rest of the call, and a call it abandons is
+dropped without the interpreter looking in the frame. Under the JIT that
+took Mandelbrot from 2.51G cycles to 1.34G, Sum 11% and Storage 10%; the
+rest ran the same instructions. Values are still not held as words in an
+OSR entry: its carried values are a variable each, an aggregate's holding
+its address in the frame.

@@ -22,8 +22,14 @@
 //! `mem_replace` is a place in the slot's words, and the swap or replace
 //! exchanges the words of it.
 //!
-//! A tracked slot keeps its tracking byte in memory and stays there, and so
-//! does every slot of an OSR entry, which is the interpreter's.
+//! A tracked slot keeps its tracking byte in memory and stays there.
+//!
+//! An OSR entry carries on in the interpreter's frame, and its slots are held
+//! in registers as a function's are, read from the frame on entry. Nothing
+//! reads them back: the code runs the rest of the call, and a call it abandons
+//! is dropped by the interpreter without looking in the frame. A reference
+//! the interpreter made to a slot before the entry is one the IR made, and
+//! the analysis, which reads the whole function, has ruled that slot out.
 
 use std::collections::{HashMap, HashSet};
 
@@ -32,12 +38,12 @@ use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::Module;
 
 use datalove_datafun_intrinsics::NativeIntrinsic;
-use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrType, Operand, PlaceUse, SlotId, ValueId};
+use datalove_datafun_ir::{BlockId, CodeRef, CodeUnitId, Instruction, IrType, Operand, PlaceUse, SlotId, ValueId};
 
 use crate::types::{self, CraneliftRepr};
 use crate::CraneliftError;
 
-use super::words::{reads_argument, reg_pieces, store_regs, word_pieces};
+use super::words::{load_regs, reads_argument, reg_pieces, store_regs, word_pieces};
 use super::FunctionCompiler;
 
 /// A reference to a field of a slot held in registers, kept as where the
@@ -54,9 +60,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// The slots to hold in registers, and the field references to keep as
     /// places in them.
     pub(super) fn find_register_slots(&self) -> (HashSet<SlotId>, HashMap<ValueId, FieldPlace>) {
-        if self.osr_spec.is_some() {
-            return (HashSet::new(), HashMap::new());
-        }
         let mut chosen: HashSet<SlotId> = self.func.slot_types.iter().enumerate()
             .map(|(i, ty)| (SlotId(i as u32), ty))
             .filter(|(id, ty)| !self.func.tracked_slots.contains(id)
@@ -210,6 +213,33 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let home = self.slot_home(builder, s);
         store_regs(builder, home, &self.func.slot_types[s.0 as usize], &regs);
         Some(home)
+    }
+
+    /// In an OSR entry, give each slot held in registers that the compiled
+    /// blocks name what the interpreter's frame holds for it.
+    pub(super) fn load_slots_from_frame(&self, builder: &mut FunctionBuilder, compiled: &HashSet<BlockId>) {
+        let mut named = HashSet::new();
+        for block in self.func.blocks.iter().filter(|b| compiled.contains(&b.id)) {
+            for inst in &block.instructions {
+                inst.for_each_place_use(|op, _| {
+                    if let Operand::Slot(s) = op {
+                        named.insert(s);
+                    }
+                });
+            }
+            block.terminator.for_each_operand(|op| {
+                if let Operand::Slot(s) = op {
+                    named.insert(*s);
+                }
+            });
+        }
+        let mut slots: Vec<SlotId> = named.into_iter().filter(|s| self.slot_vars.contains_key(s)).collect();
+        slots.sort_by_key(|s| s.0);
+        for s in slots {
+            let home = self.slot_home(builder, s);
+            let regs = load_regs(builder, home, &self.func.slot_types[s.0 as usize]);
+            self.set_slot_regs(builder, s, &regs);
+        }
     }
 
     /// Declare the variables of the slots held in registers.

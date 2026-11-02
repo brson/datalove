@@ -225,6 +225,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             };
             cranelift_codegen::ir::BlockArg::from(arg)
         }).collect();
+        self.load_slots_from_frame(builder, &reachable);
         let entry_jump = builder.ins().jump(self.blocks[&spec.header], &args);
 
         let consts = self.func.blocks.iter()
