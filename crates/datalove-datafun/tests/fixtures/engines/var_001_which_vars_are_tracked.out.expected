@@ -100,6 +100,7 @@ Analysis(
                         goto block1
                     block5:
                         v7 = load.move.tracked s0
+                        drop.tracked s0
                         drop v1
                         return v7
                 """,

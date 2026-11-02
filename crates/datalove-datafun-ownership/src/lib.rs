@@ -133,6 +133,12 @@ struct AnalysisCtx<'a, 'db> {
     /// The `var`s whose state the analysis cannot fix at every point, and
     /// which keep a tracking byte; see `compute_tracking`.
     stays_tracked: std::collections::HashSet<BindingId>,
+    /// The tracked vars that may hold a value where the analysis has them
+    /// moved: one a loop body gives a value it was entered without, which
+    /// holds nothing if the body never ran and something if it did. They are
+    /// dropped wherever what is live would be, their tracking byte saying
+    /// whether there is anything to drop; reading one is still refused.
+    maybe_held: std::collections::HashSet<BindingId>,
     /// The ways out of each loop currently being analyzed, innermost last.
     ///
     /// `break` and `continue` carry no label, so both always belong to the
@@ -275,6 +281,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             errors: Vec::new(),
             schedule: DropSchedule::default(),
             stays_tracked: Default::default(),
+            maybe_held: Default::default(),
             loop_exits: Vec::new(),
             walked: Vec::new(),
             arena: None,
@@ -554,7 +561,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         let mut to_drop = Vec::new();
         if !is_script_unit {
             for &id in &frame.bindings {
-                if frame.current_state.get(&id) == Some(&BindingState::Live) {
+                if self.owned_here(id, frame.current_state.get(&id)) {
                     let info = &self.bindings[id.0 as usize];
                     // Skip Copy types (no drop needed).
                     // Skip borrowed params (caller retains ownership).
@@ -759,6 +766,16 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         id
     }
 
+    /// Whether a binding in `state` is dropped where what a scope owns is: it
+    /// is live, or it may hold a value it is not known to (`maybe_held`).
+    fn owned_here(&self, id: BindingId, state: Option<&BindingState>) -> bool {
+        match state {
+            Some(BindingState::Live) => true,
+            Some(BindingState::Moved) => self.maybe_held.contains(&id),
+            None => false,
+        }
+    }
+
     /// Get all live bindings defined in scopes we're exiting (for break/continue).
     ///
     /// Only includes bindings that were created within the scopes being traversed,
@@ -768,7 +785,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         for frame in self.scope_stack.iter().rev() {
             // Only include bindings defined in this frame.
             for &id in &frame.bindings {
-                if frame.current_state.get(&id) == Some(&BindingState::Live) {
+                if self.owned_here(id, frame.current_state.get(&id)) {
                     let info = &self.bindings[id.0 as usize];
                     // A copy owns nothing, and a borrowed binding -- a `ref`
                     // parameter, a `for`'s element -- is someone else's to drop.
@@ -805,7 +822,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 if std::mem::replace(&mut seen[id.0 as usize], true) {
                     continue;
                 }
-                if frame.current_state.get(&id) == Some(&BindingState::Live) {
+                if self.owned_here(id, frame.current_state.get(&id)) {
                     let info = &self.bindings[id.0 as usize];
                     // Skip Copy types and borrowed params (caller retains ownership).
                     if !info.ty.is_copy() && !info.is_borrowed() {
@@ -820,7 +837,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 if std::mem::replace(&mut seen[id.0 as usize], true) || self.is_external(id) {
                     continue;
                 }
-                if state == BindingState::Live {
+                if self.owned_here(id, Some(&state)) {
                     let info = &self.bindings[id.0 as usize];
                     // Skip Copy types and borrowed params (caller retains ownership).
                     if !info.ty.is_copy() && !info.is_borrowed() {
@@ -1842,9 +1859,9 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         };
         let drops = early_return_drops(ctx, exit);
         schedule_not_yet_moved(ctx, stmt_idx, &live_before_value, &drops);
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
+        // Recorded even when empty: a var a loop turns out to give a value
+        // joins it afterwards (`maybe_held`).
+        ctx.schedule.before_try_return.insert(stmt_idx, drops);
     }
 
     for step in &place.steps {
@@ -1872,9 +1889,9 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     });
     if target_may_early_return {
         let drops = early_return_drops(ctx, FunctionExit::Set { set_index: stmt.local_index });
-        if !drops.is_empty() {
-            ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
-        }
+        // Recorded even when empty: a var a loop turns out to give a value
+        // joins it afterwards (`maybe_held`).
+        ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
     }
 
     if let Some(id) = ctx.lookup(place.root.text(ctx.db)) {
@@ -1988,9 +2005,9 @@ fn analyze_leaving_expr<'db>(
     let expr_key = ctx.early_return_in(expr).expect("it may return early");
     let drops = early_return_drops(ctx, FunctionExit::Early { expr_key });
     schedule_not_yet_moved(ctx, stmt_idx, &live_before, &drops);
-    if !drops.is_empty() {
-        ctx.schedule.before_try_return.insert(stmt_idx, drops);
-    }
+    // Recorded even when empty: a var a loop turns out to give a value
+    // joins it afterwards (`maybe_held`).
+    ctx.schedule.before_try_return.insert(stmt_idx, drops);
 }
 
 /// Schedule the bindings an expression moves, for an early return from inside
@@ -2038,16 +2055,16 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx:
     if may_early_return {
         let drops = ctx.live_bindings_for_return();
         schedule_not_yet_moved(ctx, stmt_idx, &live_before_value, &drops);
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
+        // Recorded even when empty: a var a loop turns out to give a value
+        // joins it afterwards (`maybe_held`).
+        ctx.schedule.before_try_return.insert(stmt_idx, drops);
     }
 
     // All live bindings need dropping before return.
     let drops = ctx.live_bindings_for_return();
-    if !drops.is_empty() {
-        ctx.schedule.before_return.insert(stmt_idx, drops.C());
-    }
+    // Recorded even when empty: a var a loop turns out to give a value
+    // joins it afterwards (`maybe_held`).
+    ctx.schedule.before_return.insert(stmt_idx, drops.C());
 
     // Mark dropped bindings as Moved so they're not included in scope exit drops.
     for id in drops {
@@ -2526,6 +2543,9 @@ struct LoopEntry<'db> {
     inits_before: BindingMap<OutParamInitState>,
     /// Where each binding given away on entry was given away.
     moved_at_before: BindingMap<ExprKey<'db>>,
+    /// The index the body's first statement is given; every statement in
+    /// the body has one from here on.
+    first_stmt: usize,
 }
 
 impl<'db> LoopEntry<'db> {
@@ -2545,7 +2565,7 @@ impl<'db> LoopEntry<'db> {
         let moved_at_before = ctx.scope_stack.last()
             .map(|frame| frame.moved_at.C())
             .unwrap_or_default();
-        LoopEntry { state_before, outer_live, inits_before, moved_at_before }
+        LoopEntry { state_before, outer_live, inits_before, moved_at_before, first_stmt: ctx.next_stmt_id }
     }
 }
 
@@ -2585,6 +2605,17 @@ fn check_loop_repeats<'db>(
             .any(|state| state.get(&id).copied().unwrap_or(BindingState::Live) == BindingState::Live);
         if live_at_body_end || live_at_continue {
             ctx.stays_tracked.insert(id);
+            ctx.maybe_held.insert(id);
+            // A way out of the function from inside the body, scheduled before
+            // this was known, may leave on a pass after the body gave it one.
+            let schedule = &mut ctx.schedule;
+            for exits in [&mut schedule.before_return, &mut schedule.before_try_return, &mut schedule.before_set_target_early_return] {
+                for (_, drops) in exits.range_mut(entry.first_stmt..) {
+                    if !drops.contains(&id) {
+                        drops.push(id);
+                    }
+                }
+            }
         }
     }
 

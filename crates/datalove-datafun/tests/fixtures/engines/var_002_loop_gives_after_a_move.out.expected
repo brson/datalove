@@ -1,0 +1,237 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        v1 = call u0(v0)
+                        v2 = const 3u32
+                        v3 = call u0(v2)
+                        v4 = const 0u32
+                        v5 = call u1(v4)
+                        v6 = const 2u32
+                        v7 = call u1(v6)
+                        v8 = const 20u32
+                        v9 = call u1(v8)
+                        v10 = pack tuple/5 {v1, v3, v5, v7, v9}
+                        debuglog v10
+                        v11 = const 0u32
+                        v12 = call u2(v11)
+                        v13 = const 2u32
+                        v14 = call u2(v13)
+                        v15 = const 5u32
+                        v16 = call u3(v15)
+                        v17 = const 0u32
+                        v18 = call u3(v17)
+                        v19 = pack tuple/4 {v12, v14, v16, v18}
+                        debuglog v19
+                        v20 = const 1u32
+                        v21 = call u5(v20)
+                        v22 = const 5u32
+                        v23 = call u5(v22)
+                        v24 = pack tuple/2 {v21, v23}
+                        debuglog v24
+                        drop v24
+                        unit_end
+                    
+                    fn after_the_loop(p0):
+                    block0:
+                        v0 = const "first"
+                        store.move.tracked s0, v0
+                        v1 = load.move.tracked s0
+                        v2 = const 0u32
+                        store.copy s1, v2
+                        goto block1
+                    block1:
+                        v3 = lt s1, p0
+                        branch v3, block2, block3
+                    block2:
+                        v4 = const "again"
+                        drop.tracked s0
+                        store.move.tracked s0, v4
+                        v5 = const 1u32
+                        v6 = intrinsic AddWrappingU32(s1, v5)
+                        store.copy s1, v6
+                        goto block1
+                    block3:
+                        v7 = load.copy s1
+                        drop.tracked s0
+                        drop v1
+                        return v7
+                    
+                    fn returning_from_the_body(p0):
+                    block0:
+                        v0 = const "first"
+                        store.move.tracked s0, v0
+                        v1 = load.move.tracked s0
+                        v2 = const 0u32
+                        store.copy s1, v2
+                        goto block1
+                    block1:
+                        v3 = const 10u32
+                        v4 = lt s1, v3
+                        branch v4, block2, block6
+                    block2:
+                        v5 = eq s1, p0
+                        branch v5, block3, block4
+                    block3:
+                        v6 = load.copy s1
+                        drop v1
+                        drop.tracked s0
+                        return v6
+                    block4:
+                        goto block5
+                    block5:
+                        v7 = const "again"
+                        drop.tracked s0
+                        store.move.tracked s0, v7
+                        v8 = const 1u32
+                        v9 = intrinsic AddWrappingU32(s1, v8)
+                        store.copy s1, v9
+                        goto block1
+                    block6:
+                        v10 = const 10u32
+                        drop.tracked s0
+                        drop v1
+                        return v10
+                    
+                    fn nested(p0):
+                    block0:
+                        v0 = const "first"
+                        store.move.tracked s0, v0
+                        v1 = load.move.tracked s0
+                        v2 = const 0u32
+                        store.copy s1, v2
+                        goto block1
+                    block1:
+                        v3 = lt s1, p0
+                        branch v3, block2, block6
+                    block2:
+                        v4 = const 0u32
+                        store.copy s2, v4
+                        goto block3
+                    block3:
+                        v5 = const 2u32
+                        v6 = lt s2, v5
+                        branch v6, block4, block5
+                    block4:
+                        v7 = const "inner"
+                        drop.tracked s0
+                        store.move.tracked s0, v7
+                        v8 = const 1u32
+                        v9 = intrinsic AddWrappingU32(s2, v8)
+                        store.copy s2, v9
+                        goto block3
+                    block5:
+                        v10 = const 1u32
+                        v11 = intrinsic AddWrappingU32(s1, v10)
+                        store.copy s1, v11
+                        goto block1
+                    block6:
+                        v12 = load.copy s1
+                        drop.tracked s0
+                        drop v1
+                        return v12
+                    
+                    fn continuing(p0):
+                    block0:
+                        v0 = const "first"
+                        store.move.tracked s0, v0
+                        v1 = load.move.tracked s0
+                        v2 = const 0u32
+                        store.copy s1, v2
+                        goto block1
+                    block1:
+                        v3 = lt s1, p0
+                        branch v3, block2, block6
+                    block2:
+                        v4 = const 1u32
+                        v5 = intrinsic AddWrappingU32(s1, v4)
+                        store.copy s1, v5
+                        v6 = const "again"
+                        drop.tracked s0
+                        store.move.tracked s0, v6
+                        v7 = const 1u32
+                        v8 = eq s1, v7
+                        branch v8, block3, block4
+                    block3:
+                        goto block1
+                    block4:
+                        goto block5
+                    block5:
+                        goto block1
+                    block6:
+                        v9 = load.copy s1
+                        drop.tracked s0
+                        drop v1
+                        return v9
+                    
+                    fn check(p0):
+                    block0:
+                        v0 = const 2u32
+                        v1 = eq p0, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "two"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        goto block3
+                    block3:
+                        v5 = copy p0
+                        v6 = ok v5
+                        return v6
+                    
+                    fn trying(p0):
+                    block0:
+                        v0 = const "first"
+                        store.move.tracked s0, v0
+                        v1 = load.move.tracked s0
+                        v2 = const 0u32
+                        store.copy s1, v2
+                        goto block1
+                    block1:
+                        v3 = lt s1, p0
+                        branch v3, block2, block5
+                    block2:
+                        v4 = const "again"
+                        drop.tracked s0
+                        store.move.tracked s0, v4
+                        v5 = call u4(s1)
+                        v6, v7, v8 = unwrap_result v5
+                        branch v8, block4, block3
+                    block3:
+                        v9 = err v7
+                        drop.tracked s0
+                        drop v1
+                        return v9
+                    block4:
+                        v10 = const 1u32
+                        v11 = intrinsic AddWrappingU32(v6, v10)
+                        store.copy s1, v11
+                        goto block1
+                    block5:
+                        v12 = load.copy s1
+                        v13 = ok v12
+                        drop.tracked s0
+                        drop v1
+                        return v13
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(0, 3, 0, 2, 10)\n(0, 2, 5, 0)\n(ok 1, er error \"two\")\n"),
+        ),
+    ],
+)
