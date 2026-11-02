@@ -310,6 +310,10 @@ end for
 `budget` is calculated before `category` is ever mentioned.
 Probably doesn't need to run again.
 
+todo our motivating example here is a change to a function
+while the rest of the document talks about variable bindings.
+need to reconcile.
+
 Continuing, imagine the month goes on,
 and my bank appends a coffee to the data file:
 
