@@ -79,19 +79,9 @@ pub unsafe fn any_destroy_local(
             // List has allocations.
             rtdt::TyTag::List => {
                 let list_ptr = value_in as *mut rtdt::List;
-                let list = &*list_ptr;
-                let element_ty = ty.list_element_ty();
-
-                if !list.data.is_null() {
-                    let status = destroy_elements(rt, list.data as *mut u8, list.size.0 as usize, element_ty);
-                    if status != RtStatus::Ok {
-                        return status;
-                    }
-                }
-
-                // Free the list buffer if it exists.
-                if !list.data.is_null() && list.capacity > rtdt::Index::ZERO {
-                    rt.alloc.free(element_ty.size(), element_ty.align(), list.capacity.0, list.data as *mut u8);
+                let status = destroy_list(rt, &*list_ptr, ty.list_element_ty());
+                if status != RtStatus::Ok {
+                    return status;
                 }
 
                 // Clear the list fields.
@@ -294,6 +284,24 @@ pub unsafe fn any_destroy_local(
     }
 }
 
+/// Destroy a list's elements and free its buffer, leaving its header as it
+/// was.
+unsafe fn destroy_list(rt: &mut rt_local::RtLocal, list: &rtdt::List, element_ty: rtdt::TyDescRef) -> RtStatus {
+    if list.data.is_null() {
+        return RtStatus::Ok;
+    }
+    unsafe {
+        let status = destroy_elements(rt, list.data as *mut u8, list.size.0 as usize, element_ty);
+        if status != RtStatus::Ok {
+            return status;
+        }
+        if list.capacity > rtdt::Index::ZERO {
+            rt.alloc.free(element_ty.size(), element_ty.align(), list.capacity.0, list.data as *mut u8);
+        }
+    }
+    RtStatus::Ok
+}
+
 /// Destroy `count` values of `ty` laid out one after another, a list's
 /// elements.
 ///
@@ -308,11 +316,17 @@ unsafe fn destroy_elements(rt: &mut rt_local::RtLocal, values: *mut u8, count: u
     unsafe {
         if ty.type_tag() == rtdt::TyTag::Option {
             let inner = ty.option_inner_ty();
-            let payload_offset = rtdt::layout::option_payload_offset(inner.align()) as usize;
+            // The payload follows the one-byte tag at the payload's alignment.
+            let payload_offset = inner.align() as usize;
+            let inner_list = (inner.type_tag() == rtdt::TyTag::List).then(|| inner.list_element_ty());
             for i in 0..count {
                 let value = values.add(i * size);
                 if (*(value as *const rtdt::Option)).tag == rtdt::OptionTag::Some {
-                    let status = any_destroy_local(rt, value.add(payload_offset), inner.as_ref());
+                    let payload = value.add(payload_offset);
+                    let status = match inner_list {
+                        Some(element_ty) => destroy_list(rt, &*(payload as *const rtdt::List), element_ty),
+                        None => any_destroy_local(rt, payload, inner.as_ref()),
+                    };
                     if status != RtStatus::Ok {
                         return status;
                     }
