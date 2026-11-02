@@ -155,7 +155,32 @@ mod unix_impl {
             }
         }
 
+        /// Allocate room for `count` values of `size` bytes aligned to
+        /// `align`.
+        ///
+        /// Inlined into every caller as far as popping a free list, which is
+        /// nearly every allocation; the rest is `alloc_slow`. As one function
+        /// out of line, a call cost more in saving and restoring the registers
+        /// its slow paths needed than the allocation itself did.
+        #[inline(always)]
         pub unsafe fn alloc(&mut self, size: u32, align: u32, count: IndexRepr) -> *mut u8 {
+            // `count` bounded first, so that the product cannot overflow.
+            let block = ((size as usize) * (count as usize).min(MAX_SMALL_SIZE + 1)).max(align as usize);
+            if block <= MAX_SMALL_SIZE && (align as usize) <= PAGE_SIZE && (count as usize) <= MAX_SMALL_SIZE
+                && self.leak_check_mode == LeakCheckMode::Ignore
+            {
+                let class = size_to_class_index(block);
+                let head = self.free_lists[class];
+                if !head.is_null() {
+                    self.free_lists[class] = unsafe { (*head).next };
+                    return head as *mut u8;
+                }
+            }
+            unsafe { self.alloc_slow(size, align, count) }
+        }
+
+        #[inline(never)]
+        unsafe fn alloc_slow(&mut self, size: u32, align: u32, count: IndexRepr) -> *mut u8 {
             let total_size = (size as usize)
                 .checked_mul(count as usize)
                 .expect("allocation size overflow");
@@ -197,7 +222,23 @@ mod unix_impl {
             });
         }
 
+        /// Free what `alloc` gave for the same `size`, `align` and `count`.
+        ///
+        /// Inlined as far as pushing onto a free list; see `alloc`.
+        #[inline(always)]
         pub unsafe fn free(&mut self, size: u32, align: u32, count: IndexRepr, ptr: *mut u8) {
+            let block = ((size as usize) * (count as usize).min(MAX_SMALL_SIZE + 1)).max(align as usize);
+            if !ptr.is_null() && block <= MAX_SMALL_SIZE && (align as usize) <= PAGE_SIZE && (count as usize) <= MAX_SMALL_SIZE
+                && self.leak_check_mode == LeakCheckMode::Ignore
+            {
+                unsafe { self.push_free_list(size_to_class_index(block), ptr) };
+                return;
+            }
+            unsafe { self.free_slow(size, align, count, ptr) }
+        }
+
+        #[inline(never)]
+        unsafe fn free_slow(&mut self, size: u32, align: u32, count: IndexRepr, ptr: *mut u8) {
             if ptr.is_null() {
                 return;
             }
@@ -1088,6 +1129,48 @@ mod tests {
                     rt.free(*size, 8, (*count).into(), *ptr);
                 }
 
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        /// Allocations interleaved with frees with leak checking off, which
+        /// is the only mode `alloc` and `free` take their inlined fast paths
+        /// in, and the test suite runs with it on. Every live block is
+        /// filled with its own byte and checked before it is freed, so two
+        /// blocks given out over each other show.
+        #[test]
+        fn proptest_fast_paths_keep_blocks_apart(
+            ops in prop::collection::vec(
+                (1u32..3000, prop::sample::select(vec![1u32, 8, 16, 64, 4096, 8192]), 1u32..4, any::<bool>()),
+                1..200,
+            )
+        ) {
+            let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Ignore);
+            let mut live: Vec<(u32, u32, u32, *mut u8, u8)> = Vec::new();
+            let check = |&(size, _, count, ptr, fill): &(u32, u32, u32, *mut u8, u8)| unsafe {
+                std::slice::from_raw_parts(ptr, (size * count) as usize).iter().all(|&b| b == fill)
+            };
+            unsafe {
+                for (i, (size, align, count, free_one)) in ops.into_iter().enumerate() {
+                    if free_one && !live.is_empty() {
+                        let block = live.swap_remove(i % live.len());
+                        prop_assert!(check(&block));
+                        rt.free(block.0, block.1, block.2.into(), block.3);
+                        continue;
+                    }
+                    let ptr = rt.alloc(size, align, count.into());
+                    prop_assert!(!ptr.is_null());
+                    prop_assert!(is_aligned(ptr, align as usize));
+                    let fill = i as u8;
+                    std::ptr::write_bytes(ptr, fill, (size * count) as usize);
+                    live.push((size, align, count, ptr, fill));
+                }
+                for block in &live {
+                    prop_assert!(check(block));
+                    rt.free(block.0, block.1, block.2.into(), block.3);
+                }
                 rt.shutdown();
             }
         }
