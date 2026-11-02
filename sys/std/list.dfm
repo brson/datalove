@@ -96,6 +96,7 @@ end fun
 
 // A list of n clones of one element.
 fun repeated<T>(ref elem: T, n: index): [T]
+  inline
   var built: [T] = []
   call list_fill(mut built, ref elem, n)
   ret built

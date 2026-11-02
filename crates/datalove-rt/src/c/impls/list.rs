@@ -512,12 +512,18 @@ pub unsafe fn list_reserve_impl(
     unsafe { reserve(rt, list_value_mut as *mut List, element_ty, additional) }
 }
 
+/// The most bytes `list_fill_impl` writes an element at a time rather than
+/// by doubling, which calls `memcpy` for each run: a leaf of Storage's tree is
+/// a few options, and the calls were most of what filling it cost.
+const SHORT_FILL: usize = 256;
+
 /// Append `n` clones of the element at `element_in`.
 ///
-/// An element that owns nothing is copied, a byte one by a fill and any other
-/// by doubling what has been written. Otherwise each is cloned in turn, the
-/// size kept up as it goes, so that a clone failing leaves the list holding
-/// the ones before it.
+/// An element that owns nothing -- of a type that owns nothing, or an option
+/// that is `none` -- is copied: a byte one by a fill, a short run an element
+/// at a time, and a long one by doubling what has been written. Otherwise
+/// each is cloned in turn, the size kept up as it goes, so that a clone
+/// failing leaves the list holding the ones before it.
 pub unsafe fn list_fill_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
@@ -533,12 +539,19 @@ pub unsafe fn list_fill_impl(
     }
     let mut list = unsafe { ListMut::new(list_ptr, element_ty) };
     let size = element_ty.size() as usize;
-    if element_ty.is_plain() {
+    let owns_nothing = element_ty.is_plain()
+        || element_ty.type_tag() == rtdt::TyTag::Option
+            && unsafe { (*(element_in as *const rtdt::Option)).tag } != rtdt::OptionTag::Some;
+    if owns_nothing {
         let start = list.end_ptr();
         let total = n as usize * size;
         if size == 1 {
             unsafe { std::ptr::write_bytes(start, element_in.read(), total) };
-        } else if total > 0 {
+        } else if total <= SHORT_FILL {
+            for i in 0..n as usize {
+                unsafe { rtdt::bytes::copy_value(element_in, start.add(i * size), size) };
+            }
+        } else {
             unsafe { rtdt::bytes::copy_value(element_in, start, size) };
             let mut done = size;
             while done < total {
