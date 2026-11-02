@@ -53,11 +53,15 @@ I did not prove correctness.
 
 
 
+**Part 1. Background**
 
 - <!-- and -->
   [What is a reactive script?](#user-content-what-is-a-reactive-script)
 - <!-- and -->
   [Datalove's design for reactivity](#user-content-dataloves-design-for-reactivity)
+
+**Part 2. Experiments**
+
 - <!-- but..therefore -->
   [If one unit moves or mutates a binding how does that affect preceding units on replay?](#user-content-if-one-unit-moves-or-mutates-a-binding-how-does-that-affect-preceding-units-on-replay)
 - <!-- therefore -->
@@ -74,6 +78,9 @@ I did not prove correctness.
   [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
 - <!-- therefore -->
   [A complete recursive algebra of recompiles and reruns for moves and mutations](#user-content-a-complete-recursive-algebra-of-recompiles-and-reruns-for-moves-and-mutations)
+ 
+**Part 3. Results and Discussion**
+
 - <!-- but..therefore -->
   [Where the static picture is approximate](#user-content-where-the-static-picture-is-approximate)
 - <!-- but..therefore -->
@@ -103,19 +110,20 @@ Motivating example.
 -->
 
 Datalove is an interactive scripting language.
-The compiler and interpreter live together in a long-running process called the _engine_.
-In Datalove reactivity applies to scripts.
-Conceptually, a script runs to completion,
+The compiler and interpreter live together in a long-running engine.
+In Datalove reactivity applies to scripts (distinct from modules).
+A script runs to completion,
 then the engine waits for some external force to change the code or input data,
-then the script runs to completion again.
-With careful design though we avoid actually running the script again.
+then it recompiles and reruns the script to completion again.
+That is what I mean by _reactive_.
+To recompile and rerun could require the same amount of work as the initial compile and run.
+With careful design though the engine avoids fully recompiling and rerunning the script.
 As the code changes and as its input data changes,
 the engine preserves its existing state and only reevaluates
-exactly what is necessary to produce a correct new result.
-That is what I mean by _reactive_.
+what is necessary to produce a correct new result.
 
 Here is an example script one might hack on interactively,
-performing the kind of simple data transformation Datalove is designed around.
+performing the kind of data transformation Datalove is designed for.
 It reads a month of bank transactions,
 sorts each payee into a category,
 totals the categories,
@@ -208,13 +216,14 @@ The `require data` statement includes data at compile time,
 bound to a variable named `transactions`,
 and `output` just produces a binding observable in the runtime environment.
 Let's just assume these are reasonable standins for some future way to
-impose I/O on a reactive script.
+impose I/O on a script.
 
-Most of the remaining Datalove syntax in this example will be clear
-to readers of other common modern languages.
 The `%{string = int}` type is a map from `string` to `int`.
 The `!` sigil indicates sites of potential early-return errors,
-here a missing key in the `budget` map.
+here a missing key in the `budget` map, `budget[c]!`.
+"Greater than" is spelled `.>` because Datalove
+[matches `<` and `>` in the lexer](../datalit.md) (todo find a better link here).
+The remaining Datalove syntax in this example is similar to other common languages.
 
 The script produces `output`:
 
@@ -231,16 +240,10 @@ The script produces `output`:
 }
 ```
 
-In this script we expect to trigger recompilation and/or reevaluation
+In this script I expect to trigger recompilation and/or reevaluation
 when the input `transactions` changes,
 or when the script code itself changes,
 or when any of the modules it imports changes.
-
-In other cases the input might be state changes in response to UI events,
-the script being expected to quickly generate a new UI scene description,
-as in popular frameworks like React.
-In any case, the script is continually reevaluated,
-short-circuiting any computations that will provably not change across evaluations.
 
 Imagine we are developing this script experimentally.
 In the initial output nothing is overbudget,
@@ -249,6 +252,7 @@ and its transactions are currently being accumulated in the "other" category.
 So I teach the `category` function about it:
 
 ```datalove
+fun category(ref payee: string): string
   if (
     string.starts_with(ref payee, ref "TRADER JOES")
     or string.starts_with(ref payee, ref "SAFEWAY")
@@ -275,7 +279,38 @@ and groceries is now over budget:
 }
 ```
 
-Then the month goes on,
+What actually needs to recompile here?
+Definitely the `category` function I changed.
+Definitely not the imported modules.
+The rest of the script?
+Since the type of `category` didn't change I expect the rest of the script doesn't need to recompile.
+
+What actually needs to rerun here?
+A less obvious question.
+Probably anything that depends on the result of `category`.
+Not everything does:
+
+```datalove
+let budget: %{string = int} = %{
+  "groceries" = 25000,
+  "dining" = 15000,
+  "car" = 10000,
+  "bills" = 15000,
+  "other" = 5000
+}
+
+var spent: %{string = int} = %{}
+for t in ref transactions
+  let c = category(ref t.payee)
+  let so_far = map.get_or(ref spent, ref c, 0)
+  call map.insert(mut spent, c, so_far + t.cents)
+end for
+```
+
+`budget` is calculated before `category` is ever mentioned.
+Probably doesn't need to run again.
+
+Continuing, imagine the month goes on,
 and my bank appends a coffee to the data file:
 
 ```datalove
@@ -287,14 +322,17 @@ The totals for "dining" change putting me overbudget,
 If I then change the code to increase the dining budget,
 then `over` reevaluates back to `["groceries"]`.
 
+What actually needs to recompile?
+What actually needs to rerun?
+
 Let's not belabor this.
 You get the idea. Inputs change.
 Reevaluate just what needs to reevaluate.
 
-There are plenty of obstacles to doing this correctly and efficiently.
+There are obstacles to doing this correctly and efficiently.
 todo probably need some anithesis here.
 
-We'll develop the rules Datalove follows to make
+I'll develop the rules Datalove follows to make
 these cases and more work correctly,
 then circle back to a live demonstration of how this particular script actually reacts to modifications.
 
