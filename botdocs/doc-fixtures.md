@@ -121,11 +121,8 @@ came before a reset, and the player marks the reset and keeps it, so a replay
 can be read from its start.
 
 **The trace files sit in `mandocs/assets`** with the other scripts and
-images, and not beside the page that plays them. `datalove docs` builds each
-doc set's `assets` directory as a doc set of its own, with no pages, copying
-everything in it. The site generator copies a set's static assets before it
-makes the directories under it, so an asset in a subdirectory of a set with
-pages has nowhere to go; a set with no pages makes its directory first.
+images, and not beside the page that plays them. `datalove docs` copies
+everything in each doc set's `assets` directory as a static asset.
 
 ## Adding a replay
 

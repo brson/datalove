@@ -682,17 +682,8 @@ impl DocsCommand {
         let mandocs_dir = project_root.join("mandocs");
         let botdocs_dir = project_root.join("botdocs");
 
-        let static_assets = &["style.css"];
-
-        // Each set's `assets` directory is a set of its own, with no pages,
-        // because the site copies a set's static assets before it makes the
-        // directories under it: an asset named `assets/x.js` in the set above
-        // would have nowhere to go. A set with no pages makes its directory,
-        // copies its assets, and is done.
-        let mandocs_assets_dir = mandocs_dir.join("assets");
-        let botdocs_assets_dir = botdocs_dir.join("assets");
-        let mandocs_assets = asset_files(&mandocs_assets_dir)?;
-        let botdocs_assets = asset_files(&botdocs_assets_dir)?;
+        let mandocs_assets = static_assets(&mandocs_dir)?;
+        let botdocs_assets = static_assets(&botdocs_dir)?;
         let mandocs_assets: &[&str] = &mandocs_assets.iter().map(String::as_str).collect::<Vec<_>>();
         let botdocs_assets: &[&str] = &botdocs_assets.iter().map(String::as_str).collect::<Vec<_>>();
         let output_dir = project_root.join("docs");
@@ -701,7 +692,7 @@ impl DocsCommand {
             DocSet {
                 input_dir: &mandocs_dir,
                 mount: "",
-                static_assets,
+                static_assets: mandocs_assets,
                 extra_context: &[("cross_link_label", "Botdocs")],
                 link_context: &[("cross_link_url", "../botdocs/README.md")],
                 posts: Some(PostsConfig {
@@ -719,25 +710,9 @@ impl DocsCommand {
             DocSet {
                 input_dir: &botdocs_dir,
                 mount: "bot",
-                static_assets,
+                static_assets: botdocs_assets,
                 extra_context: &[("cross_link_label", "Mandocs")],
                 link_context: &[("cross_link_url", "../mandocs/README.md")],
-                posts: None,
-            },
-            DocSet {
-                input_dir: &mandocs_assets_dir,
-                mount: "assets",
-                static_assets: mandocs_assets,
-                extra_context: &[],
-                link_context: &[],
-                posts: None,
-            },
-            DocSet {
-                input_dir: &botdocs_assets_dir,
-                mount: "bot/assets",
-                static_assets: botdocs_assets,
-                extra_context: &[],
-                link_context: &[],
                 posts: None,
             },
         ];
@@ -750,13 +725,16 @@ impl DocsCommand {
     }
 }
 
-/// The names of the files in an `assets` directory.
-fn asset_files(dir: &std::path::Path) -> AnyResult<Vec<String>> {
+/// A doc set's static assets: its `style.css`, and every file in its
+/// `assets` directory.
+fn static_assets(dir: &std::path::Path) -> AnyResult<Vec<String>> {
+    let assets_dir = dir.join("assets");
     let mut assets = Vec::new();
-    for entry in std::fs::read_dir(dir).with_context(|| fmt!("failed to read {}", dir.display()))? {
-        assets.push(entry?.file_name().to_string_lossy().into_owned());
+    for entry in std::fs::read_dir(&assets_dir).with_context(|| fmt!("failed to read {}", assets_dir.display()))? {
+        assets.push(fmt!("assets/{}", entry?.file_name().to_string_lossy()));
     }
     assets.sort();
+    assets.insert(0, "style.css".S());
     Ok(assets)
 }
 
