@@ -1351,13 +1351,7 @@ _Therefore_ all these examples and more are tests.
 The examples in this document are test cases.
 Their code is test case input.
 The corresponding tables are the expected outcome.
-
-Ok that's not quite true.
-These aren't truly live, but they were verified at time of writing.
-The actual live test cases are in [this more comprehensive document](../../botdocs/script-reactivity-cases.md).
-They cover these cases and more.
-The text around them is less scrutinized.
-They are maintained by LLMs.
+This document is a live test suite.
 
 As I wrote this experiment iteratively (with my human brain and words)
 I also had LLMs validate it as a test suite while they implemented
@@ -1442,6 +1436,12 @@ LLMs can write and maintain this easily.
 LLMs also need thoughtful guiderails to help them maintain software in the direction I want.
 This test suite contains both the specification and its validation in a form that is easy for LLMs to maintain.
 This test suite is also in a form that is easy and useful for humans to read.
+
+The content of this document presents a consice narrative for readers.
+It includes the minimum description and cases to present the ideas.
+The repo also contains a [complete literate test suite](../../botdocs/script-reactivity-cases.md).
+They cover these cases and more.
+The text around them is less scrutinized, mostly written by LLMs.
 
 
 
