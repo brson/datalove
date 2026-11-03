@@ -12,13 +12,14 @@ use std::sync::Arc;
 use datalove_datafun_const::{eliminate_dead_code_unit, promote_function_consts};
 use datalove_datafun_ir::inline::{calls_inline, Inliner};
 use datalove_datafun_ir::list_access::{may_repeat, reuse_list_accesses};
-use datalove_datafun_ir::simplify::simplify;
+use datalove_datafun_ir::simplify::{empty_drops, remove_empty_drops, simplify};
 use datalove_datafun_ir::IrCodeUnit;
 
 /// Finish a function: each call to an inline function replaced by its body,
 /// list elements it reaches more than once reached once, what that leaves
-/// simplified and its dead code removed, and, where consts were inlined, the
-/// function's consts promoted to statics.
+/// simplified, drops of values that hold nothing removed, its dead code
+/// removed, and, where consts were inlined, the function's consts promoted to
+/// statics.
 ///
 /// Nothing here can fail: a cycle of inline functions, the one thing inlining
 /// cannot do, is refused by typecheck (F085).
@@ -28,7 +29,10 @@ pub fn finish(func: &mut IrCodeUnit, inliner: &mut Inliner<'_>, promote: bool) {
     if reused {
         simplify(func);
     }
-    if inlined || reused {
+    // Simplify does this too, where it runs; a drop of a `none` is as often
+    // in a function nothing was inlined into.
+    let undropped = remove_empty_drops(func);
+    if inlined || reused || undropped {
         eliminate_dead_code_unit(func);
     }
     if promote && !func.const_values.is_empty() {
@@ -42,7 +46,8 @@ pub fn finish(func: &mut IrCodeUnit, inliner: &mut Inliner<'_>, promote: bool) {
 /// for every shared function. A debug build checks that `finish` leaves as it
 /// was a function this rules out.
 fn may_change(func: &IrCodeUnit, inliner: &Inliner<'_>, promote: bool) -> bool {
-    calls_inline(func, inliner.resolver()) || may_repeat(func) || promote && !func.const_values.is_empty()
+    calls_inline(func, inliner.resolver()) || may_repeat(func) || !empty_drops(func).is_empty()
+        || promote && !func.const_values.is_empty()
 }
 
 /// `finish` for a function behind a handle, which stays shared where nothing

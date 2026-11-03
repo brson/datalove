@@ -185,7 +185,6 @@ Analysis(
                         v26 = pack tuple/7 {v9, v11, v13, v22, v23, v24, v25}
                         drop v3
                         drop v7
-                        drop v8
                         return v26
                 """,
             ),

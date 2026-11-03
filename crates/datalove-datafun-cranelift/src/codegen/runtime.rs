@@ -88,7 +88,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // `some`, which its tag says here without a call.
             None if tydesc.is_none() && matches!(ty, IrType::Option(_)) => {
                 let tag = builder.ins().load(cl_ir::types::I8, MemFlagsData::new(), ptr, 0);
-                let some = builder.ins().icmp_imm(cl_ir::condcodes::IntCC::Equal, tag, datalove_rtdt::OptionTag::Some as i64);
+                let some = builder.ins().icmp_imm_u(cl_ir::condcodes::IntCC::Equal, tag, datalove_rtdt::OptionTag::Some as i64);
                 let destroy_block = builder.create_block();
                 let after = builder.create_block();
                 builder.ins().brif(some, destroy_block, &[], after, &[]);

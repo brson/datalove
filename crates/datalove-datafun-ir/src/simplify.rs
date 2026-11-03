@@ -22,6 +22,8 @@
 //!   that defines what the unwrap did, once.
 //! - **Jumps to a block with one way in**, which is merged into the block that
 //!   jumps, and **jumps to a block that only jumps on**, which go straight on.
+//! - **Drops of values that hold nothing**: a `none` or an empty list, which
+//!   the drop would hand to the runtime to destroy nothing.
 //!
 //! Then the blocks are put in reverse postorder and those nothing reaches are
 //! dropped. Dead instructions are dead code elimination's.
@@ -39,7 +41,8 @@ pub fn simplify(unit: &mut IrCodeUnit) {
         let substituted = substitute_block_params(unit);
         let merged = merge_blocks(unit);
         let skipped = skip_empty_blocks(unit);
-        if !(forwarded || threaded || substituted || merged || skipped) {
+        let undropped = remove_empty_drops(unit);
+        if !(forwarded || threaded || substituted || merged || skipped || undropped) {
             break;
         }
     }
@@ -224,6 +227,64 @@ fn definitions(unit: &IrCodeUnit) -> ValueMap<(usize, usize)> {
         }
     }
     defs
+}
+
+/// Drops of values that hold nothing removed. Whether any were.
+pub fn remove_empty_drops(unit: &mut IrCodeUnit) -> bool {
+    let empty = empty_drops(unit);
+    if empty.is_empty() {
+        return false;
+    }
+    for block in &mut unit.blocks {
+        block.instructions.retain(|instr| !matches!(instr, Instruction::Drop { operand: Operand::Value(v) } if empty.contains(v)));
+    }
+    true
+}
+
+/// The values `unit` drops that hold nothing.
+///
+/// A value holds nothing if it was made as a `none` or an empty list, or moved
+/// or copied from one that was, and nothing has written it since. A value is
+/// written only where an instruction replaces, changes or lends it: a call
+/// never writes one, since only a place can be passed `mut` or `out` (D011,
+/// D012), and inlining puts the caller's place where the callee's parameter
+/// was.
+pub fn empty_drops(unit: &IrCodeUnit) -> ValueSet {
+    let mut written = ValueSet::with_capacity(unit.value_count);
+    let mut drops = false;
+    for instr in unit.blocks.iter().flat_map(|b| &b.instructions) {
+        drops |= matches!(instr, Instruction::Drop { operand: Operand::Value(_) });
+        instr.for_each_place_use(|op, place_use| {
+            if let Operand::Value(v) = op
+                && matches!(place_use, PlaceUse::Replaced | PlaceUse::Changed | PlaceUse::Lent)
+            {
+                written.insert(v);
+            }
+        });
+    }
+    if !drops {
+        return ValueSet::with_capacity(0);
+    }
+    let defs = definitions(unit);
+    let holds_nothing = |mut v: ValueId| loop {
+        if written.contains(&v) {
+            return false;
+        }
+        let Some(&(b, i)) = defs.get(&v) else { return false };
+        match &unit.blocks[b].instructions[i] {
+            Instruction::WrapNone { .. } => return true,
+            Instruction::ListNew { elements, .. } => return elements.is_empty(),
+            Instruction::Move { src: Operand::Value(w), .. } | Instruction::Copy { src: Operand::Value(w), .. } => v = *w,
+            _ => return false,
+        }
+    };
+    unit.blocks.iter()
+        .flat_map(|b| &b.instructions)
+        .filter_map(|instr| match instr {
+            Instruction::Drop { operand: Operand::Value(v) } if holds_nothing(*v) => Some(*v),
+            _ => None,
+        })
+        .collect()
 }
 
 /// How many times each value is read.
@@ -667,5 +728,49 @@ mod tests {
         let landing = unit.blocks.len() as u32 - 1;
         assert_eq!(unit.blocks[1].terminator, goto(landing, vec![A]));
         assert_eq!(unit.blocks[2].terminator, goto(landing, vec![B]));
+    }
+
+    /// Drop `v(1)`, made by `make`, after `between`.
+    fn made_then_dropped(make: Instruction, between: Vec<Instruction>) -> IrCodeUnit {
+        let mut instructions = vec![make];
+        instructions.extend(between);
+        instructions.push(Instruction::Drop { operand: Operand::Value(v(1)) });
+        function(vec![block(0, vec![], instructions, ret(A))])
+    }
+
+    fn drops(unit: &IrCodeUnit) -> usize {
+        unit.blocks.iter().flat_map(|b| &b.instructions).filter(|i| matches!(i, Instruction::Drop { .. })).count()
+    }
+
+    #[test]
+    fn a_dropped_none_is_not_dropped() {
+        let read = Instruction::DebugLog { operand: Operand::Value(v(1)) };
+        let mut unit = made_then_dropped(Instruction::WrapNone { dest: v(1) }, vec![read]);
+        assert!(remove_empty_drops(&mut unit));
+        assert_eq!(drops(&unit), 0);
+    }
+
+    #[test]
+    fn an_empty_list_moved_on_is_not_dropped() {
+        let made = Instruction::ListNew { dest: v(0), elements: vec![] };
+        let moved = Instruction::Move { dest: v(1), src: Operand::Value(v(0)) };
+        let mut unit = made_then_dropped(made, vec![moved]);
+        assert!(remove_empty_drops(&mut unit));
+        assert_eq!(drops(&unit), 0);
+    }
+
+    #[test]
+    fn a_list_with_elements_is_dropped() {
+        let mut unit = made_then_dropped(Instruction::ListNew { dest: v(1), elements: vec![A] }, vec![]);
+        assert!(!remove_empty_drops(&mut unit));
+        assert_eq!(drops(&unit), 1);
+    }
+
+    #[test]
+    fn an_empty_list_written_since_is_dropped() {
+        let set = Instruction::ListSet { is_valid: v(2), list: Operand::Value(v(1)), index: B, value: C };
+        let mut unit = made_then_dropped(Instruction::ListNew { dest: v(1), elements: vec![] }, vec![set]);
+        assert!(!remove_empty_drops(&mut unit));
+        assert_eq!(drops(&unit), 1);
     }
 }
