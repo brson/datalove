@@ -682,12 +682,19 @@ impl DocsCommand {
         let mandocs_dir = project_root.join("mandocs");
         let botdocs_dir = project_root.join("botdocs");
 
-        // A set copies the assets it has and skips the rest.
-        let mut assets: Vec<String> = ["style.css", "datalove-logo.svg", "datalove-prism.js", "datalove-replay.js"]
-            .iter().map(|asset| asset.S()).collect();
-        assets.extend(replay_files(&mandocs_dir)?);
-        assets.extend(replay_files(&botdocs_dir)?);
-        let static_assets: &[&str] = &assets.iter().map(String::as_str).collect::<Vec<_>>();
+        let static_assets = &["style.css"];
+
+        // Each set's `assets` directory is a set of its own, with no pages,
+        // because the site copies a set's static assets before it makes the
+        // directories under it: an asset named `assets/x.js` in the set above
+        // would have nowhere to go. A set with no pages makes its directory,
+        // copies its assets, and is done.
+        let mandocs_assets_dir = mandocs_dir.join("assets");
+        let botdocs_assets_dir = botdocs_dir.join("assets");
+        let mandocs_assets = asset_files(&mandocs_assets_dir)?;
+        let botdocs_assets = asset_files(&botdocs_assets_dir)?;
+        let mandocs_assets: &[&str] = &mandocs_assets.iter().map(String::as_str).collect::<Vec<_>>();
+        let botdocs_assets: &[&str] = &botdocs_assets.iter().map(String::as_str).collect::<Vec<_>>();
         let output_dir = project_root.join("docs");
 
         let doc_sets = [
@@ -717,6 +724,22 @@ impl DocsCommand {
                 link_context: &[("cross_link_url", "../mandocs/README.md")],
                 posts: None,
             },
+            DocSet {
+                input_dir: &mandocs_assets_dir,
+                mount: "assets",
+                static_assets: mandocs_assets,
+                extra_context: &[],
+                link_context: &[],
+                posts: None,
+            },
+            DocSet {
+                input_dir: &botdocs_assets_dir,
+                mount: "bot/assets",
+                static_assets: botdocs_assets,
+                extra_context: &[],
+                link_context: &[],
+                posts: None,
+            },
         ];
 
         Site { output_dir: &output_dir, doc_sets: &doc_sets, deployed_with: &[] }.build()?;
@@ -727,21 +750,14 @@ impl DocsCommand {
     }
 }
 
-/// The `.replay.js` files at the top of `dir`, which the pages under it
-/// play, recorded by `crates/datalove-doc-fixtures`.
-///
-/// They are at the top, beside the other static assets, because the site
-/// copies static assets before it makes the directories of the pages.
-fn replay_files(dir: &std::path::Path) -> AnyResult<Vec<String>> {
-    let mut replays = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let name = entry?.file_name().to_string_lossy().into_owned();
-        if name.ends_with(".replay.js") {
-            replays.push(name);
-        }
+/// The names of the files in an `assets` directory.
+fn asset_files(dir: &std::path::Path) -> AnyResult<Vec<String>> {
+    let mut assets = Vec::new();
+    for entry in std::fs::read_dir(dir).with_context(|| fmt!("failed to read {}", dir.display()))? {
+        assets.push(entry?.file_name().to_string_lossy().into_owned());
     }
-    replays.sort();
-    Ok(replays)
+    assets.sort();
+    Ok(assets)
 }
 
 impl ScriptWorldCommand {

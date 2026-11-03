@@ -5,8 +5,8 @@
 //! the modules and data it requires beside it. Recording it, as
 //! `datalove repl --load <world> --record <path>` does, gives a trace of the
 //! session after each input,
-//! which is written as a `.replay.js` file at the top of the documents, where
-//! the docs build finds it, for `mandocs/datalove-replay.js` to play.
+//! which is written as a `.replay.js` file in `mandocs/assets`, for
+//! `mandocs/assets/datalove-replay.js` to play.
 //!
 //! `BLESS=1` records the replays again and writes the files instead of
 //! checking them.
@@ -28,7 +28,7 @@ const REPLAYS: &[Replay] = &[
     Replay {
         name: "reactive-transactions",
         world: "reactive-transactions.world",
-        output: "mandocs/reactive-transactions.replay.js",
+        output: "mandocs/assets/reactive-transactions.replay.js",
     },
 ];
 

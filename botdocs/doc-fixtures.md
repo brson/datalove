@@ -43,8 +43,8 @@ small player that knows nothing of the engine.
 replays/<name>.world          the session, and the modules and data it requires
         | datalove repl --load <world> --record <path>, or the test
         v
-mandocs/<name>.replay.js      the trace, registered by name
-mandocs/datalove-replay.js    the player
+mandocs/assets/<name>.replay.js     the trace, registered by name
+mandocs/assets/datalove-replay.js   the player
 ```
 
 **A replay is one worldfile.** It is a session as `/save` writes it --
@@ -93,7 +93,7 @@ command error.
 
 ## The player
 
-`mandocs/datalove-replay.js` is plain JavaScript with no dependencies. It
+`mandocs/assets/datalove-replay.js` is plain JavaScript with no dependencies. It
 injects its own styles, uses the page's `--fg`, `--code-bg` and
 `--font-code` if they are set, and highlights code with Prism if the page has
 the `datalove` language. A page loads it, then the trace, and marks where the
@@ -101,8 +101,8 @@ player goes:
 
 ```html
 <div class="datalove-replay" data-replay="reactive-transactions"></div>
-<script src="../datalove-replay.js"></script>
-<script src="../reactive-transactions.replay.js"></script>
+<script src="../assets/datalove-replay.js"></script>
+<script src="../assets/reactive-transactions.replay.js"></script>
 ```
 
 The trace is a `.js` file calling `DataloveReplay.register(name, trace)`
@@ -120,12 +120,12 @@ diagnostics are turned into spans, as `ansi.rs` does for the terminal.
 came before a reset, and the player marks the reset and keeps it, so a replay
 can be read from its start.
 
-**The trace files sit at the top of `mandocs`**, beside the other static
-assets, and not beside the page that plays them. `datalove docs` adds every
-`*.replay.js` at the top of a doc set to its static assets. The site generator
-copies static assets before it makes the directories of the pages under it,
-and checks every `src` a page names, so a trace in `drafts/` could be neither
-copied nor linked.
+**The trace files sit in `mandocs/assets`** with the other scripts and
+images, and not beside the page that plays them. `datalove docs` builds each
+doc set's `assets` directory as a doc set of its own, with no pages, copying
+everything in it. The site generator copies a set's static assets before it
+makes the directories under it, so an asset in a subdirectory of a set with
+pages has nowhere to go; a set with no pages makes its directory first.
 
 ## Adding a replay
 

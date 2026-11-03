@@ -10,8 +10,8 @@
 // name, and puts the player wherever an element names that trace:
 //
 //     <div class="datalove-replay" data-replay="reactive-transactions"></div>
-//     <script src="../datalove-replay.js"></script>
-//     <script src="reactive-transactions.replay.js"></script>
+//     <script src="../assets/datalove-replay.js"></script>
+//     <script src="../assets/reactive-transactions.replay.js"></script>
 //
 // `DataloveReplay.mount(element, trace)` puts a player in an element directly.
 

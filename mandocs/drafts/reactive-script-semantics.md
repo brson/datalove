@@ -1472,5 +1472,5 @@ run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
 -->
 
 <div class="datalove-replay" data-replay="reactive-transactions"></div>
-<script src="../datalove-replay.js"></script>
-<script src="../reactive-transactions.replay.js"></script>
+<script src="../assets/datalove-replay.js"></script>
+<script src="../assets/reactive-transactions.replay.js"></script>
