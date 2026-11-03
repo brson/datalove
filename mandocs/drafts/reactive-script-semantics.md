@@ -1464,3 +1464,13 @@ then do the upstream research and refine based on the literature.
 _Therefore_ we implemented this.
 Here's a cool demo. Use original motivating example.
 -->
+
+<!--
+The replay is recorded from
+crates/datalove-doc-fixtures/replays/reactive-transactions.world;
+run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
+-->
+
+<div class="datalove-replay" data-replay="reactive-transactions"></div>
+<script src="../datalove-replay.js"></script>
+<script src="../reactive-transactions.replay.js"></script>

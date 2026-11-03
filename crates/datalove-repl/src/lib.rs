@@ -19,6 +19,9 @@ pub use executor_threaded::ThreadedExecutor;
 mod batch;
 pub use batch::{InputResult, run_script, run_source};
 
+mod record;
+pub use record::{TRACE_VERSION, Trace, TraceStep, TraceUnit, record_inputs, record_world};
+
 mod session;
 pub use session::{NumberedUnit, Session};
 
@@ -39,19 +42,47 @@ pub struct SavedInput {
 
 /// The inputs of a session a worldfile holds, in the order they were typed.
 ///
-/// A session is script units and REPL commands and nothing else, so a
-/// worldfile with modules, data, or riders in it is not one. Its `/save`s are
-/// left out: replaying one would overwrite the file being loaded with only
-/// the part of it read so far. So are its `/load`s, which would load the file
-/// again, and again, and its `/help`s, which change nothing but what is shown,
-/// and would show the help to someone who did not ask.
+/// A session `/save` writes is script units and REPL commands and nothing
+/// else, and the interactive REPL takes its library from the workspace, so a
+/// worldfile with modules, data, or riders in it is not one to load; a replay
+/// is, and [`read_world`] reads it.
 pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
+    let world = read_world(path)?;
+    if let Some(section) = world.library.first() {
+        bail!(
+            "{} holds a '{}' section, and a REPL session is script units and \
+             REPL commands only",
+            path.display(),
+            section.header(),
+        );
+    }
+    Ok(world.inputs)
+}
+
+/// A session and the library it runs against, as one worldfile holds them.
+pub struct World {
+    /// The module, data and rider sections, which make the library.
+    pub library: Vec<datalove_datafun::package_load_worldfile::WorldfileSection>,
+    /// The inputs, in the order they were typed.
+    pub inputs: Vec<SavedInput>,
+}
+
+/// Read a worldfile as a session and its library.
+///
+/// Its `/save`s are left out: replaying one would overwrite the file being
+/// loaded with only the part of it read so far. So are its `/load`s, which
+/// would load the file again, and again, and its `/help`s, which change
+/// nothing but what is shown, and would show the help to someone who did not
+/// ask. The sections that edit modules mid-file, which the memoization tests
+/// use, are not a session's.
+pub fn read_world(path: &std::path::Path) -> AnyResult<World> {
     use datalove_datafun::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 
     let file = std::fs::File::open(path)
         .with_context(|| fmt!("failed to open {}", path.display()))?;
     let parsed = parse_worldfile_sections(file)
         .with_context(|| fmt!("failed to read {}", path.display()))?;
+    let mut library = Vec::new();
     let mut inputs = Vec::new();
     for section in parsed.sections {
         let input = section.source().unwrap_or_default().trim().S();
@@ -67,16 +98,19 @@ pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
                     command => Command::ReplCommand(command),
                 }
             }
+            WorldfileSection::Module { .. } | WorldfileSection::Data { .. } | WorldfileSection::Rider { .. } => {
+                library.push(section);
+                continue;
+            }
             other => bail!(
-                "{} holds a '{}' section, and a REPL session is script units and \
-                 REPL commands only",
+                "{} holds a '{}' section, which a session does not have",
                 path.display(),
                 other.header(),
             ),
         };
         inputs.push(SavedInput { input, command });
     }
-    Ok(inputs)
+    Ok(World { library, inputs })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

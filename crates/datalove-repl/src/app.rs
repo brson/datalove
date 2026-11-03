@@ -1639,7 +1639,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 }
 
 /// The status a unit's evaluation leaves it with, as its bar shows it.
-fn status_of(eval: &script::Eval) -> UnitStatus {
+pub(crate) fn status_of(eval: &script::Eval) -> UnitStatus {
     match eval {
         script::Eval::Ran(_) | script::Eval::Value(_) => UnitStatus::Ran,
         script::Eval::NotCompiled(_) => UnitStatus::NotCompiled,

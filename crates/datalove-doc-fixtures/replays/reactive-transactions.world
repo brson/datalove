@@ -1,0 +1,179 @@
+// The budget example of mandocs/drafts/reactive-script-semantics.md, as the
+// session its replay plays.
+----------
+data local/home/transactions
+----------
+
+[
+  {day = 1, payee = "TRADER JOES #552", cents = 8412},
+  {day = 2, payee = "SHELL OIL 5741", cents = 4650},
+  {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675},
+  {day = 5, payee = "SAFEWAY 1123", cents = 6230},
+  {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380},
+  {day = 9, payee = "PG&E", cents = 11204},
+  {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540},
+  {day = 14, payee = "TRADER JOES #552", cents = 9177},
+  {day = 18, payee = "NETFLIX.COM", cents = 1549},
+  {day = 21, payee = "ZUNI CAFE", cents = 9840},
+  {day = 26, payee = "BI-RITE MARKET", cents = 3315}
+]
+
+----------
+scriptunit-fragment
+----------
+
+require module sys/std/list
+
+----------
+scriptunit-fragment
+----------
+
+require module sys/std/map
+
+----------
+scriptunit-fragment
+----------
+
+require module sys/std/string
+
+----------
+scriptunit-fragment
+----------
+
+require data local/home/transactions: [
+  {
+    day: u32,
+    payee: string,
+    cents: int,
+  }
+]
+
+----------
+scriptunit-fragment
+----------
+
+fun category(ref payee: string): string
+  if (
+    string.starts_with(ref payee, ref "TRADER JOES")
+    or string.starts_with(ref payee, ref "SAFEWAY")
+  )
+    ret "groceries"
+  else if (
+    string.contains(ref payee, ref "COFFEE")
+    or string.contains(ref payee, ref "CAFE")
+    or string.starts_with(ref payee, ref "TAQUERIA")
+  )
+    ret "dining"
+  else if string.starts_with(ref payee, ref "SHELL")
+    ret "car"
+  else if payee == "PG&E" or payee == "NETFLIX.COM"
+    ret "bills"
+  end if
+  ret "other"
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+let budget: %{string = int} = %{
+  "groceries" = 25000,
+  "dining" = 15000,
+  "car" = 10000,
+  "bills" = 15000,
+  "other" = 5000
+}
+
+----------
+scriptunit-fragment
+----------
+
+var spent: %{string = int} = %{}
+for t in ref transactions
+  let c = category(ref t.payee)
+  let so_far = map.get_or(ref spent, ref c, 0)
+  call map.insert(mut spent, c, so_far + t.cents)
+end for
+
+----------
+scriptunit-fragment
+----------
+
+var over: [string] = []
+for c, amount in ref spent
+  if amount .> budget[c]!
+    call list.push(mut over, c@)
+  end if
+end for
+
+----------
+scriptunit-fragment
+----------
+
+let output = {
+  spent = spent,
+  over = over
+}
+
+----------
+repl-command
+----------
+
+/edit 5 fun category(ref payee: string): string
+  if (
+    string.starts_with(ref payee, ref "TRADER JOES")
+    or string.starts_with(ref payee, ref "SAFEWAY")
+    or string.starts_with(ref payee, ref "BI-RITE")
+  )
+    ret "groceries"
+  else if (
+    string.contains(ref payee, ref "COFFEE")
+    or string.contains(ref payee, ref "CAFE")
+    or string.starts_with(ref payee, ref "TAQUERIA")
+  )
+    ret "dining"
+  else if string.starts_with(ref payee, ref "SHELL")
+    ret "car"
+  else if payee == "PG&E" or payee == "NETFLIX.COM"
+    ret "bills"
+  end if
+  ret "other"
+end fun
+
+----------
+repl-command
+----------
+
+/edit 6 let budget: %{string = int} = %{
+  "groceries" = 30000,
+  "dining" = 15000,
+  "bills" = 15000
+}
+
+----------
+repl-command
+----------
+
+/edit 6 let budget: %{string = int} = %{
+  "groceries" = 30000,
+  "dining" = 15000,
+  "car" = "lots",
+  "bills" = 15000
+}
+
+----------
+repl-command
+----------
+
+/edit 6 let budget: %{string = int} = %{
+  "groceries" = 30000,
+  "dining" = 15000,
+  "car" = 10000,
+  "bills" = 15000
+}
+
+----------
+scriptunit-expr
+----------
+
+output

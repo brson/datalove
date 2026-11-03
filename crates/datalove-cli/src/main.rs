@@ -86,6 +86,11 @@ struct ReplCommand {
     /// Replay a session `/save` wrote before the first prompt.
     #[arg(long, value_name = "WORLDFILE", conflicts_with = "script")]
     load: Option<PathBuf>,
+    /// With `--load`, write a trace of the session as JSON to this path, for
+    /// a web page to replay, instead of starting the REPL. The worldfile may
+    /// hold the modules, data and riders the session requires.
+    #[arg(long, value_name = "PATH", requires = "load")]
+    record: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -383,6 +388,11 @@ impl ReplCommand {
         if let Some(script_path) = &self.script {
             let local = local_library_for(Some(script_path), &cwd)?;
             datalove::repl::run_script(datalove::sys_packages::system_library(), local, script_path)
+        } else if let (Some(record_path), Some(world_path)) = (&self.record, &self.load) {
+            let trace = datalove::repl::record_world(datalove::sys_packages::system_library(), world_path)?;
+            let json = rmx::serde_json::to_string_pretty(&trace)?;
+            std::fs::write(record_path, json)
+                .with_context(|| fmt!("failed to write {}", record_path.display()))
         } else {
             let local = local_library_for(None, &cwd)?;
             datalove_repl_rat::run(
@@ -669,10 +679,15 @@ impl DocsCommand {
             .and_then(|p| p.parent())
             .ok_or_else(|| anyhow!("Failed to find project root"))?;
 
-        let static_assets = &["style.css", "datalove-logo.svg", "datalove-prism.js"];
-
         let mandocs_dir = project_root.join("mandocs");
         let botdocs_dir = project_root.join("botdocs");
+
+        // A set copies the assets it has and skips the rest.
+        let mut assets: Vec<String> = ["style.css", "datalove-logo.svg", "datalove-prism.js", "datalove-replay.js"]
+            .iter().map(|asset| asset.S()).collect();
+        assets.extend(replay_files(&mandocs_dir)?);
+        assets.extend(replay_files(&botdocs_dir)?);
+        let static_assets: &[&str] = &assets.iter().map(String::as_str).collect::<Vec<_>>();
         let output_dir = project_root.join("docs");
 
         let doc_sets = [
@@ -710,6 +725,23 @@ impl DocsCommand {
 
         Ok(())
     }
+}
+
+/// The `.replay.js` files at the top of `dir`, which the pages under it
+/// play, recorded by `crates/datalove-doc-fixtures`.
+///
+/// They are at the top, beside the other static assets, because the site
+/// copies static assets before it makes the directories of the pages.
+fn replay_files(dir: &std::path::Path) -> AnyResult<Vec<String>> {
+    let mut replays = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".replay.js") {
+            replays.push(name);
+        }
+    }
+    replays.sort();
+    Ok(replays)
 }
 
 impl ScriptWorldCommand {

@@ -1,0 +1,18 @@
+[package]
+name = "datalove-doc-fixtures"
+description = "The fixtures behind the documentation, and the tests that keep it fresh."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+# Tests, not a library anybody installs.
+publish = false
+repository.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+rmx.workspace = true
+datalove-repl.workspace = true
+# The replays run against the system library the binary ships.
+datalove-sys-packages.workspace = true

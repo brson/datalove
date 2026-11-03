@@ -13,6 +13,7 @@
 - [REPL Architecture](repl-architecture.md)
 - [The Responsive Scripting Environment](script-reactivity-architecture.md)
 - [Script Reactivity, Case by Case](script-reactivity-cases.md)
+- [Documentation Fixtures and Session Replays](doc-fixtures.md)
 - [Script Glossary](script-glossary.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datafun Grammar (EBNF)](datafun-ebnf.md)

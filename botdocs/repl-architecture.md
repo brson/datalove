@@ -47,6 +47,7 @@ datalove-repl/          The REPL's inputs and commands, and the UI-agnostic app
                         eval, load_session
   src/session.rs        Session: an Engine and the numbers of its units
   src/batch.rs          run_source and run_script, over `---`-separated inputs
+  src/record.rs         record_world: a trace of a session, for a web page to replay
   src/app.rs            ReplApp state machine, ReplExecutor trait
   src/executor_threaded.rs  The one executor: a worker thread owning a Session
 
@@ -69,8 +70,10 @@ worker: it carries out units and the commands that change the session. The
 rest of the commands are the app's, which carries them out itself; see
 [The command queue](#user-content-the-command-queue).
 
-`datalove-cli` calls `datalove_repl_rat::run()` for the interactive REPL and
-`datalove_repl::run_script` for `repl --script`. Both take the system library,
+`datalove-cli` calls `datalove_repl_rat::run()` for the interactive REPL,
+`datalove_repl::run_script` for `repl --script`, and `record_world` for
+`repl --load --record`, which writes the trace
+[doc-fixtures.md](doc-fixtures.md) describes. Both take the system library,
 and the workspace's own `local` library if it has one, from the caller; see
 [The engine](#user-content-the-engine). `script-world` uses `Engine` directly.
 
@@ -733,6 +736,9 @@ all.
 - **session_tests** also undo and redo every kind of change against a real
   engine, to the session as it was before each, and drop the redo stack and
   load the session saved after it back to the same numbers.
+- **record_tests** -- a trace recorded through `record_world`: the statuses,
+  the marks, and the details after appends and edits, and a worldfile's own
+  data and modules as the session's library.
 - **command_tests** -- how `/edit`, `/delete` and `/insert` are read, sources
   over several lines, comments before a command, and the usage of each.
 - **app_tests** -- the state machine against a scripted `MockExecutor`, with no
