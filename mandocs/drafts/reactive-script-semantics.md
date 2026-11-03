@@ -1360,13 +1360,11 @@ All three activities iterating together.
 Blog-driven and test-driven development.
 
 For each case the example script units
-and the expected step tables live outside the document
-in the test suite,
+and the expected step tables live outside the document in the test suite,
 in a single worldfile (most Datalove test cases are worldfiles).
-When the test suite runs it validates
-the results in the suite,
-then validates them against the document,
-then pastes the new results back into the document,
+When the test suite runs it validates the results in the suite,
+then validates them against this document,
+then inserts the new results back into the document,
 keeping it fresh.
 
 Here's a simple one, `edit-changes-operation.world`:
@@ -1420,15 +1418,16 @@ expect unit 2 is edited to read `b`
 The `expect` worldfile sections are inputs to the markdown tables in the document.
 The `scriptunit-edit` sections indicate edits to a script unit.
 They are representations of the same commands as executed by a human user of the scripting environment.
-Their code is merged into the `expect` tables as a "code" column when rendered to the document.
+Their code is merged into the tables as the "code" column when rendered to the document.
 
-The "uses", "this step" and "holds after" columns of the table
-are validated. The "because" column is documentation for the reader.
+The "uses", "this step" and "holds after" columns of the table are validated.
+The "because" column is documentation for the reader.
 
 I don't want to say more about the specifics of the test suite.
 What I do want to say is that I love thorough testing.
-This kind of elaborate and bespoke single-subsystem test suite can be useful.
-But I don't always write them.
+Designing an entire test suite to fit a single subsystem and purpose is powerful.
+They can express ideas that stock unit tests cannot.
+But they take outsized effort to write and maintain.
 In the past I have made elaborate and bespoke test suites when paid to do it,
 when I deemed the subsystem important enough to warrant maintaining it,
 and when I had the motivation to spend weeks writing it.
