@@ -164,6 +164,15 @@ session can `require module sys/std/string` and call into it. The engine keeps
 the pipeline, the descriptor and the natives, so a crash reset rebuilds the
 compiler and executor from them without building or loading a rider again.
 
+**An engine holds any number of sessions over one compile of the modules.**
+Each has its own units, compiled session, executor and runtime, and they share
+the database, the pipeline and the natives. The engine starts with one, which
+the methods on `Engine` itself act on and which is all the REPL uses;
+`Engine::open_session` opens more and `Engine::session(id)` gives a
+`SessionMut` to act on any. A runtime error or a crash resets only its own
+session. See [plan-multi-session.md](plan-multi-session.md) for where this is
+going: sessions on threads of their own.
+
 `ThreadedExecutor::spawn(sys, local)` takes `fn() -> SystemLibrary` instead of
 a value. The native addresses are raw pointers and so not `Send`, and the
 worker thread builds its own library. `datalove-cli` passes
@@ -171,14 +180,17 @@ worker thread builds its own library. `datalove-cli` passes
 binary; see [compiler-guide.md](compiler-guide.md) under "The Shipped Binary".
 
 **The roots follow the units.** Before every step -- an append, an edit, a
-splice -- `Engine::with_compiler` narrows the pipeline's roots to what the
-session's units will require once the step is done, plus the caller's
-`also_roots`, and compiles. A unit adding `require module sys/std/u8` brings
-`u8` into the compile, and truncating it away takes `u8` back out. When the
-module set moves, the executor is given the new module registry and the
-natives the new modules call before anything runs. The units already lowered
-are left alone, which is sound because a module's `IrModuleId` is given by
-path and kept for the pipeline's life.
+splice -- `SessionMut::with_compiler` narrows the pipeline's roots to what
+every open session's units will require once the step is done, plus the
+caller's `also_roots`, and compiles. A unit adding `require module sys/std/u8`
+brings `u8` into the compile, and truncating it away takes `u8` back out unless
+another session requires it. When the module set moves, the engine counts it,
+and a session whose executor holds modules from before the count is given the
+new module registry and the natives the new modules call before anything runs.
+It is the count and not the step that decides, because a session can come to
+require a module another session already brought in, and then nothing moves.
+The units already lowered are left alone, which is sound because a module's
+`IrModuleId` is given by path and kept for the pipeline's life.
 
 **A required module that does not compile is left out**, with every required
 module that reaches it, and the rest of the roots stay (`settle_roots` in
@@ -279,7 +291,7 @@ the reach is decided, and why the engine owns its database rather than
 borrowing it.
 
 `Engine::edit_module(library, package, module, source)` does the same from a
-module edit. Its seeds are the edited module, the modules that require it directly or not, and
+module edit, in every session, and returns each session's report. Its seeds are the edited module, the modules that require it directly or not, and
 any module the edit broke or fixed. The units importing from those are
 re-derived, and then the units reading what those compute. The broken-or-fixed
 seed is what the import edge alone would miss: a module that leaves the compile

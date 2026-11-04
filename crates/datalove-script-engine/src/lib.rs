@@ -1,15 +1,16 @@
 //! The datalove interactive scripting engine.
 //!
-//! An [`Engine`] holds a session of script units, compiled against a
+//! An [`Engine`] holds sessions of script units, compiled against a
 //! workspace's modules and run as they are submitted, and re-derives what an
-//! edit to one of them reaches. It knows nothing about how the units are
+//! edit to one of them reaches. The sessions share the compile of the modules;
+//! each has its own executor and runtime. It knows nothing about how the units are
 //! typed or shown: the REPL, `script-world`, and anything else that runs
 //! units one at a time drive it the same way.
 
 use serde::{Serialize, Deserialize};
 
 mod engine;
-pub use engine::{Compiled, Engine, ModuleErrors, OnCompileError, UnitStep};
+pub use engine::{Compiled, Engine, ModuleErrors, OnCompileError, SessionId, SessionMut, UnitStep};
 
 // The system library a driver supplies to the engine.
 pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};

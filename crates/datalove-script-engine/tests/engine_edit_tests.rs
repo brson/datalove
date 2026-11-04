@@ -497,8 +497,7 @@ fn editing_a_module_rederives_the_units_that_import_from_it() {
         "require module local/test/m\nimport m.f\nlet a = f(1)\n---\nlet b = 20");
     assert_eq!(value_of(&mut engine, "a"), "1");
 
-    let reports = engine
-        .edit_module("local", "test", "m", "fun f(x: int): int\n    ret x + 41\nend fun\n");
+    let reports = edit_module(&mut engine, "fun f(x: int): int\n    ret x + 41\nend fun\n");
 
     assert_eq!(reported(&reports), vec![1], "the importing unit, and not the unit that imports nothing");
     assert!(
@@ -517,8 +516,7 @@ fn a_module_edit_reaches_the_dependents_of_the_importing_unit() {
     run(&mut engine, 
         "require module local/test/m\nimport m.f\nlet a = f(1)\n---\nlet b = a + 5\n---\nlet c = 100");
 
-    let reports = engine
-        .edit_module("local", "test", "m", "fun f(x: int): int\n    ret x * 10\nend fun\n");
+    let reports = edit_module(&mut engine, "fun f(x: int): int\n    ret x * 10\nend fun\n");
 
     assert_eq!(reported(&reports), vec![1, 2], "the importing unit and the unit that reads its binding");
     assert_eq!(value_of(&mut engine, "a"), "10");
@@ -536,7 +534,7 @@ fn a_module_edit_that_does_not_compile_fails_its_units_until_fixed() {
     let mut engine = engine_with_module("fun f(x: int): int\n    ret x\nend fun\n");
     run(&mut engine, "require module local/test/m\nimport m.f\nlet a = f(1)\n---\nlet b = 20");
 
-    let reports = engine.edit_module("local", "test", "m", "fun f(x: int): int\n    ret \"nope\"\nend fun\n");
+    let reports = edit_module(&mut engine, "fun f(x: int): int\n    ret \"nope\"\nend fun\n");
     assert_eq!(rederived(&reports), vec![1]);
     // The module leaving the compile changes what every unit is typechecked
     // against, so the other unit is typechecked again, and comes out the
@@ -552,7 +550,7 @@ fn a_module_edit_that_does_not_compile_fails_its_units_until_fixed() {
     run(&mut engine, "let c = b + 1");
     assert_eq!(value_of(&mut engine, "c"), "21", "and new lines still compile");
 
-    let reports = engine.edit_module("local", "test", "m", "fun f(x: int): int\n    ret x + 1\nend fun\n");
+    let reports = edit_module(&mut engine, "fun f(x: int): int\n    ret x + 1\nend fun\n");
     assert_eq!(rederived(&reports), vec![1]);
     assert!(engine.module_errors().is_empty());
     assert_eq!(value_of(&mut engine, "a"), "2", "the unit is back, calling the fixed module");
@@ -569,7 +567,7 @@ fn fixing_a_module_brings_back_a_unit_that_never_ran() {
     let eval = eval_of(&mut engine, "require module local/test/m\nimport m.f\nlet a = f()");
     assert!(matches!(eval, Eval::NotCompiled(_)), "{eval:?}");
 
-    let reports = engine.edit_module("local", "test", "m", "fun f(): int\n    ret 7\nend fun\n");
+    let reports = edit_module(&mut engine, "fun f(): int\n    ret 7\nend fun\n");
 
     assert_eq!(reported(&reports), vec![1]);
     assert_eq!(value_of(&mut engine, "a"), "7");
@@ -586,7 +584,7 @@ fn a_module_edit_reaches_the_units_of_the_modules_requiring_it() {
     run(&mut engine, "require module local/test/n\nimport n.g\nlet a = g()");
     assert_eq!(value_of(&mut engine, "a"), "11");
 
-    let reports = engine.edit_module("local", "test", "m", "fun f(): int\n    ret 2\nend fun\n");
+    let reports = edit_module(&mut engine, "fun f(): int\n    ret 2\nend fun\n");
 
     assert_eq!(reported(&reports), vec![1]);
     assert_eq!(value_of(&mut engine, "a"), "12");
@@ -602,7 +600,7 @@ fn breaking_a_module_fails_the_units_of_the_modules_requiring_it() {
     ]);
     run(&mut engine, "require module local/test/n\nimport n.g\nlet a = g()");
 
-    let reports = engine.edit_module("local", "test", "m", "fun f(): int\n    ret \"nope\"\nend fun\n");
+    let reports = edit_module(&mut engine, "fun f(): int\n    ret \"nope\"\nend fun\n");
     assert_eq!(reported(&reports), vec![1]);
     let Some(Eval::NotCompiled(error)) = &reports[0].eval else {
         panic!("the unit importing from `n` fails: {reports:?}");
@@ -610,7 +608,7 @@ fn breaking_a_module_fails_the_units_of_the_modules_requiring_it() {
     assert!(error.starts_with("module `local/test/n` does not compile: "), "{error}");
     assert!(!bound(&mut engine, "a"));
 
-    engine.edit_module("local", "test", "m", "fun f(): int\n    ret 3\nend fun\n");
+    edit_module(&mut engine, "fun f(): int\n    ret 3\nend fun\n");
     assert_eq!(value_of(&mut engine, "a"), "13");
 }
 
@@ -828,4 +826,11 @@ fn a_unit_s_ownership_errors_render_as_diagnostics() {
     let moved = engine.unit_diagnostics(4, "unit 4", TextStyle::Plain);
     assert!(moved.contains("[D001]") && moved.contains("unit 4:3:9"), "{moved}");
     assert!(!moved.contains("D003"), "{moved}");
+}
+
+/// Edit `local/test/m`, saying what that did to the session the engine
+/// started with.
+fn edit_module(engine: &mut Engine, source: &str) -> Vec<UnitStep> {
+    let first = engine.first_session();
+    engine.edit_module("local", "test", "m", source).remove(&first).expect("the first session is reported")
 }

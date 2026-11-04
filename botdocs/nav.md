@@ -31,6 +31,7 @@
 - [Tables: What the Type System Is Missing](design-table-rows.md)
 - [Generics and Specialization](plan-generics.md)
 - [Script Reactivity](plan-script-reactivity.md)
+- [Script Sessions in Parallel](plan-multi-session.md)
 - [A Register Bytecode for the Interpreter](plan-bytecode.md)
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
 - [Testing the Engines Against One Reference](plan-engine-tests.md)
