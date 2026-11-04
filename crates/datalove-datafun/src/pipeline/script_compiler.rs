@@ -89,7 +89,7 @@ struct SessionUnit {
 /// units its going reaches; see [`ScriptCompiler::relower_deleted`].
 pub struct RemovedUnit {
     unit: ScriptUnit,
-    record: UnitLowerRecord,
+    record: Arc<UnitLowerRecord>,
 }
 
 /// The graph the units' records held before a re-derivation, which the reach
@@ -330,13 +330,18 @@ pub const FIRST_UNIT_ID: u32 = 1;
 ///
 /// See `botdocs/plan-script-reactivity.md` for why the compiler cannot simply
 /// be handed `&mut db` instead.
+///
+/// `Clone` so that a step can compile on a copy and keep it only once the
+/// compile is done: a compile that does not finish -- one salsa cancels, say
+/// -- leaves the session as it was, to compile again.
+#[derive(Clone)]
 pub struct ScriptSession {
     units: Vec<SessionUnit>,
     /// The id the next unit made is given; ids are not given twice, unless a
     /// unit is put back under the one it had.
     next_id: u32,
     /// What each unit's compilation produced, in the units' order.
-    records: Vec<UnitLowerRecord>,
+    records: Vec<Arc<UnitLowerRecord>>,
     skip_const_inlining: bool,
     skip_specialization: bool,
     generics: GenericsPolicy,
@@ -428,7 +433,7 @@ impl ScriptSession {
             after.unit.set_prev(db).to(Some(unit));
         }
         self.units.insert(at, SessionUnit { id, unit, source });
-        self.records.insert(at, UnitLowerRecord::default());
+        self.records.insert(at, Arc::default());
         id
     }
 
@@ -513,7 +518,7 @@ pub struct ScriptCompiler<'db> {
     /// records before it, computed on demand, so re-lowering one unit replaces
     /// one record and leaves the rest where they are. A fold could not do that:
     /// after an edit it would describe the pre-edit suffix as well.
-    unit_records: Vec<UnitLowerRecord>,
+    unit_records: Vec<Arc<UnitLowerRecord>>,
     last_source: Option<bct::input::Source>,
     /// CTFE evaluator for const expression evaluation.
     ///
@@ -571,7 +576,7 @@ impl<'db> ScriptCompiler<'db> {
         let id = self.next_id;
         self.next_id += 1;
         self.units.push(SessionUnit { id, unit, source });
-        self.unit_records.push(UnitLowerRecord::default());
+        self.unit_records.push(Arc::default());
         self.rederive_one(self.units.len() - 1)
     }
 
@@ -998,7 +1003,7 @@ impl<'db> ScriptCompiler<'db> {
                 .map(|record| record.takes.iter().chain(&record.writes).cloned().collect())
                 .collect(),
             takes: self.unit_records.iter().map(|record| set(&record.takes)).collect(),
-            shapes: self.unit_records.iter().map(binding_shapes).collect(),
+            shapes: self.unit_records.iter().map(|record| binding_shapes(record)).collect(),
         }
     }
 
@@ -1357,7 +1362,7 @@ impl<'db> ScriptCompiler<'db> {
     /// no further than that: its tree is not typechecked.
     fn compile_unit_at(&mut self, index: usize) -> ScriptCompilationResult {
         if !unit_parses(self.db, self.units[index].unit) {
-            self.unit_records[index] = UnitLowerRecord::default();
+            self.unit_records[index] = Arc::default();
             return self.parse_failure_at(index);
         }
         let unit = self.parsed_unit_at(index);
@@ -1366,7 +1371,7 @@ impl<'db> ScriptCompiler<'db> {
         // position in the script it is.
         let mut result = datalove_ct::query_events::compiling_unit(index, || self.run_phases(index, &unit));
         match &mut result.ir_unit {
-            None => self.unit_records[index] = UnitLowerRecord::default(),
+            None => self.unit_records[index] = Arc::default(),
             Some(ir_unit) => {
                 ir_unit.script_context_mut()
                     .expect("a script unit compiles to a script code unit")
@@ -2293,7 +2298,7 @@ impl<'db> ScriptCompiler<'db> {
         consts: &ConstEvalOutput,
     ) {
         let script_ctx = ir_unit.script_context();
-        self.unit_records[index] = UnitLowerRecord {
+        self.unit_records[index] = Arc::new(UnitLowerRecord {
             exports: script_ctx.map(|ctx| ctx.exports.clone()).unwrap_or_default(),
             value_types: ir_unit.value_types.clone(),
             slot_types: ir_unit.slot_types.clone(),
@@ -2316,7 +2321,7 @@ impl<'db> ScriptCompiler<'db> {
                 }
                 ParsedUnit::Fragment { .. } => None,
             },
-        };
+        });
     }
 
     /// The type of each binding and function a unit provides, as datalove

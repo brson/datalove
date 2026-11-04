@@ -3,7 +3,8 @@
 A plan for running several script sessions in one engine, sharing the
 compiler, each with its own interpreter and runtime, and eventually each on a
 thread of its own. Written November 2026. Phase 1, several sessions on one
-thread, is implemented; phases 2 and 3 are not.
+thread, is implemented, and so is the first part of phase 2, which splits
+every step into a write, a compile and a run; the threads themselves are not.
 
 ## Contents
 
@@ -104,16 +105,51 @@ coordinator owns the database and the pipeline and makes every write; a
 session thread compiles on a clone of the database it takes for the step and
 drops after.
 
-- `ModuleCompilationPipeline::compile` takes `&mut self` for its const cache
-  and module ids. The `CompiledModules<'db>` it returns borrows only the
-  database, so a mutex held for the call is enough to begin with.
-- A session compiling when another session edits sees `salsa::Cancelled` and
-  has to retry the step from its start. Which steps can be retried whole --
-  an append can; a rerun that has already run units cannot -- is the first
-  thing to settle.
-- `Shared` splits along the same line as phase 1 drew: what the coordinator
-  owns, and what a session reads. The roots and `module_errors` are the
-  coordinator's, decided over every session's units.
+**The split comes first, and is done.** Every step on a session is a write,
+then a compile, then a run, and the code says which is which:
+
+- **The write** is the only part with `&mut Shared`: `set_text` for an edit,
+  `ScriptSession::insert_unit` and `delete_unit` for a splice, which write
+  `set_prev`, and a module's new source. An append and a truncation write
+  nothing.
+- **The compile** goes through `Compiling`, which holds `&Shared` and so
+  cannot write the database. The pipeline, the roots, `module_errors` and the
+  count of module changes are in `Modules`, behind a `RefCell` standing where
+  a lock will go. It is borrowed only to settle and compile the modules and to
+  say why a unit failed. `ModuleCompilationPipeline::compile` takes
+  `&mut self` for its const cache and module ids, but the `CompiledModules`
+  it returns borrows only the database, so nothing holds the modules while
+  units compile or run.
+- **The compile can be done again.** `SessionState::resume` compiles a copy
+  of the `ScriptSession` and keeps it only once the compile is done, so a
+  compile that stops -- one salsa cancels -- leaves the session as the write
+  left it. The copy costs nothing measurable: each unit's
+  `UnitLowerRecord` is behind an `Arc`, so a copy is a refcount per unit.
+  Before that, the copy put a third on an append in a 250-unit session.
+- **The run** is everything that touches the executor, and it comes after
+  the compile. A delete and an insert used to tell the executor first; they
+  tell it now once the compile is done, so a compile done again finds the
+  executor as it was. Taking newer modules is the one thing the compile does
+  to the executor, and taking them again is harmless.
+
+What is left before the threads:
+
+- **A compile's `work` is `FnOnce`.** To be done again it has to be `Fn`, and
+  a delete's `work` consumes the `RemovedUnit` it is given, so that has to
+  become something it can borrow.
+- **A panic while compiling still empties the session.** The session is
+  intact after one now, and the executor untouched, so `Eval::Crashed` need
+  not reset -- but the REPL treats a crash as a reset, and changing that is a
+  change to what a person sees.
+- **`RefCell` becomes a lock.** A `std::sync::Mutex` is poisoned by a panic
+  while it is held, and a panic while settling the roots is today recovered
+  from by resetting the session, which needs the modules again.
+- **A cancelled compile has to be caught and done again**, by a session
+  thread holding a clone of the database. Nothing catches
+  `salsa::Cancelled` yet, because nothing can cause it.
+- `Shared` splits along the line the write drew: what the coordinator owns,
+  the database and the workspace, and what every session reaches, the
+  modules behind their lock and the natives.
 
 ## Phase 3: sessions that move between threads
 

@@ -180,7 +180,7 @@ worker thread builds its own library. `datalove-cli` passes
 binary; see [compiler-guide.md](compiler-guide.md) under "The Shipped Binary".
 
 **The roots follow the units.** Before every step -- an append, an edit, a
-splice -- `SessionMut::with_compiler` narrows the pipeline's roots to what
+splice -- `Compiling::compile_units` narrows the pipeline's roots to what
 every open session's units will require once the step is done, plus the
 caller's `also_roots`, and compiles. A unit adding `require module sys/std/u8`
 brings `u8` into the compile, and truncating it away takes `u8` back out unless

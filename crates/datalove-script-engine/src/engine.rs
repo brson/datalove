@@ -3,11 +3,12 @@
 use rmx::prelude::*;
 use salsa::Setter as _;
 use serde::Serialize;
+use std::cell::{Ref, RefCell};
 use std::sync::Arc;
 
 use crate::{Unit, Eval, EvalBinding, EvalExpr, EnvBinding};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptCompilationResult, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
+use datafun::pipeline::{CompiledModules, ScriptCompiler, ScriptCompilationResult, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 use bct::input::Source;
@@ -57,10 +58,37 @@ impl std::fmt::Display for SessionId {
 }
 
 /// What the sessions share: the database, and the modules compiled in it.
+///
+/// **A step on a session writes, then compiles, then runs, and only the
+/// write needs this mutably.** The write is what needs `&mut db`: `set_text`
+/// for an edit, `set_prev` for a splice, a module's new source. Compiling
+/// reads the database, and settles and compiles the modules through the cell
+/// they are in; running reaches the session's executor and nothing here. So
+/// everything after the write is done through `&Shared`, which is the line a
+/// session on a thread of its own will be drawn along: see
+/// `botdocs/plan-multi-session.md`.
 struct Shared {
     db: datafun::Database,
     /// The workspace the sessions compile against.
     workspace: WorkspaceDescriptor,
+    /// The natives the pipeline was given, which each session's executor
+    /// registers the ones it calls from.
+    ///
+    /// The same for the life of the pipeline, so that neither a reset nor a
+    /// new session rebuilds riders or reloads them.
+    natives: Arc<RiderNatives>,
+    /// Where `debuglog` goes, kept so every session sends it to the same place.
+    debug_output: datafun::DebugOutputMode,
+    modules: RefCell<Modules>,
+}
+
+/// The modules the sessions compile against, and how they were settled.
+///
+/// **Borrowed only for as long as settling and compiling them takes.** The
+/// `CompiledModules` a compile returns borrows the database and not these, so
+/// nothing that compiles a unit or runs one holds them, and a session's step
+/// takes them twice at most: to compile, and to say why a unit failed.
+struct Modules {
     /// The pipeline that compiled the modules, kept rather than rebuilt.
     ///
     /// A pipeline owns the `Source` inputs salsa keys its queries on, so throwing
@@ -75,54 +103,66 @@ struct Shared {
     /// another requires. That changes nothing a unit means, since a unit sees
     /// only the modules it requires.
     pipeline: ModuleCompilationPipeline,
-    /// The natives the pipeline was given, which each session's executor
-    /// registers the ones it calls from.
-    ///
-    /// The same for the life of the pipeline, so that neither a reset nor a
-    /// new session rebuilds riders or reloads them.
-    natives: Arc<RiderNatives>,
-    /// Where `debuglog` goes, kept so every session sends it to the same place.
-    debug_output: datafun::DebugOutputMode,
     /// Modules compiled whether or not a unit requires them.
     ///
     /// The rest of the roots are what the sessions' units require, worked out
-    /// again before every step; see [`SessionMut::with_compiler`].
+    /// again before every step; see [`Compiling::compile_units`].
     also_roots: Vec<String>,
     /// The required modules that do not compile, as the last settling of the
     /// roots found them; see [`settle_roots`].
-    module_errors: ModuleErrors,
+    errors: ModuleErrors,
     /// How many times the modules compiled have changed, by the roots moving
     /// or a module being edited.
     ///
     /// Each session's executor holds the modules as they were when it last
     /// took them, and takes them again when this has moved on; see
     /// [`SessionState::taken`].
-    modules: u64,
+    changes: u64,
+}
+
+impl Modules {
+    /// Settle the roots on what `units` require, counting a change if the
+    /// roots moved.
+    ///
+    /// `units` are every open session's units, as they will stand once the
+    /// step in hand is done.
+    fn settle(&mut self, db: &datafun::Database, units: &[Source]) {
+        let previous = self.pipeline.roots().clone();
+        self.errors = settle_roots(db, &mut self.pipeline, units, &self.also_roots)
+            .expect("errors no root reaches are a rider's, and the riders compiled at startup");
+        if *self.pipeline.roots() != previous {
+            self.changes += 1;
+        }
+    }
 }
 
 impl Shared {
-    /// Settle the roots on what `units` require, saying the modules changed
-    /// if the roots moved.
-    ///
-    /// `units` are every open session's units, as they will stand once the
-    /// operation in hand is done.
-    fn settle(&mut self, units: &[Source]) {
-        let previous = self.pipeline.roots().clone();
-        self.module_errors = settle_roots(&self.db, &mut self.pipeline, units, &self.also_roots)
-            .expect("errors no root reaches are a rider's, and the riders compiled at startup");
-        if *self.pipeline.roots() != previous {
-            self.modules += 1;
-        }
+    /// Settle the roots on what `units` require and compile the modules they
+    /// come to.
+    fn compile_modules(&self, units: &[Source]) -> CompiledModules<'_> {
+        let mut modules = self.modules.borrow_mut();
+        modules.settle(&self.db, units);
+        modules.pipeline.compile(&self.db)
     }
 
-    /// A session with no units, over the modules the roots were settled on.
-    fn start_session(&mut self) -> AnyResult<SessionState> {
-        let started = Started::compile(&self.db, &mut self.pipeline, &self.natives, self.debug_output)?;
+    /// A session with no units, compiling against the modules `units`
+    /// require, which are the other sessions'.
+    fn start_session(&self, units: &[Source]) -> AnyResult<SessionState> {
+        let compiled = self.compile_modules(units);
+        assert!(!compiled.has_errors(), "the roots were settled on modules that compile");
+
+        let session = compiled.script_compiler_default(&self.db)
+            .expect("script_compiler should succeed after error check")
+            .into_session();
+        let mut executor = compiled.script_executor(self.debug_output, None)
+            .expect("script_executor should succeed after error check");
+        let natives = register_natives(&self.natives, &compiled, &mut executor)?;
+
         Ok(SessionState {
-            session: Some(started.session),
-            executor: started.executor,
-            natives: started.natives,
-            taken: self.modules,
+            session,
+            executor,
+            natives,
+            taken: self.modules.borrow().changes,
             last_step: Vec::new(),
         })
     }
@@ -158,10 +198,7 @@ impl Shared {
 /// One session: its units, and the executor that runs them.
 struct SessionState {
     /// The units submitted so far and what each one's compilation produced.
-    ///
-    /// An `Option` only so that it can be handed to a compiler and taken back;
-    /// it is `Some` between operations.
-    session: Option<ScriptSession>,
+    session: ScriptSession,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
     /// The natives `executor`'s native table points to.
@@ -170,7 +207,7 @@ struct SessionState {
     /// each took a share when the symbols were registered, so neither can be
     /// reached after its code has gone whatever order these fields go in.
     natives: RegisteredNatives,
-    /// The [`Shared::modules`] the executor holds the modules of.
+    /// The [`Modules::changes`] the executor holds the modules of.
     taken: u64,
     /// What the last operation on the units did to each unit it compiled or
     /// re-derived; see [`SessionMut::last_step`].
@@ -178,12 +215,37 @@ struct SessionState {
 }
 
 impl SessionState {
-    fn session(&self) -> &ScriptSession {
-        self.session.as_ref().expect("a session")
+    fn unit_sources(&self) -> Vec<Source> {
+        self.session.unit_sources()
     }
 
-    fn unit_sources(&self) -> Vec<Source> {
-        self.session().unit_sources()
+    /// Compile `work` over the modules `compiled`, giving the executor them
+    /// first if it holds older ones.
+    ///
+    /// **It compiles a copy of the session and keeps the copy only once
+    /// `work` is done.** A compile that does not finish leaves the session as
+    /// the step's write left it, and the compile can be done again: nothing
+    /// it did before it stopped is anywhere but in salsa's memos, and the
+    /// executor holding newer modules is what the compile again would want.
+    /// That is what a session's step needs when another session's write
+    /// cancels it.
+    fn resume<R>(
+        &mut self,
+        db: &datafun::Database,
+        compiled: &CompiledModules<'_>,
+        changes: u64,
+        work: impl FnOnce(&mut ScriptCompiler<'_>) -> R,
+    ) -> R {
+        if self.taken != changes {
+            take_modules(&mut self.executor, &mut self.natives, compiled);
+            self.taken = changes;
+        }
+        let mut compiler = compiled
+            .script_compiler_resumed(db, self.session.clone())
+            .expect("the roots were settled on modules that compile");
+        let result = work(&mut compiler);
+        self.session = compiler.into_session();
+        result
     }
 }
 
@@ -202,6 +264,16 @@ pub struct SessionMut<'e> {
     ///
     /// Nothing can change them while this borrows the engine.
     others: Vec<Source>,
+}
+
+/// A session's step past its write: what compiling and running reach.
+///
+/// Holds the shared half of the engine by `&`, so nothing done through it
+/// can write the database.
+struct Compiling<'a> {
+    shared: &'a Shared,
+    state: &'a mut SessionState,
+    others: &'a [Source],
 }
 
 /// The modules a session requires that do not compile, and what they said.
@@ -396,37 +468,6 @@ impl Compiled {
 }
 
 
-/// A fresh session: everything a session rebuilds when it resets.
-struct Started {
-    session: ScriptSession,
-    executor: ScriptExecutor,
-    /// What the executor's natives were registered from. The table holds its
-    /// own share, so this is the caller's copy rather than what keeps them.
-    natives: RegisteredNatives,
-}
-
-impl Started {
-    /// Compile the modules the roots were settled on and register their natives.
-    fn compile(
-        db: &datafun::Database,
-        pipeline: &mut ModuleCompilationPipeline,
-        natives: &Arc<RiderNatives>,
-        debug_output: datafun::DebugOutputMode,
-    ) -> AnyResult<Started> {
-        let compiled = pipeline.compile(db);
-        assert!(!compiled.has_errors(), "the roots were settled on modules that compile");
-
-        let session = compiled.script_compiler_default(db)
-            .expect("script_compiler should succeed after error check")
-            .into_session();
-        let mut executor = compiled.script_executor(debug_output, None)
-            .expect("script_executor should succeed after error check");
-        let natives = register_natives(natives, &compiled, &mut executor)?;
-
-        Ok(Started { session, executor, natives })
-    }
-}
-
 impl Engine {
     pub fn new(sys: SystemLibrary) -> AnyResult<Engine> {
         let workspace = WorkspaceDescriptor::from_system_library(&sys);
@@ -504,20 +545,15 @@ impl Engine {
         };
 
         let (mut pipeline, natives) = workspace.to_pipeline_with_natives(&db, &sys.natives);
-        let module_errors = settle_roots(&db, &mut pipeline, &[], &also_roots)?;
+        // Settled here rather than by the first session, because a rider
+        // interface that does not compile is the one error that stops the
+        // engine starting, and this is where it is reported.
+        let errors = settle_roots(&db, &mut pipeline, &[], &also_roots)?;
 
-        let mut shared = Shared {
-            db,
-            workspace,
-            pipeline,
-            natives,
-            debug_output,
-            also_roots,
-            module_errors,
-            modules: 0,
-        };
+        let modules = Modules { pipeline, also_roots, errors, changes: 0 };
+        let shared = Shared { db, workspace, natives, debug_output, modules: RefCell::new(modules) };
         let first = SessionId(0);
-        let sessions = BTreeMap::from([(first, shared.start_session()?)]);
+        let sessions = BTreeMap::from([(first, shared.start_session(&[])?)]);
         Ok(Engine { shared, sessions, first, next_session: 1 })
     }
 
@@ -526,8 +562,8 @@ impl Engine {
     /// Required by any open session: the sessions share the modules, so a
     /// module one of them requires and that does not compile is left out for
     /// all of them.
-    pub fn module_errors(&self) -> &ModuleErrors {
-        &self.shared.module_errors
+    pub fn module_errors(&self) -> Ref<'_, ModuleErrors> {
+        Ref::map(self.shared.modules.borrow(), |modules| &modules.errors)
     }
 
     /// The database the sessions are compiled in, which is what the stored
@@ -543,8 +579,8 @@ impl Engine {
 
     /// The pipeline the modules are compiled by, for finding which file a
     /// diagnostic points into.
-    pub fn pipeline(&self) -> &ModuleCompilationPipeline {
-        &self.shared.pipeline
+    pub fn pipeline(&self) -> Ref<'_, ModuleCompilationPipeline> {
+        Ref::map(self.shared.modules.borrow(), |modules| &modules.pipeline)
     }
 
     /// The session the engine started with, which the methods on `Engine`
@@ -558,12 +594,17 @@ impl Engine {
         self.sessions.keys().copied().collect()
     }
 
+    /// Every open session's units.
+    fn all_units(&self) -> Vec<Source> {
+        self.sessions.values().flat_map(SessionState::unit_sources).collect()
+    }
+
     /// Open a session with no units, over the modules the engine's sessions
     /// compile against.
     pub fn open_session(&mut self) -> SessionId {
         let id = SessionId(self.next_session);
         self.next_session += 1;
-        let state = self.shared.start_session()
+        let state = self.shared.start_session(&self.all_units())
             .expect("the natives registered when the engine started are found");
         self.sessions.insert(id, state);
         id
@@ -577,8 +618,8 @@ impl Engine {
     pub fn close_session(&mut self, id: SessionId) {
         assert_ne!(id, self.first, "the session the engine started with is never closed");
         self.sessions.remove(&id).unwrap_or_else(|| panic!("no session {id} is open"));
-        let units: Vec<Source> = self.sessions.values().flat_map(SessionState::unit_sources).collect();
-        self.shared.settle(&units);
+        let units = self.all_units();
+        self.shared.modules.get_mut().settle(&self.shared.db, &units);
     }
 
     /// Session `id`, to act on.
@@ -642,22 +683,25 @@ impl Engine {
         module: &str,
         source: &str,
     ) -> BTreeMap<SessionId, Vec<UnitStep>> {
-        let shared = &mut self.shared;
+        // The write.
+        let Shared { db, modules, .. } = &mut self.shared;
+        let pipeline = &mut modules.get_mut().pipeline;
         assert!(
-            shared.pipeline.contains_module(library, package, module),
+            pipeline.contains_module(library, package, module),
             "no module {library}/{package}/{module} in this engine",
         );
-        shared.pipeline.update_source(&mut shared.db, library, package, module, source);
-        shared.set_workspace_module(library, package, module, source);
+        pipeline.update_source(db, library, package, module, source);
+        self.shared.set_workspace_module(library, package, module, source);
         let path = format!("{library}/{package}/{module}");
 
-        let broken_before: BTreeSet<String> = shared.module_errors.broken.keys().cloned().collect();
-        let units: Vec<Source> = self.sessions.values().flat_map(SessionState::unit_sources).collect();
-        shared.settle(&units);
+        // The compile.
+        let shared = &self.shared;
+        let broken_before: BTreeSet<String> = shared.modules.borrow().errors.broken.keys().cloned().collect();
+        let compiled = shared.compile_modules(&self.all_units());
+        let mut modules = shared.modules.borrow_mut();
         // The roots may not have moved, and the modules have changed anyway.
-        shared.modules += 1;
-
-        let compiled = shared.pipeline.compile(&shared.db);
+        modules.changes += 1;
+        let changes = modules.changes;
 
         // The modules whose units the edit reaches: this one, the ones that
         // reach it, and the ones it broke or fixed.
@@ -666,29 +710,28 @@ impl Engine {
             .map(|(module, _)| module)
             .collect();
         reached.insert(path);
-        let broken_after: BTreeSet<String> = shared.module_errors.broken.keys().cloned().collect();
+        let broken_after: BTreeSet<String> = modules.errors.broken.keys().cloned().collect();
         reached.extend(broken_before.symmetric_difference(&broken_after).cloned());
+        drop(modules);
 
         // A unit whose require failed is found here too: its imports are read
         // as they now resolve, and they resolve into a module that compiles.
         let reached: Vec<String> = reached.into_iter().collect();
 
-        let mut rederived = BTreeMap::new();
-        for (id, state) in &mut self.sessions {
-            take_modules(&mut state.executor, &mut state.natives, &compiled);
-            state.taken = shared.modules;
-            let mut compiler = compiled
-                .script_compiler_resumed(&shared.db, state.session.take().expect("a session"))
-                .expect("the roots were settled on modules that compile");
-            rederived.insert(*id, compiler.relower_module_reach(&reached));
-            state.session = Some(compiler.into_session());
-        }
+        let rederived: BTreeMap<SessionId, _> = self.sessions.iter_mut()
+            .map(|(id, state)| {
+                let rederived = state.resume(&shared.db, &compiled, changes, |compiler| {
+                    compiler.relower_module_reach(&reached)
+                });
+                (*id, rederived)
+            })
+            .collect();
 
+        // The run.
         rederived.into_iter()
             .map(|(id, rederived)| {
                 let mut session = self.session(id);
-                let reports = session.rerun(rederived);
-                (id, session.explain_all(reports))
+                (id, session.compiling().rerun_and_explain(rederived))
             })
             .collect()
     }
@@ -705,11 +748,11 @@ impl Engine {
     }
 
     pub fn unit_ids(&self) -> Vec<u32> {
-        self.first_state().session().unit_ids()
+        self.first_state().session.unit_ids()
     }
 
     pub fn next_id(&self) -> u32 {
-        self.first_state().session().next_id()
+        self.first_state().session.next_id()
     }
 
     pub fn set_next_id(&mut self, next: u32) {
@@ -757,11 +800,11 @@ impl Engine {
     }
 
     pub fn unit_count(&self) -> usize {
-        self.first_state().session().unit_ids().len()
+        self.first_state().session.unit_ids().len()
     }
 
     pub fn unit_accesses(&self, id: u32) -> datafun::pipeline::UnitAccesses {
-        self.first_state().session().unit_accesses(id)
+        self.first_state().session.unit_accesses(id)
     }
 
     pub fn unit_bindings(&mut self, id: u32) -> Vec<(String, Option<String>)> {
@@ -769,91 +812,25 @@ impl Engine {
     }
 }
 
+/// A session's steps.
+///
+/// **Each is a write, a compile and a run, in that order**, and only the
+/// write is done here: everything after it goes through [`Compiling`], which
+/// cannot write the database. A step that writes nothing -- an append, a
+/// truncation -- goes straight to it. The executor is touched only once the
+/// compile is done, so a compile done twice finds it as it was.
 impl SessionMut<'_> {
+    /// The step past its write.
+    fn compiling(&mut self) -> Compiling<'_> {
+        Compiling { shared: self.shared, state: self.state, others: &self.others }
+    }
+
     /// Start the session again, forgetting every unit in it.
     ///
     /// The modules stay compiled, and the riders built and loaded. The other
     /// sessions are untouched.
     pub fn reset(&mut self) {
-        // An empty session requires nothing, so the roots go back to what
-        // the other sessions require, less any a module edit has broken
-        // since.
-        self.shared.settle(&self.others);
-        // The old executor destroys its values as it goes.
-        *self.state = self.shared.start_session()
-            .expect("the natives registered when the engine started are found");
-    }
-
-    /// Build a compiler over the current module compilation, run `work` with
-    /// it, and take the session back.
-    ///
-    /// Everything that needs a compiler goes through here, because a compiler
-    /// borrows the database and the engine owns it. The session is out of the
-    /// engine while `work` runs, so `work` cannot reach back into it.
-    ///
-    /// **The modules compiled are the ones `units` require**, `units` being
-    /// the session's units as they will stand once `work` is done, so a unit
-    /// that requires a module nothing required before compiles against it, and
-    /// one that goes takes its modules with it -- unless another session
-    /// requires them too. Required modules that do not compile are left out;
-    /// see [`settle_roots`].
-    fn with_compiler<R>(
-        &mut self,
-        units: &[Source],
-        work: impl FnOnce(&mut ScriptCompiler<'_>) -> R,
-    ) -> R {
-        let all: Vec<Source> = self.others.iter().chain(units).copied().collect();
-        self.shared.settle(&all);
-
-        let compiled = self.shared.pipeline.compile(&self.shared.db);
-        if self.state.taken != self.shared.modules {
-            take_modules(&mut self.state.executor, &mut self.state.natives, &compiled);
-            self.state.taken = self.shared.modules;
-        }
-        let mut compiler = compiled
-            .script_compiler_resumed(&self.shared.db, self.state.session.take().expect("a session"))
-            .expect("the roots were settled on modules that compile");
-        let result = work(&mut compiler);
-        self.state.session = Some(compiler.into_session());
-        result
-    }
-
-    /// Say why units that failed on a module that does not compile failed.
-    ///
-    /// A unit requiring a left-out module fails on its `require` as though the
-    /// module did not exist, which is true of the compile and misleading to
-    /// read, so its error becomes the module's.
-    fn explain(&self, unit: Source, eval: Eval) -> Eval {
-        let Eval::NotCompiled(error) = eval else {
-            return eval;
-        };
-        let reasons: Vec<String> = self.shared.pipeline.required_modules(&self.shared.db, unit).into_iter()
-            .filter_map(|path| self.shared.module_errors.broken.get(&path).map(|errors| {
-                fmt!("module `{path}` does not compile: {}", errors.join("; "))
-            }))
-            .collect();
-        if reasons.is_empty() {
-            Eval::NotCompiled(error)
-        } else {
-            Eval::NotCompiled(reasons.join("\n"))
-        }
-    }
-
-    /// The same for the reports of a re-derivation.
-    fn explain_all(&self, reports: Vec<UnitStep>) -> Vec<UnitStep> {
-        // A unit that failed at run time took the session with it, so the
-        // units reported before it have no sources left to explain against.
-        if reports.iter().any(|report| report.eval.as_ref().is_some_and(Eval::resets)) {
-            return reports;
-        }
-        let sources = self.unit_sources();
-        reports.into_iter()
-            .map(|UnitStep { unit, compiled, eval }| UnitStep {
-                unit,
-                compiled,
-                eval: eval.map(|eval| self.explain(sources[self.position(unit)], eval)),
-            })
-            .collect()
+        self.compiling().reset()
     }
 
     /// The session's units' sources, in order, which is how
@@ -870,21 +847,17 @@ impl SessionMut<'_> {
     /// and are not given twice, unless a unit is put back under the one it
     /// had; see [`Self::restore_unit`]. Each session numbers its own.
     pub fn unit_ids(&self) -> Vec<u32> {
-        self.session().unit_ids()
-    }
-
-    fn session(&self) -> &ScriptSession {
-        self.state.session()
+        self.state.session.unit_ids()
     }
 
     /// Where unit `id` sits in the session, which must hold it.
     fn position(&self, id: u32) -> usize {
-        self.session().position_of(id).unwrap_or_else(|| panic!("no unit {id} in the session"))
+        self.state.session.position_of(id).unwrap_or_else(|| panic!("no unit {id} in the session"))
     }
 
     /// The id the next unit made is given, by appending or inserting.
     pub fn next_id(&self) -> u32 {
-        self.session().next_id()
+        self.state.session.next_id()
     }
 
     /// Give the next unit made the id `next`, which no unit in the session
@@ -894,7 +867,7 @@ impl SessionMut<'_> {
     /// REPL does when it drops changes it took back: the ids the units those
     /// made had are given again.
     pub fn set_next_id(&mut self, next: u32) {
-        self.state.session.as_mut().expect("a session").set_next_id(next);
+        self.state.session.set_next_id(next);
     }
 
     /// Compile and run a unit as the session's next.
@@ -906,8 +879,14 @@ impl SessionMut<'_> {
 
     /// The same, showing `on_error` a unit that does not compile.
     pub fn eval_reporting(&mut self, unit: Unit, on_error: OnCompileError<'_>) -> Eval {
+        let is_expr = unit.is_expression();
+        let source = match unit {
+            Unit::Fragment(source) | Unit::Expression(source) => source,
+        };
         let (result, ran) = unit_analysis::collect(|| {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.eval_impl(unit, on_error)))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                self.compiling().eval_new_unit(source, is_expr, on_error)
+            }))
         });
 
         let eval = match result {
@@ -920,7 +899,7 @@ impl SessionMut<'_> {
         // The unit appended is the last, unless it took the session with it.
         let step = match eval.resets() {
             true => Vec::new(),
-            false => vec![UnitStep::rederived(self.session().last_unit_id(), eval.C())],
+            false => vec![UnitStep::rederived(self.state.session.last_unit_id(), eval.C())],
         };
         self.record_step(step, ran);
         eval
@@ -977,12 +956,231 @@ impl SessionMut<'_> {
         self.state.last_step = reports;
     }
 
-    fn eval_impl(&mut self, unit: Unit, on_error: OnCompileError<'_>) -> Eval {
-        let is_expr = unit.is_expression();
-        let source = match unit {
-            Unit::Fragment(source) | Unit::Expression(source) => source,
+    /// Change unit `id`'s text and re-derive what the edit reaches.
+    ///
+    /// The units the edit does not reach keep the lowering and the frame they
+    /// already have, which is sound because a unit that uses nothing the
+    /// edited unit provides holds no reference into it. See
+    /// `botdocs/script-reactivity-architecture.md`.
+    ///
+    /// Returns what the step did to each unit it compiled or re-derived, in
+    /// the session's order; see [`Self::last_step`]. A unit whose re-lowering
+    /// failed is reported as an error and stays, with its frame destroyed and
+    /// its bindings gone from the environment, until an edit makes it compile
+    /// again.
+    pub fn edit_unit(&mut self, id: u32, source: &str) -> Vec<UnitStep> {
+        self.step(|session| session.edit_unit_in_step(id, source))
+    }
+
+    fn edit_unit_in_step(&mut self, id: u32, source: &str) -> Vec<UnitStep> {
+        let at = self.position(id);
+        let sources = self.unit_sources();
+        sources[at].set_text(&mut self.shared.db).to(source.S());
+
+        let mut step = self.compiling();
+        let rederived = step.compile_units(&sources, |compiler| compiler.relower_reach(at));
+        step.rerun_and_explain(rederived)
+    }
+
+    /// Drop the units from position `n` on.
+    ///
+    /// Nothing sits after what goes, so usually nothing is re-derived or
+    /// re-executed. Their bindings leave the environment and the values they
+    /// held are destroyed. A unit that goes having taken or written an
+    /// earlier unit's binding reruns the unit that set the binding, to build
+    /// it as it was, and the units after that one that took or wrote it too.
+    pub fn truncate_units(&mut self, n: usize) -> Vec<UnitStep> {
+        self.step(|session| session.truncate_units_in_step(n))
+    }
+
+    fn truncate_units_in_step(&mut self, n: usize) -> Vec<UnitStep> {
+        let mut units = self.unit_sources();
+        let count = units.len();
+        assert!(n <= count, "cannot truncate to {n} units; the session has {count}");
+        units.truncate(n);
+
+        let mut step = self.compiling();
+        let rederived = step.compile_units(&units, |compiler| compiler.truncate_units(n));
+        step.state.executor.truncate_units(n);
+        step.rerun_and_explain(rederived)
+    }
+
+    /// Take unit `id` out of the session, and re-derive what that reaches.
+    ///
+    /// **An edit to nothing, and its reach is an edit's**: the units after it
+    /// that used what it provided, and the units that use what those
+    /// provide. Every other unit keeps its lowering and its frame, since no
+    /// unit's id moves. A unit that read what the removed unit provided stops
+    /// compiling and stays, as any unit that fails does. And if the removed
+    /// unit took or wrote an earlier unit's binding, the unit that set it is
+    /// rerun to build it as it was.
+    pub fn delete_unit(&mut self, id: u32) -> Vec<UnitStep> {
+        self.step(|session| session.delete_unit_in_step(id))
+    }
+
+    fn delete_unit_in_step(&mut self, id: u32) -> Vec<UnitStep> {
+        let at = self.position(id);
+        let removed = self.state.session.delete_unit(&mut self.shared.db, at);
+        let units = self.unit_sources();
+
+        let mut step = self.compiling();
+        let rederived = step.compile_units(&units, |compiler| compiler.relower_deleted(at, removed));
+        step.state.executor.remove_unit(id);
+        step.rerun_and_explain(rederived)
+    }
+
+    /// Splice a new unit in at position `at`, and re-derive what it reaches.
+    ///
+    /// `is_expr` says whether the text is a bare expression or a fragment of
+    /// statements; nothing in the text decides it, which is why the appending
+    /// path has two entry points rather than one.
+    ///
+    /// **An edit from nothing, and its reach is an edit's**: the new unit, the
+    /// units after it that use what it provides, and so on, and every other
+    /// unit keeps its lowering and its frame. The new unit stays whether or
+    /// not it compiles, and is given the next id.
+    pub fn insert_unit(
+        &mut self,
+        at: usize,
+        source: &str,
+        is_expr: bool,
+    ) -> Vec<UnitStep> {
+        self.step(|session| session.insert_unit_in_step(at, source, is_expr, None))
+    }
+
+    /// The same, giving the new unit the id `id`, which no unit in the
+    /// session has.
+    ///
+    /// What putting back a unit that was taken out needs, as undoing a
+    /// delete does: under the id it had.
+    pub fn restore_unit(
+        &mut self,
+        at: usize,
+        id: u32,
+        source: &str,
+        is_expr: bool,
+    ) -> Vec<UnitStep> {
+        self.step(|session| session.insert_unit_in_step(at, source, is_expr, Some(id)))
+    }
+
+    fn insert_unit_in_step(&mut self, at: usize, source: &str, is_expr: bool, id: Option<u32>) -> Vec<UnitStep> {
+        let source = Source::new(&self.shared.db, source.S());
+        let id = self.state.session.insert_unit(&mut self.shared.db, at, source, is_expr, id);
+        let units = self.unit_sources();
+
+        let mut step = self.compiling();
+        let rederived = step.compile_units(&units, |compiler| compiler.relower_inserted(at));
+        step.state.executor.insert_unit(at, id);
+        step.rerun_and_explain(rederived)
+    }
+
+    /// The bindings the session offers, the nearest of each name, sorted by
+    /// name.
+    pub fn get_environment(&mut self) -> Vec<EnvBinding> {
+        self.compiling().get_environment()
+    }
+
+    /// Unit `id`'s parse, type and ownership diagnostics as they stand,
+    /// rendered as text in `style` quoting the unit as `name`; empty for a
+    /// unit with none.
+    pub fn unit_diagnostics(&mut self, id: u32, name: &str, style: bct::render::TextStyle) -> String {
+        let at = self.position(id);
+        let units = self.unit_sources();
+        self.compiling().compile_units(&units, |compiler| compiler.render_unit_diagnostics(at, name, style))
+    }
+
+    /// How many units the session has, failed ones included.
+    pub fn unit_count(&self) -> usize {
+        self.unit_ids().len()
+    }
+
+    /// What unit `id` provides and does to earlier units' bindings.
+    pub fn unit_accesses(&self, id: u32) -> datafun::pipeline::UnitAccesses {
+        self.state.session.unit_accesses(id)
+    }
+
+    /// What unit `id` binds and what each binding holds now, `None` for one
+    /// given away.
+    ///
+    /// One unit's frame, where [`Self::get_environment`] is the nearest
+    /// binding of each name.
+    pub fn unit_bindings(&mut self, id: u32) -> Vec<(String, Option<String>)> {
+        self.state.executor.unit_bindings(id)
+    }
+}
+
+impl Compiling<'_> {
+    /// Start the session again, with no units.
+    fn reset(&mut self) {
+        // An empty session requires nothing, so the roots go back to what
+        // the other sessions require, less any a module edit has broken
+        // since. The old executor destroys its values as it goes.
+        *self.state = self.shared.start_session(self.others)
+            .expect("the natives registered when the engine started are found");
+    }
+
+    /// Compile the modules and then `work` over them.
+    ///
+    /// Everything that needs a compiler goes through here, because a compiler
+    /// borrows the database and the engine owns it.
+    ///
+    /// **The modules compiled are the ones `units` require**, `units` being
+    /// the session's units as they will stand once `work` is done, so a unit
+    /// that requires a module nothing required before compiles against it, and
+    /// one that goes takes its modules with it -- unless another session
+    /// requires them too. Required modules that do not compile are left out;
+    /// see [`settle_roots`]. The session is compiled on a copy; see
+    /// [`SessionState::resume`].
+    fn compile_units<R>(
+        &mut self,
+        units: &[Source],
+        work: impl FnOnce(&mut ScriptCompiler<'_>) -> R,
+    ) -> R {
+        let all: Vec<Source> = self.others.iter().chain(units).copied().collect();
+        let compiled = self.shared.compile_modules(&all);
+        let changes = self.shared.modules.borrow().changes;
+        self.state.resume(&self.shared.db, &compiled, changes, work)
+    }
+
+    /// Say why units that failed on a module that does not compile failed.
+    ///
+    /// A unit requiring a left-out module fails on its `require` as though the
+    /// module did not exist, which is true of the compile and misleading to
+    /// read, so its error becomes the module's.
+    fn explain(&self, unit: Source, eval: Eval) -> Eval {
+        let Eval::NotCompiled(error) = eval else {
+            return eval;
         };
-        self.eval_new_unit(source, is_expr, on_error)
+        let modules = self.shared.modules.borrow();
+        let reasons: Vec<String> = modules.pipeline.required_modules(&self.shared.db, unit).into_iter()
+            .filter_map(|path| modules.errors.broken.get(&path).map(|errors| {
+                fmt!("module `{path}` does not compile: {}", errors.join("; "))
+            }))
+            .collect();
+        if reasons.is_empty() {
+            Eval::NotCompiled(error)
+        } else {
+            Eval::NotCompiled(reasons.join("\n"))
+        }
+    }
+
+    /// Run the units a compile re-derived, and say why those that failed on
+    /// a module failed.
+    fn rerun_and_explain(&mut self, rederived: Vec<(usize, ScriptCompilationResult)>) -> Vec<UnitStep> {
+        let reports = self.rerun(rederived);
+        // A unit that failed at run time took the session with it, so the
+        // units reported before it have no sources left to explain against.
+        if reports.iter().any(|report| report.eval.as_ref().is_some_and(Eval::resets)) {
+            return reports;
+        }
+        let sources = self.state.unit_sources();
+        let session = &self.state.session;
+        reports.into_iter()
+            .map(|UnitStep { unit, compiled, eval }| {
+                let at = session.position_of(unit).expect("a reported unit is in the session");
+                UnitStep { unit, compiled, eval: eval.map(|eval| self.explain(sources[at], eval)) }
+            })
+            .collect()
     }
 
     /// Compile and run a fragment or an expression as the next unit.
@@ -993,9 +1191,9 @@ impl SessionMut<'_> {
     /// takes the session with it.
     fn eval_new_unit(&mut self, source: String, is_expr: bool, on_error: OnCompileError<'_>) -> Eval {
         let source = Source::new(&self.shared.db, source);
-        let mut units = self.unit_sources();
+        let mut units = self.state.unit_sources();
         units.push(source);
-        let compiled = self.with_compiler(&units, |compiler| {
+        let compiled = self.compile_units(&units, |compiler| {
             let compiled = compiler.compile_source(source, is_expr);
             if compiled.first_error().is_some() {
                 on_error(compiler, &compiled);
@@ -1004,7 +1202,7 @@ impl SessionMut<'_> {
         });
 
         if let Some(error) = compiled.first_error() {
-            let id = self.session().last_unit_id();
+            let id = self.state.session.last_unit_id();
             self.state.executor.skip_unit(id);
             return self.explain(source, Eval::NotCompiled(error));
         }
@@ -1049,7 +1247,7 @@ impl SessionMut<'_> {
             // language's, from the typechecker.
             UnitStatus::Ran => match ty {
                 Some(_) => {
-                    let ty = self.session().value_type(id).S();
+                    let ty = self.state.session.value_type(id).S();
                     Eval::Value(EvalExpr { ty, value: output })
                 }
                 None => self.report_bindings(ir_unit),
@@ -1070,122 +1268,6 @@ impl SessionMut<'_> {
         Eval::Ran(exports.iter().map(|(name, binding)| self.eval_binding(name, binding)).collect())
     }
 
-    /// Change unit `id`'s text and re-derive what the edit reaches.
-    ///
-    /// The units the edit does not reach keep the lowering and the frame they
-    /// already have, which is sound because a unit that uses nothing the
-    /// edited unit provides holds no reference into it. See
-    /// `botdocs/script-reactivity-architecture.md`.
-    ///
-    /// Returns what the step did to each unit it compiled or re-derived, in
-    /// the session's order; see [`Self::last_step`]. A unit whose re-lowering
-    /// failed is reported as an error and stays, with its frame destroyed and
-    /// its bindings gone from the environment, until an edit makes it compile
-    /// again.
-    pub fn edit_unit(&mut self, id: u32, source: &str) -> Vec<UnitStep> {
-        self.step(|session| session.edit_unit_in_step(id, source))
-    }
-
-    fn edit_unit_in_step(&mut self, id: u32, source: &str) -> Vec<UnitStep> {
-        let at = self.position(id);
-        let sources = self.unit_sources();
-        sources[at].set_text(&mut self.shared.db).to(source.S());
-
-        let rederived = self.with_compiler(&sources, |compiler| compiler.relower_reach(at));
-        let reports = self.rerun(rederived);
-        self.explain_all(reports)
-    }
-
-    /// Drop the units from position `n` on.
-    ///
-    /// Nothing sits after what goes, so usually nothing is re-derived or
-    /// re-executed. Their bindings leave the environment and the values they
-    /// held are destroyed. A unit that goes having taken or written an
-    /// earlier unit's binding reruns the unit that set the binding, to build
-    /// it as it was, and the units after that one that took or wrote it too.
-    pub fn truncate_units(&mut self, n: usize) -> Vec<UnitStep> {
-        self.step(|session| session.truncate_units_in_step(n))
-    }
-
-    fn truncate_units_in_step(&mut self, n: usize) -> Vec<UnitStep> {
-        let mut units = self.unit_sources();
-        let count = units.len();
-        assert!(n <= count, "cannot truncate to {n} units; the session has {count}");
-        units.truncate(n);
-        let rederived = self.with_compiler(&units, |compiler| compiler.truncate_units(n));
-        self.state.executor.truncate_units(n);
-        let reports = self.rerun(rederived);
-        self.explain_all(reports)
-    }
-
-    /// Take unit `id` out of the session, and re-derive what that reaches.
-    ///
-    /// **An edit to nothing, and its reach is an edit's**: the units after it
-    /// that used what it provided, and the units that use what those
-    /// provide. Every other unit keeps its lowering and its frame, since no
-    /// unit's id moves. A unit that read what the removed unit provided stops
-    /// compiling and stays, as any unit that fails does. And if the removed
-    /// unit took or wrote an earlier unit's binding, the unit that set it is
-    /// rerun to build it as it was.
-    pub fn delete_unit(&mut self, id: u32) -> Vec<UnitStep> {
-        self.step(|session| session.delete_unit_in_step(id))
-    }
-
-    fn delete_unit_in_step(&mut self, id: u32) -> Vec<UnitStep> {
-        let at = self.position(id);
-        let removed = self.state.session.as_mut().expect("a session").delete_unit(&mut self.shared.db, at);
-        self.state.executor.remove_unit(id);
-        let units = self.unit_sources();
-        let rederived = self.with_compiler(&units, |compiler| compiler.relower_deleted(at, removed));
-        let reports = self.rerun(rederived);
-        self.explain_all(reports)
-    }
-
-    /// Splice a new unit in at position `at`, and re-derive what it reaches.
-    ///
-    /// `is_expr` says whether the text is a bare expression or a fragment of
-    /// statements; nothing in the text decides it, which is why the appending
-    /// path has two entry points rather than one.
-    ///
-    /// **An edit from nothing, and its reach is an edit's**: the new unit, the
-    /// units after it that use what it provides, and so on, and every other
-    /// unit keeps its lowering and its frame. The new unit stays whether or
-    /// not it compiles, and is given the next id.
-    pub fn insert_unit(
-        &mut self,
-        at: usize,
-        source: &str,
-        is_expr: bool,
-    ) -> Vec<UnitStep> {
-        self.step(|session| session.insert_unit_in_step(at, source, is_expr, None))
-    }
-
-    /// The same, giving the new unit the id `id`, which no unit in the
-    /// session has.
-    ///
-    /// What putting back a unit that was taken out needs, as undoing a
-    /// delete does: under the id it had.
-    pub fn restore_unit(
-        &mut self,
-        at: usize,
-        id: u32,
-        source: &str,
-        is_expr: bool,
-    ) -> Vec<UnitStep> {
-        self.step(|session| session.insert_unit_in_step(at, source, is_expr, Some(id)))
-    }
-
-    fn insert_unit_in_step(&mut self, at: usize, source: &str, is_expr: bool, id: Option<u32>) -> Vec<UnitStep> {
-        let source = Source::new(&self.shared.db, source.S());
-        let id = self.state.session.as_mut().expect("a session")
-            .insert_unit(&mut self.shared.db, at, source, is_expr, id);
-        self.state.executor.insert_unit(at, id);
-        let units = self.unit_sources();
-        let rederived = self.with_compiler(&units, |compiler| compiler.relower_inserted(at));
-        let reports = self.rerun(rederived);
-        self.explain_all(reports)
-    }
-
     /// Run each re-lowered unit again in place, reporting what it came to.
     ///
     /// `rederived` names the units by position, as the compiler does, and
@@ -1194,7 +1276,7 @@ impl SessionMut<'_> {
         &mut self,
         rederived: Vec<(usize, ScriptCompilationResult)>,
     ) -> Vec<UnitStep> {
-        let ids = self.unit_ids();
+        let ids = self.state.session.unit_ids();
         let mut reports = Vec::new();
         for (index, compiled) in rederived {
             let id = ids[index];
@@ -1251,44 +1333,16 @@ impl SessionMut<'_> {
     /// the unit that provides the name.
     fn type_of(&self, name: &str) -> String {
         let unit = self.state.executor.provider_of(name).expect("a binding the executor offers has a provider");
-        self.session().type_of(unit, name).S()
+        self.state.session.type_of(unit, name).S()
     }
 
     /// The bindings the session offers, the nearest of each name, sorted by
     /// name.
-    pub fn get_environment(&mut self) -> Vec<EnvBinding> {
+    fn get_environment(&mut self) -> Vec<EnvBinding> {
         self.state.executor.get_environment()
             .into_iter()
             .map(|(name, _kind, _, value)| EnvBinding { ty: self.type_of(&name), name, value })
             .collect()
-    }
-
-    /// Unit `id`'s parse, type and ownership diagnostics as they stand,
-    /// rendered as text in `style` quoting the unit as `name`; empty for a
-    /// unit with none.
-    pub fn unit_diagnostics(&mut self, id: u32, name: &str, style: bct::render::TextStyle) -> String {
-        let at = self.position(id);
-        let units = self.unit_sources();
-        self.with_compiler(&units, |compiler| compiler.render_unit_diagnostics(at, name, style))
-    }
-
-    /// How many units the session has, failed ones included.
-    pub fn unit_count(&self) -> usize {
-        self.unit_ids().len()
-    }
-
-    /// What unit `id` provides and does to earlier units' bindings.
-    pub fn unit_accesses(&self, id: u32) -> datafun::pipeline::UnitAccesses {
-        self.session().unit_accesses(id)
-    }
-
-    /// What unit `id` binds and what each binding holds now, `None` for one
-    /// given away.
-    ///
-    /// One unit's frame, where [`Self::get_environment`] is the nearest
-    /// binding of each name.
-    pub fn unit_bindings(&mut self, id: u32) -> Vec<(String, Option<String>)> {
-        self.state.executor.unit_bindings(id)
     }
 }
 

@@ -818,6 +818,7 @@ impl ScriptWorldCommand {
                 Some((source?, *offset))
             })
             .collect();
+        drop(pipeline);
 
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         let module_errors = engine.module_errors();
@@ -830,8 +831,9 @@ impl ScriptWorldCommand {
             }
             bail!("Module compilation error");
         }
+        drop(module_errors);
 
-        let files = engine.workspace().source_files(engine.pipeline());
+        let files = engine.workspace().source_files(&engine.pipeline());
 
         let total = units.len();
         let mut failed: Vec<(usize, AnyError)> = Vec::new();

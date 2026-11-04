@@ -627,6 +627,7 @@ fn an_engine_starts_over_a_module_that_does_not_compile() {
     let errors = engine.module_errors();
     assert_eq!(errors.broken.keys().collect::<Vec<_>>(), vec!["local/test/m"]);
     assert!(!errors.diagnostics.is_empty(), "with diagnostics to render");
+    drop(errors);
 
     run(&mut engine, "let a = 1");
     assert_eq!(value_of(&mut engine, "a"), "1");

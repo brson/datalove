@@ -88,11 +88,10 @@ pub fn record_world(sys: SystemLibrary, path: &std::path::Path) -> AnyResult<Tra
     let world = crate::read_world(path)?;
     let (workspace, modules) = world.workspace(&sys)?;
     let engine = Engine::with_options(sys, workspace, datalove_datafun::DebugOutputMode::Disabled, modules)?;
-    let broken = &engine.module_errors().broken;
-    if !broken.is_empty() {
-        let errors: Vec<String> = broken.iter()
-            .map(|(module, errors)| fmt!("{module}: {}", errors.join("; ")))
-            .collect();
+    let errors: Vec<String> = engine.module_errors().broken.iter()
+        .map(|(module, errors)| fmt!("{module}: {}", errors.join("; ")))
+        .collect();
+    if !errors.is_empty() {
         bail!("{} has modules that do not compile:\n{}", path.display(), errors.join("\n"));
     }
     Ok(record_inputs(&mut Session::new(engine), world.inputs))

@@ -99,7 +99,7 @@ impl UnitLowerRecord {
 /// later export shadows an earlier one of the same name whichever kind each is.
 /// Each binding is named by the id of the unit that binds it, `ids` being the
 /// records' units' ids.
-pub fn lower_context_over(ids: &[u32], records: &[UnitLowerRecord]) -> lower::ScriptLowerContext {
+pub fn lower_context_over(ids: &[u32], records: &[Arc<UnitLowerRecord>]) -> lower::ScriptLowerContext {
     assert_eq!(ids.len(), records.len(), "an id per record");
     let mut ctx = lower::ScriptLowerContext::new();
     for (id, record) in ids.iter().zip(records) {
@@ -115,7 +115,7 @@ pub fn lower_context_over(ids: &[u32], records: &[UnitLowerRecord]) -> lower::Sc
 
 /// The script-level consts in scope for a unit sitting after `records`.
 pub fn script_consts_over(
-    records: &[UnitLowerRecord],
+    records: &[Arc<UnitLowerRecord>],
 ) -> HashMap<String, (IrType, Arc<ConstValue>)> {
     let mut consts = HashMap::new();
     for record in records {
@@ -131,7 +131,7 @@ pub fn script_consts_over(
 ///
 /// A unit that exports a name it did not declare as a const rebinds it, so the
 /// name stops being a const from there on.
-pub fn external_consts_over(records: &[UnitLowerRecord]) -> Vec<String> {
+pub fn external_consts_over(records: &[Arc<UnitLowerRecord>]) -> Vec<String> {
     let mut consts: Vec<String> = Vec::new();
     for record in records {
         for (name, _) in &record.exports {
@@ -155,7 +155,7 @@ pub fn external_consts_over(records: &[UnitLowerRecord]) -> Vec<String> {
 /// it, or any later one -- and comes back to life when a later unit exports or
 /// assigns to it. What a unit did to an earlier unit's bindings comes before
 /// what it exported itself, which may be the same name again.
-pub fn dead_externals_over(records: &[UnitLowerRecord]) -> Vec<String> {
+pub fn dead_externals_over(records: &[Arc<UnitLowerRecord>]) -> Vec<String> {
     let mut dead: Vec<String> = Vec::new();
     for record in records {
         dead.extend(record.takes.iter().cloned());
@@ -177,7 +177,7 @@ pub fn dead_externals_over(records: &[UnitLowerRecord]) -> Vec<String> {
 /// among them are left out, being borrowed wherever they are named, as are
 /// the names that resolve to no binding: a function, a module alias, or a
 /// binding of a unit that did not lower.
-pub fn externals_over(ids: &[u32], records: &[UnitLowerRecord], names: &[String]) -> Vec<ExternalBinding> {
+pub fn externals_over(ids: &[u32], records: &[Arc<UnitLowerRecord>], names: &[String]) -> Vec<ExternalBinding> {
     let ctx = lower_context_over(ids, records);
     let dead = dead_externals_over(records);
     let consts = external_consts_over(records);
