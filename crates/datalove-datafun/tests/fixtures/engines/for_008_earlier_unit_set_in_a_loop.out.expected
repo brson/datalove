@@ -44,13 +44,13 @@ Analysis(
                     block1:
                         v0 = const "b"
                         v1 = list [v0]
-                        drop.tracked unit0.s0
-                        store.move.tracked unit0.s0, v1
+                        drop.tracked unit1.s0
+                        store.move.tracked unit1.s0, v1
                         v2 = const 1int
-                        v3 = add unit0.s1, v2
+                        v3 = add unit1.s1, v2
                         drop v2
-                        drop.tracked unit0.s1
-                        store.move.tracked unit0.s1, v3
+                        drop.tracked unit1.s1
+                        store.move.tracked unit1.s1, v3
                         goto block2
                     block2:
                         v4 = const 1int
@@ -63,9 +63,9 @@ Analysis(
                         branch v7, block6, block4
                     block4:
                         v8 = cursorelem s0
-                        v9 = add unit0.s1, *v8
-                        drop.tracked unit0.s1
-                        store.move.tracked unit0.s1, v9
+                        v9 = add unit1.s1, *v8
+                        drop.tracked unit1.s1
+                        store.move.tracked unit1.s1, v9
                         goto block5
                     block5:
                         cursoradvance s0, v6
@@ -91,8 +91,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move unit0.s0
-                        v1 = move unit0.s1
+                        v0 = move unit1.s0
+                        v1 = move unit1.s1
                         v2 = pack tuple/2 {v0, v1}
                         unit_end v2
                 """,

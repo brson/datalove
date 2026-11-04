@@ -25,7 +25,7 @@
 //! ```
 
 use rmx::prelude::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use datalove_datafun_ir::{ExportBinding, IrType, IrCodeUnit};
@@ -98,8 +98,15 @@ pub struct ScriptExecutor {
     /// the compiler: the units after it were lowered against it. Reading a
     /// binding asks whether its unit ran.
     script_ctx: lower::ScriptLowerContext,
-    /// What each unit exports and what became of it, indexed by unit.
-    units: Vec<UnitState>,
+    /// The units' ids, in order.
+    ///
+    /// A unit is known by its id everywhere else: its frame, its functions
+    /// and every reference a later unit's IR holds of it. Only folding the
+    /// exports and checking that a unit reads from units before it ask
+    /// where it sits.
+    order: Vec<u32>,
+    /// What each unit exports and what became of it, by id.
+    units: HashMap<u32, UnitState>,
     pub env: ScriptEnvironment,
     interp: datalove_datafun_interp::IrInterpreter,
 }
@@ -109,7 +116,7 @@ pub struct ScriptExecutor {
 /// **Every unit of a session has one, whether it ran or not.** A unit that
 /// fails stays in its session, so that an edit upstream can make it go green,
 /// and only a unit that ran to its end offers its bindings: the rest hold their
-/// index and nothing else.
+/// place and their id and nothing else.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UnitStatus {
     /// It ran to its end.
@@ -122,9 +129,9 @@ pub enum UnitStatus {
     /// destroyed when the unit runs again or the session ends. What it wrote
     /// into an earlier unit's bindings before it returned stays written.
     ReturnedEarly,
-    /// It compiled and was not run, because it reads from these units and they
-    /// did not run to their end.
-    Blocked { on: Vec<usize> },
+    /// It compiled and was not run, because it reads from these units, by id,
+    /// and they did not run to their end.
+    Blocked { on: Vec<u32> },
 }
 
 /// One unit's exports and what became of it.
@@ -168,7 +175,8 @@ impl ScriptExecutor {
     ) -> ScriptExecutor {
         ScriptExecutor {
             script_ctx: lower::ScriptLowerContext::new(),
-            units: Vec::new(),
+            order: Vec::new(),
+            units: HashMap::new(),
             env: ScriptEnvironment::with_module_registry(module_registry),
             interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
         }
@@ -300,45 +308,36 @@ impl ScriptExecutor {
     /// The interpreter freed everything the runtime had allocated, every
     /// earlier unit's values included, and dropped the units (see
     /// `IrInterpreter::discard_runtime_state`), so the bindings on offer go
-    /// too and the next unit is unit 0. Whoever keeps the session's compiled
-    /// side has to start it again to match; the REPL does.
+    /// too. Whoever keeps the session's compiled side has to start it again
+    /// to match; the REPL does.
     ///
     /// An early return is not this: it unwinds its own unit and nothing else,
     /// which is what lets that unit stay.
     fn failed(&mut self, error: InterpError) -> String {
         self.units.clear();
+        self.order.clear();
         self.rebuild_script_ctx();
         format!("Error: {error}")
     }
 
-    /// Register bindings from an IR unit for future lookups.
-    ///
-    /// The unit index this assigns is the one external operands in later units
-    /// will use to index the frame store, so the two have to agree, and both
-    /// have to agree with the index the compiler gave the unit.
+    /// Register bindings from an IR unit for future lookups, as the next unit.
     fn register_bindings(&mut self, ir_unit: &IrCodeUnit) {
-        self.check_next_index(ir_unit);
-        self.units.push(UnitState { exports: UnitExports::of(ir_unit), status: UnitStatus::Ran });
+        let id = self.check_new(ir_unit);
+        self.order.push(id);
+        self.units.insert(id, UnitState { exports: UnitExports::of(ir_unit), status: UnitStatus::Ran });
         self.rebuild_script_ctx();
     }
 
-    /// Check that `ir_unit` is the unit the executor is about to append.
+    /// Check that `ir_unit` is a unit the executor does not hold yet, and
+    /// give its id.
     ///
     /// A caller that drives a compiler and an executor side by side has to
     /// hand the executor every unit the compiler keeps, a failed one through
-    /// [`Self::skip_unit`]. Without this check, one that dropped a failure
-    /// would have every later unit read the wrong frames rather than panic.
-    fn check_next_index(&self, ir_unit: &IrCodeUnit) {
-        assert_eq!(
-            self.units.len(),
-            self.env.frames.unit_count(),
-            "script unit index diverged from the frame store",
-        );
-        assert_eq!(
-            unit_index(ir_unit),
-            self.units.len(),
-            "the compiler numbered this unit differently from the executor",
-        );
+    /// [`Self::skip_unit`].
+    fn check_new(&self, ir_unit: &IrCodeUnit) -> u32 {
+        let id = unit_id(ir_unit);
+        assert!(!self.units.contains_key(&id), "unit {id} is appended and the executor holds it already");
+        id
     }
 
     /// Fold the per-unit exports into the bindings on offer.
@@ -347,77 +346,139 @@ impl ScriptExecutor {
     /// same name, which is how a session resolves a name.
     fn rebuild_script_ctx(&mut self) {
         let mut ctx = lower::ScriptLowerContext::new();
-        for (index, unit) in self.units.iter().enumerate() {
+        for id in &self.order {
+            let unit = &self.units[id];
             ctx.add_exports(
-                index as u32,
+                *id,
                 &unit.exports.bindings,
                 &unit.exports.value_types,
                 &unit.exports.slot_types,
             );
         }
-        ctx.current_unit = self.units.len() as u32;
         self.script_ctx = ctx;
     }
 
-    /// Take the next index for a unit that did not compile.
+    /// Append unit `id`, which did not compile.
     ///
-    /// It has no frame and exports nothing, and is there so that the units
-    /// after it are numbered as the compiler numbered them.
-    pub fn skip_unit(&mut self) {
-        self.units.push(UnitState { exports: UnitExports::default(), status: UnitStatus::NotCompiled });
-        self.env.add_empty_unit();
+    /// It has no frame and exports nothing, and holds its place so that it
+    /// can be run again in it once an edit makes it compile.
+    pub fn skip_unit(&mut self, id: u32) {
+        assert!(!self.units.contains_key(&id), "unit {id} is appended and the executor holds it already");
+        self.order.push(id);
+        self.units.insert(id, UnitState { exports: UnitExports::default(), status: UnitStatus::NotCompiled });
         self.rebuild_script_ctx();
     }
 
-    /// Leave unit `index`, which an edit stopped compiling, with no frame.
+    /// Put unit `id`, not run yet, in at position `at`.
+    ///
+    /// For a unit spliced into a session: it is run in its place by
+    /// [`Self::rerun_unit`], or left with no frame by [`Self::clear_unit`] if
+    /// it did not compile. No other unit moves anything but its place.
+    pub fn insert_unit(&mut self, at: usize, id: u32) {
+        assert!(!self.units.contains_key(&id), "unit {id} is inserted and the executor holds it already");
+        self.order.insert(at, id);
+        self.units.insert(id, UnitState { exports: UnitExports::default(), status: UnitStatus::NotCompiled });
+        self.rebuild_script_ctx();
+    }
+
+    /// Take unit `id` out of the session, destroying what its frame owned.
+    ///
+    /// Nothing that stays reads from it once what its going reaches has run
+    /// again. Its id may be given again, to the unit put back.
+    pub fn remove_unit(&mut self, id: u32) {
+        assert!(self.units.remove(&id).is_some(), "unit {id} is removed and the executor does not hold it");
+        self.order.retain(|held| *held != id);
+        self.rebuild_script_ctx();
+        self.env.clear_unit(self.interp.runtime_handle(), id);
+        self.interp.forget_compiled_bodies();
+    }
+
+    /// Take out every unit from position `len` on, as [`Self::remove_unit`]
+    /// does one.
+    ///
+    /// The bindings on offer are folded again from what is left, so a name
+    /// only a dropped unit exported stops resolving.
+    pub fn truncate_units(&mut self, len: usize) {
+        assert!(
+            len <= self.order.len(),
+            "cannot truncate to {len} units; the executor holds {}",
+            self.order.len(),
+        );
+        for id in self.order.split_off(len) {
+            self.units.remove(&id);
+            self.env.clear_unit(self.interp.runtime_handle(), id);
+        }
+        self.rebuild_script_ctx();
+        self.interp.forget_compiled_bodies();
+    }
+
+    /// Leave unit `id`, which an edit stopped compiling, with no frame.
     ///
     /// What its frame owned is destroyed, as re-running it would have done.
-    pub fn clear_unit(&mut self, index: usize) {
-        self.set_not_run(index, UnitExports::default(), UnitStatus::NotCompiled);
+    pub fn clear_unit(&mut self, id: u32) {
+        self.set_not_run(id, UnitExports::default(), UnitStatus::NotCompiled);
     }
 
-    /// What became of unit `index`.
-    pub fn unit_status(&self, index: usize) -> &UnitStatus {
-        &self.units[index].status
+    /// What became of unit `id`.
+    pub fn unit_status(&self, id: u32) -> &UnitStatus {
+        &self.unit(id).status
     }
 
-    /// Put unit `index` in the state of one that did not run.
-    fn set_not_run(&mut self, index: usize, exports: UnitExports, status: UnitStatus) {
-        self.units[index] = UnitState { exports, status };
+    /// The units' ids, in order.
+    pub fn unit_ids(&self) -> &[u32] {
+        &self.order
+    }
+
+    /// Unit `id`'s state, which the executor must hold.
+    fn unit(&self, id: u32) -> &UnitState {
+        self.units.get(&id).unwrap_or_else(|| panic!("the executor holds no unit {id}"))
+    }
+
+    /// Where unit `id` sits.
+    fn position(&self, id: u32) -> usize {
+        self.order.iter().position(|held| *held == id)
+            .unwrap_or_else(|| panic!("the executor holds no unit {id}"))
+    }
+
+    /// Put unit `id` in the state of one that did not run.
+    fn set_not_run(&mut self, id: u32, exports: UnitExports, status: UnitStatus) {
+        assert!(self.units.contains_key(&id), "the executor holds no unit {id}");
+        self.units.insert(id, UnitState { exports, status });
         self.rebuild_script_ctx();
-        self.env.clear_unit(self.interp.runtime_handle(), index as u32);
+        self.env.clear_unit(self.interp.runtime_handle(), id);
         self.interp.forget_compiled_bodies();
     }
 
     /// Mark the unit just appended as one that returned early.
     fn returned_early(&mut self) {
-        self.units.last_mut().expect("the unit that returned is registered").status =
+        let id = *self.order.last().expect("the unit that returned is registered");
+        self.units.get_mut(&id).expect("the unit that returned is registered").status =
             UnitStatus::ReturnedEarly;
     }
 
-    /// The units `ir_unit` reads from that did not run to their end.
+    /// The units `ir_unit` reads from that did not run to their end, by id.
     ///
-    /// `index` is the unit's own index; everything it reads sits before it. A
+    /// `at` is where the unit sits; everything it reads sits before it. A
     /// unit that is a bare name reads that binding outside its code, so the
     /// unit providing it counts too.
-    fn blockers(&self, index: usize, ir_unit: &IrCodeUnit) -> Vec<usize> {
-        let mut read: BTreeSet<usize> =
-            ir_unit.script_units_read().into_iter().map(|unit| unit as usize).collect();
+    fn blockers(&self, at: usize, ir_unit: &IrCodeUnit) -> Vec<u32> {
+        let mut read: BTreeSet<u32> = ir_unit.script_units_read().into_iter().collect();
         let script_ctx = ir_unit.script_context().expect("a script code unit");
         if let Some(name) = &script_ctx.result_name {
-            read.extend(self.provider_before(index, name));
+            read.extend(self.provider_before(at, name));
         }
         assert!(
-            read.iter().all(|unit| *unit < index),
-            "unit {index} reads from units {read:?}, which do not all come before it",
+            read.iter().all(|unit| self.order[..at].contains(unit)),
+            "the unit at {at} reads from units {read:?}, which do not all come before it",
         );
-        read.into_iter().filter(|unit| self.units[*unit].status != UnitStatus::Ran).collect()
+        read.into_iter().filter(|unit| self.unit(*unit).status != UnitStatus::Ran).collect()
     }
 
-    /// The nearest unit before `index` that exports a value or slot `name`.
-    fn provider_before(&self, index: usize, name: &str) -> Option<usize> {
-        (0..index).rev().find(|unit| {
-            self.units[*unit].exports.bindings.iter().any(|(bound, binding)| {
+    /// The nearest unit before position `at` that exports a value or slot
+    /// `name`, by id.
+    fn provider_before(&self, at: usize, name: &str) -> Option<u32> {
+        self.order[..at].iter().rev().copied().find(|unit| {
+            self.unit(*unit).exports.bindings.iter().any(|(bound, binding)| {
                 bound == name && !matches!(binding, ExportBinding::Function(_))
             })
         })
@@ -426,29 +487,29 @@ impl ScriptExecutor {
     /// Append `ir_unit` without running it, if it reads from a unit that did
     /// not run to its end, and say why.
     fn block_appended(&mut self, ir_unit: &IrCodeUnit) -> Option<String> {
-        self.check_next_index(ir_unit);
-        let index = self.units.len();
-        let on = self.blockers(index, ir_unit);
+        let id = self.check_new(ir_unit);
+        let on = self.blockers(self.order.len(), ir_unit);
         if on.is_empty() {
             return None;
         }
         let output = blocked_output(&on);
-        self.units.push(UnitState {
+        self.order.push(id);
+        self.units.insert(id, UnitState {
             exports: UnitExports::of(ir_unit),
             status: UnitStatus::Blocked { on },
         });
-        self.env.add_empty_unit();
         self.rebuild_script_ctx();
         Some(output)
     }
 
-    /// Run a unit again in place of the one at `index`.
+    /// Run unit `id` again, in its place.
     ///
     /// The frame that unit had is replaced and what it owned destroyed, and the
     /// names it exports are taken from the new IR, so a binding it no longer
     /// declares stops being on offer. The units after it keep their frames:
     /// only the ones the edit reaches are re-executed, and a unit that uses
-    /// nothing of this one's holds no reference into it.
+    /// nothing of this one's holds no reference into it. A unit spliced in is
+    /// run for the first time through here.
     ///
     /// Returns the result type and the printed result, the way
     /// [`Self::execute_expr`] does, because **an edit can reach an expression
@@ -462,24 +523,20 @@ impl ScriptExecutor {
     /// frame it had is destroyed and the type is `None`.
     pub fn rerun_unit(
         &mut self,
-        index: usize,
+        id: u32,
         ir_unit: &IrCodeUnit,
     ) -> (Option<String>, String) {
-        assert!(
-            index < self.units.len(),
-            "unit {index} has not been executed, so there is nothing to replace",
-        );
         assert_eq!(
-            unit_index(ir_unit), index,
+            unit_id(ir_unit), id,
             "the compiler numbered this unit differently from the executor",
         );
-        let on = self.blockers(index, ir_unit);
+        let on = self.blockers(self.position(id), ir_unit);
         if !on.is_empty() {
             let output = blocked_output(&on);
-            self.set_not_run(index, UnitExports::of(ir_unit), UnitStatus::Blocked { on });
+            self.set_not_run(id, UnitExports::of(ir_unit), UnitStatus::Blocked { on });
             return (None, output);
         }
-        self.units[index] = UnitState { exports: UnitExports::of(ir_unit), status: UnitStatus::Ran };
+        self.units.insert(id, UnitState { exports: UnitExports::of(ir_unit), status: UnitStatus::Ran });
         self.rebuild_script_ctx();
 
         let script_ctx = ir_unit.script_context()
@@ -515,10 +572,10 @@ impl ScriptExecutor {
         }
 
         let completion = self.interp.reexecute_script_unit_in_env(
-            index as u32, ir_unit, &mut self.env, ret_dest, expr_dest);
+            id, ir_unit, &mut self.env, ret_dest, expr_dest);
 
         if let Ok(UnitCompletion::EarlyReturn) = completion {
-            self.units[index].status = UnitStatus::ReturnedEarly;
+            self.units.get_mut(&id).expect("the unit run is held").status = UnitStatus::ReturnedEarly;
         }
         let output = match completion {
             Err(e) => self.failed(e),
@@ -556,29 +613,6 @@ impl ScriptExecutor {
         (result_ty, output)
     }
 
-    /// Drop the runtime state of every unit from `len` on.
-    ///
-    /// What truncating a session needs, and what a splice needs before it runs
-    /// the suffix it re-derived: splicing the unit list renumbers every unit
-    /// after the splice point, so the frames from there on belong to nobody and
-    /// the suffix is run again as if it were being appended. The values those
-    /// frames held are destroyed rather than dropped -- see
-    /// `FrameStore::truncate_units`.
-    ///
-    /// The bindings on offer are folded again from what is left, so a name only
-    /// a dropped unit exported stops resolving.
-    pub fn truncate_units(&mut self, len: usize) {
-        assert!(
-            len <= self.units.len(),
-            "cannot truncate to {len} units; {} have been executed",
-            self.units.len(),
-        );
-        self.units.truncate(len);
-        self.rebuild_script_ctx();
-        self.env.truncate_units(self.interp.runtime_handle(), len);
-        self.interp.forget_compiled_bodies();
-    }
-
     /// Point the executor at a module compilation done since it was built.
     ///
     /// **An edited module reaches a running session only through here.** A
@@ -595,22 +629,21 @@ impl ScriptExecutor {
         self.interp.forget_compiled_bodies();
     }
 
-    /// The values unit `index` binds, in the order it binds them.
+    /// The values unit `id` binds, in the order it binds them.
     ///
     /// Each is what the binding holds now, `None` for one given away. Unlike
     /// [`Self::get_environment`] this is one unit's frame, shadowed bindings
     /// included, and functions are left out. A unit that did not run binds
     /// nothing.
-    pub fn unit_bindings(&mut self, index: usize) -> Vec<(String, Option<String>)> {
-        if self.units[index].status != UnitStatus::Ran {
+    pub fn unit_bindings(&mut self, id: u32) -> Vec<(String, Option<String>)> {
+        if self.unit(id).status != UnitStatus::Ran {
             return Vec::new();
         }
-        let unit = index as u32;
-        let held: Vec<(String, Option<_>)> = self.units[index].exports.bindings.iter()
+        let held: Vec<(String, Option<_>)> = self.unit(id).exports.bindings.iter()
             .filter_map(|(name, binding)| {
                 let value = match binding {
-                    ExportBinding::Value(id) => self.env.frames.external_value(unit, *id),
-                    ExportBinding::Slot(id) => self.env.frames.external_slot(unit, *id),
+                    ExportBinding::Value(value) => self.env.frames.external_value(id, *value),
+                    ExportBinding::Slot(slot) => self.env.frames.external_slot(id, *slot),
                     ExportBinding::Function(_) => return None,
                 };
                 Some((name.C(), value))
@@ -627,13 +660,12 @@ impl ScriptExecutor {
             .collect()
     }
 
-    /// The unit that provides `name` to the session: the nearest that binds
-    /// it, as the environment is built.
-    pub fn provider_of(&self, name: &str) -> Option<usize> {
+    /// The unit that provides `name` to the session, by id: the nearest that
+    /// binds it, as the environment is built.
+    pub fn provider_of(&self, name: &str) -> Option<u32> {
         self.script_ctx.values.get(name).map(|(unit, _)| *unit)
             .or_else(|| self.script_ctx.slots.get(name).map(|(unit, _)| *unit))
             .or_else(|| self.script_ctx.functions.get(name).map(|(unit, _)| *unit))
-            .map(|unit| unit as usize)
     }
 
     /// Get the type and value of a binding by name; the value is `None` for
@@ -644,7 +676,7 @@ impl ScriptExecutor {
     pub fn get_binding(&mut self, name: &str) -> Option<(String, Option<String>)> {
         let provider = self.script_ctx.values.get(name).map(|(unit, _)| *unit)
             .or_else(|| self.script_ctx.slots.get(name).map(|(unit, _)| *unit));
-        if provider.is_some_and(|unit| self.units[unit as usize].status != UnitStatus::Ran) {
+        if provider.is_some_and(|unit| self.unit(unit).status != UnitStatus::Ran) {
             return None;
         }
 
@@ -674,7 +706,8 @@ impl ScriptExecutor {
     /// nearest binding is in one that did not is left out.
     pub fn get_environment(&mut self) -> Vec<(String, String, String, Option<String>)> {
         let mut result = Vec::new();
-        let ran = |unit: &u32| self.units[*unit as usize].status == UnitStatus::Ran;
+        let units = &self.units;
+        let ran = |unit: &u32| units[unit].status == UnitStatus::Ran;
 
         for (name, (unit, value_id)) in self.script_ctx.values.iter().filter(|(_, (unit, _))| ran(unit)) {
             let ty = self.script_ctx.value_types.get(name)
@@ -751,16 +784,16 @@ impl ScriptExecutor {
     }
 }
 
-/// The index the script compiler gave `ir_unit`.
-fn unit_index(ir_unit: &IrCodeUnit) -> usize {
+/// The id the script compiler gave `ir_unit`.
+fn unit_id(ir_unit: &IrCodeUnit) -> u32 {
     ir_unit.script_context()
         .expect("only a script code unit is executed as a unit")
         .unit
-        .expect("the script compiler numbers every unit it compiles") as usize
+        .expect("the script compiler numbers every unit it compiles")
 }
 
 /// What a unit that was not run reports in place of its output.
-fn blocked_output(on: &[usize]) -> String {
+fn blocked_output(on: &[u32]) -> String {
     format!("(not run: it reads from units {on:?}, which did not finish)")
 }
 

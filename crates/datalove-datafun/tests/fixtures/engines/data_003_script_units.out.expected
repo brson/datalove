@@ -52,7 +52,7 @@ Analysis(
                     block0:
                         v0 = call u1()
                         debuglog v0
-                        debuglog unit0.v0
+                        debuglog unit1.v0
                         unit_end
                     
                     fn word_at(p0):

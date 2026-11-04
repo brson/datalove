@@ -1769,12 +1769,6 @@ let d = b + 1
 | 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 provided the same `a` and `b` | `c` = 8 |
 | 4 | `let a_moved = a; set b = b * 2` | takes `a` (1), updates `b` (2) | deleted | deleted | - |
 | 5 | `let d = b + 1` | reads `b` (2) | reruns | reads `b` after unit 4, which no longer updates it | `d` = 126 |
-
-<!--
-Engine today, more than the rule asks:
-unit 3 reruns: a splice reruns every unit from the rerun point on, readers included
-unit 5 recompiles, runs: a removal renumbers every later unit, so they are typechecked under new keys
--->
 <!-- end world -->
 
 Deleting a unit is retracting it: unit 4 took `a` and updated `b`, so units 1 and
@@ -1833,11 +1827,6 @@ let c = b * 2
 | 2 | `set b = 500` | overwrites `b` (1) | reruns | rerun: unit 3 updated `b` when it last ran, and is deleted, and unit 2 is the nearest to set it without reading it | - |
 | 3 | `set b = b + 1` | updates `b` (1) | deleted | deleted | - |
 | 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 3, which no longer updates it | `c` = 1000 |
-
-<!--
-Engine today, more than the rule asks:
-unit 4 recompiles, runs: a removal renumbers every later unit, so they are typechecked under new keys
--->
 <!-- end world -->
 
 Unit 2 overwrites `b`, so rerunning it puts `b` back as unit 3 found it, and
@@ -1876,11 +1865,6 @@ let a_moved = a
 | 1 | `let a = 1000` | - | reruns | rerun: unit 3 reads `a`, which unit 2 took after it | `a` moved |
 | 3 | `let c = a + 1` | reads `a` (1) | compiles, runs | inserted | `c` = 1001 |
 | 2 | `let a_moved = a` | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
-
-<!--
-Engine today, more than the rule asks:
-unit 2 recompiles, runs: an insert renumbers every later unit, so they are typechecked under new keys
--->
 <!-- end world -->
 
 An inserted unit is an apply with nothing to retract. Unit 3 reads `a`, which unit 2
@@ -2008,8 +1992,6 @@ nothing took it at run time.
 
 Each is a comment under a table above.
 
-- The splices rerun and recompile every unit from the rerun start on, readers
-  included, because a value is identified by its unit's index.
 - A write to part of a binding counts as a write to all of it.
 - A rerun that comes out the same still reruns its readers.
 - A unit that returned early is assumed to have done everything its code could.

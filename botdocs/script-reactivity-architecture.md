@@ -1,7 +1,8 @@
 # The responsive scripting environment
 
-How editing a script unit compiles again and reruns the units that depend on
-it, and no others. Explanation; describes the engine as of October 2026.
+How editing a script unit, or inserting or deleting one, compiles again and
+reruns the units that depend on it, and no others. Explanation; describes the
+engine as of November 2026.
 
 A REPL session is a list of script units, and an edit to one of them changes
 what the units after it would compute. Rerunning the whole session is
@@ -25,7 +26,7 @@ it, with the designs that were tried and rejected.
 
 - [The claim](#user-content-the-claim)
 - [The shape of it](#user-content-the-shape-of-it)
-- [1. A unit's key is its position, not its history](#user-content-1-a-units-key-is-its-position-not-its-history)
+- [1. A unit's key is the unit, not its place or its history](#user-content-1-a-units-key-is-the-unit-not-its-place-or-its-history)
 - [2. The environment is read, not seeded](#user-content-2-the-environment-is-read-not-seeded)
 - [3. Lowering folds records, rather than mutating one](#user-content-3-lowering-folds-records-rather-than-mutating-one)
 - [4. Re-derivation is a walk, and the runtime is already per-unit](#user-content-4-re-derivation-is-a-walk-and-the-runtime-is-already-per-unit)
@@ -43,6 +44,10 @@ Units A B C D, where C uses nothing B provides. Editing B compiles and reruns
 **B and D**. A is upstream and untouched. **C is untouched even
 though it sits between them.**
 
+Inserting or deleting a unit is the same claim: inserting X between B and C
+reruns X and the units that use what X provides, and deleting B reruns the
+units that used what B provided. Every other unit keeps its frame.
+
 Editing a module reruns the units that import from it, and the units those
 reach. A module edit that changes only a function body re-typechecks no unit.
 
@@ -56,11 +61,12 @@ D moved `a` out of A, editing B reruns A, B and D. See
 ## The shape of it
 
 ```
-Script (interned cons list)          the identity everything is keyed on
-  prev: Option<Script>               "this unit and the ones before it"
-  unit: ScriptUnit (interned)
-          source: Source             <- the unit's text; set_text edits it
-          is_expr
+ScriptUnit (input)                   the identity everything is keyed on
+  source: Source                     <- the unit's text; set_text edits it
+  is_expr
+  prev: Option<ScriptUnit>           <- the unit before; set_prev splices
+
+unit id (u32, from 1)                what IR and the runtime name a unit by
 
 ScriptEnv (interned)                 what the script is checked against
   modules: Vec<Module>               <- handles; a Module survives set_text
@@ -80,11 +86,11 @@ per unit, from lowering:             UnitLowerRecord
   takes, writes, overwrites,         what it did to earlier units' bindings
   revives
 
-runtime, per unit:                   FrameStore, UnitFunctionRegistry
-  frames[i], unit_end_values[i], unit_end_slots[i], unit_functions(i)
+runtime, per unit id:                FrameStore, UnitFunctionRegistry
+  frames[id], unit_end_values[id], unit_end_slots[id], unit_functions(id)
 ```
 
-`Script` and `ScriptUnit` are in `crates/datalove-datafun-ast/src/script.rs`,
+`ScriptUnit` is in `crates/datalove-datafun-ast/src/script.rs`,
 the typecheck queries in `crates/datalove-datafun-tycheck/src/api.rs`,
 `UnitLowerRecord` in
 `crates/datalove-datafun-compiler/src/tracked_script_lower.rs`, and the
@@ -93,18 +99,29 @@ compiler that drives them in
 
 Five things carry the design, and each is worth understanding on its own.
 
-### 1. A unit's key is its position, not its history
+### 1. A unit's key is the unit, not its place or its history
 
-`typecheck_script_unit(db, script, env)` is keyed on two interned handles. A
-`ScriptUnit` is interned over the unit's `Source`, and a `Source` is a
-`#[salsa::input]`. Editing a unit is `set_text`, which changes a source's
-*text* and not its *handle*. So every `ScriptUnit`, every `Script` node and
-every key stays where it was across an edit.
+`typecheck_script_unit(db, unit, env)` is keyed on two handles. A `ScriptUnit`
+is a `#[salsa::input]`, so its handle is independent of every field it holds.
+Editing a unit is `set_text` on its `Source`, which changes the source's *text*
+and not its *handle*. Splicing a unit in or out is `set_prev` on the unit after
+it, which changes that unit's *link* and not its handle. So neither moves a
+key.
 
 The design turns on that property. A key holding anything about the earlier
-units' outputs would move whenever B's outputs did, re-keying C whether or not
-C mentioned them. That is a whole-prefix value in a per-unit key; see
-[salsa-patterns.md](salsa-patterns.md).
+units -- their outputs, or even which units they are -- would move whenever
+they did, re-keying C whether or not C mentioned them. That is a whole-prefix
+value in a per-unit key; see [salsa-patterns.md](salsa-patterns.md). The
+first version of this engine keyed each unit on an interned cons list of
+itself and the units before it. That survived edits, since a source's handle
+does not move, but any insertion or deletion made a new list for every unit
+after it, and each was typechecked again under its new key.
+
+**A unit's own typecheck must not read `prev`.** Only the lookups of section 2
+read it, and they come out the same after a splice unless the unit spliced in
+or out binds the name looked up. So the typecheck that asked them is a memo
+hit. A typecheck that read `prev` itself would run again on every splice
+before its unit.
 
 **`ScriptEnv` is the other half of the same key, and it holds handles for the
 same reason.** A `Module` is interned over a `ModuleId` and a `Source`, so a
@@ -124,12 +141,14 @@ it.
 `TypeContext` is not given the earlier units' bindings. On a lookup miss it asks:
 
 ```
-binding_at(db, script, env, name)     -> the nearest earlier unit providing it
-module_alias_at(db, script, env, name)
-type_alias_at(db, script, env, name)  -> the nearest earlier `type`
-unit_provides(db, script, env)        -> the projection those walk
-unit_ast(db, unit)                    -> parse, spans
+binding_before(db, unit, env, name)     -> the nearest earlier unit providing it
+module_alias_before(db, unit, env, name)
+type_alias_before(db, unit, env, name)  -> the nearest earlier `type`
+unit_provides(db, unit, env)            -> the projection those walk
+unit_ast(db, unit)                      -> parse, spans
 ```
+
+Each walks back from the unit along the `prev` links.
 
 A fragment's names -- its aliases and function signatures -- are resolved in
 `typecheck_script_unit` and not in `unit_ast`, because a signature or an
@@ -137,8 +156,9 @@ alias may name a type an earlier unit declared.
 
 **Salsa records the dependency because the dependency is the read.** There is
 no key to compute in advance and nothing to keep in step. Editing B reruns
-`binding_at` for the units after it, and it backdates unless B provides that
-name, so C is a memo hit and D is not.
+`binding_before` for the units after it, and it backdates unless B provides that
+name, so C is a memo hit and D is not. Inserting X before C reruns the lookups
+that walk through C's link, and they backdate unless X provides the name.
 
 The alternative, keying on the resolved uses, is circular: a unit's uses are
 only known after typechecking it.
@@ -152,10 +172,10 @@ is seeded, the rule lives in the fallback.
 ### 3. Lowering folds records, rather than mutating one
 
 `UnitLowerRecord` holds what one unit produced. Unit *i*'s context is built from
-the records before it:
+the records before it, and names each binding by its unit's id:
 
 ```
-lower_context_over(&records[..i])
+lower_context_over(&ids[..i], &records[..i])
 script_consts_over(&records[..i])
 dead_externals_over(&records[..i])
 ```
@@ -164,14 +184,23 @@ The phases after typechecking -- ownership, lowering, const evaluation,
 instantiation, IR assembly -- take an index and build their context from a
 *position*. `compile_unit_at(index)` is the one driver, used by appending and
 by re-deriving alike. Re-lowering a unit replaces its record and leaves the
-others alone.
+others alone, and a splice inserts or removes one record and leaves the others
+alone too.
+
+**A position is the compiler's to work with, and an id is what it hands
+out.** The compiler's methods take and return positions, since the folds and
+the reach are over the order. The unit's IR is stamped with its id
+(`ScriptContext::unit`), and the engine and the executor name units by id.
 
 ### 4. Re-derivation is a walk, and the runtime is already per-unit
 
 ```
 relower_reach(edited)            -> seeds = {edited}
 relower_module_reach(paths)      -> seeds = module_importers(paths)
-   both -> rederive_reach(seeds) -> reach_from, compile, repeat -> rerun
+relower_inserted(at)             -> seeds = {at}
+relower_deleted(at, removed)     -> seeds = its readers; restore = its setters
+truncate_units(n)                -> restore = the setters of what went
+   all -> rederive_reach(seeds, restore) -> reach_from, compile, repeat -> rerun
 ```
 
 `reach_from` takes the transitive closure over the name edges -- a unit is
@@ -180,20 +209,20 @@ order. **The reach is taken over the union of the pre- and post-edit graphs**,
 because either alone is unsound. A binding the edit *removes* is absent from
 the new graph, though its reader must be told. One it *introduces* is absent
 from the old. The alias edge, from a `require` to an `import` that uses its
-alias, is added by hand: aliases resolve through `module_alias_at`, which
+alias, is added by hand: aliases resolve through `module_alias_before`, which
 `uses` does not record.
 
-`FrameStore` is partitioned by unit, so rerunning one is
-`ScriptExecutor::rerun_unit`. That runs the unit, then puts the new frame at
-its index and destroys the old frame's `unit_end_values` and `unit_end_slots`.
+`FrameStore` is partitioned by unit id, so rerunning one is
+`ScriptExecutor::rerun_unit`. That runs the unit, then puts the new frame under
+its id and destroys the old frame's `unit_end_values` and `unit_end_slots`.
 The unit's functions in the `UnitFunctionRegistry` are swapped at the same
-time (`ScriptEnvironment::replace_unit`). The order is safe because a unit's IR
+time (`ScriptEnvironment::set_unit`). The order is safe because a unit's IR
 holds no reference to itself.
 
 **Why leaving C alone is sound.** A script value is identified by
-`(unit_index, ValueId)`, so a unit's IR names the units it reads from. A unit
+`(unit id, ValueId)`, so a unit's IR names the units it reads from. A unit
 that uses nothing of B's holds no `(B, *)` reference, so rebuilding B's values
-cannot reach it. An edit leaves the indices alone, which keeps the
+cannot reach it. Neither an edit nor a splice moves an id, which keeps the
 identification good. `c_holds_no_reference_to_b` checks this by walking a
 unit's serialized IR.
 
@@ -299,74 +328,75 @@ that is an optimization not taken.
 ## Splices
 
 `truncate_units`, `delete_unit` and `insert_unit` change the list rather than a
-unit, and that moves indices. Since a script value is identified by
-`(unit_index, ValueId)`, splicing at *i* renumbers everything after it, and
-every later unit's IR has to be rebuilt. That is inherent, not a shortcoming of
-the walk: the ids really did change. **So the splices re-derive the whole
-suffix rather than the reach.** `the_whole_suffix_is_rederived_not_just_the_reach`
-asserts that against a graph-derived reach that is strictly narrower.
+unit. **They move no id, so their reach is an edit's.** An insertion is an
+edit from nothing and a deletion an edit to nothing:
 
-All three are one mechanism: splice the unit list, rebuild the `Script` chain,
-destroy and discard the suffix's runtime state, then re-derive the suffix.
-Truncating is the cheap one, and the only one that renumbers nothing, because
-nothing sits after what goes. It re-derives nothing at all, unless a unit that
-goes took or wrote an earlier binding.
+- **Insert.** `ScriptSession::insert_unit` makes the new unit, linked to the
+  one before it, and sets the link of the one after it to the new unit. The
+  new unit is the seed, and the forward rule reaches the units that now find
+  one of its bindings, a binding it shadows included. The backward rule
+  reaches back for a binding it reads that a later unit took or wrote, since
+  the new unit runs before them.
+- **Delete.** `ScriptSession::delete_unit` links the unit after it to the
+  unit before it. The seeds are the units after it that found a name it
+  provided, took or wrote, with no unit between providing, taking or writing
+  it. What it provided is read from its typecheck as well as its record,
+  since a unit that typechecked and failed later provides its names to the
+  typechecker and not to lowering. And a binding of an earlier unit that it
+  took or wrote is left as it left it, so the nearest unit before it that
+  sets the binding without reading it -- its provider, or an overwrite or
+  revival after that -- is a *restore* seed: rerun, as section 5's backward
+  rule reruns one.
+- **Truncate** is a delete of every unit from `n` on, with nothing after them
+  to reach, so only restore seeds.
 
-That is the rerun of section 5 again. A unit that goes, or runs again as part
-of the suffix, may have taken or written a binding before the splice point.
-`rerun_start` moves the start of the splice back to the nearest unit that sets
-that binding without reading it, as an edit's rerun does: its provider, or an
-overwrite or revival after that. It moves further back while the units in
-between changed something earlier still, except what a unit before the splice
-point overwrites or revives, since that unit runs again and needs nothing of
-what the binding held. The splice re-derives from there, so `truncate_units`
-returns a `Splice` like the others. A splice does not skip readers: it reruns
-every unit from the rerun start on.
+`ScriptCompiler::{relower_inserted, relower_deleted, truncate_units}` are the
+compiler's verbs. The links are input fields, so setting one needs `&mut db`,
+which is why the session splices the list and the compiler, built afterwards,
+re-derives; see [Crossing a database change](#user-content-crossing-a-database-change).
 
-Two things each splice needs that an edit does not:
+The executor runs the reach in place, as for an edit.
+`ScriptExecutor::insert_unit` puts an inserted unit in its place with no
+frame, and `rerun_unit` runs it there. `remove_unit` and `truncate_units`
+destroy what the frames that go owned and drop their functions with them,
+since an id can be given again, to a unit put back. Frames and functions are
+kept by id, so nothing else moves.
 
-- **The suffix runs as appends**, not in place. `ScriptExecutor::truncate_units`
-  destroys the frames and the unit functions from the rerun start on, and the
-  re-derived units take the next free index each. Each is run by
-  `execute_fragment` or `execute_expr`, chosen by the unit's `is_expr` flag.
-  Frames and functions have to go together because appending pushes a unit's
-  functions on the end rather than writing them at an index. A registry left
-  long would put the next unit's functions at a dropped unit's index.
-- **The same `Source` handles go back in** for the units a splice does not
-  touch. `Source::new` would mint a new one and move every memo key from there
-  on.
-
-**A unit of the suffix that stops compiling stays**, as an appended unit that
-fails does (see [Units that did not run to their end](#user-content-units-that-did-not-run-to-their-end)).
+**A unit that stops compiling stays**, as an appended unit that fails does
+(see [Units that did not run to their end](#user-content-units-that-did-not-run-to-their-end)).
 Removing a unit that a later unit reads leaves the reader failing, and putting
 the binding back makes it compile and run again.
 
-`ScriptCompiler::{truncate_units, delete_unit, insert_unit}` are the compiler's
-verbs, and `Engine::{truncate_units, delete_unit, insert_unit}` the shipped
-ones.
+`Engine::{truncate_units, delete_unit, insert_unit, restore_unit}` are the
+shipped verbs. `restore_unit` puts a unit back under the id it had, which is
+what undoing a delete is. An id is otherwise given once: the next unit made
+takes the next, and `Engine::set_next_id` gives the ids of units dropped from
+the REPL's history again.
 
 ## Crossing a database change
 
-Editing is `set_text` on a unit's `Source`, which needs `&mut db`, so nothing
-holding `'db` data can be alive across it. `ScriptSession` is the plain-data
-half: the units' sources, the per-unit records and the flags.
+Editing is `set_text` on a unit's `Source`, and splicing is `set_prev` on a
+`ScriptUnit`, and both need `&mut db`, so nothing holding `'db` data can be
+alive across them. `ScriptSession` is the plain-data half: the units' inputs
+and ids, the per-unit records and the flags.
 `CompiledModules::script_compiler_resumed` rebuilds a compiler over it
-afterwards. Interning the same sources gives back the same `Script` handles, so
-the memos survive the round trip. That is also why `UnitLowerRecord` holds its
+afterwards. The inputs are the very handles the memos are keyed on, so the
+memos survive the round trip. That is also why `UnitLowerRecord` holds its
 edges as owned strings: the reach is walked after the change.
 
-`Engine` owns its `Database` rather than borrowing one, which makes the setter
-reachable, and builds a compiler per operation. The entry points are
-`Engine::edit_unit(unit, source)`,
+`Engine` owns its `Database` rather than borrowing one, which makes the setters
+reachable, and builds a compiler per operation. The entry points name a unit
+by its id, and a place by its position: `Engine::edit_unit(id, source)`,
 `Engine::edit_module(library, package, module, source)`,
-`Engine::truncate_units(n)`, `Engine::delete_unit(i)` and
-`Engine::insert_unit(i, source, is_expr)`.
+`Engine::truncate_units(n)`, `Engine::delete_unit(id)`,
+`Engine::insert_unit(at, source, is_expr)` and
+`Engine::restore_unit(at, id, source, is_expr)`.
 
 ## Units that did not run to their end
 
 An edit can break a unit, and the edit that fixes it can be anywhere upstream.
-So **a unit that fails stays in the session**, holding its index, and is
-re-derived like any other when an edit reaches it. A unit fails in one of three
+So **a unit that fails stays in the session**, holding its place and its id,
+and is re-derived like any other when an edit reaches it. A unit fails in one of three
 ways, and `ScriptExecutor::unit_status` says which:
 
 - `NotCompiled` -- it did not parse, or did not typecheck, or failed in
@@ -382,7 +412,7 @@ ways, and `ScriptExecutor::unit_status` says which:
 **Only a unit that ran offers its bindings.** Each layer enforces the rule for
 the failures it can see:
 
-- A unit that failed to typecheck provides nothing to `binding_at`, so later
+- A unit that failed to typecheck provides nothing to `binding_before`, so later
   units resolve past it to an older binding of the name, or to nothing.
 - A unit that typechecked and failed later leaves an empty `UnitLowerRecord`,
   so the typechecker sees its names and lowering does not. The later unit fails
@@ -401,21 +431,23 @@ unit keeps its types, and it is in the reach of the failed unit because it uses
 names that unit provides. When the failed unit goes green, its dependents are
 re-derived with it and run.
 
-**The numbering must not have a hole in it**, so a unit that did not run takes
-its index with no frame. `FrameStore::frames` is `Vec<Option<ScriptFrame>>`.
-`ScriptExecutor::skip_unit` appends an empty one, and `clear_unit` empties one
-an edit broke, destroying what it owned. An early-returned unit keeps its frame,
-which holds whatever it bound before the return, until it runs again or the
-session ends. The executor folds every unit's exports, so a name a failed unit
-binds still shadows an earlier one, as it does in the compiler. `get_binding`
-and `get_environment` leave out names whose nearest binding did not run.
+**A unit that did not run has no frame.** `FrameStore::frames` is
+`Vec<Option<ScriptFrame>>`, by id. `ScriptExecutor::skip_unit` appends a unit
+with none, and `clear_unit` empties one an edit broke, destroying what it
+owned. An early-returned unit keeps its frame, which holds whatever it bound
+before the return, until it runs again or the session ends. The executor folds
+every unit's exports, in the session's order, so a name a failed unit binds
+still shadows an earlier one, as it does in the compiler. `get_binding` and
+`get_environment` leave out names whose nearest binding did not run.
 
-**The compiler and the executor have to number units alike.** Every caller
+**The compiler and the executor have to agree on the units.** Every caller
 that drives the two side by side has to hand the executor every unit the
-compiler keeps, a failed one through `skip_unit`. The script compiler stamps
-each unit's index in `ScriptContext::unit`, and the executor asserts it on every
-append and rerun. A caller that dropped a failure would otherwise read
-the wrong frames rather than panic.
+compiler keeps, a failed one through `skip_unit`, and splice the executor's
+order as it splices the session. The script compiler stamps each unit's id in
+`ScriptContext::unit`; the executor refuses to append a unit under an id it
+already holds, and checks a rerun is of the unit it names. A caller that
+dropped a failure would otherwise run the next unit against an order that is
+not the compiler's.
 
 A runtime error is not one of these. The runtime discards all of its memory
 (`IrInterpreter::discard_runtime_state`), so the session starts again.
@@ -423,7 +455,8 @@ A runtime error is not one of these. The runtime discards all of its memory
 ## What a step reports
 
 Every operation on the units -- an append, an edit, a splice, a module edit --
-says what it did to each unit it touched, in a `UnitStep` per unit:
+says what it did to each unit it touched, in a `UnitStep` per unit, which names
+the unit by its id:
 `compiled`, which compile passes salsa ran for the unit, and `eval`, what
 re-deriving it came to, or `None` if it was not re-derived. The edits return
 these, and `Engine::last_step` holds them for any operation, the append
@@ -446,7 +479,7 @@ pass records itself at the top of its body, through
 `datalove-ct/src/unit_analysis.rs`, which salsa only runs when it executes the
 query: the parser's `parse` and `parse_expr`, `typecheck_script_unit`, and the
 two ownership queries. Each names its unit by `Source`: the parse by its key,
-the typecheck by its `Script` argument, and the ownership analysis by the
+the typecheck by its `ScriptUnit` argument, and the ownership analysis by the
 `Source` it is also keyed on, which it needs for the spans its diagnostics point
 at. The engine collects them around each
 operation and maps the sources to the units after it. The log is a
@@ -471,11 +504,11 @@ separate test pins that the fixture has the shape the claim is about.
 | suite | what it holds |
 |---|---|
 | `datalove-datafun/tests/script_graph_tests` | provides and uses per unit: the graph itself |
-| `datalove-datafun/tests/script_reactivity_tests` | compile reach, at the typecheck layer |
+| `datalove-datafun/tests/script_reactivity_tests` | compile reach, at the typecheck layer, for edits and for splices |
 | `datalove-datafun/tests/script_exec_reactivity_tests` | lowering and execution reach, values through an executor |
 | `datalove-datafun/tests/script_scenario_tests` | the edit-kind matrix, the module cases, a twelve-unit session, blanking, ownership and reruns |
 | `datalove-datafun/tests/script_const_tests` | consts across units and into function bodies |
-| `datalove-datafun/tests/script_splice_tests` | truncate, remove and insert: the suffix, the values, a suffix that stops compiling |
+| `datalove-datafun/tests/script_splice_tests` | truncate, remove and insert: the reach, the values, a unit that stops compiling |
 | `datalove-script-engine/tests/engine_edit_tests` | the shipped entry points end to end, failed units going green, modules joining and breaking, reruns |
 | `datalove-doc-fixtures/tests/reactive_tests` | the step tables in `reactive/`, and that [script-reactivity-cases.md](script-reactivity-cases.md) shows them as rendered |
 | `datalove-doc-fixtures/tests/replay_tests` | the step tables in the replays the docs embed, against a session with modules and data |
@@ -541,8 +574,10 @@ units directly when the question is about validity.
   record lists what it would take and write. So a blocked unit makes the names
   it would take unusable after it, and its provider reruns for it, though
   nothing was taken.
-- **Splices rerun every unit from the rerun start on**, readers included; see
-  [Splices](#user-content-splices).
+- **A splice runs every later unit's lookups again.** They walk back along
+  the links, one of which moved, so each lookup a later unit made runs again
+  and backdates. That is a walk per name per later unit, which is cheap next
+  to the typechecks it saves, and grows with the session.
 - **The engine keeps no history.** The REPL's `/undo` and `/redo` keep it,
   and need nothing new of the engine: undoing an edit *is* an edit, undoing an
   append is `truncate_units`, and undoing an insert or a delete is the opposite

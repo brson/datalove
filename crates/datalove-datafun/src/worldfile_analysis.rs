@@ -296,11 +296,11 @@ fn execute_script_fragment(
         let compiled_unit = compiler.compile_fragment(source);
 
         // Execute if compilation succeeded; a unit that did not still takes
-        // its index.
+        // its place.
         let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
             executor.execute_fragment(ir_unit)
         } else {
-            executor.skip_unit();
+            executor.skip_unit(compiler.last_unit_id());
             String::new()
         };
 
@@ -336,12 +336,12 @@ fn execute_script_expr(
         let compiled_unit = compiler.compile_expr(source);
 
         // Execute if compilation succeeded; a unit that did not still takes
-        // its index.
+        // its place.
         let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
             let (_, value) = executor.execute_expr(ir_unit);
             value
         } else {
-            executor.skip_unit();
+            executor.skip_unit(compiler.last_unit_id());
             String::new()
         };
 

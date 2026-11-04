@@ -16,7 +16,7 @@ impl IrInterpreter {
         env: &ScriptEnvironment,
     ) -> Result<(), InterpError> {
         // Create an empty context (module functions are resolved via registry, not local context).
-        let ctx = ExecutionContext::new(env.registry.unit_count(), &[]);
+        let ctx = ExecutionContext::new(env.registry.next_unit(), &[]);
         // Use the environment's registry but create fresh frames (function execution
         // doesn't persist frames like script units do).
         let mut frames = FrameStore::new();
@@ -128,7 +128,7 @@ impl IrInterpreter {
     }
 
     /// Forget what was worked out about the functions of script unit `unit`,
-    /// whose index is about to name another unit's.
+    /// whose id is about to name another unit's.
     ///
     /// Their layouts go, and the bytecode kept with them, and every call
     /// site's idea of its callee is checked again; a module's functions,

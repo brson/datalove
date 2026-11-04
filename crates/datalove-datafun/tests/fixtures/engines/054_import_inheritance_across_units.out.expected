@@ -83,7 +83,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call unit1.u0(v0)
+                        v1 = call unit2.u0(v0)
                         unit_end v1
                 """,
             ),

@@ -37,8 +37,8 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 20int
-                        drop.tracked unit0.s0
-                        store.move.tracked unit0.s0, v0
+                        drop.tracked unit1.s0
+                        store.move.tracked unit1.s0, v0
                         unit_end
                 """,
             ),

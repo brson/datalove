@@ -10,7 +10,7 @@ use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
 
 use datalove_datafun_ast::ast::*;
-use datalove_datafun_ast::script::{Script, ScriptUnit};
+use datalove_datafun_ast::script::ScriptUnit;
 use datalove_datafun_resolve::{module_function_asts, resolve_module_exports};
 use datalove_datalit as datalit;
 use crate::context::{InheritedBindings, TypeContext};
@@ -42,7 +42,7 @@ pub use crate::{
 /// What one script unit leaves behind for the units after it.
 ///
 /// A cheap projection in front of [`typecheck_script_unit`], and the firewall
-/// that makes [`binding_at`] worth having. A unit's whole typecheck output moves
+/// that makes [`binding_before`] worth having. A unit's whole typecheck output moves
 /// whenever anything in its body moves -- it holds the expression types -- so
 /// walking back over those to answer "who provides `x`" would re-run the walk on
 /// every edit anywhere earlier. This moves only when what the unit *provides*
@@ -157,7 +157,7 @@ pub struct ScriptUnitTypecheckOutput<'db> {
 /// which is what the typechecker's own tests of recovery from a broken parse
 /// rely on.
 #[salsa::tracked(returns(copy))]
-pub fn unit_parses<'db>(db: &'db dyn crate::Db, unit: ScriptUnit<'db>) -> bool {
+pub fn unit_parses<'db>(db: &'db dyn crate::Db, unit: ScriptUnit) -> bool {
     let source = unit.source(db);
     if unit.is_expr(db) {
         datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(
@@ -171,13 +171,13 @@ pub fn unit_parses<'db>(db: &'db dyn crate::Db, unit: ScriptUnit<'db>) -> bool {
 /// One unit's parse, name resolution and spans.
 ///
 /// Keyed on the unit alone, because none of it depends on the units around it.
-/// A `ScriptUnit` is interned over a `Source`, so this key survives an edit --
+/// A `ScriptUnit` is an input over a `Source`, so this key survives an edit --
 /// the text behind the source changes and this re-runs, and any unit whose text
 /// did not change is untouched.
 #[salsa::tracked(returns(ref))]
 pub fn unit_ast<'db>(
     db: &'db dyn crate::Db,
-    unit: ScriptUnit<'db>,
+    unit: ScriptUnit,
 ) -> ScriptUnitSpec<'db> {
     let source = unit.source(db);
     if unit.is_expr(db) {
@@ -190,20 +190,20 @@ pub fn unit_ast<'db>(
     ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed))
 }
 
-/// What the last unit of `script` provides to the units after it.
+/// What `unit` provides to the units after it.
 ///
 /// See [`UnitProvides`] for why this is a separate query and not a read of
 /// `typecheck_script_unit`'s output.
 #[salsa::tracked(returns(ref))]
 pub fn unit_provides<'db>(
     db: &'db dyn crate::Db,
-    script: Script<'db>,
+    unit: ScriptUnit,
     env: ScriptEnv<'db>,
 ) -> UnitProvides<'db> {
-    if !unit_parses(db, script.unit(db)) {
+    if !unit_parses(db, unit) {
         return UnitProvides::default();
     }
-    let output = typecheck_script_unit(db, script, env);
+    let output = typecheck_script_unit(db, unit, env);
     if !output.result(db).errors(db).is_empty() {
         return UnitProvides::default();
     }
@@ -217,7 +217,15 @@ pub fn unit_provides<'db>(
     }
 }
 
-/// The binding `name` resolves to among `script`'s units, newest first.
+/// The units before `unit`, newest first, read off the `prev` links.
+///
+/// Only the lookups read the links, never a unit's own typecheck; see
+/// [`ScriptUnit`].
+fn units_before(db: &dyn crate::Db, unit: ScriptUnit) -> impl Iterator<Item = ScriptUnit> + '_ {
+    std::iter::successors(unit.prev(db), move |earlier| earlier.prev(db))
+}
+
+/// The binding `name` resolves to among the units before `unit`, newest first.
 ///
 /// **This is what replaced seeding a unit with every earlier unit's bindings.**
 /// Seeding meant the whole prefix's outputs were part of a per-unit memo key, so
@@ -225,23 +233,24 @@ pub fn unit_provides<'db>(
 /// that changed. Here the dependency *is* the read: a unit depends on the names
 /// it asked about and nothing else, and there is no key to keep in step.
 ///
-/// Called with the script up to the unit *before* the one being checked, so a
-/// unit never resolves a name against itself through this.
+/// **And it is what a splice is absorbed by.** The walk reads the units'
+/// `prev` links, so splicing a unit in or out before `unit` runs it again, and
+/// unless the unit spliced binds `name` it comes out the same, and `unit` is
+/// not typechecked again.
 ///
 /// The walk goes all the way back even once something is found, so that a name
 /// which is a variable in one unit and a function in another resolves the way it
 /// did when the prefix was accumulated forward: per namespace, nearest wins.
 #[salsa::tracked(returns(clone))]
-pub fn binding_at<'db>(
+pub fn binding_before<'db>(
     db: &'db dyn crate::Db,
-    script: Script<'db>,
+    unit: ScriptUnit,
     env: ScriptEnv<'db>,
     name: InternedText<'db>,
 ) -> Option<ScriptBinding<'db>> {
     let mut found = ScriptBinding::default();
-    let mut current = Some(script);
-    while let Some(prefix) = current {
-        let provides = unit_provides(db, prefix, env);
+    for earlier in units_before(db, unit) {
+        let provides = unit_provides(db, earlier, env);
         if found.var.is_none() {
             if let Some((_, ty, is_mutable)) =
                 provides.vars.iter().rev().find(|(n, _, _)| *n == name)
@@ -262,86 +271,76 @@ pub fn binding_at<'db>(
                 found.func_ast = Some((ast.clone(), *module_id));
             }
         }
-        current = prefix.prev(db);
     }
     if found.is_empty() { None } else { Some(found) }
 }
 
-/// The module path `alias` names, from the nearest earlier `require`.
+/// The module path `alias` names, from the nearest `require` before `unit`.
 ///
 /// A require in one REPL line is visible to an import in a later one, and this
 /// is that, asked for one alias at a time rather than carried along as a map.
 #[salsa::tracked(returns(clone))]
-fn module_alias_at<'db>(
+fn module_alias_before<'db>(
     db: &'db dyn crate::Db,
-    script: Script<'db>,
+    unit: ScriptUnit,
     env: ScriptEnv<'db>,
     alias: InternedText<'db>,
 ) -> Option<String> {
-    let mut current = Some(script);
-    while let Some(prefix) = current {
-        let aliases = &unit_provides(db, prefix, env).module_aliases;
-        if let Some((_, path)) = aliases.iter().rev().find(|(a, _)| *a == alias) {
-            return Some(path.C());
-        }
-        current = prefix.prev(db);
-    }
-    None
+    units_before(db, unit).find_map(|earlier| {
+        let aliases = &unit_provides(db, earlier, env).module_aliases;
+        aliases.iter().rev().find(|(a, _)| *a == alias).map(|(_, path)| path.C())
+    })
 }
 
-/// The type `name` names, from the nearest earlier `type`.
+/// The type `name` names, from the nearest `type` before `unit`.
 ///
 /// A type declared in one REPL line is known to a later one, asked for one
-/// name at a time as [`binding_at`] asks for a binding.
+/// name at a time as [`binding_before`] asks for a binding.
 #[salsa::tracked(returns(clone))]
-pub fn type_alias_at<'db>(
+pub fn type_alias_before<'db>(
     db: &'db dyn crate::Db,
-    script: Script<'db>,
+    unit: ScriptUnit,
     env: ScriptEnv<'db>,
     name: InternedText<'db>,
 ) -> Option<Type<'db>> {
-    let mut current = Some(script);
-    while let Some(prefix) = current {
-        let aliases = &unit_provides(db, prefix, env).type_aliases;
-        if let Some((_, ty)) = aliases.iter().rev().find(|(n, _)| *n == name) {
-            return Some(ty.clone());
-        }
-        current = prefix.prev(db);
-    }
-    None
+    units_before(db, unit).find_map(|earlier| {
+        let aliases = &unit_provides(db, earlier, env).type_aliases;
+        aliases.iter().rev().find(|(n, _)| *n == name).map(|(_, ty)| ty.clone())
+    })
 }
 
-/// Typecheck the last unit of `script`, against the units before it.
+/// Typecheck `unit`, against the units before it.
 ///
-/// **Keyed on a position in the script and nothing derived from it.** A
-/// `Script` handle is "this unit, and the units before it", built out of
-/// interned nodes over each unit's `Source`, and a source's identity is
-/// independent of its text -- so editing any unit moves no key here. What the
-/// earlier units left behind is reached through [`binding_at`] on a lookup miss,
-/// which is what confines an edit to the units that used what changed. See
-/// `botdocs/plan-script-reactivity.md`.
+/// **Keyed on the unit and nothing about where it sits.** A `ScriptUnit` is an
+/// input, and neither editing a unit nor splicing one in or out moves its
+/// handle, so nothing moves a key here. What the earlier units left behind is
+/// reached through [`binding_before`] on a lookup miss, which is what confines
+/// a change to the units that used what changed. See
+/// `botdocs/script-reactivity-architecture.md`.
+///
+/// This must not read `unit.prev` itself, or every splice before the unit
+/// would typecheck it again.
 #[salsa::tracked(returns(copy))]
 pub fn typecheck_script_unit<'db>(
     db: &'db dyn crate::Db,
-    script: Script<'db>,
+    unit: ScriptUnit,
     env: ScriptEnv<'db>,
 ) -> ScriptUnitTypecheckOutput<'db> {
     // By the unit's own source, since a unit is typechecked outside its own
     // compile too.
-    datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Typecheck, script.unit(db).source(db));
+    datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Typecheck, unit.source(db));
     // Handles only. A module's parse and name resolution are asked for one
     // module at a time, where an import names it.
     let modules_by_path = script_modules_by_path(db, env);
 
-    let unit_spec = unit_ast(db, script.unit(db));
+    let unit_spec = unit_ast(db, unit);
     let mut ctx = TypeContext::new(db, unit_spec.spans.clone());
     ctx.data_files = env.data(db).C();
     ctx.record_uses();
 
     // The environment the earlier units left is read on a lookup miss rather
     // than seeded into the context, which is the whole of stage B.
-    let earlier = script.prev(db);
-    ctx.inherited = earlier.map(|script| InheritedBindings { script, env });
+    ctx.inherited = Some(InheritedBindings { unit, env });
 
     // Script units have Result<()> return type for try operators.
     let unit_tuple_ty = datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() });
@@ -391,7 +390,7 @@ pub fn typecheck_script_unit<'db>(
                 db,
                 parsed,
                 &new_module_aliases,
-                |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
+                |alias| module_alias_before(db, unit, env, alias),
                 &modules_by_path,
             );
             imported_modules = imports;
@@ -400,7 +399,7 @@ pub fn typecheck_script_unit<'db>(
                 db,
                 &parsed.qualified_calls,
                 &new_module_aliases,
-                |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
+                |alias| module_alias_before(db, unit, env, alias),
                 &modules_by_path,
             );
             ctx.qualified = qualified;
@@ -425,8 +424,7 @@ pub fn typecheck_script_unit<'db>(
                 }
                 let first = match bound.get(&item_name) {
                     Some(first) => Some(*first),
-                    None => earlier
-                        .and_then(|prev| binding_at(db, prev, env, item_name))
+                    None => binding_before(db, unit, env, item_name)
                         .and_then(|binding| binding.func_ast)
                         .map(|(_, module_id)| module_id),
                 };
@@ -517,7 +515,7 @@ pub fn typecheck_script_unit<'db>(
                 db,
                 &parsed.qualified_calls,
                 &[],
-                |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
+                |alias| module_alias_before(db, unit, env, alias),
                 &modules_by_path,
             );
             ctx.qualified = qualified;
@@ -561,7 +559,7 @@ pub fn typecheck_script_unit<'db>(
         new_consts, uses, imported_modules)
 }
 
-/// Typecheck every unit of `script`, oldest first.
+/// Typecheck `last` and every unit before it, oldest first.
 ///
 /// An aggregation over [`typecheck_script_unit`], which is where the
 /// memoization that matters lives: this re-runs whenever a unit is appended or
@@ -569,16 +567,13 @@ pub fn typecheck_script_unit<'db>(
 #[salsa::tracked(returns(copy))]
 pub fn type_check_script_units<'db>(
     db: &'db dyn crate::Db,
-    script: Script<'db>,
+    last: ScriptUnit,
     env: ScriptEnv<'db>,
 ) -> ScriptUnitsTypecheckResultTracked<'db> {
-    let mut chain = script.chain(db);
-    chain.reverse();
-
     let mut results = Vec::new();
     let mut unit_outputs = Vec::new();
-    for prefix in chain {
-        let output = typecheck_script_unit(db, prefix, env);
+    for unit in last.units(db) {
+        let output = typecheck_script_unit(db, unit, env);
         results.push(output.result(db));
         unit_outputs.push(output);
     }
@@ -593,9 +588,9 @@ pub fn type_check_script_units<'db>(
 pub fn single_fragment_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-) -> (Script<'db>, ScriptEnv<'db>) {
-    let unit = ScriptUnit::new(db, source, false);
-    (Script::new(db, None, unit), ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new()))
+) -> (ScriptUnit, ScriptEnv<'db>) {
+    let unit = ScriptUnit::new(db, source, false, None);
+    (unit, ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new()))
 }
 
 /// Typecheck a single script fragment using the production path.
@@ -603,8 +598,8 @@ pub fn type_check_single_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
 ) -> UnitTypecheckResultTracked<'db> {
-    let (script, env) = single_fragment_script(db, source);
-    type_check_script_units(db, script, env).results(db)[0]
+    let (unit, env) = single_fragment_script(db, source);
+    type_check_script_units(db, unit, env).results(db)[0]
 }
 
 /// Typecheck a module graph (package-agnostic).

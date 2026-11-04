@@ -87,7 +87,10 @@ impl ModuleFunctionRegistry {
 
 /// Registry of unit functions, per-script.
 ///
-/// Grows as script units are executed.
+/// **Indexed by unit id, not by where a unit sits**, which is what lets a
+/// unit be spliced in or out without moving any other unit's functions. An id
+/// with no unit behind it, or behind a unit that did not run, has no
+/// functions.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct UnitFunctionRegistry {
     unit_functions: Vec<Vec<IrCodeUnit>>,
@@ -101,37 +104,31 @@ impl UnitFunctionRegistry {
         }
     }
 
-    /// Add code units from a completed unit.
-    pub fn add_unit_code_units(&mut self, units: Vec<IrCodeUnit>) {
-        self.unit_functions.push(units);
-    }
-
-    /// Put a re-executed unit's code units in place of the ones it had.
+    /// Put unit `unit`'s code units in place of whatever it had.
     ///
     /// A `CodeRef::Local` names a position in one unit's list, so a unit's
-    /// functions have to sit at that unit's index and nowhere else.
+    /// functions have to sit at that unit's id and nowhere else.
     pub fn set_unit_code_units(&mut self, unit: u32, units: Vec<IrCodeUnit>) {
         let index = unit as usize;
-        assert!(
-            index < self.unit_functions.len(),
-            "unit {unit} has no code units to replace; the registry holds {}",
-            self.unit_functions.len(),
-        );
+        if index >= self.unit_functions.len() {
+            self.unit_functions.resize_with(index + 1, Vec::new);
+        }
         self.unit_functions[index] = units;
     }
 
-    /// Drop the code units of every unit from `len` on.
+    /// Drop unit `unit`'s code units.
     ///
-    /// The other half of truncating the frame store: a `CodeRef::Local` names a
-    /// position in one unit's list, so a unit's functions have to go when its
-    /// frame does or the next unit to take that index inherits them.
-    pub fn truncate_units(&mut self, len: usize) {
-        assert!(
-            len <= self.unit_functions.len(),
-            "cannot truncate to {len} units; the registry holds {}",
-            self.unit_functions.len(),
-        );
-        self.unit_functions.truncate(len);
+    /// The other half of dropping its frame: an id can be given again, to a
+    /// unit put back, and must not find the functions it had.
+    pub fn remove_unit(&mut self, unit: u32) {
+        if let Some(functions) = self.unit_functions.get_mut(unit as usize) {
+            functions.clear();
+        }
+    }
+
+    /// Drop every unit's code units.
+    pub fn clear(&mut self) {
+        self.unit_functions.clear();
     }
 
     /// Look up a code unit from a previous unit.
@@ -145,11 +142,11 @@ impl UnitFunctionRegistry {
         self.unit_functions.get(unit as usize).map(|v| v.as_slice())
     }
 
-    /// How many units have been completed.
+    /// An id past every unit registered.
     ///
-    /// A unit is added once it has finished, so this is also the index the
-    /// unit now running will take.
-    pub fn unit_count(&self) -> u32 {
+    /// What a unit run with no id of its own takes: units built by hand and
+    /// run one after another, numbered as they come.
+    pub fn next_unit(&self) -> u32 {
         self.unit_functions.len() as u32
     }
 
@@ -233,19 +230,19 @@ impl FunctionRegistry {
         self.module_registry_mut().add_module_code_unit(module_id, func_id, unit);
     }
 
-    /// Add code units from a completed unit.
-    pub fn add_unit_code_units(&mut self, units: Vec<IrCodeUnit>) {
-        self.unit_registry.add_unit_code_units(units);
-    }
-
-    /// Put a re-executed unit's code units in place of the ones it had.
+    /// Put unit `unit`'s code units in place of whatever it had.
     pub fn set_unit_code_units(&mut self, unit: u32, units: Vec<IrCodeUnit>) {
         self.unit_registry.set_unit_code_units(unit, units);
     }
 
-    /// Drop the code units of every unit from `len` on.
-    pub fn truncate_units(&mut self, len: usize) {
-        self.unit_registry.truncate_units(len);
+    /// Drop unit `unit`'s code units.
+    pub fn remove_unit(&mut self, unit: u32) {
+        self.unit_registry.remove_unit(unit);
+    }
+
+    /// Drop every unit's code units.
+    pub fn clear_units(&mut self) {
+        self.unit_registry.clear();
     }
 
     /// Get a module code unit by module and function ID.
@@ -263,9 +260,9 @@ impl FunctionRegistry {
         self.unit_registry.unit_functions(unit)
     }
 
-    /// How many units have been completed; also the index of the one running.
-    pub fn unit_count(&self) -> u32 {
-        self.unit_registry.unit_count()
+    /// An id past every unit registered; see [`UnitFunctionRegistry::next_unit`].
+    pub fn next_unit(&self) -> u32 {
+        self.unit_registry.next_unit()
     }
 
     /// Iterate over all module code units.

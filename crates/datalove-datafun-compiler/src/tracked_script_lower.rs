@@ -97,17 +97,19 @@ impl UnitLowerRecord {
 ///
 /// Last writer wins by position, so the records are folded oldest first and a
 /// later export shadows an earlier one of the same name whichever kind each is.
-pub fn lower_context_over(records: &[UnitLowerRecord]) -> lower::ScriptLowerContext {
+/// Each binding is named by the id of the unit that binds it, `ids` being the
+/// records' units' ids.
+pub fn lower_context_over(ids: &[u32], records: &[UnitLowerRecord]) -> lower::ScriptLowerContext {
+    assert_eq!(ids.len(), records.len(), "an id per record");
     let mut ctx = lower::ScriptLowerContext::new();
-    for (index, record) in records.iter().enumerate() {
+    for (id, record) in ids.iter().zip(records) {
         ctx.add_exports(
-            index as u32,
+            *id,
             &record.exports,
             &record.value_types,
             &record.slot_types,
         );
     }
-    ctx.current_unit = records.len() as u32;
     ctx
 }
 
@@ -175,8 +177,8 @@ pub fn dead_externals_over(records: &[UnitLowerRecord]) -> Vec<String> {
 /// among them are left out, being borrowed wherever they are named, as are
 /// the names that resolve to no binding: a function, a module alias, or a
 /// binding of a unit that did not lower.
-pub fn externals_over(records: &[UnitLowerRecord], names: &[String]) -> Vec<ExternalBinding> {
-    let ctx = lower_context_over(records);
+pub fn externals_over(ids: &[u32], records: &[UnitLowerRecord], names: &[String]) -> Vec<ExternalBinding> {
+    let ctx = lower_context_over(ids, records);
     let dead = dead_externals_over(records);
     let consts = external_consts_over(records);
     let mut names: Vec<&String> = names.iter().filter(|name| !consts.contains(name)).collect();

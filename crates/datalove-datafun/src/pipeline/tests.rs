@@ -23,7 +23,7 @@ impl<'db> TestContext<'db> {
         let output = if let Some(ir_unit) = &compiled.ir_unit {
             self.executor.execute_fragment(ir_unit)
         } else {
-            self.executor.skip_unit();
+            self.executor.skip_unit(self.compiler.last_unit_id());
             String::new()
         };
         ScriptUnitResult {
@@ -40,7 +40,7 @@ impl<'db> TestContext<'db> {
         let (ty, output) = if let Some(ir_unit) = &compiled.ir_unit {
             self.executor.execute_expr(ir_unit)
         } else {
-            self.executor.skip_unit();
+            self.executor.skip_unit(self.compiler.last_unit_id());
             (None, String::new())
         };
         ScriptUnitResult {

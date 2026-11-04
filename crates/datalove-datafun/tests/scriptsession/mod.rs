@@ -121,7 +121,7 @@ impl Session {
     /// Compile one more unit on the end of the script, without running it.
     ///
     /// The unit stays whether or not it compiles. One that did not is given its
-    /// index in the executor here; one that did is the caller's to run, or to
+    /// place in the executor here; one that did is the caller's to run, or to
     /// take back off with [`Self::truncate`].
     pub fn compile_append(&mut self, text: &str) -> ScriptCompilationResult {
         let compiled = self.pipeline.compile(&self.db);
@@ -129,10 +129,11 @@ impl Session {
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
         let result = compiler.compile_fragment(text);
+        let id = compiler.last_unit_id();
         self.script = Some(compiler.into_session());
         self.texts.push(text.S());
         if result.ir_unit.is_none() {
-            self.executor.skip_unit();
+            self.executor.skip_unit(id);
         }
         result
     }
@@ -155,10 +156,11 @@ impl Session {
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
         let result = compiler.compile_expr(text);
+        let id = compiler.last_unit_id();
         self.script = Some(compiler.into_session());
         self.texts.push(text.S());
         if result.ir_unit.is_none() {
-            self.executor.skip_unit();
+            self.executor.skip_unit(id);
         }
         result
     }
@@ -215,88 +217,86 @@ impl Session {
 
     /// Drop the units from `n` on.
     ///
-    /// Returns the units re-derived. Truncating renumbers nothing, because
-    /// there is nothing after what goes, so that is none unless a unit that
-    /// went took or wrote an earlier unit's binding, which reruns from where
-    /// the binding was made.
+    /// Returns the units re-derived. Nothing sits after what goes, so that is
+    /// none unless a unit that went took or wrote an earlier unit's binding,
+    /// which reruns the unit that set the binding.
     pub fn truncate(&mut self, n: usize) -> BTreeSet<usize> {
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let splice = compiler.truncate_units(n);
+        let rederived = compiler.truncate_units(n);
         self.script = Some(compiler.into_session());
         self.texts.truncate(n);
-        self.rerun_spliced(splice)
+        self.executor.truncate_units(n);
+        self.rerun_allowing_failures(rederived)
     }
 
-    /// Splice the unit at `i` out and re-derive and re-execute the suffix.
+    /// Splice the unit at `i` out, and re-derive and re-execute what that
+    /// reaches.
     ///
-    /// Returns the units re-derived, which a splice makes the whole suffix
-    /// rather than the reach: every one of their values changed identity. A
-    /// unit of the suffix that stopped compiling stays, and [`Self::failed`]
-    /// says which did.
+    /// Returns the units re-derived, at the indices they now have. A unit that
+    /// stopped compiling stays, and [`Self::failed`] says which did.
     pub fn remove(&mut self, i: usize) -> BTreeSet<usize> {
+        let id = self.ids()[i];
+        let removed = self.script.as_mut().expect("a session").delete_unit(&mut self.db, i);
+        self.executor.remove_unit(id);
+        self.texts.remove(i);
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let splice = compiler.delete_unit(i);
+        let rederived = compiler.relower_deleted(i, removed);
         self.script = Some(compiler.into_session());
-
-        self.texts.remove(i);
-        self.rerun_spliced(splice)
+        self.rerun_allowing_failures(rederived)
     }
 
     /// Splice a new fragment in at `i`, the other half of [`Self::remove`].
     pub fn insert(&mut self, i: usize, text: &str) -> BTreeSet<usize> {
+        let source = bct::input::Source::new(&self.db, text.S());
+        let id = self.script.as_mut().expect("a session").insert_unit(&mut self.db, i, source, false, None);
+        self.executor.insert_unit(i, id);
+        self.texts.insert(i, text.S());
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let splice = compiler.insert_unit(i, text, false);
+        let rederived = compiler.relower_inserted(i);
         self.script = Some(compiler.into_session());
+        self.rerun_allowing_failures(rederived)
+    }
 
-        self.texts.insert(i, text.S());
-        self.rerun_spliced(splice)
+    /// The units' ids, in order.
+    pub fn ids(&self) -> Vec<u32> {
+        self.script.as_ref().expect("a session").unit_ids()
     }
 
     /// The units that did not run to their end, in index order.
     pub fn failed(&self) -> Vec<usize> {
-        (0..self.unit_count())
-            .filter(|unit| *self.executor.unit_status(*unit) != datafun::pipeline::UnitStatus::Ran)
+        self.ids().iter().enumerate()
+            .filter(|(_, id)| *self.executor.unit_status(**id) != datafun::pipeline::UnitStatus::Ran)
+            .map(|(index, _)| index)
             .collect()
     }
 
-    /// Run a re-derived suffix as appends, which is what a splice needs.
-    ///
-    /// [`Self::rerun`] re-executes through `replace_frame`, which puts a frame
-    /// at the index its unit already had -- right for an edit, where no index
-    /// moved. A splice moves them, so the frames from the splice point on are
-    /// destroyed and the suffix is run again from the top.
-    fn rerun_spliced(&mut self, splice: datafun::pipeline::Splice) -> BTreeSet<usize> {
-        let datafun::pipeline::Splice { from, rederived } = splice;
-        self.executor.truncate_units(from);
-        let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
-
+    /// Run each re-derived unit again in place, in the order given, leaving a
+    /// unit that did not compile with no frame.
+    fn rerun_allowing_failures(&mut self, rederived: Vec<(usize, ScriptCompilationResult)>) -> BTreeSet<usize> {
+        let ids = self.ids();
         let mut order = Vec::new();
         for (index, result) in rederived {
             order.push(index);
             let Some(ir_unit) = result.ir_unit.as_ref() else {
-                self.executor.skip_unit();
+                self.executor.clear_unit(ids[index]);
                 continue;
             };
-            let output = if is_expr[index] {
-                self.executor.execute_expr(ir_unit).1
-            } else {
-                self.executor.execute_fragment(ir_unit)
-            };
+            let (_, output) = self.executor.rerun_unit(ids[index], ir_unit);
             assert!(!output.starts_with("Error:"), "running unit {index}: {output}");
         }
 
         let mut sorted = order.clone();
         sorted.sort();
-        assert_eq!(order, sorted, "a suffix must be re-derived in index order");
+        assert_eq!(order, sorted, "units must be re-derived in index order");
         order.into_iter().collect()
     }
 
@@ -352,13 +352,14 @@ impl Session {
 
     /// Run each re-lowered unit again in place, in the order given.
     fn rerun(&mut self, rederived: Vec<(usize, ScriptCompilationResult)>) -> BTreeSet<usize> {
+        let ids = self.ids();
         let mut order = Vec::new();
         for (index, result) in rederived {
             let ir_unit = result.ir_unit.as_ref().unwrap_or_else(|| {
                 panic!("unit {index} should re-lower: {:?} {:?}",
                     result.typecheck, result.lowering)
             });
-            let (_, output) = self.executor.rerun_unit(index, ir_unit);
+            let (_, output) = self.executor.rerun_unit(ids[index], ir_unit);
             assert!(!output.starts_with("Error:"), "re-running unit {index}: {output}");
             order.push(index);
         }
@@ -452,12 +453,12 @@ impl Session {
         names.iter().copied().filter(|name| buffer.contains(&format!("ran {name}"))).collect()
     }
 
-    /// How many units the executor holds frames for.
-    ///
-    /// The index the next appended unit will take, which is what says a
-    /// truncated index is reused rather than skipped.
-    pub fn frame_count(&self) -> usize {
-        self.executor.env.frames.unit_count()
+    /// Which units the executor holds a frame for, by index.
+    pub fn framed(&self) -> Vec<usize> {
+        self.ids().iter().enumerate()
+            .filter(|(_, id)| self.executor.env.frames.has_frame(**id))
+            .map(|(index, _)| index)
+            .collect()
     }
 
     pub fn binding(&mut self, name: &str) -> String {

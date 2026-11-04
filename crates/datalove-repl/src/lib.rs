@@ -285,8 +285,8 @@ pub struct UnitDetail {
 
 /// What a step did to one unit, which the REPL names by number.
 ///
-/// The engine's [`script::UnitStep`], with the unit's number for its
-/// position, and the positions in a `Blocked` turned into numbers too.
+/// The engine's [`script::UnitStep`], whose ids are the numbers, with the
+/// passes it ran said as one.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UnitStep {
     /// The unit's number.

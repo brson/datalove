@@ -23,6 +23,7 @@
 //! ```
 
 use rmx::prelude::*;
+use salsa::Setter as _;
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
@@ -48,7 +49,7 @@ use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_tycheck::{
     typecheck_script_unit, unit_ast, unit_parses,
-    Script, ScriptEnv, ScriptUnit, ScriptUnitKind,
+    ScriptEnv, ScriptUnit, ScriptUnitKind,
     UnitTypecheckResultTracked,
 };
 
@@ -69,14 +70,26 @@ struct TypecheckOutput<'db> {
     call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
 }
 
-/// What a splice re-derived, and where it started.
+/// One unit of a session: its input, and the id it is known by.
 ///
-/// The caller drops the runtime state from `from` on and runs `rederived` as
-/// appends. `from` is the splice point unless the splice had to start at an
-/// earlier binding's provider, to rerun it and restore the binding.
-pub struct Splice {
-    pub from: usize,
-    pub rederived: Vec<(usize, ScriptCompilationResult)>,
+/// The id is the unit's for as long as it is in the session, and is what its
+/// IR is numbered by and every later unit's IR names it by; see
+/// `ScriptContext::unit`. The source is the input's own, held here too so
+/// that a session read between compilers needs no database.
+#[derive(Clone, Copy, Debug)]
+struct SessionUnit {
+    id: u32,
+    unit: ScriptUnit,
+    source: bct::input::Source,
+}
+
+/// A unit taken out of a session, as the re-derivation after it needs it.
+///
+/// What it provided and did to earlier units' bindings is what says which
+/// units its going reaches; see [`ScriptCompiler::relower_deleted`].
+pub struct RemovedUnit {
+    unit: ScriptUnit,
+    record: UnitLowerRecord,
 }
 
 /// The graph the units' records held before a re-derivation, which the reach
@@ -225,10 +238,11 @@ impl<'db> CompiledModules<'db> {
 
         Some(ScriptCompiler {
             db,
-            scripts: Vec::new(),
+            units: Vec::new(),
+            next_id: FIRST_UNIT_ID,
             env: ScriptEnv::new(
                 db, modules, self.shared.module_graph.data(db).C()),
-            last_script: None,
+            last_unit: None,
             unit_records: Vec::new(),
             last_source: None,
             ctfe_evaluator: RefCell::new(ctfe_evaluator),
@@ -260,9 +274,8 @@ impl<'db> CompiledModules<'db> {
 
     /// Create a script compiler that takes up a session an edit interrupted.
     ///
-    /// The units' `Source`s are inputs, so interning them again gives back the
-    /// very same `ScriptUnit` and `Script` handles the session had before the
-    /// edit, and every memo keyed on one of those is still good. See
+    /// The session holds the units' `ScriptUnit` inputs, the very handles
+    /// every per-unit memo is keyed on, so each of those is still good. See
     /// [`ScriptSession`].
     ///
     /// Returns `None` if module compilation failed (has errors).
@@ -298,22 +311,31 @@ pub struct UnitAccesses {
     pub revives: Vec<String>,
 }
 
+/// The id a session's first unit is given.
+///
+/// From 1, as a REPL numbers units for a person to type, so that the numbers
+/// it shows are the ids and need no table beside them.
+pub const FIRST_UNIT_ID: u32 = 1;
+
 /// The part of a script compiler that survives a database mutation.
 ///
 /// A [`ScriptCompiler`] borrows the database for as long as it lives, and
-/// editing a unit is `set_text` on a `Source`, which needs `&mut db`. So an
-/// edit means letting the compiler go and building another afterwards, and
-/// this is what crosses in between: the units' sources, whose identity is
-/// independent of their text, and what each unit's compilation produced.
-/// Everything tied to the database -- the interned `Script` handles, the
-/// module specs, the CTFE evaluator -- is derived again on the far side.
+/// editing a unit is `set_text` on a `Source`, which needs `&mut db`, as is
+/// splicing a unit in or out, which is `set_prev` on the unit after it. So
+/// those mean letting the compiler go and building another afterwards, and
+/// this is what crosses in between: the units' inputs, whose identity is
+/// independent of their text and of where they sit, their ids, and what each
+/// unit's compilation produced. Everything tied to the database -- the module
+/// specs, the CTFE evaluator -- is derived again on the far side.
 ///
 /// See `botdocs/plan-script-reactivity.md` for why the compiler cannot simply
 /// be handed `&mut db` instead.
 pub struct ScriptSession {
-    /// Each unit's source and whether it was submitted as a bare expression.
-    units: Vec<(bct::input::Source, bool)>,
-    /// What each unit's compilation produced, indexed by unit.
+    units: Vec<SessionUnit>,
+    /// The id the next unit made is given; ids are not given twice, unless a
+    /// unit is put back under the one it had.
+    next_id: u32,
+    /// What each unit's compilation produced, in the units' order.
     records: Vec<UnitLowerRecord>,
     skip_const_inlining: bool,
     skip_specialization: bool,
@@ -329,24 +351,119 @@ impl ScriptSession {
     /// the compiler -- a compiler holding `&'db dyn Database` cannot be alive
     /// across it. See `botdocs/plan-script-reactivity.md`.
     pub fn unit_sources(&self) -> Vec<bct::input::Source> {
-        self.units.iter().map(|(source, _)| *source).collect()
+        self.units.iter().map(|unit| unit.source).collect()
     }
 
-    /// The type of `name`, which unit `unit` provides, as datalove writes it.
-    pub fn type_of(&self, unit: usize, name: &str) -> &str {
-        self.records[unit].type_of(name)
+    /// The id of each unit, in order.
+    pub fn unit_ids(&self) -> Vec<u32> {
+        self.units.iter().map(|unit| unit.id).collect()
     }
 
-    /// The type of expression unit `unit`'s value, as datalove writes it.
-    pub fn value_type(&self, unit: usize) -> &str {
-        self.records[unit].value_type.as_deref().expect("the unit is an expression that compiled")
+    /// The id of the last unit, the one appended last.
+    pub fn last_unit_id(&self) -> u32 {
+        self.units.last().expect("a unit has been appended").id
     }
 
-    /// What unit `index` provides, and what it does to earlier units'
+    /// Where the unit with id `id` sits, if it is in the session.
+    pub fn position_of(&self, id: u32) -> Option<usize> {
+        self.units.iter().position(|unit| unit.id == id)
+    }
+
+    /// Where the unit with id `id` sits, which must be in the session.
+    fn position(&self, id: u32) -> usize {
+        self.position_of(id).unwrap_or_else(|| panic!("no unit {id} in the session"))
+    }
+
+    /// The id the next unit made is given.
+    pub fn next_id(&self) -> u32 {
+        self.next_id
+    }
+
+    /// Give the next unit made the id `next`.
+    ///
+    /// For a caller that numbers the units as an earlier session did, as the
+    /// REPL does when it drops the changes it took back: the units those made
+    /// are gone, and their ids are given again.
+    pub fn set_next_id(&mut self, next: u32) {
+        assert!(
+            self.units.iter().all(|unit| unit.id < next),
+            "the next id is {next}, and a unit in the session already has it or a later one",
+        );
+        self.next_id = next;
+    }
+
+    /// Splice a unit in at position `at`, as a fragment or a bare expression,
+    /// with the id `id` or else the next.
+    ///
+    /// **Only the link of the unit after it moves**: it is set to the new
+    /// unit, which is all a lookup walking back from any later unit has to
+    /// find. No unit's handle moves, so no unit's memo is lost, and a unit's
+    /// typecheck runs again only if the new unit binds a name it asks for.
+    /// The new unit is compiled by [`ScriptCompiler::relower_inserted`].
+    ///
+    /// Returns the new unit's id.
+    pub fn insert_unit<D: salsa::Database>(
+        &mut self,
+        db: &mut D,
+        at: usize,
+        source: bct::input::Source,
+        is_expr: bool,
+        id: Option<u32>,
+    ) -> u32 {
+        assert!(at <= self.units.len(), "unit inserted at {at} in a session of {}", self.units.len());
+        let id = match id {
+            Some(id) => {
+                assert!(self.position_of(id).is_none(), "unit {id} is put back while it is in the session");
+                self.next_id = self.next_id.max(id + 1);
+                id
+            }
+            None => {
+                self.next_id += 1;
+                self.next_id - 1
+            }
+        };
+        let prev = at.checked_sub(1).map(|before| self.units[before].unit);
+        let unit = ScriptUnit::new(&*db, source, is_expr, prev);
+        if let Some(after) = self.units.get(at) {
+            after.unit.set_prev(db).to(Some(unit));
+        }
+        self.units.insert(at, SessionUnit { id, unit, source });
+        self.records.insert(at, UnitLowerRecord::default());
+        id
+    }
+
+    /// Splice the unit at position `at` out, linking the unit after it to
+    /// the one before.
+    ///
+    /// What it provided and did is handed back for
+    /// [`ScriptCompiler::relower_deleted`] to work out what its going
+    /// reaches.
+    pub fn delete_unit<D: salsa::Database>(&mut self, db: &mut D, at: usize) -> RemovedUnit {
+        assert!(at < self.units.len(), "unit deleted at {at} in a session of {}", self.units.len());
+        let removed = self.units.remove(at);
+        let record = self.records.remove(at);
+        if let Some(after) = self.units.get(at) {
+            let prev = removed.unit.prev(&*db);
+            after.unit.set_prev(db).to(prev);
+        }
+        RemovedUnit { unit: removed.unit, record }
+    }
+
+    /// The type of `name`, which unit `id` provides, as datalove writes it.
+    pub fn type_of(&self, id: u32, name: &str) -> &str {
+        self.records[self.position(id)].type_of(name)
+    }
+
+    /// The type of expression unit `id`'s value, as datalove writes it.
+    pub fn value_type(&self, id: u32) -> &str {
+        self.records[self.position(id)].value_type.as_deref().expect("the unit is an expression that compiled")
+    }
+
+    /// What unit `id` provides, and what it does to earlier units'
     /// bindings, as of its last compile. A unit that did not compile does
     /// nothing.
-    pub fn unit_accesses(&self, index: usize) -> UnitAccesses {
-        let record = &self.records[index];
+    pub fn unit_accesses(&self, id: u32) -> UnitAccesses {
+        let record = &self.records[self.position(id)];
         let updates: Vec<String> = record.writes.iter()
             .filter(|name| !record.overwrites.contains(name) && !record.revives.contains(name))
             .cloned()
@@ -365,16 +482,6 @@ impl ScriptSession {
             revives: record.revives.clone(),
         }
     }
-
-    /// Whether each unit was submitted as a bare expression, in order.
-    ///
-    /// What a re-executed unit has to be run *as*: an expression computes a
-    /// value that needs somewhere to land and a fragment computes none, and
-    /// after a splice the suffix is run again from the top rather than in
-    /// place, so the caller has to know which it is holding.
-    pub fn unit_is_expr(&self) -> Vec<bool> {
-        self.units.iter().map(|(_, is_expr)| *is_expr).collect()
-    }
 }
 
 /// Script compiler for compiling script units.
@@ -383,22 +490,24 @@ impl ScriptSession {
 /// Use `compile_fragment()` or `compile_expr()` to compile units.
 pub struct ScriptCompiler<'db> {
     db: &'db dyn salsa::Database,
-    /// The script as it stood after each unit, so `scripts[i]` is the handle
-    /// every per-unit query about unit `i` is keyed on.
+    /// The units, in order: the handle every per-unit query about a unit is
+    /// keyed on, and its id.
     ///
-    /// A handle is a chain node over the unit's `Source`, so appending leaves
-    /// the earlier handles alone and editing a unit's text leaves all of them
-    /// alone. See `botdocs/plan-script-reactivity.md`.
-    scripts: Vec<Script<'db>>,
+    /// A handle is an input, so neither editing a unit's text nor splicing a
+    /// unit in or out moves any of them. See
+    /// `botdocs/script-reactivity-architecture.md`.
+    units: Vec<SessionUnit>,
+    /// The id the next unit made is given.
+    next_id: u32,
     /// The modules the script is checked against.
     env: ScriptEnv<'db>,
-    /// The script as it stood for the last unit compiled.
+    /// The unit compiled last.
     ///
-    /// Held apart from `scripts` because re-deriving compiles units in the
+    /// Held apart from `units` because re-deriving compiles units in the
     /// middle of it, and the diagnostics the caller is about to render are the
     /// last compiled unit's.
-    last_script: Option<Script<'db>>,
-    /// What each unit's compilation produced, indexed by unit.
+    last_unit: Option<ScriptUnit>,
+    /// What each unit's compilation produced, in the units' order.
     ///
     /// **Not a running total.** Unit `i` is lowered against the fold of the
     /// records before it, computed on demand, so re-lowering one unit replaces
@@ -451,51 +560,65 @@ impl<'db> ScriptCompiler<'db> {
     /// units after it are built as if it were not there, and an edit that
     /// makes it compile is an edit like any other: the reach of an edit
     /// includes a unit that asked for a name in vain and now finds it. Its
-    /// executor gives it an index with no frame, so the numbering every
-    /// `(unit, value)` reference shares has no hole in it.
+    /// executor holds its id with no frame.
     fn append_unit(
         &mut self,
-        src: bct::input::Source,
+        source: bct::input::Source,
         is_expr: bool,
     ) -> ScriptCompilationResult {
-        let script_unit = ScriptUnit::new(self.db, src, is_expr);
-        let script = Script::new(self.db, self.scripts.last().copied(), script_unit);
-        self.scripts.push(script);
+        let prev = self.units.last().map(|unit| unit.unit);
+        let unit = ScriptUnit::new(self.db, source, is_expr, prev);
+        let id = self.next_id;
+        self.next_id += 1;
+        self.units.push(SessionUnit { id, unit, source });
         self.unit_records.push(UnitLowerRecord::default());
-        self.rederive_one(self.scripts.len() - 1)
+        self.rederive_one(self.units.len() - 1)
+    }
+
+    /// The id of the unit at position `index`.
+    pub fn unit_id(&self, index: usize) -> u32 {
+        self.units[index].id
+    }
+
+    /// The id of each unit, in order.
+    pub fn unit_ids(&self) -> Vec<u32> {
+        self.units.iter().map(|unit| unit.id).collect()
+    }
+
+    /// The id of the last unit, the one appended last.
+    pub fn last_unit_id(&self) -> u32 {
+        self.units.last().expect("a unit has been appended").id
     }
 
     /// Re-lower the units an edit to unit `edited` reaches, in index order.
     ///
     /// The units the edit does not reach keep the IR they already have, which
     /// is what makes this worth doing and is sound because **a script value is
-    /// identified by `(unit_index, ValueId)`**: a unit's IR names the units it
+    /// identified by `(unit id, ValueId)`**: a unit's IR names the units it
     /// reads from, so a unit that uses nothing the edited unit provides holds
-    /// no reference to it and cannot see it change. Editing rather than
-    /// removing a unit leaves the indices alone, so the identification stays
-    /// good.
+    /// no reference to it and cannot see it change.
     ///
     /// Each returned index is paired with what compiling that unit came to.
     /// The caller re-executes them in the order given -- which is index order,
     /// because a unit reads only from units before it.
     ///
     /// A unit that fails to re-lower is left providing nothing, so its
-    /// bindings drop out of the environment, and stays where it is: the
-    /// numbering cannot have a hole in it. Its executor drops its frame.
+    /// bindings drop out of the environment, and stays where it is. Its
+    /// executor drops its frame.
     pub fn relower_reach(&mut self, edited: usize) -> Vec<(usize, ScriptCompilationResult)> {
         assert!(
-            edited < self.scripts.len(),
+            edited < self.units.len(),
             "unit {edited} was edited but the script has {} units",
-            self.scripts.len(),
+            self.units.len(),
         );
-        self.rederive_reach(BTreeSet::from([edited]))
+        self.rederive_reach(BTreeSet::from([edited]), BTreeSet::new())
     }
 
     /// Re-lower the units an edit to the modules at `edited` reaches.
     ///
     /// The module-shaped sibling of [`Self::relower_reach`], and the reason
     /// there has to be one: stage B made typechecking lazy, so an earlier unit
-    /// re-runs when a later one asks `binding_at` about a name it provides, and
+    /// re-runs when a later one asks `binding_before` about a name it provides, and
     /// **a module edit makes nobody ask**. Without an entry point that says "a
     /// module changed", the units that import from it keep the values they
     /// computed against the module as it was.
@@ -520,190 +643,112 @@ impl<'db> ScriptCompiler<'db> {
         edited: &[String],
     ) -> Vec<(usize, ScriptCompilationResult)> {
         let seeds = self.module_importers(edited);
-        self.rederive_reach(seeds)
+        self.rederive_reach(seeds, BTreeSet::new())
     }
 
-    /// Drop the units from `n` on.
+    /// Re-derive what the unit [`ScriptSession::insert_unit`] put at `at`
+    /// reaches, in index order, the new unit first among them.
     ///
-    /// The cheap one of the three splice verbs and **the only one that
-    /// renumbers nothing**: there is nothing after the units that go, so no
-    /// surviving unit's `(unit_index, ValueId)` references move. Usually
-    /// nothing is re-derived and the splice starts at `n`. But a unit that goes
-    /// may have taken or written an earlier unit's binding, and then the
-    /// rerun starts at that binding's provider, and the units from there to
-    /// `n` are re-derived to build it again (see [`Self::rerun_start`]).
-    /// The caller drops the runtime state from the splice's start on --
-    /// `ScriptExecutor::truncate_units` -- and runs what comes back as appends.
+    /// **An insertion is an edit from nothing**, and its reach is an edit's:
+    /// the units after it that use what it provides, which is how a unit
+    /// now finds a binding the new unit shadows, and back to the provider of
+    /// a binding the new unit reads that a later unit took or wrote since.
+    /// Every other unit keeps its IR and its frame, since a unit's id is all a
+    /// later unit's IR names it by, and no id moved.
+    pub fn relower_inserted(&mut self, at: usize) -> Vec<(usize, ScriptCompilationResult)> {
+        assert!(at < self.units.len(), "unit {at} was inserted but the script has {} units", self.units.len());
+        self.rederive_reach(BTreeSet::from([at]), BTreeSet::new())
+    }
+
+    /// Re-derive what taking `removed` out of the script from position `at`
+    /// reaches, in index order.
     ///
-    /// The units' `Source`s are inputs and are simply let go of; appending
-    /// afterwards mints a new one, so the index they vacate is reused by a unit
-    /// with a key of its own.
-    pub fn truncate_units(&mut self, n: usize) -> Splice {
+    /// **A deletion is an edit to nothing.** The units after it that found a
+    /// binding it provided, took or wrote now find an older one or none, so
+    /// they are re-derived, and the units that use what they provide after
+    /// them. And a binding of an earlier unit it took or wrote is left as it
+    /// left it, so the unit that sets that binding is rerun to build it as it
+    /// was, as an edit's reach goes back; see [`Self::reach_from`]. A unit that
+    /// read what `removed` provided stops compiling, and stays.
+    pub fn relower_deleted(&mut self, at: usize, removed: RemovedUnit) -> Vec<(usize, ScriptCompilationResult)> {
+        assert!(at <= self.units.len(), "unit {at} was removed but the script has {} units", self.units.len());
+        let RemovedUnit { unit, record } = removed;
+        let (now_provides, now_uses) = self.graph_now();
+        // What it provided as its typecheck says as well as its record, since a
+        // unit that typechecked and failed later provides its names to the
+        // typechecker and not to lowering: a later unit fails on one of them,
+        // and may compile once it is gone.
+        let mut provided: BTreeSet<String> = record.provides.iter().cloned().collect();
+        if unit_parses(self.db, unit) {
+            provided.extend(self.unit_provides_names(typecheck_script_unit(self.db, unit, self.env)));
+        }
+        let changed: BTreeSet<String> = record.takes.iter().chain(&record.writes).cloned().collect();
+
+        // A later unit found a binding of the removed unit's when no unit
+        // between them provided, took or wrote the name.
+        let sets = |unit: usize, name: &String| {
+            now_provides[unit].contains(name)
+                || [&self.unit_records[unit].provides, &self.unit_records[unit].takes, &self.unit_records[unit].writes]
+                    .iter().any(|names| names.contains(name))
+        };
+        let seeds: BTreeSet<usize> = (at..self.units.len())
+            .filter(|later| {
+                now_uses[*later].iter().chain(&self.unit_records[*later].uses).any(|name| {
+                    (provided.contains(name) || changed.contains(name))
+                        && !(at..*later).any(|between| sets(between, name))
+                })
+            })
+            .collect();
+
+        // The unit that builds a binding the removed unit took or wrote as it
+        // was before: its provider, or an overwrite or revival after that.
+        let restore: BTreeSet<usize> = changed.iter()
+            .filter_map(|name| {
+                (0..at).rev().find(|earlier| {
+                    let record = &self.unit_records[*earlier];
+                    now_provides[*earlier].contains(name)
+                        || [&record.provides, &record.overwrites, &record.revives].iter().any(|names| names.contains(name))
+                })
+            })
+            .collect();
+        self.rederive_reach(seeds, restore)
+    }
+
+    /// Drop the units from `n` on, and re-derive what their going reaches.
+    ///
+    /// Nothing sits after what goes, so usually nothing is. But a unit that
+    /// goes may have taken or written an earlier unit's binding, and then the
+    /// unit that sets that binding is rerun to build it as it was, as
+    /// [`Self::relower_deleted`] does for one unit. Returns those, in index
+    /// order; the caller drops the runtime state of the units that went.
+    pub fn truncate_units(&mut self, n: usize) -> Vec<(usize, ScriptCompilationResult)> {
         assert!(
-            n <= self.scripts.len(),
+            n <= self.units.len(),
             "cannot truncate to {n} units; the script has {}",
-            self.scripts.len(),
+            self.units.len(),
         );
-        let mut units = self.unit_list();
-        units.truncate(n);
-        self.splice(units, n)
-    }
-
-    /// Splice the unit at `i` out, and re-derive everything after it.
-    ///
-    /// See [`Self::splice`] for why the whole suffix is re-derived. A unit that
-    /// read what the removed unit provided stops compiling, and stays.
-    pub fn delete_unit(&mut self, i: usize) -> Splice {
-        let mut units = self.unit_list();
-        assert!(
-            i < units.len(),
-            "unit {i} was removed but the script has {} units",
-            units.len(),
-        );
-        units.remove(i);
-        self.splice(units, i)
-    }
-
-    /// Splice a new unit in at `i`, and re-derive everything after it.
-    ///
-    /// `is_expr` says whether the text is a bare expression or a fragment of
-    /// statements, the way [`Self::compile_fragment`] and
-    /// [`Self::compile_expr`] say it for an append: nothing in the text decides
-    /// it.
-    ///
-    /// See [`Self::splice`] for why the whole suffix is re-derived. The new
-    /// unit joins the script whether or not it compiles, as an appended one
-    /// does.
-    pub fn insert_unit(
-        &mut self,
-        i: usize,
-        source: &str,
-        is_expr: bool,
-    ) -> Splice {
-        let src = bct::input::Source::new(self.db, source.S());
-        self.insert_source(i, src, is_expr)
-    }
-
-    /// The same, from a source the caller made; see [`Self::compile_source`].
-    pub fn insert_source(
-        &mut self,
-        i: usize,
-        source: bct::input::Source,
-        is_expr: bool,
-    ) -> Splice {
-        let mut units = self.unit_list();
-        assert!(
-            i <= units.len(),
-            "unit {i} was inserted but the script has {} units",
-            units.len(),
-        );
-
-        units.insert(i, (source, is_expr));
-        self.splice(units, i)
-    }
-
-    /// Put `units` in place of the unit list and re-derive from `at` on.
-    ///
-    /// **The whole suffix, not the reach.** A script value is identified by
-    /// `(unit_index, ValueId)`, so splicing the list renumbers every unit after
-    /// the splice point and every one of their IRs has to be built again. That
-    /// cost is inherent rather than over-propagation: the ids really did
-    /// change. The reach is for an edit, which moves no index.
-    ///
-    /// The suffix can start before `at`: a unit from `at` on, which is
-    /// dropped or run again, may have taken or written an earlier unit's
-    /// binding, which has to be built again first (see [`Self::rerun_start`]).
-    ///
-    /// A unit of the suffix that stops compiling stays, as an appended unit
-    /// that fails does, and so does one that already did not compile.
-    fn splice(&mut self, units: Vec<(bct::input::Source, bool)>, at: usize) -> Splice {
-        let from = self.rerun_start(at);
-        self.set_units(units, from);
-        let rederived = self.rederive((from..self.scripts.len()).collect());
-        Splice { from, rederived }
-    }
-
-    /// Where a splice at `at` has to start for the bindings before it to be as
-    /// they were made.
-    ///
-    /// The units from `at` on are about to be dropped or run again, and one
-    /// that took or wrote an earlier unit's binding left it changed: moved out
-    /// of, or holding what a `set` put there. Running it again would read the
-    /// change, and dropping it would leave the change behind. So the splice
-    /// starts earlier, at the nearest unit before it that sets the binding
-    /// without reading it: its provider, or an overwrite or revival after
-    /// that. Running that unit again builds the binding as the splice point
-    /// found it. The units between are run again as well, so what they
-    /// changed counts too, and the point moves back until nothing earlier is
-    /// changed.
-    fn rerun_start(&self, at: usize) -> usize {
-        let held = self.held_graph();
-        let records = &self.unit_records;
-        let rebuilds = |unit: usize, name: &String| {
-            records[unit].overwrites.contains(name) || records[unit].revives.contains(name)
+        // The graph of the units that stay only: the ones going are not
+        // typechecked again, which they would be if the modules moved.
+        let gone = self.unit_records.split_off(n);
+        self.units.truncate(n);
+        let (now_provides, _) = self.graph_now();
+        let sets = |record: &UnitLowerRecord, name: &String| {
+            [&record.provides, &record.overwrites, &record.revives].iter().any(|names| names.contains(name))
         };
-        let setter = |from: usize, unit: usize, name: &String| {
-            // A unit before the splice point stays and runs again, and if it
-            // writes the binding without reading it, it needs nothing of what
-            // the binding held.
-            if unit < at && rebuilds(unit, name) {
-                return None;
-            }
-            let provider = (0..unit).rev().find(|earlier| held.provides[*earlier].contains(name))?;
-            let setter = (provider + 1..unit).rev()
-                .find(|earlier| rebuilds(*earlier, name))
-                .unwrap_or(provider);
-            (setter < from).then_some(setter)
-        };
-        let mut from = at;
-        loop {
-            let earliest = (from..held.changed.len())
-                .flat_map(|unit| held.changed[unit].iter().filter_map(move |name| setter(from, unit, name)))
-                .min();
-            match earliest {
-                Some(source) if source < from => from = source,
-                _ => return from,
+        let mut restore = BTreeSet::new();
+        for (at, record) in gone.iter().enumerate() {
+            for name in record.takes.iter().chain(&record.writes) {
+                // A binding a unit that goes set is gone with it.
+                if gone[..at].iter().any(|earlier| sets(earlier, name)) {
+                    continue;
+                }
+                let setter = (0..n).rev().find(|earlier| {
+                    now_provides[*earlier].contains(name) || sets(&self.unit_records[*earlier], name)
+                });
+                restore.extend(setter);
             }
         }
-    }
-
-    /// Each unit's source and kind, which is the list a splice is taken over.
-    fn unit_list(&self) -> Vec<(bct::input::Source, bool)> {
-        self.scripts.iter()
-            .map(|script| {
-                let unit = script.unit(self.db);
-                (unit.source(self.db), unit.is_expr(self.db))
-            })
-            .collect()
-    }
-
-    /// Put `units` in place of the unit list, keeping the records before `at`.
-    ///
-    /// The chain is built again because `scripts[i]` is the handle every
-    /// per-unit query about unit `i` is keyed on, and after a splice the unit at
-    /// `i` is a different unit. The records from `at` on are cleared rather than
-    /// shifted: each belongs to an index, and the re-derivation that follows
-    /// writes every one of them, in index order, so each unit is still lowered
-    /// against the records of the units before it.
-    fn set_units(&mut self, units: Vec<(bct::input::Source, bool)>, at: usize) {
-        self.scripts = self.chain_over(&units);
-        self.unit_records.truncate(at);
-        self.unit_records.resize(units.len(), UnitLowerRecord::default());
-        self.last_script = self.scripts.last().copied();
-    }
-
-    /// The chain node for each of `units`, in order.
-    ///
-    /// One interned node per unit, each over the one before it, so
-    /// `chain[i]` is "unit `i` and the units before it".
-    /// [`Script::from_units`] folds the same chain but hands back only its tail,
-    /// where a splice needs every prefix.
-    fn chain_over(&self, units: &[(bct::input::Source, bool)]) -> Vec<Script<'db>> {
-        units.iter().fold(Vec::new(), |mut chain, (src, is_expr)| {
-            let unit = ScriptUnit::new(self.db, *src, *is_expr);
-            chain.push(Script::new(self.db, chain.last().copied(), unit));
-            chain
-        })
+        self.rederive_reach(BTreeSet::new(), restore)
     }
 
     /// Compile each of `units` again, in the order given.
@@ -717,14 +762,15 @@ impl<'db> ScriptCompiler<'db> {
     /// Compile unit `index`, with the diagnostics the caller renders next
     /// pointed at it.
     fn rederive_one(&mut self, index: usize) -> ScriptCompilationResult {
-        let unit = self.scripts[index].unit(self.db);
-        self.last_script = Some(self.scripts[index]);
-        self.last_source = Some(unit.source(self.db));
+        let unit = self.units[index];
+        self.last_unit = Some(unit.unit);
+        self.last_source = Some(unit.source);
         self.compile_unit_at(index)
     }
 
     /// Compile again the units `seeds` reach, in index order, and say what
-    /// each came to.
+    /// each came to; `restore` are units to rerun from the start, to build a
+    /// binding again as it was made.
     ///
     /// What a unit took or wrote of an earlier unit's is only known once the
     /// unit is compiled, and a unit that now takes or writes something reaches
@@ -732,11 +778,15 @@ impl<'db> ScriptCompiler<'db> {
     /// compiled, and the reach is taken again with what they now do, until it
     /// settles. What the units did before the edit is held from the
     /// start, being what the running session went through.
-    fn rederive_reach(&mut self, seeds: BTreeSet<usize>) -> Vec<(usize, ScriptCompilationResult)> {
+    fn rederive_reach(
+        &mut self,
+        seeds: BTreeSet<usize>,
+        restore: BTreeSet<usize>,
+    ) -> Vec<(usize, ScriptCompilationResult)> {
         let held = self.held_graph();
         let mut changed = held.changed.clone();
         for _ in 0..=self.unit_records.len() {
-            let units = self.reach_from(&seeds, &held, &changed);
+            let units = self.reach_from(&seeds, &restore, &held, &changed);
             let results = self.rederive(units.clone());
             for (unit, record) in self.unit_records.iter().enumerate() {
                 for name in record.takes.iter().chain(&record.writes) {
@@ -748,7 +798,7 @@ impl<'db> ScriptCompiler<'db> {
             // rerun, which only its new record says. The results are for the
             // reach as it settles; a unit compiled on the way and left out of
             // it compiled to what it was.
-            if self.reach_from(&seeds, &held, &changed) == units {
+            if self.reach_from(&seeds, &restore, &held, &changed) == units {
                 return results;
             }
         }
@@ -806,9 +856,13 @@ impl<'db> ScriptCompiler<'db> {
     /// *removes* is absent from the new graph although the unit that read it
     /// has to be told, and a name the edit *introduces* is absent from the old
     /// one although a later unit that asked for it in vain now finds it.
+    ///
+    /// `restore` are providers reached that way from the start, by a splice
+    /// that took out a unit that took or wrote what they build.
     fn reach_from(
         &self,
         seeds: &BTreeSet<usize>,
+        restore: &BTreeSet<usize>,
         held: &HeldGraph,
         changed: &[BTreeSet<String>],
     ) -> Vec<usize> {
@@ -863,7 +917,7 @@ impl<'db> ScriptCompiler<'db> {
             held.shapes[provider].get(name) != binding_shape(&self.unit_records[provider], name).as_ref()
         };
 
-        let mut rerun_starts = BTreeSet::new();
+        let mut rerun_starts = restore.clone();
         loop {
             let mut rederived = vec![false; count];
             let mut restoring = vec![false; count];
@@ -1012,7 +1066,7 @@ impl<'db> ScriptCompiler<'db> {
         let db = self.db;
         let mut used: Vec<String> =
             output.uses(db).iter().map(|name| name.as_str(db).S()).collect();
-        let qualified_calls = match &unit_ast(db, self.scripts[index].unit(db)).kind {
+        let qualified_calls = match &unit_ast(db, self.units[index].unit).kind {
             ScriptUnitKind::Fragment(parsed) => {
                 for statement in parsed.statements(db).iter() {
                     if let Statement::Import(import) = statement {
@@ -1035,8 +1089,9 @@ impl<'db> ScriptCompiler<'db> {
 
     /// Take up the units and the per-unit records a session left off with.
     fn resume(&mut self, session: ScriptSession) {
-        self.scripts = self.chain_over(&session.units);
-        self.last_script = self.scripts.last().copied();
+        self.units = session.units;
+        self.next_id = session.next_id;
+        self.last_unit = self.units.last().map(|unit| unit.unit);
         self.unit_records = session.records;
         self.skip_const_inlining = session.skip_const_inlining;
         self.skip_specialization = session.skip_specialization;
@@ -1045,9 +1100,9 @@ impl<'db> ScriptCompiler<'db> {
 
     /// Hand back what an edit needs to survive letting this compiler go.
     pub fn into_session(self) -> ScriptSession {
-        let units = self.unit_list();
         ScriptSession {
-            units,
+            units: self.units,
+            next_id: self.next_id,
             records: self.unit_records,
             skip_const_inlining: self.skip_const_inlining,
             skip_specialization: self.skip_specialization,
@@ -1081,10 +1136,10 @@ impl<'db> ScriptCompiler<'db> {
     pub fn unit_typecheck_outputs(
         &self,
     ) -> Vec<Option<datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>>> {
-        self.scripts.iter()
-            .map(|script| {
-                unit_parses(self.db, script.unit(self.db))
-                    .then(|| typecheck_script_unit(self.db, *script, self.env))
+        self.units.iter()
+            .map(|unit| {
+                unit_parses(self.db, unit.unit)
+                    .then(|| typecheck_script_unit(self.db, unit.unit, self.env))
             })
             .collect()
     }
@@ -1110,8 +1165,7 @@ impl<'db> ScriptCompiler<'db> {
     /// include theirs; only those pointing into this unit, or nowhere, are
     /// its. Lowering errors are not diagnostics, and are not rendered.
     pub fn render_unit_diagnostics(&self, index: usize, name: &str, style: bct::render::TextStyle) -> String {
-        let script = self.scripts[index];
-        let unit = script.unit(self.db);
+        let unit = self.units[index].unit;
         let source = unit.source(self.db);
         let parse = if unit.is_expr(self.db) {
             datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
@@ -1122,7 +1176,7 @@ impl<'db> ScriptCompiler<'db> {
             .map(|diagnostic| diagnostic.to_diagnostic(self.db))
             .collect();
         if unit_parses(self.db, unit) {
-            let types = typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, script, self.env);
+            let types = typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, unit, self.env);
             diagnostics.extend(types.iter()
                 .map(|diagnostic| diagnostic.to_diagnostic(self.db))
                 .filter(|diagnostic| {
@@ -1140,10 +1194,10 @@ impl<'db> ScriptCompiler<'db> {
     /// Those of the last unit and whatever its typechecking asked of the units
     /// before it, which never includes typechecking one that did not parse.
     pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
-        match self.last_script {
-            Some(script) if unit_parses(self.db, script.unit(self.db)) => {
+        match self.last_unit {
+            Some(unit) if unit_parses(self.db, unit) => {
                 typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(
-                    self.db, script, self.env)
+                    self.db, unit, self.env)
             }
             _ => Vec::new(),
         }
@@ -1152,10 +1206,10 @@ impl<'db> ScriptCompiler<'db> {
     /// Ownership diagnostics from the last compilation: those of the last
     /// unit compiled, if it got as far as ownership analysis.
     pub fn get_ownership_diagnostics(&self) -> Vec<&datalove_diagnostic::OwnershipDiagnostic> {
-        let Some(last) = self.last_script else {
+        let Some(last) = self.last_unit else {
             return Vec::new();
         };
-        let index = self.scripts.iter().position(|script| *script == last)
+        let index = self.units.iter().position(|unit| unit.unit == last)
             .expect("the last unit compiled is in the script");
         self.unit_ownership_diagnostics(index)
     }
@@ -1170,11 +1224,11 @@ impl<'db> ScriptCompiler<'db> {
     /// is the query the unit's compile ran, since an edit that changes what
     /// the unit sees compiles it again.
     pub fn unit_ownership_diagnostics(&self, index: usize) -> Vec<&datalove_diagnostic::OwnershipDiagnostic> {
-        let unit = self.scripts[index].unit(self.db);
+        let unit = self.units[index].unit;
         if !unit_parses(self.db, unit) {
             return Vec::new();
         }
-        let output = typecheck_script_unit(self.db, self.scripts[index], self.env);
+        let output = typecheck_script_unit(self.db, unit, self.env);
         let result = output.result(self.db);
         if !result.errors(self.db).is_empty() {
             return Vec::new();
@@ -1238,7 +1292,7 @@ impl<'db> ScriptCompiler<'db> {
                 outputs[*unit].is_some_and(|output| self.unit_provides_names(output).contains(name))
             })
             .filter(|unit| self.unit_records[*unit].provides.is_empty())
-            .map(|unit| (name, unit));
+            .map(|unit| (name, self.units[unit].id));
         let message = match failed_provider {
             Some((name, unit)) => format!("`{name}` is bound by unit {unit}, which did not compile"),
             None => format!("{context}{error}"),
@@ -1253,7 +1307,7 @@ impl<'db> ScriptCompiler<'db> {
 
     /// The result for unit `index`, which did not parse.
     fn parse_failure_at(&self, index: usize) -> ScriptCompilationResult {
-        let unit = self.scripts[index].unit(self.db);
+        let unit = self.units[index].unit;
         let source = unit.source(self.db);
         let parse_diags = if unit.is_expr(self.db) {
             datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
@@ -1279,7 +1333,7 @@ impl<'db> ScriptCompiler<'db> {
     /// Read out of `unit_ast`, which holds the parse keyed on the unit alone,
     /// so re-lowering a unit costs no second parse of it.
     fn parsed_unit_at(&self, index: usize) -> ParsedUnit<'db> {
-        let spec = unit_ast(self.db, self.scripts[index].unit(self.db));
+        let spec = unit_ast(self.db, self.units[index].unit);
         match &spec.kind {
             ScriptUnitKind::Fragment(parsed) => {
                 ParsedUnit::Fragment { top: parsed.top, body: parsed.body(self.db) }
@@ -1302,7 +1356,7 @@ impl<'db> ScriptCompiler<'db> {
     /// provides -- nothing at all, if it failed. A unit that did not parse goes
     /// no further than that: its tree is not typechecked.
     fn compile_unit_at(&mut self, index: usize) -> ScriptCompilationResult {
-        if !unit_parses(self.db, self.scripts[index].unit(self.db)) {
+        if !unit_parses(self.db, self.units[index].unit) {
             self.unit_records[index] = UnitLowerRecord::default();
             return self.parse_failure_at(index);
         }
@@ -1316,7 +1370,7 @@ impl<'db> ScriptCompiler<'db> {
             Some(ir_unit) => {
                 ir_unit.script_context_mut()
                     .expect("a script unit compiles to a script code unit")
-                    .unit = Some(index as u32);
+                    .unit = Some(self.units[index].id);
             }
         }
         result
@@ -1427,13 +1481,13 @@ impl<'db> ScriptCompiler<'db> {
         &mut self,
         index: usize,
     ) -> Result<TypecheckOutput<'db>, ScriptCompilationResult> {
-        // Keyed on the unit's position in the script and nothing derived from
-        // the units around it, which is what lets an edit stop at the units
-        // that used what changed. See `botdocs/plan-script-reactivity.md`.
+        // Keyed on the unit and nothing about the units around it, which is
+        // what lets a change stop at the units that used what changed. See
+        // `botdocs/script-reactivity-architecture.md`.
         //
         // The mode reaches here through `env`, not just ownership analysis: a
         // mismatch `@` would fix is a type error first.
-        let output = typecheck_script_unit(self.db, self.scripts[index], self.env);
+        let output = typecheck_script_unit(self.db, self.units[index].unit, self.env);
         let result = output.result(self.db);
 
         // Check for errors.
@@ -1471,7 +1525,11 @@ impl<'db> ScriptCompiler<'db> {
         let asked: Vec<String> = output.uses(self.db).iter()
             .map(|name| name.as_str(self.db).S())
             .collect();
-        (externals_over(&self.unit_records[..index], &asked), external_consts_over(&self.unit_records[..index]))
+        let ids = self.unit_ids();
+        (
+            externals_over(&ids[..index], &self.unit_records[..index], &asked),
+            external_consts_over(&self.unit_records[..index]),
+        )
     }
 
     /// Run ownership analysis on the unit.
@@ -1484,7 +1542,7 @@ impl<'db> ScriptCompiler<'db> {
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
     ) -> Result<OwnershipOutput<'db>, ScriptCompilationResult> {
-        let source = self.scripts[index].unit(self.db).source(self.db);
+        let source = self.units[index].source;
         let (externals, external_consts) = self.ownership_inputs(index, typecheck.output);
         match unit {
             ParsedUnit::Fragment { top, body } => {
@@ -1583,7 +1641,7 @@ impl<'db> ScriptCompiler<'db> {
 
         // The context this unit is lowered against: what the units before it
         // provide, and nothing the units after it do.
-        let script_ctx = lower_context_over(&self.unit_records[..index]);
+        let script_ctx = lower_context_over(&self.unit_ids()[..index], &self.unit_records[..index]);
 
         // Get module function ID map for resolving module function calls.
 
@@ -1895,7 +1953,7 @@ impl<'db> ScriptCompiler<'db> {
         _consts: &ConstEvalOutput,
         lowered_funcs: &LoweredFunctions,
     ) -> Result<IrCodeUnit, ScriptCompilationResult> {
-        let script_ctx = lower_context_over(&self.unit_records[..index]);
+        let script_ctx = lower_context_over(&self.unit_ids()[..index], &self.unit_records[..index]);
 
         match unit {
             ParsedUnit::Fragment { body, .. } => {
@@ -2156,7 +2214,9 @@ impl<'db> ScriptCompiler<'db> {
         let resolve = |func: &CodeRef| -> Option<Arc<IrCodeUnit>> {
             match func {
                 CodeRef::Local(id) => local.get(id).cloned(),
-                CodeRef::External { unit, id } => self.unit_records.get(*unit as usize)?
+                CodeRef::External { unit, id } => self.units.iter()
+                    .position(|held| held.id == *unit)
+                    .map(|index| &self.unit_records[index])?
                     .functions.iter()
                     .find(|f| f.id == *id && is_inline(f))
                     .map(|f| Arc::new(with_calls_into_unit(f, *unit))),

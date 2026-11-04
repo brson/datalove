@@ -35,11 +35,16 @@ worldfile; `ScriptCompiler::compile_fragment`.
 
 **session**. The live, editable sequence of units the engine holds, and the
 REPL shows as its code. `ScriptSession`, the engine's `session` field;
-`repl::Session` adds the units' numbers.
+`repl::Session` adds the units' text.
 
-**script**. A sequence of units. A `.dfs` file is one written down. The
-compiler's interned `Script` is the prefix of the session ending at a unit:
-"this unit and the ones before it".
+**script**. A sequence of units. A `.dfs` file is one written down. In the
+compiler a unit is a `ScriptUnit` input linked to the one before it, so a
+unit is also the prefix of the session ending at it.
+
+**unit id**. The number a unit is given when it is made, from 1, and keeps
+while it is in the session, wherever units are inserted or deleted around
+it. Its IR, its frame and its functions are named by it, and the REPL shows
+it as the unit's number.
 
 ## Bindings and uses
 
@@ -124,8 +129,8 @@ same code. Also the plain verb for running a unit again.
 `ScriptExecutor::rerun_unit`.
 
 **rerun start**. The unit a rerun begins at: the nearest setter, for an edit
-and for a splice (`ScriptCompiler::rerun_start`). Distinct from the provider
-only when an overwrite or revival is nearer.
+and for a splice. Distinct from the provider only when an overwrite or
+revival is nearer.
 
 "Rewind" and "replay" are retired from the algebra; both were reruns.
 

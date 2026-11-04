@@ -72,8 +72,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = copy unit0.v3
-                        v1 = copy unit0.v4
+                        v0 = copy unit1.v3
+                        v1 = copy unit1.v4
                         v2 = pack tuple/2 {v0, v1}
                         unit_end v2
                 """,

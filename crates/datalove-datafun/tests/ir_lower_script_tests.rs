@@ -247,7 +247,6 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                         // Update context with exports for next unit.
                         let exports = ir_unit.script_context().map(|c| &c.exports).expect("script context required");
                         script_ctx.add_exports(unit_index, exports, &ir_unit.value_types, &ir_unit.slot_types);
-                        script_ctx.current_unit = unit_index + 1;
                     }
                     Err(e) => {
                         output.push_str(&format!("Error: {}\n", e));

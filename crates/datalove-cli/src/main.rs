@@ -855,10 +855,9 @@ impl ScriptWorldCommand {
                     None
                 }
                 Eval::NotCompiled(_) => Some(compile_error.expect("a unit that failed to compile was reported")),
-                Eval::Blocked { on } => {
-                    let on: Vec<usize> = on.iter().map(|unit| unit + 1).collect();
-                    Some(anyhow!("{}", datalove::script_engine::blocked_reason(&on)))
-                }
+                // The units are numbered from 1 in the order they are run, as
+                // the messages here count them.
+                Eval::Blocked { on } => Some(anyhow!("{}", datalove::script_engine::blocked_reason(&on))),
                 // The session is gone, so nothing is left for the rest to run against.
                 Eval::RuntimeError(output) => bail!("{}", output.strip_prefix("Error: ").unwrap_or(&output)),
                 Eval::Crashed(message) => bail!("{}", message),

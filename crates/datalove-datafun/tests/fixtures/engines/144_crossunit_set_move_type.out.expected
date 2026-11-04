@@ -42,8 +42,8 @@ Analysis(
                         v1 = const 4int
                         v2 = const 5int
                         v3 = list [v0, v1, v2]
-                        drop.tracked unit0.s0
-                        store.move.tracked unit0.s0, v3
+                        drop.tracked unit1.s0
+                        store.move.tracked unit1.s0, v3
                         unit_end
                 """,
             ),

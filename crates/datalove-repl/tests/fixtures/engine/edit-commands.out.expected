@@ -201,36 +201,6 @@
               }
             ]
           }
-        },
-        {
-          "unit": 2,
-          "compiled": true,
-          "eval": {
-            "Ran": [
-              {
-                "Value": {
-                  "name": "b",
-                  "ty": "int",
-                  "value": "11"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "unit": 3,
-          "compiled": true,
-          "eval": {
-            "Ran": [
-              {
-                "Value": {
-                  "name": "c",
-                  "ty": "int",
-                  "value": "30"
-                }
-              }
-            ]
-          }
         }
       ]
     },

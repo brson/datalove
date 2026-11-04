@@ -923,7 +923,7 @@ later passes do not look names up again. Qualified calls resolve into
 `TypeContext::qualified`, not the name table, so `u8.from_int` and
 `i8.from_int` sit side by side; a module's resolve in
 `resolve_module_imports`, a script unit's in `typecheck_script_unit`, through
-`module_alias_at` for an alias an earlier unit required.
+`module_alias_before` for an alias an earlier unit required.
 
 ## References
 

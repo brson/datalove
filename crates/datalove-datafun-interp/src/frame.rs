@@ -829,13 +829,13 @@ impl ScriptFrame {
 /// A binding that is moved out of is marked uninitialized in the frame that
 /// owns it, which is what makes it unreadable afterwards.
 ///
-/// **A unit that did not run holds its index with no frame.** A unit stays in
-/// its session when it fails to compile, or when it reads from a unit that did
-/// not run to its end, and the numbering every `(unit, id)` reference shares
-/// cannot have a hole in it. Nothing that ran reads from such a unit, so its
-/// missing frame is never asked for.
+/// **Frames are kept by unit id, not by where a unit sits**, so splicing a
+/// unit in or out moves no other unit's frame, and every `(unit, id)`
+/// reference a unit holds stays good. A unit that did not run has no frame,
+/// and nothing that ran reads from it, so its missing frame is never asked
+/// for.
 pub struct FrameStore {
-    /// Frames from executed units, indexed by unit number.
+    /// Frames from executed units, indexed by unit id.
     frames: Vec<Option<ScriptFrame>>,
     /// Unit-end values for each unit (persistent bindings to destroy).
     unit_end_values: Vec<Vec<ValueId>>,
@@ -853,29 +853,10 @@ impl FrameStore {
         }
     }
 
-    /// Add a completed unit's frame with its persistent bindings.
-    pub fn add_frame(
-        &mut self,
-        frame: ScriptFrame,
-        unit_end_values: Vec<ValueId>,
-        unit_end_slots: Vec<SlotId>,
-    ) {
-        self.frames.push(Some(frame));
-        self.unit_end_values.push(unit_end_values);
-        self.unit_end_slots.push(unit_end_slots);
-    }
-
-    /// Take the next index for a unit that did not run.
-    pub fn add_empty(&mut self) {
-        self.frames.push(None);
-        self.unit_end_values.push(Vec::new());
-        self.unit_end_slots.push(Vec::new());
-    }
-
-    /// Put a new frame in place of unit `unit`'s, destroying what the old one
-    /// owned.
+    /// Put unit `unit`'s frame in place, with its persistent bindings,
+    /// destroying what the frame it had before owned.
     ///
-    /// This is what re-executing a unit needs, and the destroy is the whole of
+    /// This is what running a unit again needs, and the destroy is the whole of
     /// why it is not just an assignment: the old frame owns the unit's
     /// persistent `let` and `var` bindings, and dropping the frame frees its
     /// buffer without destroying the values in it.
@@ -885,73 +866,45 @@ impl FrameStore {
     /// (`compiler-guide.md`, "Ownership across units"), so what a later unit
     /// took from these is in its own frame, and the binding it was taken from
     /// is no longer initialized, so it is skipped rather than destroyed twice.
-    pub fn replace_frame(
+    pub fn set_frame(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
-        unit: usize,
+        unit: u32,
         frame: ScriptFrame,
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,
     ) {
-        assert!(
-            unit < self.frames.len(),
-            "unit {unit} has no frame to replace; the store holds {}",
-            self.frames.len(),
-        );
+        let index = unit as usize;
+        if index >= self.frames.len() {
+            self.frames.resize_with(index + 1, || None);
+            self.unit_end_values.resize_with(index + 1, Vec::new);
+            self.unit_end_slots.resize_with(index + 1, Vec::new);
+        }
         self.clear_frame(rt_handle, unit);
-        self.frames[unit] = Some(frame);
-        self.unit_end_values[unit] = unit_end_values;
-        self.unit_end_slots[unit] = unit_end_slots;
+        self.frames[index] = Some(frame);
+        self.unit_end_values[index] = unit_end_values;
+        self.unit_end_slots[index] = unit_end_slots;
     }
 
     /// Leave unit `unit` with no frame, destroying what the one it had owned.
     ///
-    /// For a unit that ran before and now does not: one an edit stopped
-    /// compiling, or one an edit left reading from a unit that did not finish.
-    /// A unit that had no frame is left as it was.
-    pub fn clear_frame(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, unit: usize) {
-        assert!(
-            unit < self.frames.len(),
-            "unit {unit} has no frame to clear; the store holds {}",
-            self.frames.len(),
-        );
-        let old_values = std::mem::take(&mut self.unit_end_values[unit]);
-        let old_slots = std::mem::take(&mut self.unit_end_slots[unit]);
-        if let Some(old) = self.frames[unit].take() {
+    /// For a unit that ran before and now does not, or is gone: one an edit
+    /// stopped compiling, one an edit left reading from a unit that did not
+    /// finish, or one taken out of its session. A unit that had no frame is
+    /// left as it was.
+    ///
+    /// Nothing that stays points at what is destroyed, for the reason
+    /// [`Self::set_frame`] gives.
+    pub fn clear_frame(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, unit: u32) {
+        let index = unit as usize;
+        if index >= self.frames.len() {
+            return;
+        }
+        let old_values = std::mem::take(&mut self.unit_end_values[index]);
+        let old_slots = std::mem::take(&mut self.unit_end_slots[index]);
+        if let Some(old) = self.frames[index].take() {
             old.frame().destroy_unit_end_bindings(rt_handle, &old_values, &old_slots);
         }
-    }
-
-    /// Drop the frames from `len` on, destroying what they owned.
-    ///
-    /// What truncating a session needs, and what splicing its unit list needs
-    /// for the suffix it is about to run again. **The destroy is the whole of
-    /// why this is not three `Vec::truncate` calls**, for the reason
-    /// [`Self::replace_frame`] destroys: dropping a `Frame` frees its buffer
-    /// without destroying the values in it, and the `let` and `var` bindings a
-    /// unit left behind live in that buffer.
-    ///
-    /// Nothing that survives points at what is destroyed. A unit moves out of
-    /// an earlier unit's bindings rather than referring to them, so a unit
-    /// before `len` cannot hold anything of these, and a binding a dropped
-    /// unit moved out of is no longer initialized and so is skipped rather
-    /// than destroyed twice.
-    pub fn truncate_units(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, len: usize) {
-        assert!(
-            len <= self.frames.len(),
-            "cannot truncate to {len} units; the store holds {}",
-            self.frames.len(),
-        );
-        for unit in len..self.frames.len() {
-            let values = &self.unit_end_values[unit];
-            let slots = &self.unit_end_slots[unit];
-            if let Some(frame) = &self.frames[unit] {
-                frame.frame().destroy_unit_end_bindings(rt_handle, values, slots);
-            }
-        }
-        self.frames.truncate(len);
-        self.unit_end_values.truncate(len);
-        self.unit_end_slots.truncate(len);
     }
 
     /// Drop every unit's frame without destroying what it owns: for after the
@@ -962,12 +915,9 @@ impl FrameStore {
         self.unit_end_slots.clear();
     }
 
-    /// How many units the store holds frames for.
-    ///
-    /// External operands index frames by unit, so this is also the index the
-    /// next unit to execute will be given.
-    pub fn unit_count(&self) -> usize {
-        self.frames.len()
+    /// Whether unit `unit` has a frame.
+    pub fn has_frame(&self, unit: u32) -> bool {
+        self.frames.get(unit as usize).is_some_and(Option::is_some)
     }
 
     /// Read a value from a previous unit.

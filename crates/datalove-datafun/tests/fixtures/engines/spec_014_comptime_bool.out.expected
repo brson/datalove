@@ -97,8 +97,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move unit0.v3
-                        v1 = move unit0.v5
+                        v0 = move unit1.v3
+                        v1 = move unit1.v5
                         v2 = pack tuple/2 {v0, v1}
                         unit_end v2
                 """,

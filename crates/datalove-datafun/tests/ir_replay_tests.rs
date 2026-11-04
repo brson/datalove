@@ -182,7 +182,9 @@ fn replay(names: &[String]) -> Vec<String> {
             let ran = if ran.starts_with("Error:") {
                 ran
             } else {
-                executor.rerun_unit(0, &prepared.fragment).1
+                let id = prepared.fragment.script_context().and_then(|ctx| ctx.unit)
+                    .expect("a compiled unit is numbered");
+                executor.rerun_unit(id, &prepared.fragment).1
             };
             let value = if ran.starts_with("Error:") {
                 ran

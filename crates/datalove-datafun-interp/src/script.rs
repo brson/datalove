@@ -6,7 +6,8 @@ impl IrInterpreter {
     /// Execute a script unit with access to previous units' values.
     ///
     /// After execution, the unit's frame and functions are added to the environment
-    /// for subsequent units to reference.
+    /// for subsequent units to reference, under the id the script compiler
+    /// gave the unit, or, for a unit built without one, the next id.
     ///
     /// Returns `UnitCompletion::Normal` for regular completion, or
     /// `UnitCompletion::EarlyReturn` if `!` or `?` triggered early return.
@@ -20,19 +21,23 @@ impl IrInterpreter {
         ret_dest: Destination,
         expr_dest: Option<Destination>,
     ) -> Result<UnitCompletion, InterpError> {
-        // A unit is registered once it finishes, so the count is the index this
-        // one will take, and the index its `Local` references are relative to.
-        let at = env.registry.unit_count();
+        let at = unit.script_context()
+            .expect("execute_script_unit_in_env requires a script code unit")
+            .unit
+            .unwrap_or_else(|| env.registry.next_unit());
+        assert!(
+            !env.frames.has_frame(at) && env.registry.unit_functions(at).is_none_or(<[_]>::is_empty),
+            "unit {at} is run as a new unit and already has a frame or functions",
+        );
         self.run_script_unit(at, false, unit, env, ret_dest, expr_dest)
     }
 
-    /// Run a script unit again in place of the unit already at `at`.
+    /// Run a script unit again in place of whatever unit `at` had.
     ///
-    /// **The index is given rather than taken from the store**, because the
-    /// unit's `Local` references and every `(unit, value)` reference a later
-    /// unit holds of it are relative to where it sits, and re-executing must
-    /// not move it. What the old frame owned is destroyed when the new frame
-    /// takes its place; see [`FrameStore::replace_frame`].
+    /// Every `(unit, value)` reference a later unit holds of it names it by
+    /// `at`. What the old frame owned is destroyed when the new frame takes
+    /// its place; see [`FrameStore::set_frame`]. The compiled bodies are
+    /// forgotten, since `at` may have named other functions before.
     ///
     /// A unit reads only from the units before it, so re-running one cannot
     /// read what its own previous run left.
@@ -87,7 +92,7 @@ impl IrInterpreter {
         // unit's alike, and drop the units: what the frames the error unwound
         // owned is not destroyed a value at a time, so the runtime discards
         // all its memory instead (see `discard_runtime_state`). The session
-        // is empty afterwards, its next unit unit 0.
+        // is empty afterwards.
         if let Err(e) = result {
             drop(script_frame);
             env.discard_units();
@@ -95,24 +100,14 @@ impl IrInterpreter {
             return Err(e);
         }
 
-        if replacing {
-            env.replace_unit(
-                self.runtime.handle(),
-                at,
-                script_frame,
-                unit.nested_units.clone(),
-                script_ctx.unit_end_values.clone(),
-                script_ctx.unit_end_slots.clone(),
-            );
-        } else {
-            // Add this unit's frame and code units to the environment for future units.
-            env.add_unit(
-                script_frame,
-                unit.nested_units.clone(),
-                script_ctx.unit_end_values.clone(),
-                script_ctx.unit_end_slots.clone(),
-            );
-        }
+        env.set_unit(
+            self.runtime.handle(),
+            at,
+            script_frame,
+            unit.nested_units.clone(),
+            script_ctx.unit_end_values.clone(),
+            script_ctx.unit_end_slots.clone(),
+        );
 
         result
     }

@@ -307,11 +307,12 @@ impl Session {
     /// What unit `index` does to earlier units' bindings, as a step table's
     /// `uses` column says it, one entry per binding.
     fn uses(&self, index: usize) -> Vec<String> {
-        let accesses = self.engine.unit_accesses(index);
+        let ids = self.engine.unit_ids();
+        let accesses = self.engine.unit_accesses(ids[index]);
         let mut uses: Vec<String> = accesses.uses.iter()
             .filter_map(|name| {
                 let provider = (0..index).rev()
-                    .find(|earlier| self.engine.unit_accesses(*earlier).provides.contains(name))?;
+                    .find(|earlier| self.engine.unit_accesses(ids[*earlier]).provides.contains(name))?;
                 let has = |names: &[String]| names.contains(name);
                 let verb = if has(&accesses.revives) {
                     "revives"
@@ -336,6 +337,18 @@ impl Session {
             .unwrap_or_else(|| panic!("no unit `{unit}` in the session"))
     }
 
+    /// The engine's id for the unit named `unit`.
+    fn id(&self, unit: &str) -> u32 {
+        self.engine.unit_ids()[self.index(unit)]
+    }
+
+    /// The name of the unit the engine knows by `id`.
+    fn name(&self, id: u32) -> String {
+        let index = self.engine.unit_ids().iter().position(|held| *held == id)
+            .unwrap_or_else(|| panic!("no unit {id} in the session"));
+        self.units[index].C()
+    }
+
     /// Make a step's change, and say what each unit did.
     fn apply(&mut self, change: &Change) -> Vec<(String, Outcome)> {
         self.analyzed.clear();
@@ -348,15 +361,14 @@ impl Session {
                     }
                 }
                 Change::Edit { unit, source } => {
-                    let index = self.index(unit);
-                    let reports = self.engine.edit_unit(index, source);
+                    let reports = self.engine.edit_unit(self.id(unit), source);
                     ran.extend(self.reported(reports));
                 }
                 Change::Delete { unit } => {
-                    let index = self.index(unit);
-                    self.units.remove(index);
+                    let id = self.id(unit);
+                    self.units.remove(self.index(unit));
                     ran.push((unit.C(), Ran::Deleted));
-                    let reports = self.engine.delete_unit(index);
+                    let reports = self.engine.delete_unit(id);
                     ran.extend(self.reported(reports));
                 }
                 Change::Insert { entry, place, beside } => {
@@ -449,7 +461,7 @@ impl Session {
     fn reported(&mut self, reports: Vec<datalove_script_engine::UnitStep>) -> Vec<(String, Ran)> {
         self.note_analyzed();
         reports.iter()
-            .map(|report| (self.units[report.unit].C(), report.eval.as_ref().map_or(Ran::No, ran)))
+            .map(|report| (self.name(report.unit), report.eval.as_ref().map_or(Ran::No, ran)))
             .collect()
     }
 
@@ -458,7 +470,7 @@ impl Session {
     fn note_analyzed(&mut self) {
         for report in self.engine.last_step() {
             if report.compiled.typecheck || report.compiled.ownership {
-                let unit = self.units[report.unit].C();
+                let unit = self.name(report.unit);
                 if !self.analyzed.contains(&unit) {
                     self.analyzed.push(unit);
                 }
@@ -584,7 +596,7 @@ pub fn run(name: &str, workspace: Workspace, steps: &[Step]) -> Vec<String> {
                     failures.push(fmt!("{at}: unit {} {found}, the table says {}", row.unit, row.uses));
                 }
             }
-            let held = holds(&session.engine.unit_bindings(index));
+            let held = holds(&session.engine.unit_bindings(session.engine.unit_ids()[index]));
             if held != row.holds_after {
                 failures.push(fmt!(
                     "{at}: unit {} holds {held}, the table says {}",

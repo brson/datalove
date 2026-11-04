@@ -39,8 +39,8 @@ use std::collections::HashSet;
 /// `botdocs/plan-script-reactivity.md`.
 #[derive(Clone, Copy)]
 pub struct InheritedBindings<'db> {
-    /// The script up to the unit *before* the one being checked.
-    pub script: crate::Script<'db>,
+    /// The unit being checked, whose earlier units are read.
+    pub unit: crate::ScriptUnit,
     /// The modules the script is checked against.
     pub env: crate::ScriptEnv<'db>,
 }
@@ -1152,14 +1152,14 @@ replace the view rather than the elements it shows. Index down to single element
     /// What the earlier script units left behind under `name`.
     fn inherited(&self, name: InternedText<'db>) -> Option<crate::ScriptBinding<'db>> {
         let inherited = self.inherited?;
-        crate::api::binding_at(self.db, inherited.script, inherited.env, name)
+        crate::api::binding_before(self.db, inherited.unit, inherited.env, name)
     }
 
     /// The type alias an earlier unit declared under `name`.
     pub(crate) fn inherited_type_alias(&self, name: InternedText<'db>) -> Option<Type<'db>> {
         let inherited = self.inherited?;
         self.note_asked(name);
-        crate::api::type_alias_at(self.db, inherited.script, inherited.env, name)
+        crate::api::type_alias_before(self.db, inherited.unit, inherited.env, name)
     }
 
     /// The variable an earlier unit left behind under `name`, if a body may see it.

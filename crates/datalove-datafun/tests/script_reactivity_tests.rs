@@ -9,9 +9,15 @@
 //! This used not to hold. `typecheck_script_unit` was keyed on
 //! `AccumulatedBindings` -- every binding from every earlier unit -- so B's
 //! outputs moving gave C a new key whether or not C mentioned any of them, and C
-//! re-ran for an edit it could not see. The key is now a position in the script,
-//! and what the earlier units left behind is read through `binding_at` on a
-//! lookup miss, so a unit depends on the names it actually used.
+//! re-ran for an edit it could not see. The key is now the unit itself, an
+//! input, and what the earlier units left behind is read through
+//! `binding_before` on a lookup miss, so a unit depends on the names it
+//! actually used.
+//!
+//! **The same holds for splicing a unit in or out**, which moves no unit's key
+//! either: it is `set_prev` on the unit after the splice, and only the lookups
+//! walking back through that link run again. A unit is typechecked again only
+//! if the unit spliced in or out binds a name it asked for.
 //!
 //! **The assertion is which units re-ran, not how many.** A count can be right
 //! for the wrong reasons -- two units re-running is the correct answer here and
@@ -35,7 +41,7 @@ use bct::input::Source;
 use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
 use datalove_datafun as datafun;
 use datalove_datafun_tycheck::{
-    type_check_script_units, Script, ScriptEnv, ScriptUnit,
+    type_check_script_units, ScriptEnv, ScriptUnit,
 };
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
@@ -49,19 +55,19 @@ const UNITS: [&str; 4] = [
     "let d = b + 5\n",
 ];
 
-/// The script and the environment, built from sources that outlive an edit.
+/// A unit for each of `texts`, linked in order.
 ///
-/// `ScriptUnit` and `Script` are interned over those sources, so building them
-/// again after an edit gives back the very same handles -- which is why the
-/// memo keys survive.
-fn build<'db>(
-    db: &'db datafun::Database,
-    sources: &[Source],
-) -> (Script<'db>, ScriptEnv<'db>) {
-    let units: Vec<ScriptUnit<'db>> =
-        sources.iter().map(|source| ScriptUnit::new(db, *source, false)).collect();
-    let script = Script::from_units(db, &units).expect("at least one unit");
-    (script, ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new()))
+/// The units are inputs and outlive an edit, which is `set_text` on a unit's
+/// source, and a splice, which is `set_prev` on the unit after it -- which is
+/// why the memo keys survive both.
+fn units_of(db: &datafun::Database, texts: &[&str]) -> Vec<ScriptUnit> {
+    let sources: Vec<(Source, bool)> = texts.iter().map(|text| (Source::new(db, text.S()), false)).collect();
+    ScriptUnit::chain_of(db, &sources)
+}
+
+/// The environment the units are checked against: no modules, no data.
+fn env(db: &datafun::Database) -> ScriptEnv<'_> {
+    ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new())
 }
 
 /// What each unit provides and what it uses, as owned text.
@@ -75,9 +81,9 @@ struct Graph {
 }
 
 impl Graph {
-    fn of(db: &datafun::Database, sources: &[Source]) -> Graph {
-        let (script, env) = build(db, sources);
-        let outputs = type_check_script_units(db, script, env).unit_outputs(db);
+    fn of(db: &datafun::Database, units: &[ScriptUnit]) -> Graph {
+        let last = *units.last().expect("at least one unit");
+        let outputs = type_check_script_units(db, last, env(db)).unit_outputs(db);
 
         let mut graph = Graph { provides: Vec::new(), uses: Vec::new(), failed: Vec::new() };
         for output in &outputs {
@@ -159,8 +165,8 @@ fn units_reached(executed: &[ExecutedQuery], keys: &[salsa::Id]) -> BTreeSet<usi
 #[test]
 fn c_uses_nothing_b_provides_and_d_uses_b() {
     let db = datafun::Database::default();
-    let sources: Vec<Source> = UNITS.iter().map(|text| Source::new(&db, text.S())).collect();
-    let graph = Graph::of(&db, &sources);
+    let units = units_of(&db, &UNITS);
+    let graph = Graph::of(&db, &units);
 
     assert_eq!(graph.provides, vec![vec!["a"], vec!["b"], vec!["c"], vec!["d"]]);
     assert!(!graph.failed.iter().any(|failed| *failed), "the fixture typechecks");
@@ -188,15 +194,15 @@ fn c_uses_nothing_b_provides_and_d_uses_b() {
 fn editing_b_reaches_b_and_d_and_not_c() {
     let recorder = QueryRecorder::new();
     let mut db = datafun::Database::recording(&recorder);
-    let sources: Vec<Source> = UNITS.iter().map(|text| Source::new(&db, text.S())).collect();
+    let units = units_of(&db, &UNITS);
 
-    let graph = Graph::of(&db, &sources);
+    let graph = Graph::of(&db, &units);
     let expected = graph.dependents_of(1);
     let keys = unit_keys(&recorder.take(), UNITS.len());
 
-    sources[1].set_text(&mut db).to(S("var b = 2\n"));
+    units[1].source(&db).set_text(&mut db).to(S("var b = 2\n"));
 
-    let after = Graph::of(&db, &sources);
+    let after = Graph::of(&db, &units);
     assert!(!after.failed.iter().any(|failed| *failed), "the edit leaves the script legal");
     let reached = units_reached(&recorder.take(), &keys);
 
@@ -217,14 +223,14 @@ fn editing_b_reaches_b_and_d_and_not_c() {
 fn a_value_only_edit_reaches_only_its_own_unit() {
     let recorder = QueryRecorder::new();
     let mut db = datafun::Database::recording(&recorder);
-    let sources: Vec<Source> = UNITS.iter().map(|text| Source::new(&db, text.S())).collect();
+    let units = units_of(&db, &UNITS);
 
-    let _ = Graph::of(&db, &sources);
+    let _ = Graph::of(&db, &units);
     let keys = unit_keys(&recorder.take(), UNITS.len());
 
-    sources[1].set_text(&mut db).to(S("let b = 3\n"));
+    units[1].source(&db).set_text(&mut db).to(S("let b = 3\n"));
 
-    let _ = Graph::of(&db, &sources);
+    let _ = Graph::of(&db, &units);
     assert_eq!(
         units_reached(&recorder.take(), &keys),
         BTreeSet::from([1]),
@@ -240,15 +246,15 @@ fn a_value_only_edit_reaches_only_its_own_unit() {
 fn a_type_edit_reaches_the_units_that_read_the_binding() {
     let recorder = QueryRecorder::new();
     let mut db = datafun::Database::recording(&recorder);
-    let sources: Vec<Source> = UNITS.iter().map(|text| Source::new(&db, text.S())).collect();
+    let units = units_of(&db, &UNITS);
 
-    let graph = Graph::of(&db, &sources);
+    let graph = Graph::of(&db, &units);
     let expected = graph.dependents_of(1);
     let keys = unit_keys(&recorder.take(), UNITS.len());
 
-    sources[1].set_text(&mut db).to(S("let b = \"two\"\n"));
+    units[1].source(&db).set_text(&mut db).to(S("let b = \"two\"\n"));
 
-    let after = Graph::of(&db, &sources);
+    let after = Graph::of(&db, &units);
     let reached = units_reached(&recorder.take(), &keys);
 
     assert!(after.failed[3], "`b + 5` over a string is an error, and D is where it is filed");
@@ -265,13 +271,14 @@ fn a_type_edit_reaches_the_units_that_read_the_binding() {
 fn appending_a_unit_typechecks_only_that_unit() {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
-    let mut sources: Vec<Source> = UNITS.iter().map(|text| Source::new(&db, text.S())).collect();
+    let mut units = units_of(&db, &UNITS);
 
-    let _ = Graph::of(&db, &sources);
+    let _ = Graph::of(&db, &units);
     let keys = unit_keys(&recorder.take(), UNITS.len());
 
-    sources.push(Source::new(&db, S("let e = c + 1\n")));
-    let graph = Graph::of(&db, &sources);
+    let prev = units.last().copied();
+    units.push(ScriptUnit::new(&db, Source::new(&db, S("let e = c + 1\n")), false, prev));
+    let graph = Graph::of(&db, &units);
     assert!(!graph.failed[4], "the appended unit typechecks: {:?}", graph.uses[4]);
 
     // The appended unit has no key from the cold run, so the assertion is that
@@ -284,6 +291,97 @@ fn appending_a_unit_typechecks_only_that_unit() {
     );
 }
 
+/// Which of the units that were there before ran their typecheck, by the
+/// index each had then, and how many typechecks ran of units that were not.
+fn reached_and_new(executed: &[ExecutedQuery], keys: &[salsa::Id]) -> (BTreeSet<usize>, usize) {
+    let ran = typechecks(executed);
+    let old: BTreeSet<usize> = ran.iter().filter_map(|key| keys.iter().position(|held| held == key)).collect();
+    let new = ran.len() - old.len();
+    (old, new)
+}
+
+/// **Inserting a unit typechecks it and the units that now find one of its
+/// bindings, and no other.**
+///
+/// X binds `b` again as a `var`, so D, which reads `b`, finds a different
+/// binding and is typechecked again. C, which X sits in front of, is not:
+/// its link to the unit before it moved, and the lookups walking back
+/// through it ran again and came out the same.
+#[test]
+fn inserting_a_unit_reaches_the_units_that_find_its_bindings() {
+    let recorder = QueryRecorder::new();
+    let mut db = datafun::Database::recording(&recorder);
+    let mut units = units_of(&db, &UNITS);
+    let _ = Graph::of(&db, &units);
+    let keys = unit_keys(&recorder.take(), UNITS.len());
+
+    let x = ScriptUnit::new(&db, Source::new(&db, S("var b = 9\n")), false, Some(units[1]));
+    units[2].set_prev(&mut db).to(Some(x));
+    units.insert(2, x);
+    let graph = Graph::of(&db, &units);
+    assert!(!graph.failed.iter().any(|failed| *failed), "the insertion leaves the script legal");
+
+    let (reached, new) = reached_and_new(&recorder.take(), &keys);
+    assert_eq!(reached, BTreeSet::from([3]), "D, which reads `b`, and not C, which X sits in front of");
+    assert_eq!(new, 1, "and X itself");
+}
+
+/// Inserting a unit whose bindings nobody asks for typechecks it alone.
+#[test]
+fn inserting_a_unit_nobody_reads_typechecks_only_it() {
+    let recorder = QueryRecorder::new();
+    let mut db = datafun::Database::recording(&recorder);
+    let mut units = units_of(&db, &UNITS);
+    let _ = Graph::of(&db, &units);
+    let keys = unit_keys(&recorder.take(), UNITS.len());
+
+    let x = ScriptUnit::new(&db, Source::new(&db, S("let x = 9\n")), false, Some(units[0]));
+    units[1].set_prev(&mut db).to(Some(x));
+    units.insert(1, x);
+    let _ = Graph::of(&db, &units);
+
+    let (reached, new) = reached_and_new(&recorder.take(), &keys);
+    assert_eq!(reached, BTreeSet::new(), "no unit after X asks for `x`");
+    assert_eq!(new, 1);
+}
+
+/// **Deleting a unit typechecks the units that read its bindings, and no
+/// other.**
+#[test]
+fn deleting_a_unit_reaches_the_units_that_read_its_bindings() {
+    let recorder = QueryRecorder::new();
+    let mut db = datafun::Database::recording(&recorder);
+    let mut units = units_of(&db, &UNITS);
+    let graph = Graph::of(&db, &units);
+    let expected: BTreeSet<usize> = graph.dependents_of(1).into_iter().filter(|unit| *unit != 1).collect();
+    let keys = unit_keys(&recorder.take(), UNITS.len());
+
+    units[2].set_prev(&mut db).to(Some(units[0]));
+    units.remove(1);
+    let after = Graph::of(&db, &units);
+
+    let (reached, new) = reached_and_new(&recorder.take(), &keys);
+    assert_eq!(reached, expected, "D, which read `b`, and not C");
+    assert_eq!(new, 0);
+    assert!(after.failed[2], "D has no `b` to read now");
+}
+
+/// Deleting a unit nobody reads typechecks nothing.
+#[test]
+fn deleting_a_unit_nobody_reads_typechecks_nothing() {
+    let recorder = QueryRecorder::new();
+    let mut db = datafun::Database::recording(&recorder);
+    let mut units = units_of(&db, &UNITS);
+    let _ = Graph::of(&db, &units);
+    let keys = unit_keys(&recorder.take(), UNITS.len());
+
+    units[3].set_prev(&mut db).to(Some(units[1]));
+    units.remove(2);
+    let _ = Graph::of(&db, &units);
+
+    assert_eq!(reached_and_new(&recorder.take(), &keys), (BTreeSet::new(), 0), "nothing reads `c`");
+}
+
 /// A unit that failed to typecheck provides nothing to the units after it.
 ///
 /// Which is what accumulating forward did, and the reason `unit_provides` reads
@@ -292,11 +390,9 @@ fn appending_a_unit_typechecks_only_that_unit() {
 #[test]
 fn a_unit_that_failed_provides_nothing() {
     let db = datafun::Database::default();
-    let sources: Vec<Source> = ["let x = nope\n", "let y = x\n"].iter()
-        .map(|text| Source::new(&db, text.S()))
-        .collect();
+    let units = units_of(&db, &["let x = nope\n", "let y = x\n"]);
 
-    let graph = Graph::of(&db, &sources);
+    let graph = Graph::of(&db, &units);
     assert!(graph.failed[0], "`nope` is undefined");
     assert!(graph.failed[1], "so `x` is not available to the unit after it");
 }

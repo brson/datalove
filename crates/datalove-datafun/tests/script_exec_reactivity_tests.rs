@@ -89,7 +89,7 @@ fn c_uses_nothing_b_provides_and_d_uses_b() {
 /// This is what the whole stage rests on: B's values being rebuilt cannot reach
 /// a unit that never named one. It is checked by walking the serialized code
 /// unit for every `ExternalValue`, `ExternalSlot` and `External` -- the three
-/// forms that carry a unit index -- rather than by matching on the instruction
+/// forms that carry a unit id -- rather than by matching on the instruction
 /// set, so a form added later is covered without this test being revisited.
 #[test]
 fn c_holds_no_reference_to_b() {
@@ -108,12 +108,12 @@ fn c_holds_no_reference_to_b() {
     );
     assert_eq!(
         external_units(&units[3]),
-        BTreeSet::from([1]),
-        "D reads `b`, so it refers to unit 1 and to nothing else",
+        BTreeSet::from([session.ids()[1]]),
+        "D reads `b`, so it refers to B and to nothing else",
     );
 }
 
-/// Every unit index an IR unit refers to.
+/// Every unit id an IR unit refers to.
 fn external_units(unit: &datalove_datafun_ir::IrCodeUnit) -> BTreeSet<u32> {
     let json = rmx::serde_json::to_value(unit).expect("an IR unit serializes");
     let mut found = BTreeSet::new();
@@ -121,7 +121,7 @@ fn external_units(unit: &datalove_datafun_ir::IrCodeUnit) -> BTreeSet<u32> {
     found
 }
 
-/// Walk `value` for the externally tagged forms that carry a unit index.
+/// Walk `value` for the externally tagged forms that carry a unit id.
 ///
 /// `Operand::ExternalValue`, `Operand::ExternalSlot`, `SlotDest::External` and
 /// `CodeRef::External` all serialize as a one-key object whose payload holds a
@@ -316,7 +316,8 @@ fn an_edit_reaches_an_expression_unit() {
     let mut values = Vec::new();
     for (index, result) in &rederived {
         let ir_unit = result.ir_unit.as_ref().expect("every unit re-lowers");
-        values.push((*index, session.executor.rerun_unit(*index, ir_unit)));
+        let id = session.ids()[*index];
+        values.push((*index, session.executor.rerun_unit(id, ir_unit)));
     }
 
     assert_eq!(
@@ -358,7 +359,8 @@ fn an_edit_that_breaks_a_later_unit_leaves_the_rest_alone() {
     // was and its binding drops out of the environment.
     for (index, result) in &rederived {
         if let Some(ir_unit) = &result.ir_unit {
-            session.executor.rerun_unit(*index, ir_unit);
+            let id = session.ids()[*index];
+            session.executor.rerun_unit(id, ir_unit);
         }
     }
     assert_eq!(session.binding("c"), "30", "C never heard about any of this");

@@ -57,7 +57,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 21u32
-                        v1 = mul.assign.checked unit0.s0, v0
+                        v1 = mul.assign.checked unit1.s0, v0
                         branch v1, block1, block2
                     block1:
                         v2 = const "arithmetic overflow"
@@ -66,10 +66,10 @@ Analysis(
                         unit_early_return v4
                     block2:
                         v5 = const 1int
-                        sub.assign unit0.s1, v5
+                        sub.assign unit1.s1, v5
                         drop v5
-                        v6 = copy unit0.s0
-                        v7 = clone unit0.s1
+                        v6 = copy unit1.s0
+                        v7 = clone unit1.s1
                         v8 = pack tuple/2 {v6, v7}
                         debuglog v8
                         drop v8
@@ -93,8 +93,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = copy unit0.s0
-                        v1 = move unit0.s1
+                        v0 = copy unit1.s0
+                        v1 = move unit1.s1
                         v2 = pack tuple/2 {v0, v1}
                         unit_end v2
                 """,

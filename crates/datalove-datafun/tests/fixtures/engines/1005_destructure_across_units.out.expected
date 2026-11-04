@@ -49,14 +49,14 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 1int
-                        v1 = add unit0.s0, v0
+                        v1 = add unit1.s0, v0
                         drop v0
-                        drop.tracked unit0.s0
-                        store.move.tracked unit0.s0, v1
-                        v2 = move unit0.v4
-                        v3 = move unit0.v5
-                        v4 = move unit0.s0
-                        v5 = move unit0.s1
+                        drop.tracked unit1.s0
+                        store.move.tracked unit1.s0, v1
+                        v2 = move unit1.v4
+                        v3 = move unit1.v5
+                        v4 = move unit1.s0
+                        v5 = move unit1.s1
                         v6 = pack tuple/4 {v2, v3, v4, v5}
                         debuglog v6
                         drop v6

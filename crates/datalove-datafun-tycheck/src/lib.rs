@@ -445,13 +445,13 @@ impl<'db> ScriptUnitSpec<'db> {
 /// What a script is checked against, as a handle to key a query on.
 ///
 /// Interned rather than passed by value, and this is not a micro-optimization:
-/// a script unit asks [`api::binding_at`] once per name it uses, so this is
+/// a script unit asks [`api::binding_before`] once per name it uses, so this is
 /// hashed once per name.
 ///
 /// **The modules are handles, not their contents.** A `Module` is interned over
 /// a `ModuleId` and a `Source`, and editing a module is `set_text`, which
 /// changes a source's text and not its handle -- so this env survives a module
-/// edit. That matters because every per-unit query is keyed on `(script, env)`:
+/// edit. That matters because every per-unit query is keyed on `(unit, env)`:
 /// when the env held each module's parse, spans and name resolution, editing one
 /// module's body gave every unit a different question to answer, whether or not
 /// it imported from that module. A unit reaches a module's declarations through
@@ -770,7 +770,7 @@ pub use api::{
     ScriptBinding,
     ScriptUnitTypecheckOutput,
     UnitProvides,
-    binding_at,
+    binding_before,
     single_fragment_script,
     typecheck_script_unit,
     unit_ast,
@@ -780,7 +780,7 @@ pub use api::{
 };
 
 // The script itself, which the per-unit queries are keyed on.
-pub use datalove_datafun_ast::script::{Script, ScriptUnit};
+pub use datalove_datafun_ast::script::ScriptUnit;
 
 // Re-export context types.
 pub use context::{InheritedBindings, TypeContext};

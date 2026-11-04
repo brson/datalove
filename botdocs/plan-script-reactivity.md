@@ -789,6 +789,13 @@ splice point to the end, and -- at the engine -- destroy the frames from the
 splice point on and run the re-derived suffix as appends. Truncating is the one
 that renumbers nothing and so re-derives nothing.
 
+*(Superseded, November 2026: a unit is now a `ScriptUnit` input linked to the
+one before it, known everywhere else by an id it keeps, so a splice moves no
+key and no id, and re-derives its reach as an edit does. The suffix below was
+the cost of identifying a unit by its position, and not inherent after all;
+see
+[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-splices).)*
+
 What it came to, over four units A B C D where D reads A's binding and nothing
 reads B's:
 

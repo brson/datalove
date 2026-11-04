@@ -26,7 +26,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`output` is bound by unit 0, which did not compile",
+                message: "`output` is bound by unit 1, which did not compile",
             ),
             output: "",
         ),

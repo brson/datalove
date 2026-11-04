@@ -113,14 +113,11 @@ pub enum Eval {
     /// It stays in the session, providing none of its bindings, and reruns
     /// when an edit reaches it.
     ReturnedEarly(String),
-    /// The unit compiled and was not run, because it reads from these units
-    /// and they did not finish.
+    /// The unit compiled and was not run, because it reads from these units,
+    /// by id, and they did not finish.
     ///
-    /// The engine names the units by their index in the session; a driver
-    /// that numbers units, as the REPL does, renames them by number before
-    /// anything shows them. It stays in the session too, and runs when an
-    /// edit lets them finish.
-    Blocked { on: Vec<usize> },
+    /// It stays in the session too, and runs when an edit lets them finish.
+    Blocked { on: Vec<u32> },
 }
 
 impl Eval {

@@ -267,12 +267,13 @@ shows.
 
 ## Editing, not only appending
 
-`Engine::edit_unit(unit, source)` changes one unit of the session and
+`Engine::edit_unit(id, source)` changes one unit of the session and
 re-derives what the change reaches, leaving the rest of the session with the
 lowering and the frames it had. `Engine::truncate_units`, `delete_unit` and
-`insert_unit` splice the list and rerun the whole suffix after the splice,
-whether or not a unit in it uses what the splice changed. A unit of the
-suffix that stops compiling stays, as one appended does.
+`insert_unit` splice the list and re-derive what the splice reaches, the same
+way: a unit keeps its id wherever units are spliced around it, so a unit that
+uses nothing the splice changed is left alone. A unit that stops compiling
+stays, as one appended does.
 [script-reactivity-architecture.md](script-reactivity-architecture.md) has how
 the reach is decided, and why the engine owns its database rather than
 borrowing it.
@@ -325,12 +326,14 @@ order there, which is the cost: the order the panel shows is the session's,
 and the number only names the unit. The reactive fixtures and worldfile
 script unit headers name units the same way.
 
-**The numbers are kept beside the engine, by `Session`**, since the engine
-knows units only by position. It wraps the `Engine` and carries out every
-command that changes the session, turning a number into a position for the
-engine and the positions in what comes back -- the units an edit reached, the
-ones a `Blocked` waits on -- into numbers. It asserts after every command that
-it and the engine hold the same number of units. Both the worker and
+**A unit's number is its id in the engine**, which gives ids the same way:
+from 1, in the order units are made, never twice. `Session` wraps the `Engine`
+and carries out every command that changes the session, keeping each unit's
+text beside its number. The engine's answers name units by id, so they need no
+translating. A delete's undo puts the unit back under its number with
+`Engine::restore_unit`, and dropping undone changes gives their numbers again
+with `Engine::set_next_id`. `Session` asserts after every command that it and
+the engine hold the same units under the same numbers. Both the worker and
 `run_source` drive one. It also catches a panic in the engine's edits, which,
 unlike evaluating a unit, the engine does not catch itself, and reports it as
 a crash that reset the session.

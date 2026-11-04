@@ -56,12 +56,3 @@ expect unit 4 is deleted
 | 3 | reads `a` (1), reads `b` (2) | untouched | units 1 and 2 provided the same `a` and `b` | `c` = 8 |
 | 4 | takes `a` (1), updates `b` (2) | deleted | deleted | - |
 | 5 | reads `b` (2) | reruns | reads `b` after unit 4, which no longer updates it | `d` = 126 |
-
-----------
-engine
-----------
-
-| unit | this step | note |
-|------|-----------|------|
-| 3 | reruns | a splice reruns every unit from the rerun point on, readers included |
-| 5 | recompiles, runs | a removal renumbers every later unit, so they are typechecked under new keys |

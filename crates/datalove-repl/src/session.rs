@@ -13,19 +13,18 @@ pub struct NumberedUnit {
     pub unit: Unit,
 }
 
-/// An engine, and the numbers of the units in its session.
+/// An engine, and the units of its session with their numbers.
 ///
-/// **A unit is numbered when it is made, by appending or inserting, and
-/// keeps its number** while the session lasts. Numbers count from 1, are
-/// never reused, and start again at 1 when the session is reset. So a command
-/// naming a unit means the same unit whatever is inserted or deleted after
-/// it, and a replay numbers the units as they were numbered the first time.
-/// The engine knows units only by position, so the numbers are kept here,
-/// beside it, and every command that changes the session goes through here.
+/// **A unit's number is its id in the engine**: given when it is made, by
+/// appending or inserting, and kept while the session lasts. Numbers count
+/// from 1, are never reused, and start again at 1 when the session is reset.
+/// So a command naming a unit means the same unit whatever is inserted or
+/// deleted around it, and a replay numbers the units as they were numbered
+/// the first time. The units' text is kept here, beside the engine, and every
+/// command that changes the session goes through here.
 pub struct Session {
     engine: Engine,
     units: Vec<NumberedUnit>,
-    next: u32,
     /// What the last command to change the session did to the units, by
     /// number; see [`Session::last_step`].
     last_step: Vec<UnitStep>,
@@ -33,7 +32,7 @@ pub struct Session {
 
 impl Session {
     pub fn new(engine: Engine) -> Session {
-        Session { engine, units: Vec::new(), next: 1, last_step: Vec::new() }
+        Session { engine, units: Vec::new(), last_step: Vec::new() }
     }
 
     pub fn engine(&mut self) -> &mut Engine {
@@ -71,7 +70,7 @@ impl Session {
                     self.append(unit);
                 }
                 self.take_step(self.engine.last_step().to_vec());
-                Outcome::Unit(self.numbered(eval))
+                Outcome::Unit(eval)
             }
             Command::ReplCommand(command) => match command {
                 ReplCommand::Unknown => Outcome::CommandError("unknown command".S()),
@@ -90,7 +89,7 @@ impl Session {
                     None => no_unit(unit),
                 },
                 ReplCommand::Renumber { next } => {
-                    self.next = next;
+                    self.engine.set_next_id(next);
                     Outcome::Edited(Vec::new())
                 }
                 ReplCommand::Exit | ReplCommand::Help | ReplCommand::Save | ReplCommand::Load
@@ -99,9 +98,9 @@ impl Session {
                 }
             },
         };
-        assert_eq!(
-            self.engine.unit_count(), self.units.len(),
-            "the engine's session and its numbers are the same length",
+        assert!(
+            self.engine.unit_ids().iter().eq(self.units.iter().map(|unit| &unit.number)),
+            "the engine's units are the session's, with the same numbers",
         );
         eval
     }
@@ -117,7 +116,7 @@ impl Session {
                 kind(old), kind(&source),
             ));
         }
-        let step = self.guarded(number, "editing", |engine| engine.edit_unit(index, source.source()));
+        let step = self.guarded(number, "editing", |engine| engine.edit_unit(number, source.source()));
         self.splice(step, |units| units[index].unit = source)
     }
 
@@ -125,7 +124,7 @@ impl Session {
         let Some(index) = self.index_of(number) else {
             return no_unit(number);
         };
-        let step = self.guarded(number, "deleting", |engine| engine.delete_unit(index));
+        let step = self.guarded(number, "deleting", |engine| engine.delete_unit(number));
         self.splice(step, |units| {
             units.remove(index);
         })
@@ -136,25 +135,21 @@ impl Session {
             return no_unit(number);
         };
         let index = place.index(index);
+        let made = NumberedUnit { number: self.engine.next_id(), unit: source.C() };
         let step = self.guarded(number, "inserting beside", |engine| {
             engine.insert_unit(index, source.source(), source.is_expression())
         });
-        let made = NumberedUnit { number: self.next, unit: source };
-        let eval = self.splice(step, |units| units.insert(index, made));
-        if !eval.reset_the_session() {
-            self.next += 1;
-        }
-        eval
+        self.splice(step, |units| units.insert(index, made))
     }
 
     /// What the session has to say about the unit at `index`.
     fn describe(&mut self, index: usize) -> crate::UnitDetail {
         let number = self.units[index].number;
-        let accesses = self.engine.unit_accesses(index);
+        let accesses = self.engine.unit_accesses(number);
         crate::UnitDetail {
             unit: number,
-            diagnostics: self.engine.unit_diagnostics(index, &fmt!("unit {number}"), script::TextStyle::Ansi),
-            bindings: self.engine.unit_bindings(index),
+            diagnostics: self.engine.unit_diagnostics(number, &fmt!("unit {number}"), script::TextStyle::Ansi),
+            bindings: self.engine.unit_bindings(number),
             provides: accesses.provides,
             reads: accesses.reads,
             takes: accesses.takes,
@@ -176,18 +171,17 @@ impl Session {
         };
         assert!(self.index_of(number).is_none(), "unit {number} is restored while it is there");
         let step = self.guarded(number, "restoring", |engine| {
-            engine.insert_unit(index, source.source(), source.is_expression())
+            engine.restore_unit(index, number, source.source(), source.is_expression())
         });
         let made = NumberedUnit { number, unit: source };
         self.splice(step, |units| units.insert(index, made))
     }
 
-    /// Change the numbers as the engine changed its units, and say what the
-    /// step did to each unit by number.
+    /// Change the units as the engine changed its own, and say what the step
+    /// did to each unit by number.
     ///
     /// `change` is not made if the engine panicked, which leaves an empty
-    /// session. The step names units by where they are after the change, and
-    /// a runtime error in it leaves the session empty too.
+    /// session. A runtime error in the step leaves the session empty too.
     fn splice(
         &mut self,
         step: Result<Vec<script::UnitStep>, UnitStep>,
@@ -226,36 +220,26 @@ impl Session {
         })
     }
 
-    /// Keep the engine's step as the last, by number, and return it.
+    /// Keep the engine's step as the last, and return it.
     fn take_step(&mut self, step: Vec<script::UnitStep>) -> Vec<UnitStep> {
         self.last_step = step.into_iter()
             .map(|script::UnitStep { unit, compiled, eval }| UnitStep {
-                unit: self.units[unit].number,
+                unit,
                 compiled: compiled.any(),
-                eval: eval.map(|eval| self.numbered(eval)),
+                eval,
             })
             .collect();
         self.last_step.C()
     }
 
-    /// Name the units a `Blocked` waits on by number rather than position.
-    fn numbered(&self, eval: script::Eval) -> script::Eval {
-        match eval {
-            script::Eval::Blocked { on } => script::Eval::Blocked {
-                on: on.into_iter().map(|index| self.units[index].number as usize).collect(),
-            },
-            eval => eval,
-        }
-    }
-
+    /// Keep the unit the engine just appended, under its id.
     fn append(&mut self, unit: Unit) {
-        self.units.push(NumberedUnit { number: self.next, unit });
-        self.next += 1;
+        let number = *self.engine.unit_ids().last().expect("the engine kept the unit appended");
+        self.units.push(NumberedUnit { number, unit });
     }
 
     fn forget(&mut self) {
         self.units.clear();
-        self.next = 1;
         self.last_step.clear();
     }
 

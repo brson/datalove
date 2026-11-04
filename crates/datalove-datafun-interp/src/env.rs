@@ -52,41 +52,13 @@ impl ScriptEnvironment {
         self.registry.set_module_registry(module_registry);
     }
 
-    /// Add a completed unit's frame and code units.
-    pub fn add_unit(
-        &mut self,
-        frame: ScriptFrame,
-        code_units: Vec<IrCodeUnit>,
-        unit_end_values: Vec<ValueId>,
-        unit_end_slots: Vec<SlotId>,
-    ) {
-        self.frames.add_frame(frame, unit_end_values, unit_end_slots);
-        self.registry.add_unit_code_units(code_units);
-    }
-
-    /// Take the next index for a unit that did not run: no frame, and no
-    /// functions for a `CodeRef::External` to land on.
-    pub fn add_empty_unit(&mut self) {
-        self.frames.add_empty();
-        self.registry.add_unit_code_units(Vec::new());
-    }
-
-    /// Leave unit `unit` as one that did not run, destroying what its frame
-    /// owned.
-    ///
-    /// Both halves go together for the reason [`Self::replace_unit`] moves both.
-    pub fn clear_unit(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, unit: u32) {
-        self.frames.clear_frame(rt_handle, unit as usize);
-        self.registry.set_unit_code_units(unit, Vec::new());
-    }
-
-    /// Put a re-executed unit's frame and code units in place of the ones it
-    /// had, destroying what the old frame owned.
+    /// Put unit `unit`'s frame and code units in place, destroying what the
+    /// frame it had before owned.
     ///
     /// Both halves have to move together: a `(unit, value)` reference and a
-    /// `CodeRef::Local` are both positions in one unit's state, so a frame and
-    /// the functions beside it belong at the same index.
-    pub fn replace_unit(
+    /// `CodeRef::External` both name the unit by id, so a frame and the
+    /// functions beside it belong under the same one.
+    pub fn set_unit(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit: u32,
@@ -95,27 +67,26 @@ impl ScriptEnvironment {
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,
     ) {
-        self.frames.replace_frame(
-            rt_handle, unit as usize, frame, unit_end_values, unit_end_slots);
+        self.frames.set_frame(rt_handle, unit, frame, unit_end_values, unit_end_slots);
         self.registry.set_unit_code_units(unit, code_units);
     }
 
-    /// Drop every unit from `len` on, destroying what their frames owned.
+    /// Leave unit `unit` as one that did not run, destroying what its frame
+    /// owned: no frame, and no functions for a `CodeRef::External` to land on.
     ///
-    /// Both halves move together for the reason [`Self::replace_unit`] moves
-    /// both: a `(unit, value)` reference and a `CodeRef::Local` are both
-    /// positions in one unit's state, so a unit's frame and its functions
-    /// belong at the same index and go at the same time.
-    pub fn truncate_units(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, len: usize) {
-        self.frames.truncate_units(rt_handle, len);
-        self.registry.truncate_units(len);
+    /// Both halves go together for the reason [`Self::set_unit`] moves both.
+    /// What a unit taken out of its session leaves too, since its id may be
+    /// given again.
+    pub fn clear_unit(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, unit: u32) {
+        self.frames.clear_frame(rt_handle, unit);
+        self.registry.remove_unit(unit);
     }
 
     /// Drop every unit, frames and functions, without destroying what the
     /// frames owned: for after the runtime has discarded all its memory.
     pub fn discard_units(&mut self) {
         self.frames.discard_units();
-        self.registry.truncate_units(0);
+        self.registry.clear_units();
     }
 
     /// Destroy live values in all frames.

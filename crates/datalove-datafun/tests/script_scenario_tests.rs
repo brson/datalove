@@ -351,7 +351,8 @@ fn check(scenario: &Scenario) {
     let mut ran = BTreeSet::new();
     for (unit, result) in &rederived {
         if let Some(ir_unit) = &result.ir_unit {
-            let (_, output) = run.session.executor.rerun_unit(*unit, ir_unit);
+            let id = run.session.ids()[*unit];
+            let (_, output) = run.session.executor.rerun_unit(id, ir_unit);
             assert!(!output.starts_with("Error:"), "{name}: re-running unit {unit}: {output}");
             ran.insert(*unit);
         }
@@ -825,7 +826,8 @@ fn blanking_a_unit_is_the_removal_the_numbering_allows() {
 
     for (unit, result) in &rederived {
         if let Some(ir_unit) = &result.ir_unit {
-            session.executor.rerun_unit(*unit, ir_unit);
+            let id = session.ids()[*unit];
+            session.executor.rerun_unit(id, ir_unit);
         }
     }
     assert!(!session.has_binding("x"), "the blanked unit exports nothing now");
@@ -1121,7 +1123,8 @@ fn an_earlier_units_binding_moves_once_within_a_unit() {
 }
 
 /// Truncating a unit that took an earlier binding **puts the binding back**,
-/// by running its provider again.
+/// by running its provider again, and nothing after it that read nothing of
+/// the binding.
 #[test]
 fn truncating_a_unit_that_moved_a_binding_reruns_from_its_provider() {
     let mut session = Session::new();
@@ -1131,8 +1134,8 @@ fn truncating_a_unit_that_moved_a_binding_reruns_from_its_provider() {
     let _ = session.units_run();
     assert_eq!(session.binding("xs"), "given away");
 
-    assert_eq!(session.truncate(2), BTreeSet::from([0, 1]), "rerun from A, and on from there");
-    assert_eq!(session.marks_run(&["A", "B", "C"]), BTreeSet::from(["A", "B"]));
+    assert_eq!(session.truncate(2), BTreeSet::from([0]), "rerun A; B reads nothing of `xs`");
+    assert_eq!(session.marks_run(&["A", "B", "C"]), BTreeSet::from(["A"]));
     assert_eq!(session.binding("xs"), "[1, 2, 3]");
     assert!(!session.has_binding("ys"));
 }

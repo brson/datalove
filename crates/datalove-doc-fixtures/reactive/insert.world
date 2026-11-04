@@ -34,11 +34,3 @@ expect a unit reading `a` is inserted before the take
 | 1 | - | reruns | rerun: unit 3 reads `a`, which unit 2 took after it | `a` moved |
 | 3 | reads `a` (1) | compiles, runs | inserted | `c` = 1001 |
 | 2 | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
-
-----------
-engine
-----------
-
-| unit | this step | note |
-|------|-----------|------|
-| 2 | recompiles, runs | an insert renumbers every later unit, so they are typechecked under new keys |

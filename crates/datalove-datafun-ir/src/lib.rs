@@ -77,7 +77,7 @@ pub struct CodeUnitId(pub u32);
 pub enum CodeRef {
     /// Unit in the current compilation scope.
     Local(CodeUnitId),
-    /// Unit from a previous script execution.
+    /// Unit from a previous script execution, by the script unit's id.
     External { unit: u32, id: CodeUnitId },
     /// Unit from a compiled module.
     Module { module: IrModuleId, id: CodeUnitId },
@@ -913,9 +913,9 @@ pub enum Operand {
     Slot(SlotId),
     /// Function parameter (reference to caller's data).
     Param(ParamId),
-    /// SSA value from a previous script unit.
+    /// SSA value from a previous script unit, by the unit's id.
     ExternalValue { unit: u32, value: ValueId },
-    /// Mutable slot from a previous script unit.
+    /// Mutable slot from a previous script unit, by the unit's id.
     ExternalSlot { unit: u32, slot: SlotId },
 }
 
@@ -2861,13 +2861,15 @@ pub struct ScriptContext {
     /// Bindings exported to subsequent units.
     #[serde(default)]
     pub exports: Vec<(String, ExportBinding)>,
-    /// The unit's index in its script, which the script compiler stamps.
+    /// The unit's id in its script, which the script compiler stamps.
     ///
     /// **The one number the compiler and the executor have to agree on**: every
     /// `(unit, id)` reference in a later unit was lowered against it, and the
-    /// executor puts the unit's frame at the index it has reached. A unit built
-    /// for anything but a script session -- a const expression, a test -- has
-    /// none.
+    /// executor keeps the unit's frame under it. An id is the unit's for as
+    /// long as it is in its session, wherever units are spliced in or out
+    /// around it, which is what lets a splice leave the units it does not
+    /// reach alone. A unit built for anything but a script session -- a const
+    /// expression, a test -- has none, and is run as the next unit.
     #[serde(default)]
     pub unit: Option<u32>,
 }
