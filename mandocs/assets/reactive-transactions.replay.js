@@ -467,7 +467,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -643,7 +642,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -861,7 +859,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -944,7 +941,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],
@@ -1130,7 +1126,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -1213,7 +1208,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],
@@ -1448,7 +1442,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -1531,7 +1524,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],
@@ -1860,7 +1852,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -1943,7 +1934,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],
@@ -2262,7 +2252,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -2345,7 +2334,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],
@@ -2620,7 +2608,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -2688,7 +2675,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],
@@ -2949,7 +2935,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -3032,7 +3017,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],
@@ -3307,7 +3291,6 @@ DataloveReplay.register("reactive-transactions", {
             "reads": [
               "category",
               "payee",
-              "string",
               "string"
             ],
             "takes": [],
@@ -3390,7 +3373,6 @@ DataloveReplay.register("reactive-transactions", {
               "spent",
               "t",
               "transactions",
-              "map",
               "map"
             ],
             "takes": [],

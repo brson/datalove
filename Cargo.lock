@@ -1481,7 +1481,11 @@ dependencies = [
 name = "datalove-doc-fixtures"
 version = "0.1.0"
 dependencies = [
+ "bcts",
+ "datalove-ct",
+ "datalove-datafun",
  "datalove-repl",
+ "datalove-script-engine",
  "datalove-sys-packages",
  "rustmax",
 ]

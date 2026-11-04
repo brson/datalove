@@ -9,8 +9,6 @@ use rmx::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
 
-use datalove_datafun::pipeline::{CompilerOptions, WorkspaceDescriptor};
-
 use crate::app::{UnitStatus, status_of};
 use crate::script::{self, Engine, EnvBinding};
 use crate::{Command, Outcome, ReplCommand, SavedInput, Session, SystemLibrary, UnitDetail};
@@ -88,16 +86,7 @@ pub fn record_inputs(session: &mut Session, inputs: Vec<SavedInput>) -> Trace {
 /// that does not compile is an error in the worldfile.
 pub fn record_world(sys: SystemLibrary, path: &std::path::Path) -> AnyResult<Trace> {
     let world = crate::read_world(path)?;
-    let workspace = WorkspaceDescriptor::from_system_library(&sys)
-        .merge(&WorkspaceDescriptor::from_worldfile_sections(&world.library, CompilerOptions::default()))
-        .with_work_dir(datalove_paths::work_dir()?);
-    let modules = world.library.iter()
-        .filter_map(|section| match section {
-            datalove_datafun::package_load_worldfile::WorldfileSection::Module { library, package, module, .. } =>
-                Some(fmt!("{library}/{package}/{module}")),
-            _ => None,
-        })
-        .collect();
+    let (workspace, modules) = world.workspace(&sys)?;
     let engine = Engine::with_options(sys, workspace, datalove_datafun::DebugOutputMode::Disabled, modules)?;
     let broken = &engine.module_errors().broken;
     if !broken.is_empty() {

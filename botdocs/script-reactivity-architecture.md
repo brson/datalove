@@ -114,7 +114,10 @@ query returns only the module's declarations. A body edit leaves them equal,
 so the query backdates and no importing unit re-typechecks.
 
 The env does move when the module *set* changes, which is a different world
-and so a different question: an import may resolve differently in it.
+and so a different question: an import may resolve differently in it. So a unit
+that requires a module re-keys every unit before it, and each of those is
+typechecked again under the new env when a later unit looks a name up through
+it.
 
 ### 2. The environment is read, not seeded
 
@@ -474,12 +477,16 @@ separate test pins that the fixture has the shape the claim is about.
 | `datalove-datafun/tests/script_const_tests` | consts across units and into function bodies |
 | `datalove-datafun/tests/script_splice_tests` | truncate, remove and insert: the suffix, the values, a suffix that stops compiling |
 | `datalove-script-engine/tests/engine_edit_tests` | the shipped entry points end to end, failed units going green, modules joining and breaking, reruns |
-| `datalove-script-engine/tests/reactive_tests` | the step tables in `tests/fixtures/reactive/`, and that [script-reactivity-cases.md](script-reactivity-cases.md) shows them as rendered |
+| `datalove-doc-fixtures/tests/reactive_tests` | the step tables in `reactive/`, and that [script-reactivity-cases.md](script-reactivity-cases.md) shows them as rendered |
+| `datalove-doc-fixtures/tests/replay_tests` | the step tables in the replays the docs embed, against a session with modules and data |
 
 A step table says what each unit should do per step, with the engine's known
-extra work annotated. There, a unit counts as recompiled if salsa ran its
-typecheck, or ran an ownership analysis while compiling it
-(`query_events::compiling_unit`). Every step also checks the engine's own
+extra work annotated; `crates/datalove-doc-fixtures/src/step_tables.rs` checks
+them. There, a unit counts as recompiled if salsa ran its typecheck, or ran an
+ownership analysis while compiling it (`query_events::compiling_unit`). Salsa's
+events say that a typecheck ran but not for which unit, since its key moves
+with the env, so the typecheck's own `unit_analysis` record names the unit,
+and there must be exactly one record for every typecheck salsa ran. Every step also checks the engine's own
 account of what it compiled against that, so a pass whose entry query does not
 record itself fails the fixtures it changes; removing the ownership hook fails
 every step where a unit's ownership analysis runs and its typecheck does not.

@@ -2,9 +2,9 @@
 
 What an edit to a REPL session should recompile and rerun, worked through as
 cases, with the rules they add up to. Every table here is rendered from a
-fixture in `crates/datalove-script-engine/tests/fixtures/reactive/` and
+fixture in `crates/datalove-doc-fixtures/reactive/` and
 checked against the engine by
-`crates/datalove-script-engine/tests/reactive_tests.rs`, so this is a literate
+`crates/datalove-doc-fixtures/tests/reactive_tests.rs`, so this is a literate
 test suite: what it says about the engine is true or the build fails.
 Started October 2026 from `mandocs/drafts/reactive-script-semantics.md`, which
 is the narrative version. How the engine does it is
@@ -49,9 +49,10 @@ What happens to a unit in a step is one of:
 - `reruns`: ran again without compiling again.
 - `compiles, runs` or `recompiles, runs`.
 - `recompile fails`, or `compile fails` for a new unit.
-- `compiles, returns early`: ran and left its top level through `!` or `?`.
+- `compiles, returns early`: ran and left its top level through `!` or `?`;
+  `reruns, returns early` without compiling again.
 - `compiles, is blocked`: not run, because it reads from a unit that did not
-  finish.
+  finish; `is blocked` without compiling again.
 - `deleted`.
 
 A unit _recompiles_ when salsa runs its typecheck or its ownership analysis
@@ -69,7 +70,7 @@ To add a case, write a fixture (the format is at the top of
 `reactive_tests.rs`), add regions for it here --
 `<!-- world NAME code -->` and `<!-- world NAME step N -->`, each closed by
 `<!-- end world -->` -- and render them with
-`BLESS=1 cargo test -p datalove-script-engine --test reactive_tests`. The
+`BLESS=1 cargo test -p datalove-doc-fixtures --test reactive_tests`. The
 test fails if a fixture has a step not shown here, or this file differs from
 its fixtures.
 

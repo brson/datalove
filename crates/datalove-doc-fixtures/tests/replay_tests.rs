@@ -4,15 +4,26 @@
 //! Each replay is a worldfile holding a session as `/save` writes it, with
 //! the modules and data it requires beside it. Recording it, as
 //! `datalove repl --load <world> --record <path>` does, gives a trace of the
-//! session after each input,
-//! which is written as a `.replay.js` file in `mandocs/assets`, for
-//! `mandocs/assets/datalove-replay.js` to play.
+//! session after each input, which is written as a `.replay.js` file in
+//! `mandocs/assets`, for `mandocs/assets/datalove-replay.js` to play.
+//!
+//! A replay may also hold `expect` tables, and `engine` tables after them,
+//! as the reactive fixtures do; see `datalove_doc_fixtures::step_tables`. An
+//! `expect` checks the inputs since the one before it, which are either units
+//! appended or one `/edit`, `/delete` or `/insert`. The tables are taken out
+//! before the session is recorded, so what a replay shows is checked against
+//! the rules, and a change in the language breaks the test rather than
+//! quietly changing the document.
 //!
 //! `BLESS=1` records the replays again and writes the files instead of
-//! checking them.
+//! checking them. The step tables are never blessed: they are the rules.
 
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};
+
+use datalove_doc_fixtures::step_tables::{Change, Check, Entry, SEPARATOR, Step, Workspace, run, sections};
+use datalove_repl::script::Unit;
+use datalove_repl::{Command, ReplCommand, SavedInput, read_world, record_world};
 
 /// A replay a document shows.
 struct Replay {
@@ -40,11 +51,99 @@ fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// A replay's worldfile, taken apart: the session, written to a worldfile of
+/// its own without the tables, and the tables.
+struct Parsed {
+    /// Keeps the session's worldfile.
+    _dir: rmx::tempfile::TempDir,
+    /// The worldfile of the session alone.
+    session: PathBuf,
+    /// How many inputs the session has.
+    inputs: usize,
+    /// Each table, with how many inputs come before it.
+    checks: Vec<(usize, Check)>,
+}
+
+fn parse(replay: &Replay) -> Parsed {
+    let text = std::fs::read_to_string(replays_dir().join(replay.world)).X();
+    let mut session = String::new();
+    let mut checks: Vec<(usize, Check)> = Vec::new();
+    let mut inputs = 0;
+    for section in sections(&text) {
+        let (kind, rest) = section.header.split_once(' ').unwrap_or((&section.header, ""));
+        match kind {
+            "expect" => checks.push((inputs, Check::parse(rest, &section.content))),
+            "engine" => {
+                let (_, check) = checks.last_mut()
+                    .unwrap_or_else(|| panic!("{}: an `engine` table before any `expect`", replay.world));
+                check.add_engine(&section.content);
+            }
+            _ => {
+                if kind.starts_with("scriptunit-") || kind == "repl-command" {
+                    inputs += 1;
+                }
+                session.push_str(&fmt!("{SEPARATOR}\n{}\n{SEPARATOR}\n\n{}\n\n", section.header, section.content));
+            }
+        }
+    }
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join(replay.world);
+    std::fs::write(&path, session).X();
+    Parsed { _dir: dir, session: path, inputs, checks }
+}
+
+/// The change an input makes, naming units by number as the session numbers
+/// them; `next` is the number the next unit made takes.
+fn change(replay: &Replay, command: &Command, next: &mut u32) -> Change {
+    let mut entry = |source: &Unit| {
+        let unit = next.to_string();
+        *next += 1;
+        Entry { unit, source: source.source().S(), expression: source.is_expression() }
+    };
+    match command {
+        Command::Unit(unit) => Change::Enter(vec![entry(unit)]),
+        Command::ReplCommand(ReplCommand::Edit { unit, source }) =>
+            Change::Edit { unit: unit.to_string(), source: source.source().S() },
+        Command::ReplCommand(ReplCommand::Delete { unit }) => Change::Delete { unit: unit.to_string() },
+        Command::ReplCommand(ReplCommand::Insert { place, unit, source }) =>
+            Change::Insert { entry: entry(source), place: *place, beside: unit.to_string() },
+        other => todo!("{}: a replay with step tables that has {other:?}", replay.world),
+    }
+}
+
+/// The steps a session's inputs make, each checked by the table after it.
+///
+/// The inputs a table checks are one step: units appended, or one change of
+/// another kind. The inputs after the last table are a step each, and are
+/// not checked.
+fn steps(replay: &Replay, inputs: &[SavedInput], checks: Vec<(usize, Check)>) -> Vec<Step> {
+    let mut next = 1;
+    let mut changes = inputs.iter().map(|input| change(replay, &input.command, &mut next));
+    let mut steps = Vec::new();
+    let mut taken = 0;
+    for (before, check) in checks {
+        assert!(before > taken, "{}: an `expect` with no input before it", replay.world);
+        let group: Vec<Change> = changes.by_ref().take(before - taken).collect();
+        taken = before;
+        let change = match group.len() {
+            1 => group.into_iter().next().X(),
+            _ => Change::Enter(group.into_iter()
+                .flat_map(|change| match change {
+                    Change::Enter(entries) => entries,
+                    _ => panic!("{}: an `expect` after several inputs, not all of them units", replay.world),
+                })
+                .collect()),
+        };
+        steps.push(Step { change, check: Some(check) });
+    }
+    steps.extend(changes.map(|change| Step { change, check: None }));
+    steps
+}
+
 /// The `.replay.js` file for a replay: its trace, registered with the player
 /// under its name.
-fn render(replay: &Replay) -> String {
-    let world = replays_dir().join(replay.world);
-    let trace = datalove_repl::record_world(datalove_sys_packages::system_library(), &world).X();
+fn render(replay: &Replay, session: &Path) -> String {
+    let trace = record_world(datalove_sys_packages::system_library(), session).X();
     let json = rmx::serde_json::to_string_pretty(&trace).X();
     fmt!(
         "// Recorded by crates/datalove-doc-fixtures from replays/{}.\n\
@@ -55,12 +154,28 @@ fn render(replay: &Replay) -> String {
 }
 
 #[test]
+fn every_step_table_holds_for_the_engine() {
+    let mut failures = Vec::new();
+    for replay in REPLAYS {
+        let parsed = parse(replay);
+        let world = read_world(&parsed.session).X();
+        assert_eq!(world.inputs.len(), parsed.inputs, "{}: every input is replayed", replay.world);
+        let sys = datalove_sys_packages::system_library();
+        let (descriptor, also_roots) = world.workspace(&sys).X();
+        let steps = steps(replay, &world.inputs, parsed.checks);
+        failures.extend(run(replay.world, Workspace { sys, descriptor, also_roots }, &steps));
+    }
+    assert!(failures.is_empty(), "\n{}\n", failures.join("\n"));
+}
+
+#[test]
 fn replays_are_fresh() {
     let bless = std::env::var("BLESS").is_ok();
     let mut stale = Vec::new();
     for replay in REPLAYS {
         let path = workspace_root().join(replay.output);
-        let rendered = render(replay);
+        let parsed = parse(replay);
+        let rendered = render(replay, &parsed.session);
         if bless {
             std::fs::write(&path, rendered).X();
         } else if std::fs::read_to_string(&path).ok().as_deref() != Some(rendered.as_str()) {

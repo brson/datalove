@@ -761,9 +761,10 @@ all.
   to their end staying and going green. The reach itself is measured in
   `datalove-datafun`'s `script_exec_reactivity_tests` and
   `script_scenario_tests`; these say the engine wires it up.
-- **reactive_tests** -- the step tables in `fixtures/reactive/` against the
-  engine, and [script-reactivity-cases.md](script-reactivity-cases.md) against
-  the tables. `BLESS=1` re-renders the doc.
+The step tables in `crates/datalove-doc-fixtures` check the engine too: the
+reactive fixtures, which [script-reactivity-cases.md](script-reactivity-cases.md)
+is rendered from, and the replays the docs embed; see
+[doc-fixtures.md](doc-fixtures.md).
 
 Neither the rendering nor the key bindings have tests. `render.rs` would take
 ratatui's `TestBackend`; `term.rs` has no seam, since `run()` does terminal

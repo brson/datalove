@@ -1003,7 +1003,7 @@ impl<'db> ScriptCompiler<'db> {
             .collect()
     }
 
-    /// The names a unit asks its environment for.
+    /// The names a unit asks its environment for, each once.
     fn unit_used_names(
         &self,
         index: usize,
@@ -1027,6 +1027,9 @@ impl<'db> ScriptCompiler<'db> {
         for (alias, _) in qualified_calls.iter() {
             used.push(alias.as_str(db).S());
         }
+        // A unit calling two functions of a module asks for its alias twice.
+        let mut seen = std::collections::HashSet::new();
+        used.retain(|name| seen.insert(name.C()));
         used
     }
 

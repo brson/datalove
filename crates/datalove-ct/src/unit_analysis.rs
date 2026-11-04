@@ -22,6 +22,10 @@
 //! the parallel compile is of modules. The reactive tests check both: that
 //! this agrees with what salsa reports it ran, and that no script unit's
 //! analysis runs on a worker.
+//!
+//! **Collecting nests.** A record goes to every collector on the thread, so a
+//! test collecting around the engine sees what the engine's own collecting
+//! sees.
 
 use bct::input::Source;
 use rmx::std::cell::RefCell;
@@ -35,13 +39,14 @@ pub enum Pass {
 }
 
 thread_local! {
-    static RAN: RefCell<Option<Vec<(Pass, Source)>>> = const { RefCell::new(None) };
+    /// What each collector on this thread has collected, innermost last.
+    static RAN: RefCell<Vec<Vec<(Pass, Source)>>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Record that `pass` ran for the unit with this source.
 pub fn record(pass: Pass, source: Source) {
-    RAN.with_borrow_mut(|ran| {
-        if let Some(ran) = ran {
+    RAN.with_borrow_mut(|collectors| {
+        for ran in collectors {
             ran.push((pass, source));
         }
     });
@@ -50,10 +55,16 @@ pub fn record(pass: Pass, source: Source) {
 /// Run `f`, and say which units' analysis ran while it did, in the order it
 /// ran. A unit is there once for every pass that ran for it.
 pub fn collect<R>(f: impl FnOnce() -> R) -> (R, Vec<(Pass, Source)>) {
-    let outer = RAN.replace(Some(Vec::new()));
-    let _restore = Restore(Some(move || RAN.set(outer)));
+    let depth = RAN.with_borrow_mut(|collectors| {
+        collectors.push(Vec::new());
+        collectors.len()
+    });
+    let _restore = Restore(Some(move || RAN.with_borrow_mut(|collectors| collectors.truncate(depth - 1))));
     let result = f();
-    let ran = RAN.with_borrow_mut(|ran| ran.as_mut().map(std::mem::take)).expect("collecting");
+    let ran = RAN.with_borrow_mut(|collectors| {
+        assert_eq!(collectors.len(), depth, "the collectors inside this one are done");
+        std::mem::take(collectors.last_mut().expect("collecting"))
+    });
     (result, ran)
 }
 

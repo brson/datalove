@@ -67,6 +67,28 @@ pub struct World {
     pub inputs: Vec<SavedInput>,
 }
 
+impl World {
+    /// The workspace the session runs in: the system library and the
+    /// worldfile's own, with the worldfile's modules, which are compiled from
+    /// the start whether or not a unit requires them, as `script-world`
+    /// compiles them.
+    pub fn workspace(&self, sys: &SystemLibrary) -> AnyResult<(datalove_datafun::pipeline::WorkspaceDescriptor, Vec<String>)> {
+        use datalove_datafun::package_load_worldfile::WorldfileSection;
+        use datalove_datafun::pipeline::{CompilerOptions, WorkspaceDescriptor};
+
+        let workspace = WorkspaceDescriptor::from_system_library(sys)
+            .merge(&WorkspaceDescriptor::from_worldfile_sections(&self.library, CompilerOptions::default()))
+            .with_work_dir(datalove_paths::work_dir()?);
+        let modules = self.library.iter()
+            .filter_map(|section| match section {
+                WorldfileSection::Module { library, package, module, .. } => Some(fmt!("{library}/{package}/{module}")),
+                _ => None,
+            })
+            .collect();
+        Ok((workspace, modules))
+    }
+}
+
 /// Read a worldfile as a session and its library.
 ///
 /// Its `/save`s are left out: replaying one would overwrite the file being

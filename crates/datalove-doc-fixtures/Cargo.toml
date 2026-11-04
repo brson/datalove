@@ -10,9 +10,11 @@ publish = false
 repository.workspace = true
 
 [dependencies]
-
-[dev-dependencies]
 rmx.workspace = true
+bct.workspace = true
+datalove-ct.workspace = true
+datalove-datafun.workspace = true
 datalove-repl.workspace = true
-# The replays run against the system library the binary ships.
+datalove-script-engine.workspace = true
+# The fixtures run against the system library the binary ships.
 datalove-sys-packages.workspace = true

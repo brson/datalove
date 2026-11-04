@@ -336,14 +336,18 @@ impl Engine {
         Engine::with_options_in(datafun::Database::default(), sys, workspace, debug_output, also_roots)
     }
 
-    /// An engine over the system library alone, in a database the caller made.
+    /// The same as [`Engine::with_options`], in a database the caller made.
     ///
     /// For a database that records what salsa runs
     /// (`datafun::Database::recording`), which is how a test sees which units
     /// were typechecked again.
-    pub fn in_database(db: datafun::Database, sys: SystemLibrary) -> AnyResult<Engine> {
-        let workspace = WorkspaceDescriptor::from_system_library(&sys);
-        Engine::with_options_in(db, sys, workspace, datafun::DebugOutputMode::Disabled, Vec::new())
+    pub fn in_database(
+        db: datafun::Database,
+        sys: SystemLibrary,
+        workspace: WorkspaceDescriptor,
+        also_roots: Vec<String>,
+    ) -> AnyResult<Engine> {
+        Engine::with_options_in(db, sys, workspace, datafun::DebugOutputMode::Disabled, also_roots)
     }
 
     fn with_options_in(
@@ -497,8 +501,9 @@ impl Engine {
             .collect()
     }
 
-    /// The session's units' sources, in order.
-    fn unit_sources(&self) -> Vec<Source> {
+    /// The session's units' sources, in order, which is how
+    /// [`datalove_ct::unit_analysis`] names them.
+    pub fn unit_sources(&self) -> Vec<Source> {
         self.session.as_ref().expect("a session").unit_sources()
     }
 

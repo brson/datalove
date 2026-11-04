@@ -10,6 +10,7 @@ in the reactive scripting post, went in.
 - [Session replays](#user-content-session-replays)
 - [The trace](#user-content-the-trace)
 - [The player](#user-content-the-player)
+- [Step tables in a replay](#user-content-step-tables-in-a-replay)
 - [Adding a replay](#user-content-adding-a-replay)
 - [Known gaps](#user-content-known-gaps)
 
@@ -21,14 +22,21 @@ fails when what the document holds is not what the engine produces now.
 `BLESS=1` records it again.
 
 Those fixtures are not tests of any one crate: they are the documents', and
-a fixture often needs a library of its own to run. So they live together in `crates/datalove-doc-fixtures`, not beside whichever
-crate's tests happened to need one. Everything a document in `mandocs` or
-`botdocs` shows that the engine produced belongs there.
+a fixture often needs a library of its own to run. So they live together in
+`crates/datalove-doc-fixtures`, not beside whichever crate's tests happened to
+need one. Everything a document in `mandocs` or `botdocs` shows that the
+engine produced belongs there:
 
-The step tables of [script-reactivity-cases.md](script-reactivity-cases.md)
-came before this crate and are still rendered by
-`crates/datalove-script-engine/tests/reactive_tests.rs`, since they are the
-engine's specification as much as a document.
+- `reactive/`, the step tables
+  [script-reactivity-cases.md](script-reactivity-cases.md) is rendered from,
+  run by `tests/reactive_tests.rs`.
+- `replays/`, the sessions the posts play, run by `tests/replay_tests.rs`.
+
+**Both are checked by step tables** (`src/step_tables.rs`): for each step, what
+every unit should do, what it uses, and what it holds after. A table states
+the rule, an `engine` table after it writes down where the engine does more
+work than the rule asks, and the test fails if the engine does anything else.
+The tables are never blessed, because they are the rules.
 
 ## Session replays
 
@@ -124,6 +132,20 @@ can be read from its start.
 images, and not beside the page that plays them. `datalove docs` copies
 everything in each doc set's `assets` directory as a static asset.
 
+## Step tables in a replay
+
+A replay is checked against the rules as well as recorded, so a change to the
+language breaks its test rather than quietly changing what the post shows. Its
+worldfile may hold `expect` sections, and `engine` sections after them, as the
+reactive fixtures do. An `expect` checks the inputs since the `expect` before
+it, which are either units appended -- the script entered at the start, say
+-- or one `/edit`, `/delete` or `/insert`. Inputs after the last `expect` are
+not checked. Units are named by the numbers the session gives them.
+
+The test takes the tables out before it records the session, so they are not
+in the trace, and `datalove repl --load` refuses a worldfile that still has
+them.
+
 ## Adding a replay
 
 1. Write the session as a worldfile in
@@ -132,6 +154,8 @@ everything in each doc set's `assets` directory as a static asset.
 2. Add a `Replay` naming it, its player name, and its output, to `REPLAYS` in
    `crates/datalove-doc-fixtures/tests/replay_tests.rs`. A test fails on a
    worldfile that is not listed.
+3. Put an `expect` table after the steps worth checking; see
+   [Step tables in a replay](#user-content-step-tables-in-a-replay).
 3. Run `BLESS=1 cargo test -p datalove-doc-fixtures`.
 4. Put the `div` and the two `script`s in the document.
 
@@ -141,9 +165,9 @@ JSON.
 
 ## Known gaps
 
-- The "because" column of the reactive step tables, saying why each unit
-  reran, is worked out only in `reactive_tests.rs`, from salsa's events. The
-  engine does not report it, so a replay shows what reran but not why.
+- A replay shows what each unit did, and not why. The reasons are in its step
+  tables' `because` column, which is written by hand, is not checked, and is
+  not in the trace.
 - Nothing edits a module or a data file from a script, so a replay cannot show
   `local` changing under a session, as the post's transactions example
   imagines.
