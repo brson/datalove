@@ -47,7 +47,7 @@ Focus on ergonomic scripting experience and the REPL.
 
 - repl ux
 - script reactivity
-- recursive types
+- multiple script sessions
 
 
 ## On deck
