@@ -179,7 +179,7 @@ constants in static initializers. Nothing in the first version depends on this.
 
 A function body is lowered once, before its consts are evaluated, and the
 inline pass writes the values in afterwards (phases 2 to 4 in the compiler
-guide's script pipeline). By then the uses of a function-local const are
+guide's script compilation). By then the uses of a function-local const are
 shaped as uses of an owned binding:
 
 ```

@@ -16,7 +16,7 @@
 use std::time::{Duration, Instant};
 
 use datalove_datafun as datafun;
-use datafun::pipeline::{load_local_library, WorkspaceDescriptor};
+use datafun::driver::{load_local_library, WorkspaceDescriptor};
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -37,7 +37,7 @@ fn main() {
         .with_user_library(local)
         .expect("the store's library fits the workspace");
     descriptor.options.cache_consts = !no_cache;
-    let (mut pipeline, _) = descriptor.to_pipeline_with_natives(&db, &sys.natives);
+    let (mut module_compiler, _) = descriptor.to_compiler_with_natives(&db, &sys.natives);
 
     let original = edited.as_ref().map(|module| {
         let path = format!("{}/store/{}.dfm", dir, module);
@@ -49,7 +49,7 @@ fn main() {
     );
 
     let start = Instant::now();
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     println!("first compile: {:?}", start.elapsed());
@@ -57,10 +57,10 @@ fn main() {
     let mut times: Vec<Duration> = Vec::with_capacity(iterations);
     for salt in 1..=iterations {
         if let Some(module) = &edited {
-            pipeline.update_source(&mut db, "local", "store", module, &probe(salt));
+            module_compiler.update_source(&mut db, "local", "store", module, &probe(salt));
         }
         let start = Instant::now();
-        let compiled = pipeline.compile(&db);
+        let compiled = module_compiler.compile(&db);
         times.push(start.elapsed());
         assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     }

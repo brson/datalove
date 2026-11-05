@@ -72,9 +72,9 @@ impl World {
     /// worldfile's own, with the worldfile's modules, which are compiled from
     /// the start whether or not a unit requires them, as `script-world`
     /// compiles them.
-    pub fn workspace(&self, sys: &SystemLibrary) -> AnyResult<(datalove_datafun::pipeline::WorkspaceDescriptor, Vec<String>)> {
+    pub fn workspace(&self, sys: &SystemLibrary) -> AnyResult<(datalove_datafun::driver::WorkspaceDescriptor, Vec<String>)> {
         use datalove_datafun::package_load_worldfile::WorldfileSection;
-        use datalove_datafun::pipeline::{CompilerOptions, WorkspaceDescriptor};
+        use datalove_datafun::driver::{CompilerOptions, WorkspaceDescriptor};
 
         let workspace = WorkspaceDescriptor::from_system_library(sys)
             .merge(&WorkspaceDescriptor::from_worldfile_sections(&self.library, CompilerOptions::default()))

@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 
-use datalove_datafun::pipeline::{
+use datalove_datafun::driver::{
     ModuleDescriptor, PackageDescriptor, PackageLibrary, WorkspaceDescriptor,
 };
 use datalove_script_engine::{Engine, Eval, SessionId, Unit};

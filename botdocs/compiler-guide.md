@@ -5,7 +5,7 @@ Reference for the datalove-datafun compiler architecture.
 ## Contents
 
 - [Crate Organization](#user-content-crate-organization)
-- [Module Compilation Pipeline](#user-content-module-compilation-pipeline)
+- [Module Compilation Phases](#user-content-module-compilation-phases)
   - [Token Gluing](#user-content-token-gluing)
   - [Phase 5: IR Lowering Detail](#user-content-phase-5-ir-lowering-detail)
   - [Const Parameter Specialization](#user-content-const-parameter-specialization)
@@ -17,7 +17,7 @@ Reference for the datalove-datafun compiler architecture.
   - [Checkout and Release Builds](#user-content-checkout-and-release-builds)
   - [The ABI Check](#user-content-the-abi-check)
   - [Rider Manifests and Interfaces](#user-content-rider-manifests-and-interfaces)
-- [Script Compilation Pipeline](#user-content-script-compilation-pipeline)
+- [Script Compilation Phases](#user-content-script-compilation-phases)
 - [Printing Types and Errors](#user-content-printing-types-and-errors)
 - [IR Types](#user-content-ir-types)
   - [IDs](#user-content-ids)
@@ -50,7 +50,7 @@ Reference for the datalove-datafun compiler architecture.
 
 ## Crate Organization
 
-### Core Compiler Pipeline
+### Core Compiler
 
 | Crate | Responsibility |
 |-------|----------------|
@@ -65,8 +65,8 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-datafun-const` | Const evaluation (CTFE), const inlining, dead code elimination |
 | `datalove-datafun-ir` | IR types (`IrCodeUnit`, `IrType`, `ValueId`, layout, registries) |
 | `datalove-datafun-intrinsics` | `IntrinsicId` and signatures for `icall` operations |
-| `datalove-datafun-compiler` | Salsa-tracked pipeline, `Database`, `compile_modules()`, `lower_module_graph_with_evaluator()`, specialization |
-| `datalove-datafun` | High-level facade, `ModuleCompilationPipeline`, `ScriptCompiler`, workspaces, rider build/load |
+| `datalove-datafun-compiler` | Salsa-tracked phases, `Database`, `compile_modules()`, `lower_module_graph_with_evaluator()`, specialization |
+| `datalove-datafun` | High-level facade, `ModuleCompiler`, `ScriptCompiler`, workspaces, rider build/load |
 
 ### Execution
 
@@ -120,7 +120,7 @@ inside it.
 on it, so editing a `.dfm` recompiles no compiler crate. See [The Shipped
 Binary](#user-content-the-shipped-binary).
 
-## Module Compilation Pipeline
+## Module Compilation Phases
 
 Module compilation runs through five phases. Phases 1-4 are handled by `compile_modules()`,
 phase 5 by `lower_module_graph_with_evaluator()`. Each `*_phase` is its step
@@ -263,7 +263,7 @@ Phase 5d: Assemble and finish modules
     v   Output: ModuleGraphLoweringResult
 ```
 
-The passes run in one order in both pipelines -- const inlining,
+The passes run in one order in both compilers -- const inlining,
 specialization, inlining, dead code, promotion -- and the script compiler runs
 the last three through the same `optimize::finish`. See
 [the plan for the passes](plan-ir-passes.md).
@@ -324,13 +324,13 @@ evaluate, and the module registry built to have CTFE on hand is not free.
 #### The registries come out of memos
 
 There are two `ModuleFunctionRegistry`s per compile -- `ctfe_module_registry`,
-for const expressions that call across modules, and the one the pipeline hands
+for const expressions that call across modules, and the one the module compiler hands
 to the interpreter -- and each has an entry per function in the world. Building
 them and dropping the previous pair was about two thirds of what an unchanged
 recompile of the system library cost, and about 44% of the synthetic one.
 
-Both are tracked. The CTFE one is keyed on phase 5a's handles. The pipeline's,
-`module_function_registry` in `datafun/src/pipeline/module_pipeline.rs`, is
+Both are tracked. The CTFE one is keyed on phase 5a's handles. The module compiler's,
+`module_function_registry` in `datafun/src/driver/module_compiler.rs`, is
 keyed on the `ModuleGraphLoweringResult`, which is a tracked struct whose
 identity is the per-module results it holds -- so it is a word to hash and it
 moves exactly when some module's assembled IR does. The native rider units go
@@ -340,7 +340,7 @@ The compiler core still never spells a linker symbol; `NativeContext::new`
 takes the rider and function names and the IR crate's `native_symbol` does the
 spelling, which is the native ABI's business. See [the native ABI](native-abi.md).
 
-**The pipeline's is capped at `lru = 4`.** Its key moves on every edit, so the
+**The module compiler's is capped at `lru = 4`.** Its key moves on every edit, so the
 memo for the key before it is of no use to anyone, and uncapped it grew the
 database by about 140KB an edit. Eviction runs once per revision, so nothing is
 dropped underneath a compile, and the capacity only has to cover the one a
@@ -361,11 +361,11 @@ would have to build its own evaluator, which means reaching the interpreter and
 the natives from inside one.
 
 **They are cached outside salsa instead**, per module, by `ConstCache` in
-`compiler/src/const_cache.rs`, which the pipeline owns and passes down. A
+`compiler/src/const_cache.rs`, which the module compiler owns and passes down. A
 module's key is a content hash of its source and of everything it requires,
 transitively, plus the world's data files; a const can only call into what its
 module requires, so a module whose closure did not change evaluates to what it
-did before. The riders are hashed by the pipeline and a change to them, or to
+did before. The riders are hashed by the module compiler and a change to them, or to
 the natives, empties the cache. A module whose consts had an error is not kept.
 `CompilerOptions::cache_consts` turns it off, and `DATALOVE_VERIFY_CONST_CACHE`
 (or `set_verify_const_cache`) evaluates every hit anyway and panics on a
@@ -411,7 +411,7 @@ The `skip_const_inlining` flag skips phases 5b and 5b', and the promotion in 5d,
 lowering const bindings as let bindings. Phase 5a still runs: a module-level const is
 resolved where its reference is lowered rather than by a later pass, so there is nothing
 there for the flag to skip. Used for testing CTFE accuracy. Callers of the high-level
-pipeline set `CompilerOptions::const_inlining`.
+driver set `CompilerOptions::const_inlining`.
 
 ### Const Parameter Specialization
 
@@ -590,12 +590,12 @@ view of a row rather than an element, and a view may not be bound mutably
 
 ### Const Evaluation
 
-Both pipelines evaluate consts through `compiler/src/const_eval.rs`: `evaluate_const`
+Both compilers evaluate consts through `compiler/src/const_eval.rs`: `evaluate_const`
 for one binding, `evaluate_body_consts` for a function body in order, and
 `evaluate_instantiation_consts` for a comptime function's body once an instantiation
 has given its const parameters values. What they evaluate against is a `ConstEvalEnv`:
 the typechecker's results, the evaluator, the functions lowered so far, and, in the
-module pipeline, the registry used to report a const that depends on a function still
+module compiler, the registry used to report a const that depends on a function still
 waiting on a module const (a cycle). Each binding takes one of three routes:
 
 1. **Simple literals** - booleans, integers, floats, strings, None extracted directly
@@ -676,7 +676,7 @@ native fun string_len(ref self: string): index
 native fun list_push<T>(mut self: [T], elem: T)
 ```
 
-How it flows through the pipeline:
+How it flows through the compiler:
 
 - Rider sources travel as `Vec<(String, String)>` (alias, source) into
   `compile_modules`, because building a `RiderInterface` creates a
@@ -685,7 +685,7 @@ How it flows through the pipeline:
   `ParsedModuleGraph::resolved_riders`.
 - Each distinct alias gets a synthetic `ModuleId` with path `@rider/{alias}`,
   created once in `build_resolved_riders_from_sources` and shared by every
-  module that requires it. Its `IrModuleId` is the one the pipeline's
+  module that requires it. Its `IrModuleId` is the one the module compiler's
   `ModuleIdTable` gives that path, and riders are numbered before any module.
 - The typechecker resolves imports from riders in
   `resolve_module_imports_internal`.
@@ -715,7 +715,7 @@ Execution:
     in this process are no use to it and it links a built component instead.
   - *Built from source.* Every rider with a crate directory - a user
     package's, and `sys/std`'s, whether the library came off disk or out of
-    the binary - goes through `pipeline/rider_build.rs`, which synthesizes one
+    the binary - goes through `driver/rider_build.rs`, which synthesizes one
     `datalove-native-component` crate depending on every such rider crate so
     that whatever they share is shared once. Builds are cached per work dir,
     rider set and kind. The workspace's `work_dir` is where this happens; a
@@ -920,13 +920,13 @@ override that.** `datalove-sys-packages` is `sys/`, so `sys/std/rider/` is never
 in it, and the interface arrives by dependency instead.
 `embedded_matches_tree` checks that route against the file on disk.
 
-## Script Compilation Pipeline
+## Script Compilation Phases
 
 Scripts compile incrementally in REPL-style, accumulating exports across units.
 
 ```
 [Phase 1: Parse + Resolve + Typecheck]
-    |   Standard pipeline through typecheck
+    |   Standard phases through typecheck
     v
 [Phase 2: Lower functions]
     |   phase_lower_functions
@@ -1026,7 +1026,7 @@ go.
 ## IR Types
 
 What follows is the part of the IR a reader of this guide needs in order to
-follow the pipeline. The complete reference -- every instruction and
+follow the phases. The complete reference -- every instruction and
 terminator, the layout rules, generics and descriptors, the passes and the
 invariants -- is [The Datafun IR](ir.md).
 
@@ -1310,19 +1310,19 @@ holds `Source` handles across an edit rather than rebuilding from paths -- a
 
 ### Reusing a Compiled World
 
-**The unit of reuse is the pipeline, not the database.** A
-`ModuleCompilationPipeline` owns the `Source` inputs every tracked query is
-keyed on, and `descriptor.to_pipeline(db)` makes new ones, so a fresh pipeline
+**The unit of reuse is the module compiler, not the database.** A
+`ModuleCompiler` owns the `Source` inputs every tracked query is
+keyed on, and `descriptor.to_compiler(db)` makes new ones, so a fresh module compiler
 misses every memo however warm the database is. Measured in debug on `sys/std`:
-a fresh database and pipeline, the same database with a fresh pipeline, and a
-cloned database with a fresh pipeline all took about 756ms; the same pipeline
+a fresh database and module compiler, the same database with a fresh one, and a
+cloned database with a fresh one all took about 756ms; the same module compiler
 compiling a second time took 84ms (and less since).
 
-`CompiledWorld` (`datafun/src/pipeline/compiled_world.rs`) is that pair kept
-together: a `Database` and the pipeline whose inputs live in it. It is not a
+`CompiledWorld` (`datafun/src/driver/compiled_world.rs`) is that pair kept
+together: a `Database` and the module compiler whose inputs live in it. It is not a
 cache, just the state a caller holds if it wants salsa to do its job -- owned,
 no thread-local, dropped with its owner. `std_engine_tests` holds one per worker,
-and the REPL's `Engine` keeps its pipeline across a reset for the same reason.
+and the REPL's `Engine` keeps its module compiler across a reset for the same reason.
 
 **Threads.** `Storage::clone` keeps the `Arc<Zalsa>` -- every memo, interned
 value and tracked struct -- and makes a fresh `ZalsaLocal`, the per-thread
@@ -1396,7 +1396,7 @@ one and on wasm rayon would run it nested there.
 What caps all of this is the sequential half. Each phase's aggregator walks the
 graph whatever was edited, so the speedup is bounded by what it does: parse sits
 near 2.7x on sixteen cores in the `parallel` bench and cannot go past it while
-the aggregator rebuilds. In the real pipeline phase 1's warm-up finds nothing
+the aggregator rebuilds. In a real compile phase 1's warm-up finds nothing
 to do, because package resolution has already parsed every module; in a
 parallel compile that parse is the parallel one, in
 `extract_dependencies_with_mode`. See
@@ -1583,7 +1583,7 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   `__script_body(void* rt)` and a `main()` that initializes the runtime. One
   file per module plus one for the script, so a C compiler produces the
   executable in a single step and there is no unlinked halfway point;
-  `pipeline::c_aot` drives it and `aot-compile --c` reaches it.
+  `driver::c_aot` drives it and `aot-compile --c` reaches it.
 
   Its function ABI is its own: `RET f(rt, [sret,] p0..pn, tp0..tpk)`, one
   descriptor per type parameter of a generic. It differs from
@@ -1852,30 +1852,30 @@ pub fn lower_module_graph_with_evaluator<'db>(
 ### High-Level API
 
 ```rust
-let mut pipeline = ModuleCompilationPipeline::default();
-pipeline.add_module(&db, "local", "pkg", "main", source);
-let compiled = pipeline.compile(&db);
+let mut module_compiler = ModuleCompiler::default();
+module_compiler.add_module(&db, "local", "pkg", "main", source);
+let compiled = module_compiler.compile(&db);
 drop(compiled);
 
 // An edit, then the same call again.
-pipeline.update_source(&mut db, "local", "pkg", "main", new_source);
-let compiled = pipeline.compile(&db);
+module_compiler.update_source(&mut db, "local", "pkg", "main", new_source);
+let compiled = module_compiler.compile(&db);
 ```
 
 There is one entry point for the first compile and every recompile. What makes
-a recompile incremental is the pipeline, which keeps the `Source` inputs its
+a recompile incremental is the module compiler, which keeps the `Source` inputs its
 queries are keyed on, not the call. A second `compile(&mut db)` used to exist
 because `ModuleGraph` was an input that a recompile updated through setters;
 with the graph interned nothing in a compile writes, so it was removed.
 
-`ModuleCompilationPipeline::from_sections(&db, &sections, CompilerOptions::default())`
+`ModuleCompiler::from_sections(&db, &sections, CompilerOptions::default())`
 builds one from parsed worldfile sections, which is how most tests construct it.
 `compile_with_mode` takes an explicit `ParallelMode` instead of reading
 `DATALOVE_PARALLEL`.
 
-A pipeline's `CompilerOptions` are settled when it is built. Nothing recompiles
+A module compiler's `CompilerOptions` are settled when it is built. Nothing recompiles
 under options it was not made with, so there are no setters for them, and a
-`WorkspaceDelta` that changes them says `requires_new_pipeline` rather than
+`WorkspaceDelta` that changes them says `requires_new_compiler` rather than
 being applied to one that exists.
 
 ### Data Files
@@ -1883,7 +1883,7 @@ being applied to one that exists.
 A package's `.dlt` files travel beside its modules the whole way: the loader
 reads them into `Package::data`, a `WorkspaceDescriptor` keeps them in
 `PackageDescriptor::data` and diffs them into `WorkspaceDelta::data_*`, and
-the pipeline holds each as a `Source` in `IncrementalModuleWorld`, so an edit
+the module compiler holds each as a `Source` in `IncrementalModuleWorld`, so an edit
 to one is a `set_text` like a module edit. They take no part in package
 resolution -- data has no requires -- and every one in the world rides on the
 `ModuleGraph` as `data`, by path, from where `ScriptEnv` takes them too.
@@ -1918,7 +1918,7 @@ takes it, and package resolution walks from it too, so modules nothing reaches
 are not even parsed. `Roots::All` is bit-for-bit the compile there was before the
 choice existed, so the two are one path with a different argument. Because
 `ModuleGraph` is interned, the roots are part of the graph's identity, and
-changing them on a live pipeline (`set_roots`) is a different graph rather than a
+changing them on a live module compiler (`set_roots`) is a different graph rather than a
 memo to invalidate; `roots_tests` holds that. On `sys/` plus one module, a
 script requiring nothing went from about 43ms to under 7ms end to end.
 
@@ -1927,12 +1927,12 @@ reported. So the line is that compiling from roots is for running a program, not
 for vouching for a world, and `All` stays the default:
 
 - `script`, `script-ir` and `aot-compile` narrow once, through
-  `ModuleCompilationPipeline::narrow_roots_to_script`, which reads the script's
+  `ModuleCompiler::narrow_roots_to_script`, which reads the script's
   `require`s.
 - The REPL engine, and so the REPL and `script-world`, narrows again before
   every step, to what the session's units require; see
   [repl-architecture.md](repl-architecture.md).
-- `typecheck-std` and the test suites that build their own pipelines pass
+- `typecheck-std` and the test suites that build their own module compilers pass
   `All`.
 
 A worldfile's own modules are always roots, whether the script reaches them or
@@ -1943,7 +1943,7 @@ does not resolve, because pruning on a program whose requires are wrong would
 drop the module the diagnostic is about.
 
 Narrowing again as a session goes is sound because of the numbering: a
-pipeline numbers each module by path, once, for its whole life (see
+module compiler numbers each module by path, once, for its whole life (see
 `ModuleIdTable` in `crates/datalove-datafun-common/src/lib.rs`), so a module
 joining the graph moves no other module's number and leaves the units already
 lowered calling the modules they named.
@@ -1955,7 +1955,7 @@ system library (absent under `--no-sys`), user libraries in shadowing order,
 `CompilerOptions`, and a `work_dir` the compiler may write to. It is cheap to
 clone and two of them can be diffed into a `WorkspaceDelta` for incremental
 recompilation. It is pure data; drivers (CLI, REPL, LSP) build one and feed it
-to `ModuleCompilationPipeline`.
+to `ModuleCompiler`.
 
 Two constructors supply the system library, and neither goes looking for it:
 
@@ -1984,9 +1984,9 @@ descriptor and its script sessions separately. Nor is the execution mode in the
 descriptor, or whether riders are built as a dylib or a staticlib; those are
 decided by the driver that consumes it.
 
-`WorkspaceDelta::apply_to_pipeline` applies module additions, removals and
-changes to a live pipeline, and refuses a delta that `requires_new_pipeline`
-(compiler options, or any rider change). No driver consumes deltas yet; see
+`WorkspaceDelta::apply_to_compiler` applies module additions, removals and
+changes to a live module compiler, and refuses a delta that `requires_new_compiler`
+(compiler options, or any rider change). No caller consumes deltas yet; see
 issues.md.
 
 ### Script Compilation
@@ -2165,7 +2165,7 @@ file, as the REPL does.
 |------|----------|
 | `compiler/src/lib.rs` | `Database`, `DbClone` impl, module exports |
 | `compiler/src/compile.rs` | `compile_modules()`, `ModuleCompilationOutput` |
-| `compiler/src/module_graph.rs` | Parsing pipeline, rider interface construction |
+| `compiler/src/module_graph.rs` | Parsing, rider interface construction |
 | `compiler/src/tracked_lower.rs` | `lower_module_graph_with_evaluator()`, `compute_func_id_map()`, three-phase lowering |
 | `compiler/src/tracked_ownership_analysis.rs` | Salsa-tracked ownership analysis |
 | `compiler/src/tracked_script_lower.rs` | Script lowering, `collect_const_graph()` |
@@ -2184,16 +2184,16 @@ file, as the REPL does.
 | `ir/src/layout.rs` | The layout authority for `IrType` |
 | `ir/src/frame_layout.rs` | Frame layout shared by every backend, the interpreter's `IrLayout` included |
 | `ir/src/registry.rs` | `ModuleFunctionRegistry`, `UnitFunctionRegistry` |
-| `datafun/src/pipeline/mod.rs` | `ModuleCompilationPipeline` re-exports |
-| `datafun/src/pipeline/module_pipeline.rs` | The pipeline itself, `add_native_rider_units()` |
-| `datafun/src/pipeline/script_compiler.rs` | Script compilation pipeline |
-| `datafun/src/pipeline/workspace.rs` | `WorkspaceDescriptor`, `WorkspaceDelta` |
-| `datafun/src/pipeline/rider_build.rs` | Native component synthesis and cargo build, for riders found on disk |
-| `datafun/src/pipeline/rider_load.rs` | `register_linked_natives`, `load_rider_library` |
+| `datafun/src/driver/mod.rs` | `ModuleCompiler` re-exports |
+| `datafun/src/driver/module_compiler.rs` | The module compiler itself, `add_native_rider_units()` |
+| `datafun/src/driver/script_compiler.rs` | Script compilation |
+| `datafun/src/driver/workspace.rs` | `WorkspaceDescriptor`, `WorkspaceDelta` |
+| `datafun/src/driver/rider_build.rs` | Native component synthesis and cargo build, for riders found on disk |
+| `datafun/src/driver/rider_load.rs` | `register_linked_natives`, `load_rider_library` |
 | `cli/src/main.rs` | `register_natives()`, which wires both the interpreter table and the JIT |
 | `sys/build.rs` | Embeds `sys/` module sources and names each rider's crate and `INTERFACE` |
 | `sys/src/lib.rs` | `system_library()` |
-| `datafun/src/pipeline/compiled_world.rs` | `CompiledWorld` |
+| `datafun/src/driver/compiled_world.rs` | `CompiledWorld` |
 | `datafun/src/incremental.rs` | `IncrementalModuleWorld`, `Roots` |
 | `buildinfo/build.rs` | Decides `BuildInfo` |
 | `rt/src/c/impls/alloc.rs` | The runtime allocator, `LeakCheckMode` |

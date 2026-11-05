@@ -7,7 +7,7 @@
 //!
 //! The descriptor is pure data -- it does not perform compilation. Drivers
 //! (CLI, REPL, LSP) build descriptors and feed them to
-//! [`ModuleCompilationPipeline`](super::ModuleCompilationPipeline).
+//! [`ModuleCompiler`](super::ModuleCompiler).
 
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use rmx::prelude::*;
@@ -237,20 +237,20 @@ impl WorkspaceDelta {
             || !self.riders_changed.is_empty()
     }
 
-    /// True when this delta cannot be applied to a pipeline that already exists.
+    /// True when this delta cannot be applied to a module compiler that already exists.
     ///
-    /// Compiler options are settled when a pipeline is built, because nothing
+    /// Compiler options are settled when a module compiler is built, because nothing
     /// already compiled under the old ones would be recompiled under the new.
     /// Riders are set as a whole list rather than one at a time, so a delta
     /// naming only the ones that moved cannot say what the list becomes.
     ///
-    /// A driver seeing this builds a new pipeline from the newer descriptor.
-    pub fn requires_new_pipeline(&self) -> bool {
-        self.new_pipeline_reason().is_some()
+    /// A caller seeing this builds a new module compiler from the newer descriptor.
+    pub fn requires_new_compiler(&self) -> bool {
+        self.new_compiler_reason().is_some()
     }
 
-    /// What in this delta needs a new pipeline, for the message that says so.
-    fn new_pipeline_reason(&self) -> Option<&'static str> {
+    /// What in this delta needs a new module compiler, for the message that says so.
+    fn new_compiler_reason(&self) -> Option<&'static str> {
         match (self.options_changed.is_some(), self.riders_dirty()) {
             (true, true) => Some("compiler options and riders"),
             (true, false) => Some("compiler options"),
@@ -455,7 +455,7 @@ impl WorkspaceDescriptor {
 /// -- `/usr` has a `local` -- so this looks only where a workspace laid out
 /// as documented puts its library.
 ///
-/// This is the command line's rule. The pipeline itself takes whatever library
+/// This is the command line's rule. The module compiler itself takes whatever library
 /// it is given.
 pub fn find_local_library(script: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
     let Some(script) = script else {
@@ -813,126 +813,126 @@ fn package_library_from_map(
 }
 
 // ---------------------------------------------------------------------------
-// Pipeline integration
+// Module compiler integration
 // ---------------------------------------------------------------------------
 
-use super::module_pipeline::ModuleCompilationPipeline;
+use super::module_compiler::ModuleCompiler;
 use super::rider_load::RiderNatives;
 use rmx::std::collections::HashMap;
 
 impl WorkspaceDescriptor {
-    /// Apply this descriptor to a fresh pipeline, populating all modules and riders.
-    pub fn apply_to_pipeline(
+    /// Apply this descriptor to a fresh module compiler, populating all modules and riders.
+    pub fn apply_to_compiler(
         &self,
-        pipeline: &mut ModuleCompilationPipeline,
+        module_compiler: &mut ModuleCompiler,
         db: &dyn salsa::Database,
     ) {
         for (path, module) in self.all_modules() {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
             if parts.len() == 3 {
-                pipeline.add_module(db, parts[0], parts[1], parts[2], &module.source);
+                module_compiler.add_module(db, parts[0], parts[1], parts[2], &module.source);
             }
         }
         for (path, file) in self.all_data() {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
-            pipeline.add_data(db, parts[0], parts[1], parts[2], &file.source);
+            module_compiler.add_data(db, parts[0], parts[1], parts[2], &file.source);
         }
 
-        pipeline.set_rider_sources(self.rider_sources());
+        module_compiler.set_rider_sources(self.rider_sources());
     }
 
-    /// Create a fresh pipeline from this descriptor.
-    pub fn to_pipeline(&self, db: &dyn salsa::Database) -> ModuleCompilationPipeline {
-        let mut pipeline = ModuleCompilationPipeline::new(self.options.clone());
-        self.apply_to_pipeline(&mut pipeline, db);
-        pipeline
+    /// Create a fresh module compiler from this descriptor.
+    pub fn to_compiler(&self, db: &dyn salsa::Database) -> ModuleCompiler {
+        let mut module_compiler = ModuleCompiler::new(self.options.clone());
+        self.apply_to_compiler(&mut module_compiler, db);
+        module_compiler
     }
 
-    /// Create a fresh pipeline from this descriptor, given the natives its
+    /// Create a fresh module compiler from this descriptor, given the natives its
     /// modules call.
     ///
     /// `linked` is what this binary carries, as
-    /// [`SystemLibrary::natives`] lists them. The pipeline needs the natives
+    /// [`SystemLibrary::natives`] lists them. The module compiler needs the natives
     /// before it compiles anything, since a const can call one, and an
     /// executor needs the same ones after, through
     /// [`register_natives`](super::rider_load::register_natives), so they are
     /// handed back too. A rider is built at most once between the two.
-    pub fn to_pipeline_with_natives(
+    pub fn to_compiler_with_natives(
         &self,
         db: &dyn salsa::Database,
         linked: &[(String, *const ())],
-    ) -> (ModuleCompilationPipeline, Arc<RiderNatives>) {
-        let mut pipeline = self.to_pipeline(db);
+    ) -> (ModuleCompiler, Arc<RiderNatives>) {
+        let mut module_compiler = self.to_compiler(db);
         let natives = Arc::new(RiderNatives::for_workspace(self, linked));
-        pipeline.set_natives(natives.clone());
-        (pipeline, natives)
+        module_compiler.set_natives(natives.clone());
+        (module_compiler, natives)
     }
 
-    /// The file each module, data file and rider interface `pipeline` compiled
+    /// The file each module, data file and rider interface `module_compiler` compiled
     /// from this descriptor was read from, by its source.
     ///
     /// For framing a diagnostic against the file its text came from.
-    pub fn source_files(&self, pipeline: &ModuleCompilationPipeline) -> HashMap<bct::input::Source, PathBuf> {
+    pub fn source_files(&self, module_compiler: &ModuleCompiler) -> HashMap<bct::input::Source, PathBuf> {
         let modules = self.module_files().into_iter()
-            .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)));
+            .filter_map(|(path, file)| Some((module_compiler.module_source(&path)?, file)));
         let data = self.data_files().into_iter()
-            .filter_map(|(path, file)| Some((pipeline.data_source(&path)?, file)));
+            .filter_map(|(path, file)| Some((module_compiler.data_source(&path)?, file)));
         let riders = self.rider_files().into_iter()
-            .filter_map(|(name, file)| Some((pipeline.rider_source(&name)?, file)));
+            .filter_map(|(name, file)| Some((module_compiler.rider_source(&name)?, file)));
         modules.chain(data).chain(riders).collect()
     }
 }
 
 impl WorkspaceDelta {
-    /// Apply this delta to an existing pipeline for incremental recompilation.
+    /// Apply this delta to an existing module compiler for incremental recompilation.
     ///
-    /// Modules are the only part of a workspace a live pipeline can take one
-    /// change at a time. See [`requires_new_pipeline`](Self::requires_new_pipeline)
+    /// Modules are the only part of a workspace a live module compiler can take one
+    /// change at a time. See [`requires_new_compiler`](Self::requires_new_compiler)
     /// for the rest, which this refuses rather than drops.
-    pub fn apply_to_pipeline(
+    pub fn apply_to_compiler(
         &self,
-        pipeline: &mut ModuleCompilationPipeline,
+        module_compiler: &mut ModuleCompiler,
         db: &mut dyn salsa::Database,
     ) {
         assert!(
-            !self.requires_new_pipeline(),
-            "this delta changes {}, which a built pipeline cannot take; \
+            !self.requires_new_compiler(),
+            "this delta changes {}, which a built module_compiler cannot take; \
              build a new one from the newer descriptor instead",
-            self.new_pipeline_reason().expect("requires_new_pipeline said so"),
+            self.new_compiler_reason().expect("requires_new_compiler said so"),
         );
 
         for path in &self.modules_removed {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
             if parts.len() == 3 {
-                pipeline.remove_module(parts[0], parts[1], parts[2]);
+                module_compiler.remove_module(parts[0], parts[1], parts[2]);
             }
         }
 
         for (path, module) in &self.modules_added {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
             if parts.len() == 3 {
-                pipeline.add_module(db, parts[0], parts[1], parts[2], &module.source);
+                module_compiler.add_module(db, parts[0], parts[1], parts[2], &module.source);
             }
         }
 
         for (path, module) in &self.modules_changed {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
             if parts.len() == 3 {
-                pipeline.update_source(db, parts[0], parts[1], parts[2], &module.source);
+                module_compiler.update_source(db, parts[0], parts[1], parts[2], &module.source);
             }
         }
 
         for path in &self.data_removed {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
-            pipeline.remove_data(parts[0], parts[1], parts[2]);
+            module_compiler.remove_data(parts[0], parts[1], parts[2]);
         }
         for (path, file) in &self.data_added {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
-            pipeline.add_data(db, parts[0], parts[1], parts[2], &file.source);
+            module_compiler.add_data(db, parts[0], parts[1], parts[2], &file.source);
         }
         for (path, file) in &self.data_changed {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
-            pipeline.update_data(db, parts[0], parts[1], parts[2], &file.source);
+            module_compiler.update_data(db, parts[0], parts[1], parts[2], &file.source);
         }
     }
 }
@@ -977,17 +977,17 @@ mod tests {
     }
 
     #[test]
-    fn an_edited_module_applies_to_the_pipeline_it_was_built_for() {
+    fn an_edited_module_applies_to_the_compiler_it_was_built_for() {
         let before = descriptor("let x = 1", None, CompilerOptions::default());
         let after = descriptor("let x = 2", None, CompilerOptions::default());
         let delta = before.diff(&after);
 
         assert_eq!(delta.modules_changed.len(), 1);
-        assert!(!delta.requires_new_pipeline());
+        assert!(!delta.requires_new_compiler());
     }
 
     #[test]
-    fn changed_options_need_a_new_pipeline() {
+    fn changed_options_need_a_new_compiler() {
         let before = descriptor("let x = 1", None, CompilerOptions::default());
         let after = descriptor(
             "let x = 1",
@@ -997,23 +997,23 @@ mod tests {
         let delta = before.diff(&after);
 
         assert!(!delta.is_empty(), "the change is reported");
-        assert!(delta.requires_new_pipeline());
+        assert!(delta.requires_new_compiler());
     }
 
     #[test]
-    fn changed_riders_need_a_new_pipeline() {
+    fn changed_riders_need_a_new_compiler() {
         let before = descriptor("let x = 1", Some("native fun f()"), CompilerOptions::default());
         let after = descriptor("let x = 1", Some("native fun g()"), CompilerOptions::default());
         let delta = before.diff(&after);
 
         assert!(delta.riders_dirty());
-        assert!(delta.requires_new_pipeline());
+        assert!(delta.requires_new_compiler());
     }
 
     /// The case that used to pass silently, compiling under the old options.
     #[test]
     #[should_panic(expected = "compiler options")]
-    fn applying_changed_options_to_a_built_pipeline_is_refused() {
+    fn applying_changed_options_to_a_built_compiler_is_refused() {
         let before = descriptor("let x = 1", None, CompilerOptions::default());
         let after = descriptor(
             "let x = 1",
@@ -1023,8 +1023,8 @@ mod tests {
         let delta = before.diff(&after);
 
         let mut db = crate::Database::default();
-        let mut pipeline = before.to_pipeline(&db);
-        delta.apply_to_pipeline(&mut pipeline, &mut db);
+        let mut module_compiler = before.to_compiler(&db);
+        delta.apply_to_compiler(&mut module_compiler, &mut db);
     }
 }
 

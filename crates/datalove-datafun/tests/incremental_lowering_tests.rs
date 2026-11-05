@@ -13,7 +13,7 @@
 use rmx::prelude::*;
 
 use datalove_ct::query_events::QueryRecorder;
-use datalove_datafun::pipeline::ModuleCompilationPipeline;
+use datalove_datafun::driver::ModuleCompiler;
 use datalove_datafun_compiler::Database;
 
 const MODULES: usize = 8;
@@ -43,17 +43,17 @@ fn ran(executed: &[datalove_ct::query_events::ExecutedQuery], query: &str) -> us
 }
 
 /// Build the modules and compile them once, leaving the recorder cleared.
-fn compiled_world(recorder: &QueryRecorder) -> (Database, ModuleCompilationPipeline) {
+fn compiled_world(recorder: &QueryRecorder) -> (Database, ModuleCompiler) {
     let db = Database::recording(recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
     for index in 0..MODULES {
-        pipeline.add_module(&db, "local", "test", &format!("m{}", index), &module_source(index, 0));
+        module_compiler.add_module(&db, "local", "test", &format!("m{}", index), &module_source(index, 0));
     }
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
-    (db, pipeline)
+    (db, module_compiler)
 }
 
 #[test]
@@ -61,11 +61,11 @@ fn a_first_compile_lowers_every_module() {
     let recorder = QueryRecorder::new();
     let db = Database::recording(&recorder);
 
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
     for index in 0..MODULES {
-        pipeline.add_module(&db, "local", "test", &format!("m{}", index), &module_source(index, 0));
+        module_compiler.add_module(&db, "local", "test", &format!("m{}", index), &module_source(index, 0));
     }
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
 
     let executed = recorder.take();
@@ -79,9 +79,9 @@ fn a_first_compile_lowers_every_module() {
 #[test]
 fn an_unchanged_recompile_lowers_nothing() {
     let recorder = QueryRecorder::new();
-    let (db, mut pipeline) = compiled_world(&recorder);
+    let (db, mut module_compiler) = compiled_world(&recorder);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful());
     drop(compiled);
 
@@ -100,10 +100,10 @@ fn an_unchanged_recompile_lowers_nothing() {
 #[test]
 fn an_edit_lowers_only_the_module_that_changed() {
     let recorder = QueryRecorder::new();
-    let (mut db, mut pipeline) = compiled_world(&recorder);
+    let (mut db, mut module_compiler) = compiled_world(&recorder);
 
-    pipeline.update_source(&mut db, "local", "test", "m0", &module_source(0, 99));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "local", "test", "m0", &module_source(0, 99));
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -159,16 +159,16 @@ fn an_unchanged_recompile_of_a_world_with_consts_lowers_nothing() {
         source
     }
 
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
     for index in 0..MODULES {
-        pipeline.add_module(&db, "local", "test", &format!("c{index}"), &const_source(index));
+        module_compiler.add_module(&db, "local", "test", &format!("c{index}"), &const_source(index));
     }
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -191,11 +191,11 @@ fn an_unchanged_recompile_of_a_world_with_consts_lowers_nothing() {
 #[test]
 fn adding_a_module_does_not_relower_the_others() {
     let recorder = QueryRecorder::new();
-    let (db, mut pipeline) = compiled_world(&recorder);
+    let (db, mut module_compiler) = compiled_world(&recorder);
 
     let last = format!("m{}", MODULES);
-    pipeline.add_module(&db, "local", "test", &last, &module_source(MODULES, 0));
-    let compiled = pipeline.compile(&db);
+    module_compiler.add_module(&db, "local", "test", &last, &module_source(MODULES, 0));
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

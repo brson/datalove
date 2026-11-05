@@ -6,9 +6,9 @@
 //! library, and the library going when the last of them does.
 
 use datalove_datafun as datafun;
-use datafun::pipeline::rider_build::build_rider_dylib;
-use datafun::pipeline::rider_load::{load_rider_library, open_library_count};
-use datafun::pipeline::workspace::RiderCrate;
+use datafun::driver::rider_build::build_rider_dylib;
+use datafun::driver::rider_load::{load_rider_library, open_library_count};
+use datafun::driver::workspace::RiderCrate;
 use datalove_datafun_interp::NativeFunctionTable;
 use std::path::PathBuf;
 

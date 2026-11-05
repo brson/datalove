@@ -21,7 +21,7 @@ use rmx::prelude::*;
 
 use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
 use datalove_datafun as datafun;
-use datalove_datafun::pipeline::{CompilerOptions, ModuleCompilationPipeline};
+use datalove_datafun::driver::{CompilerOptions, ModuleCompiler};
 use datalove_datafun_pkg::package_load_worldfile;
 
 /// How many times `query` ran, out of what the recorder collected.
@@ -76,18 +76,18 @@ fn plain_source(takes: &str) -> String {
 /// Build the rider world, compile it once, and leave the recorder cleared.
 fn compiled_rider_world(
     recorder: &QueryRecorder,
-) -> (datafun::Database, ModuleCompilationPipeline) {
+) -> (datafun::Database, ModuleCompiler) {
     let db = datafun::Database::recording(recorder);
     let worldfile = rider_worldfile(&plain_source(""));
     let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes()).X();
-    let mut pipeline =
-        ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    let mut module_compiler =
+        ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
-    (db, pipeline)
+    (db, module_compiler)
 }
 
 /// A first compile typechecks every module, so the tests below are not vacuous.
@@ -97,10 +97,10 @@ fn a_first_compile_of_the_rider_world_typechecks_every_module() {
     let db = datafun::Database::recording(&recorder);
     let worldfile = rider_worldfile(&plain_source(""));
     let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes()).X();
-    let mut pipeline =
-        ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    let mut module_compiler =
+        ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -121,11 +121,11 @@ fn a_first_compile_of_the_rider_world_typechecks_every_module() {
 #[test]
 fn a_signature_edit_does_not_reach_modules_that_import_from_a_rider() {
     let recorder = QueryRecorder::new();
-    let (mut db, mut pipeline) = compiled_rider_world(&recorder);
+    let (mut db, mut module_compiler) = compiled_rider_world(&recorder);
 
     // `plain_edited` gains a parameter. Nothing imports or calls it.
-    pipeline.update_source(&mut db, "local", "test", "plain", &plain_source("a: i32"));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "local", "test", "plain", &plain_source("a: i32"));
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -161,10 +161,10 @@ fn the_rider_interfaces_are_built_once_and_an_edit_does_not_rebuild_them() {
     let db = datafun::Database::recording(&recorder);
     let worldfile = rider_worldfile(&plain_source(""));
     let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes()).X();
-    let mut pipeline =
-        ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    let mut module_compiler =
+        ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     assert_eq!(
@@ -173,8 +173,8 @@ fn the_rider_interfaces_are_built_once_and_an_edit_does_not_rebuild_them() {
     );
 
     let mut db = db;
-    pipeline.update_source(&mut db, "local", "test", "plain", &plain_source("a: i32"));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "local", "test", "plain", &plain_source("a: i32"));
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     assert_eq!(
@@ -187,9 +187,9 @@ fn the_rider_interfaces_are_built_once_and_an_edit_does_not_rebuild_them() {
 #[test]
 fn an_unchanged_recompile_of_the_rider_world_runs_no_queries() {
     let recorder = QueryRecorder::new();
-    let (db, mut pipeline) = compiled_rider_world(&recorder);
+    let (db, mut module_compiler) = compiled_rider_world(&recorder);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -225,19 +225,19 @@ fn import_world(shared_param: &str, private_param: &str) -> (String, String, Str
 /// Build the three-module world, compile it once, leave the recorder cleared.
 fn compiled_import_world(
     recorder: &QueryRecorder,
-) -> (datafun::Database, ModuleCompilationPipeline) {
+) -> (datafun::Database, ModuleCompiler) {
     let db = datafun::Database::recording(recorder);
     let (lib, user, bystander) = import_world("x: i32", "y: i32");
-    let mut pipeline = ModuleCompilationPipeline::default();
-    pipeline.add_module(&db, "local", "test", "lib", &lib);
-    pipeline.add_module(&db, "local", "test", "user", &user);
-    pipeline.add_module(&db, "local", "test", "bystander", &bystander);
+    let mut module_compiler = ModuleCompiler::default();
+    module_compiler.add_module(&db, "local", "test", "lib", &lib);
+    module_compiler.add_module(&db, "local", "test", "user", &user);
+    module_compiler.add_module(&db, "local", "test", "bystander", &bystander);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
-    (db, pipeline)
+    (db, module_compiler)
 }
 
 /// An edit to a module nobody requires does not re-resolve anybody's imports.
@@ -250,13 +250,13 @@ fn compiled_import_world(
 #[test]
 fn an_edit_to_an_unrequired_module_re_resolves_no_imports() {
     let recorder = QueryRecorder::new();
-    let (mut db, mut pipeline) = compiled_import_world(&recorder);
+    let (mut db, mut module_compiler) = compiled_import_world(&recorder);
 
-    pipeline.update_source(
+    module_compiler.update_source(
         &mut db, "local", "test", "bystander",
         "fun alone(x: i32, extra: i32): i32\n\x20   ret x\nend fun\n",
     );
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -285,12 +285,12 @@ fn an_edit_to_an_unrequired_module_re_resolves_no_imports() {
 #[test]
 fn changing_an_unimported_export_stops_at_the_importer_s_import_resolution() {
     let recorder = QueryRecorder::new();
-    let (mut db, mut pipeline) = compiled_import_world(&recorder);
+    let (mut db, mut module_compiler) = compiled_import_world(&recorder);
 
     // `private` gains a parameter. `user` imports `shared`, not `private`.
     let (lib, _, _) = import_world("x: i32", "y: i32, extra: i32");
-    pipeline.update_source(&mut db, "local", "test", "lib", &lib);
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "local", "test", "lib", &lib);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -315,13 +315,13 @@ fn changing_an_unimported_export_stops_at_the_importer_s_import_resolution() {
 #[test]
 fn changing_an_imported_export_does_reach_the_importer() {
     let recorder = QueryRecorder::new();
-    let (mut db, mut pipeline) = compiled_import_world(&recorder);
+    let (mut db, mut module_compiler) = compiled_import_world(&recorder);
 
     // `shared`'s parameter type changes. `user` calls it with a literal, which
     // takes its type from context, so the world still compiles.
     let (lib, _, _) = import_world("x: u32", "y: i32");
-    pipeline.update_source(&mut db, "local", "test", "lib", &lib);
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "local", "test", "lib", &lib);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

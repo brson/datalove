@@ -1,15 +1,15 @@
-//! Module compilation pipeline with incremental recompilation support.
+//! Module compilation with incremental recompilation support.
 //!
-//! The [`ModuleCompilationPipeline`] manages module compilation through parsing,
+//! The [`ModuleCompiler`] manages module compilation through parsing,
 //! typechecking, ownership analysis, and IR lowering. It supports both fresh
 //! compilation and incremental updates via salsa.
 //!
 //! # Example
 //!
 //! ```ignore
-//! let mut pipeline = ModuleCompilationPipeline::default();
-//! pipeline.add_module(&db, "local", "mypackage", "main", source);
-//! let compiled = pipeline.compile(&db);
+//! let mut module_compiler = ModuleCompiler::default();
+//! module_compiler.add_module(&db, "local", "mypackage", "main", source);
+//! let compiled = module_compiler.compile(&db);
 //!
 //! if compiled.is_successful() {
 //!     let compiler = compiled.script_compiler_default(&db).unwrap();
@@ -45,13 +45,13 @@ use crate::incremental::{IncrementalModuleWorld, Roots, extract_dependencies_wit
 use super::compiled_modules::{SharedModuleContext, CompiledModules};
 use super::workspace::CompilerOptions;
 
-/// Module compilation pipeline with incremental recompilation support.
+/// Module compiler with incremental recompilation support.
 ///
 /// Compiles modules through parsing, typechecking, drop analysis, and IR lowering.
 /// Compile with `compile`, edit with `update_source`, and compile again.
-pub struct ModuleCompilationPipeline {
+pub struct ModuleCompiler {
     world: IncrementalModuleWorld,
-    /// Settled when the pipeline is built. Nothing recompiles under different
+    /// Settled when the module compiler is built. Nothing recompiles under different
     /// options than it was made with, so there is nothing here to set later.
     options: CompilerOptions,
     /// Rider interfaces parsed from worldfile rider sections.
@@ -71,7 +71,7 @@ pub struct ModuleCompilationPipeline {
     roots: Roots,
     /// Where evaluating a const finds the natives it calls.
     ///
-    /// `None` for a pipeline whose consts call none, where reaching one is a
+    /// `None` for a module compiler whose consts call none, where reaching one is a
     /// panic. See [`set_natives`](Self::set_natives).
     natives: Option<Arc<dyn NativeResolver>>,
     /// Consts evaluated by earlier compiles, by module.
@@ -80,15 +80,15 @@ pub struct ModuleCompilationPipeline {
     /// setting them empties it. See `const_cache`.
     const_cache: ConstCache,
     /// The number each module's IR has been given, by path, for the life of
-    /// the pipeline.
+    /// the module compiler.
     ///
     /// Only ever added to, so a module keeps its number while roots and edits
     /// change which modules a compile reaches; see `ModuleIdTable`.
     module_ids: BTreeMap<String, u32>,
 }
 
-impl ModuleCompilationPipeline {
-    /// Create an empty pipeline.
+impl ModuleCompiler {
+    /// Create an empty module compiler.
     pub fn new(options: CompilerOptions) -> Self {
         Self {
             world: IncrementalModuleWorld::new(),
@@ -132,18 +132,18 @@ impl ModuleCompilationPipeline {
         }
     }
 
-    /// Create a pipeline from worldfile sections.
+    /// Create a module compiler from worldfile sections.
     pub fn from_sections(
         db: &dyn salsa::Database,
         sections: &[WorldfileSection],
         options: CompilerOptions,
     ) -> Self {
-        let mut pipeline = Self::new(options);
-        pipeline.add_modules_from_sections(db, sections);
-        pipeline
+        let mut module_compiler = Self::new(options);
+        module_compiler.add_modules_from_sections(db, sections);
+        module_compiler
     }
 
-    /// Add a module to the pipeline.
+    /// Add a module to the module compiler.
     pub fn add_module(
         &mut self,
         db: &dyn salsa::Database,
@@ -162,7 +162,7 @@ impl ModuleCompilationPipeline {
         self.world.add_module_with_durability(db, &path, source, durability);
     }
 
-    /// Add a data file to the pipeline, for `require data` to name.
+    /// Add a data file to the module compiler, for `require data` to name.
     pub fn add_data(
         &mut self,
         db: &dyn salsa::Database,
@@ -179,7 +179,7 @@ impl ModuleCompilationPipeline {
         self.world.add_data_with_durability(db, &path, text, durability);
     }
 
-    /// Remove a data file from the pipeline.
+    /// Remove a data file from the module compiler.
     pub fn remove_data(&mut self, library: &str, package: &str, name: &str) {
         self.world.remove_data(&format!("{}/{}/{}", library, package, name));
     }
@@ -288,13 +288,13 @@ impl ModuleCompilationPipeline {
     ///
     /// The roots are part of the module graph's identity, so changing them is a
     /// different graph and not a stale memo. Changing them between compiles of
-    /// one pipeline is therefore sound, and costs what adding or removing that
+    /// one module compiler is therefore sound, and costs what adding or removing that
     /// many modules costs.
     pub fn set_roots(&mut self, roots: Roots) {
         self.roots = roots;
     }
 
-    /// Which of the world's modules this pipeline compiles.
+    /// Which of the world's modules this module compiler compiles.
     pub fn roots(&self) -> &Roots {
         &self.roots
     }
@@ -426,7 +426,7 @@ impl ModuleCompilationPipeline {
         self.world.sources().get(&path).map(|source| source.text(db).C())
     }
 
-    /// Remove a module from the pipeline.
+    /// Remove a module from the module compiler.
     pub fn remove_module(&mut self, library: &str, package: &str, module: &str) {
         let path = format!("{}/{}/{}", library, package, module);
         self.world.remove_module(&path);
@@ -448,7 +448,7 @@ impl ModuleCompilationPipeline {
     /// Compile all modules.
     ///
     /// The first compile and every recompile after an edit are the same call:
-    /// what makes a recompile cheap is that the pipeline keeps the `Source`
+    /// what makes a recompile cheap is that the module compiler keeps the `Source`
     /// inputs its queries are keyed on, so an edit made through
     /// `update_source` reaches only what reads it. Parallel unless
     /// `DATALOVE_PARALLEL=0`; see `parallel_mode_from_env`.
@@ -643,7 +643,7 @@ impl ModuleCompilationPipeline {
 ///
 /// Capped, because that key moves on every edit and the memo for the key
 /// before it is of no use to anyone: left uncapped this grew by about 140KB an
-/// edit, which is half again what the rest of the pipeline already retains per
+/// edit, which is half again what the rest of the compiler already retains per
 /// revision. Eviction runs once per revision, so nothing is dropped underneath
 /// a compile, and the capacity only has to cover the one a recompile asks for
 /// plus the one an edit displaces.
@@ -686,7 +686,7 @@ fn module_code_units<'db>(
     )
 }
 
-impl Default for ModuleCompilationPipeline {
+impl Default for ModuleCompiler {
     fn default() -> Self {
         Self::new(CompilerOptions::default())
     }

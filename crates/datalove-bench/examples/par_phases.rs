@@ -13,7 +13,7 @@ use rmx::prelude::*;
 
 use datalove_datafun as datafun;
 use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies_with_mode};
-use datalove_datafun::pipeline::WorkspaceDescriptor;
+use datalove_datafun::driver::WorkspaceDescriptor;
 use datalove_datafun_compiler::compile::{parse_phase, resolve_phase, typecheck_phase, ownership_phase};
 use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_datafun_interp::InterpCtfeEvaluator;

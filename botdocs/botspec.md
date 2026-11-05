@@ -2018,7 +2018,7 @@ is a workspace's own, read from disk by the command line (`script`,
 - else, with no script (the interactive REPL), in the current directory.
 
 A command given a script never looks in the current directory, and nothing
-further up the tree is looked at. There is no workspace manifest. The pipeline
+further up the tree is looked at. There is no workspace manifest. The module compiler
 itself takes whatever libraries it is given; the rule is the command line's.
 
 A package in `local` may have a rider (Section 9.5), declared in a

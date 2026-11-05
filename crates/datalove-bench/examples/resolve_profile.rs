@@ -18,7 +18,7 @@ use rmx::std::collections::BTreeMap;
 use bct::input::Source;
 use datalove_datafun as datafun;
 use datalove_datafun::incremental::{IncrementalModuleWorld, Roots};
-use datalove_datafun::pipeline::WorkspaceDescriptor;
+use datalove_datafun::driver::WorkspaceDescriptor;
 use std::time::{Duration, Instant};
 
 #[derive(Default)]

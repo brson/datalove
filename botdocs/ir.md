@@ -65,7 +65,7 @@ The crate is `crates/datalove-datafun-ir`, with four modules -- `layout`,
 | `BlockId(u32)` | Basic block |
 | `CodeUnitId(u32)` | Code unit, numbered within its containing scope |
 | `FuncId(u32)` | Module-local function, in the compiler's `FuncIdMap` |
-| `IrModuleId(u32)` | Module number, given by path and kept for the pipeline's life; *not* salsa's `ModuleId` |
+| `IrModuleId(u32)` | Module number, given by path and kept for the module compiler's life; *not* salsa's `ModuleId` |
 
 `CodeUnitId` is the unified addressing scheme that replaced `FuncId` inside the
 IR. `FuncId` survives above it, in the compiler's map from `(ModuleId, name)` to
@@ -793,7 +793,7 @@ const expression call a function in another module, and it holds the riders'
 native units as well, so a const can call a native.
 
 Calling one needs its code, which the evaluator's interpreter finds through a
-`NativeResolver` (`InterpCtfeEvaluator::with_native_resolver`). The pipeline is
+`NativeResolver` (`InterpCtfeEvaluator::with_native_resolver`). The module compiler is
 given one with `set_natives` and builds every evaluator with it. A driver gives
 it a `RiderNatives`, the same one it later registers the executor's natives
 from: built riders are compiled and loaded the first time either asks for a
@@ -892,7 +892,7 @@ the one now running, since a unit is added once it has finished.
 
 Everything here transforms `IrCodeUnit` in place or produces a new one.
 
-Both pipelines run them in one order: const inlining, specialization,
+Both compilers run them in one order: const inlining, specialization,
 inlining with simplification, dead code, const promotion. The last three are
 `compiler::optimize::finish`, per function.
 
@@ -1059,7 +1059,7 @@ Bless expected output with `BLESS=1 cargo test`.
 
 ## See Also
 
-- [Compiler Guide](compiler-guide.md) -- the pipeline this sits in the middle of
+- [Compiler Guide](compiler-guide.md) -- the compiler this sits in the middle of
 - [Language Specification](botspec.md) -- what the source means
 - [The Native Rider ABI](native-abi.md) -- how a native call is made
 - [Generics: how it works](generics.md) -- dynamic values and descriptor tables

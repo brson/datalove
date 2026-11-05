@@ -39,7 +39,7 @@ pub use datalove_datafun_parser::{parse_module_ast, parse_module_full, module_sp
 /// `parse_module_graph_parallel` for parallel execution when you have a `&dyn Db`.
 ///
 /// The modules are numbered for this graph alone, which is right for a
-/// compile done once. A pipeline that compiles again as its module set changes
+/// compile done once. A module compiler that compiles again as its module set changes
 /// keeps a numbering across compiles, and gives it to
 /// [`parse_module_graph_with_ids`].
 #[salsa::tracked(returns(copy))]

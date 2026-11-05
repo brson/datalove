@@ -61,10 +61,10 @@ impl<'db> TestContext<'db> {
 #[test]
 fn test_multiple_script_contexts() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
 
     // Compile with no modules - just testing script context isolation.
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "compilation should succeed");
 
     // Create first script context.
@@ -99,9 +99,9 @@ fn test_multiple_script_contexts() {
 #[test]
 fn test_interleaved_execution() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful());
 
     let mut ctx_a = TestContext::new(&compiled, &db);
@@ -153,16 +153,16 @@ fn test_parallel_script_execution() {
 
     // Compile once on the main thread.
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
 
     // Add a module with a function all threads will use.
-    pipeline.add_module(&db, "local", "pkg", "math", r#"
+    module_compiler.add_module(&db, "local", "pkg", "math", r#"
 fun square(n: int): int
   ret n * n
 end fun
 "#);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
 
     // Clone the compiled modules into an Arc for sharing.
@@ -235,16 +235,16 @@ end fun
 #[test]
 fn test_compile_run_compile_run() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
 
     // First compilation: add a module with a simple identity function.
-    pipeline.add_module(&db, "local", "pkg", "v1", r#"
+    module_compiler.add_module(&db, "local", "pkg", "v1", r#"
 fun value(x: u32): u32
   ret x
 end fun
 "#);
 
-    let compiled1 = pipeline.compile(&db);
+    let compiled1 = module_compiler.compile(&db);
     assert!(compiled1.is_successful(), "first compilation failed: {:?}", compiled1.all_errors());
 
     // First run: import and call module function.
@@ -272,9 +272,9 @@ end fun
 #[test]
 fn test_isolated_unit_functions() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful());
 
     let mut ctx1 = TestContext::new(&compiled, &db);
@@ -304,9 +304,9 @@ fn test_isolated_unit_functions() {
 #[test]
 fn test_many_script_contexts() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful());
 
     // Create many contexts.
@@ -324,15 +324,15 @@ fn test_many_script_contexts() {
 #[test]
 fn test_shared_module_functions() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
 
-    pipeline.add_module(&db, "local", "pkg", "math", r#"
+    module_compiler.add_module(&db, "local", "pkg", "math", r#"
 fun id(x: u32): u32
   ret x
 end fun
 "#);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
 
     // Create two contexts that both use the module function.
@@ -365,8 +365,8 @@ end fun
 #[test]
 fn test_per_unit_memoization_behavior() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::default();
+    let compiled = module_compiler.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define x.
@@ -399,8 +399,8 @@ fn test_per_unit_memoization_behavior() {
 #[test]
 fn test_per_unit_function_propagation() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::default();
+    let compiled = module_compiler.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define an identity function.
@@ -436,8 +436,8 @@ fn test_per_unit_function_propagation() {
 #[test]
 fn test_per_unit_lowering_memoization() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::default();
+    let compiled = module_compiler.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define a function that returns a list (ownership implications).
@@ -479,8 +479,8 @@ fn test_per_unit_lowering_memoization() {
 #[test]
 fn test_function_lowering_preserves_script_tracking() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::default();
+    let compiled = module_compiler.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Define functions with parameters, then a non-Copy let binding.
@@ -511,8 +511,8 @@ debuglog process(get_value(), 10)
 #[test]
 fn test_function_lowering_preserves_option_tracking() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::default();
+    let compiled = module_compiler.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Functions with Option parameters and return types.
@@ -547,8 +547,8 @@ debuglog my_string
 #[test]
 fn test_ctfe_struct_with_string_field() {
     let db = make_db();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::default();
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "compilation should succeed");
 
     let mut ctx = TestContext::new(&compiled, &db);

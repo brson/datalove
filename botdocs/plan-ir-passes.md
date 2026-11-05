@@ -17,7 +17,7 @@ the cleanup after it (`ir::simplify`) made the passes a quarter of lowering.
 ## Where compile time goes
 
 A script requiring every `sys/std` module and calling nothing, release build,
-timed inside the pipeline:
+timed inside the compiler:
 
 | Phase | ms |
 |---|---:|
@@ -45,7 +45,7 @@ inline and mints a new handle for its module, which salsa then compares whole.
 | Dead code after inlining | `dce.rs` | modules: 5d (as above); scripts: phase 5b |
 | Const promotion | `datafun-const/promote.rs` | modules: 5d; scripts: phase 6 |
 
-The two pipelines do not agree on the order. A script const-inlines, then
+The two compilers do not agree on the order. A script const-inlines, then
 specializes, then inlines; a module specializes, inlines, then const-inlines.
 The difference is observable: specialization finds a const argument's value
 only where a `Const` instruction defines it, so in a module a function's own
@@ -96,7 +96,7 @@ the check is per module.
 
 ## Later: per-function queries
 
-The module is the finest key the pipeline has: phase 5a lowers a module's
+The module is the finest key the compiler has: phase 5a lowers a module's
 functions together, and its result is one handle. A query per function would
 need a handle per function out of 5a, so that editing one function's body
 changes one key. With that, steps 3 to 6 become `optimized_function`, a query
@@ -160,7 +160,7 @@ module consts. Nothing is in the way of those 952 semantically:
 
 1. **The order, per function** (done): const inlining moved before
    specialization for modules, as phase 5b'; steps 3 to 6 in `lower_module`
-   and in the script pipeline through one function; phase 5c' removed.
+   and in the script compiler through one function; phase 5c' removed.
    Specialization now removes the code that built the const arguments of the
    calls it rewrites, which module const inlining used to do after it.
    Against the table above, 5b' is 0.23ms and 5d 4.4ms, where 5c' and 5d were

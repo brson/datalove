@@ -11,8 +11,8 @@
 use rmx::prelude::*;
 
 use datalove_datafun as datafun;
-use datafun::pipeline::WorkspaceDescriptor;
-use datafun::pipeline::rider_load::register_natives;
+use datafun::driver::WorkspaceDescriptor;
+use datafun::driver::rider_load::register_natives;
 use datalove_datafun_interp::Engine;
 pub use datalove_datafun_common::ParallelMode;
 
@@ -34,9 +34,9 @@ pub fn run(mode: ParallelMode) -> AnyResult<String> {
     let sys = datalove_sys_packages::system_library();
     let workspace = WorkspaceDescriptor::from_system_library(&sys);
     let db = datafun::Database::default();
-    let (mut pipeline, natives) = workspace.to_pipeline_with_natives(&db, &sys.natives);
+    let (mut module_compiler, natives) = workspace.to_compiler_with_natives(&db, &sys.natives);
 
-    let compiled = pipeline.compile_with_mode(&db, mode);
+    let compiled = module_compiler.compile_with_mode(&db, mode);
     if compiled.has_errors() {
         bail!("the system library did not compile: {}", compiled.all_errors().join("; "));
     }

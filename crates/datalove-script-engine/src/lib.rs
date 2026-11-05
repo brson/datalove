@@ -13,7 +13,7 @@ mod engine;
 pub use engine::{Compiled, Engine, ModuleErrors, OnCompileError, SessionId, SessionMut, UnitStep};
 
 // The system library a driver supplies to the engine.
-pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
+pub use datalove_datafun::driver::{PackageLibrary, SystemLibrary};
 // How `Engine::unit_diagnostics` renders.
 pub use bct::render::TextStyle;
 

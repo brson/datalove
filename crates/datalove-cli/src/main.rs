@@ -380,7 +380,7 @@ impl LitOpCommand {
 
 impl ReplCommand {
     fn run(&self) -> AnyResult<()> {
-        use datalove::datafun::pipeline::local_library_for;
+        use datalove::datafun::driver::local_library_for;
 
         // A command given no script looks for `local` here, and a REPL's
         // workspace is this directory.
@@ -448,7 +448,7 @@ impl ScriptCommand {
         // Stderr mode for debuglog output.
         let mut executor = script.compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
-        datafun::pipeline::rider_load::register_natives(&script.natives, &script.compiled, &mut executor)?;
+        datafun::driver::rider_load::register_natives(&script.natives, &script.compiled, &mut executor)?;
 
         let compiled_at = start.elapsed();
         let output = executor.execute_fragment(&script.ir_unit);
@@ -502,7 +502,7 @@ impl ScriptIrCommand {
 
 impl AotCompileCommand {
     fn run(&self) -> AnyResult<()> {
-        use datalove::datafun::pipeline::{aot, rider_build};
+        use datalove::datafun::driver::{aot, rider_build};
 
         let db = datalove::datafun::Database::default();
         let script = compile::compile_script(&db, &self.file_path, self.no_sys)?;
@@ -528,7 +528,7 @@ impl AotCompileCommand {
             return self.compile_via_c(ir_unit, &registry, &rider_libs, should_link);
         }
 
-        // Compile to object bytes using pipeline::aot.
+        // Compile to object bytes using driver::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
             ir_unit,
             &registry,
@@ -548,7 +548,7 @@ impl AotCompileCommand {
         };
 
         if should_link {
-            // Link into executable using pipeline::aot, including rider libraries.
+            // Link into executable using driver::aot, including rider libraries.
             aot::link_object_to_path_with_libs(&obj_bytes, &output_path, &rider_libs)
                 .map_err(|e| anyhow!("{}", e))?;
             println!("Linked executable: {}", output_path.display());
@@ -591,7 +591,7 @@ impl AotCompileCommand {
         rider_libs: &[PathBuf],
         should_link: bool,
     ) -> AnyResult<()> {
-        use datalove::datafun::pipeline::{aot, c_aot};
+        use datalove::datafun::driver::{aot, c_aot};
 
         let sources = c_aot::compile_world(ir_unit, registry)
             .map_err(|e| anyhow!("{}", e))?;
@@ -642,10 +642,10 @@ impl TypecheckStdCommand {
         let db = datafun::Database::default();
 
         let sys = datalove::sys_packages::system_library();
-        let descriptor = datafun::pipeline::WorkspaceDescriptor::from_system_library(&sys);
+        let descriptor = datafun::driver::WorkspaceDescriptor::from_system_library(&sys);
 
-        let (mut pipeline, _) = descriptor.to_pipeline_with_natives(&db, &sys.natives);
-        let compiled = pipeline.compile(&db);
+        let (mut module_compiler, _) = descriptor.to_compiler_with_natives(&db, &sys.natives);
+        let compiled = module_compiler.compile(&db);
 
         if let Some(err) = &compiled.resolution_error {
             bail!("Package resolution failed: {}", err);
@@ -746,7 +746,7 @@ impl ScriptWorldCommand {
     /// the REPL. A runtime error ends the session, and the run with it.
     fn run(&self) -> AnyResult<()> {
         use datalove::datafun;
-        use datafun::pipeline::WorkspaceDescriptor;
+        use datafun::driver::WorkspaceDescriptor;
         use datalove::datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
         use datalove::script_engine::{Engine, Eval, Unit};
 
@@ -780,7 +780,7 @@ impl ScriptWorldCommand {
         };
         let worldfile_descriptor = WorkspaceDescriptor::from_worldfile_sections(
             &parsed.sections,
-            datafun::pipeline::CompilerOptions::default(),
+            datafun::driver::CompilerOptions::default(),
         );
         let descriptor = sys_descriptor.merge(&worldfile_descriptor)
             .with_work_dir(datalove::paths::work_dir()?);
@@ -804,21 +804,21 @@ impl ScriptWorldCommand {
         // Where each section's text sits in the worldfile, so that what is
         // said about a line of it names the file's line. The units' sources
         // are made as they are evaluated, and are added there.
-        let pipeline = engine.pipeline();
+        let module_compiler = engine.module_compiler();
         let line_offsets: datalove::bct::render::LineOffsets = parsed.sections.iter().zip(&parsed.line_offsets)
             .filter_map(|(section, offset)| {
                 let source = match section {
                     WorldfileSection::Module { library, package, module, .. } =>
-                        pipeline.module_source(&fmt!("{library}/{package}/{module}")),
+                        module_compiler.module_source(&fmt!("{library}/{package}/{module}")),
                     WorldfileSection::Data { library, package, name, .. } =>
-                        pipeline.data_source(&fmt!("{library}/{package}/{name}")),
-                    WorldfileSection::Rider { name, .. } => pipeline.rider_source(name),
+                        module_compiler.data_source(&fmt!("{library}/{package}/{name}")),
+                    WorldfileSection::Rider { name, .. } => module_compiler.rider_source(name),
                     _ => None,
                 };
                 Some((source?, *offset))
             })
             .collect();
-        drop(pipeline);
+        drop(module_compiler);
 
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         let module_errors = engine.module_errors();
@@ -833,7 +833,7 @@ impl ScriptWorldCommand {
         }
         drop(module_errors);
 
-        let files = engine.workspace().source_files(&engine.pipeline());
+        let files = engine.workspace().source_files(&engine.module_compiler());
 
         let total = units.len();
         let mut failed: Vec<(usize, AnyError)> = Vec::new();

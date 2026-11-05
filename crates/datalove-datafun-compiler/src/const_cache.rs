@@ -3,7 +3,7 @@
 //! Const evaluation runs the interpreter, and the interpreter cannot run inside
 //! a tracked function -- see "What is not tracked" in
 //! `botdocs/compiler-guide.md` -- so salsa does not memoize it. This does,
-//! per module, outside salsa, for a pipeline that compiles the same world again
+//! per module, outside salsa, for a module compiler that compiles the same world again
 //! and again.
 //!
 //! **The key is the module's source and the source of everything it requires,

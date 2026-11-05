@@ -39,10 +39,10 @@ pub mod specialize;
 // Generic specialization: instances of generics.
 pub mod instances;
 
-// The passes that finish a function, in one order for every pipeline.
+// The passes that finish a function, in one order for every compiler.
 pub mod optimize;
 
-// Evaluating const bindings, for both pipelines.
+// Evaluating const bindings, for both compilers.
 pub mod const_eval;
 
 // Evaluated consts kept across compiles.

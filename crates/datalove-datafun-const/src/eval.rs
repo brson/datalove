@@ -1,6 +1,6 @@
 //! Compile-time constant expression evaluation.
 //!
-//! Evaluates const expressions at compile time via the 3-phase CTFE pipeline:
+//! Evaluates const expressions at compile time in three CTFE phases:
 //! 1. Collect const bindings into ConstBindingGraph (Phase 1, memoized)
 //! 2. Evaluate using CtfeEvaluator (Phase 2, not memoized) - THIS MODULE
 //! 3. Use pre-resolved values during lowering (Phase 3, memoized)

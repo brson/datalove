@@ -18,7 +18,7 @@ every step into a write, a compile and a run; the threads themselves are not.
 
 ## Why
 
-An `Engine` used to be one session: one database, one pipeline, one
+An `Engine` used to be one session: one database, one module compiler, one
 `ScriptSession`, one `ScriptExecutor`. Several scripts against the same
 workspace meant several engines, and so several compiles of the standard
 library and several copies of everything salsa memoizes. The compile is the
@@ -50,7 +50,7 @@ script work keyed things:
 ## Phase 1: sessions in one engine
 
 Done. `crates/datalove-script-engine/src/engine.rs` splits the engine into
-`Shared` -- the database, pipeline, workspace, natives, `also_roots` and
+`Shared` -- the database, module compiler, workspace, natives, `also_roots` and
 `module_errors` -- and a `SessionState` per session: the `ScriptSession`, the
 executor, its registered natives and its last step. `Engine::open_session`,
 `close_session` and `session(id) -> SessionMut` are the API; the methods on
@@ -87,7 +87,7 @@ holds that.
   `Box<dyn CallDispatcher>` without `Send`, and `dyn Any`.
   `RegisteredNatives` holds `*const u8`. The database is `Send` and not
   `Sync`, as salsa means it to be: one clone per thread.
-  `ModuleCompilationPipeline` is `Send + Sync` and `ScriptSession` is `Send`.
+  `ModuleCompiler` is `Send + Sync` and `ScriptSession` is `Send`.
 - **A salsa write waits for every other clone of the database to be
   dropped** (`Storage::cancel_others` in salsa 0.28), cancelling the queries
   they are running. Editing a unit is `set_text` and splicing one is
@@ -101,7 +101,7 @@ writes, and every edit is a point where all compiling stops.
 
 **Therefore** each session lives on a thread that builds its executor and
 never lets it go, as the REPL's worker does today with the whole engine. A
-coordinator owns the database and the pipeline and makes every write; a
+coordinator owns the database and the module compiler and makes every write; a
 session thread compiles on a clone of the database it takes for the step and
 drops after.
 
@@ -113,10 +113,10 @@ then a compile, then a run, and the code says which is which:
   `set_prev`, and a module's new source. An append and a truncation write
   nothing.
 - **The compile** goes through `Compiling`, which holds `&Shared` and so
-  cannot write the database. The pipeline, the roots, `module_errors` and the
+  cannot write the database. The module compiler, the roots, `module_errors` and the
   count of module changes are in `Modules`, behind a `RefCell` standing where
   a lock will go. It is borrowed only to settle and compile the modules and to
-  say why a unit failed. `ModuleCompilationPipeline::compile` takes
+  say why a unit failed. `ModuleCompiler::compile` takes
   `&mut self` for its const cache and module ids, but the `CompiledModules`
   it returns borrows only the database, so nothing holds the modules while
   units compile or run.

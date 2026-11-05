@@ -1,10 +1,10 @@
-//! Two-stage compilation pipeline: modules first, then scripts.
+//! Two-stage compilation: modules first, then scripts.
 //!
 //! # Overview
 //!
 //! Compilation proceeds in two stages:
 //!
-//! 1. **Module compilation** ([`ModuleCompilationPipeline`]): Parses, typechecks,
+//! 1. **Module compilation** ([`ModuleCompiler`]): Parses, typechecks,
 //!    analyzes drops, and lowers modules to IR. Produces [`CompiledModules`].
 //!
 //! 2. **Script compilation and execution** ([`ScriptCompiler`] and [`ScriptExecutor`]):
@@ -16,9 +16,9 @@
 //!
 //! ```ignore
 //! // Stage 1: compile modules.
-//! let mut pipeline = ModuleCompilationPipeline::default();
-//! pipeline.add_module(&db, "local", "mypackage", "main", source);
-//! let compiled = pipeline.compile(&db);
+//! let mut module_compiler = ModuleCompiler::default();
+//! module_compiler.add_module(&db, "local", "mypackage", "main", source);
+//! let compiled = module_compiler.compile(&db);
 //!
 //! // Stage 2: compile and run scripts (only if compilation succeeded).
 //! let mut compiler = compiled.script_compiler_default(&db).expect("compilation succeeded");
@@ -33,15 +33,15 @@
 //! # Incremental Compilation
 //!
 //! Edit a module with `update_source`, which needs `&mut db` since it sets an
-//! input, and call `compile` again. The pipeline keeps its inputs across edits,
+//! input, and call `compile` again. The module compiler keeps its inputs across edits,
 //! so the recompile reuses everything the edit did not reach.
 //!
 //! ```ignore
-//! let compiled1 = pipeline.compile(&db);
+//! let compiled1 = module_compiler.compile(&db);
 //! drop(compiled1);
 //!
-//! pipeline.update_source(&mut db, "local", "pkg", "main", new_source);
-//! let compiled2 = pipeline.compile(&db);
+//! module_compiler.update_source(&mut db, "local", "pkg", "main", new_source);
+//! let compiled2 = module_compiler.compile(&db);
 //! ```
 //!
 //! # Parallelism
@@ -54,7 +54,7 @@ mod compiled_modules;
 mod compiled_world;
 mod script_compiler;
 mod script_executor;
-mod module_pipeline;
+mod module_compiler;
 pub mod workspace;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod aot;
@@ -73,7 +73,7 @@ pub use compiled_modules::{SharedModuleContext, CompiledModules};
 pub use compiled_world::CompiledWorld;
 pub use script_compiler::{FIRST_UNIT_ID, RemovedUnit, ScriptCompiler, ScriptSession, UnitAccesses};
 pub use script_executor::{ScriptExecutor, UnitStatus};
-pub use module_pipeline::ModuleCompilationPipeline;
+pub use module_compiler::ModuleCompiler;
 pub use workspace::{
     WorkspaceDescriptor, WorkspaceDelta, SystemLibrary,
     PackageLibrary, PackageDescriptor, ModuleDescriptor,

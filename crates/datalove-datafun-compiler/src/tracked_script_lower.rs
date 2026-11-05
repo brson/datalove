@@ -205,7 +205,7 @@ pub fn externals_over(ids: &[u32], records: &[Arc<UnitLowerRecord>], names: &[St
 
 /// Collect const bindings from statements and return them in dependency order.
 ///
-/// This is Phase 1 of the 3-phase CTFE memoization pipeline:
+/// This is Phase 1 of the three phases of CTFE memoization:
 /// 1. collect_const_graph (memoized) - pure data extraction
 /// 2. evaluate_consts (not memoized) - needs interpreter
 /// 3. lower_with_consts (memoized) - uses resolved values

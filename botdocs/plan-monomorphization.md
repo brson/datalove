@@ -228,7 +228,7 @@ pass first.
   `substitute_types`, `clean_copy_types`, with unit tests on hand-built
   units.
 - `crates/datalove-datafun-compiler/src/instances.rs`: the pass, the
-  `Instantiator` that both pipelines drive, and `GenericsPolicy` -- `Off`,
+  `Instantiator` that both compilers drive, and `GenericsPolicy` -- `Off`,
   `All`, and `Chaos { seed }`, which hashes the seed with the call site
   (function name, block, instruction), the callee and the bindings. The
   policy is asked per site before an existing instance is reused, so two

@@ -8,11 +8,11 @@ use rmx::std::sync::Arc;
 
 use datalove::bct::input::Source;
 use datalove::bct::render::LineOffsets;
-use datalove::datafun::pipeline::{
-    CompiledModules, LoweringResult, ModuleCompilationPipeline, OwnershipResult,
+use datalove::datafun::driver::{
+    CompiledModules, LoweringResult, ModuleCompiler, OwnershipResult,
     ScriptCompilationResult, ScriptCompiler, TypecheckResult, WorkspaceDescriptor,
 };
-use datalove::datafun::pipeline::rider_load::RiderNatives;
+use datalove::datafun::driver::rider_load::RiderNatives;
 use datalove::datafun_ir::IrCodeUnit;
 
 use crate::render;
@@ -55,19 +55,19 @@ pub fn compile_script<'db>(
     let source = rmx::std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read script file: {}", path.display()))?;
 
-    let (mut pipeline, natives) = descriptor.to_pipeline_with_natives(db, &sys.natives);
+    let (mut module_compiler, natives) = descriptor.to_compiler_with_natives(db, &sys.natives);
     // Compile only what the script reaches. A program that requires two
     // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
     // refuses when a require does not resolve, leaving the whole world for
     // resolution to report on.
-    pipeline.narrow_roots_to_script(db, &source, &[]);
-    let compiled = pipeline.compile(db);
-    bail_on_module_errors(db, &compiled, &pipeline, &descriptor, path, &cwd)?;
+    module_compiler.narrow_roots_to_script(db, &source, &[]);
+    let compiled = module_compiler.compile(db);
+    bail_on_module_errors(db, &compiled, &module_compiler, &descriptor, path, &cwd)?;
 
     let mut compiler = compiled.script_compiler_default(db)
         .expect("script_compiler should succeed after error check");
     let unit = compiler.compile_fragment(&source);
-    let files = descriptor.source_files(&pipeline);
+    let files = descriptor.source_files(&module_compiler);
     check_unit(&compiler, &unit, &files, path, &LineOffsets::new(), &cwd)?;
     let ir_unit = unit.ir_unit
         .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
@@ -82,7 +82,7 @@ pub fn compile_script<'db>(
 fn bail_on_module_errors<'db>(
     db: &'db datalove::datafun::Database,
     compiled: &CompiledModules<'db>,
-    pipeline: &ModuleCompilationPipeline,
+    module_compiler: &ModuleCompiler,
     descriptor: &WorkspaceDescriptor,
     script_path: &Path,
     cwd: &Path,
@@ -91,7 +91,7 @@ fn bail_on_module_errors<'db>(
         return Ok(());
     }
 
-    let files = descriptor.source_files(pipeline);
+    let files = descriptor.source_files(module_compiler);
     let locate = |source: Source| files.get(&source).cloned();
 
     let diagnostics: Vec<_> = compiled.get_module_parse_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db))

@@ -26,7 +26,7 @@ use rmx::prelude::*;
 use bct::input::Source;
 use datalove_ct::query_events::QueryRecorder;
 use datalove_ct::unit_analysis::{self, Pass};
-use datalove_datafun::pipeline::WorkspaceDescriptor;
+use datalove_datafun::driver::WorkspaceDescriptor;
 use datalove_repl::Place;
 use datalove_script_engine::{Engine, Eval, SystemLibrary, Unit};
 

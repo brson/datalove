@@ -19,7 +19,7 @@ use datalove_datafun_interp::{Destination, IrInterpreter, ScriptEnvironment};
 use datalove_datafun_ir::{expand_ir_strings, FunctionRegistry, IrCodeUnit, IrType};
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_rt::rust::AlignedBuffer;
-use datafun::pipeline::CompilerOptions;
+use datafun::driver::CompilerOptions;
 
 // ============================================================================
 // Result Types
@@ -38,9 +38,9 @@ pub struct IrSerialSectionResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Typecheck result.
-    pub typecheck: datafun::pipeline::TypecheckResult,
+    pub typecheck: datafun::driver::TypecheckResult,
     /// Lowering result.
-    pub lowering: datafun::pipeline::LoweringResult,
+    pub lowering: datafun::driver::LoweringResult,
     /// Direct interpreter output.
     pub direct_interp_output: String,
     /// Direct AOT output.
@@ -195,7 +195,7 @@ fn execute_ir_aot(
         }
     };
 
-    // Link using shared pipeline function (uses lld if available).
+    // Link using shared driver function (uses lld if available).
     let dir = match rmx::tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
@@ -213,7 +213,7 @@ fn execute_ir_aot(
     };
 
     let exe_path = dir.path().join("test");
-    if let Err(e) = datafun::pipeline::aot::link_object_to_path(&obj_bytes, &exe_path) {
+    if let Err(e) = datafun::driver::aot::link_object_to_path(&obj_bytes, &exe_path) {
         return (
             String::new(),
             AotCompileResult::Success,
@@ -291,13 +291,13 @@ fn analyze_worldfile_ir_serial(
         results.push(IrSerialSectionResult {
             section_type: "validation".to_string(),
             name: None,
-            typecheck: datafun::pipeline::TypecheckResult::Error {
+            typecheck: datafun::driver::TypecheckResult::Error {
                 errors: vec![format!(
                     "Expected 1 scriptunit-fragment, found {}",
                     fragment_count
                 )],
             },
-            lowering: datafun::pipeline::LoweringResult::Skipped,
+            lowering: datafun::driver::LoweringResult::Skipped,
             direct_interp_output: String::new(),
             direct_aot_output: String::new(),
             serialized_ir_size: 0,
@@ -319,13 +319,13 @@ fn analyze_worldfile_ir_serial(
         results.push(IrSerialSectionResult {
             section_type: "validation".to_string(),
             name: None,
-            typecheck: datafun::pipeline::TypecheckResult::Error {
+            typecheck: datafun::driver::TypecheckResult::Error {
                 errors: vec![format!(
                     "scriptunit-expr sections not allowed, found {}",
                     expr_count
                 )],
             },
-            lowering: datafun::pipeline::LoweringResult::Skipped,
+            lowering: datafun::driver::LoweringResult::Skipped,
             direct_interp_output: String::new(),
             direct_aot_output: String::new(),
             serialized_ir_size: 0,
@@ -353,20 +353,20 @@ fn analyze_worldfile_ir_serial(
         })
         .unwrap();
 
-    // Build pipeline and compile.
-    let mut pipeline =
-        datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile(&db);
+    // Build the module compiler and compile.
+    let mut module_compiler =
+        datafun::driver::ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    let compiled = module_compiler.compile(&db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
         results.push(IrSerialSectionResult {
             section_type: "resolution".to_string(),
             name: None,
-            typecheck: datafun::pipeline::TypecheckResult::Error {
+            typecheck: datafun::driver::TypecheckResult::Error {
                 errors: vec![err.clone()],
             },
-            lowering: datafun::pipeline::LoweringResult::Skipped,
+            lowering: datafun::driver::LoweringResult::Skipped,
             direct_interp_output: String::new(),
             direct_aot_output: String::new(),
             serialized_ir_size: 0,
@@ -390,8 +390,8 @@ fn analyze_worldfile_ir_serial(
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: datafun::pipeline::TypecheckResult::Skipped,
-            lowering: datafun::pipeline::LoweringResult::Skipped,
+            typecheck: datafun::driver::TypecheckResult::Skipped,
+            lowering: datafun::driver::LoweringResult::Skipped,
             direct_interp_output: String::new(),
             direct_aot_output: String::new(),
             serialized_ir_size: 0,
@@ -416,7 +416,7 @@ fn analyze_worldfile_ir_serial(
     // Check for typecheck/lowering errors.
     if !matches!(
         &compiled_unit.typecheck,
-        datafun::pipeline::TypecheckResult::Success
+        datafun::driver::TypecheckResult::Success
     ) {
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),
@@ -442,7 +442,7 @@ fn analyze_worldfile_ir_serial(
 
     if !matches!(
         &compiled_unit.lowering,
-        datafun::pipeline::LoweringResult::Success { .. }
+        datafun::driver::LoweringResult::Success { .. }
     ) {
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),
@@ -473,7 +473,7 @@ fn analyze_worldfile_ir_serial(
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
                 typecheck: compiled_unit.typecheck,
-                lowering: datafun::pipeline::LoweringResult::Error {
+                lowering: datafun::driver::LoweringResult::Error {
                     message: "No IR unit produced".to_string(),
                 },
                 direct_interp_output: String::new(),

@@ -26,8 +26,8 @@ use rmx::std::collections::BTreeSet;
 use salsa::Setter as _;
 
 use datalove_datafun as datafun;
-use datafun::pipeline::{
-    CompilerOptions, ModuleCompilationPipeline, ScriptCompilationResult, ScriptExecutor,
+use datafun::driver::{
+    CompilerOptions, ModuleCompiler, ScriptCompilationResult, ScriptExecutor,
     ScriptSession,
 };
 
@@ -46,7 +46,7 @@ pub fn unit_letter(index: usize) -> char {
     letters.as_bytes()[index] as char
 }
 
-/// A module, as the pipeline names one.
+/// A module, as the module compiler names one.
 #[derive(Clone, Copy)]
 pub struct Module<'a> {
     pub library: &'a str,
@@ -65,7 +65,7 @@ impl Module<'_> {
 /// A script session that can be edited part way through.
 pub struct Session {
     pub db: datafun::Database,
-    pub pipeline: ModuleCompilationPipeline,
+    pub module_compiler: ModuleCompiler,
     pub script: Option<ScriptSession>,
     pub executor: ScriptExecutor,
     /// Each unit's text as it now stands, which is where the import edges the
@@ -79,7 +79,7 @@ impl Session {
     }
 
     pub fn with_db(db: datafun::Database) -> Session {
-        Session::build(db, ModuleCompilationPipeline::new(CompilerOptions::default()))
+        Session::build(db, ModuleCompiler::new(CompilerOptions::default()))
     }
 
     /// A session over a set of modules the script may require and import from.
@@ -89,17 +89,17 @@ impl Session {
 
     /// The same, over a database the caller built -- a recording one, usually.
     pub fn with_modules_in(db: datafun::Database, modules: &[Module<'_>]) -> Session {
-        let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
+        let mut module_compiler = ModuleCompiler::new(CompilerOptions::default());
         for module in modules {
-            pipeline.add_module(
+            module_compiler.add_module(
                 &db, module.library, module.package, module.module, module.source);
         }
-        Session::build(db, pipeline)
+        Session::build(db, module_compiler)
     }
 
-    fn build(db: datafun::Database, mut pipeline: ModuleCompilationPipeline) -> Session {
+    fn build(db: datafun::Database, mut module_compiler: ModuleCompiler) -> Session {
         let (script, executor) = {
-            let compiled = pipeline.compile(&db);
+            let compiled = module_compiler.compile(&db);
             assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
             let script = compiled
                 .script_compiler_default(&db)
@@ -110,7 +110,7 @@ impl Session {
                 .expect("a script executor");
             (script, executor)
         };
-        Session { db, pipeline, script: Some(script), executor, texts: Vec::new() }
+        Session { db, module_compiler, script: Some(script), executor, texts: Vec::new() }
     }
 
     /// How many units the script holds.
@@ -124,7 +124,7 @@ impl Session {
     /// place in the executor here; one that did is the caller's to run, or to
     /// take back off with [`Self::truncate`].
     pub fn compile_append(&mut self, text: &str) -> ScriptCompilationResult {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -151,7 +151,7 @@ impl Session {
 
     /// Compile one more unit, submitted as a bare expression, without running it.
     pub fn compile_append_expr(&mut self, text: &str) -> ScriptCompilationResult {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -170,7 +170,7 @@ impl Session {
     /// Returns the result type and the printed value, which is what the REPL
     /// shows for an expression line.
     pub fn append_expr(&mut self, text: &str) -> (Option<String>, String) {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -196,7 +196,7 @@ impl Session {
     /// For the cases where a unit is supposed to stop compiling, which
     /// [`Self::rederive`] refuses to see.
     pub fn relower(&mut self, edited: usize) -> Vec<(usize, ScriptCompilationResult)> {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -221,7 +221,7 @@ impl Session {
     /// none unless a unit that went took or wrote an earlier unit's binding,
     /// which reruns the unit that set the binding.
     pub fn truncate(&mut self, n: usize) -> BTreeSet<usize> {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -242,7 +242,7 @@ impl Session {
         let removed = self.script.as_mut().expect("a session").delete_unit(&mut self.db, i);
         self.executor.remove_unit(id);
         self.texts.remove(i);
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -257,7 +257,7 @@ impl Session {
         let id = self.script.as_mut().expect("a session").insert_unit(&mut self.db, i, source, false, None);
         self.executor.insert_unit(i, id);
         self.texts.insert(i, text.S());
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -274,7 +274,7 @@ impl Session {
     /// The units that did not run to their end, in index order.
     pub fn failed(&self) -> Vec<usize> {
         self.ids().iter().enumerate()
-            .filter(|(_, id)| *self.executor.unit_status(**id) != datafun::pipeline::UnitStatus::Ran)
+            .filter(|(_, id)| *self.executor.unit_status(**id) != datafun::driver::UnitStatus::Ran)
             .map(|(index, _)| index)
             .collect()
     }
@@ -307,13 +307,13 @@ impl Session {
     /// env moves and every unit is re-keyed. Nothing is re-derived here -- the
     /// caller asks the units whatever it wants to know afterwards.
     pub fn add_module(&mut self, module: &Module<'_>) {
-        self.pipeline.add_module(
+        self.module_compiler.add_module(
             &self.db, module.library, module.package, module.module, module.source);
     }
 
     /// Take a module out of the session, the other half of [`Self::add_module`].
     pub fn remove_module(&mut self, module: &Module<'_>) {
-        self.pipeline.remove_module(module.library, module.package, module.module);
+        self.module_compiler.remove_module(module.library, module.package, module.module);
     }
 
     /// Change a module's text and re-derive what that reaches.
@@ -327,10 +327,10 @@ impl Session {
         &mut self,
         module: &Module<'_>,
     ) -> Vec<(usize, ScriptCompilationResult)> {
-        self.pipeline.update_source(
+        self.module_compiler.update_source(
             &mut self.db, module.library, module.package, module.module, module.source);
 
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         assert!(
             compiled.is_successful(),
             "the edited module should compile: {:?}", compiled.all_errors(),
@@ -375,7 +375,7 @@ impl Session {
     /// Owned because it is read before the database is borrowed mutably for the
     /// edit, and everything salsa hands back is tied to that borrow.
     pub fn graph(&mut self) -> Graph {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");

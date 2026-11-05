@@ -13,7 +13,7 @@
 //! numbers as relative rather than as pure execution cost.
 
 use datalove_datafun as datafun;
-use datafun::pipeline::ModuleCompilationPipeline;
+use datafun::driver::ModuleCompiler;
 
 fn main() {
     divan::main();
@@ -135,8 +135,8 @@ debuglog build_map(20000)
 /// Compile and execute a script fragment with the interpreter.
 fn run(source: &str) {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::default();
+    let compiled = module_compiler.compile(&db);
 
     let mut compiler = compiled.script_compiler_default(&db).unwrap();
     let mut executor = compiled

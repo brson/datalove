@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use datalove_datafun::pipeline::aot;
+//! use datalove_datafun::driver::aot;
 //!
 //! let obj_bytes = aot::compile_script_to_object(&ir_unit)?;
 //! let (exe_path, _dir) = aot::link_object_to_temp_executable(&obj_bytes)?;

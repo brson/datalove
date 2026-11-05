@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use crate::{Unit, Eval, EvalBinding, EvalExpr, EnvBinding};
 use datalove_datafun as datafun;
-use datafun::pipeline::{CompiledModules, ScriptCompiler, ScriptCompilationResult, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
-use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
+use datafun::driver::{CompiledModules, ScriptCompiler, ScriptCompilationResult, ScriptExecutor, ScriptSession, ModuleCompiler, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
+use datafun::driver::rider_load::{RegisteredNatives, RiderNatives, register_natives};
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 use bct::input::Source;
 use datafun::incremental::Roots;
@@ -23,7 +23,7 @@ use datalove_ct::unit_analysis::{self, Pass};
 /// **A session is a list of script units and the runtime they run in**, and
 /// the engine holds any number of them over one compilation of the modules:
 /// each has its own compiled units, its own executor and its own runtime, and
-/// they share the database, the pipeline and the natives. The engine starts
+/// they share the database, the module compiler and the natives. The engine starts
 /// with one, which the methods on `Engine` itself act on;
 /// [`Engine::open_session`] opens more, and [`Engine::session`] acts on any.
 ///
@@ -71,10 +71,10 @@ struct Shared {
     db: datafun::Database,
     /// The workspace the sessions compile against.
     workspace: WorkspaceDescriptor,
-    /// The natives the pipeline was given, which each session's executor
+    /// The natives the module compiler was given, which each session's executor
     /// registers the ones it calls from.
     ///
-    /// The same for the life of the pipeline, so that neither a reset nor a
+    /// The same for the life of the module compiler, so that neither a reset nor a
     /// new session rebuilds riders or reloads them.
     natives: Arc<RiderNatives>,
     /// Where `debuglog` goes, kept so every session sends it to the same place.
@@ -89,20 +89,20 @@ struct Shared {
 /// nothing that compiles a unit or runs one holds them, and a session's step
 /// takes them twice at most: to compile, and to say why a unit failed.
 struct Modules {
-    /// The pipeline that compiled the modules, kept rather than rebuilt.
+    /// The module compiler that compiled the modules, kept rather than rebuilt.
     ///
-    /// A pipeline owns the `Source` inputs salsa keys its queries on, so throwing
+    /// A module compiler owns the `Source` inputs salsa keys its queries on, so throwing
     /// one away and making another means recompiling the library from nothing. A
     /// reset happens on every panic recovery, and the library it recompiles cannot
     /// have changed -- it is the copy embedded in the binary -- so keeping the
-    /// pipeline turns a reset from a full compile into salsa verifying what it
+    /// module compiler turns a reset from a full compile into salsa verifying what it
     /// already has.
     ///
     /// **Its roots are what every open session's units require**, plus
     /// `also_roots`, so one session's units compile against modules only
     /// another requires. That changes nothing a unit means, since a unit sees
     /// only the modules it requires.
-    pipeline: ModuleCompilationPipeline,
+    module_compiler: ModuleCompiler,
     /// Modules compiled whether or not a unit requires them.
     ///
     /// The rest of the roots are what the sessions' units require, worked out
@@ -127,10 +127,10 @@ impl Modules {
     /// `units` are every open session's units, as they will stand once the
     /// step in hand is done.
     fn settle(&mut self, db: &datafun::Database, units: &[Source]) {
-        let previous = self.pipeline.roots().clone();
-        self.errors = settle_roots(db, &mut self.pipeline, units, &self.also_roots)
+        let previous = self.module_compiler.roots().clone();
+        self.errors = settle_roots(db, &mut self.module_compiler, units, &self.also_roots)
             .expect("errors no root reaches are a rider's, and the riders compiled at startup");
-        if *self.pipeline.roots() != previous {
+        if *self.module_compiler.roots() != previous {
             self.changes += 1;
         }
     }
@@ -142,7 +142,7 @@ impl Shared {
     fn compile_modules(&self, units: &[Source]) -> CompiledModules<'_> {
         let mut modules = self.modules.borrow_mut();
         modules.settle(&self.db, units);
-        modules.pipeline.compile(&self.db)
+        modules.module_compiler.compile(&self.db)
     }
 
     /// A session with no units, compiling against the modules `units`
@@ -167,11 +167,11 @@ impl Shared {
         })
     }
 
-    /// Keep the descriptor in step with the pipeline.
+    /// Keep the descriptor in step with the module compiler.
     ///
-    /// A reset rebuilds from the pipeline rather than from the descriptor, so
+    /// A reset rebuilds from the module compiler rather than from the descriptor, so
     /// nothing reads this today. It is what a `WorkspaceDelta` would be taken
-    /// against, and a descriptor saying one thing while the pipeline compiles
+    /// against, and a descriptor saying one thing while the module compiler compiles
     /// another is the kind of disagreement that is found much later.
     fn set_workspace_module(
         &mut self,
@@ -188,13 +188,13 @@ impl Shared {
             .filter_map(|held| held.modules.get_mut(module))
             .next()
             .unwrap_or_else(|| panic!(
-                "the pipeline has {library}/{package}/{module} and the workspace \
+                "the module compiler has {library}/{package}/{module} and the workspace \
                  descriptor it was built from does not",
             ));
         held.source = source.into();
     }
 
-    /// Keep the descriptor in step with the pipeline's data, as
+    /// Keep the descriptor in step with the module compiler's data, as
     /// [`Self::set_workspace_module`] does for its modules.
     fn set_workspace_data(&mut self, library: &str, package: &str, name: &str, text: &str) {
         let libraries = self.workspace.system_library.iter_mut()
@@ -205,7 +205,7 @@ impl Shared {
             .filter_map(|held| held.data.get_mut(name))
             .next()
             .unwrap_or_else(|| panic!(
-                "the pipeline has data {library}/{package}/{name} and the workspace \
+                "the module compiler has data {library}/{package}/{name} and the workspace \
                  descriptor it was built from does not",
             ));
         held.source = text.into();
@@ -330,7 +330,7 @@ impl ModuleErrors {
 fn take_modules(
     executor: &mut ScriptExecutor,
     natives: &mut RegisteredNatives,
-    compiled: &datafun::pipeline::CompiledModules<'_>,
+    compiled: &datafun::driver::CompiledModules<'_>,
 ) {
     executor.set_module_registry(compiled.shared.module_registry.clone());
     *natives = register_natives(&natives.natives, compiled, executor)
@@ -350,18 +350,18 @@ fn take_modules(
 /// rider is compiled whether or not anything requires it, and that is an error.
 fn settle_roots(
     db: &datafun::Database,
-    pipeline: &mut ModuleCompilationPipeline,
+    module_compiler: &mut ModuleCompiler,
     units: &[Source],
     also: &[String],
 ) -> AnyResult<ModuleErrors> {
-    pipeline.narrow_roots_to_sources(db, units, also);
+    module_compiler.narrow_roots_to_sources(db, units, also);
     let mut found = ModuleErrors::default();
     loop {
-        let compiled = pipeline.compile(db);
+        let compiled = module_compiler.compile(db);
         if !compiled.has_errors() {
             return Ok(found);
         }
-        let Roots::From(roots) = pipeline.roots().clone() else {
+        let Roots::From(roots) = module_compiler.roots().clone() else {
             unreachable!("the engine always narrows");
         };
 
@@ -404,13 +404,13 @@ fn settle_roots(
             found.broken.insert(root.C(), messages);
         }
         let kept = roots.into_iter().filter(|root| !failing.contains(root)).collect();
-        pipeline.set_roots(Roots::From(kept));
+        module_compiler.set_roots(Roots::From(kept));
     }
 }
 
 /// Every module and rider each module of a compile reaches by `require`,
 /// itself included, by path.
-fn module_reach(db: &datafun::Database, compiled: &datafun::pipeline::CompiledModules<'_>) -> BTreeMap<String, BTreeSet<String>> {
+fn module_reach(db: &datafun::Database, compiled: &datafun::driver::CompiledModules<'_>) -> BTreeMap<String, BTreeSet<String>> {
     let parsed = compiled.shared.parsed_graph;
     let requires = parsed.resolved_requires(db);
     let path = |module: bct::module_graph::ModuleId<'_>| module.path(db).C();
@@ -439,7 +439,7 @@ fn module_reach(db: &datafun::Database, compiled: &datafun::pipeline::CompiledMo
 /// not outlive it, and the engine lets each compiler go once its operation is
 /// over, so a caller that renders them has to be handed them here.
 pub type OnCompileError<'a> =
-    &'a mut dyn FnMut(&ScriptCompiler<'_>, &datafun::pipeline::ScriptCompilationResult);
+    &'a mut dyn FnMut(&ScriptCompiler<'_>, &datafun::driver::ScriptCompilationResult);
 
 /// What one step did to one unit: which of the passes that compile it ran
 /// again, and what re-deriving it came to, if it was re-derived.
@@ -516,7 +516,7 @@ impl Engine {
     /// The same, saying where `debuglog` goes and which modules to compile
     /// whether or not a unit requires them.
     ///
-    /// **The engine decides the pipeline's roots**: `also_roots`, and whatever
+    /// **The engine decides the module compiler's roots**: `also_roots`, and whatever
     /// the sessions' units require, which starts as nothing. Any of them that
     /// does not compile is left out, and [`Self::module_errors`] says so; the
     /// engine starts regardless.
@@ -561,13 +561,13 @@ impl Engine {
             None => workspace.with_work_dir(datalove_paths::work_dir()?),
         };
 
-        let (mut pipeline, natives) = workspace.to_pipeline_with_natives(&db, &sys.natives);
+        let (mut module_compiler, natives) = workspace.to_compiler_with_natives(&db, &sys.natives);
         // Settled here rather than by the first session, because a rider
         // interface that does not compile is the one error that stops the
         // engine starting, and this is where it is reported.
-        let errors = settle_roots(&db, &mut pipeline, &[], &also_roots)?;
+        let errors = settle_roots(&db, &mut module_compiler, &[], &also_roots)?;
 
-        let modules = Modules { pipeline, also_roots, errors, changes: 0 };
+        let modules = Modules { module_compiler, also_roots, errors, changes: 0 };
         let shared = Shared { db, workspace, natives, debug_output, modules: RefCell::new(modules) };
         let first = SessionId(0);
         let sessions = BTreeMap::from([(first, shared.start_session(&[])?)]);
@@ -594,10 +594,10 @@ impl Engine {
         &self.shared.workspace
     }
 
-    /// The pipeline the modules are compiled by, for finding which file a
+    /// The module compiler the modules are compiled by, for finding which file a
     /// diagnostic points into.
-    pub fn pipeline(&self) -> Ref<'_, ModuleCompilationPipeline> {
-        Ref::map(self.shared.modules.borrow(), |modules| &modules.pipeline)
+    pub fn module_compiler(&self) -> Ref<'_, ModuleCompiler> {
+        Ref::map(self.shared.modules.borrow(), |modules| &modules.module_compiler)
     }
 
     /// The session the engine started with, which the methods on `Engine`
@@ -702,12 +702,12 @@ impl Engine {
     ) -> BTreeMap<SessionId, Vec<UnitStep>> {
         // The write.
         let Shared { db, modules, .. } = &mut self.shared;
-        let pipeline = &mut modules.get_mut().pipeline;
+        let module_compiler = &mut modules.get_mut().module_compiler;
         assert!(
-            pipeline.contains_module(library, package, module),
+            module_compiler.contains_module(library, package, module),
             "no module {library}/{package}/{module} in this engine",
         );
-        pipeline.update_source(db, library, package, module, source);
+        module_compiler.update_source(db, library, package, module, source);
         self.shared.set_workspace_module(library, package, module, source);
         let path = format!("{library}/{package}/{module}");
 
@@ -788,9 +788,9 @@ impl Engine {
         // The write.
         let path = format!("{library}/{package}/{name}");
         let Shared { db, modules, .. } = &mut self.shared;
-        let pipeline = &mut modules.get_mut().pipeline;
-        assert!(pipeline.data_source(&path).is_some(), "no data {path} in this engine");
-        pipeline.update_data(db, library, package, name, text);
+        let module_compiler = &mut modules.get_mut().module_compiler;
+        assert!(module_compiler.data_source(&path).is_some(), "no data {path} in this engine");
+        module_compiler.update_data(db, library, package, name, text);
         self.shared.set_workspace_data(library, package, name, text);
 
         // The compile.
@@ -902,7 +902,7 @@ impl Engine {
         self.first_state().session.unit_ids().len()
     }
 
-    pub fn unit_accesses(&self, id: u32) -> datafun::pipeline::UnitAccesses {
+    pub fn unit_accesses(&self, id: u32) -> datafun::driver::UnitAccesses {
         self.first_state().session.unit_accesses(id)
     }
 
@@ -1194,7 +1194,7 @@ impl SessionMut<'_> {
     }
 
     /// What unit `id` provides and does to earlier units' bindings.
-    pub fn unit_accesses(&self, id: u32) -> datafun::pipeline::UnitAccesses {
+    pub fn unit_accesses(&self, id: u32) -> datafun::driver::UnitAccesses {
         self.state.session.unit_accesses(id)
     }
 
@@ -1251,7 +1251,7 @@ impl Compiling<'_> {
             return eval;
         };
         let modules = self.shared.modules.borrow();
-        let reasons: Vec<String> = modules.pipeline.required_modules(&self.shared.db, unit).into_iter()
+        let reasons: Vec<String> = modules.module_compiler.required_modules(&self.shared.db, unit).into_iter()
             .filter_map(|path| modules.errors.broken.get(&path).map(|errors| {
                 fmt!("module `{path}` does not compile: {}", errors.join("; "))
             }))

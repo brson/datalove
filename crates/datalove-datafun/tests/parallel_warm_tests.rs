@@ -12,7 +12,7 @@
 use rmx::prelude::*;
 
 use datalove_ct::query_events::QueryRecorder;
-use datalove_datafun::pipeline::ModuleCompilationPipeline;
+use datalove_datafun::driver::ModuleCompiler;
 use datalove_datafun_common::ParallelMode;
 use datalove_datafun_compiler::Database;
 
@@ -56,11 +56,11 @@ const WARMED: &[&str] = &[
 fn every_per_module_query_runs_ahead_of_its_step() {
     let recorder = QueryRecorder::new();
     let db = Database::recording(&recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
     for index in 0..MODULES {
-        pipeline.add_module(&db, "local", "test", &fmt!("m{index}"), &module_source(index));
+        module_compiler.add_module(&db, "local", "test", &fmt!("m{index}"), &module_source(index));
     }
-    let compiled = pipeline.compile_with_mode(&db, ParallelMode::Parallel);
+    let compiled = module_compiler.compile_with_mode(&db, ParallelMode::Parallel);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

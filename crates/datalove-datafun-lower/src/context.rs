@@ -675,7 +675,7 @@ impl<'db> LowerCtx<'db> {
 
     /// Pre-populate const bindings from Phase 2 resolved values.
     ///
-    /// When using the 3-phase CTFE pipeline, call this before lowering
+    /// When using the three CTFE phases, call this before lowering
     /// to provide pre-evaluated const values. Lowering will then skip
     /// inline evaluation for these consts.
     ///

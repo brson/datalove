@@ -95,7 +95,7 @@ the typecheck queries in `crates/datalove-datafun-tycheck/src/api.rs`,
 `UnitLowerRecord` in
 `crates/datalove-datafun-compiler/src/tracked_script_lower.rs`, and the
 compiler that drives them in
-`crates/datalove-datafun/src/pipeline/script_compiler.rs`.
+`crates/datalove-datafun/src/driver/script_compiler.rs`.
 
 Five things carry the design, and each is worth understanding on its own.
 

@@ -61,7 +61,7 @@ use datalove_datafun_c_aot::CAotCompiler;
 use datalove_datafun_interp::{Engine, FunctionRegistry};
 use datalove_datafun_ir::{expand_ir_strings, IrCodeUnit};
 use datalove_datafun_pkg::package_load_worldfile::{self, ParsedWorldfile, WorldfileSection};
-use datafun::pipeline::{CompilerOptions, LoweringResult, OwnershipResult, ScriptExecutor, TypecheckResult};
+use datafun::driver::{CompilerOptions, LoweringResult, OwnershipResult, ScriptExecutor, TypecheckResult};
 use datafun::worldfile_analysis::{Analysis, AnalysisOptions, ExecutorHooks};
 
 /// Functions the chaos dispatcher JIT-compiled, over the whole corpus.
@@ -344,9 +344,9 @@ fn run_aot(
     build_and_run: fn(&IrCodeUnit, &FunctionRegistry, &Path) -> Result<String, String>,
 ) -> Result<String, String> {
     let db = datafun::Database::default();
-    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(
+    let mut module_compiler = datafun::driver::ModuleCompiler::from_sections(
         &db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     let mut compiler = compiled.script_compiler_default(&db)
         .ok_or("the modules did not compile")?;
     let source = parsed.sections.iter()
@@ -377,7 +377,7 @@ fn cranelift_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: 
         .map_err(|e| format!("compile failed: {e}"))?;
     let object = product.emit().map_err(|e| format!("emit failed: {e}"))?;
     let exe = dir.join("test");
-    datafun::pipeline::aot::link_object_to_path(&object, &exe).map_err(|e| format!("link failed: {e}"))?;
+    datafun::driver::aot::link_object_to_path(&object, &exe).map_err(|e| format!("link failed: {e}"))?;
     run_exe(&exe)
 }
 
@@ -385,7 +385,7 @@ fn c_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -
     let output = CAotCompiler::new().compile_world(unit, registry).map_err(|e| format!("compile failed: {e}"))?;
     let mut cmd = Command::new("cc");
     cmd.args(["-std=c11", "-O0", "-g"]);
-    if datafun::pipeline::aot::use_lld() {
+    if datafun::driver::aot::use_lld() {
         cmd.arg("-fuse-ld=lld");
     }
     for (filename, content) in &output.files {
@@ -393,7 +393,7 @@ fn c_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -
         std::fs::write(&path, content).map_err(|e| e.to_string())?;
         cmd.arg(path);
     }
-    cmd.arg(datafun::pipeline::aot::runtime_only_component().map_err(|e| e.to_string())?);
+    cmd.arg(datafun::driver::aot::runtime_only_component().map_err(|e| e.to_string())?);
     let exe = dir.join("test");
     cmd.args(["-ldl", "-lpthread", "-lm", "-o"]).arg(&exe);
     let cc = cmd.output().map_err(|e| format!("failed to run cc: {e}"))?;

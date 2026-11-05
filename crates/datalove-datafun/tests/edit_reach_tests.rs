@@ -22,7 +22,7 @@ use rmx::prelude::*;
 
 use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
 use datalove_datafun as datafun;
-use datalove_datafun::pipeline::{CompilerOptions, ModuleCompilationPipeline};
+use datalove_datafun::driver::{CompilerOptions, ModuleCompiler};
 use datalove_datafun_pkg::package_load_worldfile;
 
 /// The per-module phases, and how many modules ran each.
@@ -142,23 +142,23 @@ impl World {
 }
 
 /// Compile the fixture, apply `edit`, and report how far the edit reached.
-fn reach_of(edit: impl FnOnce(&mut datafun::Database, &mut ModuleCompilationPipeline)) -> Reach {
+fn reach_of(edit: impl FnOnce(&mut datafun::Database, &mut ModuleCompiler)) -> Reach {
     let recorder = QueryRecorder::new();
     let mut db = datafun::Database::recording(&recorder);
 
     let world = World::default();
     let parsed = package_load_worldfile::parse_worldfile_sections(world.worldfile().as_bytes()).X();
-    let mut pipeline =
-        ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    let mut module_compiler =
+        ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
-    edit(&mut db, &mut pipeline);
+    edit(&mut db, &mut module_compiler);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "after the edit: {:?}", compiled.all_errors());
     drop(compiled);
 
@@ -168,7 +168,7 @@ fn reach_of(edit: impl FnOnce(&mut datafun::Database, &mut ModuleCompilationPipe
 /// Replace one module's text with what `world` says it should be.
 fn put(
     db: &mut datafun::Database,
-    pipeline: &mut ModuleCompilationPipeline,
+    module_compiler: &mut ModuleCompiler,
     module: &str,
     world: &World,
 ) {
@@ -182,7 +182,7 @@ fn put(
             _ => None,
         })
         .expect("the fixture has that module");
-    pipeline.update_source(db, "local", "test", module, &text);
+    module_compiler.update_source(db, "local", "test", module, &text);
 }
 
 // ============================================================================
@@ -195,10 +195,10 @@ fn a_first_compile_runs_every_phase_for_every_module() {
     let db = datafun::Database::recording(&recorder);
     let parsed =
         package_load_worldfile::parse_worldfile_sections(World::default().worldfile().as_bytes()).X();
-    let mut pipeline =
-        ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    let mut module_compiler =
+        ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -223,8 +223,8 @@ fn a_first_compile_runs_every_phase_for_every_module() {
 /// typechecked.
 #[test]
 fn a_body_edit_reaches_only_its_own_module() {
-    let reach = reach_of(|db, pipeline| {
-        put(db, pipeline, "base", &World { base_salt: 99, ..World::default() });
+    let reach = reach_of(|db, module_compiler| {
+        put(db, module_compiler, "base", &World { base_salt: 99, ..World::default() });
     });
     assert_eq!(
         reach,
@@ -236,8 +236,8 @@ fn a_body_edit_reaches_only_its_own_module() {
 /// A signature edit in an island reaches only the island.
 #[test]
 fn a_signature_edit_in_an_island_reaches_only_the_island() {
-    let reach = reach_of(|db, pipeline| {
-        put(db, pipeline, "zz_island0", &World { island_takes: "z: i32, extra: i32", ..World::default() });
+    let reach = reach_of(|db, module_compiler| {
+        put(db, module_compiler, "zz_island0", &World { island_takes: "z: i32, extra: i32", ..World::default() });
     });
     assert_eq!(
         reach,
@@ -259,8 +259,8 @@ fn a_signature_edit_in_an_island_reaches_only_the_island() {
 /// it returns is equal and `mid` is not typechecked again.
 #[test]
 fn changing_an_unimported_export_stops_at_the_importer_s_imports() {
-    let reach = reach_of(|db, pipeline| {
-        put(db, pipeline, "base", &World { private_takes: "y: i32, extra: i32", ..World::default() });
+    let reach = reach_of(|db, module_compiler| {
+        put(db, module_compiler, "base", &World { private_takes: "y: i32, extra: i32", ..World::default() });
     });
     assert_eq!(
         reach,
@@ -279,8 +279,8 @@ fn changing_an_unimported_export_stops_at_the_importer_s_imports() {
 /// `mid_shared`, whose signature did not move, so the edit stops at `mid`.
 #[test]
 fn changing_an_imported_export_reaches_the_importer_and_no_further() {
-    let reach = reach_of(|db, pipeline| {
-        put(db, pipeline, "base", &World { shared_takes: "x: u32", ..World::default() });
+    let reach = reach_of(|db, module_compiler| {
+        put(db, module_compiler, "base", &World { shared_takes: "x: u32", ..World::default() });
     });
     assert_eq!(
         reach,
@@ -307,8 +307,8 @@ fn changing_an_imported_export_reaches_the_importer_and_no_further() {
 /// do have to lower again.
 #[test]
 fn adding_a_module_leaves_the_others_alone() {
-    let reach = reach_of(|db, pipeline| {
-        pipeline.add_module(
+    let reach = reach_of(|db, module_compiler| {
+        module_compiler.add_module(
             db, "local", "test", "zzz_added",
             "fun added_fn(q: i32): i32\n\x20   ret q\nend fun\n",
         );
@@ -322,8 +322,8 @@ fn adding_a_module_leaves_the_others_alone() {
 /// Removing an island leaves every remaining module alone.
 #[test]
 fn removing_an_island_leaves_the_others_alone() {
-    let reach = reach_of(|_db, pipeline| {
-        pipeline.remove_module("local", "test", "zz_island1");
+    let reach = reach_of(|_db, module_compiler| {
+        module_compiler.remove_module("local", "test", "zz_island1");
     });
     assert_eq!(
         (reach.typechecks, reach.analyses, reach.lowerings, reach.assemblies), (0, 0, 0, 0),
@@ -335,7 +335,7 @@ fn removing_an_island_leaves_the_others_alone() {
 /// An unchanged recompile of this world runs nothing.
 #[test]
 fn an_unchanged_recompile_reaches_nothing() {
-    let reach = reach_of(|_db, _pipeline| {});
+    let reach = reach_of(|_db, _module_compiler| {});
     assert_eq!(
         reach,
         Reach { imports: 0, typechecks: 0, analyses: 0, lowerings: 0, assemblies: 0 },

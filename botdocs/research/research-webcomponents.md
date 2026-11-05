@@ -82,7 +82,7 @@ This is relevant for datafun if we want to support async I/O in the future.
 
 ## 2. Datafun Compiler Architecture
 
-See [compiler-guide.md](../compiler-guide.md): the module pipeline, the IR
+See [compiler-guide.md](../compiler-guide.md): module compilation, the IR
 (SSA values plus mutable slots, block parameters rather than phis), and the
 execution backends. A Wasm backend would sit beside the Cranelift AOT and C
 backends, consume the same IR, and call the runtime through the same

@@ -1,4 +1,4 @@
-//! The passes that finish a function, in the order every pipeline runs them;
+//! The passes that finish a function, in the order every compiler runs them;
 //! see `botdocs/plan-ir-passes.md`.
 //!
 //! Const inlining and specialization come first and are not here: the one

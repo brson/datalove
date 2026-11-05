@@ -121,7 +121,7 @@ so it read as a `let`. Nothing noticed while bodies could name either.
 **Both halves are fixed now.** `lower_script_functions` is handed the script's
 consts and seeds them into the lowering context, the way
 `lower_function_for_module` does with a module's, and the script compiler grew
-the two strata the module pipeline already had -- lower, evaluate, lower again
+the two strata the module compiler already had -- lower, evaluate, lower again
 only if a body deferred. `accumulated_script_consts` carries them across units.
 A const naming a const across units needed the same seeding in
 `evaluate_script_consts`, whose map started empty. `script_const_tests` has
@@ -200,7 +200,7 @@ every REPL unit would want exclusive access to the database -- and
 `ScriptCompiler` cannot be handed it. It holds `&'db dyn Database` and, behind
 that lifetime, `ModuleSpec`s and a whole `SharedModuleContext` derived from
 `CompiledModules<'db>`, and salsa's lifetimes exist precisely to stop that data
-outliving a database change. `ModuleCompilationPipeline` gets away with `&mut D`
+outliving a database change. `ModuleCompiler` gets away with `&mut D`
 because it holds nothing but `Source`s and rebuilds its `'db` data per compile;
 making the script compiler do the same means re-deriving the module compilation
 on every unit and restructuring 58 call sites across 22 files. That is stage C
@@ -268,7 +268,7 @@ through a query has no such problem.
 appending or editing a unit needs `&mut db`, where `ScriptCompiler` holds
 `&'db dyn salsa::Database` today. That ripples to `Session` and `Engine`. It is
 the same shape as `IncrementalModuleWorld::update_source` needing `&mut db`,
-and `ModuleCompilationPipeline::compile` already takes `&mut D` for exactly this
+and `ModuleCompiler::compile` already takes `&mut D` for exactly this
 reason, so there is precedent to follow rather than a new idea to invent.
 
 Two things fall out for free. `Source`-per-`compile_fragment` stops being minted,

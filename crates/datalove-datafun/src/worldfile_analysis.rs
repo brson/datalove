@@ -21,8 +21,8 @@ use serde::{Serialize, Deserialize};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
-use crate::pipeline::{
-    ModuleCompilationPipeline, CompilerOptions, TypecheckResult, OwnershipResult, LoweringResult,
+use crate::driver::{
+    ModuleCompiler, CompilerOptions, TypecheckResult, OwnershipResult, LoweringResult,
     format_ownership_result, format_lowering_result,
 };
 
@@ -132,7 +132,7 @@ pub fn analyze_worldfile_with_hooks(
     let mut results = Vec::new();
 
     // This function exists to produce fixture output, which includes the IR.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(
+    let mut module_compiler = ModuleCompiler::from_sections(
         db,
         &parsed.sections,
         CompilerOptions {
@@ -145,7 +145,7 @@ pub fn analyze_worldfile_with_hooks(
     );
 
     // Compile modules (typecheck, drop analysis, lower).
-    let compiled = pipeline.compile(db);
+    let compiled = module_compiler.compile(db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
@@ -207,7 +207,7 @@ pub fn analyze_worldfile_with_hooks(
 // Internal Helpers
 // ============================================================================
 
-use crate::pipeline::{CompiledModules, ScriptCompiler, ScriptExecutor};
+use crate::driver::{CompiledModules, ScriptCompiler, ScriptExecutor};
 
 /// Collect analysis results for module sections.
 fn collect_module_results(

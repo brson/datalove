@@ -170,7 +170,7 @@ walks a worklist calling `module_import_demands`, which reaches
 did that on the main thread, so by the time phase 1's parallel path warmed
 the parse memos they were all hits, and the largest front-end phase ran
 sequentially. The `parallel` bench did not see this, because it calls the
-phase-1 function directly. In a parallel compile the pipeline now calls
+phase-1 function directly. In a parallel compile the module compiler now calls
 `extract_dependencies_with_mode`
 (`crates/datalove-datafun/src/incremental.rs`), which runs the same walk
 outside any query, one frontier at a time, with each frontier's parses on

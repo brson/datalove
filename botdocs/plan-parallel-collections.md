@@ -123,7 +123,7 @@ itself goes in the bench, since every source pays it.
 
 ### The policy
 
-`ChunkPolicy` is a salsa input, one per database, that the pipeline sets:
+`ChunkPolicy` is a salsa input, one per database, that the module compiler sets:
 
 - per collection kind, `min_bytes`, `min_elements` and `target_chunk_bytes`,
   with defaults from [the cutoff bench](#user-content-the-cutoff-bench);
@@ -310,7 +310,7 @@ designed above:
 
 - **A collection is cut in every mode**, not only under `DATALOVE_PARALLEL`:
   the policy cannot see the mode, which is per compile while the policy is per
-  database, and an input set per compile would need `&mut` where the pipeline
+  database, and an input set per compile would need `&mut` where the module compiler
   has `&`. What depends on the mode is only the warm-up. So the thresholds
   are where the chunks cost a sequential parse nothing, which the bench shows
   they do from 32KB, and one parse in every mode is an equivalence for free.

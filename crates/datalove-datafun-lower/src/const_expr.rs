@@ -71,7 +71,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         }
     }
 
-    // Use the real lowering pipeline.
+    // Use the real lowering.
     let result_value = super::expr::lower_expression(&mut ctx, expr)?;
 
     // Finish the block with a UnitEnd terminator.

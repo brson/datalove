@@ -26,7 +26,7 @@ use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_cranelift_jit::{DispatcherConfig, OptimizingDispatcher};
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::FunctionRegistry;
-use datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
+use datafun::driver::{ModuleCompiler, CompilerOptions};
 
 /// Number of worldfiles to generate and test per run.
 const ITERATION_COUNT: u64 = 20;
@@ -59,8 +59,8 @@ fn run_with_chaos_interp(
     parsed: &package_load_worldfile::ParsedWorldfile,
     seed: u64,
 ) -> RunResult {
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile(db);
+    let mut module_compiler = ModuleCompiler::from_sections(db, &parsed.sections, CompilerOptions::default());
+    let compiled = module_compiler.compile(db);
 
     if let Some(err) = &compiled.resolution_error {
         return RunResult {
@@ -147,7 +147,7 @@ fn run_with_chaos_interp(
 
             debuglog.push_str(&executor.get_debug_buffer());
 
-            if matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Error { .. }) {
+            if matches!(compiled_unit.typecheck, datafun::driver::TypecheckResult::Error { .. }) {
                 return RunResult {
                     compiled: false,
                     debuglog,
@@ -155,7 +155,7 @@ fn run_with_chaos_interp(
                     error: Some(format!("Script typecheck error: {:?}", compiled_unit.typecheck)),
                 };
             }
-            if matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Error { .. }) {
+            if matches!(compiled_unit.lowering, datafun::driver::LoweringResult::Error { .. }) {
                 return RunResult {
                     compiled: false,
                     debuglog,
@@ -181,8 +181,8 @@ fn run_with_aot(
     db: &datafun::Database,
     parsed: &package_load_worldfile::ParsedWorldfile,
 ) -> RunResult {
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile(db);
+    let mut module_compiler = ModuleCompiler::from_sections(db, &parsed.sections, CompilerOptions::default());
+    let compiled = module_compiler.compile(db);
 
     if let Some(err) = &compiled.resolution_error {
         return RunResult {
@@ -247,7 +247,7 @@ fn run_with_aot(
     };
     let compiled_unit = compiler.compile_fragment(fragment_source);
 
-    if !matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Success) {
+    if !matches!(compiled_unit.typecheck, datafun::driver::TypecheckResult::Success) {
         return RunResult {
             compiled: false,
             debuglog: String::new(),
@@ -256,7 +256,7 @@ fn run_with_aot(
         };
     }
 
-    if !matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
+    if !matches!(compiled_unit.lowering, datafun::driver::LoweringResult::Success { .. }) {
         return RunResult {
             compiled: false,
             debuglog: String::new(),
@@ -326,7 +326,7 @@ fn aot_compile_link_run(
         }
     };
 
-    // Link using shared pipeline function (uses lld if available).
+    // Link using shared driver function (uses lld if available).
     let dir = match rmx::tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
@@ -340,7 +340,7 @@ fn aot_compile_link_run(
     };
 
     let exe_path = dir.path().join("test");
-    if let Err(e) = datafun::pipeline::aot::link_object_to_path(&obj_bytes, &exe_path) {
+    if let Err(e) = datafun::driver::aot::link_object_to_path(&obj_bytes, &exe_path) {
         return RunResult {
             compiled: true,
             debuglog: String::new(),

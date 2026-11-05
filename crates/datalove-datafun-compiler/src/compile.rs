@@ -1,6 +1,6 @@
 //! Module compilation from pre-resolved module graphs.
 //!
-//! This module provides the core compilation pipeline that accepts pre-resolved
+//! This module provides the core compilation that accepts pre-resolved
 //! module graphs (output of package resolution) and produces compilation artifacts.
 //! It does not depend on package resolution or the interpreter.
 
@@ -77,7 +77,7 @@ impl<'db> ModuleCompilationOutput<'db> {
 /// Does NOT run IR lowering. Callers who need IR should call
 /// `lower_module_graph_with_evaluator` after checking that `is_successful()` returns true.
 ///
-/// Pipeline phases:
+/// Phases:
 /// 1. Parse - lexing/parsing to AST
 /// 2. Name Resolution - collect type aliases and function signatures (memoized per-module)
 /// 3. Typecheck - type inference and checking
@@ -128,7 +128,7 @@ pub fn compile_modules<'db>(
 // phase 5 after (`lower_module_graph_with_evaluator`) are where the compile is
 // parallel; the phases themselves know nothing of it.
 
-/// Phase 1: parse. In the pipeline the dependency walk has parsed every
+/// Phase 1: parse. In the module compiler the dependency walk has parsed every
 /// module already; a graph built without it, as the benches and tests build
 /// theirs, is parsed here, ahead of the phases that read each module's AST.
 /// Rider sources are passed through as raw strings; `RiderInterface` creation

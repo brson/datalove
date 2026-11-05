@@ -27,7 +27,7 @@ use std::sync::Arc;
 use datalove_datafun as datafun;
 use datalove_datafun_interp::{Engine, ModuleFunctionRegistry};
 use datalove_datafun_ir::{CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
-use datafun::pipeline::{LoweringResult, ScriptExecutor, TypecheckResult, WorkspaceDescriptor};
+use datafun::driver::{LoweringResult, ScriptExecutor, TypecheckResult, WorkspaceDescriptor};
 
 /// What one fixture compiled to.
 #[derive(Serialize, Deserialize)]
@@ -72,7 +72,7 @@ fn prepare(names: &[String]) {
         WorkspaceDescriptor::load_sys_dir(repo_root().join("sys"))
     ).expect("the standard library's sources must load")
         .with_work_dir(work_dir);
-    let mut world = datafun::pipeline::CompiledWorld::new(&descriptor);
+    let mut world = datafun::driver::CompiledWorld::new(&descriptor);
     let out = out_dir();
     std::fs::create_dir_all(&out).X();
 
@@ -138,7 +138,7 @@ fn reachable(registry: &ModuleFunctionRegistry, roots: &[&IrCodeUnit]) -> Module
     pruned
 }
 
-fn compiled_unit(result: datafun::pipeline::ScriptCompilationResult) -> Option<IrCodeUnit> {
+fn compiled_unit(result: datafun::driver::ScriptCompilationResult) -> Option<IrCodeUnit> {
     if matches!(result.typecheck, TypecheckResult::Error { .. })
         || matches!(result.lowering, LoweringResult::Error { .. }) {
         return None;

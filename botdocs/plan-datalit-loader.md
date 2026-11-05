@@ -111,7 +111,7 @@ A reader for datalit text, in `datalove-rt` or a crate depending only on it and
 
 The obvious way to use the loader in the compiler -- load, then convert the
 runtime value to a `ConstValue` with `extract_const_value`, and let the rest of
-the pipeline carry on -- gives most of the gain back. A data file would go
+the compiler carry on -- gives most of the gain back. A data file would go
 bytes, runtime value (fast), `ConstValue` tree (a deep copy, allocation-heavy,
 larger than the data), runtime value again (`write_const`, or emitted
 construction code): two extra full passes, and the tree is part of what costs

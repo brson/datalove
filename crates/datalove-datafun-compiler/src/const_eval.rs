@@ -2,10 +2,10 @@
 //!
 //! Consts are evaluated in three places -- a module's or a script's top level,
 //! a function body, and a comptime function's body once an instantiation has
-//! given its const parameters values -- by the module pipeline and by the
+//! given its const parameters values -- by the module compiler and by the
 //! script compiler alike. Each binding is lowered to a small unit, or read
 //! straight off when it is a literal or names a const already evaluated, and
-//! the unit is run by the CTFE evaluator. Both pipelines do it through here.
+//! the unit is run by the CTFE evaluator. Both compilers do it through here.
 
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;

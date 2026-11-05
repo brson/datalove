@@ -22,7 +22,7 @@
 use divan::Bencher;
 
 use datalove_datafun as datafun;
-use datafun::pipeline::{WorkspaceDescriptor, rider_load};
+use datafun::driver::{WorkspaceDescriptor, rider_load};
 use datalove_datafun_cranelift_jit::{DispatcherConfig, DispatcherMode, OptimizingDispatcher};
 use datalove_datafun_interp::CallDispatcher;
 use datalove_datafun_ir::IrCodeUnit;
@@ -63,21 +63,21 @@ impl Config {
 
 /// Everything a timed run needs, built outside the timer.
 struct Prepared {
-    executor: datafun::pipeline::ScriptExecutor,
+    executor: datafun::driver::ScriptExecutor,
     unit: IrCodeUnit,
 }
 
 /// The database and compiled system library, built once per benchmark thread.
 ///
 /// Leaked rather than owned because a `CompiledModules` borrows both the
-/// database and the pipeline it came from, and every iteration wants one. Built
+/// database and the module compiler it came from, and every iteration wants one. Built
 /// once because compiling `sys/std` per iteration was both the slowest part of
 /// the setup and enough leaked salsa state to exhaust memory. Thread-local
 /// because a salsa `Database` is not `Sync`.
 type World = (
     &'static datafun::Database,
-    &'static datafun::pipeline::CompiledModules<'static>,
-    &'static datafun::pipeline::SystemLibrary,
+    &'static datafun::driver::CompiledModules<'static>,
+    &'static datafun::driver::SystemLibrary,
 );
 
 thread_local! {
@@ -89,12 +89,12 @@ fn with_world<R>(f: impl FnOnce(World) -> R) -> R {
         let world = *cell.get_or_init(|| {
             let db: &'static datafun::Database =
                 Box::leak(Box::new(datafun::Database::default()));
-            let sys: &'static datafun::pipeline::SystemLibrary =
+            let sys: &'static datafun::driver::SystemLibrary =
                 Box::leak(Box::new(datalove_sys_packages::system_library()));
             let descriptor = WorkspaceDescriptor::from_system_library(sys);
-            let pipeline: &'static mut datafun::pipeline::ModuleCompilationPipeline =
-                Box::leak(Box::new(descriptor.to_pipeline(db)));
-            let compiled = pipeline.compile(db);
+            let module_compiler: &'static mut datafun::driver::ModuleCompiler =
+                Box::leak(Box::new(descriptor.to_compiler(db)));
+            let compiled = module_compiler.compile(db);
             assert!(!compiled.has_errors(), "the system library must compile");
             (db, &*Box::leak(Box::new(compiled)), sys)
         });

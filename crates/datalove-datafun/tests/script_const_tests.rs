@@ -4,8 +4,8 @@
 //! and in the units that follow, the way a *module*-level const is in scope for
 //! a module function body. The typechecker has always said so -- a const is the
 //! one enclosing binding a function body may name -- and lowering now builds
-//! it: the script pipeline lowers functions in two strata, as the module
-//! pipeline does, so a body naming a const declared beside it is lowered once
+//! it: the script compiler lowers functions in two strata, as the module
+//! compiler does, so a body naming a const declared beside it is lowered once
 //! the const has a value.
 //!
 //! It did not, for a while. A body naming a script const failed lowering with
@@ -23,16 +23,16 @@
 use rmx::prelude::*;
 
 use datalove_datafun as datafun;
-use datalove_datafun::pipeline::{
-    CompilerOptions, LoweringResult, ModuleCompilationPipeline, ScriptCompilationResult,
+use datalove_datafun::driver::{
+    CompilerOptions, LoweringResult, ModuleCompiler, ScriptCompilationResult,
     TypecheckResult,
 };
 
 /// Compile `units` in order, returning every unit's result.
 fn compile(units: &[&str]) -> Vec<ScriptCompilationResult> {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::new(CompilerOptions::default());
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
     units.iter().map(|unit| compiler.compile_fragment(unit)).collect()
@@ -44,8 +44,8 @@ fn compile(units: &[&str]) -> Vec<ScriptCompilationResult> {
 /// the value is right rather than only that lowering got through.
 fn compile_and_eval(units: &[&str], expr: &str) -> (Vec<ScriptCompilationResult>, String) {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::new(CompilerOptions::default());
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
     let mut executor = compiled
@@ -190,11 +190,11 @@ fn and_so_the_function_is_callable() {
 #[test]
 fn a_module_const_read_by_a_module_function_works() {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    pipeline.add_module(&db, "local", "test", "m",
+    let mut module_compiler = ModuleCompiler::new(CompilerOptions::default());
+    module_compiler.add_module(&db, "local", "test", "m",
         "const K: u32 = 5\n\nfun f(): u32\n    ret K\nend fun\n");
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(
         compiled.is_successful(),
         "a module const in a module function body should compile: {:?}",

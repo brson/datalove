@@ -1,7 +1,7 @@
 //! High-durability inputs are not revalidated by a low-durability edit.
 //!
 //! The system library is read once and does not change while a session runs,
-//! so `ModuleCompilationPipeline::add_module` creates its sources at
+//! so `ModuleCompiler::add_module` creates its sources at
 //! `Durability::HIGH`. Salsa tracks the last revision at which each durability
 //! level changed, which lets it mark a memo verified without walking its
 //! dependencies when everything under it is more durable than anything touched
@@ -11,7 +11,7 @@
 //! here is that salsa's mechanism does what the compiler is relying on. That
 //! the compiler reaches for it is not pinned by anything, and cannot easily be:
 //! `mark_as_verified` fires `DidValidateMemoizedValue` on the shallow path as
-//! well as the deep one, so no event distinguishes the two, and the pipeline
+//! well as the deep one, so no event distinguishes the two, and the module compiler
 //! demands every module's queries on every compile anyway -- durability saves
 //! the depth of each walk, not the number of them. It shows up as time and
 //! nothing else. It was worth 17% of a realistic edit when it was turned on;

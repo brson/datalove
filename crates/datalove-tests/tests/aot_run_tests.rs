@@ -1,6 +1,6 @@
 //! Integration tests that compile, link, and run AOT code.
 
-use datalove_datafun::pipeline::aot as pipeline_aot;
+use datalove_datafun::driver::aot as driver_aot;
 use datalove_datafun_ir::{
     BlockId, ConstValue, IrBlock, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
     IrType, Instruction, Operand, Terminator, ValueId, SymbolTable,
@@ -61,8 +61,8 @@ fn create_debuglog_i32_script(value: i32) -> IrCodeUnit {
 fn test_link_and_run_debuglog_i32() {
     let unit = create_debuglog_i32_script(42);
 
-    // Use pipeline::aot to compile, link, and run.
-    let output = pipeline_aot::compile_link_run(&unit)
+    // Use driver::aot to compile, link, and run.
+    let output = driver_aot::compile_link_run(&unit)
         .expect("compile_link_run failed");
 
     // Check output.
@@ -94,8 +94,8 @@ fn test_link_and_run_debuglog_bool_true() {
         None,
     );
 
-    // Use pipeline::aot to compile, link, and run.
-    let output = pipeline_aot::compile_link_run(&unit)
+    // Use driver::aot to compile, link, and run.
+    let output = driver_aot::compile_link_run(&unit)
         .expect("compile_link_run failed");
 
     assert!(
@@ -140,8 +140,8 @@ fn test_link_and_run_multiple_debuglogs() {
         None,
     );
 
-    // Use pipeline::aot to compile, link, and run.
-    let output = pipeline_aot::compile_link_run(&unit)
+    // Use driver::aot to compile, link, and run.
+    let output = driver_aot::compile_link_run(&unit)
         .expect("compile_link_run failed");
 
     assert!(output.stderr.contains("1"), "Expected '1' in output: {:?}", output.stderr);

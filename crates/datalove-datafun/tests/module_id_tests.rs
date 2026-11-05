@@ -49,7 +49,7 @@ fn require_and_import(module: &Module<'_>) -> String {
 /// What a session has to do whenever its module set changes, so a unit can
 /// call into a module the executor's registry did not have.
 fn recompile(session: &mut Session) {
-    let compiled = session.pipeline.compile(&session.db);
+    let compiled = session.module_compiler.compile(&session.db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     session.executor.set_module_registry(compiled.shared.module_registry.clone());
 }
@@ -75,10 +75,10 @@ fn check(session: &mut Session, first: &Module<'_>, second: &Module<'_>, bring_i
 /// what the REPL does when a unit requires a module nothing required before.
 fn widening_roots(first: &Module<'_>, second: &Module<'_>) {
     let mut session = Session::with_modules(&[A, B]);
-    session.pipeline.set_roots(Roots::From(BTreeSet::from([first.path()])));
+    session.module_compiler.set_roots(Roots::From(BTreeSet::from([first.path()])));
     recompile(&mut session);
     let both = BTreeSet::from([first.path(), second.path()]);
-    check(&mut session, first, second, |session| session.pipeline.set_roots(Roots::From(both)));
+    check(&mut session, first, second, |session| session.module_compiler.set_roots(Roots::From(both)));
 }
 
 /// A module added to the world the session started with.

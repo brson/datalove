@@ -49,7 +49,7 @@ home here.
   - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
   - [The allocator keeps every block it has ever handed out](#user-content-the-allocator-keeps-every-block-it-has-ever-handed-out)
 
-- [Compilation pipeline and incrementality](#user-content-compilation-pipeline-and-incrementality)
+- [Compilation and incrementality](#user-content-compilation-and-incrementality)
   - [Pruning stops at the module](#user-content-pruning-stops-at-the-module)
   - [Nothing consumes a WorkspaceDelta](#user-content-nothing-consumes-a-workspacedelta)
   - [No batch of scripts against one world](#user-content-no-batch-of-scripts-against-one-world)
@@ -587,7 +587,7 @@ JIT could not see a loop in a function called once, is fixed by OSR; see
   functions is an indirect call through the callee's code cell
   (`JitCompiler::code_cells`), read at the call site; only a call to a function
   not yet compiled reaches its stub and `__jit_dispatch_call`.
-- **The C backend runs `cc -std=c11 -O0 -g`** (`pipeline/c_aot.rs`, and the
+- **The C backend runs `cc -std=c11 -O0 -g`** (`driver/c_aot.rs`, and the
   same in `engine_tests.rs`). `-O2` measured 8.4x on `loop_arith`, the largest
   number in the jit report. The work is whatever undefined behaviour `-O2` exposes
   in the emitted C, which the four-backend differential suite would find.
@@ -637,7 +637,7 @@ reused, that is one system call per *live* block, not one per allocation.
 Above 128 KiB each allocation is mapped on its own, and the last four freed
 mappings (at most 32 MiB) are kept for reuse.
 
-## Compilation pipeline and incrementality
+## Compilation and incrementality
 
 What the driver and salsa layers recompute, keep or cannot yet do.
 
@@ -660,13 +660,13 @@ nothing finer:
 ### Nothing consumes a WorkspaceDelta
 
 **Checked.** `WorkspaceDescriptor::diff` produces a `WorkspaceDelta`, and
-`WorkspaceDelta::apply_to_pipeline` applies its module half -- added to
+`WorkspaceDelta::apply_to_compiler` applies its module half -- added to
 `add_module`, removed to `remove_module`, changed to `update_source`, which keeps
 salsa identity -- and refuses a delta changing riders or options, which need a new
-pipeline (and, for riders, a rebuilt native component). Both are called only from
+module compiler (and, for riders, a rebuilt native component). Both are called only from
 their unit tests. The REPL keeps its descriptor in step
 (`Engine::set_workspace_module`, which says nothing reads it) but edits the
-pipeline directly; no driver diffs two snapshots. So the delta path is built and
+module compiler directly; no caller diffs two snapshots. So the delta path is built and
 unexercised, and the first real consumer (a file watcher, an LSP) is what would
 test it.
 

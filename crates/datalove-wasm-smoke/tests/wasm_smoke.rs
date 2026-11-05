@@ -93,7 +93,7 @@ fn run_in_wasm(path: &PathBuf, mode: ParallelMode) -> String {
 
 #[test]
 #[ignore = "builds the compiler for wasm, which takes minutes; run by `just test-wasm`"]
-fn bytecode_pipeline_runs_in_wasm_on_one_thread() {
+fn bytecode_compile_runs_in_wasm_on_one_thread() {
     let path = build_module();
     for mode in [ParallelMode::Sequential, ParallelMode::Parallel] {
         let native = run(mode).expect("the script runs natively");

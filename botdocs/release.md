@@ -98,11 +98,11 @@ needs the replacement too. `scripts/local-registry.py` has the details.
 A dev-dependency cycle is unpublishable, since neither end can go first, and
 cargo accepts one silently: it builds and tests happily, and only publishing
 complains. Three turned up on the first release attempt, all into the
-pipeline from crates the pipeline is built on: `datalove-datafun-compiler`
+driver from crates the driver is built on: `datalove-datafun-compiler`
 and `datalove-datafun-cranelift-aot` each had tests using `datalove-datafun`,
 and `datalove-datafun-cranelift-jit` declared the same dev-dependency without
 using it.
 
-The rule that came out of it: a test that needs the whole pipeline to
+The rule that came out of it: a test that needs the whole driver to
 exercise one crate cannot live in that crate. It goes in `datalove-tests`,
 which exists for suites that span the workspace and is `publish = false`.

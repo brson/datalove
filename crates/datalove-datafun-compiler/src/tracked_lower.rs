@@ -214,7 +214,7 @@ fn reachable_func_ids<'db>(
 /// module after it. A script unit lowered before the move kept calling by the
 /// old number, and nothing re-lowers a unit whose own text did not change, so
 /// the call landed on another module's function, or on memory that was none.
-/// A pipeline keeps its table for its life and only adds to it, so a module's
+/// A module compiler keeps its table for its life and only adds to it, so a module's
 /// number stays its own while the module set grows and shrinks around it.
 ///
 /// **This is the one place that reads the numbering, and it is worth keeping
@@ -1504,7 +1504,7 @@ impl<'db> WaitingBatches<'db> {
 ///
 /// This is the entry point that supports full const expression evaluation.
 ///
-/// Pipeline phases:
+/// Phases:
 /// 1. Lower functions (5a)
 /// 2. Const evaluation (5b) - uses lowered functions for CTFE calls
 /// 3. Comptime specialization (5c) - transforms functions with const params

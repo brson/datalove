@@ -33,7 +33,7 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
-use datalove_datafun::pipeline::ModuleCompilationPipeline;
+use datalove_datafun::driver::ModuleCompiler;
 use datalove_datafun_compiler::Database;
 
 /// How many memos a query has, and what they cost between them.
@@ -52,14 +52,14 @@ fn module_source(index: usize, functions: usize, salt: usize) -> String {
 /// Compile a world of this shape and report every query's memo footprint.
 fn memo_sizes(modules: usize, functions_per_module: usize) -> MemoSizes {
     let mut db = Database::default();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
     for index in 0..modules {
-        pipeline.add_module(
+        module_compiler.add_module(
             &db, "local", "test", &format!("m{index}"),
             &module_source(index, functions_per_module, 0),
         );
     }
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -169,17 +169,17 @@ fn queries_for_one_edit(modules: usize) -> Vec<ExecutedQuery> {
     let recorder = QueryRecorder::new();
     let mut db = Database::recording(&recorder);
 
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
     for index in 0..modules {
-        pipeline.add_module(&db, "local", "test", &format!("m{index}"), &module_source(index, 3, 0));
+        module_compiler.add_module(&db, "local", "test", &format!("m{index}"), &module_source(index, 3, 0));
     }
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
-    pipeline.update_source(&mut db, "local", "test", "m0", &module_source(0, 3, 7));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "local", "test", "m0", &module_source(0, 3, 7));
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -229,12 +229,12 @@ fn a_first_build_does_grow_with_the_world() {
 
     let build = |modules: usize| {
         let db = Database::recording(&recorder);
-        let mut pipeline = ModuleCompilationPipeline::default();
+        let mut module_compiler = ModuleCompiler::default();
         for index in 0..modules {
-            pipeline.add_module(&db, "local", "test", &format!("m{index}"), &module_source(index, 3, 0));
+            module_compiler.add_module(&db, "local", "test", &format!("m{index}"), &module_source(index, 3, 0));
         }
         recorder.clear();
-        let compiled = pipeline.compile(&db);
+        let compiled = module_compiler.compile(&db);
         assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
         drop(compiled);
         recorder.take().len()

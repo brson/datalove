@@ -1372,9 +1372,9 @@ impl<'db> ScriptCompiler<'db> {
         }
     }
 
-    /// Compile unit `index` through the pipeline, against the units before it.
+    /// Compile unit `index` through the phases, against the units before it.
     ///
-    /// Pipeline phases:
+    /// Phases:
     /// 1. Analysis
     ///    a. Typecheck - type inference and checking
     ///    b. Ownership - borrow checking and drop scheduling
@@ -2059,7 +2059,7 @@ impl<'db> ScriptCompiler<'db> {
     /// them against a script that has no type parameters of its own.
     /// Evaluate one function's const bindings for one instantiation.
     ///
-    /// The mirror of what the module pipeline does for its own copies: seed the
+    /// The mirror of what the module compiler does for its own copies: seed the
     /// const parameters with what this instantiation passes, and every const in
     /// the body becomes evaluable by the same CTFE that evaluates every other
     /// const. Returns the values under their local names, which is how the

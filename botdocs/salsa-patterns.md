@@ -223,7 +223,7 @@ module anywhere shifted every rider's id, every module's `ReachableFuncIds` move
 with it, and the whole world re-lowered. `ir_module_ids` is the one place that
 decides now, the riders are numbered first so their ids depend on the rider
 sources alone, and `build_func_id_map` is deleted -- it was a subset of the map
-the pipeline already had.
+the module compiler already had.
 
 **A key you define needs a single definition as much as it needs to be stable.**
 Five derivations of one numbering is five chances to disagree, and the numbering
@@ -235,7 +235,7 @@ not only recompilation. A lowered script unit calls into a module by its
 module joining the graph ahead of another sent the unit's calls to whichever
 module now had the number: the wrong function's answer, or a read of memory
 that was no value. So the numbers are no longer derived from the graph at all.
-The pipeline keeps a `ModuleIdTable`, path to number, for its whole life,
+The module compiler keeps a `ModuleIdTable`, path to number, for its whole life,
 numbering riders first and then each new module as it first appears, and never
 reusing or taking back a number. `ir_module_ids` still decides, by reading
 that table. `crates/datalove-datafun/tests/module_id_tests.rs` holds the cases.
@@ -288,7 +288,7 @@ key and the entity re-runs for an edit it cannot see.
 |---|---|---|
 | `resolve_module_imports` | `AllModuleExports` | per-module export lookup |
 | the rider stubs | `ParsedModuleGraph` | `rider_interfaces`, keyed on `RiderSources` |
-| `IrModuleId`s | the module's graph position | `ir_module_ids`, reading the pipeline's `ModuleIdTable` |
+| `IrModuleId`s | the module's graph position | `ir_module_ids`, reading the module compiler's `ModuleIdTable` |
 | script units | `accumulated` diagnostics | per-unit reads |
 | script lowering | `accumulated_lower_bindings` | `UnitLowerRecord` folded per position |
 | `typecheck_script_unit` | `ScriptEnv` over `Vec<ModuleSpec>` | `Vec<Module>` plus `script_module_spec` |
@@ -528,7 +528,7 @@ On by default; `DATALOVE_PARALLEL=0` turns it off.
 
 - **Tracked structs can only be created inside tracked functions.** Return plain
   data from helpers and build the struct at the tracked boundary. `TypeFunction`
-  is one of these; passing raw strings down the pipeline and interning inside
+  is one of these; passing raw strings down the phases and interning inside
   the tracked function is the workaround used here.
 - **`ModuleId::new()` twice gives two different ids** when `ModuleId` is an
   input. It is interned now, so equal paths give equal ids, but the general

@@ -6,7 +6,7 @@
 //! makes two promises, and these hold it to both:
 //!
 //! - **It is never stale.** After any edit, every const has the value a
-//!   pipeline that evaluates everything gives it. Every test here runs with
+//!   module compiler that evaluates everything gives it. Every test here runs with
 //!   the cache verifying each hit against an evaluation besides, so a stale hit
 //!   is a panic even where a test does not read the value back.
 //! - **It is worth having.** An edit evaluates the consts of the module it
@@ -18,12 +18,12 @@ use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, BTreeSet};
 
 use datalove_datafun as datafun;
-use datafun::pipeline::{CompilerOptions, ModuleCompilationPipeline};
+use datafun::driver::{CompilerOptions, ModuleCompiler};
 
 /// A world of `local/pkg` modules and data, compiled again after each change.
 struct World {
     db: datafun::Database,
-    pipeline: ModuleCompilationPipeline,
+    module_compiler: ModuleCompiler,
     modules: BTreeMap<String, String>,
     data: BTreeMap<String, String>,
 }
@@ -45,11 +45,11 @@ impl World {
     }
 
     fn with_options(options: CompilerOptions) -> World {
-        let mut pipeline = ModuleCompilationPipeline::new(options);
-        pipeline.set_verify_const_cache(true);
+        let mut module_compiler = ModuleCompiler::new(options);
+        module_compiler.set_verify_const_cache(true);
         World {
             db: datafun::Database::default(),
-            pipeline,
+            module_compiler,
             modules: BTreeMap::new(),
             data: BTreeMap::new(),
         }
@@ -58,9 +58,9 @@ impl World {
     /// Add or replace a module.
     fn module(&mut self, name: &str, source: &str) {
         if self.modules.contains_key(name) {
-            self.pipeline.update_source(&mut self.db, "local", "pkg", name, source);
+            self.module_compiler.update_source(&mut self.db, "local", "pkg", name, source);
         } else {
-            self.pipeline.add_module(&self.db, "local", "pkg", name, source);
+            self.module_compiler.add_module(&self.db, "local", "pkg", name, source);
         }
         self.modules.insert(name.to_string(), source.to_string());
     }
@@ -68,9 +68,9 @@ impl World {
     /// Add or replace a data file.
     fn data(&mut self, name: &str, text: &str) {
         if self.data.contains_key(name) {
-            self.pipeline.update_data(&mut self.db, "local", "pkg", name, text);
+            self.module_compiler.update_data(&mut self.db, "local", "pkg", name, text);
         } else {
-            self.pipeline.add_data(&self.db, "local", "pkg", name, text);
+            self.module_compiler.add_data(&self.db, "local", "pkg", name, text);
         }
         self.data.insert(name.to_string(), text.to_string());
     }
@@ -80,10 +80,10 @@ impl World {
     /// Returns the modules whose consts the compile evaluated rather than took
     /// from the cache, and what each probe came to.
     fn compile(&mut self, probes: &[&str]) -> (BTreeSet<String>, Vec<String>) {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         let db = &self.db;
         assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
-        let evaluated = names(&self.pipeline.const_cache_report().evaluated);
+        let evaluated = names(&self.module_compiler.const_cache_report().evaluated);
 
         let mut compiler = compiled.script_compiler_default(db).expect("a script compiler");
         let mut executor = compiled
@@ -147,7 +147,7 @@ fn a_recompile_with_no_edit_evaluates_nothing() {
     let (evaluated, values) = world.compile(&["a.get()"]);
     assert_eq!(evaluated, set(&[]));
     assert_eq!(values, ["11"]);
-    assert_eq!(names(&world.pipeline.const_cache_report().reused), set(&["a", "b"]));
+    assert_eq!(names(&world.module_compiler.const_cache_report().reused), set(&["a", "b"]));
 }
 
 #[test]
@@ -262,9 +262,9 @@ end fun
     let mut world = World::new();
     world.module("a", &source(0));
     for _ in 0..2 {
-        let compiled = world.pipeline.compile(&world.db);
+        let compiled = world.module_compiler.compile(&world.db);
         assert!(compiled.has_errors(), "dividing by zero is an error");
-        assert_eq!(names(&world.pipeline.const_cache_report().evaluated), set(&["a"]));
+        assert_eq!(names(&world.module_compiler.const_cache_report().evaluated), set(&["a"]));
     }
 
     world.module("a", &source(4));
@@ -279,7 +279,7 @@ fn changing_the_riders_empties_the_cache() {
     world.module("a", &caller("b"));
     world.compile(&[]);
 
-    world.pipeline.set_rider_sources(vec![(
+    world.module_compiler.set_rider_sources(vec![(
         "extra".to_string(),
         "native fun twice(x: u32): u32\n".to_string(),
     )]);
@@ -294,11 +294,11 @@ fn turning_the_cache_off_evaluates_everything_every_time() {
     world.module("a", &caller("b"));
     world.compile(&[]);
     world.compile(&[]);
-    let report = world.pipeline.const_cache_report();
+    let report = world.module_compiler.const_cache_report();
     assert!(report.evaluated.is_empty() && report.reused.is_empty(), "{:?}", report);
 }
 
-/// A chain with a fork in it, edited at random, checked against a pipeline that
+/// A chain with a fork in it, edited at random, checked against a module compiler that
 /// caches nothing after every edit.
 ///
 /// `m0` is required by `m1` and `m2`, which are both required by `m3`, and `m4`

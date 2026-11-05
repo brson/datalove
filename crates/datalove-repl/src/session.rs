@@ -127,7 +127,7 @@ impl Session {
     /// the step is what the change did to the units that depend on it. A
     /// panic is reported as the first unit's, since the change names none.
     fn edit_data(&mut self, path: &str, text: &str) -> Outcome {
-        if self.engine.pipeline().data_source(path).is_none() {
+        if self.engine.module_compiler().data_source(path).is_none() {
             return Outcome::CommandError(fmt!("there is no data {path}"));
         }
         let [library, package, name] = path.splitn(3, '/').collect::<Vec<_>>()[..] else {

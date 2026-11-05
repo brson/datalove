@@ -29,5 +29,5 @@ pub mod import_demands;
 pub mod incremental;
 pub mod memo_analysis;
 pub mod package_resolve;
-pub mod pipeline;
+pub mod driver;
 pub mod worldfile_analysis;

@@ -7,7 +7,7 @@
 //! is only worth doing if phase 5 onward is a large enough share to pay for
 //! itself.
 //!
-//! The pipeline already has that seam: `compile_modules` returns after phase 4,
+//! The compiler already has that seam: `compile_modules` returns after phase 4,
 //! and `lower_module_graph_with_evaluator` is a separate call. This drives the
 //! two halves directly, on a fresh database each iteration so nothing is a memo
 //! hit, and reports the split.
@@ -20,7 +20,7 @@ use rmx::prelude::*;
 
 use datalove_datafun as datafun;
 use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies};
-use datalove_datafun::pipeline::WorkspaceDescriptor;
+use datalove_datafun::driver::WorkspaceDescriptor;
 use datalove_datafun_compiler::compile::{ModuleCompilationInput, compile_modules};
 use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_datafun_interp::InterpCtfeEvaluator;

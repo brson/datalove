@@ -4,7 +4,7 @@
 //! paths that early out. This one is what the compiler actually compiles.
 
 use datalove_datafun as datafun;
-use datafun::pipeline::WorkspaceDescriptor;
+use datafun::driver::WorkspaceDescriptor;
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -19,15 +19,15 @@ fn main() {
     let mut db = datafun::Database::default();
     let sys = datalove_sys_packages::system_library();
     let descriptor = WorkspaceDescriptor::from_system_library(&sys);
-    let mut pipeline = descriptor.to_pipeline(&db);
+    let mut module_compiler = descriptor.to_compiler(&db);
     let local_source = |salt: usize| format!(
         "fun local_a(x: int): int\n  ret x + {}\nend fun\n\
          fun local_b(x: int): int\n  ret local_a(x) * 2\nend fun\n",
         salt,
     );
-    pipeline.add_module(&db, "local", "app", "main", &local_source(0));
+    module_compiler.add_module(&db, "local", "app", "main", &local_source(0));
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors(), "the system library must compile");
     drop(compiled);
 
@@ -50,19 +50,19 @@ fn main() {
     }
     let probe = |salt: usize| format!("{}\nfun probe_edit(): int\n  ret {}\nend fun\n", text, salt);
 
-    pipeline.update_source(&mut db, "sys", &package, &module, &probe(0));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "sys", &package, &module, &probe(0));
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
 
     let start = std::time::Instant::now();
     for salt in 1..=iterations {
         if local {
-            pipeline.update_source(&mut db, "local", "app", "main", &local_source(salt));
+            module_compiler.update_source(&mut db, "local", "app", "main", &local_source(salt));
         } else if edit {
-            pipeline.update_source(&mut db, "sys", &package, &module, &probe(salt));
+            module_compiler.update_source(&mut db, "sys", &package, &module, &probe(salt));
         }
-        let compiled = pipeline.compile(&db);
+        let compiled = module_compiler.compile(&db);
         assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     }
     let elapsed = start.elapsed();

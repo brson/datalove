@@ -1,10 +1,10 @@
-//! A database and the pipeline that compiled its modules, kept together.
+//! A database and the module compiler that compiled its modules, kept together.
 //!
 //! Compiling a module world is the largest cost in a datalove invocation -- the
 //! standard library is 81ms of a release run -- and it repeats not because the
-//! database is thrown away but because the *pipeline* is. A pipeline owns the
+//! database is thrown away but because the *module compiler* is. A module compiler owns the
 //! `Source` inputs every tracked query is keyed on, so a new one makes new inputs
-//! and nothing downstream can hit the memo. Keeping the same pipeline, compiling
+//! and nothing downstream can hit the memo. Keeping the same module compiler, compiling
 //! the standard library a second time costs about a ninth of the first.
 //!
 //! So this is not a cache. It is the pair a caller has to hold on to if it wants
@@ -20,16 +20,16 @@
 //! belongs to one thread at a time; what it produces does not, since an
 //! `IrCodeUnit` is `Send + Sync` and carries nothing of salsa with it.
 
-use crate::pipeline::{CompiledModules, ModuleCompilationPipeline, WorkspaceDescriptor};
+use crate::driver::{CompiledModules, ModuleCompiler, WorkspaceDescriptor};
 use datalove_datafun_compiler::Database;
 
-/// A database, and the pipeline whose inputs live in it.
+/// A database, and the module compiler whose inputs live in it.
 ///
 /// Compile against it repeatedly rather than building one per script: that is the
 /// whole point, and the reason it is a struct rather than a function.
 pub struct CompiledWorld {
     db: Database,
-    pipeline: ModuleCompilationPipeline,
+    module_compiler: ModuleCompiler,
 }
 
 impl CompiledWorld {
@@ -39,8 +39,8 @@ impl CompiledWorld {
     /// does that and pays for it, and every one after reuses what it can.
     pub fn new(descriptor: &WorkspaceDescriptor) -> Self {
         let db = Database::default();
-        let pipeline = descriptor.to_pipeline(&db);
-        Self { db, pipeline }
+        let module_compiler = descriptor.to_compiler(&db);
+        Self { db, module_compiler }
     }
 
     /// The database the modules were compiled against.
@@ -57,7 +57,7 @@ impl CompiledWorld {
     /// honest: the result names salsa values that belong to this database, so it
     /// cannot outlive the world that produced it.
     pub fn compile(&mut self) -> CompiledModules<'_> {
-        self.pipeline.compile(&self.db)
+        self.module_compiler.compile(&self.db)
     }
 
     /// Run `f` against the compiled modules.
@@ -65,7 +65,7 @@ impl CompiledWorld {
     /// For a caller that wants the modules and the database at once without
     /// arguing with the borrow checker about which of the two it has.
     pub fn with_compiled<R>(&mut self, f: impl FnOnce(&Database, &CompiledModules<'_>) -> R) -> R {
-        let compiled = self.pipeline.compile(&self.db);
+        let compiled = self.module_compiler.compile(&self.db);
         f(&self.db, &compiled)
     }
 }

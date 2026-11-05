@@ -159,14 +159,14 @@ and enter nothing.
 compile regardless, and `Engine::in_database` takes a database the caller made,
 which is how a test records what salsa runs. The library carries the addresses
 of the native rider functions alongside the sources. They become a
-`RiderNatives` given to both the pipeline, for consts, and the executor, so a
+`RiderNatives` given to both the module compiler, for consts, and the executor, so a
 session can `require module sys/std/string` and call into it. The engine keeps
-the pipeline, the descriptor and the natives, so a crash reset rebuilds the
+the module compiler, the descriptor and the natives, so a crash reset rebuilds the
 compiler and executor from them without building or loading a rider again.
 
 **An engine holds any number of sessions over one compile of the modules.**
 Each has its own units, compiled session, executor and runtime, and they share
-the database, the pipeline and the natives. The engine starts with one, which
+the database, the module compiler and the natives. The engine starts with one, which
 the methods on `Engine` itself act on and which is all the REPL uses;
 `Engine::open_session` opens more and `Engine::session(id)` gives a
 `SessionMut` to act on any. A runtime error or a crash resets only its own
@@ -180,7 +180,7 @@ worker thread builds its own library. `datalove-cli` passes
 binary; see [compiler-guide.md](compiler-guide.md) under "The Shipped Binary".
 
 **The roots follow the units.** Before every step -- an append, an edit, a
-splice -- `Compiling::compile_units` narrows the pipeline's roots to what
+splice -- `Compiling::compile_units` narrows the module compiler's roots to what
 every open session's units will require once the step is done, plus the
 caller's `also_roots`, and compiles. A unit adding `require module sys/std/u8`
 brings `u8` into the compile, and truncating it away takes `u8` back out unless
@@ -190,7 +190,7 @@ new module registry and the natives the new modules call before anything runs.
 It is the count and not the step that decides, because a session can come to
 require a module another session already brought in, and then nothing moves.
 The units already lowered are left alone, which is sound because a module's
-`IrModuleId` is given by path and kept for the pipeline's life.
+`IrModuleId` is given by path and kept for the module compiler's life.
 
 **A required module that does not compile is left out**, with every required
 module that reaches it, and the rest of the roots stay (`settle_roots` in

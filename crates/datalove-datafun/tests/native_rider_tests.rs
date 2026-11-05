@@ -9,7 +9,7 @@ use std::sync::Arc;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile;
 use datalove_datafun_interp::{IrInterpreter, NativeFnImpl, NativeResolver, NativeTarget, Value, Destination};
-use datalove_datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
+use datalove_datafun::driver::{ModuleCompiler, CompilerOptions};
 
 #[test]
 fn test_native_rider_int_add() {
@@ -176,16 +176,16 @@ fn run_main(worldfile: &str, natives: Option<Arc<dyn NativeResolver>>) -> Result
     // Parse the worldfile into sections.
     let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes()).X();
 
-    // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    // Build the module compiler from sections.
+    let mut module_compiler = ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
     if let Some(natives) = natives {
-        pipeline.set_natives(natives);
+        module_compiler.set_natives(natives);
     }
 
-    assert!(pipeline.contains_module("local", "test", "main"));
+    assert!(module_compiler.contains_module("local", "test", "main"));
 
     // Compile.
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     let db = &db;
 
     if compiled.has_errors() {

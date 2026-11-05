@@ -17,7 +17,7 @@ use rmx::std::collections::BTreeMap;
 use rmx::std::path::PathBuf;
 use rmx::std::sync::Arc;
 
-use datalove_datafun::pipeline::{
+use datalove_datafun::driver::{
     ModuleDescriptor, PackageDescriptor, PackageLibrary, RiderDescriptor, SystemLibrary,
 };
 

@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use datalove_datafun::pipeline::rider_load::load_rider_library;
+use datalove_datafun::driver::rider_load::load_rider_library;
 use datalove_datafun_interp::NativeFunctionTable;
 
 /// Compile one source file to a shared library in `dir`, and return its path.

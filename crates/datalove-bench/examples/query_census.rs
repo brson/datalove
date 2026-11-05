@@ -11,7 +11,7 @@ use rmx::std::collections::BTreeMap;
 
 use datalove_ct::query_events::QueryRecorder;
 use datalove_datafun as datafun;
-use datafun::pipeline::WorkspaceDescriptor;
+use datafun::driver::WorkspaceDescriptor;
 
 /// A local module that calls into the system library, as a real one would.
 fn local_source(salt: usize) -> String {
@@ -66,28 +66,28 @@ fn main() {
 
     let sys = datalove_sys_packages::system_library();
     let descriptor = WorkspaceDescriptor::from_system_library(&sys);
-    let mut pipeline = descriptor.to_pipeline(&db);
-    pipeline.add_module(&db, "local", "app", "main", &local_source(0));
+    let mut module_compiler = descriptor.to_compiler(&db);
+    module_compiler.add_module(&db, "local", "app", "main", &local_source(0));
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     report("cold compile", counts(&recorder));
 
     // Nothing changed.
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors());
     drop(compiled);
     report("unchanged recompile", counts(&recorder));
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors());
     drop(compiled);
     report("second unchanged recompile", counts(&recorder));
 
     // A body edit in the local module, which is what an editing session does.
-    pipeline.update_source(&mut db, "local", "app", "main", &local_source(1));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "local", "app", "main", &local_source(1));
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     report("edit one local module", counts(&recorder));
@@ -98,14 +98,14 @@ fn main() {
         .next()
         .expect("the system library has modules");
     let probe = |salt: usize| format!("{}\nfun probe_edit(): int\n  ret {}\nend fun\n", text, salt);
-    pipeline.update_source(&mut db, "sys", &package, &module, &probe(0));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "sys", &package, &module, &probe(0));
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
-    pipeline.update_source(&mut db, "sys", &package, &module, &probe(1));
-    let compiled = pipeline.compile(&db);
+    module_compiler.update_source(&mut db, "sys", &package, &module, &probe(1));
+    let compiled = module_compiler.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     report(&format!("edit sys/{package}/{module}"), counts(&recorder));

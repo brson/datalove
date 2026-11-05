@@ -17,32 +17,32 @@ use datalove_datafun as datafun;
 use datalove_datafun_cranelift_jit::JitEngine;
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_interp::{CallDispatcher, Engine};
-use datafun::pipeline::{
+use datafun::driver::{
     WorkspaceDescriptor, TypecheckResult, LoweringResult,
-    aot as pipeline_aot, c_aot as pipeline_c_aot,
+    aot as driver_aot, c_aot as driver_c_aot,
 };
 
 /// What this suite compiles against, kept for the worker that built it.
 ///
 /// One per worker thread rather than one per fixture per backend, which is what
 /// it used to be: 572 compilations of `sys/std` for 534 CPU-seconds. Keeping the
-/// pipeline is what makes the difference -- see "Reusing a
+/// module compiler is what makes the difference -- see "Reusing a
 /// Compiled World" in `botdocs/compiler-guide.md`.
 struct Worker {
     descriptor: WorkspaceDescriptor,
-    world: datafun::pipeline::CompiledWorld,
+    world: datafun::driver::CompiledWorld,
     /// The library again, with every call to a generic that can be pointed
     /// at an instance pointed at one: the `spec` engines.
-    spec_world: datafun::pipeline::CompiledWorld,
+    spec_world: datafun::driver::CompiledWorld,
 }
 
 impl Worker {
     fn new() -> Self {
         let descriptor = describe_sys();
-        let world = datafun::pipeline::CompiledWorld::new(&descriptor);
+        let world = datafun::driver::CompiledWorld::new(&descriptor);
         let mut spec_descriptor = describe_sys();
         spec_descriptor.options.generics = GenericsPolicy::All;
-        let spec_world = datafun::pipeline::CompiledWorld::new(&spec_descriptor);
+        let spec_world = datafun::driver::CompiledWorld::new(&spec_descriptor);
         Self { descriptor, world, spec_world }
     }
 }
@@ -69,7 +69,7 @@ fn describe_sys() -> WorkspaceDescriptor {
 ///
 /// A broken library is not one fixture disagreeing with another, so it is not
 /// reported per fixture.
-fn check_library(compiled: &datafun::pipeline::CompiledModules<'_>) {
+fn check_library(compiled: &datafun::driver::CompiledModules<'_>) {
     if let Some(err) = &compiled.resolution_error {
         panic!("the standard library does not resolve: {}", err);
     }
@@ -82,13 +82,13 @@ fn check_library(compiled: &datafun::pipeline::CompiledModules<'_>) {
 /// Returns the static library path (for AOT linking) and loaded rider handle.
 fn build_and_load_riders(
     descriptor: &WorkspaceDescriptor,
-    compiled: &datafun::pipeline::CompiledModules<'_>,
-    executor: &mut datafun::pipeline::ScriptExecutor,
-) -> Result<(Vec<PathBuf>, Vec<datafun::pipeline::rider_load::LoadedRider>), String> {
+    compiled: &datafun::driver::CompiledModules<'_>,
+    executor: &mut datafun::driver::ScriptExecutor,
+) -> Result<(Vec<PathBuf>, Vec<datafun::driver::rider_load::LoadedRider>), String> {
     let rider_crates = descriptor.rider_crates();
     let work_dir = descriptor.work_dir.as_ref()
         .ok_or("workspace has riders but no work dir")?;
-    let staticlib = datafun::pipeline::rider_build::build_component_staticlib(work_dir, &rider_crates)
+    let staticlib = datafun::driver::rider_build::build_component_staticlib(work_dir, &rider_crates)
         .map_err(|e| format!("rider build error: {}", e))?;
 
     let lib_paths = vec![staticlib];
@@ -96,9 +96,9 @@ fn build_and_load_riders(
     let mut loaded_riders = Vec::new();
 
     if !native_symbols.is_empty() {
-        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crates)
+        let dylib = datafun::driver::rider_build::build_rider_dylib(work_dir, &rider_crates)
             .map_err(|e| format!("rider build error: {}", e))?;
-        let loaded = datafun::pipeline::rider_load::load_rider_library(
+        let loaded = datafun::driver::rider_load::load_rider_library(
             &dylib,
             "native-component",
             &native_symbols,
@@ -113,7 +113,7 @@ fn build_and_load_riders(
 /// Run a script through the interpreter, compiling fragment then evaluating `output`.
 fn run_with_executor(
     db: &datafun::Database,
-    compiled: &datafun::pipeline::CompiledModules<'_>,
+    compiled: &datafun::driver::CompiledModules<'_>,
     descriptor: &WorkspaceDescriptor,
     script_text: &str,
     engine: Engine,
@@ -185,7 +185,7 @@ fn run_with_executor(
 /// output value to stderr, then compiles, links (with rider libs), and runs it.
 fn run_aot(
     db: &datafun::Database,
-    compiled: &datafun::pipeline::CompiledModules<'_>,
+    compiled: &datafun::driver::CompiledModules<'_>,
     script_text: &str,
     rider_lib_paths: &[PathBuf],
 ) -> Result<String, String> {
@@ -208,7 +208,7 @@ fn run_aot(
     let registry = compiled.module_registry();
 
     // AOT compile with world types.
-    let obj_bytes = pipeline_aot::compile_script_to_object_with_world(
+    let obj_bytes = driver_aot::compile_script_to_object_with_world(
         &ir_unit,
         &registry,
     ).map_err(|e| format!("AOT compile error: {}", e))?;
@@ -217,11 +217,11 @@ fn run_aot(
     let dir = rmx::tempfile::tempdir()
         .map_err(|e| format!("AOT temp dir error: {}", e))?;
     let exe_path = dir.path().join("test");
-    pipeline_aot::link_object_to_path_with_libs(&obj_bytes, &exe_path, rider_lib_paths)
+    driver_aot::link_object_to_path_with_libs(&obj_bytes, &exe_path, rider_lib_paths)
         .map_err(|e| format!("AOT link error: {}", e))?;
 
     // Run and capture stderr (debuglog output).
-    let exec_output = pipeline_aot::run_executable(&exe_path)
+    let exec_output = driver_aot::run_executable(&exe_path)
         .map_err(|e| format!("AOT execution error: {}", e))?;
 
     // Debuglog appends a newline; trim to match execute_expr format.
@@ -234,7 +234,7 @@ fn run_aot(
 /// executable: C source and a C compiler rather than an object and a linker.
 fn run_c_aot(
     db: &datafun::Database,
-    compiled: &datafun::pipeline::CompiledModules<'_>,
+    compiled: &datafun::driver::CompiledModules<'_>,
     script_text: &str,
     rider_lib_paths: &[PathBuf],
 ) -> Result<String, String> {
@@ -254,16 +254,16 @@ fn run_c_aot(
     let ir_unit = result.ir_unit.ok_or("C AOT: IR unit not available")?;
     let registry = compiled.module_registry();
 
-    let sources = pipeline_c_aot::compile_world(&ir_unit, &registry)
+    let sources = driver_c_aot::compile_world(&ir_unit, &registry)
         .map_err(|e| format!("C AOT compile error: {}", e))?;
 
     let dir = rmx::tempfile::tempdir()
         .map_err(|e| format!("C AOT temp dir error: {}", e))?;
     let exe_path = dir.path().join("test");
-    pipeline_c_aot::link_sources_to_path(&sources, &exe_path, rider_lib_paths)
+    driver_c_aot::link_sources_to_path(&sources, &exe_path, rider_lib_paths)
         .map_err(|e| format!("C AOT link error: {}", e))?;
 
-    let exec_output = pipeline_aot::run_executable(&exe_path)
+    let exec_output = driver_aot::run_executable(&exe_path)
         .map_err(|e| format!("C AOT execution error: {}", e))?;
 
     Ok(exec_output.stderr.trim_end().to_string())
@@ -326,7 +326,7 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
 /// Only the walker: specialization is not offered to the other engines yet.
 fn specialized(
     db: &datafun::Database,
-    compiled: &datafun::pipeline::CompiledModules<'_>,
+    compiled: &datafun::driver::CompiledModules<'_>,
     descriptor: &WorkspaceDescriptor,
     script_text: &str,
     interp_value: &str,
@@ -345,7 +345,7 @@ fn specialized(
 /// `interp_value`.
 fn compare_backends(
     db: &datafun::Database,
-    compiled: &datafun::pipeline::CompiledModules<'_>,
+    compiled: &datafun::driver::CompiledModules<'_>,
     descriptor: &WorkspaceDescriptor,
     script_text: &str,
     rider_lib_paths: &[PathBuf],

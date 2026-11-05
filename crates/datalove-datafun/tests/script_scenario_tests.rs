@@ -41,7 +41,7 @@ use rmx::std::collections::{BTreeMap, BTreeSet};
 
 use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
 use datalove_datafun as datafun;
-use datafun::pipeline::ScriptCompilationResult;
+use datafun::driver::ScriptCompilationResult;
 
 mod scriptsession;
 use scriptsession::{analysis_reach, Graph, Module, Session};

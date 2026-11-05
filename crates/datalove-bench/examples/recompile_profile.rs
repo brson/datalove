@@ -12,7 +12,7 @@
 //! program on every edit make it linear in the size of the world, and the size
 //! of the world in the fixtures is not the size of anybody's project.
 
-use datalove_datafun::pipeline::ModuleCompilationPipeline;
+use datalove_datafun::driver::ModuleCompiler;
 use datalove_datafun_compiler::Database;
 
 const FUNCTIONS_PER_MODULE: usize = 30;
@@ -42,20 +42,20 @@ fn main() {
     let num_modules: usize = args.next().and_then(|a| a.parse().ok()).unwrap_or(32);
 
     let mut db = Database::default();
-    let mut pipeline = ModuleCompilationPipeline::default();
+    let mut module_compiler = ModuleCompiler::default();
     for i in 0..num_modules {
-        pipeline.add_module(&db, "local", "pkg", &format!("m{}", i), &module_source(i, 0));
+        module_compiler.add_module(&db, "local", "pkg", &format!("m{}", i), &module_source(i, 0));
     }
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
 
     let start = std::time::Instant::now();
     for salt in 1..=iterations {
         if edit {
-            pipeline.update_source(&mut db, "local", "pkg", "m0", &module_source(0, salt));
+            module_compiler.update_source(&mut db, "local", "pkg", "m0", &module_source(0, salt));
         }
-        let compiled = pipeline.compile(&db);
+        let compiled = module_compiler.compile(&db);
         assert!(compiled.is_successful());
     }
     let elapsed = start.elapsed();

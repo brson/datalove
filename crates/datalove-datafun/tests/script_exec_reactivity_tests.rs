@@ -2,7 +2,7 @@
 //!
 //! The rule `script_reactivity_tests` holds for *analysis* -- editing a unit
 //! reaches that unit and the units that use what it provides, and nothing else
-//! -- asked here of the other half of the pipeline. For units A B C D where C
+//! -- asked here of the other half of the compiler. For units A B C D where C
 //! uses nothing B provides, editing B re-lowers and re-executes B and D. A is
 //! upstream. **C keeps its previous lowering and its previous frame**, which is
 //! the whole of stage C in `botdocs/plan-script-reactivity.md`.

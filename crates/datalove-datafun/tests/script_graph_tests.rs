@@ -23,7 +23,7 @@
 use rmx::prelude::*;
 
 use datalove_datafun as datafun;
-use datalove_datafun::pipeline::{CompilerOptions, ModuleCompilationPipeline};
+use datalove_datafun::driver::{CompilerOptions, ModuleCompiler};
 
 /// Compile `units` in order and report each one's provides and uses.
 ///
@@ -31,15 +31,15 @@ use datalove_datafun::pipeline::{CompilerOptions, ModuleCompilationPipeline};
 /// function names bound. Both are sorted, so a case reads as written.
 fn graph_of(units: &[&str]) -> Vec<(Vec<String>, Vec<String>)> {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::new(CompilerOptions::default());
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
 
     for unit in units {
         let result = compiler.compile_fragment(unit);
         assert!(
-            matches!(result.typecheck, datafun::pipeline::TypecheckResult::Success { .. }),
+            matches!(result.typecheck, datafun::driver::TypecheckResult::Success { .. }),
             "unit {unit:?} did not typecheck: {:?} / own {:?}", result.typecheck, result.ownership,
         );
     }
@@ -62,10 +62,10 @@ fn graph_of(units: &[&str]) -> Vec<(Vec<String>, Vec<String>)> {
 }
 
 /// Compile `units` in order and hand back the last one's result, errors and all.
-fn last_result(units: &[&str]) -> datafun::pipeline::ScriptCompilationResult {
+fn last_result(units: &[&str]) -> datafun::driver::ScriptCompilationResult {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile(&db);
+    let mut module_compiler = ModuleCompiler::new(CompilerOptions::default());
+    let compiled = module_compiler.compile(&db);
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
     let mut result = None;
     for unit in units {
@@ -185,7 +185,7 @@ fn a_function_body_may_not_name_an_enclosing_let() {
         "fun apply(n: int): int\n    ret n * scale\nend fun\n",
     ]);
     match result.typecheck {
-        datafun::pipeline::TypecheckResult::Error { ref errors } => assert!(
+        datafun::driver::TypecheckResult::Error { ref errors } => assert!(
             errors.iter().any(|e| e.contains("scale")),
             "wrong error for a body naming a `let`: {errors:?}",
         ),

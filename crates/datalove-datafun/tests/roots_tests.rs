@@ -17,7 +17,7 @@ use rmx::prelude::*;
 use datalove_ct::query_events::QueryRecorder;
 use datalove_datafun as datafun;
 use datalove_datafun::incremental::Roots;
-use datalove_datafun::pipeline::ModuleCompilationPipeline;
+use datalove_datafun::driver::ModuleCompiler;
 
 /// `top` requires `mid` requires `base`. Two islands require nothing.
 ///
@@ -25,22 +25,22 @@ use datalove_datafun::pipeline::ModuleCompilationPipeline;
 /// "compiled all of them" or "compiled one".
 const MODULES: usize = 5;
 
-fn add_fixture(db: &dyn salsa::Database, pipeline: &mut ModuleCompilationPipeline) {
-    pipeline.add_module(db, "local", "test", "base",
+fn add_fixture(db: &dyn salsa::Database, module_compiler: &mut ModuleCompiler) {
+    module_compiler.add_module(db, "local", "test", "base",
         "fun base_fn(x: i32): i32\n    ret x\nend fun\n");
-    pipeline.add_module(db, "local", "test", "mid",
+    module_compiler.add_module(db, "local", "test", "mid",
         "require module local/test/base\n\
          import base.base_fn\n\
          \n\
          fun mid_fn(x: i32): i32\n    ret base_fn(x)\nend fun\n");
-    pipeline.add_module(db, "local", "test", "top",
+    module_compiler.add_module(db, "local", "test", "top",
         "require module local/test/mid\n\
          import mid.mid_fn\n\
          \n\
          fun top_fn(): i32\n    ret mid_fn(1)\nend fun\n");
-    pipeline.add_module(db, "local", "test", "zz_island0",
+    module_compiler.add_module(db, "local", "test", "zz_island0",
         "fun island0_fn(x: i32): i32\n    ret x\nend fun\n");
-    pipeline.add_module(db, "local", "test", "zz_island1",
+    module_compiler.add_module(db, "local", "test", "zz_island1",
         "fun island1_fn(x: i32): i32\n    ret x\nend fun\n");
 }
 
@@ -52,11 +52,11 @@ fn roots_of(paths: &[&str]) -> Roots {
 fn modules_compiled(roots: Roots) -> usize {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
-    add_fixture(&db, &mut pipeline);
-    pipeline.set_roots(roots);
+    let mut module_compiler = ModuleCompiler::default();
+    add_fixture(&db, &mut module_compiler);
+    module_compiler.set_roots(roots);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -135,22 +135,22 @@ fn a_root_that_is_not_in_the_world_is_ignored() {
 #[test]
 fn an_error_in_an_unreachable_module_is_not_reported() {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::default();
-    add_fixture(&db, &mut pipeline);
+    let mut module_compiler = ModuleCompiler::default();
+    add_fixture(&db, &mut module_compiler);
     // An island nothing requires, which does not typecheck.
-    pipeline.add_module(&db, "local", "test", "zz_broken",
+    module_compiler.add_module(&db, "local", "test", "zz_broken",
         "fun broken_fn(): i32\n    ret \"not an i32\"\nend fun\n");
 
-    pipeline.set_roots(Roots::All);
-    let compiled = pipeline.compile(&db);
+    module_compiler.set_roots(Roots::All);
+    let compiled = module_compiler.compile(&db);
     assert!(
         !compiled.is_successful(),
         "the whole world includes the broken module, so it must be reported",
     );
     drop(compiled);
 
-    pipeline.set_roots(roots_of(&["local/test/top"]));
-    let compiled = pipeline.compile(&db);
+    module_compiler.set_roots(roots_of(&["local/test/top"]));
+    let compiled = module_compiler.compile(&db);
     assert!(
         compiled.is_successful(),
         "`top` does not reach the broken module, so nothing looks at it: {:?}",
@@ -158,27 +158,27 @@ fn an_error_in_an_unreachable_module_is_not_reported() {
     );
 }
 
-/// Changing the roots on a live pipeline is sound, not a stale memo.
+/// Changing the roots on a live module compiler is sound, not a stale memo.
 ///
 /// The roots decide the module set, which decides the `ModuleGraph`, which is
 /// interned and is the identity of everything keyed on it -- so a different root
 /// set is a different graph rather than a cache to invalidate. Compiling one
-/// pipeline under both in turn has to give both answers.
+/// module compiler under both in turn has to give both answers.
 #[test]
 fn the_roots_can_change_between_compiles() {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
-    add_fixture(&db, &mut pipeline);
+    let mut module_compiler = ModuleCompiler::default();
+    add_fixture(&db, &mut module_compiler);
 
-    pipeline.set_roots(roots_of(&["local/test/zz_island0"]));
-    let compiled = pipeline.compile(&db);
+    module_compiler.set_roots(roots_of(&["local/test/zz_island0"]));
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
-    pipeline.set_roots(Roots::All);
-    let compiled = pipeline.compile(&db);
+    module_compiler.set_roots(Roots::All);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -203,11 +203,11 @@ fn the_roots_can_change_between_compiles() {
 fn every_phase_sees_only_the_reachable_modules() {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
-    add_fixture(&db, &mut pipeline);
-    pipeline.set_roots(roots_of(&["local/test/mid"]));
+    let mut module_compiler = ModuleCompiler::default();
+    add_fixture(&db, &mut module_compiler);
+    module_compiler.set_roots(roots_of(&["local/test/mid"]));
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -242,11 +242,11 @@ fn every_phase_sees_only_the_reachable_modules() {
 fn only_the_reachable_modules_are_parsed() {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
-    add_fixture(&db, &mut pipeline);
-    pipeline.set_roots(roots_of(&["local/test/mid"]));
+    let mut module_compiler = ModuleCompiler::default();
+    add_fixture(&db, &mut module_compiler);
+    module_compiler.set_roots(roots_of(&["local/test/mid"]));
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -263,10 +263,10 @@ fn only_the_reachable_modules_are_parsed() {
 fn the_whole_world_is_parsed_when_the_roots_are_the_world() {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
-    add_fixture(&db, &mut pipeline);
+    let mut module_compiler = ModuleCompiler::default();
+    add_fixture(&db, &mut module_compiler);
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -285,13 +285,13 @@ fn the_whole_world_is_parsed_when_the_roots_are_the_world() {
 fn compiled_for_script(script: &str, also: &[String]) -> usize {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
-    let mut pipeline = ModuleCompilationPipeline::default();
-    add_fixture(&db, &mut pipeline);
+    let mut module_compiler = ModuleCompiler::default();
+    add_fixture(&db, &mut module_compiler);
 
-    pipeline.narrow_roots_to_script(&db, script, also);
+    module_compiler.narrow_roots_to_script(&db, script, also);
     recorder.clear();
 
-    let compiled = pipeline.compile(&db);
+    let compiled = module_compiler.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

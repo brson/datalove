@@ -117,7 +117,7 @@ pub fn parallel_mode_from_env() -> ParallelMode {
 /// A parsed rider interface from a `.dli` file.
 ///
 /// Contains native function signatures and type aliases exported by a rider.
-/// Plain data, not salsa::tracked. Flows through the pipeline as part of
+/// Plain data, not salsa::tracked. Flows through the compiler as part of
 /// `ParsedModuleGraph`.
 #[derive(Clone, PartialEq, Eq, Hash)]
 #[derive(salsa::SalsaValue)]
@@ -204,7 +204,7 @@ pub struct ParsedModuleGraph<'db> {
 /// A lowered script unit calls into a module by its number, and nothing
 /// re-lowers that unit when the module set around it changes, so a numbering
 /// that moved with the graph sent the call to whichever module had the number
-/// now -- a different module's function, or memory that was none. A pipeline
+/// now -- a different module's function, or memory that was none. A module compiler
 /// keeps one table for its life and only adds to it; a one-off compile gets a
 /// table of its own from [`ModuleIdTable::numbering`].
 ///

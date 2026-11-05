@@ -46,7 +46,7 @@ impl Corpus {
 }
 
 /// Every module source in the system library.
-fn module_texts(sys: &datafun::pipeline::SystemLibrary) -> Vec<String> {
+fn module_texts(sys: &datafun::driver::SystemLibrary) -> Vec<String> {
     sys.library
         .packages
         .values()
