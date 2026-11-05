@@ -173,7 +173,7 @@ fn sources_by_step(fixture: &Fixture) -> Vec<Vec<(String, String)>> {
             }
             Change::Edit { unit, source } => set(&mut sources, unit, source),
             Change::Insert { entry, .. } => set(&mut sources, &entry.unit, &entry.source),
-            Change::Delete { .. } => {}
+            Change::Delete { .. } | Change::EditData { .. } => {}
         }
         by_step.push(sources.clone());
     }

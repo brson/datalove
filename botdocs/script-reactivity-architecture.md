@@ -388,6 +388,7 @@ edges as owned strings: the reach is walked after the change.
 reachable, and builds a compiler per operation. The entry points name a unit
 by its id, and a place by its position: `Engine::edit_unit(id, source)`,
 `Engine::edit_module(library, package, module, source)`,
+`Engine::edit_data(library, package, name, text)`,
 `Engine::truncate_units(n)`, `Engine::delete_unit(id)`,
 `Engine::insert_unit(at, source, is_expr)` and
 `Engine::restore_unit(at, id, source, is_expr)`.

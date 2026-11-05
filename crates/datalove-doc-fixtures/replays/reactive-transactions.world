@@ -176,9 +176,72 @@ expect Bi-Rite is groceries
 repl-command
 ----------
 
+/edit-data local/home/transactions [
+  {day = 1, payee = "TRADER JOES #552", cents = 8412},
+  {day = 2, payee = "SHELL OIL 5741", cents = 4650},
+  {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675},
+  {day = 5, payee = "SAFEWAY 1123", cents = 6230},
+  {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380},
+  {day = 9, payee = "PG&E", cents = 11204},
+  {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540},
+  {day = 14, payee = "TRADER JOES #552", cents = 9177},
+  {day = 18, payee = "NETFLIX.COM", cents = 1549},
+  {day = 21, payee = "ZUNI CAFE", cents = 9840},
+  {day = 26, payee = "BI-RITE MARKET", cents = 3315},
+  {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}
+]
+
+----------
+expect the bank adds a coffee
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | uses nothing of unit 4's | - |
+| 2 | - | untouched | uses nothing of unit 4's | - |
+| 3 | - | untouched | uses nothing of unit 4's | - |
+| 4 | - | reruns | its data changed | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}, {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}] |
+| 5 | reads `string` (3) | untouched | uses nothing of unit 4's | - |
+| 6 | - | untouched | uses nothing of unit 4's | `budget` = %{"bills" = 15000, "car" = 10000, "dining" = 15000, "groceries" = 25000, "other" = 5000} |
+| 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | reruns | reads `transactions` from unit 4 | `spent` moved |
+| 8 | reads `budget` (6), reads `list` (1), reads `spent` (7) | reruns | reads `spent` from unit 7, which reran | `over` moved |
+| 9 | takes `over` (8), takes `spent` (7) | reruns | takes `spent` and `over` from units 7 and 8, which reran | `output` = {spent = %{"bills" = 12753, "car" = 4650, "dining" = 15325, "groceries" = 27134}, over = ["dining", "groceries"]} |
+
+----------
+repl-command
+----------
+
+/edit 6 let budget: %{string = int} = %{
+  "groceries" = 25000,
+  "dining" = 20000,
+  "car" = 10000,
+  "bills" = 15000,
+  "other" = 5000
+}
+
+----------
+expect the dining budget is raised
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | uses nothing of unit 6's | - |
+| 2 | - | untouched | uses nothing of unit 6's | - |
+| 3 | - | untouched | uses nothing of unit 6's | - |
+| 4 | - | untouched | uses nothing of unit 6's | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}, {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}] |
+| 5 | reads `string` (3) | untouched | uses nothing of unit 6's | - |
+| 6 | - | recompiles, runs | edited | `budget` = %{"bills" = 15000, "car" = 10000, "dining" = 20000, "groceries" = 25000, "other" = 5000} |
+| 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | reruns | rerun: unit 9 took `spent` when it last ran, and unit 8 reruns and reads it | `spent` moved |
+| 8 | reads `budget` (6), reads `list` (1), reads `spent` (7) | reruns | reads `budget` from unit 6 | `over` moved |
+| 9 | takes `over` (8), takes `spent` (7) | reruns | takes `over` from unit 8, which reran, and `spent` from unit 7, which reran | `output` = {spent = %{"bills" = 12753, "car" = 4650, "dining" = 15325, "groceries" = 27134}, over = ["groceries"]} |
+
+----------
+repl-command
+----------
+
 /edit 6 let budget: %{string = int} = %{
   "groceries" = 30000,
-  "dining" = 15000,
+  "dining" = 20000,
   "bills" = 15000
 }
 
@@ -191,10 +254,10 @@ expect the car budget is dropped
 | 1 | - | untouched | uses nothing of unit 6's | - |
 | 2 | - | untouched | uses nothing of unit 6's | - |
 | 3 | - | untouched | uses nothing of unit 6's | - |
-| 4 | - | untouched | uses nothing of unit 6's | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}] |
+| 4 | - | untouched | uses nothing of unit 6's | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}, {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}] |
 | 5 | reads `string` (3) | untouched | uses nothing of unit 6's | - |
-| 6 | - | recompiles, runs | edited | `budget` = %{"bills" = 15000, "dining" = 15000, "groceries" = 30000} |
-| 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | reruns | rerun: unit 9 took `spent` when it last ran, and unit 8 reruns and reads it | `spent` = %{"bills" = 12753, "car" = 4650, "dining" = 13435, "groceries" = 27134} |
+| 6 | - | recompiles, runs | edited | `budget` = %{"bills" = 15000, "dining" = 20000, "groceries" = 30000} |
+| 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | reruns | rerun: unit 9 took `spent` when it last ran, and unit 8 reruns and reads it | `spent` = %{"bills" = 12753, "car" = 4650, "dining" = 15325, "groceries" = 27134} |
 | 8 | reads `budget` (6), reads `list` (1), reads `spent` (7) | reruns, returns early | reads `budget` from unit 6, which has no `"car"` | - |
 | 9 | takes `over` (8), takes `spent` (7) | is blocked | unit 8 did not finish | - |
 
@@ -204,7 +267,7 @@ repl-command
 
 /edit 6 let budget: %{string = int} = %{
   "groceries" = 30000,
-  "dining" = 15000,
+  "dining" = 20000,
   "car" = "lots",
   "bills" = 15000
 }
@@ -218,10 +281,10 @@ expect the car budget is a typo
 | 1 | - | untouched | uses nothing of unit 6's | - |
 | 2 | - | untouched | uses nothing of unit 6's | - |
 | 3 | - | untouched | uses nothing of unit 6's | - |
-| 4 | - | untouched | uses nothing of unit 6's | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}] |
+| 4 | - | untouched | uses nothing of unit 6's | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}, {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}] |
 | 5 | reads `string` (3) | untouched | uses nothing of unit 6's | - |
 | 6 | - | recompile fails | edited: `"lots"` is not an `int` | - |
-| 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | untouched | `spent` is held: unit 9 has not run since unit 7 last did | `spent` = %{"bills" = 12753, "car" = 4650, "dining" = 13435, "groceries" = 27134} |
+| 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | untouched | `spent` is held: unit 9 has not run since unit 7 last did | `spent` = %{"bills" = 12753, "car" = 4650, "dining" = 15325, "groceries" = 27134} |
 | 8 | reads `budget` (6), reads `list` (1), reads `spent` (7) | recompile fails | `budget` is unbound: unit 6 failed | - |
 | 9 | takes `over` (8), takes `spent` (7) | recompile fails | `over` is unbound: unit 8 failed | - |
 
@@ -239,7 +302,7 @@ repl-command
 
 /edit 6 let budget: %{string = int} = %{
   "groceries" = 30000,
-  "dining" = 15000,
+  "dining" = 20000,
   "car" = 10000,
   "bills" = 15000
 }
@@ -253,12 +316,12 @@ expect the car budget is fixed
 | 1 | - | untouched | uses nothing of unit 6's | - |
 | 2 | - | untouched | uses nothing of unit 6's | - |
 | 3 | - | untouched | uses nothing of unit 6's | - |
-| 4 | - | untouched | uses nothing of unit 6's | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}] |
+| 4 | - | untouched | uses nothing of unit 6's | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}, {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}] |
 | 5 | reads `string` (3) | untouched | uses nothing of unit 6's | - |
-| 6 | - | recompiles, runs | edited | `budget` = %{"bills" = 15000, "car" = 10000, "dining" = 15000, "groceries" = 30000} |
+| 6 | - | recompiles, runs | edited | `budget` = %{"bills" = 15000, "car" = 10000, "dining" = 20000, "groceries" = 30000} |
 | 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | untouched | `spent` is held: unit 9 has not run since unit 7 last did | `spent` moved |
 | 8 | reads `budget` (6), reads `list` (1), reads `spent` (7) | recompiles, runs | reads `budget` from unit 6, which compiles again | `over` moved |
-| 9 | takes `over` (8), takes `spent` (7) | recompiles, runs | takes `over` from unit 8, which compiles again | `output` = {spent = %{"bills" = 12753, "car" = 4650, "dining" = 13435, "groceries" = 27134}, over = []} |
+| 9 | takes `over` (8), takes `spent` (7) | recompiles, runs | takes `over` from unit 8, which compiles again | `output` = {spent = %{"bills" = 12753, "car" = 4650, "dining" = 15325, "groceries" = 27134}, over = []} |
 
 ----------
 scriptunit-expr
@@ -275,10 +338,10 @@ expect the output is shown
 | 1 | - | untouched | new unit after it | - |
 | 2 | - | untouched | new unit after it | - |
 | 3 | - | untouched | new unit after it | - |
-| 4 | - | untouched | new unit after it | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}] |
+| 4 | - | untouched | new unit after it | `transactions` = [{day = 1, payee = "TRADER JOES #552", cents = 8412}, {day = 2, payee = "SHELL OIL 5741", cents = 4650}, {day = 3, payee = "BLUE BOTTLE COFFEE", cents = 675}, {day = 5, payee = "SAFEWAY 1123", cents = 6230}, {day = 7, payee = "TAQUERIA EL FAROLITO", cents = 2380}, {day = 9, payee = "PG&E", cents = 11204}, {day = 12, payee = "BLUE BOTTLE COFFEE", cents = 540}, {day = 14, payee = "TRADER JOES #552", cents = 9177}, {day = 18, payee = "NETFLIX.COM", cents = 1549}, {day = 21, payee = "ZUNI CAFE", cents = 9840}, {day = 26, payee = "BI-RITE MARKET", cents = 3315}, {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}] |
 | 5 | reads `string` (3) | untouched | new unit after it | - |
-| 6 | - | untouched | new unit after it | `budget` = %{"bills" = 15000, "car" = 10000, "dining" = 15000, "groceries" = 30000} |
+| 6 | - | untouched | new unit after it | `budget` = %{"bills" = 15000, "car" = 10000, "dining" = 20000, "groceries" = 30000} |
 | 7 | reads `category` (5), reads `map` (2), reads `transactions` (4) | untouched | new unit after it | `spent` moved |
 | 8 | reads `budget` (6), reads `list` (1), reads `spent` (7) | untouched | new unit after it | `over` moved |
-| 9 | takes `over` (8), takes `spent` (7) | untouched | new unit after it | `output` = {spent = %{"bills" = 12753, "car" = 4650, "dining" = 13435, "groceries" = 27134}, over = []} |
+| 9 | takes `over` (8), takes `spent` (7) | untouched | new unit after it | `output` = {spent = %{"bills" = 12753, "car" = 4650, "dining" = 15325, "groceries" = 27134}, over = []} |
 | 10 | reads `output` (9) | compiles, runs | new | - |

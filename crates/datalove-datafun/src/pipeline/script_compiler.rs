@@ -651,6 +651,31 @@ impl<'db> ScriptCompiler<'db> {
         self.rederive_reach(seeds, BTreeSet::new())
     }
 
+    /// Re-lower the units an edit to the data file at `data` reaches.
+    ///
+    /// The data-shaped sibling of [`Self::relower_module_reach`], needed for
+    /// the same reason: nothing asks about a unit whose data changed. A unit
+    /// is reached when one of its `require data` consts names `data`, or when
+    /// one of its imports resolves into one of `modules`, the modules whose
+    /// own consts reach the file, and then the units that use what it provides
+    /// are reached as an edit's are.
+    ///
+    /// **A data file is compiled into the unit that requires it**, as the
+    /// value of a const, so the unit is re-derived rather than only rerun,
+    /// though its code is the same.
+    pub fn relower_data_reach(
+        &mut self,
+        data: &str,
+        modules: &[String],
+    ) -> Vec<(usize, ScriptCompilationResult)> {
+        let db = self.db;
+        let mut seeds = self.module_importers(modules);
+        seeds.extend(self.unit_typecheck_outputs().iter().enumerate()
+            .filter(|(_, output)| output.is_some_and(|output| output.result(db).data_files(db).contains_key(data)))
+            .map(|(unit, _)| unit));
+        self.rederive_reach(seeds, BTreeSet::new())
+    }
+
     /// Re-derive what the unit [`ScriptSession::insert_unit`] put at `at`
     /// reaches, in index order, the new unit first among them.
     ///

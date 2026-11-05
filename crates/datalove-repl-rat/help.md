@@ -69,6 +69,9 @@ unit after it, so all of those are compiled and run again. The same changes can 
   grayed out in the History tab.
 - `/redo` -- make again the change last taken back. Entering anything new
   forgets what was taken back.
+- `/edit-data <library/package/name> <text>` -- replace a data file's text,
+  as the world outside the session would; the units that require it run
+  again. It is not a change to the code, so `/undo` does not take it back.
 - `/reset` -- start the session again, empty.
 - `/save` -- save everything entered to `repl-session.world`.
 - `/load` -- start the session again as `repl-session.world` has it.

@@ -81,6 +81,7 @@ impl Session {
                     Outcome::Reset
                 }
                 ReplCommand::Edit { unit, source } => self.edit(unit, source),
+                ReplCommand::EditData { path, text } => self.edit_data(&path, &text),
                 ReplCommand::Delete { unit } => self.delete(unit),
                 ReplCommand::Insert { place, unit, source } => self.insert(place, unit, source),
                 ReplCommand::Restore { unit, after, source } => self.restore(unit, after, source),
@@ -118,6 +119,27 @@ impl Session {
         }
         let step = self.guarded(number, "editing", |engine| engine.edit_unit(number, source.source()));
         self.splice(step, |units| units[index].unit = source)
+    }
+
+    /// Replace a data file's text, as a stand-in for the world changing it.
+    ///
+    /// The data is not the session's, so the units stay as they are, and
+    /// the step is what the change did to the units that depend on it. A
+    /// panic is reported as the first unit's, since the change names none.
+    fn edit_data(&mut self, path: &str, text: &str) -> Outcome {
+        if self.engine.pipeline().data_source(path).is_none() {
+            return Outcome::CommandError(fmt!("there is no data {path}"));
+        }
+        let [library, package, name] = path.splitn(3, '/').collect::<Vec<_>>()[..] else {
+            return Outcome::CommandError(fmt!("there is no data {path}"));
+        };
+        let first = self.units.first().map_or(0, |unit| unit.number);
+        let step = self.guarded(first, "editing data before", |engine| {
+            let first = engine.first_session();
+            engine.edit_data(library, package, name, text).remove(&first)
+                .expect("every session is re-derived")
+        });
+        self.splice(step, |_| ())
     }
 
     fn delete(&mut self, number: u32) -> Outcome {

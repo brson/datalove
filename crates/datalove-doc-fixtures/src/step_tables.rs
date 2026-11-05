@@ -142,6 +142,8 @@ pub enum Change {
     /// Units appended, one at a time.
     Enter(Vec<Entry>),
     Edit { unit: String, source: String },
+    /// A data file's text replaced, by its `library/package/name` path.
+    EditData { path: String, text: String },
     Delete { unit: String },
     /// A unit put before or after the unit `beside`.
     Insert { entry: Entry, place: Place, beside: String },
@@ -362,6 +364,15 @@ impl Session {
                 }
                 Change::Edit { unit, source } => {
                     let reports = self.engine.edit_unit(self.id(unit), source);
+                    ran.extend(self.reported(reports));
+                }
+                Change::EditData { path, text } => {
+                    let [library, package, name] = path.splitn(3, '/').collect::<Vec<_>>()[..] else {
+                        panic!("data `{path}` is not a library/package/name path");
+                    };
+                    let first = self.engine.first_session();
+                    let reports = self.engine.edit_data(library, package, name, text).remove(&first)
+                        .expect("every session is re-derived");
                     ran.extend(self.reported(reports));
                 }
                 Change::Delete { unit } => {

@@ -2061,19 +2061,19 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 15000,\n  \"bills\" = 15000\n}",
+      "input": "/edit-data local/home/transactions [\n  {day = 1, payee = \"TRADER JOES #552\", cents = 8412},\n  {day = 2, payee = \"SHELL OIL 5741\", cents = 4650},\n  {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675},\n  {day = 5, payee = \"SAFEWAY 1123\", cents = 6230},\n  {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380},\n  {day = 9, payee = \"PG&E\", cents = 11204},\n  {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540},\n  {day = 14, payee = \"TRADER JOES #552\", cents = 9177},\n  {day = 18, payee = \"NETFLIX.COM\", cents = 1549},\n  {day = 21, payee = \"ZUNI CAFE\", cents = 9840},\n  {day = 26, payee = \"BI-RITE MARKET\", cents = 3315},\n  {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}\n]",
       "outcome": {
         "Edited": [
           {
-            "unit": 6,
-            "compiled": true,
+            "unit": 4,
+            "compiled": false,
             "eval": {
               "Ran": [
                 {
                   "Value": {
-                    "name": "budget",
-                    "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 15000, \"dining\" = 15000, \"groceries\" = 30000}"
+                    "name": "transactions",
+                    "ty": "[{ day: u32, payee: string, cents: int }]",
+                    "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
                   }
                 }
               ]
@@ -2088,7 +2088,831 @@ DataloveReplay.register("reactive-transactions", {
                   "Slot": {
                     "name": "spent",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "unit": 8,
+            "compiled": false,
+            "eval": {
+              "Ran": [
+                {
+                  "Slot": {
+                    "name": "over",
+                    "ty": "[string]",
+                    "value": "[\"dining\", \"groceries\"]"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "unit": 9,
+            "compiled": false,
+            "eval": {
+              "Ran": [
+                {
+                  "Value": {
+                    "name": "output",
+                    "ty": "{ spent: %{string = int}, over: [string] }",
+                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "units": [
+        {
+          "number": 1,
+          "expression": false,
+          "source": "require module sys/std/list",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 1,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "list"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 2,
+          "expression": false,
+          "source": "require module sys/std/map",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 2,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "map"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 3,
+          "expression": false,
+          "source": "require module sys/std/string",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 3,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "string"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 4,
+          "expression": false,
+          "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "transactions",
+                  "ty": "[{ day: u32, payee: string, cents: int }]",
+                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 4,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "transactions",
+                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
+              ]
+            ],
+            "provides": [
+              "transactions"
+            ],
+            "reads": [
+              "transactions"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 5,
+          "expression": false,
+          "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Function": {
+                  "name": "category"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 5,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "category"
+            ],
+            "reads": [
+              "category",
+              "payee",
+              "string"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 6,
+          "expression": false,
+          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "budget",
+                  "ty": "%{string = int}",
+                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "budget",
+                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+              ]
+            ],
+            "provides": [
+              "budget"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
+          "expression": false,
+          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Slot": {
+                  "name": "spent",
+                  "ty": "%{string = int}",
+                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 7,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "spent",
+                null
+              ]
+            ],
+            "provides": [
+              "spent"
+            ],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "spent",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 8,
+          "expression": false,
+          "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Slot": {
+                  "name": "over",
+                  "ty": "[string]",
+                  "value": "[\"dining\", \"groceries\"]"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 8,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "over",
+                null
+              ]
+            ],
+            "provides": [
+              "over"
+            ],
+            "reads": [
+              "amount",
+              "budget",
+              "c",
+              "over",
+              "spent",
+              "list"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 9,
+          "expression": false,
+          "source": "let output = {\n  spent = spent,\n  over = over\n}",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "output",
+                  "ty": "{ spent: %{string = int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 9,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "output",
+                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+              ]
+            ],
+            "provides": [
+              "output"
+            ],
+            "reads": [],
+            "takes": [
+              "over",
+              "spent"
+            ],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        }
+      ],
+      "environment": [
+        {
+          "name": "budget",
+          "ty": "%{string = int}",
+          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+        },
+        {
+          "name": "category",
+          "ty": "fun(string): string",
+          "value": "-"
+        },
+        {
+          "name": "output",
+          "ty": "{ spent: %{string = int}, over: [string] }",
+          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+        },
+        {
+          "name": "over",
+          "ty": "[string]",
+          "value": null
+        },
+        {
+          "name": "spent",
+          "ty": "%{string = int}",
+          "value": null
+        },
+        {
+          "name": "transactions",
+          "ty": "[{ day: u32, payee: string, cents: int }]",
+          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
+        }
+      ]
+    },
+    {
+      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+      "outcome": {
+        "Edited": [
+          {
+            "unit": 6,
+            "compiled": true,
+            "eval": {
+              "Ran": [
+                {
+                  "Value": {
+                    "name": "budget",
+                    "ty": "%{string = int}",
+                    "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "unit": 7,
+            "compiled": false,
+            "eval": {
+              "Ran": [
+                {
+                  "Slot": {
+                    "name": "spent",
+                    "ty": "%{string = int}",
+                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "unit": 8,
+            "compiled": false,
+            "eval": {
+              "Ran": [
+                {
+                  "Slot": {
+                    "name": "over",
+                    "ty": "[string]",
+                    "value": "[\"groceries\"]"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "unit": 9,
+            "compiled": false,
+            "eval": {
+              "Ran": [
+                {
+                  "Value": {
+                    "name": "output",
+                    "ty": "{ spent: %{string = int}, over: [string] }",
+                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "units": [
+        {
+          "number": 1,
+          "expression": false,
+          "source": "require module sys/std/list",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 1,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "list"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 2,
+          "expression": false,
+          "source": "require module sys/std/map",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 2,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "map"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 3,
+          "expression": false,
+          "source": "require module sys/std/string",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 3,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "string"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 4,
+          "expression": false,
+          "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "transactions",
+                  "ty": "[{ day: u32, payee: string, cents: int }]",
+                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 4,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "transactions",
+                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
+              ]
+            ],
+            "provides": [
+              "transactions"
+            ],
+            "reads": [
+              "transactions"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 5,
+          "expression": false,
+          "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Function": {
+                  "name": "category"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 5,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "category"
+            ],
+            "reads": [
+              "category",
+              "payee",
+              "string"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 6,
+          "expression": false,
+          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "budget",
+                  "ty": "%{string = int}",
+                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+                }
+              }
+            ]
+          },
+          "compiled": true,
+          "ran": true,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "budget",
+                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+              ]
+            ],
+            "provides": [
+              "budget"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
+          "expression": false,
+          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Slot": {
+                  "name": "spent",
+                  "ty": "%{string = int}",
+                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 7,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "spent",
+                null
+              ]
+            ],
+            "provides": [
+              "spent"
+            ],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "spent",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 8,
+          "expression": false,
+          "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Slot": {
+                  "name": "over",
+                  "ty": "[string]",
+                  "value": "[\"groceries\"]"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 8,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "over",
+                null
+              ]
+            ],
+            "provides": [
+              "over"
+            ],
+            "reads": [
+              "amount",
+              "budget",
+              "c",
+              "over",
+              "spent",
+              "list"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 9,
+          "expression": false,
+          "source": "let output = {\n  spent = spent,\n  over = over\n}",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "output",
+                  "ty": "{ spent: %{string = int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 9,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "output",
+                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+              ]
+            ],
+            "provides": [
+              "output"
+            ],
+            "reads": [],
+            "takes": [
+              "over",
+              "spent"
+            ],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        }
+      ],
+      "environment": [
+        {
+          "name": "budget",
+          "ty": "%{string = int}",
+          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+        },
+        {
+          "name": "category",
+          "ty": "fun(string): string",
+          "value": "-"
+        },
+        {
+          "name": "output",
+          "ty": "{ spent: %{string = int}, over: [string] }",
+          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+        },
+        {
+          "name": "over",
+          "ty": "[string]",
+          "value": null
+        },
+        {
+          "name": "spent",
+          "ty": "%{string = int}",
+          "value": null
+        },
+        {
+          "name": "transactions",
+          "ty": "[{ day: u32, payee: string, cents: int }]",
+          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
+        }
+      ]
+    },
+    {
+      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"bills\" = 15000\n}",
+      "outcome": {
+        "Edited": [
+          {
+            "unit": 6,
+            "compiled": true,
+            "eval": {
+              "Ran": [
+                {
+                  "Value": {
+                    "name": "budget",
+                    "ty": "%{string = int}",
+                    "value": "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "unit": 7,
+            "compiled": false,
+            "eval": {
+              "Ran": [
+                {
+                  "Slot": {
+                    "name": "spent",
+                    "ty": "%{string = int}",
+                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
                   }
                 }
               ]
@@ -2198,7 +3022,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "transactions",
                   "ty": "[{ day: u32, payee: string, cents: int }]",
-                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
                 }
               }
             ]
@@ -2211,7 +3035,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "transactions",
-                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
               ]
             ],
             "provides": [
@@ -2263,7 +3087,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 6,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 15000,\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"bills\" = 15000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -2271,7 +3095,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "budget",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"dining\" = 15000, \"groceries\" = 30000}"
+                  "value": "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
                 }
               }
             ]
@@ -2284,7 +3108,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"dining\" = 15000, \"groceries\" = 30000}"
+                "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
               ]
             ],
             "provides": [
@@ -2308,7 +3132,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
                 }
               }
             ]
@@ -2321,7 +3145,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "spent",
-                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
               ]
             ],
             "provides": [
@@ -2409,7 +3233,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "budget",
           "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"dining\" = 15000, \"groceries\" = 30000}"
+          "value": "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
         },
         {
           "name": "category",
@@ -2419,17 +3243,17 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "spent",
           "ty": "%{string = int}",
-          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
         },
         {
           "name": "transactions",
           "ty": "[{ day: u32, payee: string, cents: int }]",
-          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
         }
       ]
     },
     {
-      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 15000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
+      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
       "outcome": {
         "Edited": [
           {
@@ -2448,7 +3272,7 @@ DataloveReplay.register("reactive-transactions", {
                   "Slot": {
                     "name": "spent",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
                   }
                 }
               ]
@@ -2554,7 +3378,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "transactions",
                   "ty": "[{ day: u32, payee: string, cents: int }]",
-                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
                 }
               }
             ]
@@ -2567,7 +3391,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "transactions",
-                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
               ]
             ],
             "provides": [
@@ -2619,7 +3443,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 6,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 15000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
           "status": "NotCompiled",
           "outcome": {
             "NotCompiled": "mismatched types: expected `int`, found `string`"
@@ -2649,7 +3473,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
                 }
               }
             ]
@@ -2662,7 +3486,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "spent",
-                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
               ]
             ],
             "provides": [
@@ -2737,17 +3561,17 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "spent",
           "ty": "%{string = int}",
-          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
         },
         {
           "name": "transactions",
           "ty": "[{ day: u32, payee: string, cents: int }]",
-          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
         }
       ]
     },
     {
-      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
+      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
       "outcome": {
         "Edited": [
           {
@@ -2759,7 +3583,7 @@ DataloveReplay.register("reactive-transactions", {
                   "Value": {
                     "name": "budget",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 30000}"
+                    "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
                   }
                 }
               ]
@@ -2789,7 +3613,7 @@ DataloveReplay.register("reactive-transactions", {
                   "Value": {
                     "name": "output",
                     "ty": "{ spent: %{string = int}, over: [string] }",
-                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
                   }
                 }
               ]
@@ -2881,7 +3705,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "transactions",
                   "ty": "[{ day: u32, payee: string, cents: int }]",
-                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
                 }
               }
             ]
@@ -2894,7 +3718,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "transactions",
-                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
               ]
             ],
             "provides": [
@@ -2946,7 +3770,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 6,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -2954,7 +3778,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "budget",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 30000}"
+                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
                 }
               }
             ]
@@ -2967,7 +3791,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 30000}"
+                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
               ]
             ],
             "provides": [
@@ -2991,7 +3815,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
                 }
               }
             ]
@@ -3080,7 +3904,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "output",
                   "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
                 }
               }
             ]
@@ -3093,7 +3917,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
               ]
             ],
             "provides": [
@@ -3114,7 +3938,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "budget",
           "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 30000}"
+          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
         },
         {
           "name": "category",
@@ -3124,7 +3948,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "output",
           "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
         },
         {
           "name": "over",
@@ -3139,7 +3963,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "transactions",
           "ty": "[{ day: u32, payee: string, cents: int }]",
-          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
         }
       ]
     },
@@ -3149,7 +3973,7 @@ DataloveReplay.register("reactive-transactions", {
         "Unit": {
           "Value": {
             "ty": "{ spent: %{string = int}, over: [string] }",
-            "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+            "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
           }
         }
       },
@@ -3237,7 +4061,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "transactions",
                   "ty": "[{ day: u32, payee: string, cents: int }]",
-                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
                 }
               }
             ]
@@ -3250,7 +4074,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "transactions",
-                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
               ]
             ],
             "provides": [
@@ -3302,7 +4126,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 6,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -3310,7 +4134,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "budget",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 30000}"
+                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
                 }
               }
             ]
@@ -3323,7 +4147,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 30000}"
+                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
               ]
             ],
             "provides": [
@@ -3347,7 +4171,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
                 }
               }
             ]
@@ -3436,7 +4260,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Value": {
                   "name": "output",
                   "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
                 }
               }
             ]
@@ -3449,7 +4273,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
               ]
             ],
             "provides": [
@@ -3473,7 +4297,7 @@ DataloveReplay.register("reactive-transactions", {
           "outcome": {
             "Value": {
               "ty": "{ spent: %{string = int}, over: [string] }",
-              "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+              "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
             }
           },
           "compiled": true,
@@ -3497,7 +4321,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "budget",
           "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 30000}"
+          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
         },
         {
           "name": "category",
@@ -3507,7 +4331,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "output",
           "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = []}"
+          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
         },
         {
           "name": "over",
@@ -3522,7 +4346,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "name": "transactions",
           "ty": "[{ day: u32, payee: string, cents: int }]",
-          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}, {day = 29, payee = \"BLUE BOTTLE COFFEE\", cents = 1890}]"
         }
       ]
     }

@@ -96,7 +96,7 @@ so changing one of those types changes the format: bump `TRACE_VERSION` in
 synchronous and can describe every unit directly. The app would give the
 history's own rules and `/undo` and `/redo`, but it describes only the
 selected unit, asking the engine on another thread. So a replay uses
-units and `/edit`, `/delete` and `/insert`; an `/undo` in one records a
+units and `/edit`, `/edit-data`, `/delete` and `/insert`; an `/undo` in one records a
 command error.
 
 ## The player
@@ -139,7 +139,7 @@ language breaks its test rather than quietly changing what the post shows. Its
 worldfile may hold `expect` sections, and `engine` sections after them, as the
 reactive fixtures do. An `expect` checks the inputs since the `expect` before
 it, which are either units appended -- the script entered at the start, say
--- or one `/edit`, `/delete` or `/insert`. Inputs after the last `expect` are
+-- or one `/edit`, `/edit-data`, `/delete` or `/insert`. Inputs after the last `expect` are
 not checked. Units are named by the numbers the session gives them.
 
 The test takes the tables out before it records the session, so they are not

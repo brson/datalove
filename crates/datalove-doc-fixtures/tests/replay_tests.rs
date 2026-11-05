@@ -10,7 +10,7 @@
 //! A replay may also hold `expect` tables, and `engine` tables after them,
 //! as the reactive fixtures do; see `datalove_doc_fixtures::step_tables`. An
 //! `expect` checks the inputs since the one before it, which are either units
-//! appended or one `/edit`, `/delete` or `/insert`. The tables are taken out
+//! appended or one `/edit`, `/edit-data`, `/delete` or `/insert`. The tables are taken out
 //! before the session is recorded, so what a replay shows is checked against
 //! the rules, and a change in the language breaks the test rather than
 //! quietly changing the document.
@@ -104,6 +104,8 @@ fn change(replay: &Replay, command: &Command, next: &mut u32) -> Change {
         Command::Unit(unit) => Change::Enter(vec![entry(unit)]),
         Command::ReplCommand(ReplCommand::Edit { unit, source }) =>
             Change::Edit { unit: unit.to_string(), source: source.source().S() },
+        Command::ReplCommand(ReplCommand::EditData { path, text }) =>
+            Change::EditData { path: path.C(), text: text.C() },
         Command::ReplCommand(ReplCommand::Delete { unit }) => Change::Delete { unit: unit.to_string() },
         Command::ReplCommand(ReplCommand::Insert { place, unit, source }) =>
             Change::Insert { entry: entry(source), place: *place, beside: unit.to_string() },

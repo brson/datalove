@@ -1261,6 +1261,15 @@ or both:
 | delete       | yes                  | -                  |
 | edit         | yes                  | yes                |
 | rerun        | yes                  | yes, the same code |
+| data change  | yes                  | yes, the same code over new data |
+
+A change to the data a unit requires is a rerun of that unit,
+except that it now provides different values.
+Its code is the same,
+so it does to earlier bindings what it did before.
+If the new data doesn't have the type the unit requires it at,
+the unit no longer compiles,
+and the change is a break.
 
 A modification of a unit `T` calls for more of them.
 
@@ -1288,7 +1297,7 @@ A modification of a unit `T` calls for more of them.
   before anything overwrites it again.
   A unit rerun to restore a binding finds what it found before,
   so it changes no values.
-  A unit rerun for a changed value may change values in turn.
+  A unit rerun for a changed value or changed data may change values in turn.
   An overwrite stops a change only while it writes what it wrote before.
   If the provider now gives the binding another type,
   or makes it a `let`,

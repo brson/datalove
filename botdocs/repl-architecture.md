@@ -117,7 +117,7 @@ what lets the tests drive the state machine with a scripted mock.
 ## The command queue
 
 Some commands are the engine's: units, and the commands that change the
-session, `/reset`, `/edit`, `/delete` and `/insert`. The rest are the app's:
+session, `/reset`, `/edit`, `/edit-data`, `/delete` and `/insert`. The rest are the app's:
 `/undo`, `/redo`, `/save`, `/load`, `/help` and `/exit`, which read the history
 and the app's units, and may send the engine commands of their own. Each runs
 against what every command entered before it leaves, however fast they were
@@ -303,6 +303,15 @@ reached fail saying why. An edit that fixes the module brings it and them
 back. A module no unit requires is not compiled, so an edit to one reports
 nothing until something requires it. Adding and removing modules mid-session
 is not offered.
+
+`Engine::edit_data(library, package, name, text)` is the same for a data file.
+Its seeds are the units whose `require data` names the file and the units
+importing from a module whose consts reach it. A data file is a const's value,
+so the requiring unit is lowered again, though its typecheck backdates while
+the data's type holds; data of another type fails it. At the prompt it is
+`/edit-data <library/package/name> <text>`, a stand-in for the world changing
+the file. The data is not the session's, so the app keeps no `Change` for it and
+`/undo` passes over it.
 
 ## Editing at the prompt
 
@@ -770,7 +779,7 @@ all.
 
 `crates/datalove-script-engine/tests/`:
 
-- **engine_edit_tests** -- the edit path: `edit_unit`, `edit_module` and the
+- **engine_edit_tests** -- the edit path: `edit_unit`, `edit_module`, `edit_data` and the
   splices, the units each reaches, and the environment afterwards; modules
   joining, leaving and breaking; and units that did not compile, parse, or run
   to their end staying and going green. The reach itself is measured in
@@ -789,8 +798,8 @@ setup and the loop together.
 
 - No cancellation. The worker has no way to be interrupted, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
-- `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/delete`,
-  `/insert`, `/undo` and `/redo` are the only commands.
+- `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/edit-data`,
+  `/delete`, `/insert`, `/undo` and `/redo` are the only commands.
 - Undo and redo have no key; they are typed.
 - A command whose source spans lines cannot be typed: an input starting with
   the sigil is a command on its first line. Only a replay, or an edit from

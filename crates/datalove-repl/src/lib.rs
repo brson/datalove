@@ -172,6 +172,11 @@ pub enum ReplCommand {
     /// Replace the source of the unit with this number, keeping its kind:
     /// `/edit N <source>`.
     Edit { unit: u32, source: Unit },
+    /// Replace the text of the data file at `library/package/name`, as the
+    /// world outside the session would: `/edit-data <path> <text>`.
+    ///
+    /// The data is not the session's, so the history cannot undo it.
+    EditData { path: String, text: String },
     /// Remove the unit with this number: `/delete N`.
     Delete { unit: u32 },
     /// Add a unit before or after the one with this number:
@@ -356,6 +361,11 @@ impl ReplCommand {
             "edit" => match numbered_source(args) {
                 Some((unit, source)) => ReplCommand::Edit { unit, source },
                 None => usage("/edit N <source>"),
+            },
+            "edit-data" => match split_word(args) {
+                (path, text) if !path.is_empty() && !text.trim().is_empty() =>
+                    ReplCommand::EditData { path: path.S(), text: text.trim_end().S() },
+                _ => usage("/edit-data <library/package/name> <text>"),
             },
             "delete" => match args.parse() {
                 Ok(unit) => ReplCommand::Delete { unit },

@@ -63,6 +63,11 @@ fn engine_with_module(source: &str) -> Engine {
 
 /// The same with several modules, all in `local/test`.
 fn engine_with_modules(modules: &[(&str, &str)]) -> Engine {
+    engine_with_modules_and_data(modules, &[])
+}
+
+/// The same with data files beside the modules, in `local/test` too.
+fn engine_with_modules_and_data(modules: &[(&str, &str)], data: &[(&str, &str)]) -> Engine {
     let sys = datalove_sys_packages::system_library();
     let mut workspace = WorkspaceDescriptor::from_system_library(&sys);
     workspace.user_libraries.push(PackageLibrary {
@@ -77,7 +82,12 @@ fn engine_with_modules(modules: &[(&str, &str)]) -> Engine {
                         ModuleDescriptor { name: name.S(), source: (*source).into(), origin: None },
                     ))
                     .collect(),
-                data: Default::default(),
+                data: data.iter()
+                    .map(|(name, text)| (
+                        name.S(),
+                        ModuleDescriptor { name: name.S(), source: (*text).into(), origin: None },
+                    ))
+                    .collect(),
                 rider: None,
             },
         )].into_iter().collect(),
@@ -590,6 +600,64 @@ fn a_module_edit_reaches_the_units_of_the_modules_requiring_it() {
     assert_eq!(value_of(&mut engine, "a"), "12");
 }
 
+/// A data edit re-derives the unit that requires the data and the units that
+/// read what it provides, and leaves the rest alone.
+#[test]
+fn editing_data_rederives_the_units_that_require_it() {
+    let mut engine = engine_with_modules_and_data(&[], &[("d", "5")]);
+    run(&mut engine, "require data local/test/d: int\n---\nlet a = d + 1\n---\nlet b = 20");
+    assert_eq!(value_of(&mut engine, "a"), "6");
+
+    let reports = edit_data(&mut engine, "7");
+
+    assert_eq!(rederived(&reports), vec![1, 2], "the requiring unit and its reader, and not the unit that reads neither");
+    assert_eq!(value_of(&mut engine, "d"), "7");
+    assert_eq!(value_of(&mut engine, "a"), "8");
+    assert_eq!(value_of(&mut engine, "b"), "20");
+}
+
+/// Data that no longer has the type it is required at breaks the unit that
+/// requires it, and the units that read what that unit provided, and data that
+/// has it again fixes them.
+#[test]
+fn data_of_another_type_breaks_the_units_that_require_it_until_fixed() {
+    let mut engine = engine_with_modules_and_data(&[], &[("d", "5")]);
+    run(&mut engine, "require data local/test/d: int\n---\nlet a = d + 1\n---\nlet b = 20");
+
+    let reports = edit_data(&mut engine, "\"five\"");
+
+    assert_eq!(reported(&reports), vec![1, 2]);
+    assert!(
+        reports.iter().all(|report| matches!(report.eval, Some(Eval::NotCompiled(_)))),
+        "both fail to compile: {reports:?}",
+    );
+    assert!(!bound(&mut engine, "d"));
+    assert!(!bound(&mut engine, "a"));
+    assert_eq!(value_of(&mut engine, "b"), "20");
+
+    edit_data(&mut engine, "7");
+
+    assert_eq!(value_of(&mut engine, "a"), "8");
+}
+
+/// Data a module requires is compiled into the module, so a data edit reaches
+/// the units that import from it.
+#[test]
+fn editing_data_a_module_requires_rederives_its_importers() {
+    let mut engine = engine_with_modules_and_data(
+        &[("m", "require data local/test/d: int\nfun f(): int\n    ret d + 10\nend fun\n")],
+        &[("d", "5")],
+    );
+    run(&mut engine, "require module local/test/m\nimport m.f\nlet a = f()\n---\nlet b = 20");
+    assert_eq!(value_of(&mut engine, "a"), "15");
+
+    let reports = edit_data(&mut engine, "7");
+
+    assert_eq!(rederived(&reports), vec![1]);
+    assert_eq!(value_of(&mut engine, "a"), "17");
+    assert_eq!(value_of(&mut engine, "b"), "20");
+}
+
 /// Breaking a module fails the units of the modules requiring it too, which
 /// leave the compile with it, and fixing it brings them back.
 #[test]
@@ -827,6 +895,13 @@ fn a_unit_s_ownership_errors_render_as_diagnostics() {
     let moved = engine.unit_diagnostics(4, "unit 4", TextStyle::Plain);
     assert!(moved.contains("[D001]") && moved.contains("unit 4:3:9"), "{moved}");
     assert!(!moved.contains("D003"), "{moved}");
+}
+
+/// Edit the data `local/test/d`, saying what that did to the session the
+/// engine started with.
+fn edit_data(engine: &mut Engine, text: &str) -> Vec<UnitStep> {
+    let first = engine.first_session();
+    engine.edit_data("local", "test", "d", text).remove(&first).expect("the first session is reported")
 }
 
 /// Edit `local/test/m`, saying what that did to the session the engine

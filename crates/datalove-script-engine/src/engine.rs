@@ -193,6 +193,23 @@ impl Shared {
             ));
         held.source = source.into();
     }
+
+    /// Keep the descriptor in step with the pipeline's data, as
+    /// [`Self::set_workspace_module`] does for its modules.
+    fn set_workspace_data(&mut self, library: &str, package: &str, name: &str, text: &str) {
+        let libraries = self.workspace.system_library.iter_mut()
+            .chain(self.workspace.user_libraries.iter_mut());
+        let held = libraries
+            .filter(|held| held.name == library)
+            .filter_map(|held| held.packages.get_mut(package))
+            .filter_map(|held| held.data.get_mut(name))
+            .next()
+            .unwrap_or_else(|| panic!(
+                "the pipeline has data {library}/{package}/{name} and the workspace \
+                 descriptor it was built from does not",
+            ));
+        held.source = text.into();
+    }
 }
 
 /// One session: its units, and the executor that runs them.
@@ -722,6 +739,88 @@ impl Engine {
             .map(|(id, state)| {
                 let rederived = state.resume(&shared.db, &compiled, changes, |compiler| {
                     compiler.relower_module_reach(&reached)
+                });
+                (*id, rederived)
+            })
+            .collect();
+
+        // The run.
+        rederived.into_iter()
+            .map(|(id, rederived)| {
+                let mut session = self.session(id);
+                (id, session.compiling().rerun_and_explain(rederived))
+            })
+            .collect()
+    }
+
+    /// Change one data file's text and re-derive the script units it reaches,
+    /// in every session.
+    ///
+    /// The data-shaped sibling of [`Self::edit_module`]. A unit is re-derived
+    /// when it requires the data, when it imports from a module whose consts
+    /// reach it, or when it uses what such a unit provides; the units that
+    /// require it are recompiled, since the data is compiled into them as a
+    /// const. Returns what the step did to each session's units, by session.
+    pub fn edit_data(
+        &mut self,
+        library: &str,
+        package: &str,
+        name: &str,
+        text: &str,
+    ) -> BTreeMap<SessionId, Vec<UnitStep>> {
+        let (mut reports, ran) = unit_analysis::collect(|| self.edit_data_in_step(library, package, name, text));
+        self.session_ids().into_iter()
+            .map(|id| {
+                let mut session = self.session(id);
+                session.record_step(reports.remove(&id).expect("every session is re-derived"), ran.C());
+                (id, session.last_step().to_vec())
+            })
+            .collect()
+    }
+
+    fn edit_data_in_step(
+        &mut self,
+        library: &str,
+        package: &str,
+        name: &str,
+        text: &str,
+    ) -> BTreeMap<SessionId, Vec<UnitStep>> {
+        // The write.
+        let path = format!("{library}/{package}/{name}");
+        let Shared { db, modules, .. } = &mut self.shared;
+        let pipeline = &mut modules.get_mut().pipeline;
+        assert!(pipeline.data_source(&path).is_some(), "no data {path} in this engine");
+        pipeline.update_data(db, library, package, name, text);
+        self.shared.set_workspace_data(library, package, name, text);
+
+        // The compile.
+        let shared = &self.shared;
+        let compiled = shared.compile_modules(&self.all_units());
+        let db = &shared.db;
+        // The modules whose consts name the data, and the modules that reach
+        // one of them.
+        let typecheck = compiled.shared.graph_typecheck;
+        let requiring: BTreeSet<String> = typecheck.module_results(db).iter_unordered()
+            .filter(|(_, result)| result.data_files(db).contains_key(&path))
+            .map(|(module, _)| module.path(db).C())
+            .collect();
+        let reached: Vec<String> = module_reach(db, &compiled).into_iter()
+            .filter(|(_, reach)| !reach.is_disjoint(&requiring))
+            .map(|(module, _)| module)
+            .collect();
+        let changes = {
+            let mut modules = shared.modules.borrow_mut();
+            // A module's consts hold the data, so the modules have changed.
+            if !reached.is_empty() {
+                modules.changes += 1;
+            }
+            modules.changes
+        };
+
+        let rederived: BTreeMap<SessionId, _> = self.sessions.iter_mut()
+            .map(|(id, state)| {
+                let rederived = state.resume(&shared.db, &compiled, changes, |compiler| {
+                    compiler.relower_data_reach(&path, &reached)
                 });
                 (*id, rederived)
             })

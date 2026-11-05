@@ -1064,6 +1064,9 @@ impl<E: ReplExecutor> ReplApp<E> {
                     }
                     None
                 }
+                // The data is the world's, not the session's, so there is
+                // nothing of the session to take back.
+                R::EditData { .. } => None,
                 other => unreachable!("{other:?} was answered as an edit"),
             },
             _ => None,
