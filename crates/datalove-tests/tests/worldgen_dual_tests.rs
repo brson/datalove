@@ -62,37 +62,15 @@ fn run_with_chaos_interp(
     let mut module_compiler = ModuleCompiler::from_sections(db, &parsed.sections, CompilerOptions::default());
     let compiled = module_compiler.compile(db);
 
-    if let Some(err) = &compiled.resolution_error {
+    // Parse and ownership errors as well as type and lowering ones: a module
+    // with any of them is not run.
+    if compiled.has_errors() {
         return RunResult {
             compiled: false,
             debuglog: String::new(),
             success: false,
-            error: Some(format!("Resolution error: {}", err)),
+            error: Some(format!("Module errors: {:?}", compiled.all_errors())),
         };
-    }
-
-    // Check for typecheck errors.
-    for (path, errors) in &compiled.path_to_errors {
-        if !errors.is_empty() {
-            return RunResult {
-                compiled: false,
-                debuglog: String::new(),
-                success: false,
-                error: Some(format!("Typecheck error in {}: {:?}", path, errors)),
-            };
-        }
-    }
-
-    // Check for lowering errors.
-    for (path, errors) in &compiled.lowering_errors {
-        if !errors.is_empty() {
-            return RunResult {
-                compiled: false,
-                debuglog: String::new(),
-                success: false,
-                error: Some(format!("Lowering error in {}: {:?}", path, errors)),
-            };
-        }
     }
 
     // Chaos dispatch: compile 75% of calls on the first one
@@ -184,37 +162,15 @@ fn run_with_aot(
     let mut module_compiler = ModuleCompiler::from_sections(db, &parsed.sections, CompilerOptions::default());
     let compiled = module_compiler.compile(db);
 
-    if let Some(err) = &compiled.resolution_error {
+    // Parse and ownership errors as well as type and lowering ones: a module
+    // with any of them is not run.
+    if compiled.has_errors() {
         return RunResult {
             compiled: false,
             debuglog: String::new(),
             success: false,
-            error: Some(format!("Resolution error: {}", err)),
+            error: Some(format!("Module errors: {:?}", compiled.all_errors())),
         };
-    }
-
-    // Check for typecheck errors.
-    for (path, errors) in &compiled.path_to_errors {
-        if !errors.is_empty() {
-            return RunResult {
-                compiled: false,
-                debuglog: String::new(),
-                success: false,
-                error: Some(format!("Typecheck error in {}: {:?}", path, errors)),
-            };
-        }
-    }
-
-    // Check for lowering errors.
-    for (path, errors) in &compiled.lowering_errors {
-        if !errors.is_empty() {
-            return RunResult {
-                compiled: false,
-                debuglog: String::new(),
-                success: false,
-                error: Some(format!("Lowering error in {}: {:?}", path, errors)),
-            };
-        }
     }
 
     // Find the script fragment.

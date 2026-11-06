@@ -22,7 +22,6 @@ home here.
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [The REPL shows a broken module only as a message](#user-content-the-repl-shows-a-broken-module-only-as-a-message)
-  - [A module that does not parse fails `script-world` silently](#user-content-a-module-that-does-not-parse-fails-script-world-silently)
   - [Lowering errors say what, never where](#user-content-lowering-errors-say-what-never-where)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
@@ -57,6 +56,7 @@ home here.
 
 - [Testing](#user-content-testing)
   - [The cli tests run with leak checking on, which no user does](#user-content-the-cli-tests-run-with-leak-checking-on-which-no-user-does)
+  - [Fixtures in old syntax test only that they do not parse](#user-content-fixtures-in-old-syntax-test-only-that-they-do-not-parse)
 
 ## Engines and the REPL: failing the wrong way
 
@@ -201,22 +201,6 @@ does not reach this today.
 module's diagnostics, framed against its source, are what the engine keeps in
 `ModuleErrors`, and only the CLI renders them; the REPL's Detail tab shows the
 unit's own diagnostics, which say nothing of the module's.
-
-### A module that does not parse fails `script-world` silently
-
-**Reproduced.** A worldfile module section that does not parse, such as one
-with `let x: int = @true`, makes `datalove script-world` print `Error: Module
-compilation error` and nothing else. The same error in a scriptunit section
-is P080, framed, and `datalove script` shows a module's P080 too.
-
-`ModuleErrors::diagnostics` (`crates/datalove-script-engine/src/engine.rs`)
-holds the type and ownership diagnostics, not the parse ones, and
-`script-world` prints those and the lowering errors, never `broken`. So a
-module whose only errors are parse errors has nothing to show. The
-`world_error` fixtures run through `script-world`, which is how
-`06_F016_type_mismatch_in_module` went on passing on a stale parse error for
-as long as it did. Keeping the parse diagnostics in `ModuleErrors` beside
-the others would fix both this and part of the REPL's Detail tab.
 
 ### Lowering errors say what, never where
 
@@ -717,3 +701,25 @@ test a configuration no user runs. Either clear the variable at the spawn sites
 (the `Command::new`s in `datalove-cli/tests`, built inline, which is where a
 helper would earn its place) or accept that they are not testing the shipped
 default.
+
+### Fixtures in old syntax test only that they do not parse
+
+**Checked, by reading each fixture whose expected output is a parse error.**
+These are written in syntax the language has dropped or never had -- Rust's
+`fn f() -> T { ... }`, `<` for less-than, struct literals with `:` -- and
+their expected output is the parse error, so they pass while testing none of
+what their comments say:
+
+- `datalove-datafun/tests/fixtures/engines/`: `182_table_in_function`,
+  `831_ctfe_table_script_func`, `833_ctfe_set_of_structs`,
+  `834_ctfe_map_with_struct_value`, `835_ctfe_nested_collections`,
+  `836_ctfe_map_struct_key`, `857_ctfe_comparison_lt`.
+- `datalove-datafun/tests/fixtures/ir_lower/003_var_mutation`, whose `sum =
+  sum + 1` is not a `set`.
+
+Each wants rewriting in the current syntax to what its comment describes, or
+deleting where another fixture already covers it. The `world_error` fixtures
+had the same fault, hidden because `script-world` printed no module parse
+errors; those are fixed. The `datalove-datalit` tycheck fixtures that expect
+a parse error (`global_no_sigil_*`, the `err_*_heap_mismatch` set) look
+deliberate but were not checked one by one.

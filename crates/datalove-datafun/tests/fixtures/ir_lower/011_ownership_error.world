@@ -1,0 +1,10 @@
+----------
+module local/test/main
+----------
+
+// A module that fails ownership analysis is lowered no further.
+fun main(): string
+    let s = "a"
+    let t = s
+    ret s
+end fun

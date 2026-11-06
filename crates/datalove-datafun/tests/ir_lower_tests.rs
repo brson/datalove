@@ -51,6 +51,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         return Ok(format!("Typecheck error: {}\n", all_typecheck_errors.join("; ")));
     }
 
+    let all_ownership_errors = compiled.all_ownership_errors();
+    if !all_ownership_errors.is_empty() {
+        return Ok(format!("Ownership error: {}\n", all_ownership_errors.join("; ")));
+    }
+
     // Check for lowering errors.
     let all_lowering_errors = compiled.all_lowering_errors();
     if !all_lowering_errors.is_empty() {
