@@ -1,0 +1,6 @@
+// A module function whose body only calls itself has the shape of a
+// forwarder, and is asked whether it is one through the call it makes. That
+// once panicked the bytecode; it recurses until the frame stack is full.
+require module local/app/forever
+
+debuglog forever.forever(: u32 / 1)

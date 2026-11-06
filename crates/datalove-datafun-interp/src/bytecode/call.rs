@@ -657,75 +657,77 @@ impl IrInterpreter {
         let callee = Self::resolve_callee(call, code_ref, ctx, registry);
         let callee_ctx = ctx.for_callee(code_ref, registry);
         let address = callee as *const IrCodeUnit as usize;
-        let (layout, suits, forward, descriptors) = {
-            let mut site = call.site.borrow_mut();
-            let cache = &mut site.callee;
-            match &*cache {
-                Some(c) if c.address == address && c.epoch == self.code_epoch
-                    && c.generation == self.native_table.generation()
-                    && !(dispatched && c.needs_policy(dispatcher_epoch)) =>
-                {
-                    (c.layout.clone(), c.suits, c.forward.clone(), c.descriptors.clone())
-                }
-                _ => {
-                    let (layout, suits, forward) = match &callee.context {
-                        CodeUnitContext::Native(native) => (None, Self::suits_native(call, native), None),
-                        _ => {
-                            let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
-                            let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
-                            let suits = call.args.iter().enumerate().all(|(i, &movable)| {
-                                match layout.param_modes[i] {
-                                    ParamMode::Out => false,
-                                    ParamMode::In => movable || !layout.param_moves[i],
-                                    ParamMode::Ref | ParamMode::Mut => true,
-                                }
-                            });
-                            let forward = self.forwarder(&layout, callee, &callee_ctx, registry);
-                            (Some(layout), suits, forward)
-                        }
-                    };
-                    // A forwarder's native, for the descriptors it asks for.
-                    let forwarded = forward.as_ref().map(|bc| {
-                        let Instruction::Call { func: inner_ref, .. } = &callee.blocks[0].instructions[0] else {
-                            unreachable!("a forwarder is a call")
-                        };
-                        let native_body = Self::resolve_callee(&bc.calls[0], inner_ref, &callee_ctx, registry);
-                        match &native_body.context {
-                            CodeUnitContext::Native(native) => native.undetermined_type_params.clone(),
-                            _ => unreachable!("a forwarder calls a native"),
-                        }
-                    });
-                    let descriptors: std::rc::Rc<[crate::BindingRef]> =
-                        self.site_descriptors(callee, bindings, forwarded.as_deref(), frame.layout()).into();
-                    // Every plan hands over the descriptors of what the call
-                    // bound the callee's type parameters to: a native and a
-                    // body from `descriptors`, and compiled code as the words
-                    // after its arguments.
-                    let plannable = suits && !matches!(code_ref, CodeRef::External { .. });
-                    let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
+        // The site is not held borrowed while a plan is made: a body whose one
+        // call is to itself is asked whether it forwards through this site.
+        let hit = match &call.site.borrow().callee {
+            Some(c) if c.address == address && c.epoch == self.code_epoch
+                && c.generation == self.native_table.generation()
+                && !(dispatched && c.needs_policy(dispatcher_epoch)) =>
+            {
+                Some((c.layout.clone(), c.suits, c.forward.clone(), c.descriptors.clone()))
+            }
+            _ => None,
+        };
+        let (layout, suits, forward, descriptors) = match hit {
+            Some(hit) => hit,
+            None => {
+                let (layout, suits, forward) = match &callee.context {
+                    CodeUnitContext::Native(native) => (None, Self::suits_native(call, native), None),
+                    _ => {
                         let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
-                        self.call_dispatcher.borrow_mut().as_mut()
-                            .expect("installed")
-                            .site_policy(identity, callee)
-                    });
-                    let plan = if plannable {
-                        self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref(), policy, &descriptors)
-                    } else {
-                        None
-                    };
-                    let fresh = CallCache {
-                        address, epoch: self.code_epoch, generation: self.native_table.generation(),
-                        layout: layout.clone(), suits, forward: forward.clone(), plan,
-                        descriptors: descriptors.clone(),
-                        dispatcher: dispatched.then_some(dispatcher_epoch),
-                    };
-                    // A planned call's frame borrows its layout and bytecode
-                    // from the plan, so a replaced one is kept.
-                    if let Some(old) = cache.replace(fresh) {
-                        self.retired_call_caches.push(old);
+                        let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
+                        let suits = call.args.iter().enumerate().all(|(i, &movable)| {
+                            match layout.param_modes[i] {
+                                ParamMode::Out => false,
+                                ParamMode::In => movable || !layout.param_moves[i],
+                                ParamMode::Ref | ParamMode::Mut => true,
+                            }
+                        });
+                        let forward = self.forwarder(&layout, callee, &callee_ctx, registry);
+                        (Some(layout), suits, forward)
                     }
-                    (layout, suits, forward, descriptors)
+                };
+                // A forwarder's native, for the descriptors it asks for.
+                let forwarded = forward.as_ref().map(|bc| {
+                    let Instruction::Call { func: inner_ref, .. } = &callee.blocks[0].instructions[0] else {
+                        unreachable!("a forwarder is a call")
+                    };
+                    let native_body = Self::resolve_callee(&bc.calls[0], inner_ref, &callee_ctx, registry);
+                    match &native_body.context {
+                        CodeUnitContext::Native(native) => native.undetermined_type_params.clone(),
+                        _ => unreachable!("a forwarder calls a native"),
+                    }
+                });
+                let descriptors: std::rc::Rc<[crate::BindingRef]> =
+                    self.site_descriptors(callee, bindings, forwarded.as_deref(), frame.layout()).into();
+                // Every plan hands over the descriptors of what the call
+                // bound the callee's type parameters to: a native and a
+                // body from `descriptors`, and compiled code as the words
+                // after its arguments.
+                let plannable = suits && !matches!(code_ref, CodeRef::External { .. });
+                let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
+                    let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
+                    self.call_dispatcher.borrow_mut().as_mut()
+                        .expect("installed")
+                        .site_policy(identity, callee)
+                });
+                let plan = if plannable {
+                    self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref(), policy, &descriptors)
+                } else {
+                    None
+                };
+                let fresh = CallCache {
+                    address, epoch: self.code_epoch, generation: self.native_table.generation(),
+                    layout: layout.clone(), suits, forward: forward.clone(), plan,
+                    descriptors: descriptors.clone(),
+                    dispatcher: dispatched.then_some(dispatcher_epoch),
+                };
+                // A planned call's frame borrows its layout and bytecode
+                // from the plan, so a replaced one is kept.
+                if let Some(old) = call.site.borrow_mut().callee.replace(fresh) {
+                    self.retired_call_caches.push(old);
                 }
+                (layout, suits, forward, descriptors)
             }
         };
         // A body goes to the dispatcher, which a native, or a forwarder to
