@@ -103,7 +103,9 @@ handles soundly. In Datalove every move and every write to another unit's
 binding is visible statically: linear types for moves, `set` and `mut`/`out`
 parameters in signatures for writes. IPyflow's worst failure, a write through
 an alias inside a function, cannot happen. That is the strongest claim for the
-comparison section.
+comparison section. The engine is held to it by the cases under
+[writes through function parameters](script-reactivity-cases.md#user-content-writes-through-function-parameters),
+which include Rex's `flu_vaccine` edit and its `aliasing_val_swap`.
 
 ## The algebra is dependence analysis
 

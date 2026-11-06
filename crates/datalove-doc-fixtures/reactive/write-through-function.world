@@ -1,0 +1,128 @@
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+fun bump(mut x: int)
+  set x = x + 1
+end fun
+
+----------
+scriptunit-fragment 3
+----------
+
+call bump(mut b)
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b * 2
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 126 |
+| 2 | - | compiles, runs | new | - |
+| 3 | reads `bump` (2), updates `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 252 |
+
+----------
+scriptunit-edit 2
+----------
+
+fun bump(mut x: int)
+  set x = x * 2
+end fun
+
+----------
+expect the function's body is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 reruns and updates `b`, so `b` has to be as unit 3 first found it | `b` = 250 |
+| 2 | - | recompiles, runs | edited | - |
+| 3 | reads `bump` (2), updates `b` (1) | reruns | reads `bump` | - |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3 | `c` = 500 |
+
+----------
+scriptunit-insert 5 after 1
+----------
+
+fun lower(mut x: int)
+  set x = x - 25
+end fun
+call lower(mut b)
+
+----------
+expect a unit that defines a function and calls it on `b` is inserted after unit 1
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 5 updates `b`, which unit 3 updated since | `b` = 200 |
+| 5 | updates `b` (1) | compiles, runs | new | - |
+| 2 | - | untouched | nothing changed `bump` | - |
+| 3 | reads `bump` (2), updates `b` (1) | reruns | updates `b` after unit 5 | - |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 5 | `c` = 400 |
+
+----------
+scriptunit-delete 5
+----------
+
+----------
+expect unit 5 is deleted
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 5 updated `b` when it last ran, and is deleted | `b` = 250 |
+| 5 | - | deleted | deleted | - |
+| 2 | - | untouched | nothing changed `bump` | - |
+| 3 | reads `bump` (2), updates `b` (1) | reruns | updates `b`, which unit 5 no longer updates first | - |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3 | `c` = 500 |
+
+----------
+scriptunit-edit 2
+----------
+
+fun bump(ref x: int): int
+  ret x + 1
+end fun
+
+----------
+expect the function stops writing its argument
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 updated `b` when it last ran, and no longer compiles | `b` = 125 |
+| 2 | - | recompiles, runs | edited | - |
+| 3 | - | recompile fails | `bump` no longer takes `mut` | - |
+| 4 | reads `b` (1) | reruns | reads `b`, which unit 3 no longer updates | `c` = 250 |
+
+----------
+scriptunit-edit 3
+----------
+
+set b = bump(ref b)
+
+----------
+expect the call is edited to suit
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | `b` is as unit 1 made it | `b` = 126 |
+| 2 | - | untouched | nothing changed `bump` | - |
+| 3 | reads `bump` (2), updates `b` (1) | recompiles, runs | edited | - |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3, which now updates it | `c` = 252 |

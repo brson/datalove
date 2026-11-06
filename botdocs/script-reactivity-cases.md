@@ -23,6 +23,7 @@ is the narrative version. How the engine does it is
 - [Revivals](#user-content-revivals)
 - [Reruns that need reruns](#user-content-reruns-that-need-reruns)
 - [Values through intermediate bindings](#user-content-values-through-intermediate-bindings)
+- [Writes through function parameters](#user-content-writes-through-function-parameters)
 - [Conditional writes, loops and parts of bindings](#user-content-conditional-writes-loops-and-parts-of-bindings)
 - [Splices](#user-content-splices)
 - [Returning early](#user-content-returning-early)
@@ -1553,6 +1554,185 @@ let shown = big
 Engine today, more than the rule asks:
 unit 3 reruns: does not compare a rerun unit's values with what they were
 -->
+<!-- end world -->
+
+## Writes through function parameters
+
+A function with a `mut` parameter writes the caller's binding, and the call
+says so: `call bump(mut b)` updates `b` as `set b = b + 1` would. So a write
+inside a function is as visible as a `set`, and the rules above apply to it
+unchanged. This is the case notebook reactivity fails on most in the Rex
+benchmark (Lu et al., arXiv 2511.21994): IPyflow traces mutation at runtime and
+misses one made through a function's parameter. Here the edits are to the
+function, to a unit that defines one and calls it, and to the function's
+signature.
+
+<!-- world write-through-function code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+fun bump(mut x: int)
+  set x = x + 1
+end fun
+
+----------
+scriptunit-fragment 3
+----------
+
+call bump(mut b)
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b * 2
+```
+<!-- end world -->
+
+<!-- world write-through-function step 1 -->
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 126 |
+| 2 | `fun bump(mut x: int); set x = x + 1; end fun` | - | compiles, runs | new | - |
+| 3 | `call bump(mut b)` | reads `bump` (2), updates `b` (1) | compiles, runs | new | - |
+| 4 | `let c = b * 2` | reads `b` (1) | compiles, runs | new | `c` = 252 |
+<!-- end world -->
+
+<!-- world write-through-function step 2 -->
+**Step 2: the function's body is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 reruns and updates `b`, so `b` has to be as unit 3 first found it | `b` = 250 |
+| 2 | `fun bump(mut x: int); set x = x * 2; end fun` | - | recompiles, runs | edited | - |
+| 3 | `call bump(mut b)` | reads `bump` (2), updates `b` (1) | reruns | reads `bump` | - |
+| 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 3 | `c` = 500 |
+<!-- end world -->
+
+Editing the function's body reruns unit 3, which calls it, and unit 3 updates
+`b`, so unit 1 reruns first to give it `b` as it first found it.
+
+<!-- world write-through-function step 3 -->
+**Step 3: a unit that defines a function and calls it on `b` is inserted after unit 1.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 5 updates `b`, which unit 3 updated since | `b` = 200 |
+| 5 | `fun lower(mut x: int); set x = x - 25; end fun; call lower(mut b)` | updates `b` (1) | compiles, runs | new | - |
+| 2 | `fun bump(mut x: int); set x = x * 2; end fun` | - | untouched | nothing changed `bump` | - |
+| 3 | `call bump(mut b)` | reads `bump` (2), updates `b` (1) | reruns | updates `b` after unit 5 | - |
+| 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 5 | `c` = 400 |
+<!-- end world -->
+
+<!-- world write-through-function step 4 -->
+**Step 4: unit 5 is deleted.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 5 updated `b` when it last ran, and is deleted | `b` = 250 |
+| 5 | `fun lower(mut x: int); set x = x - 25; end fun; call lower(mut b)` | - | deleted | deleted | - |
+| 2 | `fun bump(mut x: int); set x = x * 2; end fun` | - | untouched | nothing changed `bump` | - |
+| 3 | `call bump(mut b)` | reads `bump` (2), updates `b` (1) | reruns | updates `b`, which unit 5 no longer updates first | - |
+| 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 3 | `c` = 500 |
+<!-- end world -->
+
+Rex's `flu_vaccine` edit has this shape: a new cell defines a function and
+calls it on an earlier cell's data in place.
+
+<!-- world write-through-function step 5 -->
+**Step 5: the function stops writing its argument.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 updated `b` when it last ran, and no longer compiles | `b` = 125 |
+| 2 | `fun bump(ref x: int): int; ret x + 1; end fun` | - | recompiles, runs | edited | - |
+| 3 | `call bump(mut b)` | - | recompile fails | `bump` no longer takes `mut` | - |
+| 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b`, which unit 3 no longer updates | `c` = 250 |
+<!-- end world -->
+
+The edit is to unit 2, but it is unit 3 that stops writing `b`, because the
+call no longer compiles against the new signature. A failed unit writes
+nothing, so `b` is restored as for a deleted writer.
+
+<!-- world write-through-function step 6 -->
+**Step 6: the call is edited to suit.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | untouched | `b` is as unit 1 made it | `b` = 126 |
+| 2 | `fun bump(ref x: int): int; ret x + 1; end fun` | - | untouched | nothing changed `bump` | - |
+| 3 | `set b = bump(ref b)` | reads `bump` (2), updates `b` (1) | recompiles, runs | edited | - |
+| 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 3, which now updates it | `c` = 252 |
+<!-- end world -->
+
+A swap writes two bindings at once, each from the other's old value. Editing
+either one means restoring both, since the swap reads both. Rex's
+`aliasing_val_swap` is this case written as `a, b = b, a`, and IPyflow fails
+it by rerunning the definition of `b` and not of `a`.
+
+<!-- world swap code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var a = 9
+
+----------
+scriptunit-fragment 2
+----------
+
+var b = 5
+
+----------
+scriptunit-fragment 3
+----------
+
+fun swap(mut x: int, mut y: int)
+  let t = x@
+  set x = y@
+  set y = t
+end fun
+call swap(mut a, mut b)
+
+----------
+scriptunit-fragment 4
+----------
+
+let shown = a * 10 + b
+```
+<!-- end world -->
+
+<!-- world swap step 1 -->
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var a = 9` | - | compiles, runs | new | `a` = 5 |
+| 2 | `var b = 5` | - | compiles, runs | new | `b` = 9 |
+| 3 | `fun swap(mut x: int, mut y: int); let t = x@; set x = y@; set y = t; end fun; call swap(mut a, mut b)` | updates `a` (1), updates `b` (2) | compiles, runs | new | - |
+| 4 | `let shown = a * 10 + b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `shown` = 59 |
+<!-- end world -->
+
+<!-- world swap step 2 -->
+**Step 2: unit 2 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var a = 9` | - | reruns | rerun: unit 3 reruns and updates `a`, so `a` has to be as unit 3 first found it | `a` = 8 |
+| 2 | `var b = 8` | - | recompiles, runs | edited | `b` = 9 |
+| 3 | `fun swap(mut x: int, mut y: int); let t = x@; set x = y@; set y = t; end fun; call swap(mut a, mut b)` | updates `a` (1), updates `b` (2) | reruns | reads `b` from unit 2 | - |
+| 4 | `let shown = a * 10 + b` | reads `a` (1), reads `b` (2) | reruns | reads `a` and `b` after unit 3 | `shown` = 89 |
 <!-- end world -->
 
 ## Conditional writes, loops and parts of bindings

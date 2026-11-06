@@ -1,0 +1,56 @@
+----------
+scriptunit-fragment 1
+----------
+
+var a = 9
+
+----------
+scriptunit-fragment 2
+----------
+
+var b = 5
+
+----------
+scriptunit-fragment 3
+----------
+
+fun swap(mut x: int, mut y: int)
+  let t = x@
+  set x = y@
+  set y = t
+end fun
+call swap(mut a, mut b)
+
+----------
+scriptunit-fragment 4
+----------
+
+let shown = a * 10 + b
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 5 |
+| 2 | - | compiles, runs | new | `b` = 9 |
+| 3 | updates `a` (1), updates `b` (2) | compiles, runs | new | - |
+| 4 | reads `a` (1), reads `b` (2) | compiles, runs | new | `shown` = 59 |
+
+----------
+scriptunit-edit 2
+----------
+
+var b = 8
+
+----------
+expect unit 2 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 reruns and updates `a`, so `a` has to be as unit 3 first found it | `a` = 8 |
+| 2 | - | recompiles, runs | edited | `b` = 9 |
+| 3 | updates `a` (1), updates `b` (2) | reruns | reads `b` from unit 2 | - |
+| 4 | reads `a` (1), reads `b` (2) | reruns | reads `a` and `b` after unit 3 | `shown` = 89 |
