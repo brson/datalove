@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "takes_ref: error[D003]: cannot move borrowed value: `x`",
+                message: "takes_ref: error[O003]: cannot move borrowed value: `x`",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

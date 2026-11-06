@@ -1,4 +1,4 @@
-// D006 names every way out that leaves an out parameter unwritten: here a
+// O006 names every way out that leaves an out parameter unwritten: here a
 // `ret` before the `set`, and the end of the body, which a false `flag` runs
 // to.
 fun pick(flag: bool, out s: string)

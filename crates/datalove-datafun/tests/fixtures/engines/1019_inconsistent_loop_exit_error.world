@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-// Error test: D014. One way out of the loop gives `b` away and another does
+// Error test: O014. One way out of the loop gives `b` away and another does
 // not, so whether it is still held afterwards depends on which ran.
 //
-// Not D007. The move happens on the path that breaks, so it cannot happen
+// Not O007. The move happens on the path that breaks, so it cannot happen
 // twice; what cannot be settled is the state after the loop. The `while` is
 // what makes the exits disagree -- the condition can fail on the first read,
 // leaving `b` untouched.

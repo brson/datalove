@@ -1,4 +1,4 @@
-[31m[D001] Error:[0m use of moved value: `s`
+[31m[O001] Error:[0m use of moved value: `s`
    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/workspace/local/broken/moves.dfm:3:11 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[36ms[0m

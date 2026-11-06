@@ -2427,7 +2427,7 @@ pub unsafe extern "C-unwind" fn dlr_std__mem_swap(
     _out: rtdt::AnyOut<'_>, _out_td: &rtdt::TyDesc,
 ) -> u8 {
     // The two cannot overlap: two `mut` arguments rooted at one binding are
-    // refused (D010).
+    // refused (O010).
     unsafe {
         let size = a_td.size as usize;
         rtdt::bytes::swap_value(a_ptr.as_ptr(), b_ptr.as_ptr(), size);

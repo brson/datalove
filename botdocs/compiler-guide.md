@@ -92,7 +92,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-paths` | `work_dir()`, where native components are built |
 | `datalove-ct` | Compile-time utilities, query logging |
 | `datalove-diagnostic` | Diagnostic/error infrastructure |
-| `datalove-diagnostic-codes` | Every diagnostic code, an enum per family (`DCode`, `PCode`, `TCode`, `FCode`) |
+| `datalove-diagnostic-codes` | Every diagnostic code, an enum per family (`DCode`, `OCode`, `PCode`, `TCode`, `FCode`) |
 | `datalove-datalit` | Data literal types and typechecking |
 | `datalove-exampletest` | Snapshot test harness |
 | `datalove-worldgen` | Generator for random worldfiles that typecheck |
@@ -979,7 +979,7 @@ before anything read them), and
 `revived_exports` for the ones that held nothing and that it assigned to. A
 unit can also give away a binding it defined itself, which goes in
 `dead_exports`. `dead_externals_over` folds the records into the names a later
-unit may not use, and using one is D013. The reach of an edit needs
+unit may not use, and using one is O013. The reach of an edit needs
 `UnitLowerRecord::takes` and `writes` too, for rerunning a unit has to put back
 what it changed first;
 see [script-reactivity-architecture.md](script-reactivity-architecture.md).
@@ -1452,7 +1452,7 @@ pub enum TrackingCategory {
 
 Tracked bindings: exports, `out` params, conditional moves, mutable slots.
 
-Match arms use `ScopeKind::MatchArm`. Branch consistency (D008) is generalized
+Match arms use `ScopeKind::MatchArm`. Branch consistency (O008) is generalized
 across all match arms: if a value is moved in one arm, it must be moved in all.
 `if` and `match` both check it in `check_branches_agree`, over the branches that
 fall through. Each branch's `BranchEnd` keeps its `moved_at` and `assigned_at`
@@ -1461,7 +1461,7 @@ and, for a `set`, at the move before the branches that it undoes.
 
 **Consts are borrowed.** A const, function-level, module-level or script-level,
 and a const parameter are ref bindings: a move out of one of a non-copy type is
-`CannotMoveConst` (D016) unless written with `@`. A const the analysis declared
+`CannotMoveConst` (O016) unless written with `@`. A const the analysis declared
 is a binding with `is_const`. One declared outside the body is only a name, and
 `OuterConsts` says which: in a function body every name it cannot resolve,
 since a body sees only its parameters, what it binds, consts and functions, and
@@ -1486,29 +1486,29 @@ gives each its `DCode`.
 
 | Code | Variant | Trigger |
 |------|---------|---------|
-| D001 | `UseAfterMove` | Using value after move |
-| D002 | `DoubleMove` | Moving value twice |
-| D003 | `CannotMoveBorrowed` | Moving `ref`/`mut`/`out` param |
-| D004 | `CannotMutFromRef` | Passing `ref` to `mut` param |
-| D005 | `ReadUninitialized` | Reading an `out` param or `var` binding before it is set |
-| D006 | `OutParamNotInitialized` | Return without initializing `out` |
-| D007 | `MoveInLoop` | Moving outer-scoped value in loop |
-| D008 | `InconsistentBranchMove` | Value moved, or `set` again after a move, in one merging branch only |
-| D009 | `OutParamPartialWrite` | Field write to `out` param |
-| D010 | `AliasedMutableArgument` | Two arguments share a place root, one is `mut`/`out` |
-| D011 | `CannotMutateImmutable` | `let` binding or `in` param passed as `mut`/`out` |
-| D012 | `CannotMutateTemporary` | Non-place argument passed as `mut`/`out` |
-| D013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
-| D014 | `InconsistentLoopExit` | Moved on one way out of a loop and not another |
-| D015 | `WalkedCollectionChanged`, `WalkedCollectionAssigned` | The collection a `for` walks moved, passed `mut`/`out`, or assigned to or through |
-| D016 | `CannotMoveConst` | Moving out of a const or const parameter without `@` |
+| O001 | `UseAfterMove` | Using value after move |
+| O002 | `DoubleMove` | Moving value twice |
+| O003 | `CannotMoveBorrowed` | Moving `ref`/`mut`/`out` param |
+| O004 | `CannotMutFromRef` | Passing `ref` to `mut` param |
+| O005 | `ReadUninitialized` | Reading an `out` param or `var` binding before it is set |
+| O006 | `OutParamNotInitialized` | Return without initializing `out` |
+| O007 | `MoveInLoop` | Moving outer-scoped value in loop |
+| O008 | `InconsistentBranchMove` | Value moved, or `set` again after a move, in one merging branch only |
+| O009 | `OutParamPartialWrite` | Field write to `out` param |
+| O010 | `AliasedMutableArgument` | Two arguments share a place root, one is `mut`/`out` |
+| O011 | `CannotMutateImmutable` | `let` binding or `in` param passed as `mut`/`out` |
+| O012 | `CannotMutateTemporary` | Non-place argument passed as `mut`/`out` |
+| O013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
+| O014 | `InconsistentLoopExit` | Moved on one way out of a loop and not another |
+| O015 | `WalkedCollectionChanged`, `WalkedCollectionAssigned` | The collection a `for` walks moved, passed `mut`/`out`, or assigned to or through |
+| O016 | `CannotMoveConst` | Moving out of a const or const parameter without `@` |
 
-D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`,
-as D016 does for a move out of a const. The parsers' own `D0xx` codes
-start at D017 and do not reuse any of these; see
+O001, O002, O007 and O013 carry an `OwnershipRecoveryHint` suggesting an `@`,
+as O016 does for a move out of a const. The parse codes are datalit's D-codes
+and datafun's P-codes; see
 [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 
-Every code, in all four families, is a variant of an enum in
+Every code, in all five families, is a variant of an enum in
 `datalove-diagnostic-codes` whose discriminant is its number, so two faults
 cannot share one. A new fault takes the next number of its family and a row in
 the family's table; that crate's tests check the tables, and fail on a code
@@ -1615,7 +1615,7 @@ rather than the runtime taking a bare pointer on trust.
 
 A value a function changes, takes over or writes overlaps no other value it
 is handed, as a `&mut` overlaps nothing; only `AnyRef`s may share one. For
-the arguments of a call the ownership checker sees to it (D010). The one way
+the arguments of a call the ownership checker sees to it (O010). The one way
 the language has of naming a place twice in a runtime call is `set x += x`,
 which lowering turns into the operator and a store, keeping the update in
 place for a value rooted elsewhere. An export handed such a value beside

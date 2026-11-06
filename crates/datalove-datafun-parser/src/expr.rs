@@ -590,7 +590,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         None => {
                                             return self.emit_expr_error(ts,
                                                 "expected name after 'atom'",
-                                                PCode::AtomWithoutName,
+                                                DCode::AtomWithoutName,
                                                 "expected atom name"
                                             );
                                         }
@@ -609,7 +609,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         None => {
                                             return self.emit_expr_error(ts,
                                                 "expected name after 'term'",
-                                                PCode::TermWithoutName,
+                                                DCode::TermWithoutName,
                                                 "expected term name"
                                             );
                                         }
@@ -628,7 +628,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     let Some(iter) = self.eat_branch(Sigil::BraceOpen) else {
                                         return self.emit_expr_error(ts,
                                             "expected '{' after 'enum'",
-                                            PCode::EnumLiteralWithoutBrace,
+                                            DCode::EnumLiteralWithoutBrace,
                                             "expected '{'"
                                         );
                                     };

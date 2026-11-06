@@ -24,7 +24,7 @@ end fun
 // Exchange the values in two places.
 //
 // The two have to be rooted at different bindings, which rules out the two
-// halves of one tuple (D010). `list.swap` exchanges two elements of one list.
+// halves of one tuple (O010). `list.swap` exchanges two elements of one list.
 fun swap<T>(mut a: T, mut b: T)
   inline
   call mem_swap(mut a, mut b)

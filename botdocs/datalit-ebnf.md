@@ -246,10 +246,10 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D059 | A bare identifier | `expr.rs:244` |
 | D060 | A number with a suffix | `expr.rs:85` |
 
-The parse codes start after the ownership codes (D001 to D016,
-[spec Section 11.1](botspec.md#user-content-111-errors)); D044 to D053 and
-D058 to D060 are faults that used to share a number with an ownership code or
-with another parse fault. Line numbers are as of October 2026 and drift; the
+D001 to D016 were the ownership codes, now O001 to O016
+([spec Section 11.1](botspec.md#user-content-111-errors)), and are retired.
+D044 to D053 and D058 to D060 are faults that used to share a number with an
+ownership code or with another parse fault. Line numbers are as of October 2026 and drift; the
 code is a `DCode` variant in `crates/datalove-diagnostic-codes`, and its name
 is what to search for.
 

@@ -8,7 +8,7 @@
 //! two of them the element itself may change -- `mem.swap(mut d.next, mut
 //! piles[pile]!)` does that -- but not the list: a `mut` borrow of an element
 //! reaches the element and nothing else, and no other argument may be rooted
-//! at the same binding (D010). So what changes the list is what names it: a
+//! at the same binding (O010). So what changes the list is what names it: a
 //! store to it, a drop of it, or passing it to a call, as
 //! `Instruction::for_each_place_use` says. A move out of it leaves nothing
 //! to reach it by until a store fills it again.

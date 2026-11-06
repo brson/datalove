@@ -246,8 +246,8 @@ pub fn remove_empty_drops(unit: &mut IrCodeUnit) -> bool {
 /// A value holds nothing if it was made as a `none` or an empty list, or moved
 /// or copied from one that was, and nothing has written it since. A value is
 /// written only where an instruction replaces, changes or lends it: a call
-/// never writes one, since only a place can be passed `mut` or `out` (D011,
-/// D012), and inlining puts the caller's place where the callee's parameter
+/// never writes one, since only a place can be passed `mut` or `out` (O011,
+/// O012), and inlining puts the caller's place where the callee's parameter
 /// was.
 pub fn empty_drops(unit: &IrCodeUnit) -> ValueSet {
     let mut written = ValueSet::with_capacity(unit.value_count);

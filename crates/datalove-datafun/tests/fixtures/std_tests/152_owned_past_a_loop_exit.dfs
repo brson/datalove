@@ -1,15 +1,15 @@
 // What is true after a loop is what every way out of it agrees on.
 //
-// A `break` that gives an owned value away used to be D007 `cannot move in
+// A `break` that gives an owned value away used to be O007 `cannot move in
 // loop`, which was the wrong complaint twice over: the move cannot happen more
 // than once, since the only path reaching it leaves the loop, and the thing
 // actually at stake is whether the value is still held afterwards. Each `break`
 // now records what it took with it, and a conditional loop counts its condition
 // failing as a way out as well, with the state it was entered with. Agreement
-// settles the state; disagreement is D014, which says so.
+// settles the state; disagreement is O014, which says so.
 //
 // A `continue` is not a way out -- it goes back to the head, so what it moved
-// can be moved again, and that stays D007. See
+// can be moved again, and that stays O007. See
 // `engines/1019_inconsistent_loop_exit_error` for the refusal and
 // `std_tests/151_owned_past_a_returning_branch` for the `ret` half of this.
 //

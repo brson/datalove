@@ -21,15 +21,15 @@
 //!
 //! # Errors detected
 //!
-//! - D001 UseAfterMove: using a value after ownership was transferred
-//! - D002 DoubleMove: transferring ownership twice
-//! - D003 CannotMoveBorrowed: attempting to move a ref/mut/out parameter
-//! - D004 CannotMutFromRef: passing immutable ref where mutable is required
-//! - D005 ReadUninitialized: reading binding before initialization
-//! - D006 OutParamNotInitialized: returning without initializing out param
-//! - D007 MoveInLoop: moving outer-scoped value inside loop body
-//! - D015 WalkedCollectionChanged: changing a collection a `for` walks
-//! - D016 CannotMoveConst: moving out of a const without `@`
+//! - O001 UseAfterMove: using a value after ownership was transferred
+//! - O002 DoubleMove: transferring ownership twice
+//! - O003 CannotMoveBorrowed: attempting to move a ref/mut/out parameter
+//! - O004 CannotMutFromRef: passing immutable ref where mutable is required
+//! - O005 ReadUninitialized: reading binding before initialization
+//! - O006 OutParamNotInitialized: returning without initializing out param
+//! - O007 MoveInLoop: moving outer-scoped value inside loop body
+//! - O015 WalkedCollectionChanged: changing a collection a `for` walks
+//! - O016 CannotMoveConst: moving out of a const without `@`
 //!
 //! # Drop scheduling
 //!
@@ -453,7 +453,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// - Ref/Mut params: borrowed, always initialized, cannot be moved/dropped
     /// - Let bindings: single assignment, drop point statically known
     /// - Vars: whether one holds a value is as fixed as a let's. Branches that
-    ///   meet agree on it (D008), a loop gives back what it was given (D007),
+    ///   meet agree on it (O008), a loop gives back what it was given (O007),
     ///   and a `set` over one that holds nothing says so (`set_over_moved`).
     ///   Three kinds are not: a var of a script unit, which other units read
     ///   and write; one declared without a value, which may be given one on

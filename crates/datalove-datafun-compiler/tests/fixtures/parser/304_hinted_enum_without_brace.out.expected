@@ -36,7 +36,7 @@
   },
   "diagnostics": [
     {
-      "code": "P071",
+      "code": "D037",
       "labels": [
         {
           "message": "expected '{'",

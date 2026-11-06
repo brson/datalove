@@ -2,7 +2,7 @@
 module local/test/ownership
 ----------
 
-// Error test: D016 moving out of consts in a module function.
+// Error test: O016 moving out of consts in a module function.
 // A module const and a function const are both borrowed.
 
 const MSG: string = "hello"

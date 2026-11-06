@@ -190,7 +190,7 @@ is a mismatch (F016).
 
 The hex prefix may be `0x` or `0X`, and hex digits are of either case. There
 are no binary or octal literals: `0b101` and `0o17` are a `0` with a suffix
-(P053).
+(D060).
 
 A hex literal is an unsigned integer: it checks against `int`, the unsigned
 fixed-width types and `index`, and against `f32` and `f64` as their bit
@@ -215,7 +215,7 @@ Underscores may group digits, and say nothing about the value:
 ```
 
 A separator goes between digits, so a literal begins and ends with one.
-`_1` is a name rather than a number, and `1_` and `0x_FF` are neither (P052).
+`_1` is a name rather than a number, and `1_` and `0x_FF` are neither (D019).
 Separators may be doubled: `1__0` is 10.
 
 **Floating-point** numbers use decimal notation, with an optional exponent:
@@ -284,10 +284,10 @@ gap anywhere inside ends it.
 2.5e - 10      // error: an exponent is written without spaces: `2.5e-10`
 ```
 
-The two errors are P052 in Datafun.
+The two errors are D019.
 
 Letters written onto the digits are read as a suffix and reported as one
-(P053 in Datafun, D060 in Datalit), since the language has none: `1u8` says to
+(D060), since the language has none: `1u8` says to
 write `: u8 / 1` rather than complaining about an unexpected identifier.
 
 **Fixity.** An operator's spacing says what it attaches to:
@@ -333,12 +333,12 @@ elements are separated by nothing but spacing (Section 3.2).
 A name is ASCII letters, digits and `_`, and does not begin with a digit:
 `[A-Za-z_][A-Za-z0-9_]*`. Strings and comments may hold any text.
 
-A name written with a letter or digit outside ASCII is refused (P075 in
-Datafun, D043 in Datalit), once for each place it is written, and the parse
-goes on as though it were a name. Letters and digits of any script are read
-into one word, so the whole of `café` is reported rather than `caf` followed by
-a stray character. A word that begins with an ASCII digit is a number, whose
-letters are a suffix and are reported as one (Section 2.4).
+A name written with a letter or digit outside ASCII is refused (D043), once
+for each place it is written, and the parse goes on as though it were a name.
+Letters and digits of any script are read into one word, so the whole of
+`café` is reported rather than `caf` followed by a stray character. A word that
+begins with an ASCII digit is a number, whose letters are a suffix and are
+reported as one (Section 2.4).
 
 ```datalove
 let café = 1       // error: `café` is not an ASCII name
@@ -828,7 +828,7 @@ them (Section 8.7).
 A linear value is moved at most once; one never moved is dropped at the end
 of its scope. Borrowing it -- as a `ref` argument, an operator's operand, under
 `debuglog` -- does not count as a use. After a value is moved, subsequent uses
-are compile-time errors (D001):
+are compile-time errors (O001):
 
 ```datalove
 let x: int = 42
@@ -928,7 +928,7 @@ type; there is no implicit widening.
 
 Less-than and greater-than are spelled `.<` and `.>` because `<` and `>` alone
 are brackets, matched in pairs before an expression is read, as they are around
-a function's type parameters. `a < b` is an unclosed `<` (P051).
+a function's type parameters. `a < b` is an unclosed `<` (D055).
 
 The ordering operators `.<`, `.>`, `<=` and `>=` take numeric operands only.
 Order strings with `string.cmp`, and anything else with `sys/std/ord`.
@@ -1134,7 +1134,7 @@ Value expressions:
 
 Field access and indexing can also follow value expressions (`f(x).field`,
 `f(x)[i]?`), but these produce values, not places -- the result cannot be
-used as a `set` target or `mut` argument (D012). A linear part of one is
+used as a `set` target or `mut` argument (O012). A linear part of one is
 refused as a linear part of a place is (Section 7.2): `mk().0` with an `int`
 first element is F070.
 
@@ -1345,14 +1345,14 @@ const LST: [int] = [1, 2, 3]
 A const is an immutable ref binding: it is borrowed wherever it is named, as a
 `ref` parameter is. It may be read, compared, indexed and passed as `ref` any
 number of times, and moving out of a const of a linear type takes a clone with
-`@`. A move without one is D016, whose help says where the `@` goes. A const of
+`@`. A move without one is O016, whose help says where the `@` goes. A const of
 a copy type is copied as any copy type is.
 
 ```datalove
 const LST: [int] = [1, 2, 3]
 let n = list.len(ref LST)      // a borrow
 let a = LST@                   // a move out of a const takes a clone
-let b = LST                    // D016: cannot move out of const
+let b = LST                    // O016: cannot move out of const
 ```
 
 This holds for a const initializer too, so `const B: int = add_ten(A@)` clones
@@ -2293,31 +2293,31 @@ end fun
 ## 11. Ownership Analysis
 
 Ownership analysis runs after type checking to verify correct use of linear
-values. Its errors are D001 to D016; the codes from D017 on belong to the
-Datalit parser and checker ([Datalit Grammar](datalit-ebnf.md)), which are
-reached from Datafun through literals and data files.
+values. Its errors are the O-codes. The D- and T-codes belong to the Datalit
+parser and checker ([Datalit Grammar](datalit-ebnf.md)), which are reached
+from Datafun through literals and data files.
 
 ### 11.1 Errors
 
 | Code | Name | Description |
 |------|------|-------------|
-| D001 | UseAfterMove | Using a value after it was moved |
-| D002 | DoubleMove | Moving a value twice |
-| D003 | CannotMoveBorrowed | Moving a `ref`/`mut`/`out` parameter |
-| D004 | CannotMutFromRef | Passing `ref` where `mut` required |
-| D005 | ReadUninitialized | Reading before initialization |
-| D006 | OutParamNotInitialized | Returning without initializing `out` param |
-| D007 | MoveInLoop | Moving outer-scoped linear value in loop |
-| D008 | InconsistentBranchMove | Branches disagree on whether a value is held: moved, or `set` again, in one but not another |
-| D009 | OutParamPartialWrite | Writing fields of `out` param individually |
-| D010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out` |
-| D011 | CannotMutateImmutable | Immutable binding passed as `mut`/`out` |
-| D012 | CannotMutateTemporary | Temporary passed as `mut`/`out` |
-| D013 | UseAfterMoveInEarlierUnit | Using a binding an earlier script unit gave away |
-| D014 | InconsistentLoopExit | Moving a value on one way out of a loop and not another |
-| D015 | WalkedCollectionChanged | Moving the collection a `for` walks, or passing it `mut`/`out` |
-| D015 | WalkedCollectionAssigned | A `set` to or through the collection a `for` walks |
-| D016 | CannotMoveConst | Moving out of a const or const parameter without `@` |
+| O001 | UseAfterMove | Using a value after it was moved |
+| O002 | DoubleMove | Moving a value twice |
+| O003 | CannotMoveBorrowed | Moving a `ref`/`mut`/`out` parameter |
+| O004 | CannotMutFromRef | Passing `ref` where `mut` required |
+| O005 | ReadUninitialized | Reading before initialization |
+| O006 | OutParamNotInitialized | Returning without initializing `out` param |
+| O007 | MoveInLoop | Moving outer-scoped linear value in loop |
+| O008 | InconsistentBranchMove | Branches disagree on whether a value is held: moved, or `set` again, in one but not another |
+| O009 | OutParamPartialWrite | Writing fields of `out` param individually |
+| O010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out` |
+| O011 | CannotMutateImmutable | Immutable binding passed as `mut`/`out` |
+| O012 | CannotMutateTemporary | Temporary passed as `mut`/`out` |
+| O013 | UseAfterMoveInEarlierUnit | Using a binding an earlier script unit gave away |
+| O014 | InconsistentLoopExit | Moving a value on one way out of a loop and not another |
+| O015 | WalkedCollectionChanged | Moving the collection a `for` walks, or passing it `mut`/`out` |
+| O015 | WalkedCollectionAssigned | A `set` to or through the collection a `for` walks |
+| O016 | CannotMoveConst | Moving out of a const or const parameter without `@` |
 
 ### 11.2 Mutable Arguments
 
@@ -2341,7 +2341,7 @@ call bump(mut compute())    // error: the write would be discarded
 ```
 
 An `in` parameter is not assignable either, and a `ref` parameter reports the
-more specific D004.
+more specific O004.
 
 ### 11.3 Argument Aliasing
 
@@ -2357,7 +2357,7 @@ fun grow(mut self: string, ref other: string)
 end fun
 
 var s: string = "hi"
-call grow(mut s, ref s)    // error (D010): aliased mutable argument
+call grow(mut s, ref s)    // error (O010): aliased mutable argument
 ```
 
 Two `ref` arguments are permitted, as are two reads of a copy value:
@@ -2379,7 +2379,7 @@ Moving an outer-scoped linear value inside a loop is an error:
 var a: int = 0
 var b: int = 5
 loop
-    set a = b      // error (D007): cannot move `b` in loop
+    set a = b      // error (O007): cannot move `b` in loop
 end loop
 ```
 
@@ -2389,7 +2389,7 @@ Copy types and operator operands (which are borrowed) are exempt.
 
 The collection a `for` walks is frozen for the loop's body, since its element
 bindings point into it. Moving it, assigning to it or through it, and passing
-it `mut` or `out` are errors (D015):
+it `mut` or `out` are errors (O015):
 
 ```datalove
 var xs = [1, 2]
@@ -2404,7 +2404,7 @@ Freezing is by the binding the place is rooted at, as aliasing is, so
 ### 11.6 Branch Consistency
 
 Where branches join, each linear value must be held on every branch or on
-none (D008). A value moved in one branch must be moved in the others, and one
+none (O008). A value moved in one branch must be moved in the others, and one
 `set` again after a move in one branch must be set again in the others:
 
 ```datalove
@@ -2415,12 +2415,12 @@ fun f(c: bool, s: string)
     if c
         call consume(s)     // moves s
     else
-        // error (D008): s is not moved here
+        // error (O008): s is not moved here
     end if
 end fun
 ```
 
-The same holds for the ways out of a loop (D014).
+The same holds for the ways out of a loop (O014).
 
 ### 11.7 Tracking Categories
 

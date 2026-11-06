@@ -1,4 +1,4 @@
-// D014 on a `for`: the `break` gives `kept` away, and running out of
+// O014 on a `for`: the `break` gives `kept` away, and running out of
 // elements does not.
 var kept = "held"
 let xs = [1, 2, 3]

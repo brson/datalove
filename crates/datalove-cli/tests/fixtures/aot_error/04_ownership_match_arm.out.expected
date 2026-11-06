@@ -1,4 +1,4 @@
-[D008] Error: `s` is given away in the `Circle` arm but not in the `Square` arm
+[O008] Error: `s` is given away in the `Circle` arm but not in the `Square` arm
    ╭─[ tests/fixtures/aot_error/04_ownership_match_arm.dfs:8:17 ]
    │
  8 │     let taken = s

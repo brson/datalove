@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "outer: error[D006]: out parameter not initialized: `y`",
+                message: "outer: error[O006]: out parameter not initialized: `y`",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

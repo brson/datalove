@@ -5,9 +5,9 @@
 //! reports a fault names it: `PCode::ForWithoutRef`, not `"P088"`. A site
 //! that reuses a code for a different fault then reads as wrong.
 //!
-//! - [`DCode`]: ownership faults (D001 to D016), and datalit's parse faults
-//!   (D017 on), which datafun's parser also reports for the literal syntax it
-//!   shares with datalit.
+//! - [`DCode`]: datalit's parse faults, which datafun's parser also reports
+//!   for the syntax it shares with datalit.
+//! - [`OCode`]: datafun's ownership faults.
 //! - [`PCode`]: datafun's own parse faults.
 //! - [`TCode`]: datalit's type faults.
 //! - [`FCode`]: datafun's type faults.
@@ -104,11 +104,11 @@ macro_rules! codes {
 }
 
 codes! {
-    /// Ownership faults, and the parse faults of datalit's syntax.
+    /// Ownership faults, found by datafun's ownership analysis.
     ///
-    /// Tabled in `botdocs/botspec.md` (11.1) up to D016, and in
-    /// `botdocs/datalit-ebnf.md` (Diagnostics) from D017.
-    pub enum DCode = b'D' {
+    /// Tabled in `botdocs/botspec.md` (11.1) and `botdocs/compiler-guide.md`
+    /// (Error Codes).
+    pub enum OCode = b'O' {
         /// Using a value after it was moved.
         UseAfterMove = 1,
         /// Moving a value twice.
@@ -141,6 +141,16 @@ codes! {
         WalkedCollectionChanged = 15,
         /// Moving out of a const or const parameter without `@`.
         CannotMoveConst = 16,
+    }
+    retired = [];
+}
+
+codes! {
+    /// The parse faults of datalit's syntax, in datalit and wherever datafun
+    /// shares it.
+    ///
+    /// Tabled in `botdocs/datalit-ebnf.md` (Diagnostics).
+    pub enum DCode = b'D' {
         /// A map entry without `=`.
         MapEntryWithoutEquals = 17,
         /// End of input or a bracket where an expression is expected.
@@ -218,7 +228,7 @@ codes! {
         /// A number with a suffix.
         NumberSuffix = 60,
     }
-    retired = [25];
+    retired = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 25];
 }
 
 codes! {
@@ -297,10 +307,6 @@ codes! {
         IcallWithoutName = 40,
         /// `icall` without its `(`.
         IcallWithoutParen = 41,
-        /// `atom` with no name.
-        AtomWithoutName = 42,
-        /// `term` with no name.
-        TermWithoutName = 43,
         /// `case atom` with no name.
         CaseAtomWithoutName = 44,
         /// `case term` with no name.
@@ -313,14 +319,6 @@ codes! {
         LineOutsideCase = 48,
         /// A second `case default`.
         DuplicateDefaultCase = 49,
-        /// A close bracket with no open.
-        UnmatchedClose = 50,
-        /// An open bracket never closed.
-        UnclosedOpen = 51,
-        /// A malformed number.
-        MalformedNumber = 52,
-        /// A number with a suffix.
-        NumberSuffix = 53,
         /// A bound the language does not have.
         UnknownBound = 60,
         /// `where` without its `{`.
@@ -343,16 +341,12 @@ codes! {
         NestedPattern = 69,
         /// A parenthesized name as a pattern.
         ParenthesizedName = 70,
-        /// An `enum` literal without `{`.
-        EnumLiteralWithoutBrace = 71,
         /// A call of something that is not a function.
         CallOfNonFunction = 72,
         /// A binding `if` in an `else if` chain.
         DestructuringElseIf = 73,
         /// A declaration inside a block.
         DeclarationInBlock = 74,
-        /// A non-ASCII name.
-        NonAsciiName = 75,
         /// `inline` anywhere but the whole first line of a function body.
         MisplacedInline = 76,
         /// A statement at the top level of a module that is not a declaration.
@@ -382,7 +376,7 @@ codes! {
         /// A `set` without its assignment operator.
         SetWithoutAssignOp = 89,
     }
-    retired = [];
+    retired = [42, 43, 50, 51, 52, 53, 71, 75];
 }
 
 codes! {

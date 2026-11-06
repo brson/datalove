@@ -1,4 +1,4 @@
-// D001 use after move in if branch
+// O001 use after move in if branch
 fun consume(s: string): int
   ret 42
 end fun

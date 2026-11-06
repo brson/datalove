@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use datalove_diagnostic_codes::{DCode, FCode, PCode, TCode};
+use datalove_diagnostic_codes::{DCode, FCode, OCode, PCode, TCode};
 use enum_iterator::all;
 
 fn workspace_root() -> PathBuf {
@@ -19,6 +19,7 @@ fn live<C: enum_iterator::Sequence + Copy>(as_str: fn(C) -> &'static str, number
 fn family(prefix: char) -> Vec<(String, u16)> {
     match prefix {
         'D' => live(DCode::as_str, DCode::number),
+        'O' => live(OCode::as_str, OCode::number),
         'P' => live(PCode::as_str, PCode::number),
         'T' => live(TCode::as_str, TCode::number),
         'F' => live(FCode::as_str, FCode::number),
@@ -29,6 +30,7 @@ fn family(prefix: char) -> Vec<(String, u16)> {
 fn retired(prefix: char) -> &'static [u16] {
     match prefix {
         'D' => DCode::RETIRED,
+        'O' => OCode::RETIRED,
         'P' => PCode::RETIRED,
         'T' => TCode::RETIRED,
         'F' => FCode::RETIRED,
@@ -41,7 +43,7 @@ fn parse_code(text: &str) -> Option<(char, u16)> {
     let mut chars = text.chars();
     let prefix = chars.next()?;
     let digits = chars.as_str();
-    if !"DPTF".contains(prefix) || digits.len() != 3 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+    if !"DOPTF".contains(prefix) || digits.len() != 3 || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     Some((prefix, digits.parse().ok()?))
@@ -82,7 +84,7 @@ fn check_table(doc: &str, prefix: char, range: std::ops::RangeInclusive<u16>) {
 
 #[test]
 fn a_code_shows_its_prefix_and_number() {
-    for prefix in ['D', 'P', 'T', 'F'] {
+    for prefix in ['D', 'O', 'P', 'T', 'F'] {
         for (text, number) in family(prefix) {
             assert_eq!(text, format!("{prefix}{number:03}"));
         }
@@ -91,7 +93,7 @@ fn a_code_shows_its_prefix_and_number() {
 
 #[test]
 fn no_live_code_is_retired() {
-    for prefix in ['D', 'P', 'T', 'F'] {
+    for prefix in ['D', 'O', 'P', 'T', 'F'] {
         for (text, number) in family(prefix) {
             assert!(!retired(prefix).contains(&number), "{text} is retired");
         }
@@ -100,9 +102,9 @@ fn no_live_code_is_retired() {
 
 #[test]
 fn the_docs_table_every_code() {
-    check_table("botspec.md", 'D', 1..=16);
-    check_table("compiler-guide.md", 'D', 1..=16);
-    check_table("datalit-ebnf.md", 'D', 17..=999);
+    check_table("botspec.md", 'O', 1..=999);
+    check_table("compiler-guide.md", 'O', 1..=999);
+    check_table("datalit-ebnf.md", 'D', 1..=999);
     check_table("datafun-ebnf.md", 'P', 1..=999);
     check_table("datalit-typing-rules.md", 'T', 1..=999);
     check_table("datafun-typing-rules.md", 'F', 1..=999);

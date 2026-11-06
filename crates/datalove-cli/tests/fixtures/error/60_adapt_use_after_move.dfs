@@ -1,4 +1,4 @@
-// D001 use after move with @ hint
+// O001 use after move with @ hint
 fun consume(s: string): int
   ret 42
 end fun

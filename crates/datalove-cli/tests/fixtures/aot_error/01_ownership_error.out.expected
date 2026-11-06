@@ -1,4 +1,4 @@
-[D008] Error: `x` is given away in the then branch but not when the `if` is skipped
+[O008] Error: `x` is given away in the then branch but not when the `if` is skipped
     ╭─[ tests/fixtures/aot_error/01_ownership_error.dfs:11:17 ]
     │
  11 │     let taken = x

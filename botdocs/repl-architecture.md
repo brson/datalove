@@ -235,7 +235,7 @@ binding.
 
 **Every unit follows the language's ownership rules across units** as inside
 one. `let b = a` moves `a` out of the unit that provides it, and a later unit
-that names `a` is D013. Naming a binding as a bare
+that names `a` is O013. Naming a binding as a bare
 expression shows it without taking it. Units do not copy out of earlier
 bindings, both to keep script units as close to the language as possible and
 because copying stops being available once there are types that cannot be

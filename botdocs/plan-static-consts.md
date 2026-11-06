@@ -225,10 +225,10 @@ ref binding, and `ret xs` becomes `ret xs@`.
 What this changes:
 
 - **Ownership analysis** treats a const mention as a borrowed place. A move out
-  of one is a diagnostic in the D003 family (now D016 of its own), with the same help that D001
+  of one is a diagnostic in the O003 family (now O016 of its own), with the same help that O001
   gives: insert `@`, at the place to insert it.
 - **`match`, the destructuring `if`, and `let` destructuring** move their
-  scrutinee, and on a `ref` binding each is D003 today. No form takes apart a
+  scrutinee, and on a `ref` binding each is O003 today. No form takes apart a
   borrowed enum, option or struct without cloning it, so until borrowing forms
   exist these are written `match CONST@`, `if CONST@ |x|` and
   `let {a, b} = CONST@`. Borrowing `match` and `if` are worth having for `ref`

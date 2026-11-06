@@ -9,7 +9,7 @@
 
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::ModuleId;
-use datalove_diagnostic_codes::DCode;
+use datalove_diagnostic_codes::OCode;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{Binding, ExprArena, ExprFun, ExprFunctionCall, FunHead, Statement, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
@@ -582,7 +582,7 @@ pub enum LoopExit<'db> {
 #[derive(salsa::SalsaValue)]
 pub enum AnalysisError<'db> {
     /// Using a binding an earlier unit gave its value away.
-    /// D013 - Recoverable with @ (clone at the use that gave it away)
+    /// O013 - Recoverable with @ (clone at the use that gave it away)
     UseAfterMoveInEarlierUnit {
         /// Location of the use in this unit.
         expr_key: ExprKey<'db>,
@@ -590,7 +590,7 @@ pub enum AnalysisError<'db> {
         recovery_hint: OwnershipRecoveryHint,
     },
     /// Using a value after it was moved.
-    /// D001 - Recoverable with @ (clone before first use)
+    /// O001 - Recoverable with @ (clone before first use)
     UseAfterMove {
         /// Location of the second use (where error is detected).
         expr_key: ExprKey<'db>,
@@ -600,7 +600,7 @@ pub enum AnalysisError<'db> {
         recovery_hint: OwnershipRecoveryHint,
     },
     /// Moving a value multiple times.
-    /// D002 - Recoverable with @ (clone before second move)
+    /// O002 - Recoverable with @ (clone before second move)
     DoubleMove {
         /// Location of the second move (where error is detected).
         expr_key: ExprKey<'db>,
@@ -610,14 +610,14 @@ pub enum AnalysisError<'db> {
         recovery_hint: OwnershipRecoveryHint,
     },
     /// Attempting to move a borrowed value (ref/mut/out parameter).
-    /// D003
+    /// O003
     CannotMoveBorrowed {
         expr_key: ExprKey<'db>,
         name: String,
     },
     /// Attempting to move out of a const, which is borrowed wherever it is
     /// named.
-    /// D016
+    /// O016
     CannotMoveConst {
         expr_key: ExprKey<'db>,
         name: String,
@@ -626,32 +626,32 @@ pub enum AnalysisError<'db> {
     /// Changing a collection while a `for` walks it: moving it, assigning to
     /// it or through it, or passing it `mut` or `out`. The walk holds
     /// references into it.
-    /// D015
+    /// O015
     WalkedCollectionChanged {
         expr_key: ExprKey<'db>,
         name: String,
     },
     /// The same, by a `set` to the collection or through it, reported at its
     /// target: the `set` statement's span index.
-    /// D015
+    /// O015
     WalkedCollectionAssigned {
         set_index: u32,
         name: String,
     },
     /// Attempting to pass a ref param to a mut param.
-    /// D004
+    /// O004
     CannotMutFromRef {
         expr_key: ExprKey<'db>,
         name: String,
     },
     /// Reading binding before it was initialized.
-    /// D005. Applies to Out params and uninitialized var bindings.
+    /// O005. Applies to Out params and uninitialized var bindings.
     ReadUninitialized {
         expr_key: ExprKey<'db>,
         name: String,
     },
     /// Function returns without initializing Out param.
-    /// D006
+    /// O006
     OutParamNotInitialized {
         name: String,
         /// Each way out of the function that leaves it unwritten, in the
@@ -659,7 +659,7 @@ pub enum AnalysisError<'db> {
         exits: Vec<FunctionExit<'db>>,
     },
     /// Moving an outer-scoped value inside a loop body.
-    /// D007 - Recoverable with @ (clone before entering loop)
+    /// O007 - Recoverable with @ (clone before entering loop)
     MoveInLoop {
         /// Expression where the move occurred.
         expr_key: ExprKey<'db>,
@@ -671,7 +671,7 @@ pub enum AnalysisError<'db> {
     ///
     /// Either one gave the binding away and another did not, or, where it was
     /// already given away, one gave it a value again and another did not.
-    /// D008
+    /// O008
     InconsistentBranchMove {
         /// Statement index of the `if` or `match` statement.
         stmt_idx: usize,
@@ -700,7 +700,7 @@ pub enum AnalysisError<'db> {
     /// still held after the loop, since that depends on which exit ran, and a
     /// drop point has to be decided without knowing.
     ///
-    /// D014
+    /// O014
     InconsistentLoopExit {
         name: String,
         /// The ways out of the loop that leave the binding given away.
@@ -711,28 +711,28 @@ pub enum AnalysisError<'db> {
         moved_at: Option<ExprKey<'db>>,
     },
     /// Partial field write to out param (must write whole value).
-    /// D009
+    /// O009
     OutParamPartialWrite {
         expr_key: ExprKey<'db>,
         name: String,
     },
     /// Two arguments of one call name the same binding, and at least one of
     /// them is passed to a `mut` or `out` parameter.
-    /// D010
+    /// O010
     AliasedMutableArgument {
         /// Location of the later of the two arguments.
         expr_key: ExprKey<'db>,
         name: String,
     },
     /// Passing an immutable binding to a `mut` or `out` parameter.
-    /// D011. Applies to `let` bindings and `in` parameters; a `ref` parameter
-    /// reports D004 instead.
+    /// O011. Applies to `let` bindings and `in` parameters; a `ref` parameter
+    /// reports O004 instead.
     CannotMutateImmutable {
         expr_key: ExprKey<'db>,
         name: String,
     },
     /// Passing a value that is not a place to a `mut` or `out` parameter.
-    /// D012. The callee's writes would land in a temporary and be discarded.
+    /// O012. The callee's writes would land in a temporary and be discarded.
     CannotMutateTemporary {
         expr_key: ExprKey<'db>,
     },
@@ -740,30 +740,30 @@ pub enum AnalysisError<'db> {
 
 impl AnalysisError<'_> {
     /// The diagnostic code of the fault.
-    pub fn code(&self) -> DCode {
+    pub fn code(&self) -> OCode {
         match self {
-            AnalysisError::UseAfterMoveInEarlierUnit { .. } => DCode::UseAfterMoveInEarlierUnit,
-            AnalysisError::UseAfterMove { .. } => DCode::UseAfterMove,
-            AnalysisError::DoubleMove { .. } => DCode::DoubleMove,
-            AnalysisError::CannotMoveBorrowed { .. } => DCode::CannotMoveBorrowed,
-            AnalysisError::CannotMoveConst { .. } => DCode::CannotMoveConst,
-            AnalysisError::CannotMutFromRef { .. } => DCode::CannotMutFromRef,
-            AnalysisError::WalkedCollectionChanged { .. } => DCode::WalkedCollectionChanged,
-            AnalysisError::WalkedCollectionAssigned { .. } => DCode::WalkedCollectionChanged,
-            AnalysisError::ReadUninitialized { .. } => DCode::ReadUninitialized,
-            AnalysisError::OutParamNotInitialized { .. } => DCode::OutParamNotInitialized,
-            AnalysisError::MoveInLoop { .. } => DCode::MoveInLoop,
-            AnalysisError::InconsistentBranchMove { .. } => DCode::InconsistentBranchMove,
-            AnalysisError::InconsistentLoopExit { .. } => DCode::InconsistentLoopExit,
-            AnalysisError::OutParamPartialWrite { .. } => DCode::OutParamPartialWrite,
-            AnalysisError::AliasedMutableArgument { .. } => DCode::AliasedMutableArgument,
-            AnalysisError::CannotMutateImmutable { .. } => DCode::CannotMutateImmutable,
-            AnalysisError::CannotMutateTemporary { .. } => DCode::CannotMutateTemporary,
+            AnalysisError::UseAfterMoveInEarlierUnit { .. } => OCode::UseAfterMoveInEarlierUnit,
+            AnalysisError::UseAfterMove { .. } => OCode::UseAfterMove,
+            AnalysisError::DoubleMove { .. } => OCode::DoubleMove,
+            AnalysisError::CannotMoveBorrowed { .. } => OCode::CannotMoveBorrowed,
+            AnalysisError::CannotMoveConst { .. } => OCode::CannotMoveConst,
+            AnalysisError::CannotMutFromRef { .. } => OCode::CannotMutFromRef,
+            AnalysisError::WalkedCollectionChanged { .. } => OCode::WalkedCollectionChanged,
+            AnalysisError::WalkedCollectionAssigned { .. } => OCode::WalkedCollectionChanged,
+            AnalysisError::ReadUninitialized { .. } => OCode::ReadUninitialized,
+            AnalysisError::OutParamNotInitialized { .. } => OCode::OutParamNotInitialized,
+            AnalysisError::MoveInLoop { .. } => OCode::MoveInLoop,
+            AnalysisError::InconsistentBranchMove { .. } => OCode::InconsistentBranchMove,
+            AnalysisError::InconsistentLoopExit { .. } => OCode::InconsistentLoopExit,
+            AnalysisError::OutParamPartialWrite { .. } => OCode::OutParamPartialWrite,
+            AnalysisError::AliasedMutableArgument { .. } => OCode::AliasedMutableArgument,
+            AnalysisError::CannotMutateImmutable { .. } => OCode::CannotMutateImmutable,
+            AnalysisError::CannotMutateTemporary { .. } => OCode::CannotMutateTemporary,
         }
     }
 }
 
-/// The message for a D008 [`AnalysisError::InconsistentBranchMove`].
+/// The message for a O008 [`AnalysisError::InconsistentBranchMove`].
 pub fn inconsistent_branch_message(error: &AnalysisError) -> Option<String> {
     let AnalysisError::InconsistentBranchMove { name, gave_away, changed_in, unchanged_in, .. } = error else {
         return None;
@@ -823,7 +823,7 @@ fn format_single_error(error: &AnalysisError) -> String {
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::InconsistentBranchMove { .. } => {
-            format!("error[{code}]: {}", inconsistent_branch_message(error).expect("is D008"))
+            format!("error[{code}]: {}", inconsistent_branch_message(error).expect("is O008"))
         }
         AnalysisError::InconsistentLoopExit { name, .. } => {
             format!("error[{code}]: `{}` is given away on one way out of this loop and not another", name)

@@ -383,7 +383,7 @@ expected type reaches `@` through any checking rule: an annotated `let`, a
 A call's arguments carry markers that must repeat the parameter modes:
 `ref e`, `mut e` and `out e` for those modes, and nothing for `in` and
 `const`. A marker that disagrees is F057. Whether a `mut` or `out` argument
-denotes something assignable is checked by the ownership pass (D011, D012),
+denotes something assignable is checked by the ownership pass (O011, O012),
 not here.
 
 For a function with no type parameters:
@@ -600,7 +600,7 @@ a plain name and needs a type:
 ```
 
 Whether it is written before it is read is the ownership pass's business
-(D005), not the type checker's.
+(O005), not the type checker's.
 
 ```
 Γ|const ⊢ e ⇒ T                         Γ|const ⊢ e ⇐ T

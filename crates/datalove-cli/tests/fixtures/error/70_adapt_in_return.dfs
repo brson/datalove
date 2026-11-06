@@ -1,4 +1,4 @@
-// D001 use after move where first use is in return
+// O001 use after move where first use is in return
 fun consume(s: string): int
   ret 42
 end fun

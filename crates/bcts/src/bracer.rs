@@ -181,8 +181,8 @@ pub enum TreeToken<'db> {
 /// Match a source's brackets, recovering from the ones that do not match.
 ///
 /// A close finds the nearest open of its kind still waiting, and any opens
-/// inside that one are cut off where it closes, each reported unclosed (P051).
-/// A close that finds no open is reported (P050) and passed over. Whatever is
+/// inside that one are cut off where it closes, each reported unclosed (D055).
+/// A close that finds no open is reported (D054) and passed over. Whatever is
 /// still open at the end runs to the end and is reported unclosed. A `}`
 /// closes `{`, `%{` or `#{`, whichever is nearest.
 ///

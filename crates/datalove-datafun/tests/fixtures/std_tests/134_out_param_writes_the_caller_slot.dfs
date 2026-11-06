@@ -5,7 +5,7 @@
 // ownership pass tracked the write only when the argument was itself another
 // `out` parameter being forwarded, which is the rare case. The usual argument
 // is an uninitialized `var`, and for one of those the call was not counted as
-// the write, so reading the slot afterwards was D005 -- leaving `out` working
+// the write, so reading the slot afterwards was O005 -- leaving `out` working
 // only where a value was already there and it was not needed.
 
 fun fill(out n: u32)

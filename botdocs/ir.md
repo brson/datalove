@@ -734,7 +734,7 @@ assumes ownership analysis has proven the operand's state and neither reads nor
 writes a tracking byte. A tracked variant reads the byte before destroying
 anything and writes it afterwards.
 
-The full error catalogue (D001 to D013) is in the
+The full error catalogue (O001 to O013) is in the
 [compiler guide](compiler-guide.md#user-content-error-codes).
 
 ## 10. Constants

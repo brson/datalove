@@ -1,4 +1,4 @@
-[D008] Error: `s` is given a new value in the then branch but not in the else branch
+[O008] Error: `s` is given a new value in the then branch but not in the else branch
    ╭─[ tests/fixtures/aot_error/03_ownership_branch_set.dfs:9:13 ]
    │
  6 │   let taken = s

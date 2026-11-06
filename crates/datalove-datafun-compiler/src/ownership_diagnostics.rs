@@ -218,7 +218,7 @@ pub fn ownership_diagnostic<'db>(
             at, name, gave_away, fix_in, changed_at, moved_before, ..
         } => {
             let message = datalove_datafun_sema::inconsistent_branch_message(error)
-                .expect("is D008");
+                .expect("is O008");
             let mut builder = DiagnosticBuilder::error(db, &message).code(code);
 
             // The branch's own move or `set` is what to look at; the condition

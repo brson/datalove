@@ -145,7 +145,7 @@ The rewrite is contained in `bcts` and the two parsers.
 
 The bracer recovers from unmatched brackets by inserting closes where an open
 was never closed and removing closes that match nothing, and reports both
-(P050, P051). A parser sees the result only as a branch's extent: its
+(D054, D055). A parser sees the result only as a branch's extent: its
 contents, and `end_byte`, where its span ends whether the close was real or
 not. The match table carries exactly that. An open bracket's entry is where
 its contents end; whether a real close follows is whether the token there is
@@ -219,7 +219,7 @@ Where it departs from the design:
   token's entry, so the levels hand out exactly what they did. The lists are
   not stored. One odd case of recovery the walk carried was then fixed: it
   handed a removed close to the parser as a token whenever a bracket followed
-  it at the same level, so `let x = 1) + (2)` reported the `)` twice (P050,
+  it at the same level, so `let x = 1) + (2)` reported the `)` twice (D054,
   then P021) and parsed as `let x = 1`. Every removed close is passed over
   now (`312_stray_close_before_bracket`).
 - **Snapshots rather than two parsers.** The harness writes everything the

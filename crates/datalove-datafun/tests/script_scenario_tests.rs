@@ -1077,7 +1077,7 @@ fn a_unit_that_now_moves_a_binding_reaches_its_later_users() {
     let rederived = session.relower(1);
     assert_eq!(rederived.iter().map(|(unit, _)| *unit).collect::<Vec<_>>(), vec![0, 1, 2]);
     let c = &rederived[2].1;
-    assert!(format!("{:?}", c.ownership).contains("D013"), "{:?}", c.ownership);
+    assert!(format!("{:?}", c.ownership).contains("O013"), "{:?}", c.ownership);
 }
 
 /// An edit that makes a unit write an earlier `var` reaches the later units
@@ -1109,13 +1109,13 @@ fn an_earlier_units_binding_moves_once_within_a_unit() {
     session.append("let xs = [1, 2]\n");
 
     let twice = session.compile_append("let a = xs\nlet b = xs\n");
-    assert!(format!("{:?}", twice.ownership).contains("D001"), "{:?}", twice.ownership);
+    assert!(format!("{:?}", twice.ownership).contains("O001"), "{:?}", twice.ownership);
     session.truncate(1);
 
     let looped = session.compile_append(
         "var i = 0\nloop\n    set i = i + 1\n    if i == 3\n        break\n    end if\n    let a = xs\nend loop\n",
     );
-    assert!(format!("{:?}", looped.ownership).contains("D007"), "{:?}", looped.ownership);
+    assert!(format!("{:?}", looped.ownership).contains("O007"), "{:?}", looped.ownership);
     session.truncate(1);
 
     session.append("let a = xs\n");
@@ -1182,7 +1182,7 @@ fn gave_away(session: &mut Session, name: &str) -> bool {
     let count = session.unit_count();
     let result = session.compile_append(&format!("let probe = {name}\n"));
     session.truncate(count);
-    format!("{:?}", result.ownership).contains("D013")
+    format!("{:?}", result.ownership).contains("O013")
 }
 
 /// A const from an earlier unit is **borrowed**, as one from this unit is, and
@@ -1199,10 +1199,10 @@ fn an_earlier_units_const_is_borrowed_until_rebound() {
     session.append("const L: [int] = [1, 2]\n");
 
     let moved = session.compile_append("let a = L\n");
-    assert!(format!("{:?}", moved.ownership).contains("D016"), "{:?}", moved.ownership);
+    assert!(format!("{:?}", moved.ownership).contains("O016"), "{:?}", moved.ownership);
 
     let moved = session.compile_append_expr("L");
-    assert!(format!("{:?}", moved.ownership).contains("D016"), "{:?}", moved.ownership);
+    assert!(format!("{:?}", moved.ownership).contains("O016"), "{:?}", moved.ownership);
 
     session.append("let b = L@\n");
     assert_eq!(session.binding("b"), "[1, 2]");

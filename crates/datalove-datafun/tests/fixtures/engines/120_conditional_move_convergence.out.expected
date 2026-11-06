@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "test: error[D008]: `x` is given away in the then branch but not when the `if` is skipped",
+                message: "test: error[O008]: `x` is given away in the then branch but not when the `if` is skipped",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

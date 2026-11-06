@@ -109,7 +109,7 @@ let w = ys
 
 The fourth unit reads `i` from the third, which returned early, so it is
 blocked and never runs; `ys` is still in the environment as `[1, 2]`. But the
-fifth unit is refused with D013, "`ys` was given away by an earlier unit",
+fifth unit is refused with O013, "`ys` was given away by an earlier unit",
 because the fourth unit's record says it takes `ys`. A unit that returns early
 before its move does the same. The help, to clone `ys` where it was given away,
 names no place and the place never ran.
@@ -285,13 +285,13 @@ copy, would cost a clone of every linear element an operator reads.
 
 ### The loop check asks where a binding ended up, not whether its move repeats
 
-**Reproduced.** A spurious D007 on a loop that re-initializes before it moves.
+**Reproduced.** A spurious O007 on a loop that re-initializes before it moves.
 
 ```datalove
 var s = "a"
 loop while i .< 3
   set s = "b"        // s is Live again here
-  let t = s          // D007 -- but no iteration reads a moved s
+  let t = s          // O007 -- but no iteration reads a moved s
   ...
 end loop
 ```
@@ -326,7 +326,7 @@ guarantees the end of the body agrees with it for every outer non-copy binding.
 Relax the rule and that guarantee goes, and the exit merge is unsound rather
 than imprecise.
 
-Loop exits themselves are settled: see `merge_loop_exits`, D014, and
+Loop exits themselves are settled: see `merge_loop_exits`, O014, and
 `std_tests/152_owned_past_a_loop_exit`.
 
 ### A `let` with no type that fails to typecheck leaves its name undefined

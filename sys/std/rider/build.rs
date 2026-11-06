@@ -111,7 +111,7 @@ impl<'a> Decl<'a> {
     /// and for a scalar, exclusive for `mut` and for a consumed aggregate,
     /// which is handed over to be taken. The ownership checker makes the
     /// exclusive ones sound, rejecting a call that passes one value twice
-    /// where either is `mut` (D010). A result is a `&mut MaybeUninit`, being
+    /// where either is `mut` (O010). A result is a `&mut MaybeUninit`, being
     /// written rather than read. A value at a type parameter, an option, a
     /// tuple and nothing at all have no Rust type, so they are the `rtdt::Any`
     /// pointer for what the mode lets the function do with them.

@@ -35,7 +35,7 @@ pub fn parse<'db>(
     let lexed = lexer::lex(db, source);
     let bracer = bracer::bracer(db, lexed);
     let text = source.as_str(db);
-    crate::parser_util::emit_bracer_errors(db, bracer, source, DCode::UnmatchedClose, DCode::UnclosedOpen);
+    crate::parser_util::emit_bracer_errors(db, bracer, source);
     for span in parser_util::non_ascii_names(lexed.tokens(db), text) {
         parser_util::non_ascii_name_error(db, source, span)
             .code(DCode::NonAsciiName.as_str())

@@ -1,4 +1,4 @@
-// D014 on a bare `loop`, which is left only by its `break`s: one gives `kept`
+// O014 on a bare `loop`, which is left only by its `break`s: one gives `kept`
 // away and the other does not.
 var kept = "held"
 var i = 0

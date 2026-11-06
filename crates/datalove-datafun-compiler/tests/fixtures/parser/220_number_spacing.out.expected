@@ -49,7 +49,7 @@
   },
   "diagnostics": [
     {
-      "code": "P052",
+      "code": "D019",
       "labels": [
         {
           "message": "write it as `1.5`",
@@ -63,7 +63,7 @@
       "message": "a float is written without spaces in it"
     },
     {
-      "code": "P052",
+      "code": "D019",
       "labels": [
         {
           "message": "write it as `2.5e-10`",
@@ -77,7 +77,7 @@
       "message": "an exponent is written without spaces in it"
     },
     {
-      "code": "P053",
+      "code": "D060",
       "labels": [
         {
           "message": "`u8` is not part of the number; write a type hint, as in `: u8 / 1`",
@@ -91,7 +91,7 @@
       "message": "numeric suffixes are not supported"
     },
     {
-      "code": "P052",
+      "code": "D019",
       "labels": [
         {
           "message": "not a run of digits",

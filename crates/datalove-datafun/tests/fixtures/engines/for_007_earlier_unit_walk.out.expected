@@ -56,7 +56,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "error[D015]: cannot change `xs` while a `for` walks it",
+                message: "error[O015]: cannot change `xs` while a `for` walks it",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

@@ -1,4 +1,4 @@
-// D006 an out parameter left unwritten by a checked operator's early return.
+// O006 an out parameter left unwritten by a checked operator's early return.
 //
 // A `+!` that overflows leaves the function as surely as a `ret` does, and
 // the caller treats its `out` argument as written either way. Only `ret` and

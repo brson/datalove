@@ -43,7 +43,7 @@ not written. Two more notations carry what tokens alone cannot:
   closing line: `end_line("fun")` is `"end", "fun"` on a line of its own.
 
 Brackets, `( [ { {| [| %{ #{ < (| <|` and their partners, are matched before
-parsing (P050, P051). `<` and `>` are always brackets, never operators.
+parsing (D054, D055). `<` and `>` are always brackets, never operators.
 
 The parser's sources are cited by file and function: `statement.rs`,
 `expr.rs`, `literal.rs`, `state.rs` and `lib.rs` are in
@@ -156,9 +156,9 @@ field_sel     = NAME | digit, { digit } ;       (* digits fit a u32; else, or no
 primary       = hinted
               | "true" | "false" | "none"
               | ( "some" | "ok" | "er" | "data" | "error" ), payload
-              | "atom", NAME                          (* P042 *)
-              | "term", NAME, payload                 (* P043 *)
-              | "enum", "{", expr, [ "," ], "}"       (* P071 *)
+              | "atom", NAME                          (* D035 *)
+              | "term", NAME, payload                 (* D036 *)
+              | "enum", "{", expr, [ "," ], "}"       (* D037 *)
               | "icall", NAME, ~"(", [ arg_list ], ")"  (* P040, P041; spaced "(": P021 *)
               | dec_number | hex_number               (* no sign: "-" is prefix_op *)
               | string_lit                            (* D039 *)
@@ -177,7 +177,7 @@ hinted        = ":", type, "/", ( hint_literal | unary ) ;   (* no "/": D049 *)
 hint_literal  = [ "-", ~ ], dec_number | hex_number | string_lit
               | "true" | "false" | "none"
               | ( "some" | "ok" | "er" | "data" | "error" ), payload
-              | "atom", NAME | "term", NAME, payload     (* P042, P043 *)
+              | "atom", NAME | "term", NAME, payload     (* D035, D036 *)
               | "enum", "{", expr, [ "," ], "}"
               | paren | collection ;
                 (* chosen by the first token; see "What a hint covers" below *)
@@ -209,14 +209,14 @@ type          = ? the datalit type grammar, datalit-ebnf.md, parsed by the same
 
 (* ===== Lexical  (bcts lexer.rs, parser_util.rs) ===== *)
 word          = wchar, { wchar } ;              (* [A-Za-z0-9_] or Unicode alphanumeric *)
-NAME          = ? a word not beginning with an ASCII digit ? ;  (* non-ASCII: P075 *)
+NAME          = ? a word not beginning with an ASCII digit ? ;  (* non-ASCII: D043 *)
 value_name    = NAME - ( "true" | "false" | "none" | "some" | "ok" | "er" | "data"
                        | "error" | "atom" | "term" | "enum" | "not" | "icall" ) ;
 param_name    = value_name - ( "mut" | "out" | "ref" | "const" ) ;
 type_name     = NAME - ( scalar type keyword | "atom" | "term" | "enum" ) ;
                 (* each exclusion is P064, and the name is still taken *)
 dec_number    = digit_run, [ ".", digit_run ], [ ( "e" | "E" ), [ "+" | "-" ], digit_run ] ;
-                (* glued throughout; gaps: P052; letters on the end: P053 *)
+                (* glued throughout; gaps: D019; letters on the end: D060 *)
 hex_number    = "0", ( "x" | "X" ), hex_run ;
 string_lit, digit_run, hex_run, comment, newline
               = ? as in the datalit grammar ? ;
@@ -257,7 +257,7 @@ string_lit, digit_run, hex_run, comment, newline
   are held to the same rule, as is the `(` after `icall`'s name.
 - `NAME(` is a call only when glued.
 - A prefix operator has no spacing rule: `- x` is a negation.
-- A number is one glued run (P052, P053).
+- A number is one glued run (D019, D060).
 - After `: T /`, a `-` glued to a decimal word is the literal's sign, so
   `: i32 / -5` is the literal -5. Anywhere else, `-5` is the negation of `5`.
 - In a tensor row, elements are separated by this rule alone:
@@ -334,21 +334,16 @@ and differs:
 | `(a, b)` | `AnonTuple` | `Tuple` unhinted, `AnonTuple` under a hint |
 | `: T / (x)` | `Group` when under another hint | `Hinted(x)` |
 | Tensor elements and table cells | datalit expressions | datafun expressions, with fixity ending tensor elements |
-| Unmatched brackets | D054, D055 | P050, P051 |
 
-The same faults get different codes in the two parsers:
-
-| Fault | Datalit | Datafun |
-|---|---|---|
-| Malformed number; numeric suffix | D019; D060 | P052; P053 |
-| `enum` literal without `{` | D037 | P071 |
-| `atom`, `term` without a name | D035, D036 | P042, P043 |
-| An unexpected token | D020, D059, D018 | P080, P081 |
-| A non-ASCII name | D043 | P075 |
-
-The rest are the same in both: a hint without its `/` (D049), a struct field
+A fault in syntax the two languages share has datalit's D-code in both:
+unmatched brackets (D054, D055), a malformed or suffixed number (D019, D060),
+`atom` and `term` without a name (D035, D036), an `enum` literal without `{`
+(D037), a non-ASCII name (D043), a hint without its `/` (D049), a struct field
 without its name or `=` (D058), a map entry without `=` (D017), D030, D031,
-D033, D034, D038 to D041, tensor-shape D023, and every type diagnostic.
+D033, D034, D038 to D041, tensor-shape D023, every type-hint fault, and every
+type diagnostic. A P-code is for datafun's own syntax. An unexpected token is
+one too, since what may come where differs between the two expression
+grammars: D020, D059 and D018 in datalit are P080 and P081 in datafun.
 
 ## Diagnostics
 
@@ -393,18 +388,12 @@ and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 | P034 | A block with no `end` line |
 | P040 | `icall` with no name |
 | P041 | `icall` without its `(` |
-| P042 | `atom` with no name |
-| P043 | `term` with no name |
 | P044 | `case atom` with no name |
 | P045 | `case term` with no name |
 | P046 | `case term` with no binding |
 | P047 | `case` not followed by `atom`, `term` or `default` |
 | P048 | A line before the first `case` of a `match` |
 | P049 | A second `case default` |
-| P050 | A close bracket with no open |
-| P051 | An open bracket never closed |
-| P052 | A malformed number |
-| P053 | A number with a suffix |
 | P060 | A bound the language does not have |
 | P061 | `where` without its `{` |
 | P062 | A bound on a name that is not a type parameter of the function |
@@ -416,11 +405,9 @@ and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 | P068 | A destructuring `var` with no value |
 | P069 | A nested pattern, or a pattern without a name |
 | P070 | A parenthesized name as a pattern |
-| P071 | An `enum` literal without `{` |
 | P072 | A call of something that is not a function |
 | P073 | A binding `if` in an `else if` chain |
 | P074 | A declaration inside a block |
-| P075 | A non-ASCII name |
 | P076 | `inline` anywhere but the whole first line of a function body |
 | P077 | A statement at the top level of a module that is not a declaration |
 | P078 | A type parameter bounded twice |

@@ -20,7 +20,7 @@ scriptunit-fragment
 
 // A unit walking a collection an earlier unit made freezes it as it would
 // one of its own, so passing it `mut` to be replaced under the cursor is
-// refused (D015).
+// refused (O015).
 for x in ref xs
   call clobber(mut xs)
   debuglog x

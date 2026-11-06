@@ -906,12 +906,12 @@ fn a_unit_s_ownership_errors_render_as_diagnostics() {
     run(&mut engine, "let b = [1]\nlet c = b\nlet d = b");
 
     let fragment = engine.unit_diagnostics(2, "unit 2", TextStyle::Plain);
-    assert!(fragment.contains("[D016]") && fragment.contains("unit 2:1:9"), "{fragment}");
+    assert!(fragment.contains("[O016]") && fragment.contains("unit 2:1:9"), "{fragment}");
     let expression = engine.unit_diagnostics(3, "unit 3", TextStyle::Plain);
-    assert!(expression.contains("[D016]") && expression.contains("unit 3:1:1"), "{expression}");
+    assert!(expression.contains("[O016]") && expression.contains("unit 3:1:1"), "{expression}");
     let moved = engine.unit_diagnostics(4, "unit 4", TextStyle::Plain);
-    assert!(moved.contains("[D001]") && moved.contains("unit 4:3:9"), "{moved}");
-    assert!(!moved.contains("D016"), "{moved}");
+    assert!(moved.contains("[O001]") && moved.contains("unit 4:3:9"), "{moved}");
+    assert!(!moved.contains("O016"), "{moved}");
 }
 
 /// Edit the data `local/test/d`, saying what that did to the session the

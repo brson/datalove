@@ -367,7 +367,7 @@ panics for a slot with no binding.
 ## Ownership
 
 - **The bindings** are allocated with `param_mode: Some(ParamMode::Ref)`, as
-  a `ref` parameter is, so a move is D003, a `mut`/`out` argument D004, and
+  a `ref` parameter is, so a move is O003, a `mut`/`out` argument O004, and
   nothing drops them: not at the body's end, and not at a `break` or
   `continue` either.
 - **Freezing.** A stack of walked roots on `AnalysisCtx`, pushed for the
@@ -375,14 +375,14 @@ panics for a slot with no binding.
   no binding here. The root is found before the loop's own names are bound,
   so `for xs in ref xs` freezes the outer `xs`. It is checked in `mark_moved`,
   in `analyze_set` against the place's root (whole, indexed, field and
-  compound), and in `check_mutable_argument`. Every refusal is D015, at the
+  compound), and in `check_mutable_argument`. Every refusal is O015, at the
   `set`'s target or at the expression. A nested loop over the outer binding's
   row freezes the same root again, harmlessly.
 - **Exits.** `merge_loop_exits` merges `state_before` for a loop that can end
   without running its body, `loop while` and `for`, and the state at each
   `break`. Out parameters are settled the same way: one is written after the
   loop only if every way out wrote it.
-- **Moves in the body** of an outer binding are D007 as for any loop.
+- **Moves in the body** of an outer binding are O007 as for any loop.
 
 ## Backends
 
@@ -466,7 +466,7 @@ description of a cursor's layout to drift from the runtime's.
   - `for x, x` was accepted (D038, `error/105`).
   - An out parameter written only in a loop's body counted as written after
     a loop that can end before its body runs, `loop while` as well as `for`
-    (D006, `error/106`).
+    (O006, `error/106`).
   - Assigning an earlier unit's binding inside any loop's body panicked in
     lowering, which found no slot for it (`engines/for_008`).
   - C AOT advanced a strided cursor past its buffer as a pointer, which C
@@ -508,7 +508,7 @@ What the plan says, with these differences:
   count. Counting up still counts, so zero-sized elements still walk.
 - **Errors.** P086 (no name, or more than two), P087 (no `in`), P088 (no `ref`),
   F087 (a temporary, a value that is not a collection, or the wrong number of
-  names for it), D015 (changing the collection being walked).
+  names for it), O015 (changing the collection being walked).
 - **Worldgen writes `for`** over a collection in scope, at its own
   probability (`for_probability`), since the roll for a statement rarely
   found one: one world in eighty had a `for` before, fifteen after.

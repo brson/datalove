@@ -1,4 +1,4 @@
-// D001 use after move with long variable name
+// O001 use after move with long variable name
 fun consume(s: string): int
   ret 42
 end fun

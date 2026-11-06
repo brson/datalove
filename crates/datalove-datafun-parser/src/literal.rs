@@ -177,7 +177,7 @@ impl<'db> Parser<'db> {
                     Some(n) => n,
                     None => return self.lit_error(ts,
                         "expected name after 'atom'",
-                        PCode::AtomWithoutName,
+                        DCode::AtomWithoutName,
                         "expected atom name",
                     ),
                 };
@@ -190,7 +190,7 @@ impl<'db> Parser<'db> {
                     Some(n) => n,
                     None => return self.lit_error(ts,
                         "expected name after 'term'",
-                        PCode::TermWithoutName,
+                        DCode::TermWithoutName,
                         "expected term name",
                     ),
                 };
@@ -203,7 +203,7 @@ impl<'db> Parser<'db> {
                 let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
                     return self.lit_error(ts,
                         "expected '{' after 'enum'",
-                        PCode::EnumLiteralWithoutBrace,
+                        DCode::EnumLiteralWithoutBrace,
                         "expected '{'",
                     );
                 };
@@ -317,11 +317,11 @@ impl<'db> Parser<'db> {
         let ts = TextSpan::new(self.source_text(), number.span.C());
 
         if let Some((message, label)) = number.complaint() {
-            return self.lit_error(ts, &message, PCode::MalformedNumber, &label);
+            return self.lit_error(ts, &message, DCode::MalformedNumber, &label);
         }
         if let Some(suffix) = &number.suffix {
             let (message, label) = parser_util::suffix_complaint(suffix);
-            return self.lit_error(ts, &message, PCode::NumberSuffix, &label);
+            return self.lit_error(ts, &message, DCode::NumberSuffix, &label);
         }
 
         let value = InternedText::new(self.db, number.text());

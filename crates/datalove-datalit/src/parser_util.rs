@@ -1,6 +1,6 @@
 //! Re-export parser utilities from bcts.
 
-use datalove_diagnostic_codes::{Code, DCode};
+use datalove_diagnostic_codes::DCode;
 pub use bct::parser_util::{
     eat_number, is_decimal_run, is_hex_word, is_identifier, is_numeric_literal, is_number_word,
     strip_separators,
@@ -228,17 +228,15 @@ pub fn tensor_needs_header(shape: &[u32]) -> bool {
     shape.len() > 1 && (shape[0] == 1 || shape.contains(&0))
 }
 
-/// Report the brackets the bracer could not match: a close with no open, as
-/// `stray_code`, and an open never closed, as `unclosed_code`.
+/// Report the brackets the bracer could not match: a close with no open, and
+/// an open never closed.
 ///
-/// Both parsers call this with codes of their own. The bracer has already
-/// recovered, so parsing goes on over its tree either way.
+/// Both parsers call this, the brackets being syntax they share. The bracer
+/// has already recovered, so parsing goes on over its tree either way.
 pub fn emit_bracer_errors<'db>(
     db: &'db dyn salsa::Database,
     bracer: bct::bracer::Bracer<'db>,
     source: bct::input::Source,
-    stray_code: impl Code,
-    unclosed_code: impl Code,
 ) {
     use bct::diagnostic::DiagnosticBuilder;
     use datalove_diagnostic::DiagnosticBuilderExt;
@@ -252,13 +250,13 @@ pub fn emit_bracer_errors<'db>(
         let ts = TextSpan::new(source, token.span());
         if token.is_close_sigil() {
             DiagnosticBuilder::error(db, &rmx::std::format!("unmatched '{}'", sigil.as_str()))
-                .code(stray_code.as_str())
+                .code(DCode::UnmatchedClose.as_str())
                 .primary_label(ts, &rmx::std::format!("this '{}' has no matching '{}'",
                     sigil.as_str(), sigil.open_sigil().as_str()))
                 .emit_parse();
         } else {
             DiagnosticBuilder::error(db, &rmx::std::format!("unclosed '{}'", sigil.as_str()))
-                .code(unclosed_code.as_str())
+                .code(DCode::UnclosedOpen.as_str())
                 .primary_label(ts, &rmx::std::format!("this '{}' is never closed", sigil.as_str()))
                 .emit_parse();
         }

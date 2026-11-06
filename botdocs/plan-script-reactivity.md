@@ -519,7 +519,7 @@ unit's binding, and `a_copy_out_of_an_earlier_unit_survives_its_re_execution`
 puts a list -- heap memory, so a move would be visible to the leak checker --
 through an edit to the unit it came from. A unit may only move out of a binding
 it defined itself, and `a_move_across_units_survives_an_edit` says the record of
-that survives a re-derivation: D013 is still reported for a unit typed
+that survives a re-derivation: O013 is still reported for a unit typed
 afterwards, which is the only observable, since the frame still holds the value.
 
 **Thinner than it looks:**

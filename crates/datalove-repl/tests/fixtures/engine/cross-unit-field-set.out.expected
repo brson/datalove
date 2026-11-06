@@ -403,7 +403,7 @@
     },
     "eval": {
       "Unit": {
-        "NotCompiled": "error[D013]: `s` was given away by an earlier unit\n  help: use `@` to clone `s` where it was given away"
+        "NotCompiled": "error[O013]: `s` was given away by an earlier unit\n  help: use `@` to clone `s` where it was given away"
       }
     },
     "environment": [

@@ -75,7 +75,7 @@ under these names:
 `UnitLowerRecord` has `takes`, `writes` (overwrites and updates together),
 `overwrites` and `revives`. Not "effects": that word is for consequences.
 
-**given away**. What a taken binding is, as the user sees it: D013, "`a` was
+**given away**. What a taken binding is, as the user sees it: O013, "`a` was
 given away by an earlier unit". "Moved" is fine in ownership-internal prose.
 
 ## Steps

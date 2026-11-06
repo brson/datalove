@@ -25,7 +25,7 @@
   },
   "diagnostics": [
     {
-      "code": "P051",
+      "code": "D055",
       "labels": [
         {
           "message": "this '[' is never closed",

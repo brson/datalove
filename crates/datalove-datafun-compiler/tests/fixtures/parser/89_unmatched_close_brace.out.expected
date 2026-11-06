@@ -17,7 +17,7 @@
   },
   "diagnostics": [
     {
-      "code": "P050",
+      "code": "D054",
       "labels": [
         {
           "message": "this '}' has no matching '{'",

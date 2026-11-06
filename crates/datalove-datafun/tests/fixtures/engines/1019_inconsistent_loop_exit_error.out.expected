@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "error[D014]: `b` is given away on one way out of this loop and not another",
+                message: "error[O014]: `b` is given away on one way out of this loop and not another",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

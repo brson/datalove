@@ -114,7 +114,7 @@
   },
   "diagnostics": [
     {
-      "code": "P042",
+      "code": "D035",
       "labels": [
         {
           "message": "expected atom name",
@@ -128,7 +128,7 @@
       "message": "expected name after 'atom'"
     },
     {
-      "code": "P043",
+      "code": "D036",
       "labels": [
         {
           "message": "expected term name",
