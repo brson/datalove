@@ -43,6 +43,10 @@ modification. After each step a table says, for every unit:
 - **holds after**: its own bindings once the step is over, `moved` for one
   given away, `-` for none.
 
+Every step is also checked against a fresh run of the session's current code,
+which no table can get wrong: each unit has to end the same way and hold the
+same bindings as it does in a new session that runs the units in order.
+
 What happens to a unit in a step is one of:
 
 - `untouched`.

@@ -20,6 +20,11 @@
 //! with fails too, so the annotations stay true.
 //!
 //! The `because` column is for the reader, and is not checked.
+//!
+//! Every step, with a table or without, is also checked against a fresh run:
+//! a new engine runs the session's current units in order, and each unit must
+//! come to the same end and hold the same bindings. This is the definition of
+//! a correct step, checked without trusting the tables' `holds after`.
 
 use rmx::prelude::*;
 
@@ -136,6 +141,15 @@ pub struct Entry {
     pub unit: String,
     pub source: String,
     pub expression: bool,
+}
+
+impl Entry {
+    fn code(&self) -> Unit {
+        match self.expression {
+            true => Unit::Expression(self.source.C()),
+            false => Unit::Fragment(self.source.C()),
+        }
+    }
 }
 
 pub enum Change {
@@ -287,6 +301,11 @@ fn holds(bindings: &[(String, Option<String>)]) -> String {
 struct Session {
     engine: Engine,
     units: Vec<String>,
+    /// Each unit's current source, in the same order.
+    code: Vec<Unit>,
+    /// What each unit came to when it last ran or failed to, in the same
+    /// order.
+    states: Vec<Ran>,
     /// The units whose last compile failed, which leaves no record of what
     /// they do.
     failed: Vec<String>,
@@ -294,16 +313,20 @@ struct Session {
     /// The units the engine says it typechecked or analyzed for ownership in
     /// the step just applied, which the recorder checks.
     analyzed: Vec<String>,
+    also_roots: Vec<String>,
 }
 
 impl Session {
     fn start(sys: SystemLibrary, workspace: WorkspaceDescriptor, also_roots: Vec<String>) -> Session {
         let recorder = QueryRecorder::new();
         let db = datalove_datafun::Database::recording(&recorder);
-        let engine = Engine::in_database(db, sys, workspace, also_roots).expect("the engine starts");
+        let engine = Engine::in_database(db, sys, workspace, also_roots.C()).expect("the engine starts");
         assert!(engine.module_errors().is_empty(), "the modules compile: {:?}", engine.module_errors().broken);
         recorder.clear();
-        Session { engine, units: Vec::new(), failed: Vec::new(), recorder, analyzed: Vec::new() }
+        Session {
+            engine, units: Vec::new(), code: Vec::new(), states: Vec::new(), failed: Vec::new(),
+            recorder, analyzed: Vec::new(), also_roots,
+        }
     }
 
     /// What unit `index` does to earlier units' bindings, as a step table's
@@ -363,6 +386,11 @@ impl Session {
                     }
                 }
                 Change::Edit { unit, source } => {
+                    let index = self.index(unit);
+                    self.code[index] = match self.code[index].is_expression() {
+                        true => Unit::Expression(source.C()),
+                        false => Unit::Fragment(source.C()),
+                    };
                     let reports = self.engine.edit_unit(self.id(unit), source);
                     ran.extend(self.reported(reports));
                 }
@@ -377,7 +405,10 @@ impl Session {
                 }
                 Change::Delete { unit } => {
                     let id = self.id(unit);
-                    self.units.remove(self.index(unit));
+                    let index = self.index(unit);
+                    self.units.remove(index);
+                    self.code.remove(index);
+                    self.states.remove(index);
                     ran.push((unit.C(), Ran::Deleted));
                     let reports = self.engine.delete_unit(id);
                     ran.extend(self.reported(reports));
@@ -385,6 +416,8 @@ impl Session {
                 Change::Insert { entry, place, beside } => {
                     let index = place.index(self.index(beside));
                     self.units.insert(index, entry.unit.C());
+                    self.code.insert(index, entry.code());
+                    self.states.insert(index, Ran::No);
                     let reports = self.engine.insert_unit(index, &entry.source, entry.expression);
                     ran.extend(self.reported(reports));
                 }
@@ -396,6 +429,10 @@ impl Session {
             self.failed.retain(|name| name != unit);
             if *ran == Ran::Fails {
                 self.failed.push(unit.C());
+            }
+            if !matches!(ran, Ran::No | Ran::Deleted) {
+                let index = self.index(unit);
+                self.states[index] = *ran;
             }
         }
 
@@ -491,13 +528,43 @@ impl Session {
 
     fn append(&mut self, entry: &Entry) -> (String, Ran) {
         self.units.push(entry.unit.C());
-        let unit = match entry.expression {
-            true => Unit::Expression(entry.source.C()),
-            false => Unit::Fragment(entry.source.C()),
-        };
-        let eval = self.engine.eval(unit);
+        self.code.push(entry.code());
+        let eval = self.engine.eval(entry.code());
         self.note_analyzed();
+        self.states.push(ran(&eval));
         (entry.unit.C(), ran(&eval))
+    }
+
+    /// Say every way this session differs from a fresh run of its current
+    /// code: each unit, in order, must have come to the same end and hold the
+    /// same bindings.
+    ///
+    /// This is what a step is for, so it is checked whether or not the step
+    /// has a table, and it does not trust the tables' `holds after`.
+    fn differs_from_fresh(&mut self, at: &str) -> Vec<String> {
+        let sys = datalove_sys_packages::system_library();
+        let mut fresh = Engine::with_options(
+            sys, self.engine.workspace().C(), datalove_datafun::DebugOutputMode::Disabled, self.also_roots.C(),
+        ).expect("the engine starts");
+        let states: Vec<Ran> = self.code.iter().map(|unit| ran(&fresh.eval(unit.C()))).collect();
+        let ids = self.engine.unit_ids();
+        let fresh_ids = fresh.unit_ids();
+        let mut failures = Vec::new();
+        for (index, unit) in self.units.iter().enumerate() {
+            if self.states[index] != states[index] {
+                failures.push(fmt!(
+                    "{at}: unit {unit} came to {:?}, and to {:?} in a fresh run",
+                    self.states[index], states[index],
+                ));
+                continue;
+            }
+            let held = holds(&self.engine.unit_bindings(ids[index]));
+            let fresh_held = holds(&fresh.unit_bindings(fresh_ids[index]));
+            if held != fresh_held {
+                failures.push(fmt!("{at}: unit {unit} holds {held}, and {fresh_held} in a fresh run"));
+            }
+        }
+        failures
     }
 }
 
@@ -526,6 +593,7 @@ pub fn run(name: &str, workspace: Workspace, steps: &[Step]) -> Vec<String> {
 
     for (number, step) in steps.iter().enumerate() {
         let touched = session.apply(&step.change);
+        failures.extend(session.differs_from_fresh(&fmt!("{name} step {}", number + 1)));
         let Some(check) = &step.check else {
             continue;
         };
