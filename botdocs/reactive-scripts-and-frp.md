@@ -175,7 +175,7 @@ occur and accumulate.
 
 Commit `5c7f3bcc3` added `Engine::edit_data` and the REPL's `/edit-data`, and
 a step to
-[`reactive-transactions.world`](../crates/datalove-doc-fixtures/replays/reactive-transactions.world)
+`crates/datalove-doc-fixtures/replays/reactive-transactions.world`
 where the bank appends a coffee. Here `require data` is a compiler input: the
 data is the value of a const in the unit that requires it.
 
