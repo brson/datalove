@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
+      "code": "T057",
       "labels": [
         {
           "message": "atom not a variant of this enum",

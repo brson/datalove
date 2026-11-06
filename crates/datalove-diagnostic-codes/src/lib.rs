@@ -205,7 +205,7 @@ codes! {
         StructTypeFieldSyntax = 48,
         /// A hint without its `/`.
         HintWithoutSlash = 49,
-        /// A `-` not glued to a decimal number, or a signed hex literal.
+        /// A `-` not glued to a decimal number.
         BadSign = 50,
         /// An atom type with no name.
         AtomTypeWithoutName = 51,
@@ -227,6 +227,8 @@ codes! {
         BareIdentifier = 59,
         /// A number with a suffix.
         NumberSuffix = 60,
+        /// A signed hex literal.
+        SignedHex = 61,
     }
     retired = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 25];
 }
@@ -276,8 +278,7 @@ codes! {
         PipeBindingWithoutName = 19,
         /// A `|` binding without its closing `|`.
         PipeBindingUnclosed = 20,
-        /// A token left over after a statement or a bracket's last element,
-        /// or a postfix operator written apart from what it applies to.
+        /// A token left over after a statement or a bracket's last element.
         StrayToken = 21,
         /// `type` with no name.
         TypeAliasWithoutName = 22,
@@ -375,6 +376,10 @@ codes! {
         ForWithoutRef = 88,
         /// A `set` without its assignment operator.
         SetWithoutAssignOp = 89,
+        /// A postfix operator written apart from what it applies to.
+        SpacedPostfix = 90,
+        /// A binary operator written against one side only.
+        LopsidedOperator = 91,
     }
     retired = [42, 43, 50, 51, 52, 53, 71, 75];
 }
@@ -464,9 +469,8 @@ codes! {
         UndefinedVariable = 1,
         /// An undefined function.
         UndefinedFunction = 2,
-        /// No synthesis rule applies.
-        NoSynthesisRule = 11,
-        /// A type mismatch.
+        /// `Check-Subsume` failed: an expression of one type where another
+        /// is expected.
         Mismatch = 16,
         /// An operator applied to a type it does not admit.
         InvalidOperand = 26,
@@ -476,7 +480,7 @@ codes! {
         ResultWithoutElse = 46,
         /// `?` on a non-option or `!` on a non-result.
         BadUnwrap = 48,
-        /// An early return whose type does not fit, or outside any function.
+        /// An early return whose type does not fit the function's.
         EarlyReturnMismatch = 49,
         /// `break` outside a loop.
         BreakOutsideLoop = 50,
@@ -504,8 +508,6 @@ codes! {
         MissingReturn = 63,
         /// An unknown type name.
         UnknownType = 64,
-        /// A literal out of range for its type.
-        LiteralOutOfRange = 65,
         /// A type alias defined twice.
         AliasDefinedTwice = 66,
         /// No such field.
@@ -524,8 +526,6 @@ codes! {
         TensorViewMutated = 73,
         /// A bare index in a `set` target where one cannot go.
         BareIndexInSet = 74,
-        /// A literal whose shape does not fit its type.
-        LiteralShape = 75,
         /// An argument to a const parameter that is not a const binding.
         ConstArgNotConst = 76,
         /// A const parameter whose type mentions a type parameter.
@@ -542,18 +542,58 @@ codes! {
         RiderInScript = 82,
         /// A `require` that closes a cycle of modules.
         RequireCycle = 83,
-        /// A `require data` whose file does not have the given type.
+        /// A `require data` whose file does not have the type it is given.
         DataTypeMismatch = 84,
         /// `inline` functions calling each other in a cycle.
         InlineCycle = 85,
-        /// A function defined twice, or imported and defined.
+        /// A function defined twice.
         FunctionDefinedTwice = 86,
-        /// A `for` over something it cannot walk.
-        BadFor = 87,
+        /// A `for` over a type it cannot walk.
+        ForUnwalkable = 87,
         /// A const whose type mentions a type parameter.
         ConstTypeGeneric = 88,
         /// A const that depends on itself or on a later const.
         ConstCycle = 89,
+        /// The operands of a binary operator that do not pair.
+        OperandMismatch = 90,
+        /// A `@` that cannot convert the value to the expected type.
+        BadAdapt = 91,
+        /// A type argument outside its parameter's bound.
+        BoundNotSatisfied = 92,
+        /// A binding `if` on something that is not an option or a result.
+        BindingIfNotOptional = 93,
+        /// An `else` binding on an option, which has no error to bind.
+        ElseBindingOnOption = 94,
+        /// A `call` statement of a function that returns a value.
+        CallReturnsValue = 95,
+        /// A `match` on something that is not an enum.
+        MatchNotEnum = 96,
+        /// Two cases for one variant.
+        DuplicateCase = 97,
+        /// `case atom` on a term, or `case term` on an atom.
+        CaseKindMismatch = 98,
+        /// A `case` naming no variant of the enum.
+        NoSuchVariant = 99,
+        /// A variant with no case, in a `match` with no `case default`.
+        MissingCase = 100,
+        /// A type parameter no argument decides, left unbound at a call.
+        UnboundTypeParam = 101,
+        /// An `icall` of an intrinsic the compiler does not know.
+        UnknownIntrinsic = 102,
+        /// An index into something that is not a list, map or tensor.
+        NotIndexable = 103,
+        /// A bare `e[k]` outside a `set` target.
+        BareIndexOutsideSet = 104,
+        /// An early return outside any function.
+        EarlyReturnOutsideFunction = 105,
+        /// An import of a name a function of the module or script defines.
+        ImportShadowsFunction = 106,
+        /// A `require data` given no type, of a file that has none.
+        DataUntyped = 107,
+        /// A `for` over a temporary.
+        ForOverTemporary = 108,
+        /// A `for` binding the wrong number of names for its collection.
+        ForNameCount = 109,
     }
-    retired = [60];
+    retired = [11, 60, 65, 75];
 }

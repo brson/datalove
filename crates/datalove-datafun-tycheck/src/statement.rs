@@ -496,10 +496,10 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                         res.inner_type.clone()
                     }
                     _ => {
-                        // F016: only an option or a result has a value to bind.
+                        // F093: only an option or a result has a value to bind.
                         let err = ctx.error_worded(
                             crate::ErrorSite::Expr(ctx.expr(condition).key()),
-                            FCode::Mismatch,
+                            FCode::BindingIfNotOptional,
                             fmt!("only an option `?T` or a result `!T` has a value to take out, and this is `{}`", type_to_string(db, &condition_ty)),
                             "this is not an option or a result",
                             None,
@@ -530,7 +530,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                                 let actual_type = type_to_string(db, &condition_ty);
                                 let err = ctx.error_worded(
                                     crate::ErrorSite::Expr(ctx.expr(condition).key()),
-                                    FCode::Mismatch,
+                                    FCode::ElseBindingOnOption,
                                     fmt!("only a result `!T` has an error for `else` to bind, and this is `{actual_type}`"),
                                     "this is not a result",
                                     None,
@@ -683,7 +683,7 @@ Give the const a concrete type, or make it a `let`.")),
                     let actual_str = type_to_string(db, &input_ty);
                     let err = ctx.error_worded(
                         crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                        FCode::Mismatch,
+                        FCode::MatchNotEnum,
                         fmt!("`match` takes an enum apart, and this is `{actual_str}`"),
                         "this is not an enum",
                         None,
@@ -706,7 +706,7 @@ Give the const a concrete type, or make it a `let`.")),
                 if covered.iter().any(|n| *n == variant_name) {
                     let err = ctx.error_worded(
                         crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                        FCode::Mismatch,
+                        FCode::DuplicateCase,
                         fmt!("`{}` has two cases", variant_name.as_str(db)),
                         "each variant is matched by one case",
                         None,
@@ -722,7 +722,7 @@ Give the const a concrete type, or make it a `let`.")),
                         if v.payload.is_some() {
                             let err = ctx.error_worded(
                                 crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                                FCode::Mismatch,
+                                FCode::CaseKindMismatch,
                                 fmt!("`{0}` is a term, with a payload, and is matched with `case term {0} <name>`", name.as_str(db)),
                                 "`case atom` matches a variant with no payload",
                                 None,
@@ -747,7 +747,7 @@ Give the const a concrete type, or make it a `let`.")),
                             None => {
                                 let err = ctx.error_worded(
                                     crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                                    FCode::Mismatch,
+                                    FCode::CaseKindMismatch,
                                     fmt!("`{0}` is an atom, with no payload, and is matched with `case atom {0}`", name.as_str(db)),
                                     "`case term` matches a variant with a payload",
                                     None,
@@ -760,7 +760,7 @@ Give the const a concrete type, or make it a `let`.")),
                     (_, None) => {
                         let err = ctx.error_worded(
                             crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                            FCode::Mismatch,
+                            FCode::NoSuchVariant,
                             fmt!("`{}` has no variant `{}`", type_to_string(db, &input_ty), variant_name.as_str(db)),
                             "no such variant",
                             None,
@@ -795,7 +795,7 @@ Give the const a concrete type, or make it a `let`.")),
                     let missing: Vec<String> = uncovered.iter().map(|name| fmt!("`{name}`")).collect();
                     let err = ctx.error_worded(
                         crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                        FCode::Mismatch,
+                        FCode::MissingCase,
                         fmt!("this `match` has no case for {}", missing.join(", ")),
                         "every variant needs a case, or there is a `case default`",
                         None,
@@ -813,7 +813,7 @@ Give the const a concrete type, or make it a `let`.")),
                     if ty != unit_type {
                         let actual_str = type_to_string(db, &ty);
                         let err = ctx.error_type_mismatch(
-                            ctx.expr(expr),
+                            ctx.expr(expr), FCode::CallReturnsValue,
                             "()",
                             &actual_str,
                             "a `call` statement is of a function that returns `()`"
@@ -1097,9 +1097,9 @@ fn require_return_type_for<'db>(
 
 /// Report a `set` target that indexes something that cannot be indexed.
 ///
-/// F011, as for the same index in an expression.
+/// F103, as for the same index in an expression.
 fn report_unindexable<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtSet<'db>, msg: String) -> TypeError {
-    ctx.report_set_error(stmt, FCode::NoSynthesisRule, msg, "this cannot be indexed", None)
+    ctx.report_set_error(stmt, FCode::NotIndexable, msg, "this cannot be indexed", None)
 }
 
 /// Check a `for`: what it walks, what it binds, and its body.
@@ -1113,16 +1113,16 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
     use datalit::tycheck::Type as T;
     let db = ctx.db;
     let iteratee = stmt.iteratee;
-    let coded = |ctx: &mut TypeContext<'db>, message: String, label: &str| {
+    let coded = |ctx: &mut TypeContext<'db>, code: FCode, message: String, label: &str| {
         let site = crate::ErrorSite::Expr(ctx.expr(iteratee).key());
-        ctx.push_coded(site, FCode::BadFor, message.C(), label.S(), None);
+        ctx.push_coded(site, code, message.C(), label.S(), None);
         ctx.add_error(datalove_datafun_common::TypeError::ForWalk { message });
     };
 
     // A temporary would have to live to the loop's end and be dropped on
     // every way out of it, `ret` and `?` included; nothing wants that yet.
     if !is_place(db, ctx.expr(iteratee)) {
-        coded(ctx, S("a `for` walks a collection that is already somewhere"),
+        coded(ctx, FCode::ForOverTemporary, S("a `for` walks a collection that is already somewhere"),
             "name a variable, a parameter, or a field or element of one");
         return;
     }
@@ -1159,7 +1159,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
         }
         Type::Datalit(T::Set(set)) => {
             if n == 2 {
-                coded(ctx, S("a `for` over a set binds one name"),
+                coded(ctx, FCode::ForNameCount, S("a `for` over a set binds one name"),
                     "a set's elements have no index");
                 return;
             }
@@ -1167,7 +1167,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
         }
         Type::Datalit(T::Map(map)) => {
             if n == 1 {
-                coded(ctx, S("a `for` over a map binds two names"),
+                coded(ctx, FCode::ForNameCount, S("a `for` over a map binds two names"),
                     "write `for key, value`");
                 return;
             }
@@ -1175,7 +1175,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
         }
         other => {
             let actual = type_to_string(db, other);
-            coded(ctx, fmt!("a `for` cannot walk a value of type `{actual}`"),
+            coded(ctx, FCode::ForUnwalkable, fmt!("a `for` cannot walk a value of type `{actual}`"),
                 "a `for` walks a list, a set, a map or a tensor");
             return;
         }

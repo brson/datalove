@@ -85,11 +85,7 @@ pub(crate) fn type_data_file<'db>(
     let expected = match expected {
         None => None,
         Some(Type::Datalit(ty)) => Some(ty.C()),
-        Some(Type::Function(_)) => {
-            let message = fmt!("data `{path}` cannot be a function");
-            ctx.push_coded(site, FCode::DataTypeMismatch, message.C(), S("data is a value"), None);
-            return Err(TypeError::DatalitError(message));
-        }
+        Some(Type::Function(_)) => unreachable!("a type a datafun expression is checked against is data"),
     };
 
     ctx.resolved_data.insert(path.C(), source);
@@ -101,16 +97,16 @@ pub(crate) fn type_data_file<'db>(
             Ok(ty)
         }
         Err(errors) => {
-            let message = match &expected {
-                Some(ty) => fmt!(
+            let (code, message) = match &expected {
+                Some(ty) => (FCode::DataTypeMismatch, fmt!(
                     "data `{path}` is not a `{}`",
                     datalit::tycheck::type_to_string(db, ty),
-                ),
-                None => fmt!("data `{path}` has no type of its own"),
+                )),
+                None => (FCode::DataUntyped, fmt!("data `{path}` has no type of its own")),
             };
             let label = errors.first().cloned().unwrap_or_else(|| S("the data does not check"));
             let note = (errors.len() > 1).then(|| errors[1..].join("; "));
-            ctx.push_coded(site, FCode::DataTypeMismatch, message.C(), label, note);
+            ctx.push_coded(site, code, message.C(), label, note);
             Err(TypeError::DatalitError(message))
         }
     }

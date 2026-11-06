@@ -131,7 +131,7 @@ let a: u8 = zero()
 
 works: `zero` hands `fixedint_zero` its entry for `T`, which the script filled
 with `u8`'s descriptor. A call with nothing to say what `T` is, such as
-`debuglog zero()`, is refused by the type checker (F011); the rules for what
+`debuglog zero()`, is refused by the type checker (F101); the rules for what
 decides it are the spec's ([Section 8.7](botspec.md#user-content-87-generic-functions)).
 
 ## Writing the result

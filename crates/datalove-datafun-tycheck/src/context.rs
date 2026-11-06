@@ -3,7 +3,7 @@
 //! Provides TypeContext for tracking bindings and errors during typechecking,
 //! and ScriptTypeContext for tracking accumulated bindings across script units.
 
-use datalove_diagnostic_codes::FCode;
+use datalove_diagnostic_codes::{Code, FCode};
 use rmx::prelude::*;
 use bct::text::{InternedText, TextSpan};
 
@@ -460,7 +460,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         }
     }
 
-    /// F086: An import of a name a function here is defined by.
+    /// F106: An import of a name a function here is defined by.
     ///
     /// Filed against the import, which is refused; the function stays.
     pub fn error_import_shadows_function(
@@ -488,7 +488,6 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         TypeError::UnresolvedName(name.as_str(self.db).S())
     }
 
-    /// F011: Cannot synthesize type.
     /// Convert a type hint under the aliases in scope, reporting a name that
     /// resolves to nothing.
     ///
@@ -522,20 +521,31 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         result
     }
 
-    pub fn error_cannot_synthesize(&mut self, expr: ExprFun<'db>, message: &str) -> TypeError {
+    /// A type that cannot be synthesized, for the reason `code` names.
+    pub fn error_cannot_synthesize(&mut self, expr: ExprFun<'db>, code: impl Code, message: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
             expr_key: expr.key(),
             module_id: self.current_module_id,
+            code: InternedText::new(self.db, code.as_str().S()),
             message: InternedText::new(self.db, message.S()),
         });
         TypeError::CannotSynthesize
     }
 
-    /// F016: Type mismatch (simple version without recovery hint).
-    pub fn error_type_mismatch(&mut self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
+    /// An expression of one type where another is expected, as the check
+    /// `code` names found it, without a recovery hint.
+    pub fn error_type_mismatch(
+        &mut self,
+        expr: ExprFun<'db>,
+        code: impl Code,
+        expected: &str,
+        actual: &str,
+        label: &str,
+    ) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
             expr_key: expr.key(),
             module_id: self.current_module_id,
+            code: InternedText::new(self.db, code.as_str().S()),
             expected: InternedText::new(self.db, expected.S()),
             actual: InternedText::new(self.db, actual.S()),
             label: InternedText::new(self.db, label.S()),
@@ -547,13 +557,15 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         }
     }
 
-    /// F016: Type mismatch with recovery hint computation.
+    /// An expression of one type where another is expected, with a recovery
+    /// hint.
     ///
     /// This version takes Type references and checks if the error is recoverable
     /// via the @ (adapt) operator using can_clone_coerce_to.
     pub fn error_type_mismatch_with_types(
         &mut self,
         expr: ExprFun<'db>,
+        code: impl Code,
         expected: &Type<'db>,
         actual: &Type<'db>,
         label: &str,
@@ -574,6 +586,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
             expr_key: expr.key(),
             module_id: self.current_module_id,
+            code: InternedText::new(self.db, code.as_str().S()),
             expected: InternedText::new(self.db, expected_str.C()),
             actual: InternedText::new(self.db, actual_str.C()),
             label: InternedText::new(self.db, label.S()),
@@ -688,7 +701,7 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn report_set_error(
         &mut self,
         stmt: &StmtSet<'db>,
-        code: FCode,
+        code: impl Code,
         message: String,
         label: &str,
         note: Option<&str>,
@@ -822,7 +835,7 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn error_worded(
         &mut self,
         site: ErrorSite<'db>,
-        code: FCode,
+        code: impl Code,
         message: String,
         label: &str,
         note: Option<String>,
@@ -835,7 +848,7 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn push_coded(
         &mut self,
         site: ErrorSite<'db>,
-        code: FCode,
+        code: impl Code,
         message: String,
         label: String,
         note: Option<String>,
@@ -850,9 +863,9 @@ replace the view rather than the elements it shows. Index down to single element
         });
     }
 
-    /// F065: A literal out of range for the type it is checked against.
+    /// A literal out of range for the type it is checked against.
     ///
-    /// Worded as datalit words it, with the range the type has.
+    /// Coded and worded as datalit does it, with the range the type has.
     pub fn error_literal_out_of_range(
         &mut self,
         expr: ExprFun<'db>,
@@ -861,7 +874,7 @@ replace the view rather than the elements it shows. Index down to single element
     ) -> TypeError {
         use datalove_datalit::tycheck::{hex_type_range_info, int_type_range_info, type_to_string};
         let ty_str = type_to_string(self.db, ty);
-        let (message, (_, note)) = if hex {
+        let (message, (code, note)) = if hex {
             (fmt!("hex literal out of range for type {ty_str}"), hex_type_range_info(ty))
         } else {
             (fmt!("integer literal out of range for type {ty_str}"), int_type_range_info(ty))
@@ -869,6 +882,7 @@ replace the view rather than the elements it shows. Index down to single element
         self.pending_diagnostics.push(PendingDiagnostic::LiteralOutOfRange {
             expr_key: expr.key(),
             module_id: self.current_module_id,
+            code: InternedText::new(self.db, code.as_str().S()),
             message: InternedText::new(self.db, message),
             note: InternedText::new(self.db, note.S()),
         });

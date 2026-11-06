@@ -1,0 +1,13 @@
+// A module const is in no function, so nothing can return early from it.
+----------
+module local/test/main
+----------
+
+const C: u32 = (: ?u32 / some 1)?
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+debuglog main.C

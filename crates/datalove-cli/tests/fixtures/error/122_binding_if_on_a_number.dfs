@@ -1,0 +1,5 @@
+// Only an option or a result has a value for a binding `if` to take out.
+let n: u32 = 1
+if n |v|
+  debuglog v
+end if

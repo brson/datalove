@@ -1,0 +1,5 @@
+// A `call` discards nothing: its function returns `()`.
+fun one(): u32
+  ret 1
+end fun
+call one()

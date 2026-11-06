@@ -1,0 +1,2 @@
+// An `icall` names an intrinsic the compiler knows.
+let x = icall no_such_intrinsic(1)

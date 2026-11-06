@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
+      "code": "F097",
       "labels": [
         {
           "message": "each variant is matched by one case",
@@ -17,7 +17,7 @@
   ],
   "errors": [
     {
-      "code": "F016",
+      "code": "F097",
       "kind": "Worded",
       "message": "`Red` has two cases"
     }

@@ -17,7 +17,7 @@
   },
   "diagnostics": [
     {
-      "code": "P021",
+      "code": "P090",
       "labels": [
         {
           "message": "a call's arguments are written against what is called",

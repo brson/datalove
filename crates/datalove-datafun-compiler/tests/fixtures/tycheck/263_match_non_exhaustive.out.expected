@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
+      "code": "F100",
       "labels": [
         {
           "message": "every variant needs a case, or there is a `case default`",
@@ -17,7 +17,7 @@
   ],
   "errors": [
     {
-      "code": "F016",
+      "code": "F100",
       "kind": "Worded",
       "message": "this `match` has no case for `Green`"
     }

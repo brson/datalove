@@ -1,0 +1,5 @@
+// A type argument has to be one its parameter's bound admits.
+fun half<T>(x: T): T where { T is float }
+  ret x
+end fun
+let h = half(: u32 / 4)

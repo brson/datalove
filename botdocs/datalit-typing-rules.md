@@ -602,6 +602,10 @@ Some properties follow from the rules and are worth stating outright.
 
 ## Diagnostics
 
+Datafun reports many of these codes too, for the same faults in the literal
+forms it shares; its own table lists which
+([Datafun Typing Rules](datafun-typing-rules.md#user-content-diagnostics)).
+
 | Code | Mode | Meaning |
 |------|------|---------|
 | T005-T012 | check | Integer or hex literal out of range for `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, in that order |

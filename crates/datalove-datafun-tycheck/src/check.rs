@@ -8,7 +8,7 @@
 //! 2. Main check_expr function - entry point for type checking
 //! 3. Collection checking helpers - list, set, map, tensor, tuple, struct, enum
 
-use datalove_diagnostic_codes::FCode;
+use datalove_diagnostic_codes::{Code, FCode, TCode};
 use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -48,7 +48,7 @@ pub fn check_expr<'db>(
         if !types_equivalent_at_head(db, &hinted, expected) {
             let expected_str = type_to_string(db, expected);
             let hinted_str = type_to_string(db, &hinted);
-            return Err(ctx.error_type_mismatch(expr, &expected_str, &hinted_str, "the type hint disagrees with the expected type"));
+            return Err(ctx.error_type_mismatch(expr, TCode::HintMismatch, &expected_str, &hinted_str, "the type hint disagrees with the expected type"));
         }
     }
 
@@ -104,7 +104,7 @@ fn check_unhinted<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "?_", "`none` is an option"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, "?_", "`none` is an option"))
                 }
             }
         }
@@ -121,7 +121,7 @@ fn check_unhinted<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "?_", "`some` makes an option"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, "?_", "`some` makes an option"))
                 }
             }
         }
@@ -138,7 +138,7 @@ fn check_unhinted<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "!_", "`ok` makes a result"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, "!_", "`ok` makes a result"))
                 }
             }
         }
@@ -156,7 +156,7 @@ fn check_unhinted<'db>(
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "!_", "`er` makes a result"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, "!_", "`er` makes a result"))
                 }
             }
         }
@@ -174,7 +174,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -191,7 +191,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -208,7 +208,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -225,7 +225,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -242,7 +242,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -259,7 +259,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -276,7 +276,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -293,7 +293,7 @@ fn check_unhinted<'db>(
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -322,13 +322,13 @@ fn check_unhinted<'db>(
                     } else {
                         let expected_str = type_to_string(db, expected);
                         let actual_str = type_to_string(db, &synthesized);
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                        Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                     }
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -342,7 +342,7 @@ fn check_unhinted<'db>(
             let synthesized = ctx.synthesize_unhinted(expr)?;
             let expected_str = type_to_string(db, expected);
             let actual_str = type_to_string(db, &synthesized);
-            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+            Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
         }
 
         // Handle hex literals specially - they can coerce to expected integer types.
@@ -366,13 +366,13 @@ fn check_unhinted<'db>(
                     } else {
                         let expected_str = type_to_string(db, expected);
                         let actual_str = type_to_string(db, &synthesized);
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                        Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                     }
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -416,7 +416,7 @@ fn check_unhinted<'db>(
             }
             let expected_str = type_to_string(db, expected);
             let actual_str = type_to_string(db, &synthesized);
-            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+            Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
         }
 
         // Handle clone/coerce operator (@) - explicit lossless conversion.
@@ -437,7 +437,7 @@ fn check_unhinted<'db>(
             // Conversion not valid - report error.
             let expected_str = type_to_string(db, expected);
             let actual_str = type_to_string(db, &operand_ty);
-            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "@ operator cannot convert between these types"))
+            Err(ctx.error_type_mismatch(expr, FCode::BadAdapt, &expected_str, &actual_str, "@ operator cannot convert between these types"))
         }
 
         // An operator whose result has its operands' type passes what is
@@ -458,7 +458,7 @@ fn check_unhinted<'db>(
             if types_equivalent_at_head(db, &synthesized, expected) {
                 return Ok(());
             }
-            Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
+            Err(ctx.error_type_mismatch_with_types(expr, FCode::Mismatch, expected, &synthesized, "type mismatch"))
         }
 
         // Handle atom expressions - check against expected Atom or Enum type.
@@ -471,7 +471,7 @@ fn check_unhinted<'db>(
                     } else {
                         let expected_str = type_to_string(db, expected);
                         let actual_str = format!("atom {}", atom_expr.name.as_str(db));
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "atom name mismatch"))
+                        Err(ctx.error_type_mismatch(expr, TCode::VariantMismatch, &expected_str, &actual_str, "atom name mismatch"))
                     }
                 }
                 Type::Datalit(datalit::tycheck::Type::Enum(enum_ty)) => {
@@ -485,13 +485,13 @@ fn check_unhinted<'db>(
                     } else {
                         let expected_str = type_to_string(db, expected);
                         let actual_str = format!("atom {}", atom_expr.name.as_str(db));
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "atom not a variant of this enum"))
+                        Err(ctx.error_type_mismatch(expr, TCode::VariantMismatch, &expected_str, &actual_str, "atom not a variant of this enum"))
                     }
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -509,7 +509,7 @@ fn check_unhinted<'db>(
                     } else {
                         let expected_str = type_to_string(db, expected);
                         let actual_str = format!("term {}", term_expr.name.as_str(db));
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "term name mismatch"))
+                        Err(ctx.error_type_mismatch(expr, TCode::VariantMismatch, &expected_str, &actual_str, "term name mismatch"))
                     }
                 }
                 Type::Datalit(datalit::tycheck::Type::Enum(enum_ty)) => {
@@ -527,21 +527,21 @@ fn check_unhinted<'db>(
                                 None => {
                                     let expected_str = type_to_string(db, expected);
                                     let actual_str = format!("term {}", term_expr.name.as_str(db));
-                                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "variant has no payload but term expression has one"))
+                                    Err(ctx.error_type_mismatch(expr, TCode::VariantMismatch, &expected_str, &actual_str, "variant has no payload but term expression has one"))
                                 }
                             }
                         }
                         None => {
                             let expected_str = type_to_string(db, expected);
                             let actual_str = format!("term {}", term_expr.name.as_str(db));
-                            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "term not a variant of this enum"))
+                            Err(ctx.error_type_mismatch(expr, TCode::VariantMismatch, &expected_str, &actual_str, "term not a variant of this enum"))
                         }
                     }
                 }
                 _ => {
                     let expected_str = type_to_string(db, expected);
                     let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -569,7 +569,7 @@ fn check_unhinted<'db>(
                     let expected_str = type_to_string(db, expected);
                     Err(ctx.error_worded(
                         crate::ErrorSite::Expr(expr.key()),
-                        FCode::Mismatch,
+                        TCode::EnumLiteralNotEnum,
                         fmt!("an enum literal is a value of an enum, and `{expected_str}` is not one"),
                         "an enum literal",
                         None,
@@ -593,7 +593,7 @@ fn check_unhinted<'db>(
             if types_equivalent_at_head(db, &synthesized, expected) {
                 return Ok(());
             }
-            Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
+            Err(ctx.error_type_mismatch_with_types(expr, FCode::Mismatch, expected, &synthesized, "type mismatch"))
         }
 
         _ => {
@@ -604,7 +604,7 @@ fn check_unhinted<'db>(
                 return Ok(());
             }
 
-            Err(ctx.error_type_mismatch_with_types(expr, expected, &synthesized, "type mismatch"))
+            Err(ctx.error_type_mismatch_with_types(expr, FCode::Mismatch, expected, &synthesized, "type mismatch"))
         }
     }
 }
@@ -725,7 +725,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     if actual_rank != expected_rank {
         let ty = type_to_string(db, &inner_ty);
         return Err(shape_error(
-            ctx, expr,
+            ctx, expr, TCode::TensorRank,
             fmt!("this tensor has rank {actual_rank}, and `{ty}` has rank {expected_rank}"),
             None,
             TypeError::ArityMismatch { expected: expected_rank as usize, actual: actual_rank as usize },
@@ -736,7 +736,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     if let Err(e) = datalit::tycheck::check_tensor_element_count(shape, elements.len()) {
         let held = shape.iter().map(|&d| d as usize).product::<usize>();
         return Err(shape_error(
-            ctx, expr,
+            ctx, expr, TCode::TensorElementCount,
             fmt!("this tensor's shape holds {held} elements, and {} are written", elements.len()),
             None,
             e.into(),
@@ -777,7 +777,7 @@ pub fn check_tuple_elements<'db>(
     if elements.len() != expected_fields.len() {
         let ty = type_to_string(db, &inner_ty);
         return Err(shape_error(
-            ctx, expr,
+            ctx, expr, TCode::TupleLength,
             fmt!("this tuple has {} elements, and `{ty}` has {}", elements.len(), expected_fields.len()),
             None,
             TypeError::ArityMismatch { expected: expected_fields.len(), actual: elements.len() },
@@ -820,7 +820,7 @@ pub fn check_struct_fields<'db>(
     if fields.len() != expected_fields.len() {
         let ty = type_to_string(db, &inner_ty);
         return Err(shape_error(
-            ctx, expr,
+            ctx, expr, TCode::StructFieldCount,
             fmt!("this struct has {} fields, and `{ty}` has {}", fields.len(), expected_fields.len()),
             None,
             TypeError::ArityMismatch { expected: expected_fields.len(), actual: fields.len() },
@@ -833,7 +833,7 @@ pub fn check_struct_fields<'db>(
         if field.name != expected_field.name {
             let ty = type_to_string(db, &inner_ty);
             return Err(shape_error(
-                ctx, expr,
+                ctx, expr, TCode::StructFieldName,
                 fmt!("field `{}` where `{ty}` has `{}`", field.name.as_str(db), expected_field.name.as_str(db)),
                 Some("a struct's fields are written in the order its type declares them"),
                 TypeError::FieldOrderMismatch,
@@ -863,7 +863,7 @@ pub fn check_table_rows<'db>(
     let ty = || type_to_string(db, &Type::Datalit(datalit::tycheck::Type::Table(table_ty.clone())));
     if header.len() != expected_columns.len() {
         return Err(shape_error(
-            ctx, expr,
+            ctx, expr, TCode::TableColumnCount,
             fmt!("this table has {} columns, and `{}` has {}", header.len(), ty(), expected_columns.len()),
             None,
             TypeError::ArityMismatch { expected: expected_columns.len(), actual: header.len() },
@@ -874,7 +874,7 @@ pub fn check_table_rows<'db>(
     for (h, c) in header.iter().zip(expected_columns.iter()) {
         if h.as_str(db) != c.name.as_str(db) {
             return Err(shape_error(
-                ctx, expr,
+                ctx, expr, TCode::TableColumnName,
                 fmt!("column `{}` where `{}` has `{}`", h.as_str(db), ty(), c.name.as_str(db)),
                 Some("a table's columns are written in the order its type declares them"),
                 TypeError::FieldOrderMismatch,
@@ -886,7 +886,7 @@ pub fn check_table_rows<'db>(
     for row in rows {
         if row.elements.len() != expected_columns.len() {
             return Err(shape_error(
-                ctx, expr,
+                ctx, expr, TCode::TableRowWidth,
                 fmt!("a row of {} elements, where `{}` has {} columns", row.elements.len(), ty(), expected_columns.len()),
                 None,
                 TypeError::ArityMismatch { expected: expected_columns.len(), actual: row.elements.len() },
@@ -903,15 +903,16 @@ pub fn check_table_rows<'db>(
 }
 
 /// Report a literal whose shape does not fit the type it is checked against,
-/// and pass its error on. F075.
+/// as the datalit fault `code` names, and pass its error on.
 pub(crate) fn shape_error<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
+    code: impl Code,
     message: String,
     note: Option<&str>,
     error: TypeError,
 ) -> TypeError {
     let site = crate::ErrorSite::Expr(expr.key());
-    ctx.push_coded(site, FCode::LiteralShape, message, S("does not fit the type"), note.map(S));
+    ctx.push_coded(site, code, message, S("does not fit the type"), note.map(S));
     error
 }

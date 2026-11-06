@@ -1,0 +1,10 @@
+// A data file that is not of the type its `require` gives.
+----------
+data local/app/nums
+----------
+[1, 2, 3]
+----------
+scriptunit-fragment
+----------
+
+require data local/app/nums: [string]

@@ -1,0 +1,7 @@
+// An option has no error for `else` to bind.
+let o: ?u32 = none
+if o |v|
+  debuglog v
+else |e|
+  debuglog 0
+end if

@@ -119,7 +119,7 @@
   },
   "diagnostics": [
     {
-      "code": "P021",
+      "code": "P090",
       "labels": [
         {
           "message": "a postfix operator is written against the expression before it",
@@ -133,7 +133,7 @@
       "message": "this `.` is written apart from what it applies to"
     },
     {
-      "code": "P021",
+      "code": "P090",
       "labels": [
         {
           "message": "a postfix operator is written against the expression before it",
@@ -147,7 +147,7 @@
       "message": "this `[0]` is written apart from what it applies to"
     },
     {
-      "code": "P021",
+      "code": "P090",
       "labels": [
         {
           "message": "a postfix operator is written against the expression before it",

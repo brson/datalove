@@ -133,7 +133,7 @@ impl<'db> Parser<'db> {
                 self.next();
                 return self.emit_expr_error(ts,
                     "a hex literal takes no sign",
-                    DCode::BadSign,
+                    DCode::SignedHex,
                     "a hex literal is an unsigned bit pattern; write a negative number in decimal"
                 );
             }

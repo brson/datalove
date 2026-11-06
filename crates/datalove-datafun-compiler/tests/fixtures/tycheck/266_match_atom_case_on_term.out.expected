@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
+      "code": "F098",
       "labels": [
         {
           "message": "`case atom` matches a variant with no payload",
@@ -17,7 +17,7 @@
   ],
   "errors": [
     {
-      "code": "F016",
+      "code": "F098",
       "kind": "Worded",
       "message": "`Note` is a term, with a payload, and is matched with `case term Note <name>`"
     }

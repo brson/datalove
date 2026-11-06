@@ -464,7 +464,7 @@ pub enum TypeError {
     /// The second used to replace the first's signature without a word, and
     /// both bodies were then checked against it.
     DuplicateFunction { name: String, fun_local_index: u32 },
-    /// F086: An import of a name the module or script defines a function by.
+    /// F106: An import of a name the module or script defines a function by.
     ///
     /// Which of the two a call reached used to depend on the order the
     /// checker happened to bind them in, which differed between modules and
@@ -496,8 +496,8 @@ pub enum TypeError {
     /// F085: Inline functions calling each other in a cycle, by name, from
     /// the first back to it again.
     InlineCycle { names: Vec<String> },
-    /// F087: a `for` that cannot walk what it names, or binds the wrong number
-    /// of names for it.
+    /// F087, F108 or F109: a `for` that cannot walk what it names, or binds the
+    /// wrong number of names for it.
     ForWalk { message: String },
     /// An error its reporter worded whole, under `code`, where no other
     /// variant says what went wrong.

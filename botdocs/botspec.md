@@ -306,14 +306,15 @@ consulted.
 ```datalove
 a - b          // subtraction
 a-b            // subtraction
-a -b           // error (P021): `-` spaced as a prefix operator after an operand
-p . 0          // error: a postfix operator is written against the expression before it
+a -b           // error (P091): `-` spaced as a prefix operator after an operand
+p . 0          // error (P090): a postfix operator is written against the expression before it
 x ?            // error: likewise
 f (1)          // error: a call's `(` is written against what is called, as a postfix operator is
 a--b           // `a - (-b)`
 ```
 
-A misplaced operator is P021. Inside a tensor row, where elements are
+A binary operator spaced on one side only is P091, and a postfix operator
+written apart P090. Inside a tensor row, where elements are
 separated by spacing, `a -b` is the two elements `a` and `-b`.
 
 Fixity is for the sigil operators. A word operator -- `and`, `or`, `xor`, `not`
@@ -538,7 +539,7 @@ neither can be written as "a tensor of any rank".
 ```
 
 A struct's fields are in the order written, and the order is part of the type:
-`{ y = 1, x = 2 }` is not a `{ x: int, y: int }` (F075). A field, table column
+`{ y = 1, x = 2 }` is not a `{ x: int, y: int }` (T042). A field, table column
 or enum variant named twice is D038.
 
 ### 3.4 Option and Result
@@ -643,7 +644,7 @@ let d: enum { atom Red, atom Blue } = enum { atom Blue }
 let e: enum { atom Red, term Custom string } = term Custom "hello"
 ```
 
-An enum literal has no type of its own and needs one expected (F011). This is
+An enum literal has no type of its own and needs one expected (T016). This is
 the same in Datalit.
 
 **Coercion.** An atom or term that is not a literal -- a variable, a
@@ -1680,7 +1681,7 @@ let xs: [u32] = list.of(5)                       // T is u32, from the expected 
 ```
 
 The types cannot be written at the call: `f<u32>(1)` is not a call. A
-parameter nothing decides is F011. Where an argument such as `[]` leaves it
+parameter nothing decides is F101. Where an argument such as `[]` leaves it
 open, the argument is what is reported as needing a type.
 
 **Where a type parameter may appear.** Anywhere: on its own, under `?` or `!`
@@ -1771,7 +1772,7 @@ A generic still compiles to one body, so the machine code cannot hold the
 instruction for every type the bound admits. The operands arrive with their
 descriptors and the runtime reads which type it is, the same way a collection
 of a type parameter has its elements walked by a size read off a descriptor. A
-call site that binds the parameter to anything else is refused (F016).
+call site that binds the parameter to anything else is refused (F092).
 
 A value of a bounded parameter is still linear, so handing one to a function
 twice asks for a clone; reading one as the operand of an operator does not move
@@ -1791,7 +1792,7 @@ somewhere its type is decided, by an expected type or by the operand beside it
 ```datalove
 let z: T = zero()      // the binding says `T`
 ret self == zero()     // the other operand says `T`
-debuglog zero()        // F011: nothing says what `T` is
+debuglog zero()        // F101: nothing says what `T` is
 ```
 
 **What an *unbounded* type parameter does not admit.** Anything that would need
@@ -1863,7 +1864,7 @@ end if
 
 A result's `if` must have an `else`, and the `else` must bind the error,
 `else |e|` (F046). An option's `else` binds nothing; `else |e|` on one is a
-mismatch (F016). A binding `if` takes no part in an `else if` chain, on either
+mismatch (F094). A binding `if` takes no part in an `else if` chain, on either
 side (P073): it cannot be followed by `else if`, and an `else if` cannot bind.
 Nest the `if` in an `else` body instead. An `else |e|` cannot be followed by
 `if` either (P066).
@@ -1904,11 +1905,11 @@ end for
 ```
 
 The collection is written with `ref` (P088) and is a place: a name, a
-parameter, or a field or element of one (F087). Each element binding is a
+parameter, or a field or element of one (F108). Each element binding is a
 reference into the collection, as a `ref` parameter is: it cannot be moved,
 assigned, or passed `mut` or `out`, and `@` clones it. A tensor of rank above 1
 binds a view of each row, one rank less. An index binding is an `index`. A
-`for` binds one or two names (P086), two on a map and one on a set (F087).
+`for` binds one or two names (P086), two on a map and one on a set (F109).
 `break` and `continue` work as in `loop`; `continue` goes to the next element.
 
 **Match** destructures an enum value:
@@ -1935,7 +1936,7 @@ end match
 
 A `case default` arm matches any unmatched variant. Without a default, the
 match must be exhaustive (all enum variants must be covered). A missing
-variant and a duplicate case are errors (F016), and so is a second
+variant and a duplicate case are errors (F100, F097), and so is a second
 `case default` (P049).
 
 The input expression is consumed (moved) by the match.
@@ -1987,7 +1988,7 @@ call map.add(mut counts, ref word, 1)!
 ```
 
 `call f(x)@`, `call icall g()` and `call x!` are P031 as surely as `call x`.
-The call, once its try operators have unwrapped it, must be unit (F016
+The call, once its try operators have unwrapped it, must be unit (F095
 otherwise), since a value computed and discarded is more likely a mistake
 than an intention; a value that is wanted for nothing is bound with `let` and
 left. A line that begins with no statement keyword at all is P001.
@@ -2066,7 +2067,7 @@ import std.string_len
 
 A name binds one function, so importing a second under a name already bound
 is an error rather than a shadowing (F059). The same holds between an import
-and a function the module or script defines: the import is refused (F086),
+and a function the module or script defines: the import is refused (F106),
 and the function stays. Two modules exporting the same name is
 ordinary -- `min` is in every numeric module -- so only one of them can be
 imported into a given scope. In a session the imports arrive on separate
@@ -2472,7 +2473,7 @@ not have: `1 + "hello"` is a plain mismatch.
 The same holds for the elements of a collection literal, the arguments of a
 generic call, and the payloads of `some` and `term` inside them. An empty
 collection, `none` or `er` with nothing to go along with needs a type
-annotation: `let xs = []` is F011, as `let x = none` is.
+annotation: `let xs = []` is T016, as `let x = none` is.
 
 Float literals infer their precision from context:
 

@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F086",
+      "code": "F106",
       "labels": [
         {
           "message": "a name binds one function",

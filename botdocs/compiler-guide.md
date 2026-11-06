@@ -224,12 +224,12 @@ reading.
 | `1 . 5` | a float is written without spaces in it (write it as `1.5`) |
 | `2.5e - 10` | an exponent is written without spaces in it (write it as `2.5e-10`) |
 | `1u8` | numeric suffixes are not supported (write a type hint, as in `: u8 / 1`) |
-| `a -1` | this `-` is spaced as a prefix operator |
-| `p . 0`, `x ?` | this `.` / `?` is written apart from what it applies to |
+| `a -1` | this `-` is spaced as a prefix operator (P091) |
+| `p . 0`, `x ?` | this `.` / `?` is written apart from what it applies to (P090) |
 
 The last two come from `lopsided_operator` in the datafun parser's `expr.rs`.
 Datalit has no operators to misplace, and a `-` there that no number follows is
-D050, "unexpected minus sign".
+D050, "unexpected minus sign"; a `-` on a hex literal is D061.
 
 ### Phase 5: IR Lowering Detail
 

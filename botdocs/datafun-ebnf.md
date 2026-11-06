@@ -84,7 +84,7 @@ field_pat     = NAME, [ "=", value_name ] ;      (* names unique: D038 *)
 (* ===== Assignment  (statement.rs: parse_set, parse_place_steps) ===== *)
 set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* P009; no op: P089 *)
 place_step    = ~".", field_sel
-              | ~"[", expr, "]", [ ~"?" | ~"!" ] ;   (* spaced: P021, read anyway *)
+              | ~"[", expr, "]", [ ~"?" | ~"!" ] ;   (* spaced: P090, read anyway *)
 assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
               | "+?=" | "-?=" | "*?=" | "/?=" ;
 
@@ -159,7 +159,7 @@ primary       = hinted
               | "atom", NAME                          (* D035 *)
               | "term", NAME, payload                 (* D036 *)
               | "enum", "{", expr, [ "," ], "}"       (* D037 *)
-              | "icall", NAME, ~"(", [ arg_list ], ")"  (* P040, P041; spaced "(": P021 *)
+              | "icall", NAME, ~"(", [ arg_list ], ")"  (* P040, P041; spaced "(": P090 *)
               | dec_number | hex_number               (* no sign: "-" is prefix_op *)
               | string_lit                            (* D039 *)
               | NAME, [ ~"(", [ arg_list ], ")" ]     (* a call only when glued *)
@@ -248,12 +248,12 @@ string_lit, digit_run, hex_run, comment, newline
 ([spec Section 2.4](botspec.md#user-content-24-spacing)):
 
 - A sigil binary operator is glued on both sides or on neither. `a -b` and
-  `a- b` end the expression, and what follows is P021. Word operators
+  `a- b` end the expression, and the operator is P091. Word operators
   (`and`, `or`, `xor`) have no such rule.
 - A postfix operator, `? ! @ . [ (`, is glued on its left: `p . 0`, `x ?`,
-  `f (1)` and `u8 .max(1)` are P021. After an index, `?` and `!` are glued to
+  `f (1)` and `u8 .max(1)` are P090. After an index, `?` and `!` are glued to
   the `]`; `xs[i]!=3` lexes `!=` as one operator, so it is `xs[i] != 3`, a
-  bare index (F011 in the type checker). The steps of a `set` target
+  bare index (F104 in the type checker). The steps of a `set` target
   are held to the same rule, as is the `(` after `icall`'s name.
 - `NAME(` is a call only when glued.
 - A prefix operator has no spacing rule: `- x` is a negation.
@@ -296,7 +296,7 @@ string_lit, digit_run, hex_run, comment, newline
 - Every declared name is checked against the reserved words (P064),
   including the name a struct pattern's `{f}` shorthand binds.
 
-**Recovery.** P021 is also the code for any token left over after a
+**Recovery.** P021 is the code for any other token left over after a
 complete statement, or after the last element of a bracket: `debuglog 1 2`
 is P021 at the `2`. It is suppressed after any earlier error in the same
 sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
@@ -329,7 +329,7 @@ and differs:
 | Form | Datalit | Datafun |
 |---|---|---|
 | Payload of `some`, `ok`, `er`, `data`, `error`, `term` | `full_expr` | a unary expression; a binary operator after it is P065 |
-| A sign | a glued `-` on a decimal literal; `-0x10` is D050 | part of the literal only right after a hint; elsewhere prefix negation, so `-0x10` is legal |
+| A sign | a glued `-` on a decimal literal; `-0x10` is D061 | part of the literal only right after a hint; elsewhere prefix negation, so `-0x10` is legal |
 | What a hint covers | one datalit expression | a literal form, or a unary expression wrapped in a `Hinted` node |
 | `(a, b)` | `AnonTuple` | `Tuple` unhinted, `AnonTuple` under a hint |
 | `: T / (x)` | `Group` when under another hint | `Hinted(x)` |
@@ -373,7 +373,7 @@ and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 | P018 | `import` with no item |
 | P019 | A `|` binding with no name |
 | P020 | A `|` binding without its closing `|` |
-| P021 | A token left over after a statement or a bracket's last element, or a postfix operator written apart from what it applies to |
+| P021 | A token left over after a statement or a bracket's last element |
 | P022 | `type` with no name |
 | P023 | `type` without its `:` |
 | P024 | `const` with no name |
@@ -422,6 +422,8 @@ and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 | P087 | A `for` without `in` |
 | P088 | A `for` without `ref` before its collection |
 | P089 | A `set` without its assignment operator |
+| P090 | A postfix operator written apart from what it applies to |
+| P091 | A binary operator written against one side only |
 
 A code missing from the table is unassigned. The codes are `PCode` in
 `crates/datalove-diagnostic-codes`, which a test holds to this table.

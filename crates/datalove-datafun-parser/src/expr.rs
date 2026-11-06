@@ -370,14 +370,16 @@ impl<'db> Parser<'db> {
         )
     }
 
-    /// What to say about an operator written against one side only.
+    /// What to say about an operator written against one side only, and its
+    /// code.
     ///
     /// An expression that ended at one of these ended because of how it was
     /// spaced, which is worth saying rather than reporting the operator as a
     /// token nobody expected.
-    pub(super) fn lopsided_operator(&self) -> Option<(String, String)> {
+    pub(super) fn lopsided_operator(&self) -> Option<(PCode, String, String)> {
         if self.peek_sigil(Sigil::ParenOpen) && !self.glued_left() {
             return Some((
+                PCode::SpacedPostfix,
                 S("this `(` is written apart from what it calls"),
                 S("a call's arguments are written against what is called"),
             ));
@@ -393,6 +395,7 @@ impl<'db> Parser<'db> {
         if self.peek_binop_ignoring_spacing().is_some() && !self.is_infix_spacing() {
             let fixity = if self.glued_right() { "prefix" } else { "postfix" };
             return Some((
+                PCode::LopsidedOperator,
                 fmt!("this `{text}` is spaced as a {fixity} operator"),
                 S("an operator between two things is written against both of them, or against neither"),
             ));
@@ -400,6 +403,7 @@ impl<'db> Parser<'db> {
 
         if Self::is_postfix_sigil(sigil) && !self.glued_left() {
             return Some((
+                PCode::SpacedPostfix,
                 fmt!("this `{text}` is written apart from what it applies to"),
                 S("a postfix operator is written against the expression before it"),
             ));

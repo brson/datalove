@@ -25,7 +25,7 @@
   },
   "diagnostics": [
     {
-      "code": "P021",
+      "code": "P090",
       "labels": [
         {
           "message": "a postfix operator is written against the expression before it",

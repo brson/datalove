@@ -276,14 +276,14 @@ bare `+` under `fixedint` is still F026. `ord` gives no operator at all --
 `.<` and `==` on a `T is ord` are F026 -- only the order `sys/std/ord` and
 sets and maps use. `==` on an aggregate holding a type parameter is F026 even
 when the parameter is bounded. A call site that binds a bounded parameter to a
-type the bound does not admit is F016.
+type the bound does not admit is F092.
 
 **A set or map over a `T` with no `ord` bound** is F061.
 
 **A const parameter whose type mentions a type parameter** is F077:
 specialization makes one copy per const value, and that copy is still generic.
 
-**A type parameter no argument or expectation determines** is F011, since the
+**A type parameter no argument or expectation determines** is F101, since the
 caller has no descriptor to pass. The types cannot be written at a call
 either: `f<u32>(1)` is not a call.
 

@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F065",
+      "code": "T005",
       "labels": [
         {
           "message": "value out of range",

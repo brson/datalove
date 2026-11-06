@@ -1,0 +1,8 @@
+[31m[P091] Error:[0m this `-` is spaced as a prefix operator
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/127_lopsided_operator.dfs:3:11 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m3 │[0m [38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;201m-[0m[38;5;249m1[0m
+ [38;5;240m  │[0m           [38;5;201m┬[0m  
+ [38;5;240m  │[0m           [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m an operator between two things is written against both of them, or against neither
+[38;5;246m───╯[0m
+Error: Parse error

@@ -148,10 +148,12 @@ Every datalit rule holds in datafun, with `Γ` added on the left of each
 judgment: annotation (`Syn-TypedExpr`, `Check-Hinted`), subsumption, the
 literal rules, tuples, structs, collections, tensors, tables, the option,
 result, `data` and `error` constructors, atoms, terms and enums. Their
-diagnostics are F-codes here: a mismatch is F016, a missing synthesis rule
-F011, a literal out of range F065, and a literal of the wrong shape (tuple
-length, struct field count or order, table columns, tensor rank or element
-count) F075.
+diagnostics are datalit's T-codes here, since the forms are datalit's: a
+literal out of range is T005 to T015 or T061 by its type, a literal of the
+wrong shape T038, T039, T042, T048, T049 or T054 to T056, a form left open
+with nothing expected T016, an atom or term not the expected variant T057,
+and an enum literal against a type that is not an enum T058. A plain
+mismatch is datafun's F016.
 
 Datafun adds one checking rule for a negated literal, since datafun has a
 negation operator and datalit has only signed literals:
@@ -233,10 +235,10 @@ with `x : ?u32` compares options, `a@ .< b` takes `b`'s type, and
 `a@ .< 0` compares at `a`'s type, the literal going along with the `@`.
 `1 == 2` has nothing but literals and compares two `int`s. Operands whose
 types do not come to the same type, such as `1 == "a"` or `a@ .< b@` with
-`a : u32` and `b : u64`, are F016, labelled "operands must have the same
+`a : u32` and `b : u64`, are F090, labelled "operands must have the same
 type", reported before the operator is checked against the type. Operands
 that come to one type but do not check against it are reported at the
-operand: with `x : u8`, `x == 300` is F065.
+operand: with `x : u8`, `x == 300` is T005.
 
 Each arithmetic operator `⊕` admits a set of operand types, `Arith(⊕)`, and
 may require the enclosing function to return an option or a result:
@@ -374,7 +376,7 @@ Nothing else adapts. There is no narrowing, and no enum adapts to another.
 ```
 
 With an expected type, `@` converts to it; with none, it clones and keeps
-its type. `Check-Adapt` failing is F016, "@ operator cannot convert". An
+its type. `Check-Adapt` failing is F091, "@ operator cannot convert". An
 expected type reaches `@` through any checking rule: an annotated `let`, a
 `ret`, a call argument, `Check-BinOp`, or the other operand by `Pair`.
 
@@ -420,8 +422,8 @@ variables come to:
 ```
 
 `θ(α) ∈ b` reads: `any` and `ord` admit every type, `float` admits `Float`,
-and `fixedint` admits `Fix`. A bound refused is F016. A parameter nothing
-decides is F011: at the argument that left it open, such as `[]` in
+and `fixedint` admits `Fix`. A bound refused is F092. A parameter nothing
+decides is F101: at the argument that left it open, such as `[]` in
 `list.len(ref [])`, or, where no argument mentions it, at the call, "nothing
 here says what `T` is".
 
@@ -444,7 +446,8 @@ icall(n) = (T₁, ..., Tₙ) → R    Γ ⊢ eᵢ ⇐ Tᵢ
 ```
 
 So in `icall add_wrapping_u32(a, 2)` the `2` is a `u32`. Arguments take no
-mode markers (F057). An unknown intrinsic or wrong argument count is F011.
+mode markers (F057). An unknown intrinsic is F102, and a wrong argument count
+F045, as for a function.
 
 ### Fields and indexes
 
@@ -487,8 +490,8 @@ Indexing is defined over the element of a collection:
 
 An index is fallible: a missing key or an out-of-range index returns early
 from the function, as `?` and `!` do (F049 if the return type does not fit).
-An index into something that is not a list, map or tensor is F011, and so is
-a bare `e[k]` outside a `set` target.
+An index into something that is not a list, map or tensor is F103, and a
+bare `e[k]` outside a `set` target is F104.
 
 **Borrowed positions.** A projection or index that reads a part of a linear
 type moves it out of the aggregate that still holds it, which is refused:
@@ -537,7 +540,7 @@ however deeply its calls and operators nest
 `check_expr` in `check.rs` chooses a rule in this order:
 
 1. A hinted expression `: T₀ / e` compares `T₀` with the expected type by
-   `≈` (F016, "the type hint disagrees"), then continues with `e`.
+   `≈` (T040, "the type hint disagrees"), then continues with `e`.
 2. A literal form checked against a recursive type is checked against its
    unfolding (`Check-Roll`), and the steps below read that.
 3. If a checking rule matches the expression form and the expected type, it
@@ -613,9 +616,9 @@ once per binding of the type parameters of the function it is in.
 
 `require data p: T` is `const x: T = ⟨file⟩`, where `x` is the last part of
 `p`, and the file is checked against `T` by datalit's
-`type_check_with_expected`. A missing file is F079; one not of type `T`, or
-with no type of its own and no `T` given, or a `T` that is a function type,
-is F084, with datalit's own errors as its notes.
+`type_check_with_expected`. A missing file is F079, one not of type `T` is
+F084, and one with no type of its own and no `T` given is F107; each has
+datalit's own errors as its notes.
 
 Shadowing is allowed: a binding of a name already in scope replaces it for
 the statements that follow.
@@ -680,7 +683,7 @@ does not admit is F026. The order in which a `set` evaluates its parts is in
 
 A missing `else` is an empty `s̄₂`, except that a result needs its
 `else |y|` (F046). A binding `if` whose condition is neither an option nor a
-result is F016, and so is `else |y|` on an option. `else if` is a nested `if`
+result is F093, and `else |y|` on an option is F094. `else if` is a nested `if`
 in the `else` block; a binding `if` cannot take part in such a chain (P073).
 
 ```
@@ -712,8 +715,8 @@ where `walk` gives the bindings each collection admits, each of kind `let`:
 | `%{K = V}` | -- | `k : K`, `v : V` |
 
 The collection is read in a borrowed position. A collection that is not a
-place, of any other type, or with the wrong number of names for its type is
-F087. The bindings are references into the collection; the ownership
+place is F108, one of any other type F087, and one with the wrong number of
+names for its type F109. The bindings are references into the collection; the ownership
 analysis, not the checker, keeps them from being moved or written.
 
 ```
@@ -728,10 +731,9 @@ the cases name every vᵢ, or there is a default
 ```
 
 The input must synthesize an enum; options and results are taken apart by
-the binding `if`, not by `match`. Every failure of `Match` is F016: an input
-that is not an enum, a case naming no variant, an atom case for a term
-variant or the reverse, a duplicate case, and a missing variant with no
-default.
+the binding `if`, not by `match`. An input that is not an enum is F096, a
+case naming no variant F099, an atom case for a term variant or the reverse
+F098, a duplicate case F097, and a missing variant with no default F100.
 
 ```
 Γ(ret) = R    Γ ⊢ e ⇐ R           Γ(ret) = void
@@ -751,7 +753,7 @@ A `ret` at the top level of a module is refused by the parser (P077).
 
 `debuglog` takes any type, in a borrowed position. A `call` statement's
 call, after any `?` and `!` on it, must have type `()`: a value computed and
-discarded is F016. `call` followed by anything but a call, with or without
+discarded is F095. `call` followed by anything but a call, with or without
 `?` and `!`, is P031.
 
 ### Functions
@@ -800,11 +802,11 @@ checked so far: `let s = #{x@}` over an unbounded `T` is accepted.
 
 A type parameter passed on to another generic function satisfies the callee's
 bound only when its own bound is the same one; a `T is float` passed where
-`T is ord` is wanted is F016, though `float` implies `ord`.
+`T is ord` is wanted is F092, though `float` implies `ord`.
 
 A name is defined by one function in a module or script: a second `fun` or
-`native fun` of the same name is F086, and so is an `import` of a name a
-function there defines. The first definition stays, so the rest of the unit
+`native fun` of the same name is F086, and an `import` of a name a function
+there defines is F106. The first definition stays, so the rest of the unit
 resolves against it. A `fun`, `native fun` or `type` is only a declaration at
 the top level; inside a block it is P074.
 
@@ -820,7 +822,7 @@ and body see the `require`s, `import`s, `type`s and consts above it, and a
 name used above its declaration is the error it would be anywhere it is not
 in scope. Module top level has no `ret` entry,
 so `?`, `!` and the checked and optional operators in a module const are
-F049 ("no enclosing function").
+F105 ("no enclosing function").
 
 **Scripts.** A script's top level is checked under `Γ, ret !()`: it is a
 body returning a result, so `!`, `+!` and `ret ok ()` work there and `?`
@@ -841,13 +843,12 @@ not reported again.
 |------|---------|
 | F001 | Undefined variable |
 | F002 | Undefined function; an import or qualified call of a function the module or rider does not have |
-| F011 | No synthesis rule: `none`, `er e` or an enum literal with nothing expected; a type parameter left unbound at a call; an index into something that is not a list, map or tensor, read or `set`; a bare `e[k]` outside a `set` target; an unknown intrinsic or wrong intrinsic arity |
-| F016 | Type mismatch: a failed `Check-Subsume`; operands that do not pair; a collection element that does not unify with the others; a hint that disagrees with the expected type; `@` that cannot convert; a bound not satisfied; an intrinsic argument; a binding `if` on something that is not an option or result, or `else \|y\|` on an option; a `call` whose callee does not return `()`; every `match` error |
+| F016 | Type mismatch: a failed `Check-Subsume`, including a collection element that does not unify with the others and an intrinsic argument |
 | F026 | An operator applied to a type it does not admit, including a compound `set` |
 | F045 | Wrong number of arguments |
 | F046 | A binding `if` on a result with no `else`, or with an `else` that binds nothing |
 | F048 | `?` on a non-option or `!` on a non-result |
-| F049 | An early-return form (`?`, `!`, `[k]?`, `[k]!`, the checked and optional operators, and their compound `set` forms) whose return type does not fit, or outside any function |
+| F049 | An early-return form (`?`, `!`, `[k]?`, `[k]!`, the checked and optional operators, and their compound `set` forms) whose return type does not fit |
 | F050 | `break` outside a loop |
 | F051 | `continue` outside a loop |
 | F052 | `ret e` in a function with no declared return type |
@@ -861,7 +862,6 @@ not reported again.
 | F062 | `native fun` outside a rider |
 | F063 | A function with a return type whose body can complete |
 | F064 | Unknown type name |
-| F065 | Integer or hex literal out of range for its type |
 | F066 | A type alias defined twice |
 | F067 | No such field |
 | F068 | Projection on a type with no fields |
@@ -871,7 +871,6 @@ not reported again.
 | F072 | A non-copy element read outside a borrowed position |
 | F073 | A tensor view passed `mut` or `out`, or written by `set` |
 | F074 | A bare index in a `set` target that is not the last step, not into a map, or under a compound assignment |
-| F075 | A literal whose shape does not fit its type: tuple length, struct fields, table columns, tensor rank or element count |
 | F076 | An argument to a const parameter that is not a const binding |
 | F077 | A const parameter whose type mentions a type parameter |
 | F078 | An import from, or qualified call through, a name no `require` introduced |
@@ -880,22 +879,53 @@ not reported again.
 | F081 | A module required under an alias another required module already has |
 | F082 | `require rider` in a script |
 | F083 | A `require` that closes a cycle of modules |
-| F084 | A `require data` whose file does not have the given type, has no type of its own and is given none, or is given a function type |
+| F084 | A `require data` whose file does not have the type it is given |
 | F085 | `inline` functions calling each other in a cycle |
-| F086 | A function defined twice in one module or script, or an import of a name a function there defines |
-| F087 | A `for` over something that is not a place, over a type it cannot walk, or binding the wrong number of names for its collection |
+| F086 | A function defined twice in one module or script |
+| F087 | A `for` over a type it cannot walk |
 | F088 | A const whose type mentions a type parameter |
 | F089 | A const that depends, through the functions it calls, on itself or on a const declared after it |
+| F090 | Operands of a binary operator that do not come to one type |
+| F091 | `@` that cannot convert to the expected type |
+| F092 | A type argument outside its parameter's bound |
+| F093 | A binding `if` on something that is not an option or a result |
+| F094 | `else \|y\|` on an option |
+| F095 | A `call` of a function that does not return `()` |
+| F096 | A `match` on something that is not an enum |
+| F097 | Two cases for one variant |
+| F098 | `case atom` on a term variant, or `case term` on an atom |
+| F099 | A `case` naming no variant of the enum |
+| F100 | A variant with no case, in a `match` with no `case default` |
+| F101 | A type parameter nothing decides, left unbound at a call |
+| F102 | An `icall` of an intrinsic the compiler does not know |
+| F103 | An index into something that is not a list, map or tensor, read or `set` |
+| F104 | A bare `e[k]` outside a `set` target |
+| F105 | An early-return form outside any function |
+| F106 | An import of a name a function of the module or script defines |
+| F107 | A `require data` given no type, of a file that has none of its own |
+| F108 | A `for` over something that is not a place |
+| F109 | A `for` binding the wrong number of names for its collection |
+| T005-T015, T061 | A literal out of range for its type, as in datalit |
+| T016 | `none`, `er e`, an enum literal or an empty collection with nothing expected |
+| T017 | An expression that holds a parse error |
+| T038, T039, T042 | A tuple or struct literal whose length, fields or field order do not fit its type |
+| T040 | A hint that disagrees with the expected type |
+| T048, T049 | A tensor literal whose rank or element count does not fit its type |
+| T054-T056 | A table literal whose columns or rows do not fit its type |
+| T057 | An atom or term that is not the expected variant |
+| T058 | An enum literal against a type that is not an enum |
 | T062-T066 | A recursive type that is not well formed; as in datalit, and T066 for a type parameter inside one |
 
-A code missing from the table is unassigned; F060 is retired. Two parse
+A code missing from the table is unassigned; F011, F060, F065 and F075 are
+retired. Two parse
 errors belong to the same rules: P074, a declaration inside a block, and
 P077, a statement at the top level of a module that is not a declaration.
-The datalit checker's `TypeError` converts into datafun's, but datafun
-reports its literal errors through its own checks, so the datalit T-codes do
-not appear in datafun source. They do appear in data files: a `.dlt` that
-does not have the type its `require data` gives is F084 at the `require`, and
-the datalit errors are reported where they are in the file.
+A fault in a literal form, which datafun shares with datalit, has datalit's
+T-code, as a fault in shared syntax has its D-code; the T rows above are
+those. They appear in data files too: a `.dlt` that does not have the type
+its `require data` gives is F084 at the `require`, and the datalit errors are
+reported where they are in the file. A table literal whose row disagrees with
+its own header, with no type to check it against, is datalit's D030.
 
 ## Implementation
 

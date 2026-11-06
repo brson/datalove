@@ -1,0 +1,3 @@
+// A `@` converts only where a clone can become the expected type.
+let n: u32 = 1
+let s: string = n@

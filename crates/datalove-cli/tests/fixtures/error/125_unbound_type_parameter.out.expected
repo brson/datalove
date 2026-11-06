@@ -1,0 +1,8 @@
+[31m[F101] Error:[0m nothing here says what `T` is. No argument mentions it, so the type has to come from what the answer is bound to: write `let x: <type> = nothing(...)` rather than using the call where its type is only read
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/125_unbound_type_parameter.dfs:5:10 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m5 │[0m [38;5;249md[0m[38;5;249me[0m[38;5;249mb[0m[38;5;249mu[0m[38;5;249mg[0m[38;5;249ml[0m[38;5;249mo[0m[38;5;249mg[0m[38;5;249m [0m[38;5;201mn[0m[38;5;201mo[0m[38;5;201mt[0m[38;5;201mh[0m[38;5;201mi[0m[38;5;201mn[0m[38;5;201mg[0m[38;5;249m([0m[38;5;249m)[0m
+ [38;5;240m  │[0m          [38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m  
+ [38;5;240m  │[0m             [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m cannot infer type
+[38;5;246m───╯[0m
+Error: Type error

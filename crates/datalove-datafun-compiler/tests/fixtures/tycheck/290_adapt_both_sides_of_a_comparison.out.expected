@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
+      "code": "F090",
       "labels": [
         {
           "message": "operands must have the same type",

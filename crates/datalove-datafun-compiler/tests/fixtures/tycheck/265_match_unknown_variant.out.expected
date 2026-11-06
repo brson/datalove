@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
+      "code": "F099",
       "labels": [
         {
           "message": "no such variant",
@@ -17,7 +17,7 @@
   ],
   "errors": [
     {
-      "code": "F016",
+      "code": "F099",
       "kind": "Worded",
       "message": "`enum { atom Blue, atom Red }` has no variant `Green`"
     }

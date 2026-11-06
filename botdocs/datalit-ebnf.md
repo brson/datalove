@@ -127,7 +127,7 @@ numeric_lit    = float_lit | hex_lit | int_lit ;   (* malformed: D019; suffixed:
 int_lit        = [ "-" ], digit_run ;
 float_lit      = [ "-" ], digit_run, ( ".", digit_run, [ exponent ] | exponent ) ;
 exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
-hex_lit        = "0", ( "x" | "X" ), hex_run ;      (* no sign: D050 *)
+hex_lit        = "0", ( "x" | "X" ), hex_run ;      (* no sign: D061 *)
 digit_run      = digit, [ { digit | "_" }, digit ] ;
 hex_run        = hex_digit, [ { hex_digit | "_" }, hex_digit ] ;
 string_lit     = '"', { string_char }, '"' ;        (* unterminated: D020 *)
@@ -163,7 +163,7 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
 - **Where the hint's `/` ends.** A `/` glued to `/` or `*` starts a comment,
   so `: u8/*c*/1` and `: u8 //1` lose their `/` (D049).
 - **Signs.** A sign is a `-` glued to a decimal literal: `- 1` is D050, `-0xF`
-  is D050, and `+1` is D020. A float needs digits on both sides of its point:
+  is D061, and `+1` is D020. A float needs digits on both sides of its point:
   `.5` is D020 and `1.` is D019. A letter on the end of a number is D060, not a
   suffix: `1u8` is written `: u8 / 1`.
 - **Names.** Field, column and variant names and the names after `atom` and
@@ -234,7 +234,7 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D047 | Tensor type without its `,` | `type_hint.rs:213` |
 | D048 | Struct or table type field without its name or `:` | `type_hint.rs:390,403` |
 | D049 | Hint without its `/` | `expr.rs:43` |
-| D050 | `-` not glued to a decimal number; a signed hex literal | `expr.rs:135,141` |
+| D050 | `-` not glued to a decimal number | `expr.rs:141` |
 | D051 | Atom type with no name | `type_hint.rs:100,333` |
 | D052 | Term type with no name | `type_hint.rs:115,353` |
 | D053 | An enum variant that is not `atom` or `term` | `type_hint.rs:363` |
@@ -245,10 +245,11 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D058 | Struct field without its name or `=` | `expr.rs:416,428` |
 | D059 | A bare identifier | `expr.rs:244` |
 | D060 | A number with a suffix | `expr.rs:85` |
+| D061 | A signed hex literal | `expr.rs:135` |
 
 D001 to D016 were the ownership codes, now O001 to O016
 ([spec Section 11.1](botspec.md#user-content-111-errors)), and are retired.
-D044 to D053 and D058 to D060 are faults that used to share a number with an
+D044 to D053 and D058 to D061 are faults that used to share a number with an
 ownership code or with another parse fault. Line numbers are as of October 2026 and drift; the
 code is a `DCode` variant in `crates/datalove-diagnostic-codes`, and its name
 is what to search for.

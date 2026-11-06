@@ -11,7 +11,7 @@
 //! 6. Field projection synthesis
 //! 7. Inline literal synthesis - list, set, map, tensor, tuple, struct, data, error
 
-use datalove_diagnostic_codes::FCode;
+use datalove_diagnostic_codes::{DCode, FCode, TCode};
 use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -225,7 +225,7 @@ fn report_open<'db>(ctx: &mut TypeContext<'db>, open: ExprFun<'db>) -> TypeError
         ExprFunKind::Table(_) => OpenLiteral::Table,
         _ => unreachable!("no other expression leaves a type open"),
     };
-    ctx.error_cannot_synthesize(open, open_literal.message())
+    ctx.error_cannot_synthesize(open, TCode::OpenType, open_literal.message())
 }
 
 /// Whether an expression builds a value out of the expressions inside it.
@@ -351,7 +351,7 @@ pub fn synthesize_unhinted<'db>(
         }
 
         ExprFunKind::ParseError(_) => {
-            Err(ctx.error_cannot_synthesize(expr, "type inference blocked by syntax error"))
+            Err(ctx.error_cannot_synthesize(expr, TCode::ParseErrorInExpr, "type inference blocked by syntax error"))
         }
 
         // New inline variants - simple literals.
@@ -365,7 +365,7 @@ pub fn synthesize_unhinted<'db>(
             Ok(ty)
         }
         ExprFunKind::None(_) => {
-            Err(ctx.error_cannot_synthesize(expr, OpenLiteral::None.message()))
+            Err(ctx.error_cannot_synthesize(expr, TCode::OpenType, OpenLiteral::None.message()))
         }
         ExprFunKind::Int(_) => {
             // Integer literals synthesize to bigint for REPL ergonomics.
@@ -445,7 +445,7 @@ pub fn synthesize_unhinted<'db>(
         }
         ExprFunKind::Er(_) => {
             // `er` needs a hint to say what the result holds.
-            Err(ctx.error_cannot_synthesize(expr, OpenLiteral::Er.message()))
+            Err(ctx.error_cannot_synthesize(expr, TCode::OpenType, OpenLiteral::Er.message()))
         }
         ExprFunKind::Data(data_expr) => {
             synthesize_inline_data(ctx, expr, data_expr)
@@ -490,7 +490,7 @@ pub fn synthesize_unhinted<'db>(
 
         // An enum literal has no type of its own.
         ExprFunKind::EnumLiteral(_) => {
-            Err(ctx.error_cannot_synthesize(expr, "enum literal requires type context"))
+            Err(ctx.error_cannot_synthesize(expr, TCode::OpenType, "enum literal requires type context"))
         }
 
         // Intrinsic call expression.
@@ -500,7 +500,7 @@ pub fn synthesize_unhinted<'db>(
 
         // Bare index expression is a type error — must be wrapped in ? or !.
         ExprFunKind::Index(_) => {
-            Err(ctx.error_cannot_synthesize(expr, "bare index `a[i]` requires `?` or `!` suffix"))
+            Err(ctx.error_cannot_synthesize(expr, FCode::BareIndexOutsideSet, "bare index `a[i]` requires `?` or `!` suffix"))
         }
 
         // Place expression with index steps (e.g., `a[i]?`, `a[i]?.field`).
@@ -628,7 +628,7 @@ fn synthesize_binop<'db>(
     // Check that operands have the same type.
     if !types_equivalent(db, &lhs_ty, &rhs_ty) {
         return Err(ctx.error_type_mismatch(
-            expr,
+            expr, FCode::OperandMismatch,
             &type_to_string(db, &lhs_ty),
             &type_to_string(db, &rhs_ty),
             "operands must have the same type"
@@ -976,7 +976,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
             if !bound_admits(ctx, *bound, bound_to) {
                 let shown = type_to_string(db, &Type::Datalit(bound_to.clone()));
                 return Err(ctx.error_type_mismatch(
-                    expr, bound.as_str(), &shown,
+                    expr, FCode::BoundNotSatisfied, bound.as_str(), &shown,
                     "this type parameter is bounded, and that is not one of the types \
                      it admits"));
             }
@@ -998,7 +998,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
             match bindings.get(param) {
                 Some(bound_to) => type_args.push(bound_to.clone()),
                 None => {
-                    return Err(ctx.error_cannot_synthesize(expr, &format!(
+                    return Err(ctx.error_cannot_synthesize(expr, FCode::UnboundTypeParam, &format!(
                         "nothing here says what `{}` is. No argument mentions it, so \
                          the type has to come from what the answer is bound to: write \
                          `let x: <type> = {}(...)` rather than using the call where \
@@ -1171,12 +1171,12 @@ fn synthesize_intrinsic_call<'db>(
 
     // Look up intrinsic by name.
     let (_, intrinsic_def) = lookup_intrinsic(name_str)
-        .ok_or_else(|| ctx.error_cannot_synthesize(expr, &format!("unknown intrinsic: {}", name_str)))?;
+        .ok_or_else(|| ctx.error_cannot_synthesize(expr, FCode::UnknownIntrinsic, &format!("unknown intrinsic: {}", name_str)))?;
 
     // Check arity.
     if args.len() != intrinsic_def.params.len() {
         return Err(ctx.error_cannot_synthesize(
-            expr,
+            expr, FCode::ArgumentCount,
             &format!("intrinsic {} expects {} arguments, got {}", name_str, intrinsic_def.params.len(), args.len())
         ));
     }
@@ -1336,7 +1336,7 @@ fn synthesize_index_common<'db>(
 ) -> Result<Type<'db>, TypeError> {
     let base_ty = ctx.synthesize_expr(ctx.expr(index_expr.base))?;
     let (element_ty, index_type) = resolve_index_types(ctx.db, &base_ty)
-        .map_err(|msg| ctx.error_cannot_synthesize(expr, &msg))?;
+        .map_err(|msg| ctx.error_cannot_synthesize(expr, FCode::NotIndexable, &msg))?;
 
     if let Err(e) = check_expr(ctx, ctx.expr(index_expr.index), &index_type) {
         ctx.add_error(e);
@@ -1402,7 +1402,7 @@ fn synthesize_place<'db>(
                         ctx.ref_context = old_ref_context;
                         ctx.mut_context = old_mut_context;
                         return Err(ctx.error_cannot_synthesize(
-                            expr,
+                            expr, FCode::BareIndexOutsideSet,
                             "bare index `a[i]` requires `?` or `!` suffix",
                         ));
                     }
@@ -1564,7 +1564,7 @@ fn synthesize_place_index_step<'db>(
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
     let (element_ty, index_type) = resolve_index_types(db, base_ty)
-        .map_err(|msg| ctx.error_cannot_synthesize(expr, &msg))?;
+        .map_err(|msg| ctx.error_cannot_synthesize(expr, FCode::NotIndexable, &msg))?;
 
     if let Err(e) = check_expr(ctx, ctx.expr(idx.index), &index_type) {
         ctx.add_error(e);
@@ -1783,7 +1783,7 @@ fn synthesize_inline_table<'db>(
         Some(first) => {
             if first.elements.len() != header.len() {
                 return Err(crate::check::shape_error(
-                ctx, expr,
+                ctx, expr, DCode::TableRowWidth,
                 fmt!("a row of {} elements, where the header has {} columns", first.elements.len(), header.len()),
                 None,
                 TypeError::ArityMismatch { expected: header.len(), actual: first.elements.len() },
@@ -1801,7 +1801,7 @@ fn synthesize_inline_table<'db>(
     for row in rows.iter().skip(1) {
         if row.elements.len() != header.len() {
             return Err(crate::check::shape_error(
-                ctx, expr,
+                ctx, expr, DCode::TableRowWidth,
                 fmt!("a row of {} elements, where the header has {} columns", row.elements.len(), header.len()),
                 None,
                 TypeError::ArityMismatch { expected: header.len(), actual: row.elements.len() },
@@ -1926,6 +1926,6 @@ fn check_like_first<'db>(
     check_element_compatible(ctx.db, first_ty, elem_ty).map_err(|_| {
         let expected = type_to_string(ctx.db, first_ty);
         let actual = type_to_string(ctx.db, elem_ty);
-        ctx.error_type_mismatch(elem, &expected, &actual, label)
+        ctx.error_type_mismatch(elem, FCode::Mismatch, &expected, &actual, label)
     })
 }

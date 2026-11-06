@@ -496,13 +496,13 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Report a postfix operator written apart from what it applies to (P021).
+    /// Report a postfix operator written apart from what it applies to (P090).
     pub(super) fn report_spaced_postfix(&mut self) {
         self.had_error = true;
         let ts = self.peek_text_span();
         let text = self.text()[ts.span.clone()].to_string();
         DiagnosticBuilder::error(self.db, &fmt!("this `{text}` is written apart from what it applies to"))
-            .code(PCode::StrayToken.as_str())
+            .code(PCode::SpacedPostfix.as_str())
             .primary_label(ts, "a postfix operator is written against the expression before it")
             .emit_parse();
     }
@@ -704,12 +704,12 @@ impl<'db> Parser<'db> {
         if self.peek().is_some() && !self.had_error {
             self.had_error = true;
             let ts = self.peek_text_span();
-            let (message, label) = match self.lopsided_operator() {
+            let (code, message, label) = match self.lopsided_operator() {
                 Some(complaint) => complaint,
-                None => (S("unexpected token after expression"), S("unexpected token")),
+                None => (PCode::StrayToken, S("unexpected token after expression"), S("unexpected token")),
             };
             let mut builder = DiagnosticBuilder::error(self.db, &message)
-                .code(PCode::StrayToken.as_str())
+                .code(code.as_str())
                 .primary_label(ts, &label);
             if let Some((ctx_span, ctx_msg)) = &self.branch_context {
                 builder = builder.secondary_label(ctx_span.C(), ctx_msg);

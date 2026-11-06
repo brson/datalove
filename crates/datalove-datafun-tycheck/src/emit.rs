@@ -288,7 +288,7 @@ fn build<'db>(
         }
         PendingDiagnostic::ImportShadowsFunction { local_index, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("`{}` is imported, and also defined here as a function", name.as_str(db)))
-                .code(FCode::FunctionDefinedTwice.as_str())
+                .code(FCode::ImportShadowsFunction.as_str())
                 .primary_label(spans.lookup_import(db, *local_index)?, "a name binds one function")
                 .note("the function defined here is the one that is used")
         }
@@ -375,15 +375,15 @@ drop the return type.")
 is a package's rider interface. Declare it in the package's `rider/rider.dli` and reach it from a module \
 with `require rider <name>` and `import <name>.<function>`; a script has no rider of its own.")
         }
-        PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
+        PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, code, message } => {
             DiagnosticBuilder::error(db, message.as_str(db))
-                .code(FCode::NoSynthesisRule.as_str())
+                .code(code.as_str(db))
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "cannot infer type")
         }
-        PendingDiagnostic::TypeMismatch { expr_key, module_id: _, expected, actual, label, recovery_hint } => {
+        PendingDiagnostic::TypeMismatch { expr_key, module_id: _, code, expected, actual, label, recovery_hint } => {
             let msg = format!("mismatched types: expected `{}`, found `{}`", expected.as_str(db), actual.as_str(db));
             let mut builder = DiagnosticBuilder::error(db, &msg)
-                .code(FCode::Mismatch.as_str())
+                .code(code.as_str(db))
                 .primary_label(spans.lookup_expr(db, *expr_key)?, label.as_str(db));
             if let RecoveryHint::InsertAdapt { description } = recovery_hint {
                 builder = builder.help(&format!("use `@` to {}", description));
@@ -395,9 +395,9 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                 .code(FCode::PatternMismatch.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, label.as_str(db))
         }
-        PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note } => {
+        PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, code, message, note } => {
             DiagnosticBuilder::error(db, message.as_str(db))
-                .code(FCode::LiteralOutOfRange.as_str())
+                .code(code.as_str(db))
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "value out of range")
                 .note(note.as_str(db))
         }
@@ -465,7 +465,7 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                 None => {
                     let msg = format!("`{}` can return early, and there is no function here to return from", operator.as_str(db));
                     DiagnosticBuilder::error(db, &msg)
-                        .code(FCode::EarlyReturnMismatch.as_str())
+                        .code(FCode::EarlyReturnOutsideFunction.as_str())
                         .primary_label(ts, "this can return early")
                 }
             }

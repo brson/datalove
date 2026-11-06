@@ -1,0 +1,3 @@
+// A binary operator is written against both operands or neither.
+let a = 3
+let b = a -1

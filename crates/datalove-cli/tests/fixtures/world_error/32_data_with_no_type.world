@@ -1,0 +1,10 @@
+// A data file required with no type has to have one of its own.
+----------
+data local/app/empty
+----------
+[]
+----------
+scriptunit-fragment
+----------
+
+require data local/app/empty

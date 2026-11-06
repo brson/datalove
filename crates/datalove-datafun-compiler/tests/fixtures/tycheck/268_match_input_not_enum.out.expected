@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
+      "code": "F096",
       "labels": [
         {
           "message": "this is not an enum",
@@ -17,7 +17,7 @@
   ],
   "errors": [
     {
-      "code": "F016",
+      "code": "F096",
       "kind": "Worded",
       "message": "`match` takes an enum apart, and this is `u32`"
     }

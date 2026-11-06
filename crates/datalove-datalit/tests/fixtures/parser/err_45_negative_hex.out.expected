@@ -9,7 +9,7 @@
   },
   "diagnostics": [
     {
-      "code": "D050",
+      "code": "D061",
       "labels": [
         {
           "message": "a hex literal is an unsigned bit pattern; write a negative number in decimal",

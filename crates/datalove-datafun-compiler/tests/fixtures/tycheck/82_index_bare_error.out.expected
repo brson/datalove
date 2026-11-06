@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "code": "F011",
+      "code": "F104",
       "labels": [
         {
           "message": "cannot infer type",

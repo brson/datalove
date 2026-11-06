@@ -1,0 +1,5 @@
+// A type parameter no argument mentions has to come from where the answer goes.
+fun nothing<T>(): ?T
+  ret none
+end fun
+debuglog nothing()

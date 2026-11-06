@@ -155,35 +155,40 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
-    /// F011: Cannot synthesize type.
+    /// A type that cannot be synthesized, with the code saying why.
     CannotSynthesize {
         expr_key: ExprKey<'db>,
         module_id: Option<ModuleId<'db>>,
+        code: InternedText<'db>,
         message: InternedText<'db>,
     },
-    /// F016: Type mismatch.
+    /// An expression of one type where another is expected, with the code
+    /// saying which check found it.
     ///
     /// If recovery_hint is `InsertAdapt`, the error can be fixed by inserting `@`.
     TypeMismatch {
         expr_key: ExprKey<'db>,
         module_id: Option<ModuleId<'db>>,
+        code: InternedText<'db>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
         label: InternedText<'db>,
         /// Recovery hint suggesting an `@`.
         recovery_hint: RecoveryHint,
     },
-    /// F065: A literal out of range for the type it is checked against.
+    /// A literal out of range for the type it is checked against, T005 to
+    /// T015 or T061 by the type.
     LiteralOutOfRange {
         expr_key: ExprKey<'db>,
         module_id: Option<ModuleId<'db>>,
+        code: InternedText<'db>,
         message: InternedText<'db>,
         note: InternedText<'db>,
     },
     /// A diagnostic worded where it was found, with its code.
     ///
     /// For errors that need nothing at emission time but a span: the place
-    /// errors F067..F070 and F072..F074, and F002, F075..F078.
+    /// errors F067..F070 and F072..F074, and F002 and F076..F078.
     Coded {
         site: ErrorSite<'db>,
         module_id: Option<ModuleId<'db>>,
@@ -211,7 +216,7 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
-    /// F086: An import of a name a function here is defined by.
+    /// F106: An import of a name a function here is defined by.
     ImportShadowsFunction {
         local_index: u32,
         module_id: Option<ModuleId<'db>>,
