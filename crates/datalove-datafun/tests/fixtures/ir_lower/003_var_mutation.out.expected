@@ -1,1 +1,17 @@
-Parse error: unexpected statement; unexpected statement
+fn main():
+block0:
+    v0 = const 0int
+    store.move s0, v0
+    v1 = const 1int
+    v2 = add s0, v1
+    drop v1
+    drop s0
+    store.move s0, v2
+    v3 = const 2int
+    v4 = add s0, v3
+    drop v3
+    drop s0
+    store.move s0, v4
+    v5 = load.move s0
+    return v5
+

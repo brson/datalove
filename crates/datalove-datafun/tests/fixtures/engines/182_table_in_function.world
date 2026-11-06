@@ -2,8 +2,9 @@
 scriptunit-fragment
 ----------
 
-fn make_table() -> {| a: u32, b: u32 |} {
-    : {| a: u32, b: u32 |} / {| a, b; 10, 20 |}
-}
+// A table returned from a script function.
+fun make_table(): {| a: u32, b: u32 |}
+    ret {| a, b; 10, 20 |}
+end fun
 
-debuglog(make_table())
+debuglog make_table()

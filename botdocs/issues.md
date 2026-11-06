@@ -56,7 +56,6 @@ home here.
 
 - [Testing](#user-content-testing)
   - [The cli tests run with leak checking on, which no user does](#user-content-the-cli-tests-run-with-leak-checking-on-which-no-user-does)
-  - [Fixtures in old syntax test only that they do not parse](#user-content-fixtures-in-old-syntax-test-only-that-they-do-not-parse)
 
 ## Engines and the REPL: failing the wrong way
 
@@ -701,25 +700,3 @@ test a configuration no user runs. Either clear the variable at the spawn sites
 (the `Command::new`s in `datalove-cli/tests`, built inline, which is where a
 helper would earn its place) or accept that they are not testing the shipped
 default.
-
-### Fixtures in old syntax test only that they do not parse
-
-**Checked, by reading each fixture whose expected output is a parse error.**
-These are written in syntax the language has dropped or never had -- Rust's
-`fn f() -> T { ... }`, `<` for less-than, struct literals with `:` -- and
-their expected output is the parse error, so they pass while testing none of
-what their comments say:
-
-- `datalove-datafun/tests/fixtures/engines/`: `182_table_in_function`,
-  `831_ctfe_table_script_func`, `833_ctfe_set_of_structs`,
-  `834_ctfe_map_with_struct_value`, `835_ctfe_nested_collections`,
-  `836_ctfe_map_struct_key`, `857_ctfe_comparison_lt`.
-- `datalove-datafun/tests/fixtures/ir_lower/003_var_mutation`, whose `sum =
-  sum + 1` is not a `set`.
-
-Each wants rewriting in the current syntax to what its comment describes, or
-deleting where another fixture already covers it. The `world_error` fixtures
-had the same fault, hidden because `script-world` printed no module parse
-errors; those are fixed. The `datalove-datalit` tycheck fixtures that expect
-a parse error (`global_no_sigil_*`, the `err_*_heap_mismatch` set) look
-deliberate but were not checked one by one.

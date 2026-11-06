@@ -4,19 +4,32 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "ParseError",
-                errors: [
-                    "unmatched \'>\'",
-                    "unexpected statement",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn make_table():
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = pack tuple/2 {v0, v1}
+                        v3 = table [v2]
+                        return v3
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
+            debug_output: Some("{| a, b; 10, 20 |}\n"),
         ),
     ],
 )
