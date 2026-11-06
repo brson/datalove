@@ -905,7 +905,7 @@ and nothing it uses was recompiled,
 but it no longer compiles:
 
 ```
-error[D013]: `a` was given away by an earlier unit
+error[O013]: `a` was given away by an earlier unit
 ```
 
 **Step 2: unit 3 is edited to take `a`.**

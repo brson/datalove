@@ -360,7 +360,7 @@ Attempting to run the above produces an error:
 
 ```
 $ datalove script test.dfs
-[D001] Error: use of moved value: `a`
+[O001] Error: use of moved value: `a`
    ╭─[ test.dfs:7:9 ]
    │
  6 │ let b = a
