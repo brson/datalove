@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-// Error test: D003 moving out of a const in a script. A const is borrowed
+// Error test: D016 moving out of a const in a script. A const is borrowed
 // wherever it is named, so moving out of one needs a clone.
 
 fun consume(xs: [int]): int

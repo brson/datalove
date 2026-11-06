@@ -225,7 +225,7 @@ ref binding, and `ret xs` becomes `ret xs@`.
 What this changes:
 
 - **Ownership analysis** treats a const mention as a borrowed place. A move out
-  of one is a diagnostic in the D003 family, with the same help that D001
+  of one is a diagnostic in the D003 family (now D016 of its own), with the same help that D001
   gives: insert `@`, at the place to insert it.
 - **`match`, the destructuring `if`, and `let` destructuring** move their
   scrutinee, and on a `ref` binding each is D003 today. No form takes apart a

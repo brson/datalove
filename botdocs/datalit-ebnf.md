@@ -101,7 +101,7 @@ set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
 
 expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 field_list     = field, { ws, ",", ws, field }, [ ws, "," ] ;
-field          = ident, ws, "=", ws, full_expr ;    (* D018; names unique: D038 *)
+field          = ident, ws, "=", ws, full_expr ;    (* D058; names unique: D038 *)
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
 entry          = full_expr, ws, "=", ws, full_expr ;  (* D017 *)
 
@@ -123,7 +123,7 @@ table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;  (* D030 *
 tbl_ws         = { ws | newline } ;
 
 (* ===== Literals: one glued run, no ws or comment inside ===== *)
-numeric_lit    = float_lit | hex_lit | int_lit ;   (* malformed or suffixed: D019 *)
+numeric_lit    = float_lit | hex_lit | int_lit ;   (* malformed: D019; suffixed: D060 *)
 int_lit        = [ "-" ], digit_run ;
 float_lit      = [ "-" ], digit_run, ( ".", digit_run, [ exponent ] | exponent ) ;
 exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
@@ -164,12 +164,12 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
   so `: u8/*c*/1` and `: u8 //1` lose their `/` (D049).
 - **Signs.** A sign is a `-` glued to a decimal literal: `- 1` is D050, `-0xF`
   is D050, and `+1` is D020. A float needs digits on both sides of its point:
-  `.5` is D020 and `1.` is D019. A letter on the end of a number is D019, not a
+  `.5` is D020 and `1.` is D019. A letter on the end of a number is D060, not a
   suffix: `1u8` is written `: u8 / 1`.
 - **Names.** Field, column and variant names and the names after `atom` and
   `term` are any `ident`, keywords included: `{none = 1}` and `atom true`
   parse. Datalit reserves no words; `true` is a keyword only where an
-  expression is expected, and `True` there is D019. A `type_name` is any
+  expression is expected, and `True` there is D059. A `type_name` is any
   `ident` not already a type keyword; the type checker refuses every one that
   is not the name of a `rec` around it (T059), datalit having no aliases. A
   word beginning with a digit is no name anywhere: `: 5 / 1` is D046.
@@ -208,8 +208,8 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | Code | Refuses | Where |
 |---|---|---|
 | D017 | Map entry without `=` | `expr.rs:107` |
-| D018 | End of input or a bracket where an expression is expected; struct field without its name or `=` | `expr.rs:394,416,428` |
-| D019 | A malformed number or one with a suffix; a bare identifier | `expr.rs:81,85,244` |
+| D018 | End of input or a bracket where an expression is expected | `expr.rs:394` |
+| D019 | A malformed number | `expr.rs:81` |
 | D020 | An unexpected sigil or error token | `expr.rs:264` |
 | D021 | Tokens left after an expression | `state.rs:286` |
 | D022 | Tokens left inside a type's brackets | `state.rs:275` |
@@ -242,12 +242,15 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D055 | An open bracket never closed | `mod.rs:37`, through `parser_util.rs` `emit_bracer_errors` |
 | D056 | `rec` type with no name | `type_hint.rs:130` |
 | D057 | `rec` type named with a word that is a type, or starts one | `type_hint.rs:132` |
+| D058 | Struct field without its name or `=` | `expr.rs:416,428` |
+| D059 | A bare identifier | `expr.rs:244` |
+| D060 | A number with a suffix | `expr.rs:85` |
 
-The parse codes start after the ownership codes (D001 to D015,
-[spec Section 11.1](botspec.md#user-content-111-errors)); D044 to D053 are
-faults that used to share a number with an ownership code or with another
-parse fault. Line numbers are as of October 2026 and drift; the code string is
-what to search for.
+The parse codes start after the ownership codes (D001 to D016,
+[spec Section 11.1](botspec.md#user-content-111-errors)); D044 to D053 and
+D058 to D060 are faults that used to share a number with an ownership code or
+with another parse fault. Line numbers are as of October 2026 and drift; the
+code string is what to search for.
 
 Type errors (T-codes) are listed in
 [Datalit Typing Rules](datalit-typing-rules.md#user-content-diagnostics).

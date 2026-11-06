@@ -615,7 +615,8 @@ pub enum AnalysisError<'db> {
         name: String,
     },
     /// Attempting to move out of a const, which is borrowed wherever it is
-    /// named. Also D003.
+    /// named.
+    /// D016
     CannotMoveConst {
         expr_key: ExprKey<'db>,
         name: String,
@@ -774,7 +775,7 @@ fn format_single_error(error: &AnalysisError) -> String {
             format!("error[D003]: cannot move borrowed value: `{}`", name)
         }
         AnalysisError::CannotMoveConst { expr_key: _, name, recovery_hint } => {
-            let base = format!("error[D003]: cannot move out of const: `{}`", name);
+            let base = format!("error[D016]: cannot move out of const: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::CannotMutFromRef { expr_key: _, name } => {

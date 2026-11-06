@@ -366,7 +366,7 @@ fn apply_wrong_element_type<'db>(
 
         Some(MutationResult {
             source,
-            expected_errors: vec!["T018"], // List element type mismatch.
+            expected_errors: vec!["T032"], // List element type mismatch.
             description: "Inserted wrong-typed element in list".S(),
         })
     } else {
@@ -465,9 +465,9 @@ fn apply_remove_type_hint<'db>(
     let (needs_hint, error_code) = match inner_expr {
         Expr::None => (true, "T016"), // Cannot synthesize type for None.
 
-        Expr::List(l) if l.elements.is_empty() => (true, "T013"), // Cannot synthesize type for empty list.
-        Expr::Set(s) if s.elements.is_empty() => (true, "T014"), // Cannot synthesize type for empty set.
-        Expr::Map(m) if m.entries.is_empty() => (true, "T015"), // Cannot synthesize type for empty map.
+        Expr::List(l) if l.elements.is_empty() => (true, "T016"), // Cannot synthesize type for empty list.
+        Expr::Set(s) if s.elements.is_empty() => (true, "T016"), // Cannot synthesize type for empty set.
+        Expr::Map(m) if m.entries.is_empty() => (true, "T016"), // Cannot synthesize type for empty map.
         _ => (false, ""),
     };
 
@@ -660,7 +660,7 @@ fn apply_swap_map_key_value<'db>(
 
         Some(MutationResult {
             source,
-            expected_errors: vec!["T019"], // Map key type mismatch.
+            expected_errors: vec!["T032"], // Map key type mismatch.
             description: "Swapped map key and value".S(),
         })
     } else {

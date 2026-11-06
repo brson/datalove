@@ -183,7 +183,7 @@ pub fn gen_expr<'db, R: Rng>(
 
     // A const of the wanted type, which is never consumed: a const is borrowed
     // wherever it is named, so one of a linear type is cloned out with `@`
-    // (moving it is D003), and one of a copy type is copied as any other value
+    // (moving it is D016), and one of a copy type is copied as any other value
     // of it is.
     let consts: Vec<String> = ctx
         .consts

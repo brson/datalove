@@ -1199,10 +1199,10 @@ fn an_earlier_units_const_is_borrowed_until_rebound() {
     session.append("const L: [int] = [1, 2]\n");
 
     let moved = session.compile_append("let a = L\n");
-    assert!(format!("{:?}", moved.ownership).contains("D003"), "{:?}", moved.ownership);
+    assert!(format!("{:?}", moved.ownership).contains("D016"), "{:?}", moved.ownership);
 
     let moved = session.compile_append_expr("L");
-    assert!(format!("{:?}", moved.ownership).contains("D003"), "{:?}", moved.ownership);
+    assert!(format!("{:?}", moved.ownership).contains("D016"), "{:?}", moved.ownership);
 
     session.append("let b = L@\n");
     assert_eq!(session.binding("b"), "[1, 2]");

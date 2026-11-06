@@ -506,7 +506,7 @@ What the plan says, with these differences:
   keeping a counter of its own, which was a second induction variable, a
   slot loaded, added to and stored every iteration beside the cursor's own
   count. Counting up still counts, so zero-sized elements still walk.
-- **Errors.** P078 (a `for` header that does not parse), P079 (no `ref`),
+- **Errors.** P086 (no name, or more than two), P087 (no `in`), P088 (no `ref`),
   F087 (a temporary, a value that is not a collection, or the wrong number of
   names for it), D015 (changing the collection being walked).
 - **Worldgen writes `for`** over a collection in scope, at its own

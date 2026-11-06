@@ -1460,7 +1460,7 @@ and, for a `set`, at the move before the branches that it undoes.
 
 **Consts are borrowed.** A const, function-level, module-level or script-level,
 and a const parameter are ref bindings: a move out of one of a non-copy type is
-`CannotMoveConst` (D003) unless written with `@`. A const the analysis declared
+`CannotMoveConst` (D016) unless written with `@`. A const the analysis declared
 is a binding with `is_const`. One declared outside the body is only a name, and
 `OuterConsts` says which: in a function body every name it cannot resolve,
 since a body sees only its parameters, what it binds, consts and functions, and
@@ -1487,7 +1487,6 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D001 | `UseAfterMove` | Using value after move |
 | D002 | `DoubleMove` | Moving value twice |
 | D003 | `CannotMoveBorrowed` | Moving `ref`/`mut`/`out` param |
-| D003 | `CannotMoveConst` | Moving out of a const or const parameter without `@` |
 | D004 | `CannotMutFromRef` | Passing `ref` to `mut` param |
 | D005 | `ReadUninitialized` | Reading an `out` param or `var` binding before it is set |
 | D006 | `OutParamNotInitialized` | Return without initializing `out` |
@@ -1500,9 +1499,10 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
 | D014 | `InconsistentLoopExit` | Moved on one way out of a loop and not another |
 | D015 | `WalkedCollectionChanged`, `WalkedCollectionAssigned` | The collection a `for` walks moved, passed `mut`/`out`, or assigned to or through |
+| D016 | `CannotMoveConst` | Moving out of a const or const parameter without `@` |
 
 D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`,
-as D003 does for a move out of a const. The parsers' own `D0xx` codes
+as D016 does for a move out of a const. The parsers' own `D0xx` codes
 start at D017 and do not reuse any of these; see
 [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 

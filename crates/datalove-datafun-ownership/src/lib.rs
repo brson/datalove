@@ -29,6 +29,7 @@
 //! - D006 OutParamNotInitialized: returning without initializing out param
 //! - D007 MoveInLoop: moving outer-scoped value inside loop body
 //! - D015 WalkedCollectionChanged: changing a collection a `for` walks
+//! - D016 CannotMoveConst: moving out of a const without `@`
 //!
 //! # Drop scheduling
 //!

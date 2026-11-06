@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-// Error test: D003 moving out of consts in a script function. A script const,
+// Error test: D016 moving out of consts in a script function. A script const,
 // a function const and a const parameter are all borrowed.
 
 const LST: [int] = [1, 2]

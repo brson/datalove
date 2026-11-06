@@ -82,7 +82,7 @@ impl<'db> Parser<'db> {
         }
         if let Some(suffix) = &number.suffix {
             let (message, label) = parser_util::suffix_complaint(suffix);
-            return self.emit_expr_error(ts, &message, "D019", &label);
+            return self.emit_expr_error(ts, &message, "D060", &label);
         }
 
         // A number written well is written as it reads, so its text is what
@@ -241,7 +241,7 @@ impl<'db> Parser<'db> {
                         self.next();
                         self.emit_expr_error(ts,
                             &format!("unexpected identifier '{}'", word),
-                            "D019",
+                            "D059",
                             "unexpected identifier"
                         )
                     }
@@ -413,7 +413,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts.clone(),
                     "expected field name in struct expression",
-                    "D018",
+                    "D058",
                     "expected field name"
                 );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
@@ -425,7 +425,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_expr = self.emit_expr_error(ts,
                 "expected '=' after field name in struct expression",
-                "D018",
+                "D058",
                 "expected '=' after field name"
             );
             let error_value = ast::ExprFull::new(None, None, error_expr);

@@ -21,7 +21,7 @@
   },
   "diagnostics": [
     {
-      "code": "D018",
+      "code": "D058",
       "labels": [
         {
           "message": "expected '=' after field name",

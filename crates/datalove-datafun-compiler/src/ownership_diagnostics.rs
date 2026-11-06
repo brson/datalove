@@ -132,7 +132,7 @@ pub fn ownership_diagnostic<'db>(
         AnalysisError::CannotMoveConst { expr_key, name, recovery_hint } => {
             let (text, span) = error_span(spans, *expr_key);
             let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move out of const: `{name}`"))
-                .code("D003")
+                .code("D016")
                 .primary_label(TextSpan::new(text, span.C()), "cannot move out of const")
                 .note("a const is borrowed wherever it is named");
             if let Some(help) = adapt_help(recovery_hint, text.as_str(db), &span, name) {

@@ -677,7 +677,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
                     "expected field name in struct",
-                    "D018",
+                    "D058",
                     "expected field name"
                 );
                 let error_name = InternedText::new(self.db, "<error>".S());
@@ -689,7 +689,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_expr = self.emit_expr_error(ts,
                 "expected '=' after field name in struct",
-                "D018",
+                "D058",
                 "expected '='"
             );
             return ast::ExprStructField { name, value: error_expr };

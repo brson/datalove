@@ -122,7 +122,7 @@ pipe_binding  = "|", value_name, "|" ;          (* P019, P020 *)
 loop_stmt     = "loop", [ "while", expr ], EOLS, block, end_line("loop") ;
 for_stmt      = "for", value_name, [ ",", value_name ], "in", "ref", expr,
                 EOLS, block, end_line("for") ;
-                (* no name, or a third: P078; no "in": P078; no "ref": P079 *)
+                (* no name, or a third: P086; no "in": P087; no "ref": P088 *)
 break_stmt    = "break" ;
 continue_stmt = "continue" ;
 match_stmt    = "match", expr, EOLS, { case_arm }, end_line("match") ;  (* P048 *)
@@ -188,7 +188,7 @@ set           = "#{", [ expr, { ",", expr }, [ "," ] ], "}" ;
 map           = "%{", [ entry, { ",", entry }, [ "," ] ], "}" ;
 entry         = expr, "=", expr ;               (* D017 *)
 struct        = "{", [ sfield, { ",", sfield }, [ "," ] ], "}" ;
-sfield        = NAME, "=", expr ;               (* D018, D038 *)
+sfield        = NAME, "=", expr ;               (* D058, D038 *)
 table         = "{|", [ ROWSEPS ], [ header_row, { ROWSEPS, data_row }, [ ROWSEPS ] ], "|}" ;
 ROWSEPS       = ( newline | ";" ), { newline | ";" } ;
 header_row    = NAME, { ",", NAME }, [ "," ] ;  (* D031, D034, D038 *)
@@ -289,9 +289,7 @@ string_lit, digit_run, hex_run, comment, newline
   pattern is P069, and a name bound twice is D038.
 - A binding `if` takes no part in an `else if` chain on either side (P073),
   and `else |e|` cannot be followed by `if` (P066).
-- A `for` binds one or two names. P078 and P079 are shared with other faults:
-  P078 also says a type parameter is bounded twice, and P079 a field selector
-  is malformed.
+- A `for` binds one or two names, and walks its collection `in ref`.
 - A line before the first `case` of a `match` is P048.
 - The `where` clause is on the signature's line; on the next one it is P001.
 - Every declared name is checked against the reserved words (P064),
@@ -341,14 +339,14 @@ The same faults get different codes in the two parsers:
 
 | Fault | Datalit | Datafun |
 |---|---|---|
-| Malformed number; numeric suffix | D019 | P052; P053 |
+| Malformed number; numeric suffix | D019; D060 | P052; P053 |
 | `enum` literal without `{` | D037 | P071 |
 | `atom`, `term` without a name | D035, D036 | P042, P043 |
-| An unexpected token | D020, D018 | P080, P081 |
+| An unexpected token | D020, D059, D018 | P080, P081 |
 | A non-ASCII name | D043 | P075 |
 
 The rest are the same in both: a hint without its `/` (D049), a struct field
-without its name or `=` (D018), a map entry without `=` (D017), D030, D031,
+without its name or `=` (D058), a map entry without `=` (D017), D030, D031,
 D033, D034, D038 to D041, tensor-shape D023, and every type diagnostic.
 
 ## Divergences

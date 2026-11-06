@@ -1302,7 +1302,7 @@ statements that run belong in a function or a script")
                     let ts = self.peek_text_span();
                     return Err(self.emit_stmt_error(ts,
                         "expected a name for `for` to bind",
-                        "P078",
+                        "P086",
                         "a `for` binds a name to each element"));
                 }
             }
@@ -1314,7 +1314,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return Err(self.emit_stmt_error(ts,
                 "a `for` binds one or two names",
-                "P078",
+                "P086",
                 "an element, an index and an element, or a key and a value"));
         }
 
@@ -1322,14 +1322,14 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return Err(self.emit_stmt_error(ts,
                 "expected `in` after the names a `for` binds",
-                "P078",
+                "P087",
                 "expected `in`"));
         }
         if !self.eat_word("ref") {
             let ts = self.peek_text_span();
             return Err(self.emit_stmt_error(ts,
                 "a `for` walks its collection by reference",
-                "P079",
+                "P088",
                 "write `in ref` before the collection"));
         }
         Ok((bindings, self.parse_expr_full()))

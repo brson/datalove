@@ -9,7 +9,7 @@
   },
   "diagnostics": [
     {
-      "code": "D019",
+      "code": "D060",
       "labels": [
         {
           "message": "`u8` is not part of the number; write a type hint, as in `: u8 / 1`",

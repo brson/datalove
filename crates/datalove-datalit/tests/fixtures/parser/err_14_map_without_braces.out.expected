@@ -9,7 +9,7 @@
   },
   "diagnostics": [
     {
-      "code": "D019",
+      "code": "D059",
       "labels": [
         {
           "message": "unexpected identifier",

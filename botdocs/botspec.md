@@ -287,7 +287,7 @@ gap anywhere inside ends it.
 The two errors are P052 in Datafun.
 
 Letters written onto the digits are read as a suffix and reported as one
-(P053 in Datafun, D019 in Datalit), since the language has none: `1u8` says to
+(P053 in Datafun, D060 in Datalit), since the language has none: `1u8` says to
 write `: u8 / 1` rather than complaining about an unexpected identifier.
 
 **Fixity.** An operator's spacing says what it attaches to:
@@ -1345,14 +1345,14 @@ const LST: [int] = [1, 2, 3]
 A const is an immutable ref binding: it is borrowed wherever it is named, as a
 `ref` parameter is. It may be read, compared, indexed and passed as `ref` any
 number of times, and moving out of a const of a linear type takes a clone with
-`@`. A move without one is D003, whose help says where the `@` goes. A const of
+`@`. A move without one is D016, whose help says where the `@` goes. A const of
 a copy type is copied as any copy type is.
 
 ```datalove
 const LST: [int] = [1, 2, 3]
 let n = list.len(ref LST)      // a borrow
 let a = LST@                   // a move out of a const takes a clone
-let b = LST                    // D003: cannot move out of const
+let b = LST                    // D016: cannot move out of const
 ```
 
 This holds for a const initializer too, so `const B: int = add_ten(A@)` clones
@@ -1903,12 +1903,12 @@ for key, value in ref m     // a map, by key
 end for
 ```
 
-The collection is written with `ref` (P079) and is a place: a name, a
+The collection is written with `ref` (P088) and is a place: a name, a
 parameter, or a field or element of one (F087). Each element binding is a
 reference into the collection, as a `ref` parameter is: it cannot be moved,
 assigned, or passed `mut` or `out`, and `@` clones it. A tensor of rank above 1
 binds a view of each row, one rank less. An index binding is an `index`. A
-`for` binds one or two names (P078), two on a map and one on a set (F087).
+`for` binds one or two names (P086), two on a map and one on a set (F087).
 `break` and `continue` work as in `loop`; `continue` goes to the next element.
 
 **Match** destructures an enum value:
@@ -2293,7 +2293,7 @@ end fun
 ## 11. Ownership Analysis
 
 Ownership analysis runs after type checking to verify correct use of linear
-values. Its errors are D001 to D015; the codes from D017 on belong to the
+values. Its errors are D001 to D016; the codes from D017 on belong to the
 Datalit parser and checker ([Datalit Grammar](datalit-ebnf.md)), which are
 reached from Datafun through literals and data files.
 
@@ -2304,7 +2304,6 @@ reached from Datafun through literals and data files.
 | D001 | UseAfterMove | Using a value after it was moved |
 | D002 | DoubleMove | Moving a value twice |
 | D003 | CannotMoveBorrowed | Moving a `ref`/`mut`/`out` parameter |
-| D003 | CannotMoveConst | Moving out of a const or const parameter without `@` |
 | D004 | CannotMutFromRef | Passing `ref` where `mut` required |
 | D005 | ReadUninitialized | Reading before initialization |
 | D006 | OutParamNotInitialized | Returning without initializing `out` param |
@@ -2318,6 +2317,7 @@ reached from Datafun through literals and data files.
 | D014 | InconsistentLoopExit | Moving a value on one way out of a loop and not another |
 | D015 | WalkedCollectionChanged | Moving the collection a `for` walks, or passing it `mut`/`out` |
 | D015 | WalkedCollectionAssigned | A `set` to or through the collection a `for` walks |
+| D016 | CannotMoveConst | Moving out of a const or const parameter without `@` |
 
 ### 11.2 Mutable Arguments
 
