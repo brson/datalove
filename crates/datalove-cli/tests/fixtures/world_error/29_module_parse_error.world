@@ -1,0 +1,14 @@
+----------
+module local/test/main
+----------
+
+// A module that does not parse is shown as its parse errors, framed.
+fun broken(): int
+  ret (1
+end fun
+
+----------
+scriptunit-expr
+----------
+
+0

@@ -3,11 +3,11 @@ module local/test/main
 ----------
 
 fun broken()
-  ret @42
+  ret 42
 end fun
 
 ----------
 scriptunit-expr
 ----------
 
-@0
+0

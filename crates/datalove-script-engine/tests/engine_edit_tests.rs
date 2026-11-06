@@ -701,6 +701,23 @@ fn an_engine_starts_over_a_module_that_does_not_compile() {
     assert_eq!(value_of(&mut engine, "a"), "1");
 }
 
+/// A module that does not parse has its parse diagnostics kept to render,
+/// as one that does not typecheck has its type diagnostics.
+#[test]
+fn a_module_that_does_not_parse_keeps_its_diagnostics() {
+    let sys = datalove_sys_packages::system_library();
+    let workspace = engine_with_modules(&[("m", "fun f(): int\n    ret (1\nend fun\n")])
+        .workspace()
+        .C();
+    let engine = Engine::with_options(
+        sys, workspace, datalove_datafun::DebugOutputMode::Disabled, vec!["local/test/m".S()])
+        .expect("the engine starts");
+
+    let errors = engine.module_errors();
+    assert_eq!(errors.broken.keys().collect::<Vec<_>>(), vec!["local/test/m"]);
+    assert!(!errors.diagnostics.is_empty(), "with diagnostics to render");
+}
+
 /// What one appended unit came to.
 fn eval_of(engine: &mut Engine, source: &str) -> Eval {
     let mut results = run(engine, source);

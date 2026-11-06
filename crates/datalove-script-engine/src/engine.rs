@@ -305,8 +305,8 @@ pub struct ModuleErrors {
     /// Each required module left out, by path, with the errors of the modules
     /// it reaches that explain why.
     pub broken: BTreeMap<String, Vec<String>>,
-    /// The type and ownership diagnostics of the compile that found them, in
-    /// the order it reported them, which a caller renders against
+    /// The parse, type and ownership diagnostics of the compile that found
+    /// them, in the order it reported them, which a caller renders against
     /// [`Engine::db`].
     pub diagnostics: Vec<StoredDiagnostic>,
     /// The lowering errors of that compile, which carry no spans.
@@ -368,11 +368,13 @@ fn settle_roots(
         // What the first compile said, since it holds every module the
         // later ones hold and the ones they left out.
         if found.is_empty() {
+            let parse = compiled.get_module_parse_diagnostics(db).into_iter()
+                .map(|diagnostic| diagnostic.to_diagnostic(db));
             let types = compiled.get_module_type_diagnostics(db).into_iter()
                 .map(|diagnostic| diagnostic.to_diagnostic(db));
             let ownership = compiled.get_module_ownership_diagnostics(db).into_iter()
                 .map(|diagnostic| diagnostic.to_diagnostic(db));
-            found.diagnostics = types.chain(ownership)
+            found.diagnostics = parse.chain(types).chain(ownership)
                 .map(|diagnostic| diagnostic.to_stored(db))
                 .collect();
             found.lowering_errors = compiled.all_lowering_errors();
