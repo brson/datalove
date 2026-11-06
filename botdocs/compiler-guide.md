@@ -1637,9 +1637,9 @@ written badly. Only the compiler can, by lowering a drop wrongly, and the test
 suite is where that is caught. On the suite itself the tracking costs nothing
 measurable.
 
-Nothing fails if a recipe loses the variable; see [Nothing proves the suite
-runs with leak checking
-on](issues.md#user-content-nothing-proves-the-suite-runs-with-leak-checking-on).
+A recipe that loses the variable fails
+`datalove-rt-tests/tests/leak_check_tests.rs`, which leaks on purpose and
+expects the panic.
 
 ## Performance Notes
 
