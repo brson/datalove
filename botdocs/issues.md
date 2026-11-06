@@ -16,20 +16,20 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [A module const that recurses forever panics](#user-content-a-module-const-that-recurses-forever-panics)
   - [A REPL unit that fails keeps what it did to earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units)
   - [A unit that did not run still gives away what it would have taken](#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken)
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [The REPL shows a broken module only as a message](#user-content-the-repl-shows-a-broken-module-only-as-a-message)
+  - [A module that does not parse fails `script-world` silently](#user-content-a-module-that-does-not-parse-fails-script-world-silently)
   - [Lowering errors say what, never where](#user-content-lowering-errors-say-what-never-where)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
   - [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
   - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
-  - [A `let` that fails to typecheck leaves its name undefined](#user-content-a-let-that-fails-to-typecheck-leaves-its-name-undefined)
+  - [A `let` with no type that fails to typecheck leaves its name undefined](#user-content-a-let-with-no-type-that-fails-to-typecheck-leaves-its-name-undefined)
   - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
   - [Nothing takes a value back out of data or error](#user-content-nothing-takes-a-value-back-out-of-data-or-error)
   - [One function per name, so no prelude of imports](#user-content-one-function-per-name-so-no-prelude-of-imports)
@@ -56,21 +56,11 @@ home here.
   - [Every REPL unit is a new salsa input](#user-content-every-repl-unit-is-a-new-salsa-input)
 
 - [Testing](#user-content-testing)
-  - [Nothing proves the suite runs with leak checking on](#user-content-nothing-proves-the-suite-runs-with-leak-checking-on)
+  - [The cli tests run with leak checking on, which no user does](#user-content-the-cli-tests-run-with-leak-checking-on-which-no-user-does)
 
 ## Engines and the REPL: failing the wrong way
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
-
-### A module const that recurses forever panics
-
-**Reproduced, by a survey of lowering errors; not tried again since.** A
-module const whose initializer recurses without end panics in
-`datalove-datafun-interp/src/bytecode/call.rs:365`, "RefCell already
-borrowed", reached through `resolve_callee`. The same const in a script
-reports `failed to lower const 'C': stack overflow`, which is an error, if
-mislabelled as lowering; see
-[Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits).
 
 ### A REPL unit that fails keeps what it did to earlier units
 
@@ -212,6 +202,22 @@ module's diagnostics, framed against its source, are what the engine keeps in
 `ModuleErrors`, and only the CLI renders them; the REPL's Detail tab shows the
 unit's own diagnostics, which say nothing of the module's.
 
+### A module that does not parse fails `script-world` silently
+
+**Reproduced.** A worldfile module section that does not parse, such as one
+with `let x: int = @true`, makes `datalove script-world` print `Error: Module
+compilation error` and nothing else. The same error in a scriptunit section
+is P080, framed, and `datalove script` shows a module's P080 too.
+
+`ModuleErrors::diagnostics` (`crates/datalove-script-engine/src/engine.rs`)
+holds the type and ownership diagnostics, not the parse ones, and
+`script-world` prints those and the lowering errors, never `broken`. So a
+module whose only errors are parse errors has nothing to show. The
+`world_error` fixtures run through `script-world`, which is how
+`06_F016_type_mismatch_in_module` went on passing on a stale parse error for
+as long as it did. Keeping the parse diagnostics in `ModuleErrors` beside
+the others would fix both this and part of the REPL's Detail tab.
+
 ### Lowering errors say what, never where
 
 **Mostly reproduced; which variants are dead was reasoned about.** No error
@@ -340,11 +346,11 @@ than imprecise.
 Loop exits themselves are settled: see `merge_loop_exits`, D014, and
 `std_tests/152_owned_past_a_loop_exit`.
 
-### A `let` that fails to typecheck leaves its name undefined
+### A `let` with no type that fails to typecheck leaves its name undefined
 
-**Reproduced** with the debug cli. When a `let` or `var` initializer fails to
-typecheck, the binding is never added, so every later use of the name reports a
-second error, F001 "cannot find value", under the real one:
+**Reproduced** with the debug cli. When a `let` or `var` with no type written
+fails to typecheck, the binding is never added, so every later use of the name
+reports a second error, F001 "cannot find value", under the real one:
 
 ```datalove
 let s: (string, i32) = ("a", 1)
@@ -352,18 +358,17 @@ let r = s.0       // F070, a non-copy field read out
 debuglog r        // F001 cannot find value `r`
 ```
 
-The cause is `check_variable_decl` in `tycheck/src/statement.rs`: it calls
-`bind_pattern` only when the value checked or synthesized, and on failure adds
-the error and stops. It applies to every kind of failure, not just F070 and
-F072.
+The cause is `check_variable_decl` in
+`crates/datalove-datafun-tycheck/src/statement.rs`: without a type hint it
+calls `bind_pattern` only when the value synthesized. It applies to every kind
+of failure, not just F070 and F072. A declaration with a hint binds the name at
+the hint's type whether or not the value fits it (`error/119`).
 
-Fixing it in part is easy: when the declaration has a type hint, the hint is the
-binding's type whether or not the value fits it, so the name can be bound
-anyway. Without a hint there is no type to give it, so the full fix needs a type
-that stands for "already reported", one that every check accepts silently, so
-uses of the name neither fail nor report again. The typechecker has no such
-type: `datalit::tycheck::Type::Error` is the language's `error` type, not a
-poison type.
+Without a hint there is no type to give the name, so the fix needs a type that
+stands for "already reported", one that every check accepts silently, so uses of
+the name neither fail nor report again. The typechecker has no such type:
+`datalit::tycheck::Type::Error` is the language's `error` type, not a poison
+type.
 
 ### No table module, and none can be written
 
@@ -488,11 +493,6 @@ data files. None stopped it; each cost a detour.
   m[k@] = #{}` when absent, then `set.insert(mut m[k]!, x)`. Nothing points
   the writer from the first to the second.
 
-## The typecheckers: cost and limits
-
-Where checking a datalit or datafun input takes time or stack out of
-proportion to its size.
-
 ### A printed type loses its alias
 
 **Reproduced.** `type Color: enum { atom Red, atom Blue }` and a `let c: Color`
@@ -509,6 +509,11 @@ as `(T,)`. A value is the other way: `(x)` is `x` in parentheses, a tuple of one
 is `(x,)`, and a pattern `(x)` is refused (P070). The type printer writes
 `(T,)`, so what is printed reads the same either way; whether `(T)` should be
 refused as a pattern is, or read as `T` in parentheses, is the open part.
+
+## The typecheckers: cost and limits
+
+Where checking a datalit or datafun input takes time or stack out of
+proportion to its size.
 
 ### Deeply nested literals overflow the stack
 
@@ -702,21 +707,13 @@ session. Holding a stable `Source` per unit for appends too would fix both.
 
 What the suite does not check.
 
-### Nothing proves the suite runs with leak checking on
+### The cli tests run with leak checking on, which no user does
 
-**Reasoned; the first half was reproduced when the default flipped.**
-`LeakCheckMode::from_env` defaults to `Ignore`, and the justfile sets
-`DATALOVE_LEAK_CHECK=panic` on every test recipe. Nothing checks that it does:
-`DATALOVE_LEAK_CHECK=ignore just test` passes, so if a recipe loses the variable
-the hundred-odd fixtures that exist to be checked by the leak detector -- and the
-double-free and `free`-mismatch checks, which catch codegen bugs -- silently stop
-checking anything. The `alloc.rs` unit tests pass `LeakCheckMode::Panic`
-explicitly, so they test the mechanism and not the wiring. The fix is one canary
-in `datalove-rt-tests` that leaks through `dtlv_rti_init` with the mode taken from
-the environment and expects the panic.
-
-Separately, the cli tests spawn the real binary with no `env_remove`, so they
-inherit `panic` and test a configuration no user runs. Either clear the variable
-at the spawn sites (seven `Command::new`s in `datalove-cli/tests`, built inline,
-which is where a helper would earn its place) or accept that they are not testing
-the shipped default.
+**Reasoned.** `LeakCheckMode::from_env` defaults to `Ignore`, and the justfile
+sets `DATALOVE_LEAK_CHECK=panic` on every test recipe
+(`datalove-rt-tests/tests/leak_check_tests.rs` fails if one loses it). The cli
+tests spawn the real binary with no `env_remove`, so they inherit `panic` and
+test a configuration no user runs. Either clear the variable at the spawn sites
+(the `Command::new`s in `datalove-cli/tests`, built inline, which is where a
+helper would earn its place) or accept that they are not testing the shipped
+default.
