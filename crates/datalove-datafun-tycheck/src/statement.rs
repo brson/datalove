@@ -2,6 +2,7 @@
 //!
 //! Provides functions for type checking statements including function definitions.
 
+use datalove_diagnostic_codes::FCode;
 use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -186,7 +187,7 @@ fn unordered_binding_error<'db>(
     let param = param.as_str(db);
     ctx.push_coded(
         site,
-        "F061",
+        FCode::UnorderedParamInCollection,
         fmt!("`{param}` has not said it can be ordered, and this binding puts it in a set or a map"),
         S("a set or map over a type parameter needs `is ord`"),
         Some(fmt!("a set keeps its elements in order and a map keeps its keys in order, so say so \
@@ -314,7 +315,7 @@ pub fn check_statement<'db>(
                         };
                         ctx.push_coded(
                             crate::ErrorSite::Fun(stmt.local_index()),
-                            "F077",
+                            FCode::ConstParamGeneric,
                             error.to_string(),
                             S("a const parameter's type must be known before the function is specialized"),
                             Some(S("specialization makes one copy per const value, and the copy is still \
@@ -498,7 +499,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                         // F016: only an option or a result has a value to bind.
                         let err = ctx.error_worded(
                             crate::ErrorSite::Expr(ctx.expr(condition).key()),
-                            "F016",
+                            FCode::Mismatch,
                             fmt!("only an option `?T` or a result `!T` has a value to take out, and this is `{}`", type_to_string(db, &condition_ty)),
                             "this is not an option or a result",
                             None,
@@ -529,7 +530,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                                 let actual_type = type_to_string(db, &condition_ty);
                                 let err = ctx.error_worded(
                                     crate::ErrorSite::Expr(ctx.expr(condition).key()),
-                                    "F016",
+                                    FCode::Mismatch,
                                     fmt!("only a result `!T` has an error for `else` to bind, and this is `{actual_type}`"),
                                     "this is not a result",
                                     None,
@@ -654,7 +655,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             if generic {
                 let error = ctx.error_worded(
                     crate::ErrorSite::Expr(ctx.expr(stmt.value).key()),
-                    "F088",
+                    FCode::ConstTypeGeneric,
                     fmt!("const `{}` has a type that depends on a type parameter", stmt.name.as_str(db)),
                     "a const's type must be known when its function is compiled",
                     Some(S("a const is evaluated once, not once per type the function is called at. \
@@ -682,7 +683,7 @@ Give the const a concrete type, or make it a `let`.")),
                     let actual_str = type_to_string(db, &input_ty);
                     let err = ctx.error_worded(
                         crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                        "F016",
+                        FCode::Mismatch,
                         fmt!("`match` takes an enum apart, and this is `{actual_str}`"),
                         "this is not an enum",
                         None,
@@ -705,7 +706,7 @@ Give the const a concrete type, or make it a `let`.")),
                 if covered.iter().any(|n| *n == variant_name) {
                     let err = ctx.error_worded(
                         crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                        "F016",
+                        FCode::Mismatch,
                         fmt!("`{}` has two cases", variant_name.as_str(db)),
                         "each variant is matched by one case",
                         None,
@@ -721,7 +722,7 @@ Give the const a concrete type, or make it a `let`.")),
                         if v.payload.is_some() {
                             let err = ctx.error_worded(
                                 crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                                "F016",
+                                FCode::Mismatch,
                                 fmt!("`{0}` is a term, with a payload, and is matched with `case term {0} <name>`", name.as_str(db)),
                                 "`case atom` matches a variant with no payload",
                                 None,
@@ -746,7 +747,7 @@ Give the const a concrete type, or make it a `let`.")),
                             None => {
                                 let err = ctx.error_worded(
                                     crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                                    "F016",
+                                    FCode::Mismatch,
                                     fmt!("`{0}` is an atom, with no payload, and is matched with `case atom {0}`", name.as_str(db)),
                                     "`case term` matches a variant with a payload",
                                     None,
@@ -759,7 +760,7 @@ Give the const a concrete type, or make it a `let`.")),
                     (_, None) => {
                         let err = ctx.error_worded(
                             crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                            "F016",
+                            FCode::Mismatch,
                             fmt!("`{}` has no variant `{}`", type_to_string(db, &input_ty), variant_name.as_str(db)),
                             "no such variant",
                             None,
@@ -794,7 +795,7 @@ Give the const a concrete type, or make it a `let`.")),
                     let missing: Vec<String> = uncovered.iter().map(|name| fmt!("`{name}`")).collect();
                     let err = ctx.error_worded(
                         crate::ErrorSite::Expr(ctx.expr(stmt.input).key()),
-                        "F016",
+                        FCode::Mismatch,
                         fmt!("this `match` has no case for {}", missing.join(", ")),
                         "every variant needs a case, or there is a `case default`",
                         None,
@@ -879,7 +880,7 @@ fn typecheck_place_for_set<'db>(
                 if idx.error_mode.is_none() {
                     return Err(ctx.report_set_error(
                         stmt,
-                        "F074",
+                        FCode::BareIndexInSet,
                         S("a bare index can only be the last step of a `set` target"),
                         "an index here needs `?` or `!`",
                         Some("a bare index inserts into a map, and partway along a target there is \
@@ -928,7 +929,7 @@ fn check_set_value<'db>(
         let ty = type_to_string(ctx.db, place_ty);
         let err = ctx.report_set_error(
             stmt,
-            "F026",
+            FCode::InvalidOperand,
             fmt!("invalid operand type `{ty}` for operator `{op_str}=`"),
             "this cannot be updated with that operator",
             None,
@@ -988,7 +989,7 @@ fn typecheck_set_index<'db>(
         None if stmt.op.is_some() => {
             let err = ctx.report_set_error(
                 stmt,
-                "F074",
+                FCode::BareIndexInSet,
                 S("a compound assignment can't go through a bare index"),
                 "this index needs `?` or `!`",
                 Some("a bare index inserts into a map, where there may be no value to update. \
@@ -1012,7 +1013,7 @@ Write `[k]?` or `[k]!` to update an element that is already there."),
                 _ => {
                     let err = ctx.report_set_error(
                         stmt,
-                        "F074",
+                        FCode::BareIndexInSet,
                         fmt!("a bare index can only insert into a map, not `{}`", type_to_string(db, base_ty)),
                         "this index needs `?` or `!`",
                         Some("write `[i]?` or `[i]!` to replace an element that is already there"),
@@ -1087,7 +1088,7 @@ fn require_return_type_for<'db>(
     let actual = type_to_string(ctx.db, &expected_return);
     Err(ctx.report_set_error(
         stmt,
-        "F049",
+        FCode::EarlyReturnMismatch,
         fmt!("{what} can return early, so the function has to return {}, and it returns `{actual}`", expected.phrase()),
         label,
         None,
@@ -1098,7 +1099,7 @@ fn require_return_type_for<'db>(
 ///
 /// F011, as for the same index in an expression.
 fn report_unindexable<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtSet<'db>, msg: String) -> TypeError {
-    ctx.report_set_error(stmt, "F011", msg, "this cannot be indexed", None)
+    ctx.report_set_error(stmt, FCode::NoSynthesisRule, msg, "this cannot be indexed", None)
 }
 
 /// Check a `for`: what it walks, what it binds, and its body.
@@ -1114,7 +1115,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
     let iteratee = stmt.iteratee;
     let coded = |ctx: &mut TypeContext<'db>, message: String, label: &str| {
         let site = crate::ErrorSite::Expr(ctx.expr(iteratee).key());
-        ctx.push_coded(site, "F087", message.C(), label.S(), None);
+        ctx.push_coded(site, FCode::BadFor, message.C(), label.S(), None);
         ctx.add_error(datalove_datafun_common::TypeError::ForWalk { message });
     };
 

@@ -250,7 +250,8 @@ The parse codes start after the ownership codes (D001 to D016,
 [spec Section 11.1](botspec.md#user-content-111-errors)); D044 to D053 and
 D058 to D060 are faults that used to share a number with an ownership code or
 with another parse fault. Line numbers are as of October 2026 and drift; the
-code string is what to search for.
+code is a `DCode` variant in `crates/datalove-diagnostic-codes`, and its name
+is what to search for.
 
 Type errors (T-codes) are listed in
 [Datalit Typing Rules](datalit-typing-rules.md#user-content-diagnostics).

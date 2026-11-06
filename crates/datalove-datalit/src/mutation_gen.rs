@@ -3,6 +3,7 @@
 //! Generates erroneous expressions by mutating valid ASTs or their pretty-printed source.
 //! Used to verify both datalit and datafun parsers/typecheckers produce equivalent errors.
 
+use datalove_diagnostic_codes::{DCode, TCode};
 use rmx::prelude::*;
 use rand::Rng;
 
@@ -209,7 +210,7 @@ fn apply_truncate_source(source: &str, rng: &mut impl Rng) -> Option<MutationRes
 
     Some(MutationResult {
         source: result,
-        expected_errors: vec!["D020"], // Unexpected end of input.
+        expected_errors: vec![DCode::UnexpectedToken.as_str()], // Unexpected end of input.
         description: format!("Truncated source at position {}", truncate_pos),
     })
 }
@@ -270,14 +271,14 @@ fn apply_out_of_range_int<'db>(
 
     // Determine the out-of-range value based on type.
     let (out_of_range_value, error_code) = match th {
-        TypeHint::U8 => ("256", "T005"),
-        TypeHint::I8 => ("128", "T006"),
-        TypeHint::U16 => ("65536", "T007"),
-        TypeHint::I16 => ("32768", "T008"),
-        TypeHint::U32 => ("4294967296", "T009"),
-        TypeHint::I32 => ("2147483648", "T010"),
-        TypeHint::U64 => ("18446744073709551616", "T011"),
-        TypeHint::I64 => ("9223372036854775808", "T012"),
+        TypeHint::U8 => ("256", TCode::U8OutOfRange),
+        TypeHint::I8 => ("128", TCode::I8OutOfRange),
+        TypeHint::U16 => ("65536", TCode::U16OutOfRange),
+        TypeHint::I16 => ("32768", TCode::I16OutOfRange),
+        TypeHint::U32 => ("4294967296", TCode::U32OutOfRange),
+        TypeHint::I32 => ("2147483648", TCode::I32OutOfRange),
+        TypeHint::U64 => ("18446744073709551616", TCode::U64OutOfRange),
+        TypeHint::I64 => ("9223372036854775808", TCode::I64OutOfRange),
         _ => return None, // Not a fixed-width integer type.
     };
 
@@ -297,7 +298,7 @@ fn apply_out_of_range_int<'db>(
 
     Some(MutationResult {
         source: type_hint_str,
-        expected_errors: vec![error_code],
+        expected_errors: vec![error_code.as_str()],
         description: format!("Replaced integer with out-of-range value {}", out_of_range_value),
     })
 }
@@ -366,7 +367,7 @@ fn apply_wrong_element_type<'db>(
 
         Some(MutationResult {
             source,
-            expected_errors: vec!["T032"], // List element type mismatch.
+            expected_errors: vec![TCode::Mismatch.as_str()], // List element type mismatch.
             description: "Inserted wrong-typed element in list".S(),
         })
     } else {
@@ -413,7 +414,7 @@ fn apply_arity_mismatch<'db>(
 
             Some(MutationResult {
                 source,
-                expected_errors: vec!["T038"], // Tuple arity mismatch.
+                expected_errors: vec![TCode::TupleLength.as_str()], // Tuple arity mismatch.
                 description: "Removed tuple element to cause arity mismatch".S(),
             })
         }
@@ -443,7 +444,7 @@ fn apply_arity_mismatch<'db>(
 
             Some(MutationResult {
                 source,
-                expected_errors: vec!["T039"], // Struct missing field.
+                expected_errors: vec![TCode::StructFieldCount.as_str()], // Struct missing field.
                 description: "Removed struct field to cause arity mismatch".S(),
             })
         }
@@ -462,18 +463,13 @@ fn apply_remove_type_hint<'db>(
     
 
     // Check if this is an expression that requires a type hint.
-    let (needs_hint, error_code) = match inner_expr {
-        Expr::None => (true, "T016"), // Cannot synthesize type for None.
-
-        Expr::List(l) if l.elements.is_empty() => (true, "T016"), // Cannot synthesize type for empty list.
-        Expr::Set(s) if s.elements.is_empty() => (true, "T016"), // Cannot synthesize type for empty set.
-        Expr::Map(m) if m.entries.is_empty() => (true, "T016"), // Cannot synthesize type for empty map.
-        _ => (false, ""),
+    let error_code = match inner_expr {
+        Expr::None => TCode::OpenType,
+        Expr::List(l) if l.elements.is_empty() => TCode::OpenType,
+        Expr::Set(s) if s.elements.is_empty() => TCode::OpenType,
+        Expr::Map(m) if m.entries.is_empty() => TCode::OpenType,
+        _ => return None,
     };
-
-    if !needs_hint {
-        return None;
-    }
 
     // Build source string without type hint.
     
@@ -489,7 +485,7 @@ fn apply_remove_type_hint<'db>(
 
     Some(MutationResult {
         source,
-        expected_errors: vec![error_code],
+        expected_errors: vec![error_code.as_str()],
         description: "Removed type hint from expression that requires one".S(),
     })
 }
@@ -555,7 +551,7 @@ fn apply_duplicate_field<'db>(
 
         Some(MutationResult {
             source,
-            expected_errors: vec!["D038"], // Duplicate field.
+            expected_errors: vec![DCode::DuplicateName.as_str()], // Duplicate field.
             description: "Duplicated field name in struct".S(),
         })
     } else {
@@ -599,7 +595,7 @@ fn apply_wrong_field_name<'db>(
 
         Some(MutationResult {
             source,
-            expected_errors: vec!["T042"], // Unknown field.
+            expected_errors: vec![TCode::StructFieldName.as_str()], // Unknown field.
             description: "Changed field name to nonexistent".S(),
         })
     } else {
@@ -660,7 +656,7 @@ fn apply_swap_map_key_value<'db>(
 
         Some(MutationResult {
             source,
-            expected_errors: vec!["T032"], // Map key type mismatch.
+            expected_errors: vec![TCode::Mismatch.as_str()], // Map key type mismatch.
             description: "Swapped map key and value".S(),
         })
     } else {

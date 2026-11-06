@@ -14,6 +14,7 @@
 //! disagreement, at the later expression, with the diagnostics checking
 //! already has.
 
+use datalove_diagnostic_codes::TCode;
 use bct::diagnostic::DiagnosticBuilder;
 use bct::text::InternedText;
 use datalove_diagnostic::DiagnosticBuilderExt;
@@ -640,7 +641,7 @@ pub fn infer_unhinted<'db>(
         Expr::ParseError(_) => {
             if let Some(ts) = ctx.get_span(expr) {
                 DiagnosticBuilder::error(ctx.db, "cannot type-check expression with parse errors")
-                    .code("T017")
+                    .code(TCode::ParseErrorInExpr.as_str())
                     .primary_label(ts, "parse error occurred here")
                     .note("fix the parse error before type checking")
                     .emit_type();
@@ -683,7 +684,7 @@ pub fn report_unresolved<'db>(ctx: &TypeContext<'db>, unresolved: &Unresolved<'d
         _ => unreachable!("no other expression leaves a type open"),
     }.message();
     DiagnosticBuilder::error(ctx.db, msg)
-        .code("T016")
+        .code(TCode::OpenType.as_str())
         .primary_label(ts, "type annotation required")
         .note("provide a type hint to specify the expected type")
         .emit_type();

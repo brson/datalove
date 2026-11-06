@@ -1,5 +1,6 @@
 //! Type hint parsing.
 
+use datalove_diagnostic_codes::DCode;
 use rmx::prelude::*;
 
 use bct::{
@@ -28,7 +29,7 @@ pub trait TypeHintStream<'db>: TokenStream<'db> {
         &mut self,
         ts: TextSpan,
         message: &str,
-        code: &str,
+        code: DCode,
         label: &str,
     ) -> ast::TypeHint<'db>;
 
@@ -97,7 +98,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     let ts = stream.peek_text_span();
                     return stream.type_hint_error(ts,
                         "expected name after 'atom'",
-                        "D051",
+                        DCode::AtomTypeWithoutName,
                         "expected atom name"
                     );
                 }
@@ -112,7 +113,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     let ts = stream.peek_text_span();
                     return stream.type_hint_error(ts,
                         "expected name after 'term'",
-                        "D052",
+                        DCode::TermTypeWithoutName,
                         "expected term name"
                     );
                 }
@@ -127,9 +128,9 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
             // What goes wrong with the name is carried past the body, so that
             // the body is read and not blamed on whatever follows the type.
             let refused = match name {
-                None => Some(("expected name after 'rec'".S(), "D056", "expected the recursive type's name")),
+                None => Some(("expected name after 'rec'".S(), DCode::RecWithoutName, "expected the recursive type's name")),
                 Some(n) => crate::parser_util::reserved_for(n.as_str(db), crate::parser_util::NameKind::Type)
-                    .map(|why| (fmt!("a recursive type cannot be named `{}`", n.as_str(db)), "D057", why)),
+                    .map(|why| (fmt!("a recursive type cannot be named `{}`", n.as_str(db)), DCode::RecNamedAsType, why)),
             };
             let local_index = match refused {
                 None => Some(stream.alias_index(name_ts.clone())),
@@ -155,7 +156,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
             } else {
                 stream.type_hint_error(ts,
                     "expected '{}' after 'enum'",
-                    "D032",
+                    DCode::EnumTypeWithoutBrace,
                     "expected '{' after 'enum'"
                 )
             }
@@ -202,7 +203,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     let ts = sub_parser.peek_text_span();
                     return stream.type_hint_error(ts,
                         "expected '=' between map key and value types",
-                        "D044",
+                        DCode::MapTypeWithoutEquals,
                         "expected '=' between key and value types"
                     );
                 }
@@ -232,7 +233,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     Err((
                         sub_parser.peek_text_span(),
                         "expected comma between tensor element type and rank",
-                        "D047",
+                        DCode::TensorTypeWithoutComma,
                         "expected ',' after element type",
                     ))
                 } else {
@@ -241,14 +242,14 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                         Some(0) => Err((
                             ts,
                             "a tensor has at least one axis",
-                            "D042",
+                            DCode::TensorTypeRankZero,
                             "rank 0 is refused",
                         )),
                         Some(r) => Ok(r),
                         None => Err((
                             ts,
                             "expected rank (positive integer)",
-                            "D045",
+                            DCode::BadTensorRank,
                             "expected rank",
                         )),
                     }
@@ -290,7 +291,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                 }
                 stream.type_hint_error(ts,
                     "unexpected token in type hint",
-                    "D046",
+                    DCode::UnexpectedTypeToken,
                     "unexpected token in type hint"
                 )
             }
@@ -303,7 +304,7 @@ impl<'db> TypeHintStream<'db> for Parser<'db> {
         &mut self,
         ts: TextSpan,
         message: &str,
-        code: &str,
+        code: DCode,
         label: &str,
     ) -> ast::TypeHint<'db> {
         self.emit_type_hint_error(ts, message, code, label)
@@ -352,7 +353,7 @@ impl<'db> Parser<'db> {
                     }
                     None => {
                         let ts = self.peek_text_span();
-                        self.emit_type_hint_error(ts, "expected name after 'atom'", "D051", "expected atom name");
+                        self.emit_type_hint_error(ts, "expected name after 'atom'", DCode::AtomTypeWithoutName, "expected atom name");
                         use rmx::prelude::*;
                         InternedText::new(self.db, "<error>".S())
                     }
@@ -372,7 +373,7 @@ impl<'db> Parser<'db> {
                     }
                     None => {
                         let ts = self.peek_text_span();
-                        self.emit_type_hint_error(ts, "expected name after 'term'", "D052", "expected term name");
+                        self.emit_type_hint_error(ts, "expected name after 'term'", DCode::TermTypeWithoutName, "expected term name");
                         use rmx::prelude::*;
                         InternedText::new(self.db, "<error>".S())
                     }
@@ -382,7 +383,7 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let ts = self.peek_text_span();
-                self.emit_type_hint_error(ts, "expected 'atom' or 'term' in enum variant", "D053", "expected 'atom' or 'term'");
+                self.emit_type_hint_error(ts, "expected 'atom' or 'term' in enum variant", DCode::BadEnumVariant, "expected 'atom' or 'term'");
                 use rmx::prelude::*;
                 let name = InternedText::new(self.db, "<error>".S());
                 ast::TypeHintEnumVariant { name, payload: None }
@@ -409,7 +410,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_hint = self.emit_type_hint_error(ts.clone(),
                     "expected field name in struct definition",
-                    "D048",
+                    DCode::StructTypeFieldSyntax,
                     "expected field name"
                 );
                 // Create a placeholder name for the error field.
@@ -422,7 +423,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_hint = self.emit_type_hint_error(ts,
                 "expected ':' after field name in struct definition",
-                "D048",
+                DCode::StructTypeFieldSyntax,
                 "expected ':' after field name"
             );
             return ast::TypeHintNamedField { name, type_hint: Box::new(error_hint) };

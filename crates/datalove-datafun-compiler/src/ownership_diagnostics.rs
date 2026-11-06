@@ -64,12 +64,13 @@ pub fn ownership_diagnostic<'db>(
     error: &AnalysisError<'db>,
     spans: &DatafunSpans<'db>,
 ) -> DiagnosticBuilder<'db> {
+    let code = error.code().as_str();
     match error {
         AnalysisError::UseAfterMoveInEarlierUnit { expr_key, name, recovery_hint } => {
             let (text, span) = error_span(spans, *expr_key);
             let mut builder =
                 DiagnosticBuilder::error(db, &fmt!("`{name}` was given away by an earlier unit"))
-                    .code("D013")
+                    .code(code)
                     .primary_label(TextSpan::new(text, span), "used after it was given away");
             if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
                 builder = builder.help(&fmt!("use `@` to {description}"));
@@ -79,7 +80,7 @@ pub fn ownership_diagnostic<'db>(
         AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint } => {
             let (text, span) = error_span(spans, *expr_key);
             let mut builder = DiagnosticBuilder::error(db, &fmt!("use of moved value: `{name}`"))
-                .code("D001")
+                .code(code)
                 .primary_label(TextSpan::new(text, span.C()), "value used after move");
 
             // The move is labelled too where it is somewhere else, and is
@@ -103,7 +104,7 @@ pub fn ownership_diagnostic<'db>(
         AnalysisError::DoubleMove { expr_key, moved_at, name, recovery_hint } => {
             let (text, span) = error_span(spans, *expr_key);
             let mut builder = DiagnosticBuilder::error(db, &fmt!("value moved twice: `{name}`"))
-                .code("D002")
+                .code(code)
                 .primary_label(TextSpan::new(text, span.C()), "second move here");
 
             let move_span = match moved_at == expr_key {
@@ -125,14 +126,14 @@ pub fn ownership_diagnostic<'db>(
         AnalysisError::CannotMoveBorrowed { expr_key, name } => {
             let (text, span) = error_span(spans, *expr_key);
             DiagnosticBuilder::error(db, &fmt!("cannot move borrowed value: `{name}`"))
-                .code("D003")
+                .code(code)
                 .primary_label(TextSpan::new(text, span), "cannot move borrowed value")
                 .note("borrowed parameters (ref, mut, out) cannot be moved")
         }
         AnalysisError::CannotMoveConst { expr_key, name, recovery_hint } => {
             let (text, span) = error_span(spans, *expr_key);
             let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move out of const: `{name}`"))
-                .code("D016")
+                .code(code)
                 .primary_label(TextSpan::new(text, span.C()), "cannot move out of const")
                 .note("a const is borrowed wherever it is named");
             if let Some(help) = adapt_help(recovery_hint, text.as_str(db), &span, name) {
@@ -143,14 +144,14 @@ pub fn ownership_diagnostic<'db>(
         AnalysisError::WalkedCollectionChanged { expr_key, name } => {
             let (text, span) = error_span(spans, *expr_key);
             DiagnosticBuilder::error(db, &fmt!("cannot change `{name}` while a `for` walks it"))
-                .code("D015")
+                .code(code)
                 .primary_label(TextSpan::new(text, span), "changes the collection being walked")
                 .note("a `for` holds references into its collection until it ends")
         }
         AnalysisError::WalkedCollectionAssigned { set_index, name } => {
             let ts = spans.lookup_set(*set_index).expect("a `set` an ownership error points at has a span");
             DiagnosticBuilder::error(db, &fmt!("cannot change `{name}` while a `for` walks it"))
-                .code("D015")
+                .code(code)
                 .primary_label(ts.C(), "assigns to the collection being walked")
                 .note("a `for` holds references into its collection until it ends")
         }
@@ -160,13 +161,13 @@ pub fn ownership_diagnostic<'db>(
                 db,
                 &fmt!("cannot get mutable reference from immutable: `{name}`"),
             )
-            .code("D004")
+            .code(code)
             .primary_label(TextSpan::new(text, span), "ref parameter cannot be passed as mut")
         }
         AnalysisError::AliasedMutableArgument { expr_key, name } => {
             let (text, span) = error_span(spans, *expr_key);
             DiagnosticBuilder::error(db, &fmt!("aliased mutable argument: `{name}`"))
-                .code("D010")
+                .code(code)
                 .primary_label(TextSpan::new(text, span), "passed again in the same call")
                 .note("an argument passed as `mut` or `out` cannot also be passed to another parameter")
         }
@@ -176,27 +177,27 @@ pub fn ownership_diagnostic<'db>(
                 db,
                 &fmt!("cannot pass immutable binding as mutable: `{name}`"),
             )
-            .code("D011")
+            .code(code)
             .primary_label(TextSpan::new(text, span), "passed to a `mut` or `out` parameter")
             .note(&fmt!("declare `{name}` with `var` to allow mutation"))
         }
         AnalysisError::CannotMutateTemporary { expr_key } => {
             let (text, span) = error_span(spans, *expr_key);
             DiagnosticBuilder::error(db, "cannot pass a temporary as mutable")
-                .code("D012")
+                .code(code)
                 .primary_label(TextSpan::new(text, span), "passed to a `mut` or `out` parameter")
                 .note("bind the value to a `var` first, so the mutation is observable")
         }
         AnalysisError::ReadUninitialized { expr_key, name } => {
             let (text, span) = error_span(spans, *expr_key);
             DiagnosticBuilder::error(db, &fmt!("read of uninitialized binding: `{name}`"))
-                .code("D005")
+                .code(code)
                 .primary_label(TextSpan::new(text, span), "used before initialization")
         }
         AnalysisError::MoveInLoop { expr_key, name, recovery_hint } => {
             let (text, span) = error_span(spans, *expr_key);
             let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move `{name}` in loop"))
-                .code("D007")
+                .code(code)
                 .primary_label(TextSpan::new(text, span.C()), "value moved inside loop");
             if let Some(help) = adapt_help(recovery_hint, text.as_str(db), &span, name) {
                 builder = builder.help(&help);
@@ -209,7 +210,7 @@ pub fn ownership_diagnostic<'db>(
                 db,
                 &fmt!("cannot partially write to out parameter: `{name}`"),
             )
-            .code("D009")
+            .code(code)
             .primary_label(TextSpan::new(text, span), "partial write to out parameter")
             .note("out parameters must be written as a whole value")
         }
@@ -218,7 +219,7 @@ pub fn ownership_diagnostic<'db>(
         } => {
             let message = datalove_datafun_sema::inconsistent_branch_message(error)
                 .expect("is D008");
-            let mut builder = DiagnosticBuilder::error(db, &message).code("D008");
+            let mut builder = DiagnosticBuilder::error(db, &message).code(code);
 
             // The branch's own move or `set` is what to look at; the condition
             // only says which `if` or `match` it was.
@@ -255,7 +256,7 @@ pub fn ownership_diagnostic<'db>(
         }
         AnalysisError::OutParamNotInitialized { name, exits } => {
             let mut builder = DiagnosticBuilder::error(db, &fmt!("out parameter not initialized: `{name}`"))
-                .code("D006");
+                .code(code);
             for (index, exit) in exits.iter().enumerate() {
                 let (span, label) = match exit {
                     FunctionExit::Ret { local_index } => {
@@ -281,7 +282,7 @@ pub fn ownership_diagnostic<'db>(
         }
         AnalysisError::InconsistentLoopExit { name, given_away, held, moved_at } => {
             let mut builder = DiagnosticBuilder::error(db, &fmt!("`{name}` is given away on one way out of this loop and not another"))
-                .code("D014");
+                .code(code);
             let exit_span = |exit: &LoopExit<'db>| match exit {
                 LoopExit::Break { local_index } => (stmt_span(spans.lookup_break(*local_index)), "this `break`"),
                 LoopExit::ConditionFails { condition } => {

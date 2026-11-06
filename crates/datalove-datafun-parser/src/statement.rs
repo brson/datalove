@@ -1,5 +1,6 @@
 //! Statement parsing.
 
+use datalove_diagnostic_codes::PCode;
 use rmx::prelude::*;
 use rmx::core::iter::Peekable;
 
@@ -46,7 +47,7 @@ impl<'db> Parser<'db> {
                 self.eat_word("inline");
                 self.emit_stmt_error(ts,
                     "`inline` is only allowed as the first statement of a function",
-                    "P076",
+                    PCode::MisplacedInline,
                     "not the first statement of a function",
                 )
             }
@@ -54,7 +55,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 self.emit_stmt_error(ts,
                     "unexpected statement",
-                    "P001",
+                    PCode::UnknownStatement,
                     "expected 'let', 'var', 'const', 'set', 'call', 'fun', 'ret', 'require', 'import', 'if', 'match', 'loop', 'for', 'break', 'continue', 'debuglog', 'type', or 'native'"
                 )
             }
@@ -87,7 +88,7 @@ impl<'db> Parser<'db> {
                 self.had_error = true;
                 let ts = self.extract_text_span(token);
                 DiagnosticBuilder::error(self.db, &fmt!("`{word}` inside a block"))
-                    .code("P074")
+                    .code(PCode::DeclarationInBlock.as_str())
                     .primary_label(ts, &fmt!("`{word}` is only read at the top level"))
                     .help(&fmt!("move this `{word}` to the top level of the file"))
                     .emit_parse();
@@ -116,7 +117,7 @@ impl<'db> Parser<'db> {
         self.had_error = true;
         let ts = self.peek_text_span();
         DiagnosticBuilder::error(self.db, &fmt!("`{word}` at the top level of a module"))
-            .code("P077")
+            .code(PCode::StatementInModule.as_str())
             .primary_label(ts, "a module's top level is not run")
             .help("a module holds `fun`, `const`, `type`, `require` and `import`; \
 statements that run belong in a function or a script")
@@ -140,7 +141,7 @@ statements that run belong in a function or a script")
         self.had_error = true;
         let ts = self.peek_text_span();
         DiagnosticBuilder::error(self.db, &fmt!("`{word}` in a rider interface"))
-            .code("P084")
+            .code(PCode::NotInRiderInterface.as_str())
             .primary_label(ts, "an interface declares natives and types")
             .help("a rider interface holds `native fun` declarations and `type` aliases only")
             .emit_parse();
@@ -162,7 +163,7 @@ statements that run belong in a function or a script")
         };
         self.had_error = true;
         DiagnosticBuilder::error(self.db, &fmt!("unexpected token after `end {keyword}`"))
-            .code("P033")
+            .code(PCode::EndLineExtraTokens.as_str())
             .primary_label(self.extract_text_span(&extra), "`end` takes the keyword and nothing else")
             .emit_parse();
     }
@@ -173,7 +174,7 @@ statements that run belong in a function or a script")
         self.emit_stmt_error(
             TextSpan::new(self.source_text(), end..end),
             &fmt!("unterminated {keyword} body"),
-            "P034",
+            PCode::MissingEnd,
             &fmt!("expected `end {keyword}` before the end of the input"),
         )
     }
@@ -187,7 +188,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected name after 'let'",
-                    "P007",
+                    PCode::LetWithoutName,
                     "expected name",
                 );
             }
@@ -206,7 +207,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
                 "expected '=' after let binding",
-                "P083",
+                PCode::LetWithoutEquals,
                 "expected '='"
             );
         }
@@ -242,7 +243,7 @@ statements that run belong in a function or a script")
             if names.len() == 1 && !had_comma {
                 self.had_error = true;
                 DiagnosticBuilder::error(self.db, "a parenthesized name is not a pattern")
-                    .code("P070")
+                    .code(PCode::ParenthesizedName.as_str())
                     .primary_label(paren_ts, "write `(a,)` for a one-element tuple, or drop the parentheses")
                     .emit_parse();
             }
@@ -329,7 +330,7 @@ statements that run belong in a function or a script")
         self.had_error = true;
         let ts = self.error_span();
         DiagnosticBuilder::error(self.db, "expected a name in this pattern")
-            .code("P069")
+            .code(PCode::NestedPattern.as_str())
             .primary_label(ts, "expected a name")
             .emit_parse();
         // Skip the rest of this element, so one mistake is one report.
@@ -348,7 +349,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected name after 'var'",
-                    "P008",
+                    PCode::VarWithoutName,
                     "expected name",
                 );
             }
@@ -372,7 +373,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "a destructuring var needs a value to take apart",
-                    "P068",
+                    PCode::DestructuringVarWithoutValue,
                     "expected '='"
                 );
             }
@@ -380,7 +381,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "uninitialized var requires type hint",
-                    "P026",
+                    PCode::VarWithoutTypeOrValue,
                     "add ': Type' or '= value'"
                 );
             }
@@ -403,7 +404,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected name after 'const'",
-                    "P024",
+                    PCode::ConstWithoutName,
                     "expected name",
                 );
             }
@@ -422,7 +423,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
                 "expected '=' after const binding",
-                "P025",
+                PCode::ConstWithoutEquals,
                 "expected '='"
             );
         }
@@ -449,7 +450,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected name after 'set'",
-                    "P009",
+                    PCode::SetWithoutName,
                     "expected name",
                 );
             }
@@ -469,7 +470,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
                 "expected '=' after set target",
-                "D025",
+                PCode::SetWithoutAssignOp,
                 "expected '='"
             );
         };
@@ -568,7 +569,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected function name after 'fun'",
-                    "P010",
+                    PCode::FunWithoutName,
                     "expected function name",
                 );
             }
@@ -596,7 +597,7 @@ statements that run belong in a function or a script")
                 let ts = self.error_span();
                 return self.emit_stmt_error(ts,
                     "expected parameter list",
-                    "P002",
+                    PCode::FunWithoutParams,
                     "expected '(' to start parameter list"
                 );
             }
@@ -694,7 +695,7 @@ statements that run belong in a function or a script")
         let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
             self.had_error = true;
             DiagnosticBuilder::error(self.db, "expected `{` after `where`")
-                .code("P061")
+                .code(PCode::WhereWithoutBrace.as_str())
                 .primary_label(self.peek_text_span(), "the bounds go in braces")
                 .emit_parse();
             return bounds;
@@ -712,7 +713,7 @@ statements that run belong in a function or a script")
                     self.had_error = true;
                     DiagnosticBuilder::error(self.db, &format!(
                         "`{}` is bounded twice", name.text(self.db)))
-                        .code("P078")
+                        .code(PCode::TypeParamBoundedTwice.as_str())
                         .primary_label(ts, "a type parameter takes one bound")
                         .emit_parse();
                 }
@@ -722,7 +723,7 @@ statements that run belong in a function or a script")
                     DiagnosticBuilder::error(self.db, &format!(
                         "`{}` is not a type parameter of this function",
                         name.text(self.db)))
-                        .code("P062")
+                        .code(PCode::BoundOnUndeclaredParam.as_str())
                         .primary_label(ts, "bounded here but never declared")
                         .emit_parse();
                 }
@@ -740,7 +741,7 @@ statements that run belong in a function or a script")
         if !self.eat_word("is") {
             self.had_error = true;
             DiagnosticBuilder::error(self.db, "expected `is` after the type parameter")
-                .code("P063")
+                .code(PCode::BoundWithoutIs.as_str())
                 .primary_label(self.peek_text_span(), "a bound reads `T is float`")
                 .emit_parse();
             return None;
@@ -753,7 +754,7 @@ statements that run belong in a function or a script")
                 self.had_error = true;
                 DiagnosticBuilder::error(self.db, &format!(
                     "unknown bound `{}`", bound_name.text(self.db)))
-                    .code("P060")
+                    .code(PCode::UnknownBound.as_str())
                     .primary_label(ts, "not a bound this language has")
                     .emit_parse();
                 None
@@ -812,7 +813,7 @@ statements that run belong in a function or a script")
             self.had_error = true;
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "const parameter cannot be 'ref', 'out' or 'mut'")
-                .code("P082")
+                .code(PCode::ConstParamWithMode.as_str())
                 .primary_label(ts, "invalid combination")
                 .emit_parse();
         }
@@ -823,7 +824,7 @@ statements that run belong in a function or a script")
                 self.had_error = true;
                 let ts = self.peek_text_span();
                 DiagnosticBuilder::error(self.db, "expected parameter name")
-                    .code("P011")
+                    .code(PCode::ParamWithoutName.as_str())
                     .primary_label(ts, "expected parameter name")
                     .emit_parse();
                 InternedText::new(self.db, "<error>".S())
@@ -835,7 +836,7 @@ statements that run belong in a function or a script")
             self.had_error = true;
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "expected ':' after parameter name")
-                .code("P012")
+                .code(PCode::ParamWithoutColon.as_str())
                 .primary_label(ts, "expected ':'")
                 .emit_parse();
         }
@@ -870,7 +871,7 @@ statements that run belong in a function or a script")
             Some("module") => {
                 self.eat_word("module");
                 let (import_space, package_alias, module_alias) =
-                    match self.parse_require_path("module", "P013", NameKind::Module) {
+                    match self.parse_require_path("module", PCode::RequireModuleWithoutSpace, NameKind::Module) {
                         Ok(path) => path,
                         Err(error) => return error,
                     };
@@ -887,7 +888,7 @@ statements that run belong in a function or a script")
             Some("data") => {
                 self.eat_word("data");
                 let (import_space, package_alias, data_alias) =
-                    match self.parse_require_path("data", "P016", NameKind::Value) {
+                    match self.parse_require_path("data", PCode::RequireDataWithoutSpace, NameKind::Value) {
                         Ok(path) => path,
                         Err(error) => return error,
                     };
@@ -918,7 +919,7 @@ statements that run belong in a function or a script")
                         let ts = self.peek_text_span();
                         return self.emit_stmt_error(ts,
                             "expected rider name after 'require rider'",
-                            "P027",
+                            PCode::RequireRiderWithoutName,
                             "expected rider name",
                         );
                     }
@@ -933,7 +934,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 self.emit_stmt_error(ts,
                     "expected 'module', 'data', or 'rider' after 'require'",
-                    "P005",
+                    PCode::BadRequireKind,
                     "expected 'module', 'data', or 'rider'"
                 )
             }
@@ -949,7 +950,7 @@ statements that run belong in a function or a script")
     fn parse_require_path(
         &mut self,
         kind: &str,
-        first_code: &str,
+        first_code: PCode,
         alias_kind: NameKind,
     ) -> Result<(InternedText<'db>, InternedText<'db>, InternedText<'db>), ast::Statement<'db>> {
         let import_space = match self.eat_name() {
@@ -968,7 +969,7 @@ statements that run belong in a function or a script")
             let ts = self.error_span();
             return Err(self.emit_stmt_error(ts,
                 "expected '/' after import space",
-                "P003",
+                PCode::RequireWithoutSpaceSlash,
                 "expected '/' after import space"
             ));
         }
@@ -980,7 +981,7 @@ statements that run belong in a function or a script")
                 let ts = self.error_span();
                 return Err(self.emit_stmt_error(ts,
                     "expected package name after '/'",
-                    "P014",
+                    PCode::RequireWithoutPackage,
                     "expected package name",
                 ));
             }
@@ -990,7 +991,7 @@ statements that run belong in a function or a script")
             let ts = self.error_span();
             return Err(self.emit_stmt_error(ts,
                 "expected '/' after package alias",
-                "P004",
+                PCode::RequireWithoutPackageSlash,
                 "expected '/' after package alias"
             ));
         }
@@ -1002,7 +1003,7 @@ statements that run belong in a function or a script")
                 let ts = self.error_span();
                 return Err(self.emit_stmt_error(ts,
                     &fmt!("expected {kind} name after '/'"),
-                    "P015",
+                    PCode::RequireWithoutName,
                     &fmt!("expected {kind} name"),
                 ));
             }
@@ -1024,7 +1025,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected module name after 'import'",
-                    "P017",
+                    PCode::ImportWithoutModule,
                     "expected module name",
                 );
             }
@@ -1035,7 +1036,7 @@ statements that run belong in a function or a script")
             let ts = self.error_span();
             return self.emit_stmt_error(ts,
                 "expected '.' after module name",
-                "P006",
+                PCode::ImportWithoutDot,
                 "expected '.' after module name"
             );
         }
@@ -1048,7 +1049,7 @@ statements that run belong in a function or a script")
                 let ts = self.error_span();
                 return self.emit_stmt_error(ts,
                     "expected item name after '.'",
-                    "P018",
+                    PCode::ImportWithoutItem,
                     "expected item name",
                 );
             }
@@ -1099,7 +1100,7 @@ statements that run belong in a function or a script")
         if chained && then_binding.is_some() {
             self.had_error = true;
             DiagnosticBuilder::error(self.db, "`else if` cannot destructure")
-                .code("P073")
+                .code(PCode::DestructuringElseIf.as_str())
                 .primary_label(binding_ts.with_end(self.last_byte_end()), "destructuring binding in an `else if`")
                 .help("nest this `if` inside an `else` body instead")
                 .emit_parse();
@@ -1136,14 +1137,14 @@ statements that run belong in a function or a script")
                     else_sub.had_error = true;
                     let ts = else_sub.peek_text_span();
                     DiagnosticBuilder::error(else_sub.db, "an else binding cannot be followed by `if`")
-                        .code("P066")
+                        .code(PCode::ElseBindingThenIf.as_str())
                         .primary_label(ts, "nest this `if` inside the else body instead")
                         .emit_parse();
                 } else if then_binding.is_some() {
                     else_sub.had_error = true;
                     let ts = else_sub.peek_text_span();
                     DiagnosticBuilder::error(else_sub.db, "a destructuring `if` cannot be followed by `else if`")
-                        .code("P073")
+                        .code(PCode::DestructuringElseIf.as_str())
                         .primary_label(ts, "`else if` after a destructuring `if`")
                         .help("nest this `if` inside an `else` body instead")
                         .emit_parse();
@@ -1196,7 +1197,7 @@ statements that run belong in a function or a script")
                 self.had_error = true;
                 let ts = self.peek_text_span();
                 DiagnosticBuilder::error(self.db, "expected binding name after '|'")
-                    .code("P019")
+                    .code(PCode::PipeBindingWithoutName.as_str())
                     .primary_label(ts, "expected binding name")
                     .emit_parse();
                 InternedText::new(self.db, "<error>".S())
@@ -1208,7 +1209,7 @@ statements that run belong in a function or a script")
             let pos = self.last_byte_end();
             let ts = TextSpan::new(self.source_text(), pos..pos);
             DiagnosticBuilder::error(self.db, "expected '|' after binding name")
-                .code("P020")
+                .code(PCode::PipeBindingUnclosed.as_str())
                 .primary_label(ts, "expected '|'")
                 .emit_parse();
         }
@@ -1302,7 +1303,7 @@ statements that run belong in a function or a script")
                     let ts = self.peek_text_span();
                     return Err(self.emit_stmt_error(ts,
                         "expected a name for `for` to bind",
-                        "P086",
+                        PCode::ForNames,
                         "a `for` binds a name to each element"));
                 }
             }
@@ -1314,7 +1315,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return Err(self.emit_stmt_error(ts,
                 "a `for` binds one or two names",
-                "P086",
+                PCode::ForNames,
                 "an element, an index and an element, or a key and a value"));
         }
 
@@ -1322,14 +1323,14 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return Err(self.emit_stmt_error(ts,
                 "expected `in` after the names a `for` binds",
-                "P087",
+                PCode::ForWithoutIn,
                 "expected `in`"));
         }
         if !self.eat_word("ref") {
             let ts = self.peek_text_span();
             return Err(self.emit_stmt_error(ts,
                 "a `for` walks its collection by reference",
-                "P088",
+                PCode::ForWithoutRef,
                 "write `in ref` before the collection"));
         }
         Ok((bindings, self.parse_expr_full()))
@@ -1379,7 +1380,7 @@ statements that run belong in a function or a script")
                     self.expr_span_start(expr)..self.last_byte_end());
                 self.emit_stmt_error(ts,
                     "`call` takes a function call",
-                    "P031",
+                    PCode::CallOfNonCall,
                     "not a function call"
                 )
             }
@@ -1397,7 +1398,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected name after 'type'",
-                    "P022",
+                    PCode::TypeAliasWithoutName,
                     "expected name",
                 );
             }
@@ -1408,7 +1409,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
                 "expected ':' after type alias name",
-                "P023",
+                PCode::TypeAliasWithoutColon,
                 "expected ':'"
             );
         }
@@ -1437,7 +1438,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected 'native' after 'intrinsic'",
-                    "P028",
+                    PCode::NativeFunHeader,
                     "expected 'native'",
                 );
             }
@@ -1448,7 +1449,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
                 "expected 'fun' after 'native'",
-                "P028",
+                PCode::NativeFunHeader,
                 "expected 'fun'",
             );
         }
@@ -1460,7 +1461,7 @@ statements that run belong in a function or a script")
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
                     "expected function name after 'native fun'",
-                    "P029",
+                    PCode::NativeFunWithoutName,
                     "expected function name",
                 );
             }
@@ -1487,7 +1488,7 @@ statements that run belong in a function or a script")
                 let ts = self.error_span();
                 return self.emit_stmt_error(ts,
                     "expected parameter list for native fun",
-                    "P030",
+                    PCode::NativeFunWithoutParams,
                     "expected '(' to start parameter list",
                 );
             }
@@ -1506,7 +1507,7 @@ statements that run belong in a function or a script")
         if intrinsic && datalove_datafun_intrinsics::NativeIntrinsic::lookup(name.as_str(self.db)).is_none() {
             self.had_error = true;
             DiagnosticBuilder::error(self.db, &fmt!("no intrinsic native `{}`", name.as_str(self.db)))
-                .code("P085")
+                .code(PCode::UnknownIntrinsic.as_str())
                 .primary_label(native_span, "the compiler knows no native by this name")
                 .help("an intrinsic native is one of `list_push`, `list_pop`, `mem_swap` and `mem_replace`")
                 .emit_parse();
@@ -1560,7 +1561,7 @@ statements that run belong in a function or a script")
                                     self.had_error = true;
                                     let ts = case_sub.peek_text_span();
                                     DiagnosticBuilder::error(self.db, "expected name after 'case atom'")
-                                        .code("P044")
+                                        .code(PCode::CaseAtomWithoutName.as_str())
                                         .primary_label(ts, "expected atom name")
                                         .emit_parse();
                                     InternedText::new(self.db, "<error>".S())
@@ -1584,7 +1585,7 @@ statements that run belong in a function or a script")
                                     self.had_error = true;
                                     let ts = case_sub.peek_text_span();
                                     DiagnosticBuilder::error(self.db, "expected name after 'case term'")
-                                        .code("P045")
+                                        .code(PCode::CaseTermWithoutName.as_str())
                                         .primary_label(ts, "expected term name")
                                         .emit_parse();
                                     InternedText::new(self.db, "<error>".S())
@@ -1596,7 +1597,7 @@ statements that run belong in a function or a script")
                                     self.had_error = true;
                                     let ts = case_sub.peek_text_span();
                                     DiagnosticBuilder::error(self.db, "expected binding name after term name")
-                                        .code("P046")
+                                        .code(PCode::CaseTermWithoutBinding.as_str())
                                         .primary_label(ts, "expected binding name")
                                         .emit_parse();
                                     InternedText::new(self.db, "<error>".S())
@@ -1624,7 +1625,7 @@ statements that run belong in a function or a script")
                             if default_body.is_some() {
                                 self.had_error = true;
                                 DiagnosticBuilder::error(self.db, "duplicate `case default` in match")
-                                    .code("P049")
+                                    .code(PCode::DuplicateDefaultCase.as_str())
                                     .primary_label(default_span, "a match takes only one default arm")
                                     .emit_parse();
                             } else {
@@ -1635,7 +1636,7 @@ statements that run belong in a function or a script")
                             self.had_error = true;
                             let ts = case_sub.peek_text_span();
                             DiagnosticBuilder::error(self.db, "expected 'atom', 'term', or 'default' after 'case'")
-                                .code("P047")
+                                .code(PCode::BadCaseKind.as_str())
                                 .primary_label(ts, "expected 'atom', 'term', or 'default'")
                                 .emit_parse();
                             self.merge_identity_from(&mut case_sub);
@@ -1653,7 +1654,7 @@ statements that run belong in a function or a script")
             self.had_error = true;
             let ts = self.extract_text_span(&line.first().X());
             DiagnosticBuilder::error(self.db, "this line is in no case of the match")
-                .code("P048")
+                .code(PCode::LineOutsideCase.as_str())
                 .primary_label(ts, "every statement here belongs to a `case`")
                 .emit_parse();
         }

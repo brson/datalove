@@ -17,6 +17,7 @@
 //! the collection is parsed whole instead. Only a collection with an error in
 //! it can get there.
 
+use datalove_diagnostic_codes::DCode;
 use rmx::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -180,7 +181,7 @@ pub fn parse_chunk<'db>(
                         bct::diagnostic::DiagnosticBuilder::error(db,
                             &format!("row {} has {} columns but header has {}",
                                 first + i + 1, elements.len(), columns))
-                            .code("D030")
+                            .code(DCode::TableRowWidth.as_str())
                             .primary_label(ts, "column count mismatch")
                             .emit_to(&parser.sink);
                     }
@@ -196,7 +197,7 @@ pub fn parse_chunk<'db>(
             if let Some(written) = bct::split::trailing_delimiter(&groups).filter(|_| last) {
                 parser.had_error = true;
                 bct::split::trailing_delimiter_error(db, source, &written, "parts")
-                    .code("D033")
+                    .code(DCode::EmptyBeforeComma.as_str())
                     .emit_to(&parser.sink);
             }
             prelude = std::mem::take(&mut *kept.borrow_mut());
@@ -331,7 +332,7 @@ impl<'db> Parser<'db> {
                         bct::diagnostic::DiagnosticBuilder::error(self.db,
                             &format!("inconsistent tensor shape at group {}: expected {:?} but got {:?}",
                                 group_idx, expected, group.shape))
-                            .code("D023")
+                            .code(DCode::TensorShapeMismatch.as_str())
                             .primary_label(group.span.clone(), "shape mismatch")
                             .emit_to(&self.sink);
                     }
@@ -355,7 +356,7 @@ impl<'db> Parser<'db> {
         let written = crate::parser_util::tensor_body_complaint(&header.extents, rank as usize, &shape, elements.len());
         if let Some((message, label)) = written {
             let ts = TextSpan::new(self.source_text(), header.span);
-            return self.emit_expr_error(ts, &message, "D041", &label);
+            return self.emit_expr_error(ts, &message, DCode::TensorBodyMismatch, &label);
         }
         ast::Expr::Tensor(ast::ExprTensor { shape: header.extents, elements, header: true })
     }

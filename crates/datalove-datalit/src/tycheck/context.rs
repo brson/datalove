@@ -2,6 +2,7 @@
 //!
 //! Provides TypeContext for tracking errors during typechecking.
 
+use datalove_diagnostic_codes::TCode;
 use bct::text::{InternedText, TextSpan};
 use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
@@ -45,7 +46,7 @@ impl<'db> TypeContext<'db> {
             if let (Some(name), Some(ts)) = (first_alias(hint, &mut Vec::new()), self.get_span(expr)) {
                 let name = name.as_str(self.db);
                 let mut builder = DiagnosticBuilder::error(self.db, &rmx::std::format!("unknown type `{name}`"))
-                    .code("T059")
+                    .code(TCode::NamedType.as_str())
                     .primary_label(ts, "not a type")
                     .note("datalit has no type aliases, so a type is written out rather than named");
                 if let Some(suggestion) = crate::parser_util::type_name_suggestion(name) {
@@ -72,7 +73,7 @@ pub fn rec_diagnostic<'db>(db: &'db dyn crate::Db, error: &TypeError, ts: TextSp
     let TypeError::Rec(rec) = error else { return None };
     let (code, label, note) = rec.kind.diagnostic();
     Some(DiagnosticBuilder::error(db, &rmx::std::format!("{error}"))
-        .code(code)
+        .code(code.as_str())
         .primary_label(ts, label)
         .note(note))
 }

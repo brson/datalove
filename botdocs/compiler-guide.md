@@ -92,6 +92,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-paths` | `work_dir()`, where native components are built |
 | `datalove-ct` | Compile-time utilities, query logging |
 | `datalove-diagnostic` | Diagnostic/error infrastructure |
+| `datalove-diagnostic-codes` | Every diagnostic code, an enum per family (`DCode`, `PCode`, `TCode`, `FCode`) |
 | `datalove-datalit` | Data literal types and typechecking |
 | `datalove-exampletest` | Snapshot test harness |
 | `datalove-worldgen` | Generator for random worldfiles that typecheck |
@@ -1480,7 +1481,8 @@ and promoted afterwards by `promote_function_consts`; see
 
 ### Error Codes
 
-Variants of `AnalysisError` in `datalove-datafun-sema`.
+Variants of `AnalysisError` in `datalove-datafun-sema`; `AnalysisError::code`
+gives each its `DCode`.
 
 | Code | Variant | Trigger |
 |------|---------|---------|
@@ -1505,6 +1507,12 @@ D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`,
 as D016 does for a move out of a const. The parsers' own `D0xx` codes
 start at D017 and do not reuse any of these; see
 [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
+
+Every code, in all four families, is a variant of an enum in
+`datalove-diagnostic-codes` whose discriminant is its number, so two faults
+cannot share one. A new fault takes the next number of its family and a row in
+the family's table; that crate's tests check the tables, and fail on a code
+written as a string anywhere in `crates/*/src`.
 
 ### Drop Schedule
 

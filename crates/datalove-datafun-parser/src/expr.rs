@@ -1,5 +1,6 @@
 //! Expression parsing.
 
+use datalove_diagnostic_codes::{DCode, PCode};
 use rmx::prelude::*;
 
 use bct::{
@@ -65,7 +66,7 @@ impl<'db> Parser<'db> {
                 let op_text = ts.source.as_str(self.db)[ts.span.clone()].S();
                 self.had_error = true;
                 bct::diagnostic::DiagnosticBuilder::error(self.db, &fmt!("`{op_text}` after a comparison"))
-                    .code("P067")
+                    .code(PCode::ChainedComparison.as_str())
                     .primary_label(ts, "comparisons do not chain")
                     .note("parenthesize the comparison whose result is being compared, or join two comparisons with `and`")
                     .emit_parse();
@@ -275,7 +276,7 @@ impl<'db> Parser<'db> {
         let Some((qualifier, name)) = qualified else {
             return self.emit_expr_error(callee,
                 "only a function can be called",
-                "P072",
+                PCode::CallOfNonFunction,
                 "this is not a function, or a function in a module"
             );
         };
@@ -310,7 +311,7 @@ impl<'db> Parser<'db> {
         }
         self.had_error = true;
         bct::diagnostic::DiagnosticBuilder::error(self.db, "expected a field name or a tuple index after `.`")
-            .code("P079")
+            .code(PCode::BadFieldSelector.as_str())
             .primary_label(ts, "not a field name, nor a tuple index that fits a `u32`")
             .emit_parse();
         // A word that is neither is taken, so it is not reported again.
@@ -493,7 +494,7 @@ impl<'db> Parser<'db> {
             let op = ts.source.as_str(self.db)[ts.span.clone()].S();
             self.had_error = true;
             bct::diagnostic::DiagnosticBuilder::error(self.db, &fmt!("`{op}` after a constructor's payload"))
-                .code("P065")
+                .code(PCode::OperatorAfterPayload.as_str())
                 .primary_label(ts, "the payload ends before this")
                 .note(&fmt!("a payload is one expression. Parenthesize `a {op} b` to put the \
 operation in the payload, or the whole constructor to apply it to what is built"))
@@ -589,7 +590,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         None => {
                                             return self.emit_expr_error(ts,
                                                 "expected name after 'atom'",
-                                                "P042",
+                                                PCode::AtomWithoutName,
                                                 "expected atom name"
                                             );
                                         }
@@ -608,7 +609,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         None => {
                                             return self.emit_expr_error(ts,
                                                 "expected name after 'term'",
-                                                "P043",
+                                                PCode::TermWithoutName,
                                                 "expected term name"
                                             );
                                         }
@@ -627,7 +628,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     let Some(iter) = self.eat_branch(Sigil::BraceOpen) else {
                                         return self.emit_expr_error(ts,
                                             "expected '{' after 'enum'",
-                                            "P071",
+                                            PCode::EnumLiteralWithoutBrace,
                                             "expected '{'"
                                         );
                                     };
@@ -653,7 +654,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         None => {
                                             return self.emit_expr_error(ts,
                                                 "expected intrinsic name after 'icall'",
-                                                "P040",
+                                                PCode::IcallWithoutName,
                                                 "expected intrinsic name"
                                             );
                                         }
@@ -681,7 +682,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         _ => {
                                             return self.emit_expr_error(ts,
                                                 "expected '(' after intrinsic name",
-                                                "P041",
+                                                PCode::IcallWithoutParen,
                                                 "expected '('"
                                             );
                                         }
@@ -747,7 +748,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                             self.next();
                             self.emit_expr_error(ts,
                                 "unexpected token in expression",
-                                "P080",
+                                PCode::UnexpectedToken,
                                 "unexpected token"
                             )
                         }
@@ -758,7 +759,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                         self.next();
                         if let Err(error) = parser_util::string_literal_value(raw) {
                             let (message, label) = parser_util::escape_complaint(&error);
-                            return self.emit_expr_error(ts, &message, "D039", &label);
+                            return self.emit_expr_error(ts, &message, DCode::BadStringEscape, &label);
                         }
                         let value = InternedText::new(self.db, raw.S());
                         self.create_expr(
@@ -779,7 +780,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                         self.next();
                         self.emit_expr_error(ts,
                             "unexpected token in expression",
-                            "P080",
+                            PCode::UnexpectedToken,
                             "unexpected token"
                         )
                     }
@@ -801,7 +802,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                 let ts = self.peek_text_span();
                 self.emit_expr_error(ts,
                     "expected expression",
-                    "P081",
+                    PCode::ExpectedExpression,
                     "expected expression"
                 )
             }

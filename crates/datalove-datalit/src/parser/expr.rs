@@ -1,5 +1,6 @@
 //! Expression parsing.
 
+use datalove_diagnostic_codes::DCode;
 use rmx::prelude::*;
 
 use bct::{
@@ -40,7 +41,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
                     "expected '/' after type hint",
-                    "D049",
+                    DCode::HintWithoutSlash,
                     "expected '/' separator between type hint and expression"
                 );
                 ast::ExprFull::new(Some(local_index), Some(type_hint), error_expr)
@@ -78,11 +79,11 @@ impl<'db> Parser<'db> {
         let ts = TextSpan::new(self.source_text(), number.span.C());
 
         if let Some((message, label)) = number.complaint() {
-            return self.emit_expr_error(ts, &message, "D019", &label);
+            return self.emit_expr_error(ts, &message, DCode::MalformedNumber, &label);
         }
         if let Some(suffix) = &number.suffix {
             let (message, label) = parser_util::suffix_complaint(suffix);
-            return self.emit_expr_error(ts, &message, "D060", &label);
+            return self.emit_expr_error(ts, &message, DCode::NumberSuffix, &label);
         }
 
         // A number written well is written as it reads, so its text is what
@@ -104,7 +105,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_expr = self.emit_expr_error(ts,
                 "expected '=' between map key and value",
-                "D017",
+                DCode::MapEntryWithoutEquals,
                 "expected '=' after key"
             );
             let error_value = ast::ExprFull::new(None, None, error_expr);
@@ -132,13 +133,13 @@ impl<'db> Parser<'db> {
                 self.next();
                 return self.emit_expr_error(ts,
                     "a hex literal takes no sign",
-                    "D050",
+                    DCode::BadSign,
                     "a hex literal is an unsigned bit pattern; write a negative number in decimal"
                 );
             }
             return self.emit_expr_error(ts,
                 "unexpected minus sign",
-                "D050",
+                DCode::BadSign,
                 "unexpected '-' not followed by number"
             );
         }
@@ -188,7 +189,7 @@ impl<'db> Parser<'db> {
                 let Some(name) = self.eat_name() else {
                     return self.emit_expr_error(ts,
                         "expected name after 'atom'",
-                        "D035",
+                        DCode::AtomWithoutName,
                         "expected atom name"
                     );
                 };
@@ -200,7 +201,7 @@ impl<'db> Parser<'db> {
                 let Some(name) = self.eat_name() else {
                     return self.emit_expr_error(ts,
                         "expected name after 'term'",
-                        "D036",
+                        DCode::TermWithoutName,
                         "expected term name"
                     );
                 };
@@ -213,7 +214,7 @@ impl<'db> Parser<'db> {
                 let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
                     return self.emit_expr_error(ts,
                         "expected '{' after 'enum'",
-                        "D037",
+                        DCode::EnumLiteralWithoutBrace,
                         "an enum literal is written `enum { atom Name }`"
                     );
                 };
@@ -241,7 +242,7 @@ impl<'db> Parser<'db> {
                         self.next();
                         self.emit_expr_error(ts,
                             &format!("unexpected identifier '{}'", word),
-                            "D059",
+                            DCode::BareIdentifier,
                             "unexpected identifier"
                         )
                     }
@@ -251,7 +252,7 @@ impl<'db> Parser<'db> {
                         let raw = token.text(self.text());
                         if let Err(error) = parser_util::string_literal_value(raw) {
                             let (message, label) = parser_util::escape_complaint(&error);
-                            return self.emit_expr_error(ts, &message, "D039", &label);
+                            return self.emit_expr_error(ts, &message, DCode::BadStringEscape, &label);
                         }
                         let value = self.intern(raw);
                         ast::Expr::String(ast::ExprString { value })
@@ -261,7 +262,7 @@ impl<'db> Parser<'db> {
                         self.next(); // Consume unexpected token to prevent infinite loop.
                         self.emit_expr_error(ts,
                             "unexpected token in Parser expression",
-                            "D020",
+                            DCode::UnexpectedToken,
                             "unexpected token"
                         )
                     }
@@ -391,7 +392,7 @@ impl<'db> Parser<'db> {
                 self.next(); // Consume unexpected token to prevent infinite loop.
                 self.emit_expr_error(ts,
                     "unexpected tree node in Parser expression",
-                    "D018",
+                    DCode::ExpectedExpression,
                     "unexpected token"
                 )
             }
@@ -413,7 +414,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts.clone(),
                     "expected field name in struct expression",
-                    "D058",
+                    DCode::StructFieldSyntax,
                     "expected field name"
                 );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
@@ -425,7 +426,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_expr = self.emit_expr_error(ts,
                 "expected '=' after field name in struct expression",
-                "D058",
+                DCode::StructFieldSyntax,
                 "expected '=' after field name"
             );
             let error_value = ast::ExprFull::new(None, None, error_expr);
@@ -447,7 +448,7 @@ impl<'db> Parser<'db> {
         for written in split::stray_delimiters(groups) {
             self.had_error = true;
             split::stray_delimiter_error(self.db, self.source_text(), &written, what)
-                .code("D033")
+                .code(DCode::EmptyBeforeComma.as_str())
                 .emit_to(&self.sink);
         }
     }
@@ -465,7 +466,7 @@ impl<'db> Parser<'db> {
             Some(Ok(header)) => Some(header),
             Some(Err(e)) => {
                 let ts = TextSpan::new(self.source_text(), e.span);
-                return self.emit_expr_error(ts, &e.message, "D040", &e.label);
+                return self.emit_expr_error(ts, &e.message, DCode::BadTensorHeader, &e.label);
             }
         };
 
@@ -483,7 +484,7 @@ impl<'db> Parser<'db> {
         let written = crate::parser_util::tensor_body_complaint(&header.extents, rank, &shape, elements.len());
         if let Some((message, label)) = written {
             let ts = TextSpan::new(self.source_text(), header.span);
-            return self.emit_expr_error(ts, &message, "D041", &label);
+            return self.emit_expr_error(ts, &message, DCode::TensorBodyMismatch, &label);
         }
         ast::Expr::Tensor(ast::ExprTensor { shape: header.extents, elements, header: true })
     }
@@ -515,7 +516,7 @@ impl<'db> Parser<'db> {
         if let Some(written) = split::trailing_delimiter(&groups) {
             self.had_error = true;
             split::trailing_delimiter_error(self.db, self.source_text(), &written, "parts")
-                .code("D033")
+                .code(DCode::EmptyBeforeComma.as_str())
                 .emit_to(&self.sink);
         }
         let groups = split::nonempty_groups(groups);
@@ -538,7 +539,7 @@ impl<'db> Parser<'db> {
                         DiagnosticBuilder::error(self.db,
                             &format!("inconsistent tensor shape at group {}: expected {:?} but got {:?}",
                                 group_idx, expected, sub_shape))
-                            .code("D023")
+                            .code(DCode::TensorShapeMismatch.as_str())
                             .primary_label(ts, "shape mismatch")
                             .emit_to(&self.sink);
                     }
@@ -580,7 +581,7 @@ impl<'db> Parser<'db> {
                 DiagnosticBuilder::error(self.db,
                     &format!("row {} has {} columns but header has {}",
                         row_idx + 1, elements.len(), num_columns))
-                    .code("D030")
+                    .code(DCode::TableRowWidth.as_str())
                     .primary_label(ts, "column count mismatch")
                     .emit_to(&self.sink);
             }
@@ -607,7 +608,7 @@ impl<'db> Parser<'db> {
                 self.had_error = true;
                 let ts = self.extract_text_span(&first);
                 DiagnosticBuilder::error(self.db, "expected column name in table header")
-                    .code("D031")
+                    .code(DCode::TableHeaderNotName.as_str())
                     .primary_label(ts, "expected name")
                     .emit_to(&self.sink);
                 names.push(InternedText::new(self.db, "<error>".S()));
@@ -626,7 +627,7 @@ impl<'db> Parser<'db> {
                 let ts = self.extract_text_span(&extra);
                 DiagnosticBuilder::error(self.db,
                     &format!("unexpected token after column name `{}`", name))
-                    .code("D034")
+                    .code(DCode::TableHeaderExtraToken.as_str())
                     .primary_label(ts, "a column is named by one word")
                     .emit_to(&self.sink);
             }

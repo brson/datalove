@@ -8,6 +8,7 @@
 //! 2. Main check_expr function - entry point for type checking
 //! 3. Collection checking helpers - list, set, map, tensor, tuple, struct, enum
 
+use datalove_diagnostic_codes::FCode;
 use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -568,7 +569,7 @@ fn check_unhinted<'db>(
                     let expected_str = type_to_string(db, expected);
                     Err(ctx.error_worded(
                         crate::ErrorSite::Expr(expr.key()),
-                        "F016",
+                        FCode::Mismatch,
                         fmt!("an enum literal is a value of an enum, and `{expected_str}` is not one"),
                         "an enum literal",
                         None,
@@ -911,6 +912,6 @@ pub(crate) fn shape_error<'db>(
     error: TypeError,
 ) -> TypeError {
     let site = crate::ErrorSite::Expr(expr.key());
-    ctx.push_coded(site, "F075", message, S("does not fit the type"), note.map(S));
+    ctx.push_coded(site, FCode::LiteralShape, message, S("does not fit the type"), note.map(S));
     error
 }

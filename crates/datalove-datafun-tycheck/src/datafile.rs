@@ -5,6 +5,7 @@
 //! or, with no `T`, what type the file is of. Datalit's own checker does the
 //! work: the file is a datalit expression, and the types are the same types.
 
+use datalove_diagnostic_codes::FCode;
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
@@ -77,7 +78,7 @@ pub(crate) fn type_data_file<'db>(
 
     let Some(source) = ctx.data_files.get(&path).copied() else {
         let message = fmt!("no data `{path}` to require");
-        ctx.push_coded(site, "F079", message.C(), S("no such data"), None);
+        ctx.push_coded(site, FCode::RequireNotFound, message.C(), S("no such data"), None);
         return Err(TypeError::DatalitError(message));
     };
 
@@ -86,7 +87,7 @@ pub(crate) fn type_data_file<'db>(
         Some(Type::Datalit(ty)) => Some(ty.C()),
         Some(Type::Function(_)) => {
             let message = fmt!("data `{path}` cannot be a function");
-            ctx.push_coded(site, "F084", message.C(), S("data is a value"), None);
+            ctx.push_coded(site, FCode::DataTypeMismatch, message.C(), S("data is a value"), None);
             return Err(TypeError::DatalitError(message));
         }
     };
@@ -109,7 +110,7 @@ pub(crate) fn type_data_file<'db>(
             };
             let label = errors.first().cloned().unwrap_or_else(|| S("the data does not check"));
             let note = (errors.len() > 1).then(|| errors[1..].join("; "));
-            ctx.push_coded(site, "F084", message.C(), label, note);
+            ctx.push_coded(site, FCode::DataTypeMismatch, message.C(), label, note);
             Err(TypeError::DatalitError(message))
         }
     }

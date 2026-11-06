@@ -3,6 +3,7 @@
 //! Provides the SpanLookup trait and shared emit_pending_diagnostics function
 //! that can be used with either local spans or module graph spans.
 
+use datalove_diagnostic_codes::FCode;
 use bct::diagnostic::DiagnosticBuilder;
 use bct::text::TextSpan;
 use rmx::prelude::*;
@@ -270,24 +271,24 @@ fn build<'db>(
     let builder = match diag {
         PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name, below } => {
             let builder = DiagnosticBuilder::error(db, &format!("cannot find value `{}` in this scope", name.as_str(db)))
-                .code("F001")
+                .code(FCode::UndefinedVariable.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope");
             note_below(builder, *below, name.as_str(db))
         }
         PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name, below } => {
             let builder = DiagnosticBuilder::error(db, &format!("cannot find function `{}` in this scope", name.as_str(db)))
-                .code("F002")
+                .code(FCode::UndefinedFunction.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "not found in this scope");
             note_below(builder, *below, name.as_str(db))
         }
         PendingDiagnostic::DuplicateImport { local_index, module_id: _, name, first } => {
             DiagnosticBuilder::error(db, &format!("`{}` is imported already, from `{}`", name.as_str(db), first.as_str(db)))
-                .code("F059")
+                .code(FCode::ImportedTwice.as_str())
                 .primary_label(spans.lookup_import(db, *local_index)?, "a name binds one function")
         }
         PendingDiagnostic::ImportShadowsFunction { local_index, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("`{}` is imported, and also defined here as a function", name.as_str(db)))
-                .code("F086")
+                .code(FCode::FunctionDefinedTwice.as_str())
                 .primary_label(spans.lookup_import(db, *local_index)?, "a name binds one function")
                 .note("the function defined here is the one that is used")
         }
@@ -297,7 +298,7 @@ fn build<'db>(
                 param.as_str(db), position.as_str(db),
             );
             DiagnosticBuilder::error(db, &msg)
-                .code("F061")
+                .code(FCode::UnorderedParamInCollection.as_str())
                 .primary_label(spans.lookup_fun(db, *local_index)?, "this signature does not resolve, so calls to it are not found either")
                 .note("a set keeps its elements in order and a map keeps its keys in order, so a \
 collection written over a type parameter asks that parameter for an ordering. Say so with `where { \
@@ -305,7 +306,7 @@ collection written over a type parameter asks that parameter for an ordering. Sa
         }
         PendingDiagnostic::MissingReturn { local_index, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("`{}` can reach the end of its body without returning a value", name.as_str(db)))
-                .code("F063")
+                .code(FCode::MissingReturn.as_str())
                 .primary_label(spans.lookup_fun(db, *local_index)?, "this signature promises a value")
                 .note("the end of a body is a return like any other, and one that owes a \
 value has to be reached only where a `ret` has already left. Return from every path out, or \
@@ -313,13 +314,13 @@ drop the return type.")
         }
         PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name, below: true } => {
             let builder = DiagnosticBuilder::error(db, &format!("unknown type `{}`", name.as_str(db)))
-                .code("F064")
+                .code(FCode::UnknownType.as_str())
                 .primary_label(spans.lookup_alias(db, *local_index)?, "no type of this name is in scope");
             note_below(builder, true, name.as_str(db))
         }
         PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name, below: false } => {
             let mut builder = DiagnosticBuilder::error(db, &format!("unknown type `{}`", name.as_str(db)))
-                .code("F064")
+                .code(FCode::UnknownType.as_str())
                 .primary_label(spans.lookup_alias(db, *local_index)?, "no type of this name is in scope")
                 .note("a bare name in type position is a type alias, written `type Name: \
 <type>`, or one of the type parameters of the generic function it appears in.");
@@ -331,7 +332,7 @@ drop the return type.")
         PendingDiagnostic::Rec { local_index, module_id: _, error } => {
             let (code, label, note) = error.kind.diagnostic();
             DiagnosticBuilder::error(db, &error.to_string())
-                .code(code)
+                .code(code.as_str())
                 .primary_label(spans.lookup_alias(db, *local_index)?, label)
                 .note(note)
         }
@@ -353,12 +354,12 @@ drop the return type.")
         }
         PendingDiagnostic::DuplicateTypeAlias { local_index, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("`{}` is defined twice", name.as_str(db)))
-                .code("F066")
+                .code(FCode::AliasDefinedTwice.as_str())
                 .primary_label(spans.lookup_type_alias(db, *local_index)?, "a type alias is defined once")
         }
         PendingDiagnostic::DuplicateFunction { local_index, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("function `{}` is defined twice", name.as_str(db)))
-                .code("F086")
+                .code(FCode::FunctionDefinedTwice.as_str())
                 .primary_label(spans.lookup_fun(db, *local_index)?, "a function is defined once")
                 .note("the first definition is the one that is used")
         }
@@ -368,7 +369,7 @@ drop the return type.")
                 name.as_str(db),
             );
             DiagnosticBuilder::error(db, &msg)
-                .code("F062")
+                .code(FCode::NativeOutsideRider.as_str())
                 .primary_label(spans.lookup_fun(db, *local_index)?, "nothing supplies a body for this")
                 .note("a `native fun` names a Rust function, and the only place one is supplied \
 is a package's rider interface. Declare it in the package's `rider/rider.dli` and reach it from a module \
@@ -376,13 +377,13 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
         }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
             DiagnosticBuilder::error(db, message.as_str(db))
-                .code("F011")
+                .code(FCode::NoSynthesisRule.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "cannot infer type")
         }
         PendingDiagnostic::TypeMismatch { expr_key, module_id: _, expected, actual, label, recovery_hint } => {
             let msg = format!("mismatched types: expected `{}`, found `{}`", expected.as_str(db), actual.as_str(db));
             let mut builder = DiagnosticBuilder::error(db, &msg)
-                .code("F016")
+                .code(FCode::Mismatch.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, label.as_str(db));
             if let RecoveryHint::InsertAdapt { description } = recovery_hint {
                 builder = builder.help(&format!("use `@` to {}", description));
@@ -391,12 +392,12 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
         }
         PendingDiagnostic::PatternMismatch { expr_key, module_id: _, message, label } => {
             DiagnosticBuilder::error(db, message.as_str(db))
-                .code("F071")
+                .code(FCode::PatternMismatch.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, label.as_str(db))
         }
         PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note } => {
             DiagnosticBuilder::error(db, message.as_str(db))
-                .code("F065")
+                .code(FCode::LiteralOutOfRange.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "value out of range")
                 .note(note.as_str(db))
         }
@@ -404,7 +405,7 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
             let msg = format!("invalid operand type `{}` for operator `{}`", ty.as_str(db), op.as_str(db));
             let label = format!("operator `{}` cannot be applied to type `{}`", op.as_str(db), ty.as_str(db));
             let mut builder = DiagnosticBuilder::error(db, &msg)
-                .code("F026")
+                .code(FCode::InvalidOperand.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, &label);
             if let Some(note) = note {
                 builder = builder.note(note.as_str(db));
@@ -426,7 +427,7 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                 expected, plural(*expected), actual, if *actual == 1 { "was" } else { "were" },
             );
             let mut builder = DiagnosticBuilder::error(db, &msg)
-                .code("F045")
+                .code(FCode::ArgumentCount.as_str())
                 .primary_label(spans.lookup_expr(db, *call_expr_key)?, &format!("expected {} argument{}", expected, plural(*expected)));
             if let Some(def_ts) = spans.lookup_fun_in_module(db, *func_module_id, *func_local_index) {
                 let def_label = format!(
@@ -439,14 +440,14 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
         }
         PendingDiagnostic::ResultRequiresBinding { expr_key, module_id: _ } => {
             DiagnosticBuilder::error(db, "a result taken apart needs an `else` binding for its error")
-                .code("F046")
+                .code(FCode::ResultWithoutElse.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "this is a result, `!T`")
                 .note("use `if result |value| ... else |err| ... end if` to handle both cases")
         }
         PendingDiagnostic::TryTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
             let msg = format!("`{}` unwraps {}, and this is `{}`", operator.as_str(db), expected.as_str(db), actual.as_str(db));
             DiagnosticBuilder::error(db, &msg)
-                .code("F048")
+                .code(FCode::BadUnwrap.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, &format!("this is `{}`", actual.as_str(db)))
         }
         PendingDiagnostic::TryReturnTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
@@ -458,62 +459,62 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                         operator.as_str(db), expected.as_str(db), actual.as_str(db),
                     );
                     DiagnosticBuilder::error(db, &msg)
-                        .code("F049")
+                        .code(FCode::EarlyReturnMismatch.as_str())
                         .primary_label(ts, "this can return early")
                 }
                 None => {
                     let msg = format!("`{}` can return early, and there is no function here to return from", operator.as_str(db));
                     DiagnosticBuilder::error(db, &msg)
-                        .code("F049")
+                        .code(FCode::EarlyReturnMismatch.as_str())
                         .primary_label(ts, "this can return early")
                 }
             }
         }
         PendingDiagnostic::BreakOutsideLoop { local_index, module_id: _ } => {
             DiagnosticBuilder::error(db, "`break` outside of a loop")
-                .code("F050")
+                .code(FCode::BreakOutsideLoop.as_str())
                 .primary_label(spans.lookup_break(db, *local_index)?, "break statement here")
                 .note("break can only be used inside loop blocks")
         }
         PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: _ } => {
             DiagnosticBuilder::error(db, "`continue` outside of a loop")
-                .code("F051")
+                .code(FCode::ContinueOutsideLoop.as_str())
                 .primary_label(spans.lookup_continue(db, *local_index)?, "continue statement here")
                 .note("continue can only be used inside loop blocks")
         }
         PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
             DiagnosticBuilder::error(db, "void function cannot return a value")
-                .code("F052")
+                .code(FCode::RetValueInVoid.as_str())
                 .primary_label(spans.lookup_ret(db, *local_index)?, "return with value in void function")
                 .note("remove the return value or add a return type to the function")
         }
         PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: _ } => {
             DiagnosticBuilder::error(db, "function requires return value")
-                .code("F053")
+                .code(FCode::BareRetInValued.as_str())
                 .primary_label(spans.lookup_ret(db, *local_index)?, "bare return in non-void function")
                 .note("add a return value or change the function to void")
         }
         PendingDiagnostic::UndefinedVariableSet { local_index, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("cannot find variable `{}` in this scope", name.as_str(db)))
-                .code("F054")
+                .code(FCode::SetUndefined.as_str())
                 .primary_label(spans.lookup_set(db, *local_index)?, "variable not defined")
                 .note("declare the variable with 'var' before assigning to it")
         }
         PendingDiagnostic::VariableNotMutable { local_index, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("cannot assign to immutable variable `{}`", name.as_str(db)))
-                .code("F055")
+                .code(FCode::SetImmutable.as_str())
                 .primary_label(spans.lookup_set(db, *local_index)?, "cannot assign to immutable variable")
                 .note("consider declaring the variable with 'var' instead of 'let'")
         }
         PendingDiagnostic::NonConstInConstExpr { expr_key, module_id: _, name } => {
             DiagnosticBuilder::error(db, &format!("`{}` is not a const binding", name.as_str(db)))
-                .code("F058")
+                .code(FCode::ConstNamesNonConst.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, "not a const binding")
                 .note("a const expression is evaluated at compile time, so it can only name other consts")
         }
         PendingDiagnostic::ArgumentModeMismatch { expr_key, module_id: _, expected, found } => {
             DiagnosticBuilder::error(db, &format!("argument mode mismatch: expected `{}`, found `{}`", expected.as_str(db), found.as_str(db)))
-                .code("F057")
+                .code(FCode::ModeMismatch.as_str())
                 .primary_label(spans.lookup_expr(db, *expr_key)?, &format!("this argument must be passed as `{}`", expected.as_str(db)))
                 .note("the marker at a call site must match the parameter's declared mode")
         }

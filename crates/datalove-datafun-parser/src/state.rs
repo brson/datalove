@@ -1,5 +1,6 @@
 //! Parser state and helper methods.
 
+use datalove_diagnostic_codes::{Code, DCode, PCode};
 use rmx::prelude::*;
 
 use bct::{
@@ -394,13 +395,13 @@ impl<'db> Parser<'db> {
         &mut self,
         ts: TextSpan,
         message: &str,
-        code: &str,
+        code: PCode,
         label: &str,
     ) -> ast::Statement<'db> {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         let mut builder = DiagnosticBuilder::error(self.db, message)
-            .code(code)
+            .code(code.as_str())
             .primary_label(ts.C(), label);
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
@@ -414,13 +415,13 @@ impl<'db> Parser<'db> {
         &mut self,
         ts: TextSpan,
         message: &str,
-        code: &str,
+        code: impl Code,
         label: &str,
     ) -> ast::ExprId {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         let mut builder = DiagnosticBuilder::error(self.db, message)
-            .code(code)
+            .code(code.as_str())
             .primary_label(ts.C(), label);
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
@@ -489,7 +490,7 @@ impl<'db> Parser<'db> {
             self.had_error = true;
             let (message, label) = reserved_complaint(name.as_str(self.db), reason);
             DiagnosticBuilder::error(self.db, &message)
-                .code("P064")
+                .code(PCode::ReservedName.as_str())
                 .primary_label(ts, &label)
                 .emit_parse();
         }
@@ -501,7 +502,7 @@ impl<'db> Parser<'db> {
         let ts = self.peek_text_span();
         let text = self.text()[ts.span.clone()].to_string();
         DiagnosticBuilder::error(self.db, &fmt!("this `{text}` is written apart from what it applies to"))
-            .code("P021")
+            .code(PCode::StrayToken.as_str())
             .primary_label(ts, "a postfix operator is written against the expression before it")
             .emit_parse();
     }
@@ -708,7 +709,7 @@ impl<'db> Parser<'db> {
                 None => (S("unexpected token after expression"), S("unexpected token")),
             };
             let mut builder = DiagnosticBuilder::error(self.db, &message)
-                .code("P021")
+                .code(PCode::StrayToken.as_str())
                 .primary_label(ts, &label);
             if let Some((ctx_span, ctx_msg)) = &self.branch_context {
                 builder = builder.secondary_label(ctx_span.C(), ctx_msg);
@@ -745,13 +746,13 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
         &mut self,
         ts: TextSpan,
         message: &str,
-        code: &str,
+        code: DCode,
         label: &str,
     ) -> datalit::ast::TypeHint<'db> {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         let mut builder = DiagnosticBuilder::error(self.db, message)
-            .code(code)
+            .code(code.as_str())
             .primary_label(ts.C(), label);
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);

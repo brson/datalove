@@ -1,5 +1,6 @@
 //! Parser state and helper methods.
 
+use datalove_diagnostic_codes::DCode;
 use rmx::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -206,13 +207,13 @@ impl<'db> Parser<'db> {
         &mut self,
         ts: TextSpan,
         message: &str,
-        code: &str,
+        code: DCode,
         label: &str,
     ) -> ast::Expr<'db> {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
-            .code(code)
+            .code(code.as_str())
             .primary_label(ts.clone(), label)
             .emit_to(&self.sink);
         ast::Expr::ParseError(ast::ExprParseError { source: ts.source, span: ts.span, message: message_text })
@@ -223,13 +224,13 @@ impl<'db> Parser<'db> {
         &mut self,
         ts: TextSpan,
         message: &str,
-        code: &str,
+        code: DCode,
         label: &str,
     ) -> ast::TypeHint<'db> {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
-            .code(code)
+            .code(code.as_str())
             .primary_label(ts.clone(), label)
             .emit_to(&self.sink);
         ast::TypeHint::ParseError(ast::TypeHintParseError { source: ts.source, span: ts.span, message: message_text })
@@ -272,7 +273,7 @@ impl<'db> Parser<'db> {
             self.had_error = true;
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after type")
-                .code("D022")
+                .code(DCode::TrailingTypeTokens.as_str())
                 .primary_label(ts, "unexpected token")
                 .emit_to(&self.sink);
         }
@@ -283,7 +284,7 @@ impl<'db> Parser<'db> {
 /// What a parser reports of tokens left after the expression it parsed.
 pub(super) fn not_exhausted_error<'db>(db: &'db dyn crate::Db, ts: TextSpan) -> DiagnosticBuilder<'db> {
     DiagnosticBuilder::error(db, "unexpected token after expression")
-        .code("D021")
+        .code(DCode::TrailingTokens.as_str())
         .primary_label(ts, "unexpected token")
 }
 

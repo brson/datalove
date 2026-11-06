@@ -3,6 +3,7 @@
 //! Provides TypeContext for tracking bindings and errors during typechecking,
 //! and ScriptTypeContext for tracking accumulated bindings across script units.
 
+use datalove_diagnostic_codes::FCode;
 use rmx::prelude::*;
 use bct::text::{InternedText, TextSpan};
 
@@ -347,7 +348,7 @@ impl<'db> TypeContext<'db> {
             let error = TypeError::InlineCycle { names };
             self.push_coded(
                 crate::ErrorSite::Fun(start.local_index),
-                "F085",
+                FCode::InlineCycle,
                 error.to_string(),
                 S("an inline function cannot be"),
                 Some(S("every call to an inline function is replaced by its body, so a cycle of them \
@@ -636,39 +637,39 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         // The message is the error's own; see `TypeError`'s `Display`.
         let (code, message, label, note) = match &error {
             TypeError::FieldNotFound { .. } => (
-                "F067",
+                FCode::NoSuchField,
                 error.to_string(),
                 S("no such field"),
                 None,
             ),
             TypeError::ProjectionOnNonAggregate { .. } => (
-                "F068",
+                FCode::NoFields,
                 error.to_string(),
                 S("only a struct or a tuple has fields"),
                 None,
             ),
             TypeError::FieldIndexOutOfBounds { .. } => (
-                "F069",
+                FCode::TupleIndexOutOfRange,
                 error.to_string(),
                 S("no such element"),
                 None,
             ),
             TypeError::NonCopyFieldProjection { .. } => (
-                "F070",
+                FCode::NonCopyFieldRead,
                 error.to_string(),
                 S("this would move the field out"),
                 Some(S("the field's type is not a copy type, so reading it would move it while the \
 aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
             TypeError::NonCopyIndexProjection { .. } => (
-                "F072",
+                FCode::NonCopyElementRead,
                 error.to_string(),
                 S("this would move the element out"),
                 Some(S("the element's type is not a copy type, so reading it would move it while the \
 collection still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
             TypeError::ViewTypeMutBinding { .. } => (
-                "F073",
+                FCode::TensorViewMutated,
                 error.to_string(),
                 S("indexing a tensor of rank above one gives a view into it"),
                 Some(S("a view shows part of the tensor it indexes, and writing it whole would \
@@ -687,7 +688,7 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn report_set_error(
         &mut self,
         stmt: &StmtSet<'db>,
-        code: &str,
+        code: FCode,
         message: String,
         label: &str,
         note: Option<&str>,
@@ -703,12 +704,12 @@ replace the view rather than the elements it shows. Index down to single element
         let module = &unresolved.module;
         let error = match &unresolved.item {
             Some(item) => {
-                self.push_coded(site, "F002", fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
+                self.push_coded(site, FCode::UndefinedFunction, fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
                 TypeError::UnresolvedName(fmt!("{module}.{item}"))
             }
             None => self.error_worded(
                 site,
-                "F078",
+                FCode::NotRequired,
                 fmt!("nothing named `{module}` is required to import from"),
                 "no such module or rider",
                 Some(S("an import names a module or rider required first, with `require module` or `require rider`")),
@@ -724,31 +725,31 @@ replace the view rather than the elements it shows. Index down to single element
         let site = ErrorSite::Require(error.local_index);
         let (code, message, label, note) = match &error.kind {
             Kind::ModuleNotFound { path } => (
-                "F079",
+                FCode::RequireNotFound,
                 fmt!("no module `{path}` to require"),
                 S("no such module"),
                 None,
             ),
             Kind::RiderNotFound { name } => (
-                "F079",
+                FCode::RequireNotFound,
                 fmt!("no rider `{name}` to require"),
                 S("no such rider"),
                 None,
             ),
             Kind::Duplicate { what } => (
-                "F080",
+                FCode::RequiredTwice,
                 fmt!("`{what}` is required twice"),
                 S("required already, above"),
                 None,
             ),
             Kind::AliasTaken { alias, first, path } => (
-                "F081",
+                FCode::AliasTaken,
                 fmt!("`{alias}` already names `{first}`"),
                 fmt!("`{path}` would be called through `{alias}` too"),
                 Some(S("a module is called through the last part of its path, so two modules of one name cannot be required together")),
             ),
             Kind::RiderInScript { name } => (
-                "F082",
+                FCode::RiderInScript,
                 fmt!("a script cannot require a rider, here `{name}`"),
                 S("riders are required by modules"),
                 Some(S("a rider's functions reach a script through a module of its package, which requires the rider")),
@@ -757,7 +758,7 @@ replace the view rather than the elements it shows. Index down to single element
                 let target = &cycle[1];
                 let path = cycle.iter().map(|p| fmt!("`{p}`")).collect::<Vec<_>>().join(" -> ");
                 (
-                    "F083",
+                    FCode::RequireCycle,
                     fmt!("requiring `{target}` makes a cycle"),
                     fmt!("{path}"),
                     Some(S("modules cannot require each other in a cycle; move what they share into a module each of them requires")),
@@ -785,7 +786,7 @@ replace the view rather than the elements it shows. Index down to single element
         if self.below.requires.contains(&alias) {
             return Err(self.error_worded(
                 site,
-                "F078",
+                FCode::NotRequired,
                 fmt!("nothing named `{module}` is required to call into"),
                 "no such module or rider, yet",
                 Some(declared_below_note(module)),
@@ -795,12 +796,12 @@ replace the view rather than the elements it shows. Index down to single element
             return Ok(found.clone());
         }
         if self.qualified.aliases.contains(&alias) {
-            self.push_coded(site, "F002", fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
+            self.push_coded(site, FCode::UndefinedFunction, fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
             return Err(TypeError::UnresolvedName(fmt!("{module}.{item}")));
         }
         if self.failed_aliases.contains(module) {
             // Its `require` failed, and said so.
-            return Err(TypeError::Worded { code: S("F078"), message: fmt!("the `require` of `{module}` failed") });
+            return Err(TypeError::Worded { code: S(FCode::NotRequired.as_str()), message: fmt!("the `require` of `{module}` failed") });
         }
         let note = if self.variables.contains_key(&alias) {
             fmt!("`{module}` is a value here, and a value has no functions to call: pass it as an argument instead")
@@ -809,7 +810,7 @@ replace the view rather than the elements it shows. Index down to single element
         };
         Err(self.error_worded(
             site,
-            "F078",
+            FCode::NotRequired,
             fmt!("nothing named `{module}` is required to call into"),
             "no such module or rider",
             Some(note),
@@ -821,20 +822,20 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn error_worded(
         &mut self,
         site: ErrorSite<'db>,
-        code: &str,
+        code: FCode,
         message: String,
         label: &str,
         note: Option<String>,
     ) -> TypeError {
         self.push_coded(site, code, message.C(), label.S(), note);
-        TypeError::Worded { code: code.S(), message }
+        TypeError::Worded { code: code.as_str().S(), message }
     }
 
     /// Report a diagnostic worded by the caller, at `site`.
     pub fn push_coded(
         &mut self,
         site: ErrorSite<'db>,
-        code: &str,
+        code: FCode,
         message: String,
         label: String,
         note: Option<String>,
@@ -842,7 +843,7 @@ replace the view rather than the elements it shows. Index down to single element
         self.pending_diagnostics.push(PendingDiagnostic::Coded {
             site,
             module_id: self.current_module_id,
-            code: InternedText::new(self.db, code.S()),
+            code: InternedText::new(self.db, code.as_str().S()),
             message: InternedText::new(self.db, message),
             label: InternedText::new(self.db, label),
             note: note.map(|n| InternedText::new(self.db, n)),
@@ -1495,7 +1496,7 @@ impl<'db> TypeContext<'db> {
             let module = stmt.module_name.as_str(self.db);
             let error = self.error_worded(
                 ErrorSite::Import(stmt.local_index),
-                "F078",
+                FCode::NotRequired,
                 fmt!("nothing named `{module}` is required to import from"),
                 "no such module or rider, yet",
                 Some(declared_below_note(module)),
@@ -1615,7 +1616,7 @@ impl<'db> TypeContext<'db> {
         };
         let error = self.error_worded(
             ErrorSite::Expr(self.expr(top.value).key()),
-            "F089",
+            FCode::ConstCycle,
             message,
             "evaluating this needs a const that has no value yet",
             Some(fmt!("{path}. A const may depend only on what is declared above it, \

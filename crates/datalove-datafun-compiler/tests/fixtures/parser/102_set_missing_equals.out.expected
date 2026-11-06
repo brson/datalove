@@ -29,7 +29,7 @@
   },
   "diagnostics": [
     {
-      "code": "D025",
+      "code": "P089",
       "labels": [
         {
           "message": "expected '='",

@@ -11,6 +11,7 @@
 //! 6. Field projection synthesis
 //! 7. Inline literal synthesis - list, set, map, tensor, tuple, struct, data, error
 
+use datalove_diagnostic_codes::FCode;
 use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -1097,7 +1098,7 @@ fn report_comptime_arg<'db>(ctx: &mut TypeContext<'db>, arg: ExprFun<'db>, messa
     let site = crate::ErrorSite::Expr(arg.key());
     ctx.push_coded(
         site,
-        "F076",
+        FCode::ConstArgNotConst,
         message,
         S("a const parameter takes a const binding"),
         Some(S("bind the value with `const` and pass its name, so the compiler holds it when it \

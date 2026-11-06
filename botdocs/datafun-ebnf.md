@@ -21,6 +21,7 @@ says which rule types each form.
 - [Rules outside the grammar](#user-content-rules-outside-the-grammar)
 - [Productions and their typing rules](#user-content-productions-and-their-typing-rules)
 - [Differences from datalit](#user-content-differences-from-datalit)
+- [Diagnostics](#user-content-diagnostics)
 - [Divergences](#user-content-divergences)
 
 ## Notation
@@ -81,7 +82,7 @@ binding       = value_name
 field_pat     = NAME, [ "=", value_name ] ;      (* names unique: D038 *)
 
 (* ===== Assignment  (statement.rs: parse_set, parse_place_steps) ===== *)
-set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* P009; no op: D025 *)
+set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* P009; no op: P089 *)
 place_step    = ~".", field_sel
               | ~"[", expr, "]", [ ~"?" | ~"!" ] ;   (* spaced: P021, read anyway *)
 assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
@@ -348,6 +349,95 @@ The same faults get different codes in the two parsers:
 The rest are the same in both: a hint without its `/` (D049), a struct field
 without its name or `=` (D058), a map entry without `=` (D017), D030, D031,
 D033, D034, D038 to D041, tensor-shape D023, and every type diagnostic.
+
+## Diagnostics
+
+Datafun's own parse errors. Where its syntax is datalit's, its parser reports
+datalit's codes; see [Differences from datalit](#user-content-differences-from-datalit)
+and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
+
+| Code | Refuses |
+|---|---|
+| P001 | A line that begins no statement |
+| P002 | `fun` without its parameter list |
+| P003 | A `require` path without the `/` after its import space |
+| P004 | A `require` path without the `/` after its package |
+| P005 | `require` not followed by `module`, `data` or `rider` |
+| P006 | `import` without the `.` after its module |
+| P007 | `let` with no name or pattern |
+| P008 | `var` with no name or pattern |
+| P009 | `set` with no name |
+| P010 | `fun` with no name |
+| P011 | A parameter with no name |
+| P012 | A parameter without its `:` |
+| P013 | `require module` with no import space |
+| P014 | A `require` path with no package |
+| P015 | A `require` path with no module or data name |
+| P016 | `require data` with no import space |
+| P017 | `import` with no module |
+| P018 | `import` with no item |
+| P019 | A `|` binding with no name |
+| P020 | A `|` binding without its closing `|` |
+| P021 | A token left over after a statement or a bracket's last element, or a postfix operator written apart from what it applies to |
+| P022 | `type` with no name |
+| P023 | `type` without its `:` |
+| P024 | `const` with no name |
+| P025 | `const` without its `=` |
+| P026 | A `var` with neither a type nor a value |
+| P027 | `require rider` with no name |
+| P028 | `intrinsic` without `native`, or `native` without `fun` |
+| P029 | `native fun` with no name |
+| P030 | `native fun` without its parameter list |
+| P031 | `call` of something that is not a call |
+| P033 | Tokens after `end` and its keyword |
+| P034 | A block with no `end` line |
+| P040 | `icall` with no name |
+| P041 | `icall` without its `(` |
+| P042 | `atom` with no name |
+| P043 | `term` with no name |
+| P044 | `case atom` with no name |
+| P045 | `case term` with no name |
+| P046 | `case term` with no binding |
+| P047 | `case` not followed by `atom`, `term` or `default` |
+| P048 | A line before the first `case` of a `match` |
+| P049 | A second `case default` |
+| P050 | A close bracket with no open |
+| P051 | An open bracket never closed |
+| P052 | A malformed number |
+| P053 | A number with a suffix |
+| P060 | A bound the language does not have |
+| P061 | `where` without its `{` |
+| P062 | A bound on a name that is not a type parameter of the function |
+| P063 | A bound without its `is` |
+| P064 | A reserved word declared as a name |
+| P065 | A binary operator straight after a constructor's payload |
+| P066 | `else |e|` followed by `if` |
+| P067 | A second comparison at the same level |
+| P068 | A destructuring `var` with no value |
+| P069 | A nested pattern, or a pattern without a name |
+| P070 | A parenthesized name as a pattern |
+| P071 | An `enum` literal without `{` |
+| P072 | A call of something that is not a function |
+| P073 | A binding `if` in an `else if` chain |
+| P074 | A declaration inside a block |
+| P075 | A non-ASCII name |
+| P076 | `inline` anywhere but the whole first line of a function body |
+| P077 | A statement at the top level of a module that is not a declaration |
+| P078 | A type parameter bounded twice |
+| P079 | A malformed field selector after `.` |
+| P080 | An unexpected token in an expression |
+| P081 | A bracket that starts no expression, or no expression at all |
+| P082 | A const parameter with a mode |
+| P083 | `let` without its `=` |
+| P084 | Anything but `native fun` and `type` in a rider interface |
+| P085 | An `intrinsic native` the compiler does not know |
+| P086 | A `for` that binds no name, or more than two |
+| P087 | A `for` without `in` |
+| P088 | A `for` without `ref` before its collection |
+| P089 | A `set` without its assignment operator |
+
+A code missing from the table is unassigned. The codes are `PCode` in
+`crates/datalove-diagnostic-codes`, which a test holds to this table.
 
 ## Divergences
 

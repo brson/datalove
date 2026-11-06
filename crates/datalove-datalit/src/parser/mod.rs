@@ -10,6 +10,7 @@ mod chunk;
 #[cfg(test)]
 mod tests;
 
+use datalove_diagnostic_codes::DCode;
 use bct::{
     input::Source,
     bracer::Bracer,
@@ -34,10 +35,10 @@ pub fn parse<'db>(
     let lexed = lexer::lex(db, source);
     let bracer = bracer::bracer(db, lexed);
     let text = source.as_str(db);
-    crate::parser_util::emit_bracer_errors(db, bracer, source, "D054", "D055");
+    crate::parser_util::emit_bracer_errors(db, bracer, source, DCode::UnmatchedClose, DCode::UnclosedOpen);
     for span in parser_util::non_ascii_names(lexed.tokens(db), text) {
         parser_util::non_ascii_name_error(db, source, span)
-            .code("D043")
+            .code(DCode::NonAsciiName.as_str())
             .emit_parse();
     }
     parse_bracer(db, bracer, source)

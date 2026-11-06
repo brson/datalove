@@ -11,6 +11,7 @@ repository.workspace = true
 index-64 = ["datalove-datafun-ir/index-64", "datalove-datafun-common/index-64"]
 
 [dependencies]
+datalove-diagnostic-codes.workspace = true
 rmx.workspace = true
 salsa.workspace = true
 bct.workspace = true

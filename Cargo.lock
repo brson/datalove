@@ -1246,6 +1246,7 @@ dependencies = [
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
+ "datalove-diagnostic-codes",
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
@@ -1390,6 +1391,7 @@ dependencies = [
  "datalove-datafun-intrinsics",
  "datalove-datalit",
  "datalove-diagnostic",
+ "datalove-diagnostic-codes",
  "rustmax",
  "salsa",
 ]
@@ -1428,6 +1430,7 @@ dependencies = [
  "datalove-datafun-common",
  "datalove-datafun-ir",
  "datalove-datalit",
+ "datalove-diagnostic-codes",
  "rustmax",
  "salsa",
 ]
@@ -1446,6 +1449,7 @@ dependencies = [
  "datalove-datafun-sema",
  "datalove-datalit",
  "datalove-diagnostic",
+ "datalove-diagnostic-codes",
  "rustc-hash",
  "rustmax",
  "salsa",
@@ -1457,6 +1461,7 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-diagnostic",
+ "datalove-diagnostic-codes",
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
@@ -1475,6 +1480,13 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "salsa",
+]
+
+[[package]]
+name = "datalove-diagnostic-codes"
+version = "0.1.0"
+dependencies = [
+ "enum-iterator",
 ]
 
 [[package]]

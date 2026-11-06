@@ -11,6 +11,7 @@
 //! 8. Integer range checking - literal validation
 //! 9. Diagnostic helpers - error message helpers
 
+use datalove_diagnostic_codes::TCode;
 use rmx::prelude::*;
 use bct::text::InternedText;
 use crate::ast::{TypeHint, TypeHintAlias};
@@ -315,17 +316,17 @@ pub enum RecErrorKind {
 
 impl RecErrorKind {
     /// The diagnostic code, a label for the name, and a note saying why.
-    pub fn diagnostic(self) -> (&'static str, &'static str, &'static str) {
+    pub fn diagnostic(self) -> (TCode, &'static str, &'static str) {
         match self {
-            RecErrorKind::Unused => ("T062", "never uses its name",
+            RecErrorKind::Unused => (TCode::RecUnused, "never uses its name",
                 "a `rec` type is one whose body names it; without a use, write the body alone"),
-            RecErrorKind::Shadowed => ("T063", "the name is taken",
+            RecErrorKind::Shadowed => (TCode::RecShadowed, "the name is taken",
                 "a `rec` takes a name no enclosing `rec`, alias or type parameter has"),
-            RecErrorKind::Unguarded => ("T064", "recurs inline",
+            RecErrorKind::Unguarded => (TCode::RecUnguarded, "recurs inline",
                 "a recursive type recurs inside a list, map, set or table, so that its values have a size"),
-            RecErrorKind::InKey => ("T065", "recursive type in a key",
+            RecErrorKind::InKey => (TCode::RecInKey, "recursive type in a key",
                 "a map's key or a set's element cannot be a recursive type"),
-            RecErrorKind::Generic => ("T066", "a type parameter",
+            RecErrorKind::Generic => (TCode::RecGeneric, "a type parameter",
                 "a recursive type cannot hold a type parameter yet"),
         }
     }
@@ -1095,34 +1096,32 @@ const INDEX_HEX_RANGE: &str = "index can represent hex values from 0x00000000 to
 const INDEX_HEX_RANGE: &str = "index can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF";
 
 /// Get the diagnostic code and range note for an integer type.
-pub fn int_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
+pub fn int_type_range_info(ty: &Type<'_>) -> (TCode, &'static str) {
     match ty {
-        Type::U8 => ("T005", "u8 can represent values from 0 to 255"),
-        Type::I8 => ("T006", "i8 can represent values from -128 to 127"),
-        Type::U16 => ("T007", "u16 can represent values from 0 to 65,535"),
-        Type::I16 => ("T008", "i16 can represent values from -32,768 to 32,767"),
-        Type::U32 => ("T009", "u32 can represent values from 0 to 4,294,967,295"),
-        Type::I32 => ("T010", "i32 can represent values from -2,147,483,648 to 2,147,483,647"),
-        Type::U64 => ("T011", "u64 can represent values from 0 to 18,446,744,073,709,551,615"),
-        Type::I64 => ("T012", "i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
-        Type::Index => ("T015", INDEX_RANGE),
-        Type::Offset => ("T061", OFFSET_RANGE),
-        Type::Int => ("T000", "int is arbitrary precision"),
-        _ => ("T000", ""),
+        Type::U8 => (TCode::U8OutOfRange, "u8 can represent values from 0 to 255"),
+        Type::I8 => (TCode::I8OutOfRange, "i8 can represent values from -128 to 127"),
+        Type::U16 => (TCode::U16OutOfRange, "u16 can represent values from 0 to 65,535"),
+        Type::I16 => (TCode::I16OutOfRange, "i16 can represent values from -32,768 to 32,767"),
+        Type::U32 => (TCode::U32OutOfRange, "u32 can represent values from 0 to 4,294,967,295"),
+        Type::I32 => (TCode::I32OutOfRange, "i32 can represent values from -2,147,483,648 to 2,147,483,647"),
+        Type::U64 => (TCode::U64OutOfRange, "u64 can represent values from 0 to 18,446,744,073,709,551,615"),
+        Type::I64 => (TCode::I64OutOfRange, "i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
+        Type::Index => (TCode::IndexOutOfRange, INDEX_RANGE),
+        Type::Offset => (TCode::OffsetOutOfRange, OFFSET_RANGE),
+        _ => unreachable!("only a fixed-width type has a range for a literal to leave"),
     }
 }
 
 /// Get the diagnostic code and range note for a hex literal target type.
-pub fn hex_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
+pub fn hex_type_range_info(ty: &Type<'_>) -> (TCode, &'static str) {
     match ty {
-        Type::U8 => ("T005", "u8 can represent hex values from 0x00 to 0xFF"),
-        Type::U16 => ("T007", "u16 can represent hex values from 0x0000 to 0xFFFF"),
-        Type::U32 => ("T009", "u32 can represent hex values from 0x00000000 to 0xFFFFFFFF"),
-        Type::U64 => ("T011", "u64 can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF"),
-        Type::Index => ("T015", INDEX_HEX_RANGE),
-        Type::Int => ("T000", "int is arbitrary precision"),
-        Type::F32 => ("T013", "f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)"),
-        Type::F64 => ("T014", "f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)"),
-        _ => ("T000", ""),
+        Type::U8 => (TCode::U8OutOfRange, "u8 can represent hex values from 0x00 to 0xFF"),
+        Type::U16 => (TCode::U16OutOfRange, "u16 can represent hex values from 0x0000 to 0xFFFF"),
+        Type::U32 => (TCode::U32OutOfRange, "u32 can represent hex values from 0x00000000 to 0xFFFFFFFF"),
+        Type::U64 => (TCode::U64OutOfRange, "u64 can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF"),
+        Type::Index => (TCode::IndexOutOfRange, INDEX_HEX_RANGE),
+        Type::F32 => (TCode::F32BitsOutOfRange, "f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)"),
+        Type::F64 => (TCode::F64BitsOutOfRange, "f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)"),
+        _ => unreachable!("only a fixed-width type has a range for a hex literal to leave"),
     }
 }

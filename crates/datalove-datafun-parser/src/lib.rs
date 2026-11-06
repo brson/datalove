@@ -7,6 +7,7 @@ mod statement;
 mod expr;
 mod literal;
 
+use datalove_diagnostic_codes::PCode;
 use rmx::prelude::*;
 
 use bct::{
@@ -81,7 +82,7 @@ fn parse_source<'db>(
     top_level: TopLevel,
 ) -> ast::ParseResult<'db> {
     let bracer = bracer::bracer(db, lexer::lex(db, source));
-    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, "P050", "P051");
+    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, PCode::UnmatchedClose, PCode::UnclosedOpen);
     emit_non_ascii_name_errors(db, bracer, source);
     parse_bracer(db, bracer, source, module_id, top_level)
 }
@@ -94,7 +95,7 @@ pub fn parse_expr<'db>(
 ) -> ast::ParseExprResult<'db> {
     datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Parse, source);
     let bracer = bracer::bracer(db, lexer::lex(db, source));
-    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, "P050", "P051");
+    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, PCode::UnmatchedClose, PCode::UnclosedOpen);
     emit_non_ascii_name_errors(db, bracer, source);
     // Expressions don't have module context.
     parse_bracer_expr(db, bracer, source)
@@ -136,7 +137,7 @@ fn emit_non_ascii_name_errors<'db>(
     let text = source_text.as_str(db);
     for span in parser_util::non_ascii_names(bracer.lexed(db).tokens(db), text) {
         parser_util::non_ascii_name_error(db, source_text, span)
-            .code("P075")
+            .code(PCode::NonAsciiName.as_str())
             .emit_parse();
     }
 }

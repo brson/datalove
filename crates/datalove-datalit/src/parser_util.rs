@@ -1,5 +1,6 @@
 //! Re-export parser utilities from bcts.
 
+use datalove_diagnostic_codes::{Code, DCode};
 pub use bct::parser_util::{
     eat_number, is_decimal_run, is_hex_word, is_identifier, is_numeric_literal, is_number_word,
     strip_separators,
@@ -89,7 +90,7 @@ impl<'db> SeenNames<'db> {
         }
         let name = name.as_str(db);
         Some(bct::diagnostic::DiagnosticBuilder::error(db, &rmx::std::format!("`{name}` is named twice"))
-            .code("D038")
+            .code(DCode::DuplicateName.as_str())
             .primary_label(ts, &rmx::std::format!("a {what} is named once")))
     }
 }
@@ -236,8 +237,8 @@ pub fn emit_bracer_errors<'db>(
     db: &'db dyn salsa::Database,
     bracer: bct::bracer::Bracer<'db>,
     source: bct::input::Source,
-    stray_code: &str,
-    unclosed_code: &str,
+    stray_code: impl Code,
+    unclosed_code: impl Code,
 ) {
     use bct::diagnostic::DiagnosticBuilder;
     use datalove_diagnostic::DiagnosticBuilderExt;
@@ -251,13 +252,13 @@ pub fn emit_bracer_errors<'db>(
         let ts = TextSpan::new(source, token.span());
         if token.is_close_sigil() {
             DiagnosticBuilder::error(db, &rmx::std::format!("unmatched '{}'", sigil.as_str()))
-                .code(stray_code)
+                .code(stray_code.as_str())
                 .primary_label(ts, &rmx::std::format!("this '{}' has no matching '{}'",
                     sigil.as_str(), sigil.open_sigil().as_str()))
                 .emit_parse();
         } else {
             DiagnosticBuilder::error(db, &rmx::std::format!("unclosed '{}'", sigil.as_str()))
-                .code(unclosed_code)
+                .code(unclosed_code.as_str())
                 .primary_label(ts, &rmx::std::format!("this '{}' is never closed", sigil.as_str()))
                 .emit_parse();
         }

@@ -74,6 +74,7 @@ datalove-datafun-sema = { version = "0.1.0", path = "crates/datalove-datafun-sem
 datalove-datafun-tycheck = { version = "0.1.0", path = "crates/datalove-datafun-tycheck" }
 datalove-datalit = { version = "0.1.0", path = "crates/datalove-datalit" }
 datalove-diagnostic = { version = "0.1.0", path = "crates/datalove-diagnostic" }
+datalove-diagnostic-codes = { version = "0.1.0", path = "crates/datalove-diagnostic-codes" }
 datalove-paths = { version = "0.1.0", path = "crates/datalove-paths" }
 datalove-pkg-manifest = { version = "0.1.0", path = "crates/datalove-pkg-manifest" }
 datalove-repl = { version = "0.1.0", path = "crates/datalove-repl" }

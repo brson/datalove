@@ -9,6 +9,7 @@
 
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::ModuleId;
+use datalove_diagnostic_codes::DCode;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{Binding, ExprArena, ExprFun, ExprFunctionCall, FunHead, Statement, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
@@ -737,6 +738,31 @@ pub enum AnalysisError<'db> {
     },
 }
 
+impl AnalysisError<'_> {
+    /// The diagnostic code of the fault.
+    pub fn code(&self) -> DCode {
+        match self {
+            AnalysisError::UseAfterMoveInEarlierUnit { .. } => DCode::UseAfterMoveInEarlierUnit,
+            AnalysisError::UseAfterMove { .. } => DCode::UseAfterMove,
+            AnalysisError::DoubleMove { .. } => DCode::DoubleMove,
+            AnalysisError::CannotMoveBorrowed { .. } => DCode::CannotMoveBorrowed,
+            AnalysisError::CannotMoveConst { .. } => DCode::CannotMoveConst,
+            AnalysisError::CannotMutFromRef { .. } => DCode::CannotMutFromRef,
+            AnalysisError::WalkedCollectionChanged { .. } => DCode::WalkedCollectionChanged,
+            AnalysisError::WalkedCollectionAssigned { .. } => DCode::WalkedCollectionChanged,
+            AnalysisError::ReadUninitialized { .. } => DCode::ReadUninitialized,
+            AnalysisError::OutParamNotInitialized { .. } => DCode::OutParamNotInitialized,
+            AnalysisError::MoveInLoop { .. } => DCode::MoveInLoop,
+            AnalysisError::InconsistentBranchMove { .. } => DCode::InconsistentBranchMove,
+            AnalysisError::InconsistentLoopExit { .. } => DCode::InconsistentLoopExit,
+            AnalysisError::OutParamPartialWrite { .. } => DCode::OutParamPartialWrite,
+            AnalysisError::AliasedMutableArgument { .. } => DCode::AliasedMutableArgument,
+            AnalysisError::CannotMutateImmutable { .. } => DCode::CannotMutateImmutable,
+            AnalysisError::CannotMutateTemporary { .. } => DCode::CannotMutateTemporary,
+        }
+    }
+}
+
 /// The message for a D008 [`AnalysisError::InconsistentBranchMove`].
 pub fn inconsistent_branch_message(error: &AnalysisError) -> Option<String> {
     let AnalysisError::InconsistentBranchMove { name, gave_away, changed_in, unchanged_in, .. } = error else {
@@ -758,60 +784,61 @@ pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
 }
 
 fn format_single_error(error: &AnalysisError) -> String {
+    let code = error.code();
     match error {
         AnalysisError::UseAfterMoveInEarlierUnit { expr_key: _, name, recovery_hint } => {
-            let base = format!("error[D013]: `{}` was given away by an earlier unit", name);
+            let base = format!("error[{code}]: `{}` was given away by an earlier unit", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::UseAfterMove { expr_key: _, moved_at: _, name, recovery_hint } => {
-            let base = format!("error[D001]: use of moved value: `{}`", name);
+            let base = format!("error[{code}]: use of moved value: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::DoubleMove { expr_key: _, moved_at: _, name, recovery_hint } => {
-            let base = format!("error[D002]: value moved twice: `{}`", name);
+            let base = format!("error[{code}]: value moved twice: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::CannotMoveBorrowed { expr_key: _, name } => {
-            format!("error[D003]: cannot move borrowed value: `{}`", name)
+            format!("error[{code}]: cannot move borrowed value: `{}`", name)
         }
         AnalysisError::CannotMoveConst { expr_key: _, name, recovery_hint } => {
-            let base = format!("error[D016]: cannot move out of const: `{}`", name);
+            let base = format!("error[{code}]: cannot move out of const: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::CannotMutFromRef { expr_key: _, name } => {
-            format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)
+            format!("error[{code}]: cannot get mutable reference from immutable: `{}`", name)
         }
         AnalysisError::WalkedCollectionChanged { expr_key: _, name }
         | AnalysisError::WalkedCollectionAssigned { set_index: _, name } => {
-            format!("error[D015]: cannot change `{}` while a `for` walks it", name)
+            format!("error[{code}]: cannot change `{}` while a `for` walks it", name)
         }
         AnalysisError::ReadUninitialized { expr_key: _, name } => {
-            format!("error[D005]: read of uninitialized binding: `{}`", name)
+            format!("error[{code}]: read of uninitialized binding: `{}`", name)
         }
         AnalysisError::OutParamNotInitialized { name, .. } => {
-            format!("error[D006]: out parameter not initialized: `{}`", name)
+            format!("error[{code}]: out parameter not initialized: `{}`", name)
         }
         AnalysisError::MoveInLoop { expr_key: _, name, recovery_hint } => {
-            let base = format!("error[D007]: cannot move `{}` in loop", name);
+            let base = format!("error[{code}]: cannot move `{}` in loop", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::InconsistentBranchMove { .. } => {
-            format!("error[D008]: {}", inconsistent_branch_message(error).expect("is D008"))
+            format!("error[{code}]: {}", inconsistent_branch_message(error).expect("is D008"))
         }
         AnalysisError::InconsistentLoopExit { name, .. } => {
-            format!("error[D014]: `{}` is given away on one way out of this loop and not another", name)
+            format!("error[{code}]: `{}` is given away on one way out of this loop and not another", name)
         }
         AnalysisError::OutParamPartialWrite { expr_key: _, name } => {
-            format!("error[D009]: cannot partially write to out parameter: `{}`", name)
+            format!("error[{code}]: cannot partially write to out parameter: `{}`", name)
         }
         AnalysisError::AliasedMutableArgument { expr_key: _, name } => {
-            format!("error[D010]: aliased mutable argument: `{}`", name)
+            format!("error[{code}]: aliased mutable argument: `{}`", name)
         }
         AnalysisError::CannotMutateImmutable { expr_key: _, name } => {
-            format!("error[D011]: cannot pass immutable binding as mutable: `{}`", name)
+            format!("error[{code}]: cannot pass immutable binding as mutable: `{}`", name)
         }
         AnalysisError::CannotMutateTemporary { expr_key: _ } => {
-            "error[D012]: cannot pass a temporary as mutable".to_string()
+            format!("error[{code}]: cannot pass a temporary as mutable")
         }
     }
 }
