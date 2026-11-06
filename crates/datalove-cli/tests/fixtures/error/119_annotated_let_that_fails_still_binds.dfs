@@ -1,0 +1,7 @@
+// A `let` whose value does not fit its type still binds the name, at the type
+// it gives, so the later uses are not reported again as names not found.
+let s: (string, i32) = ("a", 1)
+let r: string = s.0
+debuglog r
+let n: u32 = "not a number"
+debuglog n

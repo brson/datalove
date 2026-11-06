@@ -15,18 +15,18 @@
       "message": "mismatched types: expected `?u32`, found `int`"
     },
     {
-      "code": "F001",
+      "code": "F049",
       "labels": [
         {
-          "message": "not found in this scope",
+          "message": "this can return early",
           "span": [
-            25,
-            26
+            26,
+            27
           ],
-          "text": "a"
+          "text": "?"
         }
       ],
-      "message": "cannot find value `a` in this scope"
+      "message": "`?` can return early, so the function has to return an option `?T`, and it returns `!()`"
     }
   ],
   "errors": [
@@ -36,8 +36,9 @@
       "kind": "TypeMismatch"
     },
     {
-      "kind": "UnresolvedName",
-      "name": "a"
+      "kind": "TryReturnTypeMismatch",
+      "operator": "?",
+      "return_type": "!()"
     }
   ],
   "judgements": [

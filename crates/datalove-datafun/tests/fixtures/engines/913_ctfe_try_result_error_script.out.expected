@@ -7,8 +7,6 @@ Analysis(
                 status: "Error",
                 errors: [
                     "mismatched types: expected `error`, found `string`",
-                    "cannot find `R` in this scope",
-                    "cannot find `V` in this scope",
                 ],
             ),
             ownership: OwnershipResult(

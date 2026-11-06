@@ -30,17 +30,15 @@ fn check_variable_decl<'db>(
         Some(hint) => {
             match ctx.convert_hint(hint) {
                 Ok(expected_type) => {
+                    // The hint is the binding's type whether or not the value
+                    // fits it, so a value that does not still binds the name,
+                    // and its uses report nothing more.
                     if let Some(err) = unordered_binding_error(ctx, &expected_type, Some(value)) {
                         ctx.add_error(err);
-                        return;
+                    } else if let Err(e) = check_expr(ctx, value, &expected_type) {
+                        ctx.add_error(e);
                     }
-                    match check_expr(ctx, value, &expected_type) {
-                        Ok(()) => Some(expected_type),
-                        Err(e) => {
-                            ctx.add_error(e);
-                            None
-                        }
-                    }
+                    Some(expected_type)
                 }
                 Err(e) => {
                     ctx.add_error(e);

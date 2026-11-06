@@ -3,7 +3,7 @@ module local/test/main
 ----------
 
 fun broken(): int
-  let x: int = @true
+  let x: int = true
   ret x
 end fun
 
