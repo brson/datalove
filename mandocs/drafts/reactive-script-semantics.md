@@ -1534,21 +1534,36 @@ and will moreso in the future when Datalove gets real I/O,
 the more useful comparison today seems to be to things like deterministic incremental build systems
 and live record-and-replay debuggers.
 Elm has something like this.
-Datalove's reactive algebra is a dependency analysis,
+Datalove's reactive algebra is a dependence analysis,
 bread and butter compiler stuff.
 
-todo compare the terminology here with PL literature
+Some of the vocabulary in my algebra has established terminology:
+
+| this post | standard name |
+|---|---|
+| a fresh run of the current code | from-scratch consistency |
+| read | use |
+| take | consume (linear types) |
+| overwrite | definition that kills the old value |
+| update | use, then definition |
+| later units rerun on a changed value | flow (read-after-write) dependence |
+| restore because a later unit took or wrote what an earlier one reads | anti (write-after-read) dependence |
+| the nearest unit that set the binding without reading it | reaching definition |
+| repeat until nothing more needs to rerun | worklist fixed point |
+
+Dependence analysis is mostly used for optimization.
+Here we are using it to determine when to rerun surrounding units.
 
 There is one paper that applies directly to this work,
 [When Do Reactive Notebooks Fail to React?](https://arxiv.org/abs/2511.21994), by Lu et. al. 2025.
 They examine existing reactive notebooks to find cases where
-their replay behavior is non-deterministic.
+replay behavior is unsound compared to a fresh run.
 They developed a language and testing methodology.
-I was happy to find that the algebra I developed here
-appears to pass all their cases and more.
-I did find that they had identified cases that I had not made explicit,
+I adopted their technique of comparing every step to a fresh run.
+The algebra developed here appears to pass all their cases and more.
+They did identify cases that I had not made explicit,
 particularly related to mutating functions and moves of script units.
-I was able to add them to my test suite.
+I added them to my test suite.
 
 
 
