@@ -28,7 +28,7 @@ expect all four units are entered, the last after `b` is taken
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | compiles, runs | new | `b` moved |
+| 1 | - | compiles, runs | new | `b` taken |
 | 2 | - | compiles, runs | new | `w` = 1 |
 | 3 | takes `b` (1) | compiles, runs | new | `e` = 125 |
 | 4 | - | compile fails | new, and `b` was taken | - |
@@ -43,7 +43,7 @@ expect the reader moves above the take
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | reruns | rerun: unit 4 reads `b`, which unit 3 took after it | `b` moved |
+| 1 | - | reruns | rerun: unit 4 reads `b`, which unit 3 took after it | `b` taken |
 | 2 | - | untouched | moving unit 4 changes nothing it reads | `w` = 1 |
 | 4 | reads `b` (1) | recompiles, runs | moved | `c` = 126 |
 | 3 | takes `b` (1) | reruns | takes `b` from unit 1 | `e` = 125 |
@@ -58,7 +58,7 @@ expect a unit moves past units it has nothing to do with
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | untouched | nothing changed `b` | `b` moved |
+| 1 | - | untouched | nothing changed `b` | `b` taken |
 | 4 | reads `b` (1) | untouched | nothing changed `b` | `c` = 126 |
 | 2 | - | reruns | moved | `w` = 1 |
 | 3 | takes `b` (1) | untouched | nothing changed `b` | `e` = 125 |

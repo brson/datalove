@@ -15,7 +15,7 @@ and the REPL around it [repl-architecture.md](repl-architecture.md).
 - [Units and sessions](#user-content-units-and-sessions)
 - [Bindings and uses](#user-content-bindings-and-uses)
 - [Steps](#user-content-steps)
-- [The algebra](#user-content-the-algebra)
+- [The rules](#user-content-the-rules)
 - [Unit states](#user-content-unit-states)
 - [REPL words](#user-content-repl-words)
 
@@ -75,19 +75,23 @@ under these names:
 
 `UnitLowerRecord` has `takes`, `writes` (overwrites and updates together),
 `overwrites` and `revives`. Not "effects": that word is for consequences.
+Not "operations" either: the post used to say that, and the word reads as a
+step.
 
 **given away**. What a taken binding is, as the user sees it: O013, "`a` was
-given away by an earlier unit". "Moved" is fine in ownership-internal prose.
+given away by an earlier unit". "Moved" is fine in ownership-internal
+prose. A step table's holds-after column says `taken`.
 
 ## Steps
 
-**step**. One operation on the session, an append, an edit, a delete, an
-insert, a move, a truncation, a module edit or a data edit, and what it did to
-each unit. `UnitStep`, `Engine::last_step`.
+**step**. One change to the session, an append, an edit, a delete, an
+insert, a reorder, a truncation, a module edit or a data edit, and what it did
+to each unit. `UnitStep`, `Engine::last_step`.
 
 **fresh run**. A new engine running the session's current units in order. A
 step is correct when every unit ends as it does in a fresh run and holds the
-same bindings; the step tables check every step against one.
+same bindings; the step tables check every step against one. The incremental
+computation literature calls this from-scratch consistency.
 
 **compiled again**. The step ran the unit's parse, typecheck or ownership
 analysis: `UnitStep::compiled` (`Compiled { parse, typecheck, ownership }`). A
@@ -101,7 +105,12 @@ and the History tab says "no other unit reran" when none did.
 **re-derive**. Engine-internal: lower a unit again and run it, after compiling
 it if salsa asks to.
 
-## The algebra
+## The rules
+
+**the rules**. What a step recompiles and reruns, stated in
+[script-reactivity-cases.md](script-reactivity-cases.md#user-content-the-rules).
+The docs used to call them "the algebra"; they are a dependence analysis,
+not an algebra.
 
 **retract**, **apply**. The two halves of a modification. Retract reverses
 what the unit's previous code did to earlier bindings; apply runs its current
@@ -117,8 +126,12 @@ rerun.
 Capitalised, Edit is an edit that compiles (retract, then apply); Break one
 that does not (retract); Fix one that makes a unit compile that did not
 (apply). Delete is retract and Add apply. A lower-case edit is any change to a
-unit's code. A move is a Delete and an Add of the same unit, taken as one
-step.
+unit's code.
+
+**Reorder**. Moving a unit to another place in the session, keeping its
+id: a Delete and an Add taken as one step. The REPL's `/move`,
+`Engine::move_unit`, `scriptunit-move` in a worldfile. Not "move" in prose,
+which is a take.
 
 **forward**. What a step does to the units after the modified one: rerun those
 that read a changed value, break or fix those whose names it took or gave
@@ -138,7 +151,7 @@ same code. Also the plain verb for running a unit again.
 and for a splice. Distinct from the provider only when an overwrite or
 revival is nearer.
 
-"Rewind" and "replay" are retired from the algebra; both were reruns.
+"Rewind" and "replay" are retired from the rules; both were reruns.
 
 ## Unit states
 
@@ -164,7 +177,7 @@ holds the engine's view.
 
 **undo**, **redo**. Only the REPL's `/undo` and `/redo` commands, which take
 back the last change to the session and make it again (`ReplCommand::Undo`,
-`ReplCommand::Redo`, `Change`). Not the algebra's retract and apply.
+`ReplCommand::Redo`, `Change`). Not the rules' retract and apply.
 
 **replay**. Re-submitting saved REPL inputs, from `/load` or `repl --load`
 (`ReplApp::replay`); and, in the docs, a recorded session a page plays back

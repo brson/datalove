@@ -291,7 +291,7 @@ fn holds(bindings: &[(String, Option<String>)]) -> String {
     bindings.iter()
         .map(|(name, value)| match value {
             Some(value) => fmt!("`{name}` = {value}"),
-            None => fmt!("`{name}` moved"),
+            None => fmt!("`{name}` taken"),
         })
         .collect::<Vec<_>>()
         .join(", ")

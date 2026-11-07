@@ -45,7 +45,7 @@ expect unit 3 is edited to take `a`
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | untouched | `a` is as unit 1 made it | `a` moved |
+| 1 | - | untouched | `a` is as unit 1 made it | `a` taken |
 | 2 | reads `a` (1) | untouched | reads `a` before the take | `c` = 100 |
 | 3 | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |

@@ -35,7 +35,7 @@ expect all five units are entered
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | compiles, runs | new | `a` moved |
+| 1 | - | compiles, runs | new | `a` taken |
 | 2 | - | compiles, runs | new | `b` = 250 |
 | 3 | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
 | 4 | takes `a` (1), updates `b` (2) | compiles, runs | new | `a_moved` = 1000 |

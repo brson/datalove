@@ -41,8 +41,8 @@ expect unit 1 is fixed
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | recompiles, runs | edited | `a` moved |
-| 2 | - | untouched | uses nothing of unit 1's | `b` moved |
+| 1 | - | recompiles, runs | edited | `a` taken |
+| 2 | - | untouched | uses nothing of unit 1's | `b` taken |
 | 3 | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
 
 ----------
@@ -74,6 +74,6 @@ expect unit 1 is fixed again
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | recompiles, runs | edited | `a` moved |
-| 2 | - | untouched | `b` is as unit 2 made it | `b` moved |
+| 1 | - | recompiles, runs | edited | `a` taken |
+| 2 | - | untouched | `b` is as unit 2 made it | `b` taken |
 | 3 | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |

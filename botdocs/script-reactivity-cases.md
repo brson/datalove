@@ -13,8 +13,8 @@ is the narrative version. How the engine does it is
 ## Contents
 
 - [Reading the tables](#user-content-reading-the-tables)
-- [The algebra](#user-content-the-algebra)
-- [One unit, four operations](#user-content-one-unit-four-operations)
+- [The rules](#user-content-the-rules)
+- [One unit, four accesses](#user-content-one-unit-four-accesses)
 - [A unit stops compiling, and starts again](#user-content-a-unit-stops-compiling-and-starts-again)
 - [Overwrites](#user-content-overwrites)
 - [Reading before or after another unit changes a binding](#user-content-reading-before-or-after-another-unit-changes-a-binding)
@@ -27,7 +27,7 @@ is the narrative version. How the engine does it is
 - [Modules and data](#user-content-modules-and-data)
 - [Conditional writes, loops and parts of bindings](#user-content-conditional-writes-loops-and-parts-of-bindings)
 - [Splices](#user-content-splices)
-- [Moves](#user-content-moves)
+- [Reorders](#user-content-reorders)
 - [Returning early](#user-content-returning-early)
 - [Where the engine does more than the rules](#user-content-where-the-engine-does-more-than-the-rules)
 
@@ -39,11 +39,11 @@ modification. After each step a table says, for every unit:
 - **code**: its source, joined onto one line with `; `.
 - **uses from earlier units**: what it does to each binding an earlier unit
   provides, and which unit is its provider: `reads`, `takes`, `overwrites`,
-  `updates` or `revives` (see [the algebra](#user-content-the-algebra)).
+  `updates` or `revives` (see [the rules](#user-content-the-rules)).
 - **this step**: what happened to it.
 - **because**: why. The one column that is not checked. A `rerun:` prefix
   marks a unit run to restore a binding for another unit.
-- **holds after**: its own bindings once the step is over, `moved` for one
+- **holds after**: its own bindings once the step is over, `taken` for one
   given away, `-` for none.
 
 How the tables are checked, including against a fresh run of the session's
@@ -78,17 +78,17 @@ To add a case, write a fixture (the format is at the top of
 test fails if a fixture has a step not shown here, or this file differs from
 its fixtures.
 
-## The algebra
+## The rules
 
-This is the algebra of `mandocs/drafts/reactive-script-semantics.md`, in its
+These are the rules of `mandocs/drafts/reactive-script-semantics.md`, in its
 words.
 
-### Operations
+### Accesses
 
 What matters about a unit is what it does to bindings earlier units provide.
 It uses each in one of five ways:
 
-| operation | what it does to the binding | example |
+| access    | what it does to the binding | example |
 |-----------|-----------------------------|---------|
 | read      | uses the value and leaves it | `a + 1`, `f(ref a)` |
 | take      | moves the value out, leaving the binding empty | `let a_moved = a`, `f(a)` |
@@ -96,7 +96,7 @@ It uses each in one of five ways:
 | update    | reads the value and writes a new one | `set b = b * 2`, `f(mut b)` |
 | revive    | overwrites a binding an earlier unit took | `set b = 600` after a take |
 
-The operations are what the compiler sees in the code. A write that might not
+The accesses are what the compiler sees in the code. A write that might not
 happen, because it is under an `if` or in a loop, or that writes only part of
 the binding, like `set p.1 = x`, counts as an update. An overwrite writes on
 every way through the unit, early returns included.
@@ -119,10 +119,10 @@ modification _retracts_ the unit's old code, _applies_ its new code, or both:
 Add is an append or an insert. Fix is an edit that makes a unit compile that
 did not, Break one that makes it stop, and Edit one that compiles before and
 after. Capitalised, Edit is the modification; a lower-case edit is any change
-to a unit's code, Break and Fix included. A move is a Delete and an Add of the
-same unit, taken as one step.
+to a unit's code, Break and Fix included. A reorder is a Delete and an Add of
+the same unit, taken as one step: the REPL's `/move`.
 
-### The rules
+### What a modification calls for
 
 A modification of a unit `T` calls for more of them.
 
@@ -161,7 +161,7 @@ or a Break in its own right.
 
 ### The closure in the engine
 
-Collecting needs the new code's operations, which are only known once it is
+Collecting needs the new code's accesses, which are only known once it is
 compiled, so the engine compiles what it has collected, collects again with
 what the units now do, and repeats until nothing is added. Binding names are
 enough to find the fixed point: linearity gives a value one owner at a time,
@@ -175,12 +175,12 @@ The rules say what runs. What recompiles follows from salsa's memos, so it is
 allowed to be conservative and it depends on history: a unit returning to a
 state it was compiled in before reruns without recompiling.
 
-## One unit, four operations
+## One unit, four accesses
 
 Unit 5 reads `a`, takes `b`, overwrites `c` and updates `d`, and each
-modification of it restores what its operations call for.
+modification of it restores what its accesses call for.
 
-<!-- world four-operations code -->
+<!-- world four-accesses code -->
 ```datalove
 ----------
 scriptunit-fragment 1
@@ -217,43 +217,43 @@ set d = d * 2
 ```
 <!-- end world -->
 
-<!-- world four-operations step 1 -->
+<!-- world four-accesses step 1 -->
 **Step 1: all five units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1` | - | compiles, runs | new | `a` = 1 |
-| 2 | `let b = 2` | - | compiles, runs | new | `b` moved |
+| 2 | `let b = 2` | - | compiles, runs | new | `b` taken |
 | 3 | `var c = 3` | - | compiles, runs | new | `c` = 30 |
 | 4 | `var d = 4` | - | compiles, runs | new | `d` = 8 |
 | 5 | `let e = a + 10; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | compiles, runs | new | `e` = 11, `f` = 2 |
 <!-- end world -->
 
-<!-- world four-operations step 2 -->
+<!-- world four-accesses step 2 -->
 **Step 2: unit 5 is edited.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1` | - | untouched | unit 5 only reads `a` | `a` = 1 |
-| 2 | `let b = 2` | - | reruns | rerun: unit 5 took `b` when it last ran, and the edit retracts that | `b` moved |
+| 2 | `let b = 2` | - | reruns | rerun: unit 5 took `b` when it last ran, and the edit retracts that | `b` taken |
 | 3 | `var c = 3` | - | untouched | unit 5 overwrites `c` without reading it | `c` = 30 |
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updated `d` when it last ran, and the edit retracts that | `d` = 8 |
 | 5 | `let e = a + 100; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompiles, runs | edited | `e` = 101, `f` = 2 |
 <!-- end world -->
 
-<!-- world four-operations step 3 -->
+<!-- world four-accesses step 3 -->
 **Step 3: unit 1 is edited.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 2` | - | recompiles, runs | edited | `a` = 2 |
-| 2 | `let b = 2` | - | reruns | rerun: unit 5 reruns and takes `b`, which it took when it last ran | `b` moved |
+| 2 | `let b = 2` | - | reruns | rerun: unit 5 reruns and takes `b`, which it took when it last ran | `b` taken |
 | 3 | `var c = 3` | - | untouched | unit 5 overwrites `c` without reading it | `c` = 30 |
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 reruns and updates `d`, which it updated when it last ran | `d` = 8 |
 | 5 | `let e = a + 100; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | reruns | reads `a` from unit 1 | `e` = 102, `f` = 2 |
 <!-- end world -->
 
-<!-- world four-operations step 4 -->
+<!-- world four-accesses step 4 -->
 **Step 4: unit 5 is broken.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -317,8 +317,8 @@ runs.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` moved |
-| 2 | `let b = 100` | - | untouched | uses nothing of unit 1's | `b` moved |
+| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` taken |
+| 2 | `let b = 100` | - | untouched | uses nothing of unit 1's | `b` taken |
 | 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
 <!-- end world -->
 
@@ -343,8 +343,8 @@ read as moved with nothing holding it.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` moved |
-| 2 | `let b = 100` | - | untouched | `b` is as unit 2 made it | `b` moved |
+| 1 | `let a = 1000` | - | recompiles, runs | edited | `a` taken |
+| 2 | `let b = 100` | - | untouched | `b` is as unit 2 made it | `b` taken |
 | 3 | `let a_moved = a; let b_moved = b; let c = a_moved /! b_moved` | takes `a` (1), takes `b` (2) | recompiles, runs | takes `a` from unit 1 | `a_moved` = 1000, `b_moved` = 100, `c` = 10 |
 <!-- end world -->
 
@@ -643,7 +643,7 @@ let a_moved = a
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
 | 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
 | 3 | `let a_moved = a` | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
 <!-- end world -->
@@ -653,7 +653,7 @@ let a_moved = a
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reads `a`, which unit 3 took after it | `a` moved |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reads `a`, which unit 3 took after it | `a` taken |
 | 2 | `let c = a /! 100` | reads `a` (1) | recompiles, runs | edited | `c` = 10 |
 | 3 | `let a_moved = a` | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
 <!-- end world -->
@@ -814,7 +814,7 @@ let e = a + 2
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | untouched | `a` is as unit 1 made it | `a` moved |
+| 1 | `let a = 1000` | - | untouched | `a` is as unit 1 made it | `a` taken |
 | 2 | `let c = a /! 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 100 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a + 2` | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |
@@ -872,7 +872,7 @@ let e = a
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
 | 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
 | 3 | `let d = a + 1` | reads `a` (1) | compiles, runs | new | `d` = 1001 |
 | 4 | `let e = a` | takes `a` (1) | compiles, runs | new | `e` = 1000 |
@@ -883,7 +883,7 @@ let e = a
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 3 takes `a`, which unit 4 took after it | `a` moved |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 3 takes `a`, which unit 4 took after it | `a` taken |
 | 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 100 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a` | takes `a` (1) | recompile fails | `a` was given away by unit 3 | - |
@@ -1049,7 +1049,7 @@ overwrite does not read it, so unit 2 is left alone.
 An edit can change what a unit does to a binding, here from an update to a
 read, and both halves matter:
 
-<!-- world edit-changes-operation code -->
+<!-- world edit-changes-access code -->
 ```datalove
 ----------
 scriptunit-fragment 1
@@ -1071,7 +1071,7 @@ set b = b + 1
 ```
 <!-- end world -->
 
-<!-- world edit-changes-operation step 1 -->
+<!-- world edit-changes-access step 1 -->
 **Step 1: all three units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -1081,7 +1081,7 @@ set b = b + 1
 | 3 | `set b = b + 1` | updates `b` (1) | compiles, runs | new | - |
 <!-- end world -->
 
-<!-- world edit-changes-operation step 2 -->
+<!-- world edit-changes-access step 2 -->
 **Step 2: unit 2 is edited to read `b`.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -1154,7 +1154,7 @@ A revival overwrites a binding that held nothing, so applying it needs nothing.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | reruns | rerun: unit 3 revived `b` when it last ran, and is retracted | `b` moved |
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 revived `b` when it last ran, and is retracted | `b` taken |
 | 2 | `let b_moved = b` | takes `b` (1) | reruns | rerun: takes `b` from unit 1, which reran | `b_moved` = 125 |
 | 3 | `set b = 600; let x = y` | revives `b` (1) | recompile fails | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
@@ -1302,8 +1302,8 @@ set w = w * 2
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
-| 2 | `let a2 = a` | takes `a` (1) | compiles, runs | new | `a2` moved |
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
+| 2 | `let a2 = a` | takes `a` (1) | compiles, runs | new | `a2` taken |
 | 3 | `var w = a2` | takes `a2` (2) | compiles, runs | new | `w` = 2000 |
 | 4 | `let c = w + 1` | reads `w` (3) | compiles, runs | new | `c` = 1001 |
 | 5 | `set w = w * 2` | updates `w` (3) | compiles, runs | new | - |
@@ -1314,8 +1314,8 @@ set w = w * 2
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reruns and takes `a`, which it took when it last ran | `a` moved |
-| 2 | `let a2 = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `a2`, which it took when it last ran | `a2` moved |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reruns and takes `a`, which it took when it last ran | `a` taken |
+| 2 | `let a2 = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `a2`, which it took when it last ran | `a2` taken |
 | 3 | `var w = a2` | takes `a2` (2) | reruns | rerun: unit 4 reads `w`, which unit 5 updated after it | `w` = 2000 |
 | 4 | `let c = w + 2` | reads `w` (3) | recompiles, runs | edited | `c` = 1002 |
 | 5 | `set w = w * 2` | updates `w` (3) | reruns | rerun: updates `w` from unit 3, which reran | - |
@@ -1424,9 +1424,9 @@ let e = d + 1
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1` | - | compiles, runs | new | `a` moved |
-| 2 | `let b = a` | takes `a` (1) | compiles, runs | new | `b` moved |
-| 3 | `let c = b` | takes `b` (2) | compiles, runs | new | `c` moved |
+| 1 | `let a = 1` | - | compiles, runs | new | `a` taken |
+| 2 | `let b = a` | takes `a` (1) | compiles, runs | new | `b` taken |
+| 3 | `let c = b` | takes `b` (2) | compiles, runs | new | `c` taken |
 | 4 | `let d = c` | takes `c` (3) | compiles, runs | new | `d` = 1 |
 | 5 | `let e = d + 1` | reads `d` (4) | compiles, runs | new | `e` = 2 |
 <!-- end world -->
@@ -1436,9 +1436,9 @@ let e = d + 1
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1` | - | reruns | rerun: unit 2 reruns and takes `a` | `a` moved |
-| 2 | `let b = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `b` | `b` moved |
-| 3 | `let c = b` | takes `b` (2) | reruns | rerun: unit 4 takes `c`, which it took when it last ran | `c` moved |
+| 1 | `let a = 1` | - | reruns | rerun: unit 2 reruns and takes `a` | `a` taken |
+| 2 | `let b = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `b` | `b` taken |
+| 3 | `let c = b` | takes `b` (2) | reruns | rerun: unit 4 takes `c`, which it took when it last ran | `c` taken |
 | 4 | `let d = c; let note = 0` | takes `c` (3) | recompiles, runs | edited | `d` = 1, `note` = 0 |
 | 5 | `let e = d + 1` | reads `d` (4) | reruns | reads `d` from unit 4 | `e` = 2 |
 <!-- end world -->
@@ -2212,7 +2212,7 @@ let d = b + 1
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
 | 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
 | 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
 | 4 | `let a_moved = a; set b = b * 2` | takes `a` (1), updates `b` (2) | compiles, runs | new | `a_moved` = 1000 |
@@ -2313,7 +2313,7 @@ let a_moved = a
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
 | 2 | `let a_moved = a` | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
 <!-- end world -->
 
@@ -2322,7 +2322,7 @@ let a_moved = a
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 3 reads `a`, which unit 2 took after it | `a` moved |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 3 reads `a`, which unit 2 took after it | `a` taken |
 | 3 | `let c = a + 1` | reads `a` (1) | compiles, runs | inserted | `c` = 1001 |
 | 2 | `let a_moved = a` | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
 <!-- end world -->
@@ -2330,14 +2330,14 @@ let a_moved = a
 An inserted unit is an apply with nothing to retract. Unit 3 reads `a`, which unit 2
 took after it, so unit 1 reruns first and unit 2 takes it again.
 
-## Moves
+## Reorders
 
-A move takes a unit out of one place and puts it in another, keeping its
+A reorder takes a unit out of one place and puts it in another, keeping its
 number. The session it ends with is the one a Delete and then an Add would
 end with, but the step goes straight there: the session as it stands between
 the two is never run, and the units each half reaches are rerun once.
 
-<!-- world move code -->
+<!-- world reorder code -->
 ```datalove
 ----------
 scriptunit-fragment 1
@@ -2365,7 +2365,7 @@ let d = b + 0
 ```
 <!-- end world -->
 
-<!-- world move step 1 -->
+<!-- world reorder step 1 -->
 **Step 1: all four units are entered.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -2376,7 +2376,7 @@ let d = b + 0
 | 4 | `let d = b + 0` | reads `b` (1) | compiles, runs | new | `d` = 126 |
 <!-- end world -->
 
-<!-- world move step 2 -->
+<!-- world reorder step 2 -->
 **Step 2: the update moves up past a reader.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -2391,7 +2391,7 @@ Unit 3 moves up past unit 2, which now reads `b` after the update. Unit 3
 updated `b` when it last ran, so unit 1 reruns first to build `b` as unit 3
 first finds it.
 
-<!-- world move step 3 -->
+<!-- world reorder step 3 -->
 **Step 3: the update moves down past both readers.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -2405,7 +2405,7 @@ first finds it.
 Moving it down past both readers is the other half: they read `b` as unit 1
 made it, so they rerun after unit 1 does.
 
-<!-- world move step 4 -->
+<!-- world reorder step 4 -->
 **Step 4: a reader moves above its provider.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -2416,7 +2416,7 @@ made it, so they rerun after unit 1 does.
 | 3 | `set b = b + 1` | updates `b` (1) | untouched | nothing changed `b` | - |
 <!-- end world -->
 
-<!-- world move step 5 -->
+<!-- world reorder step 5 -->
 **Step 5: the reader moves back below its provider.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
@@ -2432,7 +2432,7 @@ Delete left without the binding. Moving it back restores `b`, which unit 3
 updated after it. Unit 4 is left alone: it reads `b` before unit 3 updates
 it, and unit 1's rerun builds the value it read.
 
-<!-- world move-take code -->
+<!-- world reorder-take code -->
 ```datalove
 ----------
 scriptunit-fragment 1
@@ -2460,23 +2460,23 @@ let c = b + 1
 ```
 <!-- end world -->
 
-<!-- world move-take step 1 -->
+<!-- world reorder-take step 1 -->
 **Step 1: all four units are entered, the last after `b` is taken.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | compiles, runs | new | `b` moved |
+| 1 | `var b = 125` | - | compiles, runs | new | `b` taken |
 | 2 | `var w = 1` | - | compiles, runs | new | `w` = 1 |
 | 3 | `let e = b` | takes `b` (1) | compiles, runs | new | `e` = 125 |
 | 4 | `let c = b + 1` | - | compile fails | new, and `b` was taken | - |
 <!-- end world -->
 
-<!-- world move-take step 2 -->
+<!-- world reorder-take step 2 -->
 **Step 2: the reader moves above the take.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | reruns | rerun: unit 4 reads `b`, which unit 3 took after it | `b` moved |
+| 1 | `var b = 125` | - | reruns | rerun: unit 4 reads `b`, which unit 3 took after it | `b` taken |
 | 2 | `var w = 1` | - | untouched | moving unit 4 changes nothing it reads | `w` = 1 |
 | 4 | `let c = b + 1` | reads `b` (1) | recompiles, runs | moved | `c` = 126 |
 | 3 | `let e = b` | takes `b` (1) | reruns | takes `b` from unit 1 | `e` = 125 |
@@ -2485,12 +2485,12 @@ let c = b + 1
 A reader moved above a take finds `b` again, so unit 1 reruns to build it,
 and unit 3 takes it after the reader is done.
 
-<!-- world move-take step 3 -->
+<!-- world reorder-take step 3 -->
 **Step 3: a unit moves past units it has nothing to do with.**
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | untouched | nothing changed `b` | `b` moved |
+| 1 | `var b = 125` | - | untouched | nothing changed `b` | `b` taken |
 | 4 | `let c = b + 1` | reads `b` (1) | untouched | nothing changed `b` | `c` = 126 |
 | 2 | `var w = 1` | - | reruns | moved | `w` = 1 |
 | 3 | `let e = b` | takes `b` (1) | untouched | nothing changed `b` | `e` = 125 |
@@ -2538,7 +2538,7 @@ let e = q + 1
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
 | 2 | `let d = 0` | - | compiles, runs | new | `d` = 0 |
 | 3 | `let a2 = a; let q = 10 /! d` | takes `a` (1), reads `d` (2) | compiles, returns early | `10 /! 0` | - |
 | 4 | `let e = q + 1` | reads `q` (3) | compiles, is blocked | unit 3 did not finish | - |
@@ -2549,7 +2549,7 @@ let e = q + 1
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 3 took `a` when it last ran, and reruns | `a` moved |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 3 took `a` when it last ran, and reruns | `a` taken |
 | 2 | `let d = 5` | - | recompiles, runs | edited | `d` = 5 |
 | 3 | `let a2 = a; let q = 10 /! d` | takes `a` (1), reads `d` (2) | reruns | reads `d` from unit 2 | `a2` = 1000, `q` = 2 |
 | 4 | `let e = q + 1` | reads `q` (3) | reruns | reads `q` from unit 3, which finished | `e` = 3 |
@@ -2603,7 +2603,7 @@ let e = a + 1
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | untouched | unit 3 returned early before taking `a`, so `a` is as unit 1 made it | `a` moved |
+| 1 | `let a = 1000` | - | untouched | unit 3 returned early before taking `a`, so `a` is as unit 1 made it | `a` taken |
 | 2 | `let d = 5` | - | recompiles, runs | edited | `d` = 5 |
 | 3 | `let q = 10 /! d; let a2 = a` | takes `a` (1), reads `d` (2) | reruns | reads `d` from unit 2 | `q` = 2, `a2` = 1000 |
 | 4 | `let e = a + 1` | reads `a` (1) | untouched | still cannot name `a` | - |

@@ -12,7 +12,7 @@ from memory and not re-read; check them before citing them in a post.
 - [The answer](#user-content-the-answer)
 - [The semantics, restated](#user-content-the-semantics-restated)
 - [Reactive notebooks: the direct neighbours](#user-content-reactive-notebooks-the-direct-neighbours)
-- [The algebra is dependence analysis](#user-content-the-algebra-is-dependence-analysis)
+- [The rules are dependence analysis](#user-content-the-rules-are-dependence-analysis)
 - [Incremental computation and build systems](#user-content-incremental-computation-and-build-systems)
 - [FRP](#user-content-frp)
 - [What a data change did in the engine](#user-content-what-a-data-change-did-in-the-engine)
@@ -30,8 +30,8 @@ different side:
 - **Reactive notebooks** have the same goal and the same correctness rule, and
   fail at exactly the case Datalove's backward rules handle: mutation of a
   binding another cell provided.
-- **Dependence analysis** from compilers names the algebra's parts. Its rules
-  are reaching definitions plus flow and anti dependences.
+- **Dependence analysis** from compilers names the rules' parts: flow and anti
+  dependences, and the nearest killing definition.
 - **Self-adjusting computation and build systems** supply the correctness
   vocabulary ("from-scratch consistency"), early cutoff, and the alternative
   to restoring by rerunning: keeping versions.
@@ -107,22 +107,22 @@ comparison section. The engine is held to it by the cases under
 [writes through function parameters](../script-reactivity-cases.md#user-content-writes-through-function-parameters),
 which include Rex's `flu_vaccine` edit and its `aliasing_val_swap`.
 
-## The algebra is dependence analysis
+## The rules are dependence analysis
 
 | the draft's term | standard name |
 |---|---|
 | a later unit reruns on a changed value | flow (RAW) dependence |
 | restore because a later unit took or wrote what an earlier one reads | anti (WAR) dependence |
-| the nearest unit that provided, overwrote or revived it | reaching definition |
+| the nearest unit that provided, overwrote or revived it | nearest killing definition (a reaching definition can be an update) |
 | an overwrite stops propagation | a kill, in gen/kill dataflow |
 | a conditional or partial write counts as an update | may-def against must-def |
 | collect until nothing is added | worklist fixed point |
 
 Two consequences:
 
-- The five operations are combinations of use, must-def and may-def, plus
+- The five accesses are combinations of use, must-def and may-def, plus
   whether the name is given away or given back. Saying so could shorten the
-  "complete algebra" section and make it read as less ad hoc to PL readers.
+  "complete set of recursive rules" section and make it read as less ad hoc to PL readers.
 - Compilers remove anti dependences by renaming (SSA, register renaming). The
   equivalent here is keeping old versions of bindings, which removes the need
   to restore by rerunning. Imperative self-adjusting computation does this
@@ -206,7 +206,7 @@ data is the value of a const in the unit that requires it.
 Suppose instead the data is a binding of a special kind, which the engine's
 driver sets between steps, and which is never compiled.
 
-**The algebra gets simpler.**
+**The rules get simpler.**
 
 - The type must be declared. Today an unannotated `require data` takes its type
   from the file, so data can change a type and break a unit. An input binding
@@ -288,7 +288,7 @@ In order:
    now compared against a fresh run (November 2026); what is missing is random
    sessions.
 6. Retract by what the old code did on its last run, recorded at runtime,
-   rather than by its static operations. Apply has to stay static. This fixes
+   rather than by its static accesses. Apply has to stay static. This fixes
    the issue that a unit that did not run is assumed to have done what it would.
 7. Value-based early cutoff at the runtime layer.
 8. Later: snapshots for restores that rerun something expensive, such as the

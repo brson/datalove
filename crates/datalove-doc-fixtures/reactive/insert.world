@@ -16,7 +16,7 @@ expect both units are entered
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | compiles, runs | new | `a` moved |
+| 1 | - | compiles, runs | new | `a` taken |
 | 2 | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
 
 ----------
@@ -31,6 +31,6 @@ expect a unit reading `a` is inserted before the take
 
 | unit | uses | this step | because | holds after |
 |------|------|-----------|---------|-------------|
-| 1 | - | reruns | rerun: unit 3 reads `a`, which unit 2 took after it | `a` moved |
+| 1 | - | reruns | rerun: unit 3 reads `a`, which unit 2 took after it | `a` taken |
 | 3 | reads `a` (1) | compiles, runs | inserted | `c` = 1001 |
 | 2 | takes `a` (1) | reruns | rerun: takes `a` from unit 1, which reran | `a_moved` = 1000 |
