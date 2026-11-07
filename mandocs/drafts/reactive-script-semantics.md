@@ -1536,6 +1536,8 @@ and live record-and-replay debuggers.
 Elm has something like this.
 Datalove's reactive algebra is a dependence analysis,
 bread and butter compiler stuff.
+Dependence analysis is mostly used for optimization.
+Here we are using it to determine when to rerun surrounding units.
 
 Some of the vocabulary in my algebra has established terminology:
 
@@ -1550,9 +1552,6 @@ Some of the vocabulary in my algebra has established terminology:
 | restore because a later unit took or wrote what an earlier one reads | anti (write-after-read) dependence |
 | the nearest unit that set the binding without reading it | reaching definition |
 | repeat until nothing more needs to rerun | worklist fixed point |
-
-Dependence analysis is mostly used for optimization.
-Here we are using it to determine when to rerun surrounding units.
 
 There is one paper that applies directly to this work,
 [When Do Reactive Notebooks Fail to React?](https://arxiv.org/abs/2511.21994), by Lu et. al. 2025.
