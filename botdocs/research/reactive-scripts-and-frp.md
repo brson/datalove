@@ -132,7 +132,12 @@ Two consequences:
 ## Incremental computation and build systems
 
 - **"From-scratch consistency"** is the established name for the draft's
-  rule (Acar; Hammer et al., Adapton, PLDI 2014 *unverified*). Build Systems a
+  rule. Hammer et al., "Incremental Computation with Names" (OOPSLA 2015),
+  calls it "the fundamental correctness property of incremental computation"
+  and proves it as its main theorem (B.13): incremental evaluation produces
+  the same answer as re-evaluating from scratch. Acar's papers call the same
+  property "consistency" (Acar, Blume, Donham, ESOP 2007; Acar, Ahmed, Blume,
+  POPL 2008). Build Systems a
   la Carte (Mokhov, Mitchell, Peyton Jones, 2018 *unverified*) gives formal
   correctness definitions to cite.
 - **Imperative self-adjusting computation** (Acar, Ahmed, Blume, POPL 2008)
@@ -317,6 +322,9 @@ Read for this document:
 - Li et al., "Kishu: Time-Traveling for Computational Notebooks",
   https://www.vldb.org/pvldb/vol18/p970-li.pdf
 - marimo reactivity guide, https://docs.marimo.io/guides/reactivity/
+- Hammer, Dunfield, Headley, Labich, Foster, Hicks, Van Horn, "Incremental
+  Computation with Names", OOPSLA 2015,
+  https://www.cs.tufts.edu/~jfoster/papers/oopsla15.pdf
 - Acar, Ahmed, Blume, "Imperative self-adjusting computation", POPL 2008,
   DOI 10.1145/1328438.1328476
 - McDirmid and Edwards, "Programming with managed time", Onward! 2014,
