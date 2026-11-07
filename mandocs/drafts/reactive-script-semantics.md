@@ -55,41 +55,27 @@ I did not prove correctness.
 
 **Part 1. Background**
 
-- <!-- and -->
-  [What is a reactive script?](#user-content-what-is-a-reactive-script)
-- <!-- and -->
-  [Datalove's design for reactivity](#user-content-dataloves-design-for-reactivity)
+- [What is a reactive script?](#user-content-what-is-a-reactive-script)
+- [Datalove's design for reactivity](#user-content-dataloves-design-for-reactivity)
 
 **Part 2. Experiments**
 
-- <!-- but..therefore -->
-  [If one unit moves or mutates a binding how does that affect preceding units on replay?](#user-content-if-one-unit-moves-or-mutates-a-binding-how-does-that-affect-preceding-units-on-replay)
-- <!-- therefore -->
-  [A naive algebra of reruns for moves and mutations](#user-content-a-naive-algebra-of-reruns-for-moves-and-mutations)
-- <!-- but..therefore -->
-  [But what about edits that change what a unit does?](#user-content-but-what-about-edits-that-change-what-a-unit-does)
-- <!-- therefore -->
-  [A second algebra: retract and apply](#user-content-a-second-algebra-retract-and-apply)
-- <!-- but..therefore -->
-  [But what about edits that change which names later units can use?](#user-content-but-what-about-edits-that-change-which-names-later-units-can-use)
-- <!-- therefore -->
-  [A third algebra: breaks and fixes](#user-content-a-third-algebra-breaks-and-fixes)
-- <!-- but..therefore -->
-  [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
-- <!-- therefore -->
-  [A complete recursive algebra of recompiles and reruns for moves and mutations](#user-content-a-complete-recursive-algebra-of-recompiles-and-reruns-for-moves-and-mutations)
+- [If one unit moves or mutates a binding how does that affect preceding units on replay?](#user-content-if-one-unit-moves-or-mutates-a-binding-how-does-that-affect-preceding-units-on-replay)
+- [A naive algebra of reruns for moves and mutations](#user-content-a-naive-algebra-of-reruns-for-moves-and-mutations)
+- [But what about edits that change what a unit does?](#user-content-but-what-about-edits-that-change-what-a-unit-does)
+- [A second algebra: retract and apply](#user-content-a-second-algebra-retract-and-apply)
+- [But what about edits that change which names later units can use?](#user-content-but-what-about-edits-that-change-which-names-later-units-can-use)
+- [A third algebra: breaks and fixes](#user-content-a-third-algebra-breaks-and-fixes)
+- [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
+- [A complete recursive algebra of recompiles and reruns for moves and mutations](#user-content-a-complete-recursive-algebra-of-recompiles-and-reruns-for-moves-and-mutations)
 
 **Part 3. Results and Discussion**
 
 - [Functions and modules are bindings too](#user-content-functions-and-modules-are-bindings-too)
-- <!-- but..therefore -->
-  [Where the static picture is approximate](#user-content-where-the-static-picture-is-approximate)
-- <!-- but..therefore -->
-  [Validating this design with a literate test suite](#user-content-validating-this-design-with-a-literate-test-suite)
-- <!-- but..therefore -->
-  [Comparing to FRP literature](#user-content-comparing-to-frp-literature)
-- <!-- therefore -->
-  [A live example of the Datalove scripting engine](#user-content-a-live-example-of-the-datalove-scripting-engine)
+- [Where the static picture is approximate](#user-content-where-the-static-picture-is-approximate)
+- [Validating this design with a literate test suite](#user-content-validating-this-design-with-a-literate-test-suite)
+- [Comparing to FRP literature](#user-content-comparing-to-frp-literature)
+- [A live example of the Datalove scripting engine](#user-content-a-live-example-of-the-datalove-scripting-engine)
 
 
 
@@ -351,6 +337,9 @@ _Therefore_ about the hidden state problem.
 
 _But_ what about I/O?
 _Therefore_ here is how we model it.
+
+_But_ what about FRP?
+_Therefore_ here is how we compare.
 
 Refine the motivating example to a datalove worldfile,
 introducing the concept.
@@ -1473,7 +1462,7 @@ The text around them is less scrutinized, mostly written by LLMs.
 
 
 
-## Comparing to FRP literature
+## Comparing to the literature
 
 <!--
 _But_ we've entirely ignored the FRP literature,
@@ -1482,6 +1471,60 @@ _Therefore_ let's review some papers.
 Prefer this last because I want to experiment on my own,
 then do the upstream research and refine based on the literature.
 -->
+
+This work has precedent.
+The obvious is from functional reactive programming (FRP).
+I have only little experience and knowledge of FRP
+and did not want to change that _prior_ to doing this work.
+I prefer to discover for myself.
+
+I'm mostly familiar with FRP through its popularity
+in the UI domain, React and similar.
+My use case here is different.
+I want the interactive coding experience to be reactive,
+so when I make changes to the code or its input I see the results immediately,
+and the results are deterministic.
+
+This turns out to be significantly different from FRP
+in that FRP is entirely concerned with runtime reactivity to changes in data.
+I do care about that as well, and I think that for my purposes
+changes in data can be treated as a subset of changes to code
+(imagine that a variable binding changes value at compile time vs. runtime -
+both conceptually have the same effect on the interpreter).
+
+Datalove's reactivity is coarse-grained, script units,
+where FRP research typically seeks to produce granular recomputation.
+Differential dataflow for example is deeply focused on not reprocessing entire lists
+during streaming workloads.
+I'm not sure the extent to which Datalove will care about that,
+though I think the current architecture is a reasonable foundation for future work.
+
+Datalove's rerun algebra concerns itself primarily
+with repairing the effects of moves and mutations,
+tractable because of its linear typesystem.
+FRP seems to be focused on languages with immutable types,
+typical functional languages.
+
+So while FRP research does apply to Datalove,
+and will moreso in the future when Datalove gets real I/O,
+the more useful comparison today seems to be to things like deterministic incremental build systems
+and live record-and-replay debuggers.
+Elm has something like this.
+Datalove's reactive algebra is a dependency analysis,
+bread and butter compiler stuff.
+
+todo compare the terminology here with PL literature
+
+There is one paper that applies directly to this work,
+[When Do Reactive Notebooks Fail to React?](todo), by Lu et. al. 2025.
+They examine existing reactive notebooks to find cases where
+their replay behavior is non-deterministic.
+They developed a language and testing methodology.
+I was happy to find that the algebra I developed here
+appears to pass all their cases and more.
+I did find that they had identified cases that I had not made explicit,
+particularly related to mutating functions and moves of script units.
+I was able to add them to my test suite.
 
 
 
