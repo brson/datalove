@@ -359,10 +359,11 @@ spares name resolution sits at `ParsedStatements`.
 The test for "should this be tracked" is: **does anything look it up by
 identity, or does it only ever get read out of a collection?**
 
-## Determinism: `BTreeMap` where it is iterated, `HashMap` where it is not
+## Determinism: no walk in hash order
 
-`HashMap` iteration order comes from a seed drawn afresh in every process. For a
-compiler that means the same input can produce different output.
+A hash container iterates in an order that comes from its hasher and its
+history, not its contents; std's `HashMap` draws a fresh seed in every process.
+For a compiler that means the same input can produce different output.
 
 This was not hypothetical. Compiling one file four times produced four different
 object files. The causes, all found by walking hash collections:
@@ -377,8 +378,21 @@ object files. The causes, all found by walking hash collections:
 - Consts were flattened with `or_insert_with`, so when two shared a short name
   the winner was whichever hash order reached it first.
 
-The rule: **`HashMap` for lookup, `BTreeMap` or a sorted `Vec` for anything
-iterated.** About 116 lookup-only hash maps are left alone and should be.
+The rule was **hash maps for lookup, `BTreeMap` or a sorted `Vec` for anything
+iterated**, kept by auditing, and auditing kept missing things. So the rule is
+in the types now: the only hash containers are `bct::lookup::LookupMap` and
+`LookupSet` (`bcts/src/lookup.rs`), whose walks are each named for what they may
+do with the order, below. `clippy.toml` bans `HashMap`, `HashSet`, and the
+`FxHash` and `AHash` ones, and `just test` runs clippy with that lint denied.
+The runtime is the exception: it cannot depend on bcts, which brings salsa, so
+its two files with maps allow the lint and say why.
+
+Putting the last 60-odd files on `LookupMap`, in November 2026, made every walk
+choose, and two were wrong. Script function consts were inlined from one map
+keyed by bare name, so of two functions each declaring a const `X`, both got
+the same one's value (`backend/42_one_const_name_in_two_functions.dfs`). And
+the Cranelift backend declared a function's register-held slot variables in
+set order.
 
 ### Salsa structs have no order
 
@@ -389,16 +403,18 @@ or a sequential and a parallel one, give the same text and the same module
 different ids, and anything ordered by id can come out differently.
 
 So none of them is `Ord`. `InternedText`, `ModuleId` and `PackageModule` used to
-be, by id, and so did `ExprKey`, which contains the first two. A map or set
-keyed by a salsa struct, or by a tuple or struct holding one, is
-`bct::lookup::LookupMap` or `LookupSet` (`bcts/src/lookup.rs`):
+be, by id, and so did `ExprKey`, which contains the first two. That is what
+`LookupMap` and `LookupSet` were made for, before they became the only hash
+containers:
 
 - **Lookup** is a hash map's: `get`, `insert`, `entry`, `contains_key`, indexing.
 - **Walking it says what the walk may do with the order.** `iter_unordered` and
   its siblings for a walk whose result cannot depend on it: `all`, a count,
-  collecting into another lookup map or a map keyed by content. `sorted_by_key`
-  for one that reaches output or a memoized value, ordered by content, usually
-  `path` or `as_str`.
+  collecting into another lookup map or a map keyed by content. `sorted` for
+  one that reaches output or a memoized value, where the key is `Ord`, and
+  `sorted_by_key` where it is not, ordered by content, usually `path` or
+  `as_str`. Two entries that sort equal would come out in hash order, so debug
+  builds assert that none do.
 - **Its `Hash` ignores order**, summing a mixed hash of each entry, so unlike
   `HashMap` it can sit in a tracked struct's identity or a memoized value, which
   is what the `BTreeMap`s it replaced were for.
@@ -417,27 +433,27 @@ replaced the three `Ord`s with a scramble of the id bits and run the suite,
 which passed: none of these was visible to a test, which is the argument for
 having the compiler refuse them rather than looking for them.
 
-Reproducibility cannot be tested in one process, because the seed is fixed
-within a run and a hash map iterates identically every time. `datalove-cli/tests/reproducible_build_tests.rs`
-compiles a fixture three times in **separate processes** and compares the bytes.
+A walk can still be labeled unordered when it is not, and FxHash, which
+`LookupMap` uses, has no seed of its own: every run of a build would walk the
+same way and hide the mistake. So the seed is read from `BCTS_LOOKUP_SEED`, zero
+if unset, once per process. `datalove-cli/tests/reproducible_build_tests.rs`
+compiles every `aot_run` and `backend` fixture under three seeds, in separate
+processes, and compares the bytes. Making one backend walk unordered on purpose
+changes 18 of the 44 objects; the two small fixtures the test used to compile
+saw none of it.
 
 ### Hashers
 
-Every hash map and set in the tree is `rustc_hash::FxHashMap` or `FxHashSet`,
-the hasher salsa uses internally; std's SipHash `HashMap` is not used. Build
-one with `default()`, since `new()` exists only for std's hasher.
+`LookupMap` and `LookupSet` hash with FxHash, through `rmx::rustc_hash`, the
+hasher salsa uses internally, seeded as above.
 
-The hot maps moved first, one profile at a time; see
+The hot maps moved from SipHash first, one profile at a time; see
 [compile time](compile-time.md#user-content-what-was-fixed). The other 60-odd
 files followed in November 2026. They took a compile of every `sys/std` module
 from 136.7M instructions to 135.0M. A compiled program's speed did not change,
 except under leak checking: the runtime records every live allocation in a
 pointer-keyed map, and on FxHash that check costs `storage.dfs` 11% rather than
 19%, and `wordfreq.dfs` 13% rather than 23%.
-
-FxHash has no per-process seed, so iteration order no longer changes from run
-to run. But it still depends on insertion history, and on a salsa id where a key
-holds one, so the rule above still holds.
 
 ## Durability
 

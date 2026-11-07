@@ -11,7 +11,7 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeSet;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use rmx::std::sync::{Arc, Mutex};
 
 /// One query salsa ran, and the argument it ran on.
@@ -104,7 +104,7 @@ impl QueryRecorder {
 /// of them resolves back to its path.
 #[derive(Default)]
 pub struct ModuleKeys {
-    paths: FxHashMap<salsa::Id, String>,
+    paths: LookupMap<salsa::Id, String>,
 }
 
 impl ModuleKeys {

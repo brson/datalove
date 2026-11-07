@@ -17,7 +17,7 @@
 //! unit puts them in its own `nested_units`, as const specialization does with
 //! its copies (`specialize`).
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -90,8 +90,8 @@ pub struct Instantiator<'a> {
     key_of: &'a dyn Fn(&CodeRef) -> Option<CalleeKey>,
     /// An id for a new instance of a generic, and how a call reaches it.
     place: &'a mut dyn FnMut(CalleeKey) -> (CodeUnitId, CodeRef),
-    made: FxHashMap<(CalleeKey, Vec<IrType>), CodeRef>,
-    per_function: FxHashMap<CalleeKey, usize>,
+    made: LookupMap<(CalleeKey, Vec<IrType>), CodeRef>,
+    per_function: LookupMap<CalleeKey, usize>,
     instances: Vec<Instance>,
 }
 
@@ -104,8 +104,8 @@ impl<'a> Instantiator<'a> {
     ) -> Self {
         Instantiator {
             policy, generic, key_of, place,
-            made: FxHashMap::default(),
-            per_function: FxHashMap::default(),
+            made: LookupMap::default(),
+            per_function: LookupMap::default(),
             instances: Vec::new(),
         }
     }
@@ -236,12 +236,12 @@ pub fn instantiate_module_graph(
     modules: &mut [(IrModuleId, &mut Vec<Arc<IrCodeUnit>>)],
     policy: GenericsPolicy,
 ) {
-    let generics: FxHashMap<CalleeKey, Arc<IrCodeUnit>> = modules.iter()
+    let generics: LookupMap<CalleeKey, Arc<IrCodeUnit>> = modules.iter()
         .flat_map(|(module, functions)| functions.iter()
             .filter(|f| is_instantiable(f))
             .map(|f| (CalleeKey::Module(*module, f.id), Arc::clone(f))))
         .collect();
-    let mut next_id: FxHashMap<IrModuleId, u32> = modules.iter()
+    let mut next_id: LookupMap<IrModuleId, u32> = modules.iter()
         .map(|(module, functions)| (*module, functions.iter().map(|f| f.id.0 + 1).max().unwrap_or(0)))
         .collect();
 
@@ -290,7 +290,7 @@ pub fn instantiate_script_unit(
     module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
     policy: GenericsPolicy,
 ) {
-    let local: FxHashMap<CodeUnitId, Arc<IrCodeUnit>> = unit.nested_units.iter()
+    let local: LookupMap<CodeUnitId, Arc<IrCodeUnit>> = unit.nested_units.iter()
         .filter(|f| is_instantiable(f))
         .map(|f| (f.id, Arc::new(f.clone())))
         .collect();

@@ -270,8 +270,8 @@ impl LocalCallee {
 /// copied out by the return, and the copy's wide loads read back the narrow
 /// stores that just wrote it, which the processor cannot forward from: on
 /// recursive `fib`, which returns `!u32`, most of a call's time went there.
-pub(super) fn return_slot_values(func: &IrCodeUnit) -> rmx::rustc_hash::FxHashSet<ValueId> {
-    let mut uses: FxHashMap<ValueId, u32> = FxHashMap::default();
+pub(super) fn return_slot_values(func: &IrCodeUnit) -> bct::lookup::LookupSet<ValueId> {
+    let mut uses: LookupMap<ValueId, u32> = LookupMap::default();
     let mut count = |op: &Operand| {
         if let Operand::Value(v) | Operand::ValueRef(v) = op {
             *uses.entry(*v).or_default() += 1;

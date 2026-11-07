@@ -4,7 +4,7 @@ use datalove_diagnostic_codes::DCode;
 use rmx::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 
 use bct::{
     bracer::{Cursor, TreeToken},
@@ -50,7 +50,7 @@ impl<'db> TokenSource<'db> {
 ///
 /// A data file says the same field names and small numbers over and over, and
 /// salsa hashes and probes its map for every occurrence it is asked to intern.
-type Interned<'db> = Rc<RefCell<FxHashMap<&'db str, InternedText<'db>>>>;
+type Interned<'db> = Rc<RefCell<LookupMap<&'db str, InternedText<'db>>>>;
 
 /// Where a parser's diagnostics go: filed as they are made, or kept.
 ///

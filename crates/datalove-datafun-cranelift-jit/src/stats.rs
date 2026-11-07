@@ -9,7 +9,7 @@
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 
 use datalove_datafun_ir::IrModuleId;
 use datalove_datafun_interp::FuncIdentity;
@@ -35,7 +35,7 @@ pub struct JitStats {
     pub refused_count: u32,
     /// Each function the jit compiled or, when calls are being counted, was
     /// called through it.
-    pub functions: FxHashMap<FuncIdentity, FunctionStats>,
+    pub functions: LookupMap<FuncIdentity, FunctionStats>,
 }
 
 /// What the jit did with one function.
@@ -118,9 +118,9 @@ impl JitStats {
             FuncIdentity::Unit { unit, .. } => format!("<unit {unit}>.{}", f.name),
         };
 
-        let (interpreted, entered, exited) = self.functions.values()
+        let (interpreted, entered, exited) = self.functions.values_unordered()
             .fold((0, 0, 0), |(i, n, x), f| (i + f.interpreted, n + f.entered, x + f.exited));
-        let planned: u64 = self.functions.values().map(|f| f.planned).sum();
+        let planned: u64 = self.functions.values_unordered().map(|f| f.planned).sum();
 
         let mut out = String::new();
         let _ = writeln!(out, "jit: compiled {} functions ({} refused), {:.1} ms codegen, {} bytes",
@@ -128,11 +128,11 @@ impl JitStats {
             self.total_compile_time.as_secs_f64() * 1e3, self.total_code_size);
         let _ = writeln!(out, "jit: calls through the dispatcher: {interpreted} interpreted, \
             {entered} interpreter -> native ({planned} planned), {exited} native -> interpreter");
-        let loops_entered: u64 = self.functions.values().map(|f| f.loops_entered).sum();
+        let loops_entered: u64 = self.functions.values_unordered().map(|f| f.loops_entered).sum();
         let _ = writeln!(out, "jit: loops: {} entries compiled ({} refused), {} frames entered them",
             self.osr_compiled_count, self.osr_refused_count, loops_entered);
 
-        let mut by_calls: Vec<_> = self.functions.iter()
+        let mut by_calls: Vec<_> = self.functions.iter_unordered()
             .filter(|(_, f)| f.interpreted + f.entered + f.exited > 0)
             .collect();
         by_calls.sort_by_key(|(key, f)| (std::cmp::Reverse(f.interpreted + f.entered + f.exited), name(key, f)));
@@ -155,7 +155,7 @@ impl JitStats {
             Some(t) => format!("{:.2}ms", t.as_secs_f64() * 1e3),
             None => "-".to_owned(),
         };
-        let mut by_codegen: Vec<_> = self.functions.iter()
+        let mut by_codegen: Vec<_> = self.functions.iter_unordered()
             .filter(|(_, f)| f.compile_time.is_some() || f.osr_compile_time.is_some())
             .map(|(key, f)| (f.compile_time.unwrap_or_default() + f.osr_compile_time.unwrap_or_default(), key, f))
             .collect();
@@ -168,7 +168,7 @@ impl JitStats {
                     ms(f.compile_time), f.code_size, ms(f.osr_compile_time), f.loops_entered, name(key, f));
             }
         }
-        let mut refused_functions: Vec<_> = self.functions.iter()
+        let mut refused_functions: Vec<_> = self.functions.iter_unordered()
             .filter_map(|(key, f)| f.refusal.as_ref().map(|why| (name(key, f), why)))
             .collect();
         refused_functions.sort();
@@ -178,7 +178,7 @@ impl JitStats {
                 let _ = writeln!(out, "  {function}: {why}");
             }
         }
-        let mut refused: Vec<_> = self.functions.iter()
+        let mut refused: Vec<_> = self.functions.iter_unordered()
             .flat_map(|(key, f)| f.osr_refusals.iter().map(move |(header, why)| (name(key, f), *header, why)))
             .collect();
         refused.sort_by(|a, b| (&a.0, a.1.0).cmp(&(&b.0, b.1.0)));

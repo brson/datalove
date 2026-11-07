@@ -65,7 +65,7 @@ pub fn resolve_names_inheriting<'db>(
     let mut type_aliases_vec = Vec::new();
     let mut functions = Vec::new();
     let mut function_asts = Vec::new();
-    let mut defined = rmx::rustc_hash::FxHashSet::default();
+    let mut defined = bct::lookup::LookupSet::default();
 
     for item in items {
         // Extract function signature from either regular or native fun.

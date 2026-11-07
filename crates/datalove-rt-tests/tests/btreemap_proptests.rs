@@ -132,7 +132,7 @@ proptest! {
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         // Track unique keys for expected length.
-        let mut unique_keys = rmx::rustc_hash::FxHashSet::default();
+        let mut unique_keys = bct::lookup::LookupSet::default();
 
         // Insert all entries.
         for (key, value) in &entries {
@@ -524,7 +524,7 @@ proptest! {
             }
 
             // Calculate expected unique keys.
-            let mut unique_keys = rmx::rustc_hash::FxHashSet::default();
+            let mut unique_keys = bct::lookup::LookupSet::default();
             unique_keys.insert(base_key);
             for (key, _) in &other_entries {
                 unique_keys.insert(*key);
@@ -562,7 +562,7 @@ proptest! {
             let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, rtdt::AnyOut::new(map_ptr), &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-            let mut unique_keys = rmx::rustc_hash::FxHashSet::default();
+            let mut unique_keys = bct::lookup::LookupSet::default();
 
             for (key, value) in &entries {
                 let key_str = format!("key_{}", key);
@@ -964,7 +964,7 @@ proptest! {
                 // We must NOT destroy them here - the btreemap now owns them.
             }
 
-            let mut unique_keys = rmx::rustc_hash::FxHashSet::default();
+            let mut unique_keys = bct::lookup::LookupSet::default();
             unique_keys.insert(base_key_str);
             for (key, _) in &other_entries {
                 unique_keys.insert(format!("key_{}", key));
@@ -1038,7 +1038,7 @@ proptest! {
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Track the last value for each key.
-            let mut expected_values = rmx::rustc_hash::FxHashMap::default();
+            let mut expected_values = bct::lookup::LookupMap::default();
 
             // Insert all entries.
             for (key, value) in &entries {
@@ -1116,7 +1116,7 @@ proptest! {
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Insert keys.
-            let inserted_set: rmx::rustc_hash::FxHashSet<u32> = inserted_keys.iter().copied().collect();
+            let inserted_set: bct::lookup::LookupSet<u32> = inserted_keys.iter().copied().collect();
 
             for key in &inserted_keys {
                 let mut key_val = *key;
@@ -1260,7 +1260,7 @@ proptest! {
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc));
-            let mut expected_values: rmx::rustc_hash::FxHashMap<u32, u32> = rmx::rustc_hash::FxHashMap::default();
+            let mut expected_values: bct::lookup::LookupMap<u32, u32> = bct::lookup::LookupMap::default();
 
             for (is_insert, key, value) in operations {
                 if is_insert {

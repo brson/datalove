@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 use std::collections::BTreeMap;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{Statement, ExprArena, ExprFun, ExprFunctionCall, ExprId, ExprKey};
 use datalove_datafun_ir::{
@@ -47,7 +47,7 @@ pub struct FrameState<'db> {
     /// Next ParamId to allocate.
     pub next_param: u32,
     /// Mapping from variable names to their operands.
-    pub variables: rmx::rustc_hash::FxHashMap<String, Operand>,
+    pub variables: bct::lookup::LookupMap<String, Operand>,
     /// Stack of open name scopes, innermost last.
     ///
     /// A block body -- an `if` branch, a loop body, a match arm -- opens one,
@@ -67,7 +67,7 @@ pub struct FrameState<'db> {
     /// tracking bytes are assigned in, and that reaches the emitted code.
     pub binding_to_operand: BindingMap<Operand>,
     /// Reverse mapping from Operand to BindingId (for tracking lookups).
-    pub operand_to_binding: rmx::rustc_hash::FxHashMap<Operand, BindingId>,
+    pub operand_to_binding: bct::lookup::LookupMap<Operand, BindingId>,
     /// Next BindingId to allocate (must match analysis traversal order).
     pub next_binding_id: u32,
     /// Type for each ParamId.
@@ -106,7 +106,7 @@ pub struct FrameState<'db> {
     pub pending_intermediate_scopes: Vec<Vec<Operand>>,
     /// Expression indices of the places lowered so far that name a whole
     /// binding, for `DropSchedule::try_return_not_yet_moved`.
-    pub lowered_places: rmx::rustc_hash::FxHashSet<u32>,
+    pub lowered_places: bct::lookup::LookupSet<u32>,
     /// Next global statement ID (must match analysis traversal order).
     pub next_stmt_id: usize,
     /// Current statement index in the parent body (for drop schedule lookup).
@@ -181,15 +181,15 @@ pub struct LoopLowerContext {
 #[derive(Clone, Debug, Default)]
 pub struct ScriptLowerContext {
     /// Available let bindings: name -> (unit id, value_id).
-    pub values: FxHashMap<String, (u32, ValueId)>,
+    pub values: LookupMap<String, (u32, ValueId)>,
     /// Available var bindings: name -> (unit id, slot_id).
-    pub slots: FxHashMap<String, (u32, SlotId)>,
+    pub slots: LookupMap<String, (u32, SlotId)>,
     /// Types of exported values: name -> type.
-    pub value_types: FxHashMap<String, IrType>,
+    pub value_types: LookupMap<String, IrType>,
     /// Types of exported slots: name -> type.
-    pub slot_types: FxHashMap<String, IrType>,
+    pub slot_types: LookupMap<String, IrType>,
     /// Available functions: name -> (unit id, func_id).
-    pub functions: FxHashMap<String, (u32, FuncId)>,
+    pub functions: LookupMap<String, (u32, FuncId)>,
 }
 
 impl ScriptLowerContext {
@@ -273,11 +273,11 @@ pub struct LowerCtx<'db> {
     pub(super) symbols: SymbolTable,
     /// Available functions: name -> CodeRef (for resolving calls).
     /// Used for script-local and external unit functions (not module functions).
-    pub(super) func_scope: FxHashMap<String, CodeRef>,
+    pub(super) func_scope: LookupMap<String, CodeRef>,
     /// Types of external slots from previous script units, keyed by name.
-    pub(super) external_slot_types: FxHashMap<String, IrType>,
+    pub(super) external_slot_types: LookupMap<String, IrType>,
     /// Types of external values from previous script units, keyed by name.
-    pub(super) external_value_types: FxHashMap<String, IrType>,
+    pub(super) external_value_types: LookupMap<String, IrType>,
     /// Bindings to drop at unit end (for AOT compilation).
     pub(super) unit_end_drops: Vec<BindingId>,
 
@@ -287,7 +287,7 @@ pub struct LowerCtx<'db> {
     /// Whether we're in a script unit (vs function).
     pub(super) is_script_unit: bool,
     /// Const bindings evaluated at compile time: name -> (type, value).
-    pub(super) const_bindings: FxHashMap<String, (IrType, Arc<ConstValue>)>,
+    pub(super) const_bindings: LookupMap<String, (IrType, Arc<ConstValue>)>,
     /// The expressions of the body being lowered.
     pub(super) arena: Option<&'db ExprArena<'db>>,
 }
@@ -311,13 +311,13 @@ impl<'db> LowerCtx<'db> {
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
-            func_scope: FxHashMap::default(),
-            external_slot_types: FxHashMap::default(),
-            external_value_types: FxHashMap::default(),
+            func_scope: LookupMap::default(),
+            external_slot_types: LookupMap::default(),
+            external_value_types: LookupMap::default(),
             unit_end_drops: Vec::new(),
             return_type: None,
             is_script_unit: false,
-            const_bindings: FxHashMap::default(),
+            const_bindings: LookupMap::default(),
             arena: None,
         }
     }
@@ -369,14 +369,14 @@ impl<'db> LowerCtx<'db> {
         script_ctx: ScriptLowerContext,
     ) -> Self {
         // Seed variables with external bindings from previous units.
-        let mut variables = rmx::rustc_hash::FxHashMap::default();
-        for (name, (unit, value)) in &script_ctx.values {
+        let mut variables = bct::lookup::LookupMap::default();
+        for (name, (unit, value)) in script_ctx.values.iter_unordered() {
             variables.insert(name.clone(), Operand::ExternalValue {
                 unit: *unit,
                 value: *value,
             });
         }
-        for (name, (unit, slot)) in &script_ctx.slots {
+        for (name, (unit, slot)) in script_ctx.slots.iter_unordered() {
             variables.insert(name.clone(), Operand::ExternalSlot {
                 unit: *unit,
                 slot: *slot,
@@ -384,8 +384,8 @@ impl<'db> LowerCtx<'db> {
         }
 
         // Seed function scope with external functions from previous units.
-        let mut func_scope = FxHashMap::default();
-        for (name, (unit, func_id)) in &script_ctx.functions {
+        let mut func_scope = LookupMap::default();
+        for (name, (unit, func_id)) in script_ctx.functions.iter_unordered() {
             func_scope.insert(name.clone(), CodeRef::External {
                 unit: *unit,
                 id: CodeUnitId(func_id.0),
@@ -412,7 +412,7 @@ impl<'db> LowerCtx<'db> {
             // Script units have Result<()> return type for ! operator.
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
-            const_bindings: FxHashMap::default(),
+            const_bindings: LookupMap::default(),
             arena: None,
         }
     }
@@ -1260,7 +1260,7 @@ impl<'db> LowerCtx<'db> {
     /// via unit_end_values/unit_end_slots fields.
     pub fn compute_tracked_slots(&self) -> Vec<SlotId> {
         let mut result = Vec::new();
-        let mut added: rmx::rustc_hash::FxHashSet<SlotId> = rmx::rustc_hash::FxHashSet::default();
+        let mut added: bct::lookup::LookupSet<SlotId> = bct::lookup::LookupSet::default();
 
         for (id, &operand) in &self.body.binding_to_operand {
             if self.is_binding_tracked(id) {

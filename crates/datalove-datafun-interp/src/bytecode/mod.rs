@@ -591,7 +591,7 @@ pub(crate) fn release_layouts<'a>(layouts: impl IntoIterator<Item = &'a IrLayout
 
 /// Empty the call sites of `roots` and of every body they lead to.
 fn release_bodies(roots: Vec<std::rc::Rc<BcFunction>>) {
-    let mut seen = rmx::rustc_hash::FxHashSet::default();
+    let mut seen = bct::lookup::LookupSet::default();
     let mut pending = roots;
     while let Some(bc) = pending.pop() {
         if !seen.insert(std::rc::Rc::as_ptr(&bc)) {
@@ -910,7 +910,7 @@ pub struct BcStats {
     /// formatted string per instruction and so only with `DATALOVE_BC_STATS`.
     pub counting: bool,
     /// How many times each kind of instruction ran on the IR walker.
-    pub executed: rmx::rustc_hash::FxHashMap<String, u64>,
+    pub executed: bct::lookup::LookupMap<String, u64>,
 }
 
 impl BcStats {

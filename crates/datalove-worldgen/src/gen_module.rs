@@ -1,7 +1,7 @@
 //! Module generation.
 
 use rand::Rng;
-use rmx::rustc_hash::FxHashSet;
+use bct::lookup::LookupSet;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, ModuleInfo, TypeAlias, FunctionSig};
 use crate::gen_type::{gen_type_alias, format_type_alias};
@@ -118,7 +118,7 @@ pub fn gen_module<'db, R: Rng>(
     // shadowing. Nor is a name this module defines a function by imported,
     // which is an error too: every module names its functions `fn0`, `fn1`
     // and so on.
-    let mut imported_names: FxHashSet<String> = info.functions.iter().map(|f| f.name.clone())
+    let mut imported_names: LookupSet<String> = info.functions.iter().map(|f| f.name.clone())
         .chain(info.generics.iter().map(|g| g.name.clone()))
         .collect();
     let mut imported_generics: Vec<GenericSig> = Vec::new();

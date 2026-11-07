@@ -6,7 +6,7 @@
 //!
 //! These passes are used after const inlining to clean up orphaned code.
 
-use rmx::rustc_hash::{FxHashMap, FxHashSet};
+use bct::lookup::{LookupMap, LookupSet};
 use datalove_datafun_ir::dense::ValueSet;
 use datalove_datafun_ir::{
     BlockId, ExportBinding, Instruction, IrBlock, IrCodeUnit, IrType,
@@ -52,7 +52,7 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
     }
 
     // Find all reachable blocks starting from block 0 (entry).
-    let mut reachable: FxHashSet<BlockId> = FxHashSet::default();
+    let mut reachable: LookupSet<BlockId> = LookupSet::default();
     let mut worklist: Vec<BlockId> = vec![BlockId(0)];
 
     while let Some(block_id) = worklist.pop() {
@@ -94,7 +94,7 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
 
     // Build mapping from old block IDs to new IDs.
     // New IDs are assigned in order: 0, 1, 2, ...
-    let mut old_to_new: FxHashMap<BlockId, BlockId> = FxHashMap::default();
+    let mut old_to_new: LookupMap<BlockId, BlockId> = LookupMap::default();
     let mut new_id = 0u32;
     for block in &func.blocks {
         if reachable.contains(&block.id) {

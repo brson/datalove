@@ -14,9 +14,12 @@ LEAK_CHECK := "panic"
 
 # Run the tests, check benches compile since they are not tested, and check
 # the runtime interface is what `gen-rti` would write.
+#
+# The check is clippy's, for the one lint that has to hold: no hash container
+# but `LookupMap` and `LookupSet`; see clippy.toml.
 test:
     uv run --no-project scripts/gen-rti.py --check
-    cargo check --all --benches
+    cargo clippy --all --all-targets -- -A clippy::all -D clippy::disallowed_types
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Smoke test the sys riders built and loaded rather than linked in.

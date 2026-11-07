@@ -114,7 +114,7 @@ pub use statics::{empty_function_unit, static_const_key, StaticConstLoc, StaticC
 use osr::{reachable_from, OsrState};
 use signature::return_slot_values;
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 
 use cranelift_codegen::ir::{
     self as cl_ir,
@@ -155,42 +155,42 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Module for declaring functions.
     module: &'a mut M,
     /// Mapping from IR ValueId to Cranelift Value.
-    values: FxHashMap<ValueId, cl_ir::Value>,
+    values: LookupMap<ValueId, cl_ir::Value>,
     /// The values chosen to be held as words; see `words`.
-    word_values: rmx::rustc_hash::FxHashSet<ValueId>,
+    word_values: bct::lookup::LookupSet<ValueId>,
     /// The words of each value held so, in place of an entry in `values`.
-    words: FxHashMap<ValueId, Vec<cl_ir::Value>>,
+    words: LookupMap<ValueId, Vec<cl_ir::Value>>,
     /// The variables of each slot held in registers; see `slot_vars`.
-    slot_vars: FxHashMap<SlotId, Vec<Variable>>,
+    slot_vars: LookupMap<SlotId, Vec<Variable>>,
     /// The references to a field of a slot held in registers, kept as where
     /// the field is.
-    field_places: FxHashMap<ValueId, slot_vars::FieldPlace>,
+    field_places: LookupMap<ValueId, slot_vars::FieldPlace>,
     /// Mapping from IR BlockId to Cranelift Block.
-    blocks: FxHashMap<BlockId, cl_ir::Block>,
+    blocks: LookupMap<BlockId, cl_ir::Block>,
     /// Mapping from IR ParamId to Cranelift Value (user params, not rt_handle).
-    param_values: FxHashMap<ParamId, cl_ir::Value>,
+    param_values: LookupMap<ParamId, cl_ir::Value>,
     /// The parameters passed by value and kept in registers, in place of an
     /// entry in `param_values`: each one's value or words, and the stack slot
     /// it is written to when an address of it is asked for.
-    param_regs: FxHashMap<ParamId, (Vec<cl_ir::Value>, cl_ir::StackSlot)>,
+    param_regs: LookupMap<ParamId, (Vec<cl_ir::Value>, cl_ir::StackSlot)>,
     /// How this function gives its result back: `ret_pass`'s say, or for an
     /// OSR entry, through `sret` as the interpreter takes it.
     ret: RetPass,
     /// Functions compiled beside this one, by their IR id.
-    local_funcs: FxHashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
+    local_funcs: LookupMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
     /// Functions in a script unit that finished before this one.
     ///
     /// Keyed by the unit as well as the id, because a `CodeUnitId` numbers a
     /// unit's own functions from zero: unit 1's function 0 and unit 2's function
     /// 0 are two functions with one id, and a body calling both would otherwise
     /// put two callees under one key and reach whichever was declared second.
-    external_funcs: FxHashMap<(u32, datalove_datafun_ir::CodeUnitId), LocalCallee>,
+    external_funcs: LookupMap<(u32, datalove_datafun_ir::CodeUnitId), LocalCallee>,
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
-    module_funcs: FxHashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>,
+    module_funcs: LookupMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>,
     /// The code cell of each callee declared as a stub that reads one: the
     /// address of a word holding the callee's compiled code, zero until it
     /// has some. The JIT's; see `set_code_cells`.
-    code_cells: FxHashMap<FuncId, usize>,
+    code_cells: LookupMap<FuncId, usize>,
     /// Function registry for looking up module functions.
     registry: Option<&'a FunctionRegistry>,
     /// Where the frame is: values, slots and tracking bytes, as `layout` says.
@@ -206,7 +206,7 @@ pub struct FunctionCompiler<'a, M: Module> {
     sret_param: Option<cl_ir::Value>,
     /// Values built straight into the caller's result slot rather than in
     /// this frame; see `return_slot_values`.
-    return_slot: rmx::rustc_hash::FxHashSet<ValueId>,
+    return_slot: bct::lookup::LookupSet<ValueId>,
     /// Where the consts `StaticRef` names live.
     static_consts: StaticConsts,
     /// The stack memory constants are built in; see `constants::ConstScratch`.
@@ -217,9 +217,9 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// The descriptor table, filled on entry; see `dynamic`.
     table_values: Vec<cl_ir::Value>,
     /// Where each dynamic value is kept, on the shadow stack.
-    dyn_storage: FxHashMap<ValueId, cl_ir::Value>,
+    dyn_storage: LookupMap<ValueId, cl_ir::Value>,
     /// Where each dynamic slot is kept, on the shadow stack.
-    dyn_slot_storage: FxHashMap<SlotId, cl_ir::Value>,
+    dyn_slot_storage: LookupMap<SlotId, cl_ir::Value>,
     /// The shadow stack's top and limit on entry, written back on return, for
     /// a function that takes space on it.
     shadow_mark: Option<(cl_ir::Value, cl_ir::Value)>,
@@ -294,19 +294,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             layout,
             isa,
             module,
-            values: FxHashMap::default(),
-            word_values: rmx::rustc_hash::FxHashSet::default(),
-            words: FxHashMap::default(),
-            slot_vars: FxHashMap::default(),
-            field_places: FxHashMap::default(),
-            blocks: FxHashMap::default(),
-            param_values: FxHashMap::default(),
-            param_regs: FxHashMap::default(),
+            values: LookupMap::default(),
+            word_values: bct::lookup::LookupSet::default(),
+            words: LookupMap::default(),
+            slot_vars: LookupMap::default(),
+            field_places: LookupMap::default(),
+            blocks: LookupMap::default(),
+            param_values: LookupMap::default(),
+            param_regs: LookupMap::default(),
             ret: RetPass::Unit,
-            local_funcs: FxHashMap::default(),
-            external_funcs: FxHashMap::default(),
-            module_funcs: FxHashMap::default(),
-            code_cells: FxHashMap::default(),
+            local_funcs: LookupMap::default(),
+            external_funcs: LookupMap::default(),
+            module_funcs: LookupMap::default(),
+            code_cells: LookupMap::default(),
             registry,
             frame_slot: None,
             runtime,
@@ -318,8 +318,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             const_scratch: constants::ConstScratchArea::default(),
             type_param_values: Vec::new(),
             table_values: Vec::new(),
-            dyn_storage: FxHashMap::default(),
-            dyn_slot_storage: FxHashMap::default(),
+            dyn_storage: LookupMap::default(),
+            dyn_slot_storage: LookupMap::default(),
             shadow_mark: None,
             osr_spec: None,
             osr: None,
@@ -356,7 +356,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Use this for two-pass compilation where all functions are declared first.
     pub fn set_local_funcs(
         &mut self,
-        local_funcs: FxHashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
+        local_funcs: LookupMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
     ) {
         self.local_funcs = local_funcs;
     }
@@ -365,7 +365,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// after the first has and nothing else does.
     pub fn set_external_funcs(
         &mut self,
-        external_funcs: FxHashMap<(u32, datalove_datafun_ir::CodeUnitId), LocalCallee>,
+        external_funcs: LookupMap<(u32, datalove_datafun_ir::CodeUnitId), LocalCallee>,
     ) {
         self.external_funcs = external_funcs;
     }
@@ -373,7 +373,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Set all module function mappings at once.
     ///
     /// Use this for three-pass compilation where all module functions are declared first.
-    pub fn set_module_funcs(&mut self, module_funcs: FxHashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>) {
+    pub fn set_module_funcs(&mut self, module_funcs: LookupMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>) {
         self.module_funcs = module_funcs;
     }
 
@@ -384,7 +384,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// there, and calls the stub only while the cell is empty: the stub is a
     /// function of its own, and going through it was a third of a call
     /// between compiled functions.
-    pub fn set_code_cells(&mut self, code_cells: FxHashMap<FuncId, usize>) {
+    pub fn set_code_cells(&mut self, code_cells: LookupMap<FuncId, usize>) {
         self.code_cells = code_cells;
     }
 

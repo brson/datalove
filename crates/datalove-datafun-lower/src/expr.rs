@@ -759,7 +759,7 @@ pub fn lower_expression<'db>(
             let IrType::Struct(fields) = &result_type else {
                 panic!("AnonStruct with non-struct type {:?} - typechecker should catch this", result_type);
             };
-            let field_types: rmx::rustc_hash::FxHashMap<String, IrType> =
+            let field_types: bct::lookup::LookupMap<String, IrType> =
                 fields.iter().map(|(n, t)| (n.clone(), t.clone())).collect();
             let sorted_field_names: Vec<String> = match &result_type {
                 IrType::Struct(fields) => fields.iter().map(|(n, _)| n.clone()).collect(),
@@ -768,8 +768,8 @@ pub fn lower_expression<'db>(
 
             // Lower all field expressions and collect by name.
             // Track each non-Copy field value as pending intermediate.
-            let mut field_values: rmx::rustc_hash::FxHashMap<String, ValueId> =
-                rmx::rustc_hash::FxHashMap::default();
+            let mut field_values: bct::lookup::LookupMap<String, ValueId> =
+                bct::lookup::LookupMap::default();
             for field in struct_expr.fields.iter() {
                 let name = field.name.text(ctx.db).to_string();
                 let value = lower_expression(ctx, ctx.expr(field.value))?;
@@ -1757,9 +1757,11 @@ pub(crate) fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
         }
         Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => {
             // An earlier unit's binding has its type recorded under its name,
-            // which is the name it's bound to here.
-            let name = ctx.body.variables.iter()
-                .find_map(|(name, bound)| (bound == op).then_some(name))
+            // which is the name it's bound to here; the least, should two be,
+            // so that the hash order does not choose.
+            let name = ctx.body.variables.iter_unordered()
+                .filter_map(|(name, bound)| (bound == op).then_some(name))
+                .min()
                 .expect("an external operand comes from a variable bound to it");
             let ty = match op {
                 Operand::ExternalSlot { .. } => ctx.external_slot_type(name),

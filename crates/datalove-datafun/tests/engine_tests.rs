@@ -246,7 +246,7 @@ impl ExecutorHooks for Setup {
             // What the backend would not compile, and why, for whoever is
             // teaching it more.
             if std::env::var_os("ENGINE_TESTS_JIT_REFUSALS").is_some() {
-                for f in stats.functions.values() {
+                for f in stats.functions.values_unordered() {
                     if let Some(why) = &f.refusal {
                         eprintln!("jit refused {}: {}", f.name, why);
                     }

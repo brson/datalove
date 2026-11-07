@@ -26,7 +26,7 @@ pub use crate::{
 
 use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_inheriting};
 use std::cell::RefCell;
-use rmx::rustc_hash::FxHashSet;
+use bct::lookup::LookupSet;
 
 /// Where a script unit reads the bindings the units before it left behind.
 ///
@@ -159,7 +159,7 @@ pub struct TypeContext<'db> {
     ///
     /// A call through one would otherwise say again, less helpfully, that
     /// nothing was required under it.
-    pub(crate) failed_aliases: FxHashSet<String>,
+    pub(crate) failed_aliases: LookupSet<String>,
     /// The data files `require data` may name, by path.
     pub(crate) data_files: crate::DataFiles,
     /// The data files a `require data` const named, which lowering reads.
@@ -227,13 +227,13 @@ struct TopConst<'db> {
 #[derive(Default)]
 pub(crate) struct DeclaredBelow<'db> {
     /// `const`, `let` and `var` names.
-    values: FxHashSet<InternedText<'db>>,
+    values: LookupSet<InternedText<'db>>,
     /// Type aliases, resolved, until their `type` is reached.
     type_aliases: bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
     /// Imported functions, until the `import` that brings them is reached.
     imports: Vec<ImportBelow<'db>>,
     /// The aliases `require`s give.
-    requires: FxHashSet<InternedText<'db>>,
+    requires: LookupSet<InternedText<'db>>,
 }
 
 /// A function an `import` brings into scope, once the walk reaches it.
@@ -283,7 +283,7 @@ impl<'db> TypeContext<'db> {
             expr_types: ExprTypes::new(),
             call_targets: CallTargets::new(),
             qualified: crate::QualifiedScope::default(),
-            failed_aliases: FxHashSet::default(),
+            failed_aliases: LookupSet::default(),
             data_files: crate::DataFiles::new(),
             resolved_data: crate::DataFiles::new(),
             loop_depth: 0,

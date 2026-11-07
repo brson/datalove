@@ -12,7 +12,7 @@
 //!
 //! This separation allows lowering to be independent of const evaluation.
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::sync::Arc;
 use datalove_datafun_ir::{
     ConstValue, IrCodeUnit, IrBlock, Instruction, ValueId,
@@ -23,17 +23,20 @@ use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit};
 
 /// Inline const values into an IrCodeUnit (script unit).
 ///
-/// Takes the lowered IR and a map of const names to their evaluated values.
-/// For each const binding tracked in the IR's const_values field, replaces
-/// the defining instruction with a Const literal.
+/// Takes the lowered IR, the script's consts by name, and each function's by
+/// function name and then const name. For each const binding tracked in a
+/// unit's const_values field, replaces the defining instruction with a Const
+/// literal. A function sees only its own consts: two functions may each
+/// declare a const of one name.
 ///
 /// Returns the transformed IR.
 pub fn inline_script_consts(
     mut unit: IrCodeUnit,
-    const_values: &FxHashMap<String, Arc<ConstValue>>,
+    const_values: &LookupMap<String, Arc<ConstValue>>,
+    function_consts: &LookupMap<String, LookupMap<String, Arc<ConstValue>>>,
 ) -> IrCodeUnit {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
-    let mut value_to_const: FxHashMap<ValueId, Arc<ConstValue>> = FxHashMap::default();
+    let mut value_to_const: LookupMap<ValueId, Arc<ConstValue>> = LookupMap::default();
     for (name, value_id) in &unit.const_values {
         if let Some(const_value) = const_values.get(name) {
             value_to_const.insert(*value_id, const_value.clone());
@@ -51,8 +54,10 @@ pub fn inline_script_consts(
     eliminate_dead_code_unit(&mut unit);
 
     // Inline consts in nested units.
+    let none = LookupMap::default();
     for nested in &mut unit.nested_units {
-        inline_function_consts(nested, const_values);
+        let consts = function_consts.get(&nested.name).unwrap_or(&none);
+        inline_function_consts(nested, consts);
     }
 
     unit
@@ -67,10 +72,10 @@ pub fn inline_script_consts(
 /// constant branch simplification.
 pub fn inline_function_consts(
     func: &mut IrCodeUnit,
-    const_values: &FxHashMap<String, Arc<ConstValue>>,
+    const_values: &LookupMap<String, Arc<ConstValue>>,
 ) {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
-    let mut value_to_const: FxHashMap<ValueId, Arc<ConstValue>> = FxHashMap::default();
+    let mut value_to_const: LookupMap<ValueId, Arc<ConstValue>> = LookupMap::default();
     for (name, value_id) in &func.const_values {
         if let Some(const_value) = const_values.get(name) {
             value_to_const.insert(*value_id, const_value.clone());
@@ -102,10 +107,10 @@ pub fn inline_function_consts(
 ///
 /// Also simplifies constant branches: if a Branch terminator has a condition that
 /// is defined as a constant bool, replaces it with an unconditional Goto.
-fn inline_block_consts(block: &mut IrBlock, value_to_const: &FxHashMap<ValueId, Arc<ConstValue>>) {
+fn inline_block_consts(block: &mut IrBlock, value_to_const: &LookupMap<ValueId, Arc<ConstValue>>) {
     // Track which ValueIds are known to be constant bools (from both the passed-in
     // const values and from newly inserted is_ok/is_some/overflow values).
-    let mut const_bools: FxHashMap<ValueId, bool> = FxHashMap::default();
+    let mut const_bools: LookupMap<ValueId, bool> = LookupMap::default();
 
     // We may need to insert instructions, so collect replacements first.
     let mut replacements: Vec<(usize, Vec<Instruction>)> = Vec::new();
@@ -223,7 +228,7 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &FxHashMap<ValueId, 
 /// This function modifies the functions in place.
 pub fn inline_module_functions(
     functions: &mut [std::sync::Arc<IrCodeUnit>],
-    const_values: &FxHashMap<String, Arc<ConstValue>>,
+    const_values: &LookupMap<String, Arc<ConstValue>>,
 ) {
     for func in functions {
         // For module functions, const_values has qualified names "func_name::const_name"
@@ -246,11 +251,11 @@ pub fn inline_module_functions(
 /// when looking them up in the const_values map.
 fn inline_module_function_consts(
     func: &mut IrCodeUnit,
-    const_values: &FxHashMap<String, Arc<ConstValue>>,
+    const_values: &LookupMap<String, Arc<ConstValue>>,
     func_name: &str,
 ) {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
-    let mut value_to_const: FxHashMap<ValueId, Arc<ConstValue>> = FxHashMap::default();
+    let mut value_to_const: LookupMap<ValueId, Arc<ConstValue>> = LookupMap::default();
     for (name, value_id) in &func.const_values {
         // Look up with qualified name: "func_name::const_name"
         let qualified_name = format!("{}::{}", func_name, name);
@@ -324,10 +329,10 @@ mod tests {
             nested_units: vec![],
         };
 
-        let mut const_values = FxHashMap::default();
+        let mut const_values = LookupMap::default();
         const_values.insert("X".to_string(), Arc::new(ConstValue::I32(3)));
 
-        let result = inline_script_consts(unit, &const_values);
+        let result = inline_script_consts(unit, &const_values, &LookupMap::default());
 
         // After inlining, v0 and v1 become dead code and are removed by DCE.
         // Only v2 (the exported const) remains.
@@ -384,10 +389,10 @@ mod tests {
             nested_units: vec![],
         };
 
-        let mut const_values = FxHashMap::default();
+        let mut const_values = LookupMap::default();
         const_values.insert("X".to_string(), Arc::new(ConstValue::I32(100)));
 
-        let result = inline_script_consts(unit, &const_values);
+        let result = inline_script_consts(unit, &const_values, &LookupMap::default());
 
         // Check that the Call instruction was replaced with Const.
         assert_eq!(result.blocks[0].instructions.len(), 1);
@@ -460,10 +465,10 @@ mod tests {
             nested_units: vec![],
         };
 
-        let mut const_values = FxHashMap::default();
+        let mut const_values = LookupMap::default();
         const_values.insert("X".to_string(), Arc::new(ConstValue::I32(42)));
 
-        let result = inline_script_consts(unit, &const_values);
+        let result = inline_script_consts(unit, &const_values, &LookupMap::default());
 
         // After inlining:
         // - v0 becomes dead (not used by anything) and is removed by DCE

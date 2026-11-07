@@ -21,15 +21,19 @@
 //! descriptor for builds a second one, which is harmless: descriptors are
 //! compared by structure.
 
+// The runtime does not depend on bcts, which brings salsa, so it cannot use
+// `LookupMap`. Its maps here are only looked up in.
+#![allow(clippy::disallowed_types)]
+
 use datalove_rtdt as rtdt;
-use rmx::ahash::AHashMap;
+use rmx::rustc_hash::FxHashMap;
 use rtdt::{TyDesc, TyDescRef, TyInfo, TyTag};
 
 /// The descriptors built on one runtime handle, and the memory behind them.
 pub struct TyDescCache {
     /// Built descriptors by `key_hash` of their template and parameters.
     /// Collisions share a bucket and are told apart by comparing the key.
-    entries: AHashMap<u64, Vec<Entry>>,
+    entries: FxHashMap<u64, Vec<Entry>>,
     /// Everything allocated here, freed when the cache is dropped.
     owned: Vec<Owned>,
 }
@@ -50,7 +54,7 @@ enum Owned {
 
 impl TyDescCache {
     pub fn new() -> TyDescCache {
-        TyDescCache { entries: AHashMap::new(), owned: Vec::new() }
+        TyDescCache { entries: FxHashMap::default(), owned: Vec::new() }
     }
 
     /// The descriptor `template` describes with its parameters bound to

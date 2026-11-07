@@ -8,6 +8,11 @@
 //! Larger sizes are each mapped on their own, with the last few freed mappings
 //! kept for reuse.
 
+// The runtime does not depend on bcts, which brings salsa, so it cannot use
+// `LookupMap`. Its maps are looked up in, and the walks over them free every
+// page or list leaks sorted by address.
+#![allow(clippy::disallowed_types)]
+
 use datalove_rtdt::IndexRepr;
 
 // Unix-only imports and constants (used by unix_impl and tests).
@@ -440,7 +445,9 @@ mod unix_impl {
                 );
 
                 let mut details = String::new();
-                for (ptr, info) in self.active_allocations.iter().take(10) {
+                let mut leaked: Vec<_> = self.active_allocations.iter().collect();
+                leaked.sort_unstable_by_key(|(ptr, _)| **ptr);
+                for (ptr, info) in leaked.into_iter().take(10) {
                     let bytes = (info.size as usize) * (info.count as usize);
                     details.push_str(&format!(
                         "\n  {:p} : size={}, align={}, count={} ({} bytes)",

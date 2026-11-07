@@ -5,7 +5,7 @@
 
 use rmx::prelude::*;
 use std::path::Path;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::sync::Arc;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
@@ -97,8 +97,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
                 // Build map of function name -> resolved param/return types for type alias support.
-                let mut func_param_types: FxHashMap<String, Vec<datalove_datafun_tycheck::Type<'_>>> = FxHashMap::default();
-                let mut func_return_types: FxHashMap<String, datalove_datafun_tycheck::Type<'_>> = FxHashMap::default();
+                let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'_>>> = LookupMap::default();
+                let mut func_return_types: LookupMap<String, datalove_datafun_tycheck::Type<'_>> = LookupMap::default();
                 for (name, func_type) in tycheck_result.function_types(&db) {
                     let param_types = func_type.param_types(&db).clone();
                     func_param_types.insert(name.text(&db).S(), param_types);
@@ -156,7 +156,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let no_data = lower::DataFiles::new();
                 let lowered = lower_script_functions(
                     &db, expr_types_raw, call_targets_raw, stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, &no_data, ScriptLowerContext::new(),
-                    &FxHashMap::default(), false, None,
+                    &LookupMap::default(), false, None,
                 ).expect("function lowering failed");
                 let (lowered_functions, func_name_to_id) = (lowered.functions, lowered.func_name_to_id);
 
@@ -165,7 +165,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let resolved_consts = if !const_graph.bindings.is_empty() {
                     let mut evaluator = InterpCtfeEvaluator::new();
                     let mut resolved = ResolvedConsts::new();
-                    let mut resolved_consts_map: FxHashMap<String, (IrType, Arc<ConstValue>)> = FxHashMap::default();
+                    let mut resolved_consts_map: LookupMap<String, (IrType, Arc<ConstValue>)> = LookupMap::default();
                     let mut ctfe_error = None;
 
                     // A binding's id is its position among the const statements.
@@ -237,11 +237,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.clone(), body, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
                     Ok(ir_code_unit) => {
                         // Inline const values into the IR.
-                        let const_values_map: FxHashMap<String, Arc<datalove_datafun_ir::ConstValue>> = resolved_consts
+                        let const_values_map: LookupMap<String, Arc<datalove_datafun_ir::ConstValue>> = resolved_consts
                             .as_ref()
                             .map(|rc| rc.iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
                             .unwrap_or_default();
-                        let ir_unit = inline_script_consts(ir_code_unit, &const_values_map);
+                        let ir_unit = inline_script_consts(ir_code_unit, &const_values_map, &LookupMap::default());
 
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

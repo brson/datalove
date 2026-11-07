@@ -23,7 +23,7 @@
 //! repeated there is `true`, its branch a jump. `simplify` then forwards the
 //! copies this leaves and drops the error exits nothing reaches.
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 
 use crate::*;
 
@@ -63,7 +63,7 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
         }
     }
     let order = reverse_postorder(unit);
-    let consts: FxHashMap<ValueId, ConstValue> = unit.blocks.iter()
+    let consts: LookupMap<ValueId, ConstValue> = unit.blocks.iter()
         .flat_map(|b| &b.instructions)
         .filter_map(|i| match i {
             Instruction::Const { dest, value } => Some((*dest, value.clone())),
@@ -74,18 +74,18 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
         Operand::Value(v) if consts.contains_key(v) => Index::Const(consts[v].clone()),
         other => Index::Operand(*other),
     };
-    let mut at_end: Vec<Option<FxHashMap<Key, Known>>> = vec![None; n];
+    let mut at_end: Vec<Option<LookupMap<Key, Known>>> = vec![None; n];
     let mut changed = false;
 
     for &b in &order {
         let id = unit.blocks[b].id;
         // What every way in agrees on, where every way in has been seen.
-        let incoming: Option<Vec<FxHashMap<Key, Known>>> = preds[b].iter()
+        let incoming: Option<Vec<LookupMap<Key, Known>>> = preds[b].iter()
             .map(|&p| at_end[p].as_ref().map(|end| along_edge(end, &unit.blocks[p].terminator, id)))
             .collect();
         let mut known = match incoming {
             Some(states) if !states.is_empty() => agreed(states),
-            _ => FxHashMap::default(),
+            _ => LookupMap::default(),
         };
 
         let mut trues: Vec<ValueId> = Vec::new();
@@ -142,12 +142,12 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
 /// What is known on the edge from a block ending in `term` to `to`, given
 /// what is known at the block's end: an index a check passed is in bounds on
 /// the edge taken when it did.
-fn along_edge(end: &FxHashMap<Key, Known>, term: &Terminator, to: BlockId) -> FxHashMap<Key, Known> {
+fn along_edge(end: &LookupMap<Key, Known>, term: &Terminator, to: BlockId) -> LookupMap<Key, Known> {
     let mut known = end.clone();
     if let Terminator::Branch { cond: Operand::Value(c), then_block, else_block, .. } = term
         && *then_block == to && *else_block != to
     {
-        for k in known.values_mut().filter(|k| k.check == Some(*c)) {
+        for k in known.values_mut_unordered().filter(|k| k.check == Some(*c)) {
             k.valid = true;
         }
     }
@@ -158,10 +158,10 @@ fn along_edge(end: &FxHashMap<Key, Known>, term: &Terminator, to: BlockId) -> Fx
 ///
 /// A value every way into a block knows is defined on every path to it, so
 /// its definition dominates the block.
-fn agreed(mut states: Vec<FxHashMap<Key, Known>>) -> FxHashMap<Key, Known> {
+fn agreed(mut states: Vec<LookupMap<Key, Known>>) -> LookupMap<Key, Known> {
     let mut known = states.pop().expect("at least one way in");
     for other in &states {
-        known.retain(|key, k| {
+        known.retain_unordered(|key, k| {
             let Some(o) = other.get(key) else { return false };
             k.check = k.check.filter(|c| o.check == Some(*c));
             k.element = k.element.filter(|e| o.element == Some(*e));
@@ -202,7 +202,7 @@ fn unchanging_index(unit: &IrCodeUnit, op: &Operand) -> bool {
 /// Forget what `instr` may change: every element of a list it writes, drops
 /// or passes to a call, and, if it does any of those, every element reached
 /// through a reference, which may be the same place.
-fn forget_what_it_may_change(known: &mut FxHashMap<Key, Known>, instr: &Instruction) {
+fn forget_what_it_may_change(known: &mut LookupMap<Key, Known>, instr: &Instruction) {
     if known.is_empty() {
         return;
     }
@@ -213,7 +213,7 @@ fn forget_what_it_may_change(known: &mut FxHashMap<Key, Known>, instr: &Instruct
         }
     });
     if !changed.is_empty() {
-        known.retain(|(list, _), _| !matches!(list, Operand::ValueRef(_)) && !changed.contains(list));
+        known.retain_unordered(|(list, _), _| !matches!(list, Operand::ValueRef(_)) && !changed.contains(list));
     }
 }
 

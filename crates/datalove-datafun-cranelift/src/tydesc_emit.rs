@@ -7,7 +7,7 @@
 //! descriptors it points to, and the emitter is shared by every function
 //! compiled into a module so that each is emitted once.
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::mem::{align_of, offset_of, size_of};
 
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
@@ -142,21 +142,21 @@ fn put_set_layouts(bytes: &mut [u8], elem_ty: &IrType) {
 #[derive(Clone)]
 pub struct TyDescEmitter {
     /// Maps IrType -> DataId for emitted tydescs.
-    tydescs: FxHashMap<IrType, DataId>,
+    tydescs: LookupMap<IrType, DataId>,
     /// Counter for unique names.
     counter: u32,
     /// Data declared for a type before the type's descriptor is made, which
     /// the descriptor is then defined into; see `emit_rec`.
-    reserved: FxHashMap<IrType, DataId>,
+    reserved: LookupMap<IrType, DataId>,
 }
 
 impl TyDescEmitter {
     /// Create a new TyDesc emitter.
     pub fn new() -> Self {
         Self {
-            tydescs: FxHashMap::default(),
+            tydescs: LookupMap::default(),
             counter: 0,
-            reserved: FxHashMap::default(),
+            reserved: LookupMap::default(),
         }
     }
 

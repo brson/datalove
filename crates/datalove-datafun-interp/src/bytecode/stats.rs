@@ -26,8 +26,8 @@ impl IrInterpreter {
                 return;
             }
             eprintln!("bytecode: {} bodies, {} ops, {} on the IR walker", s.bodies, s.ops, s.escapes);
-            let mut executed: Vec<_> = s.executed.iter().collect();
-            executed.sort_by(|a, b| b.1.cmp(a.1));
+            let mut executed: Vec<_> = s.executed.iter_unordered().collect();
+            executed.sort_by(|a, b| b.1.cmp(a.1).then_with(|| a.0.cmp(b.0)));
             for (what, n) in executed.iter().take(15) {
                 eprintln!("  {n:>12}  {what}");
             }

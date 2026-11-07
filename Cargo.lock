@@ -1138,6 +1138,7 @@ version = "0.1.0"
 name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove",
  "datalove-buildinfo",
  "datalove-exampletest",
@@ -1210,6 +1211,7 @@ dependencies = [
 name = "datalove-datafun-c-aot"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-rtdt",
@@ -1263,6 +1265,7 @@ dependencies = [
 name = "datalove-datafun-const"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove-datafun-ir",
  "rustmax",
 ]
@@ -1271,6 +1274,7 @@ dependencies = [
 name = "datalove-datafun-cranelift"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "cranelift-codegen",
  "cranelift-frontend",
  "cranelift-jit",
@@ -1288,6 +1292,7 @@ dependencies = [
 name = "datalove-datafun-cranelift-aot"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "cranelift-codegen",
  "cranelift-frontend",
  "cranelift-module",
@@ -1302,6 +1307,7 @@ dependencies = [
 name = "datalove-datafun-cranelift-jit"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "cranelift-codegen",
  "cranelift-frontend",
  "cranelift-jit",
@@ -1319,6 +1325,7 @@ dependencies = [
 name = "datalove-datafun-interp"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-rt",
@@ -1526,6 +1533,7 @@ dependencies = [
 name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove-datafun",
  "datalove-exampletest",
  "datalove-paths",

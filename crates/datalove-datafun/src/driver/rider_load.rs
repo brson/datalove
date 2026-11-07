@@ -6,7 +6,7 @@
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
 
 use datalove_datafun_interp::{NativeFunctionTable, NativeTarget};
@@ -261,8 +261,8 @@ impl std::fmt::Debug for LoadedLibrary {
 /// interpreter holding it is dropped, and not at whatever point a libc decides,
 /// and the symbols are looked up once per library rather than once per
 /// interpreter.
-static OPEN_LIBRARIES: LazyLock<Mutex<FxHashMap<PathBuf, Weak<LoadedLibrary>>>> =
-    LazyLock::new(|| Mutex::new(FxHashMap::default()));
+static OPEN_LIBRARIES: LazyLock<Mutex<LookupMap<PathBuf, Weak<LoadedLibrary>>>> =
+    LazyLock::new(|| Mutex::new(LookupMap::default()));
 
 /// Open a rider library, or take a share of one already open.
 fn open_library(lib_path: &Path, rider_name: &str) -> AnyResult<Arc<LoadedLibrary>> {
@@ -288,7 +288,7 @@ fn open_library(lib_path: &Path, rider_name: &str) -> AnyResult<Arc<LoadedLibrar
 /// wanted to act on it would be asking about a library it does not hold.
 pub fn open_library_count() -> usize {
     let open = OPEN_LIBRARIES.lock().expect("rider library registry poisoned");
-    open.values().filter(|weak| weak.strong_count() > 0).count()
+    open.values_unordered().filter(|weak| weak.strong_count() > 0).count()
 }
 
 /// A loaded rider shared library.

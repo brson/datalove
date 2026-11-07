@@ -1,6 +1,6 @@
 //! Generation context for tracking scope during worldfile generation.
 
-use rmx::rustc_hash::FxHashSet;
+use bct::lookup::LookupSet;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 
@@ -173,11 +173,11 @@ pub struct GenContext<'db> {
 
     /// Variables that have been consumed (moved) and can't be used again.
     /// This is used for ownership tracking - global heap types get moved on first use.
-    pub consumed_variables: FxHashSet<String>,
+    pub consumed_variables: LookupSet<String>,
 
     /// Variables that are protected from moving inside a loop.
     /// These can still be borrowed (used in operators) but not moved.
-    pub loop_protected_variables: FxHashSet<String>,
+    pub loop_protected_variables: LookupSet<String>,
 }
 
 impl<'db> GenContext<'db> {
@@ -195,8 +195,8 @@ impl<'db> GenContext<'db> {
             current_function_name: None,
             max_callable_function_index: None,
             generic_functions: Vec::new(),
-            consumed_variables: FxHashSet::default(),
-            loop_protected_variables: FxHashSet::default(),
+            consumed_variables: LookupSet::default(),
+            loop_protected_variables: LookupSet::default(),
         }
     }
 
@@ -254,12 +254,12 @@ impl<'db> GenContext<'db> {
         // name, not just the callable ones: a local function further down the
         // module is not callable from here, but it still stands in front of an
         // import of the same name, and writing that name would reach it.
-        let local_names: rmx::rustc_hash::FxHashSet<_> =
+        let local_names: bct::lookup::LookupSet<_> =
             self.functions.iter().map(|f| f.name.as_str()).collect();
 
         // For imported functions, later imports shadow earlier ones.
         // Keep track of which names we've seen (iterating in reverse).
-        let mut seen_import_names = rmx::rustc_hash::FxHashSet::default();
+        let mut seen_import_names = bct::lookup::LookupSet::default();
         let non_shadowed_imports: Vec<_> = self.imported_functions
             .iter()
             .rev()

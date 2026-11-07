@@ -7,7 +7,6 @@
 use rmx::prelude::*;
 use bct::lookup::LookupMap;
 use rmx::std::collections::BTreeMap;
-use rmx::rustc_hash::FxHashMap;
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::Statement;
@@ -100,7 +99,7 @@ pub fn analyze_module<'db>(
 
     // Build map of function name -> resolved param types from exports.
     // This is needed to resolve type aliases in function parameters.
-    let mut func_param_types: FxHashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = FxHashMap::default();
+    let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = LookupMap::default();
     for (name, func_type) in typecheck_result.exports(db) {
         func_param_types.insert(name.text(db).S(), func_type.param_types(db).C());
     }

@@ -5,7 +5,7 @@
 //! - [`CompiledModules`]: Result of compiling a module graph, with error info.
 
 use rmx::std::collections::BTreeMap;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstValue, IrModuleId, IrType};
 
@@ -33,7 +33,7 @@ pub struct SharedModuleContext<'db> {
     pub module_registry: Arc<ModuleFunctionRegistry>,
     /// Each module's module-level consts, which a copy of one of its comptime
     /// functions made for a script may name.
-    pub module_consts: FxHashMap<IrModuleId, FxHashMap<String, (IrType, Arc<ConstValue>)>>,
+    pub module_consts: LookupMap<IrModuleId, LookupMap<String, (IrType, Arc<ConstValue>)>>,
 }
 
 /// Result of module compilation.
@@ -71,7 +71,7 @@ impl<'db> CompiledModules<'db> {
     }
 
     /// The path of every module, riders included, by the id the IR knows it by.
-    pub fn module_paths(&self, db: &'db dyn salsa::Database) -> FxHashMap<IrModuleId, String> {
+    pub fn module_paths(&self, db: &'db dyn salsa::Database) -> LookupMap<IrModuleId, String> {
         datalove_datafun_compiler::tracked_lower::ir_module_ids(db, self.shared.parsed_graph)
             .iter_unordered()
             .map(|(module, ir_id)| (*ir_id, module.path(db).clone()))

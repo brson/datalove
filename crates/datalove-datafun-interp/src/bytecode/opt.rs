@@ -31,7 +31,7 @@
 //! tests run every fixture on, so that each rule is checked against the ops
 //! it replaces.
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 
 use super::{Ck, CkTy, Loc, Op};
 
@@ -44,7 +44,7 @@ use super::{Ck, CkTy, Loc, Op};
 /// one that covers a part of it, or of nothing, learns nothing.
 pub(super) struct Facts {
     /// Each value of nonzero size, by its offset.
-    pub values: FxHashMap<u32, ValueFact>,
+    pub values: LookupMap<u32, ValueFact>,
     /// Whether each block is in a loop.
     pub in_loop: Vec<bool>,
     /// The block laid out after each block, if there is one.
@@ -107,7 +107,7 @@ pub(super) fn optimize(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
 /// been absorbed, the constant's own op, which is removed, as is that of a
 /// constant nothing reads.
 fn absorb_immediates(blocks: &mut [Vec<Op>], facts: &Facts) {
-    let mut absorbed: FxHashMap<u32, u32> = FxHashMap::default();
+    let mut absorbed: LookupMap<u32, u32> = LookupMap::default();
     for op in blocks.iter_mut().flatten() {
         let (b, imm_op): (Loc, fn(Op, u32) -> Op) = match *op {
             Op::CmpU32 { b, .. } => (b, |op, imm| match op {

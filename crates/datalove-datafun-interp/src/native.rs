@@ -185,7 +185,7 @@ pub fn c_words(
 /// Keyed by linker symbol (e.g. `dlr_testlib__int_add`).
 pub struct NativeFunctionTable {
     /// In a cell because a call can fill it in from the resolver.
-    table: RefCell<rmx::rustc_hash::FxHashMap<String, NativeTarget>>,
+    table: RefCell<bct::lookup::LookupMap<String, NativeTarget>>,
     /// Counts registrations, so that a caller holding a target it looked up
     /// can tell whether the table still says the same.
     generation: Cell<u64>,

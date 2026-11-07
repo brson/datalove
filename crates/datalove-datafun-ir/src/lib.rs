@@ -6,7 +6,7 @@
 //! - Direct lowering to LLVM/Cranelift (SSA values -> registers, slots -> stack)
 
 use serde::{Deserialize, Serialize};
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 
 pub mod dense;
 pub mod display;
@@ -838,7 +838,7 @@ pub struct SymbolTable {
     pub functions: Vec<FuncDef>,
     /// Name to FuncId mapping for the current scope (lowering-time only).
     #[serde(skip)]
-    name_to_func: FxHashMap<String, FuncId>,
+    name_to_func: LookupMap<String, FuncId>,
     /// Next FuncId to allocate.
     next_func_id: u32,
 }

@@ -5,8 +5,8 @@
 use super::*;
 
 /// The blocks reachable from `from`, itself included.
-pub(super) fn reachable_from(func: &IrCodeUnit, from: BlockId) -> rmx::rustc_hash::FxHashSet<BlockId> {
-    let mut seen = rmx::rustc_hash::FxHashSet::default();
+pub(super) fn reachable_from(func: &IrCodeUnit, from: BlockId) -> bct::lookup::LookupSet<BlockId> {
+    let mut seen = bct::lookup::LookupSet::default();
     let mut work = vec![from];
     while let Some(id) = work.pop() {
         if !seen.insert(id) {
@@ -30,21 +30,21 @@ pub(super) fn reachable_from(func: &IrCodeUnit, from: BlockId) -> rmx::rustc_has
 /// In order, so that the variables, and the code, come out the same each time.
 pub(super) fn carried_into(
     func: &IrCodeUnit,
-    reachable: &rmx::rustc_hash::FxHashSet<BlockId>,
+    reachable: &bct::lookup::LookupSet<BlockId>,
     header: BlockId,
 ) -> std::collections::BTreeSet<ValueId> {
-    use rmx::rustc_hash::FxHashSet;
+    use bct::lookup::LookupSet;
     let blocks: Vec<&IrBlock> = func.blocks.iter().filter(|b| reachable.contains(&b.id)).collect();
-    let defines = |block: &IrBlock| -> FxHashSet<ValueId> {
+    let defines = |block: &IrBlock| -> LookupSet<ValueId> {
         block.params.iter().copied().chain(block.instructions.iter().flat_map(Instruction::dests)).collect()
     };
-    let defined: FxHashMap<BlockId, FxHashSet<ValueId>> = blocks.iter().map(|b| (b.id, defines(b))).collect();
+    let defined: LookupMap<BlockId, LookupSet<ValueId>> = blocks.iter().map(|b| (b.id, defines(b))).collect();
 
     // What each block reads that it does not define, then live-in sets by the
     // usual backward iteration.
-    let mut uses: FxHashMap<BlockId, FxHashSet<ValueId>> = FxHashMap::default();
+    let mut uses: LookupMap<BlockId, LookupSet<ValueId>> = LookupMap::default();
     for block in &blocks {
-        let mut used = FxHashSet::default();
+        let mut used = LookupSet::default();
         let mut add = |op: &Operand| {
             if let Operand::Value(v) | Operand::ValueRef(v) = op {
                 used.insert(*v);
@@ -52,20 +52,20 @@ pub(super) fn carried_into(
         };
         block.instructions.iter().for_each(|i| i.for_each_operand(&mut add));
         block.terminator.for_each_operand(&mut add);
-        used.retain(|v| !defined[&block.id].contains(v));
+        used.retain_unordered(|v| !defined[&block.id].contains(v));
         uses.insert(block.id, used);
     }
     let mut live_in = uses.clone();
     loop {
         let mut changed = false;
         for block in blocks.iter().rev() {
-            let mut live: FxHashSet<ValueId> = block.terminator.successors().into_iter()
+            let mut live: LookupSet<ValueId> = block.terminator.successors().into_iter()
                 .filter_map(|s| live_in.get(&s))
-                .flatten()
+                .flat_map(LookupSet::iter_unordered)
                 .copied()
                 .collect();
-            live.retain(|v| !defined[&block.id].contains(v));
-            live.extend(uses[&block.id].iter().copied());
+            live.retain_unordered(|v| !defined[&block.id].contains(v));
+            live.extend(uses[&block.id].iter_unordered().copied());
             let entry = live_in.get_mut(&block.id).expect("every reached block");
             if live.len() != entry.len() {
                 *entry = live;
@@ -76,8 +76,8 @@ pub(super) fn carried_into(
             break;
         }
     }
-    let all: FxHashSet<ValueId> = defined.into_values().flatten().collect();
-    live_in.remove(&header).expect("the header is reached").into_iter().filter(|v| all.contains(v)).collect()
+    let all: LookupSet<ValueId> = defined.into_iter_unordered().flat_map(|(_, d)| d.into_iter_unordered()).collect();
+    live_in.remove(&header).expect("the header is reached").into_iter_unordered().filter(|v| all.contains(v)).collect()
 }
 
 /// An entry into a function at one of its loop headers rather than at its
@@ -101,21 +101,21 @@ pub struct OsrSpec {
 /// What compiling an OSR entry keeps; see `OsrSpec`.
 pub(super) struct OsrState {
     /// The blocks reachable from the header, which are all that is compiled.
-    pub(super) reachable: rmx::rustc_hash::FxHashSet<BlockId>,
+    pub(super) reachable: bct::lookup::LookupSet<BlockId>,
     /// The interpreter's frame.
     pub(super) frame: cl_ir::Value,
     /// The entry block's jump to the header, before which a value defined
     /// before the loop is read in, the first time something asks for it.
     pub(super) entry_jump: cl_ir::Inst,
     /// Those values, read in.
-    pub(super) materialized: std::cell::RefCell<FxHashMap<ValueId, cl_ir::Value>>,
+    pub(super) materialized: std::cell::RefCell<LookupMap<ValueId, cl_ir::Value>>,
     /// The constants, a scalar one of which is made again rather than read:
     /// the bytecode folds a constant into what reads it and may never write
     /// it to the frame.
-    pub(super) consts: FxHashMap<ValueId, ConstValue>,
+    pub(super) consts: LookupMap<ValueId, ConstValue>,
     /// The values read from the frame on entry and made again in the code
     /// reached, as variables; see `carried_into`.
-    pub(super) carried: FxHashMap<ValueId, Variable>,
+    pub(super) carried: LookupMap<ValueId, Variable>,
 }
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -168,7 +168,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Set up an OSR entry's own entry block: the parameters and descriptors
     /// from where the interpreter keeps them, and a jump to the header with
     /// its parameters as the frame holds them.
-    pub(super) fn enter_osr(&mut self, builder: &mut FunctionBuilder, reachable: rmx::rustc_hash::FxHashSet<BlockId>) -> Result<(), CraneliftError> {
+    pub(super) fn enter_osr(&mut self, builder: &mut FunctionBuilder, reachable: bct::lookup::LookupSet<BlockId>) -> Result<(), CraneliftError> {
         let spec = self.osr_spec.as_ref().expect("an OSR entry");
         let entry = builder.create_block();
         builder.append_block_params_for_function_params(entry);
@@ -239,9 +239,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             reachable,
             frame,
             entry_jump,
-            materialized: std::cell::RefCell::new(FxHashMap::default()),
+            materialized: std::cell::RefCell::new(LookupMap::default()),
             consts,
-            carried: FxHashMap::default(),
+            carried: LookupMap::default(),
         });
 
         // Each carried value's first definition is what the frame holds.

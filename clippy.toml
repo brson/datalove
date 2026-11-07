@@ -1,0 +1,13 @@
+# Hash containers walk in hash order, and anything that walks one where the
+# order can reach output makes the compiler's output depend on it. So the only
+# hash containers are `bct::lookup::LookupMap` and `LookupSet`, which make each
+# walk say whether it is unordered or sorted. See the determinism section of
+# botdocs/salsa-patterns.md.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "use bct::lookup::LookupMap" },
+    { path = "std::collections::HashSet", reason = "use bct::lookup::LookupSet" },
+    { path = "rustc_hash::FxHashMap", reason = "use bct::lookup::LookupMap" },
+    { path = "rustc_hash::FxHashSet", reason = "use bct::lookup::LookupSet" },
+    { path = "ahash::AHashMap", reason = "use bct::lookup::LookupMap" },
+    { path = "ahash::AHashSet", reason = "use bct::lookup::LookupSet" },
+]

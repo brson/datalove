@@ -33,7 +33,7 @@ pub use stats::{CallFrom, FunctionStats, JitStats};
 
 use std::any::Any;
 
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::time::Instant;
 
 use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};
@@ -112,9 +112,9 @@ impl Tier {
 pub struct JitEngine {
     /// Where each function is.
     ///
-    /// `FxHashMap` because this is probed on every call that reaches the
+    /// `LookupMap` because this is probed on every call that reaches the
     /// dispatcher and again on every call out of compiled code.
-    states: FxHashMap<FuncIdentity, Tier>,
+    states: LookupMap<FuncIdentity, Tier>,
     /// Cranelift JIT compiler.
     compiler: JitCompiler,
     /// Call count threshold for triggering compilation.
@@ -129,7 +129,7 @@ pub struct JitEngine {
     /// Where each loop the interpreter has asked about is, by its function
     /// and header. Refused where the backend cannot enter at the header; see
     /// `codegen::OsrSpec`.
-    loops: FxHashMap<(FuncIdentity, BlockId), Tier>,
+    loops: LookupMap<(FuncIdentity, BlockId), Tier>,
 }
 
 /// Calls before compiling a function, for a dispatcher configured by default.
@@ -177,13 +177,13 @@ impl JitEngine {
     /// Create a JIT engine that has Cranelift work as hard as `opt_level` says.
     pub fn with_opt_level(threshold: u32, opt_level: JitOptLevel) -> Result<Self, JitError> {
         Ok(Self {
-            states: FxHashMap::default(),
+            states: LookupMap::default(),
             compiler: JitCompiler::new(opt_level)?,
             threshold,
             stats: JitStats::default(),
             count_calls: false,
             osr_threshold: DEFAULT_OSR_THRESHOLD,
-            loops: FxHashMap::default(),
+            loops: LookupMap::default(),
         })
     }
 
@@ -257,8 +257,8 @@ impl JitEngine {
     /// Forget the functions `which` picks, and their loops, whose bodies have
     /// been replaced; see `CallDispatcher::bodies_replaced`.
     fn forget(&mut self, mut which: impl FnMut(&FuncIdentity) -> bool) {
-        self.states.retain(|f, _| !which(f));
-        self.loops.retain(|(f, _), _| !which(f));
+        self.states.retain_unordered(|f, _| !which(f));
+        self.loops.retain_unordered(|(f, _), _| !which(f));
         self.compiler.forget(which);
     }
 

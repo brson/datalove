@@ -1,7 +1,7 @@
 //! JIT compiler wrapping Cranelift's JITModule.
 
 use std::any::Any;
-use rmx::rustc_hash::{FxHashMap, FxHashSet};
+use bct::lookup::{LookupMap, LookupSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -120,7 +120,7 @@ pub struct JitCompiler {
     ///
     /// Populated after construction via `register_native_symbol()`.
     /// The JITModule's symbol lookup function checks this map.
-    native_symbols: Arc<Mutex<FxHashMap<String, SendPtr>>>,
+    native_symbols: Arc<Mutex<LookupMap<String, SendPtr>>>,
     /// Whatever the native symbols' code lives in.
     ///
     /// Worse than the interpreter's case, which at least keeps its pointers in
@@ -141,17 +141,17 @@ pub struct JitCompiler {
     /// going through the stub to reach the code a third of a call. The cell's
     /// address is emitted into the code, so each is boxed to stay put and
     /// none is ever removed.
-    code_cells: rmx::rustc_hash::FxHashMap<FuncIdentity, Box<AtomicUsize>>,
+    code_cells: bct::lookup::LookupMap<FuncIdentity, Box<AtomicUsize>>,
     /// The stub for each callee, made by the first compilation to call it and
     /// called by every later one: a stub depends on nothing but its callee,
     /// and making one is a Cranelift compilation of its own.
-    stubs: rmx::rustc_hash::FxHashMap<FuncIdentity, FuncId>,
+    stubs: bct::lookup::LookupMap<FuncIdentity, FuncId>,
     /// The cells of functions forgotten since, kept because the code that
     /// reads them has their addresses.
     retired_cells: Vec<Box<AtomicUsize>>,
     /// The import for each native rider function, by symbol and the address
     /// it was registered at, likewise.
-    native_imports: FxHashMap<(String, u64), FuncId>,
+    native_imports: LookupMap<(String, u64), FuncId>,
 }
 
 /// Wrapper for `*const u8` that implements `Send`.
@@ -221,13 +221,13 @@ impl JitCompiler {
         // imports, by these addresses: cranelift-jit is never PIC, so a call
         // to an import loads its absolute address and calls through it, which
         // reaches anywhere.
-        for (name, addr) in runtime_addresses() {
+        for (name, addr) in runtime_addresses().into_iter_unordered() {
             jit_builder.symbol(name, addr);
         }
         jit_builder.symbol("__jit_dispatch_call", trampoline::dispatch_fn_ptr());
 
         // Register a lookup function for dynamically-added native rider symbols.
-        let native_symbols: Arc<Mutex<FxHashMap<String, SendPtr>>> = Arc::new(Mutex::new(FxHashMap::default()));
+        let native_symbols: Arc<Mutex<LookupMap<String, SendPtr>>> = Arc::new(Mutex::new(LookupMap::default()));
         let lookup_symbols = native_symbols.clone();
         jit_builder.symbol_lookup_fn(Box::new(move |name| {
             lookup_symbols.lock().unwrap().get(name).map(|p| p.0)
@@ -270,7 +270,7 @@ impl JitCompiler {
             code_cells: Default::default(),
             stubs: Default::default(),
             retired_cells: Vec::new(),
-            native_imports: FxHashMap::default(),
+            native_imports: LookupMap::default(),
         })
     }
 
@@ -297,8 +297,8 @@ impl JitCompiler {
     /// Code compiled before can still reach the old ones, but no caller of
     /// that code is left: the interpreter forgets its call sites too.
     pub fn forget(&mut self, mut which: impl FnMut(&FuncIdentity) -> bool) {
-        self.stubs.retain(|key, _| !which(key));
-        let gone: Vec<FuncIdentity> = self.code_cells.keys().filter(|key| which(key)).copied().collect();
+        self.stubs.retain_unordered(|key, _| !which(key));
+        let gone: Vec<FuncIdentity> = self.code_cells.keys_unordered().filter(|key| which(key)).copied().collect();
         for key in gone {
             self.retired_cells.push(self.code_cells.remove(&key).expect("a key just listed"));
         }
@@ -362,10 +362,10 @@ impl JitCompiler {
         let callees = self.collect_call_targets(func);
 
         // Create stubs for each callee.
-        let mut local_funcs: FxHashMap<CodeUnitId, codegen::LocalCallee> = FxHashMap::default();
-        let mut external_funcs: FxHashMap<(u32, CodeUnitId), codegen::LocalCallee> = FxHashMap::default();
-        let mut module_funcs: FxHashMap<(IrModuleId, CodeUnitId), FuncId> = FxHashMap::default();
-        let mut code_cells: FxHashMap<FuncId, usize> = FxHashMap::default();
+        let mut local_funcs: LookupMap<CodeUnitId, codegen::LocalCallee> = LookupMap::default();
+        let mut external_funcs: LookupMap<(u32, CodeUnitId), codegen::LocalCallee> = LookupMap::default();
+        let mut module_funcs: LookupMap<(IrModuleId, CodeUnitId), FuncId> = LookupMap::default();
+        let mut code_cells: LookupMap<FuncId, usize> = LookupMap::default();
 
         for code_ref in callees {
             // Look up the callee's IR to get its signature.
@@ -488,16 +488,20 @@ impl JitCompiler {
         })
     }
 
-    /// Collect all unique Call targets in a code unit.
-    fn collect_call_targets(&self, func: &IrCodeUnit) -> FxHashSet<CodeRef> {
-        let mut targets = FxHashSet::default();
+    /// Every distinct call target in a code unit, in the order first called,
+    /// so that the stubs are declared in the same order each time.
+    fn collect_call_targets(&self, func: &IrCodeUnit) -> Vec<CodeRef> {
+        let mut seen = LookupSet::default();
+        let mut targets = Vec::new();
 
         // A `ComptimeCall` is a call too, where specialization left one: the
         // codegen compiles it as one, and its callee needs a stub as much.
         for block in &func.blocks {
             for inst in &block.instructions {
-                if let Some(code_ref) = inst.call_target() {
-                    targets.insert(code_ref.clone());
+                if let Some(code_ref) = inst.call_target()
+                    && seen.insert(code_ref.clone())
+                {
+                    targets.push(code_ref.clone());
                 }
             }
         }
@@ -731,10 +735,10 @@ fn check_runtime_addresses(jit_module: &JITModule, runtime: &RuntimeImports) {
 }
 
 /// The address of each runtime function compiled code may import, by symbol.
-fn runtime_addresses() -> FxHashMap<&'static str, *const u8> {
+fn runtime_addresses() -> LookupMap<&'static str, *const u8> {
     macro_rules! addresses {
         ($($f:ident,)*) => {
-            FxHashMap::from_iter([$((stringify!($f), datalove_rt::c::$f as *const u8)),*])
+            LookupMap::from_iter([$((stringify!($f), datalove_rt::c::$f as *const u8)),*])
         };
     }
     addresses! {

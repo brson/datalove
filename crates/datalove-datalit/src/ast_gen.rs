@@ -345,7 +345,7 @@ pub fn gen_type_hint<'db, R: Rng>(
             // Cap count to available unique field names to prevent infinite loops.
             let max_count = config.max_collection_size.min(MAX_UNIQUE_FIELD_NAMES);
             let count = rng.gen_range(config.min_collection_size..=max_count);
-            let mut used_names = rmx::rustc_hash::FxHashSet::default();
+            let mut used_names = bct::lookup::LookupSet::default();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
                     // Generate unique field name.
@@ -365,7 +365,7 @@ pub fn gen_type_hint<'db, R: Rng>(
             // At least one variant, since an enum of none has no values.
             let max_count = config.max_collection_size.max(1).min(MAX_UNIQUE_FIELD_NAMES);
             let count = rng.gen_range(1..=max_count);
-            let mut used_names = rmx::rustc_hash::FxHashSet::default();
+            let mut used_names = bct::lookup::LookupSet::default();
             let variants: Vec<_> = (0..count)
                 .map(|_| {
                     let name = loop {
@@ -390,7 +390,7 @@ pub fn gen_type_hint<'db, R: Rng>(
             // and is the same table whatever is written into it.
             let max_count = config.max_collection_size.max(1).min(MAX_UNIQUE_FIELD_NAMES);
             let count = rng.gen_range(1..=max_count);
-            let mut used_names = rmx::rustc_hash::FxHashSet::default();
+            let mut used_names = bct::lookup::LookupSet::default();
             let columns: Vec<_> = (0..count)
                 .map(|_| {
                     let name = loop {

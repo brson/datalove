@@ -29,7 +29,7 @@
 //! (`simplify`), which also puts the blocks back in an order the compiled
 //! backends can translate.
 
-use rmx::rustc_hash::{FxHashMap, FxHashSet};
+use bct::lookup::{LookupMap, LookupSet};
 use std::sync::Arc;
 
 use crate::params::{map_operands_in_instruction, map_operands_in_terminator};
@@ -89,7 +89,7 @@ pub fn is_inline(unit: &IrCodeUnit) -> bool {
 pub struct Inliner<'r> {
     resolve: &'r dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>>,
     /// Each callee met, expanded if it is inline, none if it is not.
-    callees: FxHashMap<CodeRef, Option<Arc<IrCodeUnit>>>,
+    callees: LookupMap<CodeRef, Option<Arc<IrCodeUnit>>>,
     /// The inline functions being expanded, outermost first.
     stack: Vec<CodeRef>,
 }
@@ -97,7 +97,7 @@ pub struct Inliner<'r> {
 impl<'r> Inliner<'r> {
     /// An inliner finding callees with `resolve`; see `inline_calls`.
     pub fn new(resolve: &'r dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>>) -> Self {
-        Inliner { resolve, callees: FxHashMap::default(), stack: Vec::new() }
+        Inliner { resolve, callees: LookupMap::default(), stack: Vec::new() }
     }
 
     /// How this inliner finds callees.
@@ -194,7 +194,7 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
     let caller_modes: Vec<ParamMode> = caller.function_context()
         .map(|c| c.param_modes.clone())
         .unwrap_or_default();
-    let caller_tracked: FxHashSet<SlotId> = caller.tracked_slots.iter().copied().collect();
+    let caller_tracked: LookupSet<SlotId> = caller.tracked_slots.iter().copied().collect();
 
     // The callee's ids go after the caller's, and what the splice adds after
     // the callee's: a value per `in` parameter and per `out` write-back, a
@@ -214,13 +214,13 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
 
     // What each parameter becomes: in the callee's numbering for one bound to
     // something the splice adds, in the caller's for one that is the argument.
-    let mut in_callee: FxHashMap<ParamId, Operand> = FxHashMap::default();
-    let mut in_caller: FxHashMap<ParamId, Operand> = FxHashMap::default();
-    let mut out_slots: FxHashMap<ParamId, SlotId> = FxHashMap::default();
+    let mut in_callee: LookupMap<ParamId, Operand> = LookupMap::default();
+    let mut in_caller: LookupMap<ParamId, Operand> = LookupMap::default();
+    let mut out_slots: LookupMap<ParamId, SlotId> = LookupMap::default();
     let mut bind: Vec<Instruction> = Vec::with_capacity(params);
     let mut write_back: Vec<Instruction> = Vec::new();
     // The parameters of a copy type, whose stores copy.
-    let copy_params: FxHashSet<ParamId> = ctx.params.iter().copied()
+    let copy_params: LookupSet<ParamId> = ctx.params.iter().copied()
         .filter(|p| subst(&ctx.param_types[p.0 as usize]).is_copy())
         .collect();
     for (k, &param) in ctx.params.iter().enumerate() {
@@ -372,7 +372,7 @@ fn slot_store(slot: SlotId, value: Operand, tracked: bool, copy: bool) -> Instru
 }
 
 /// A store to an `out` parameter, as a store to the slot standing for it.
-fn out_stores(instr: &Instruction, out_slots: &FxHashMap<ParamId, SlotId>, copy: &FxHashSet<ParamId>) -> Instruction {
+fn out_stores(instr: &Instruction, out_slots: &LookupMap<ParamId, SlotId>, copy: &LookupSet<ParamId>) -> Instruction {
     match instr {
         Instruction::ParamStoreTracked { param, value } | Instruction::ParamStore { param, value }
             if out_slots.contains_key(param) =>
@@ -398,10 +398,10 @@ fn out_stores(instr: &Instruction, out_slots: &FxHashMap<ParamId, SlotId>, copy:
 /// caller's own `out` parameter, so that what the place holds stays recorded.
 fn through_arguments(
     instr: &Instruction,
-    in_caller: &FxHashMap<ParamId, Operand>,
+    in_caller: &LookupMap<ParamId, Operand>,
     caller_modes: &[ParamMode],
-    caller_tracked: &FxHashSet<SlotId>,
-    copy: &FxHashSet<ParamId>,
+    caller_tracked: &LookupSet<SlotId>,
+    copy: &LookupSet<ParamId>,
     argument: &impl Fn(&Operand) -> Operand,
 ) -> Option<Instruction> {
     let tracked_param = |q: &ParamId| caller_modes[q.0 as usize] == ParamMode::Out;

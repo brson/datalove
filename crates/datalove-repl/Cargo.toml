@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
+bct.workspace = true
 datalove-datafun.workspace = true
 datalove-script-engine.workspace = true
 datalove-paths.workspace = true

@@ -2,7 +2,7 @@
 //! what stopped it.
 
 use rmx::prelude::*;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use rmx::std::path::{Path, PathBuf};
 use rmx::std::sync::Arc;
 
@@ -131,7 +131,7 @@ fn bail_on_module_errors<'db>(
 pub fn check_unit(
     compiler: &ScriptCompiler<'_>,
     unit: &ScriptCompilationResult,
-    files: &FxHashMap<Source, PathBuf>,
+    files: &LookupMap<Source, PathBuf>,
     file_path: &Path,
     line_offsets: &LineOffsets,
     cwd: &Path,

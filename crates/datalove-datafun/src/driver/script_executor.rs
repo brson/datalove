@@ -26,7 +26,7 @@
 
 use rmx::prelude::*;
 use std::collections::BTreeSet;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::sync::Arc;
 
 use datalove_datafun_ir::{ExportBinding, IrType, IrCodeUnit};
@@ -107,7 +107,7 @@ pub struct ScriptExecutor {
     /// where it sits.
     order: Vec<u32>,
     /// What each unit exports and what became of it, by id.
-    units: FxHashMap<u32, UnitState>,
+    units: LookupMap<u32, UnitState>,
     pub env: ScriptEnvironment,
     interp: datalove_datafun_interp::IrInterpreter,
 }
@@ -177,7 +177,7 @@ impl ScriptExecutor {
         ScriptExecutor {
             script_ctx: lower::ScriptLowerContext::new(),
             order: Vec::new(),
-            units: FxHashMap::default(),
+            units: LookupMap::default(),
             env: ScriptEnvironment::with_module_registry(module_registry),
             interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
         }
@@ -722,7 +722,7 @@ impl ScriptExecutor {
         let units = &self.units;
         let ran = |unit: &u32| units[unit].status == UnitStatus::Ran;
 
-        for (name, (unit, value_id)) in self.script_ctx.values.iter().filter(|(_, (unit, _))| ran(unit)) {
+        for (name, (unit, value_id)) in self.script_ctx.values.iter_unordered().filter(|(_, (unit, _))| ran(unit)) {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
@@ -730,7 +730,7 @@ impl ScriptExecutor {
             result.push((name.C(), "let".S(), ty, val));
         }
 
-        for (name, (unit, slot_id)) in self.script_ctx.slots.iter().filter(|(_, (unit, _))| ran(unit)) {
+        for (name, (unit, slot_id)) in self.script_ctx.slots.iter_unordered().filter(|(_, (unit, _))| ran(unit)) {
             let ty = self.script_ctx.slot_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
@@ -738,7 +738,7 @@ impl ScriptExecutor {
             result.push((name.C(), "var".S(), ty, val));
         }
 
-        for (name, _) in self.script_ctx.functions.iter().filter(|(_, (unit, _))| ran(unit)) {
+        for (name, _) in self.script_ctx.functions.iter_unordered().filter(|(_, (unit, _))| ran(unit)) {
             result.push((name.C(), "fun".S(), "function".S(), Some("-".S())));
         }
 

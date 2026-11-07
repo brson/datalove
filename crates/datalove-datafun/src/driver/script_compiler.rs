@@ -26,7 +26,7 @@ use rmx::prelude::*;
 use salsa::Setter as _;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{Body, ParsedExpr, Statement, TopLevel};
@@ -103,7 +103,7 @@ struct HeldGraph {
     /// What each unit took of earlier units' bindings.
     takes: Vec<BTreeSet<String>>,
     /// How each unit provided each of its bindings; see [`binding_shape`].
-    shapes: Vec<FxHashMap<String, BindingShape>>,
+    shapes: Vec<LookupMap<String, BindingShape>>,
 }
 
 /// How a unit provides a binding: as a slot or a value, and of which type.
@@ -125,7 +125,7 @@ fn binding_shape(record: &UnitLowerRecord, name: &str) -> Option<BindingShape> {
 }
 
 /// Every binding `record` says its unit provides, by name, with its shape.
-fn binding_shapes(record: &UnitLowerRecord) -> FxHashMap<String, BindingShape> {
+fn binding_shapes(record: &UnitLowerRecord) -> LookupMap<String, BindingShape> {
     record.exports.iter()
         .filter_map(|(name, _)| Some((name.C(), binding_shape(record, name)?)))
         .collect()
@@ -156,7 +156,7 @@ struct LoweredFunctions {
     /// Behind `Arc`s to match what module lowering produces, so the const
     /// evaluator takes one slice type from both paths.
     functions: Vec<std::sync::Arc<datalove_datafun_ir::IrCodeUnit>>,
-    func_name_to_id: FxHashMap<String, datalove_datafun_ir::FuncId>,
+    func_name_to_id: LookupMap<String, datalove_datafun_ir::FuncId>,
     /// Functions held back because they named a script const with no value yet.
     deferred: Vec<String>,
 }
@@ -185,7 +185,7 @@ struct Waiting<'a, 'db> {
 /// Output from const evaluation phase.
 struct ConstEvalOutput {
     resolved_consts: ResolvedConsts,
-    func_consts: FxHashMap<String, (IrType, Arc<ConstValue>)>,
+    func_consts: LookupMap<String, (IrType, Arc<ConstValue>)>,
     /// Every script-level const in scope, this unit's and earlier units'.
     ///
     /// Held apart from `resolved_consts` because those are what the inlining
@@ -193,7 +193,7 @@ struct ConstEvalOutput {
     /// what a function body naming a script const is lowered against, which it
     /// does not: a body resolves the const where the reference is lowered, so
     /// there is no later pass for the flag to skip.
-    script_consts: FxHashMap<String, (IrType, Arc<ConstValue>)>,
+    script_consts: LookupMap<String, (IrType, Arc<ConstValue>)>,
     /// Just this unit's own script-level consts, for its record.
     declared_consts: Vec<(String, IrType, Arc<ConstValue>)>,
 }
@@ -1200,7 +1200,7 @@ impl<'db> ScriptCompiler<'db> {
             used.push(alias.as_str(db).S());
         }
         // A unit calling two functions of a module asks for its alias twice.
-        let mut seen = rmx::rustc_hash::FxHashSet::default();
+        let mut seen = bct::lookup::LookupSet::default();
         used.retain(|name| seen.insert(name.C()));
         used
     }
@@ -1519,7 +1519,7 @@ impl<'db> ScriptCompiler<'db> {
         let mut first_consts = script_consts_over(&self.unit_records[..index]);
         if let ParsedUnit::Fragment { body, .. } = unit {
             first_consts.extend(datalove_datafun_compiler::const_eval::data_consts(
-                self.db, body, typecheck.expr_types, self.env.data(self.db)));
+                self.db, body, typecheck.expr_types, self.env.data(self.db)).into_iter_unordered());
         }
         let mut lowered_funcs = match self.phase_lower_functions(
             index, unit, &typecheck, &ownership, &first_consts, true, None,
@@ -1744,7 +1744,7 @@ impl<'db> ScriptCompiler<'db> {
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
-        script_consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
+        script_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
         defer_missing_consts: bool,
         only: Option<&[String]>,
     ) -> Result<LoweredFunctions, ScriptCompilationResult> {
@@ -1752,7 +1752,7 @@ impl<'db> ScriptCompiler<'db> {
             // Expressions don't have function definitions.
             return Ok(LoweredFunctions {
                 functions: Vec::new(),
-                func_name_to_id: FxHashMap::default(),
+                func_name_to_id: LookupMap::default(),
                 deferred: Vec::new(),
             });
         };
@@ -1764,8 +1764,8 @@ impl<'db> ScriptCompiler<'db> {
         // Get module function ID map for resolving module function calls.
 
         // Build func_param_types and func_return_types for type alias support.
-        let mut func_param_types: FxHashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = FxHashMap::default();
-        let mut func_return_types: FxHashMap<String, datalove_datafun_tycheck::Type<'db>> = FxHashMap::default();
+        let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = LookupMap::default();
+        let mut func_return_types: LookupMap<String, datalove_datafun_tycheck::Type<'db>> = LookupMap::default();
         for (name, func_type) in typecheck.result.function_types(self.db) {
             let param_types = func_type.param_types(self.db).clone();
             func_param_types.insert(name.text(self.db).S(), param_types);
@@ -1824,7 +1824,7 @@ impl<'db> ScriptCompiler<'db> {
             // Expressions don't have const bindings.
             return Ok(ConstEvalOutput {
                 resolved_consts: ResolvedConsts::new(),
-                func_consts: FxHashMap::default(),
+                func_consts: LookupMap::default(),
                 script_consts: earlier_consts,
                 declared_consts: Vec::new(),
             });
@@ -1914,7 +1914,7 @@ impl<'db> ScriptCompiler<'db> {
     #[allow(clippy::too_many_arguments)]
     fn evaluate_script_consts(
         &self,
-        earlier_consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
+        earlier_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
         const_graph: &datalove_datafun_ir::ConstBindingGraph,
         body: &'db Body<'db>,
         waiting: Waiting<'_, 'db>,
@@ -1926,7 +1926,7 @@ impl<'db> ScriptCompiler<'db> {
         // The const each waiting function a const reaches waits on, by its
         // place among the unit's consts, which is a binding's id. The others
         // wait for every const.
-        let needs: FxHashMap<String, u32> = waiting.typecheck.result.const_needs(self.db).iter()
+        let needs: LookupMap<String, u32> = waiting.typecheck.result.const_needs(self.db).iter()
             .map(|(name, index)| (name.text(self.db).S(), *index))
             .collect();
 
@@ -1937,7 +1937,7 @@ impl<'db> ScriptCompiler<'db> {
         // This unit's own bindings are inserted below as each is resolved, in
         // statement order, so a redeclaration shadows the earlier value rather
         // than the other way about.
-        let mut resolved_consts_map: FxHashMap<String, (IrType, Arc<ConstValue>)> =
+        let mut resolved_consts_map: LookupMap<String, (IrType, Arc<ConstValue>)> =
             earlier_consts.clone();
 
         // A binding's id is its position among the const statements, so the
@@ -2000,12 +2000,12 @@ impl<'db> ScriptCompiler<'db> {
         statements: &[Statement<'db>],
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
-        script_level_consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
+        script_level_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
         lowered_funcs: &LoweredFunctions,
     ) -> ScriptFunctionConstsResult {
         let mut evaluator = self.ctfe_evaluator.borrow_mut();
         let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
-        let mut consts = FxHashMap::default();
+        let mut consts = LookupMap::default();
         let mut errors = Vec::new();
 
         for statement in statements {
@@ -2076,8 +2076,8 @@ impl<'db> ScriptCompiler<'db> {
         match unit {
             ParsedUnit::Fragment { body, .. } => {
                 // Build func_param_types and func_return_types for type alias support.
-                let mut func_param_types: FxHashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = FxHashMap::default();
-                let mut func_return_types: FxHashMap<String, datalove_datafun_tycheck::Type<'db>> = FxHashMap::default();
+                let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = LookupMap::default();
+                let mut func_return_types: LookupMap<String, datalove_datafun_tycheck::Type<'db>> = LookupMap::default();
                 for (name, func_type) in typecheck.result.function_types(self.db) {
                     let param_types = func_type.param_types(self.db).clone();
                     func_param_types.insert(name.text(self.db).S(), param_types);
@@ -2159,17 +2159,17 @@ impl<'db> ScriptCompiler<'db> {
         func_name: &str,
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
-        scope: FxHashMap<String, (IrType, Arc<ConstValue>)>,
+        scope: LookupMap<String, (IrType, Arc<ConstValue>)>,
         comptime_param_indices: &[usize],
         values: &[ConstValue],
         lowered: &[std::sync::Arc<IrCodeUnit>],
-        func_name_to_id: &FxHashMap<String, datalove_datafun_ir::FuncId>,
-    ) -> (FxHashMap<String, Arc<ConstValue>>, Vec<String>) {
+        func_name_to_id: &LookupMap<String, datalove_datafun_ir::FuncId>,
+    ) -> (LookupMap<String, Arc<ConstValue>>, Vec<String>) {
         let Some(func_stmt) = statements.iter().find_map(|stmt| match stmt {
             Statement::Fun(f) if f.name().text(self.db) == func_name => Some(f),
             _ => None,
         }) else {
-            return (FxHashMap::default(), Vec::new());
+            return (LookupMap::default(), Vec::new());
         };
         let mut evaluator = self.ctfe_evaluator.borrow_mut();
         let mut env = ConstEvalEnv {
@@ -2242,11 +2242,11 @@ impl<'db> ScriptCompiler<'db> {
         let instantiation_consts = |callee: CalleeKey, indices: &[usize], values: &[ConstValue]| {
             match callee {
                 CalleeKey::Local(id) => {
-                    let Some(name) = lowered_funcs.func_name_to_id.iter()
+                    let Some(name) = lowered_funcs.func_name_to_id.iter_unordered()
                         .find(|(_, func_id)| func_id.0 == id.0)
                         .map(|(name, _)| name.clone())
                     else {
-                        return (FxHashMap::default(), Vec::new());
+                        return (LookupMap::default(), Vec::new());
                     };
                     // A script function's consts may name the script's.
                     self.instantiation_consts_from(
@@ -2257,7 +2257,7 @@ impl<'db> ScriptCompiler<'db> {
                 }
                 CalleeKey::Module(module, id) => {
                     let Some(original) = registry.get_module_function_as_unit(module, id) else {
-                        return (FxHashMap::default(), Vec::new());
+                        return (LookupMap::default(), Vec::new());
                     };
                     let name = original.name.clone();
                     // The module's own expressions were typechecked with the
@@ -2268,21 +2268,21 @@ impl<'db> ScriptCompiler<'db> {
                         .find(|(_, ir_id)| **ir_id == module)
                         .map(|(module_id, _)| *module_id)
                     else {
-                        return (FxHashMap::default(), Vec::new());
+                        return (LookupMap::default(), Vec::new());
                     };
                     let Some(source_module) = parsed_graph.get_module(self.db, module_id) else {
-                        return (FxHashMap::default(), Vec::new());
+                        return (LookupMap::default(), Vec::new());
                     };
                     let parsed = datalove_datafun_parser::parse_module_ast(self.db, source_module);
                     let module_results = self.shared_context.graph_typecheck.module_results(self.db);
                     let Some(single) = module_results.get(&module_id) else {
-                        return (FxHashMap::default(), Vec::new());
+                        return (LookupMap::default(), Vec::new());
                     };
                     let funcs: Vec<std::sync::Arc<IrCodeUnit>> = registry.iter_module_code_units_with_ids()
                         .filter(|((m, _), _)| *m == module)
                         .map(|(_, u)| std::sync::Arc::new(u.clone()))
                         .collect();
-                    let names: FxHashMap<String, datalove_datafun_ir::FuncId> = funcs.iter()
+                    let names: LookupMap<String, datalove_datafun_ir::FuncId> = funcs.iter()
                         .map(|u| (u.name.clone(), datalove_datafun_ir::FuncId(u.id.0)))
                         .collect();
                     // A module function's consts may name its module's.
@@ -2325,7 +2325,7 @@ impl<'db> ScriptCompiler<'db> {
         use datalove_datafun_ir::CodeRef;
 
         let registry = &self.shared_context.module_registry;
-        let local: FxHashMap<datalove_datafun_ir::CodeUnitId, Arc<IrCodeUnit>> = ir_unit.nested_units.iter()
+        let local: LookupMap<datalove_datafun_ir::CodeUnitId, Arc<IrCodeUnit>> = ir_unit.nested_units.iter()
             .filter(|unit| is_inline(unit))
             .map(|unit| (unit.id, Arc::new(unit.clone())))
             .collect();
@@ -2370,27 +2370,22 @@ impl<'db> ScriptCompiler<'db> {
             return ir_unit;
         }
 
-        // Build the const values map for inlining.
-        // Combine script-level and function-level consts.
-        let mut const_values: FxHashMap<String, Arc<ConstValue>> = FxHashMap::default();
-
-        // Add script-level consts.
+        let mut const_values: LookupMap<String, Arc<ConstValue>> = LookupMap::default();
         for (name, value) in consts.resolved_consts.iter() {
             const_values.insert(name.to_string(), value.clone());
         }
 
-        // Add function-level consts (already qualified as "func_name::const_name").
-        for (qualified_name, (_, value)) in &consts.func_consts {
-            // Extract the local const name for function-level consts.
-            // The key in func_consts is "func_name::const_name".
-            if let Some(pos) = qualified_name.rfind("::") {
-                let local_name = &qualified_name[pos + 2..];
-                const_values.insert(local_name.to_string(), value.clone());
-            }
+        // Function-level consts are keyed "func_name::const_name", and kept
+        // apart by function, since two may each declare one of a name.
+        let mut function_consts: LookupMap<String, LookupMap<String, Arc<ConstValue>>> = LookupMap::default();
+        for (qualified_name, (_, value)) in consts.func_consts.iter_unordered() {
+            let (func_name, const_name) = qualified_name.split_once("::")
+                .expect("a function-level const is keyed by function and name");
+            function_consts.entry(func_name.to_string()).or_default()
+                .insert(const_name.to_string(), value.clone());
         }
 
-        // Run the const inlining pass.
-        inline_script_consts(ir_unit, &const_values)
+        inline_script_consts(ir_unit, &const_values, &function_consts)
     }
 
     // ========================================================================

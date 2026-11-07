@@ -40,7 +40,7 @@
 //! - At loop body end for iteration-scoped bindings
 
 use rmx::prelude::*;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, FunKey, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
     StmtMatch, MatchCaseKind,
@@ -108,7 +108,7 @@ struct AnalysisCtx<'a, 'db> {
     /// All bindings (indexed by BindingId).
     bindings: Vec<BindingInfo>,
     /// Name to binding ID mapping (current scope).
-    name_to_binding: rmx::rustc_hash::FxHashMap<String, BindingId>,
+    name_to_binding: bct::lookup::LookupMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
     scope_stack: Vec<ScopeFrame<'db>>,
     /// The earlier units' bindings this unit names, which hold the first
@@ -133,13 +133,13 @@ struct AnalysisCtx<'a, 'db> {
     schedule: DropSchedule,
     /// The `var`s whose state the analysis cannot fix at every point, and
     /// which keep a tracking byte; see `compute_tracking`.
-    stays_tracked: rmx::rustc_hash::FxHashSet<BindingId>,
+    stays_tracked: bct::lookup::LookupSet<BindingId>,
     /// The tracked vars that may hold a value where the analysis has them
     /// moved: one a loop body gives a value it was entered without, which
     /// holds nothing if the body never ran and something if it did. They are
     /// dropped wherever what is live would be, their tracking byte saying
     /// whether there is anything to drop; reading one is still refused.
-    maybe_held: rmx::rustc_hash::FxHashSet<BindingId>,
+    maybe_held: bct::lookup::LookupSet<BindingId>,
     /// The ways out of each loop currently being analyzed, innermost last.
     ///
     /// `break` and `continue` carry no label, so both always belong to the
@@ -476,7 +476,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         }).collect();
         // A var dropped where it may have been moved is dropped by its
         // tracking byte; a precise one would be dropped twice.
-        for id in &self.maybe_held {
+        for id in self.maybe_held.iter_unordered() {
             assert_ne!(tracking[id.0 as usize], TrackingCategory::Precise, "a var that may be held is tracked");
         }
         tracking
@@ -1425,7 +1425,7 @@ pub fn analyze_script_functions<'db>(
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     stmts: &'db [Statement<'db>],
-    func_param_types: Option<&FxHashMap<String, Vec<Type<'db>>>>,
+    func_param_types: Option<&LookupMap<String, Vec<Type<'db>>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
     let mut analyses = bct::lookup::LookupMap::new();
     let mut errors = Vec::new();

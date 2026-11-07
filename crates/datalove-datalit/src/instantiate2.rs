@@ -672,7 +672,7 @@ fn instantiate_struct<'db>(
         }
     } else {
         // HashMap for large structs.
-        let mut field_map: rmx::rustc_hash::FxHashMap<&str, &ExprFull<'db>> = rmx::rustc_hash::FxHashMap::default();
+        let mut field_map: bct::lookup::LookupMap<&str, &ExprFull<'db>> = bct::lookup::LookupMap::default();
         for expr_field in expr_fields {
             let name = expr_field.name.as_str(db);
             field_map.insert(name, &expr_field.value);

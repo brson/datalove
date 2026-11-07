@@ -16,6 +16,7 @@ index-64 = [
 
 [dependencies]
 rmx.workspace = true
+bct.workspace = true
 datalove-datafun-intrinsics.workspace = true
 datalove-datafun-ir.workspace = true
 datalove-rtdt.workspace = true

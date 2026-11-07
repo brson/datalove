@@ -4,7 +4,6 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
-use rmx::rustc_hash::FxHashMap;
 
 use bct::package_resolve2::{
     ImportDemandMap,
@@ -78,7 +77,7 @@ pub fn to_module_graph<'db>(
 
     // Build ModuleGraph and collect path → ModuleId mapping.
     let mut builder = ModuleGraphBuilder::new(db);
-    let mut path_to_module_id: FxHashMap<String, ModuleId<'db>> = FxHashMap::default();
+    let mut path_to_module_id: LookupMap<String, ModuleId<'db>> = LookupMap::default();
 
     for pkg_module in &sorted_modules {
         let path = path_of(*pkg_module);

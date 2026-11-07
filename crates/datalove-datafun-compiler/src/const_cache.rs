@@ -24,7 +24,7 @@
 //! checks that the key is not missing anything.
 
 use std::collections::BTreeSet;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use std::sync::Arc;
 
 use bct::input::Source;
@@ -38,7 +38,7 @@ pub type Fingerprint = [u8; 32];
 struct CachedModule {
     fingerprint: Fingerprint,
     /// The module-level consts, by name.
-    module_level: Option<FxHashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_level: Option<LookupMap<String, (IrType, Arc<ConstValue>)>>,
     /// The consts in function bodies, under `func::name`, sorted.
     body: Option<Vec<(String, IrType, SharedConst)>>,
 }
@@ -54,11 +54,11 @@ pub struct ConstCacheReport {
 
 /// Evaluated consts by module path; see the module docs.
 pub struct ConstCache {
-    modules: FxHashMap<String, CachedModule>,
+    modules: LookupMap<String, CachedModule>,
     /// What the closures cannot see. A change empties the cache.
     world: Option<Fingerprint>,
     /// This compile's key for each module in the graph.
-    keys: FxHashMap<String, Fingerprint>,
+    keys: LookupMap<String, Fingerprint>,
     report: ConstCacheReport,
     verify: bool,
 }
@@ -66,9 +66,9 @@ pub struct ConstCache {
 impl Default for ConstCache {
     fn default() -> Self {
         ConstCache {
-            modules: FxHashMap::default(),
+            modules: LookupMap::default(),
             world: None,
-            keys: FxHashMap::default(),
+            keys: LookupMap::default(),
             report: ConstCacheReport::default(),
             verify: std::env::var_os("DATALOVE_VERIFY_CONST_CACHE").is_some(),
         }
@@ -118,7 +118,7 @@ impl ConstCache {
             })
             .collect();
         let keys = &self.keys;
-        self.modules.retain(|path, cached| keys.get(path) == Some(&cached.fingerprint));
+        self.modules.retain_unordered(|path, cached| keys.get(path) == Some(&cached.fingerprint));
         self.report = ConstCacheReport::default();
     }
 
@@ -134,7 +134,7 @@ impl ConstCache {
     }
 
     /// The module-level consts of `path` from an earlier compile.
-    pub(crate) fn module_level(&self, path: &str) -> Option<&FxHashMap<String, (IrType, Arc<ConstValue>)>> {
+    pub(crate) fn module_level(&self, path: &str) -> Option<&LookupMap<String, (IrType, Arc<ConstValue>)>> {
         self.modules.get(path)?.module_level.as_ref()
     }
 
@@ -144,7 +144,7 @@ impl ConstCache {
     }
 
     /// Keep the module-level consts of `path`, which all evaluated.
-    pub(crate) fn store_module_level(&mut self, path: &str, consts: FxHashMap<String, (IrType, Arc<ConstValue>)>) {
+    pub(crate) fn store_module_level(&mut self, path: &str, consts: LookupMap<String, (IrType, Arc<ConstValue>)>) {
         self.entry(path).module_level = Some(consts);
     }
 

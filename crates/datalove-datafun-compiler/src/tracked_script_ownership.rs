@@ -5,7 +5,7 @@
 //! incremental recompilation when new units are added to a batch.
 
 use rmx::prelude::*;
-use rmx::rustc_hash::FxHashMap;
+use bct::lookup::LookupMap;
 use bct::input::Source;
 use datalove_datafun_ast::ast::{FunKey, ParsedExpr, Statement, TopLevel};
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
@@ -73,7 +73,7 @@ pub struct ScriptUnitOwnershipResult<'db> {
 }
 
 impl<'db> ScriptUnitOwnershipResult<'db> {
-    /// Convert function_analyses to HashMap<StmtFun, FunctionAnalysis> for lowering.
+    /// Convert function_analyses to a map from StmtFun to FunctionAnalysis for lowering.
     ///
     /// Reconstructs the map keyed by StmtFun by finding matching function statements
     /// by name in the provided statements list.
@@ -86,7 +86,7 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
         let mut map = bct::lookup::LookupMap::new();
 
         // Build name -> function lookup from statements.
-        let mut name_to_stmt: FxHashMap<&str, FunKey<'db>> = FxHashMap::default();
+        let mut name_to_stmt: LookupMap<&str, FunKey<'db>> = LookupMap::default();
         for stmt in stmts {
             if let Statement::Fun(func) = stmt {
                 let name = func.name().text(db);
@@ -134,7 +134,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     let body = top.body(db);
 
     // Build map of function name -> resolved param types for type alias support.
-    let mut func_param_types: FxHashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = FxHashMap::default();
+    let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = LookupMap::default();
     for (name, func_type) in typecheck_result.function_types(db) {
         func_param_types.insert(name.text(db).S(), func_type.param_types(db).C());
     }

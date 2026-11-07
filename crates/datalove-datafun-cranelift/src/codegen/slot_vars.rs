@@ -31,7 +31,7 @@
 //! the interpreter made to a slot before the entry is one the IR made, and
 //! the analysis, which reads the whole function, has ruled that slot out.
 
-use rmx::rustc_hash::{FxHashMap, FxHashSet};
+use bct::lookup::{LookupMap, LookupSet};
 
 use cranelift_codegen::ir as cl_ir;
 use cranelift_frontend::{FunctionBuilder, Variable};
@@ -59,8 +59,8 @@ pub(super) struct FieldPlace {
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// The slots to hold in registers, and the field references to keep as
     /// places in them.
-    pub(super) fn find_register_slots(&self) -> (FxHashSet<SlotId>, FxHashMap<ValueId, FieldPlace>) {
-        let mut chosen: FxHashSet<SlotId> = self.func.slot_types.iter().enumerate()
+    pub(super) fn find_register_slots(&self) -> (LookupSet<SlotId>, LookupMap<ValueId, FieldPlace>) {
+        let mut chosen: LookupSet<SlotId> = self.func.slot_types.iter().enumerate()
             .map(|(i, ty)| (SlotId(i as u32), ty))
             .filter(|(id, ty)| !self.func.tracked_slots.contains(id)
                 && !matches!(ty, IrType::Cursor(_))
@@ -93,7 +93,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // How each value is used, for the field references.
-        let mut uses: FxHashMap<ValueId, Vec<(usize, usize, usize)>> = FxHashMap::default();
+        let mut uses: LookupMap<ValueId, Vec<(usize, usize, usize)>> = LookupMap::default();
         for (b, block) in self.func.blocks.iter().enumerate() {
             for (i, inst) in block.instructions.iter().enumerate() {
                 let mut at = 0;
@@ -114,7 +114,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             });
         }
 
-        let mut places = FxHashMap::default();
+        let mut places = LookupMap::default();
         for block in &self.func.blocks {
             for inst in &block.instructions {
                 let Instruction::GetFieldRef { dest, src: Operand::Slot(s), field_index } = inst else { continue };
@@ -131,7 +131,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             }
         }
-        places.retain(|_, place| chosen.contains(&place.slot));
+        places.retain_unordered(|_, place| chosen.contains(&place.slot));
         (chosen, places)
     }
 
@@ -217,8 +217,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// In an OSR entry, give each slot held in registers that the compiled
     /// blocks name what the interpreter's frame holds for it.
-    pub(super) fn load_slots_from_frame(&self, builder: &mut FunctionBuilder, compiled: &FxHashSet<BlockId>) {
-        let mut named = FxHashSet::default();
+    pub(super) fn load_slots_from_frame(&self, builder: &mut FunctionBuilder, compiled: &LookupSet<BlockId>) {
+        let mut named = LookupSet::default();
         for block in self.func.blocks.iter().filter(|b| compiled.contains(&b.id)) {
             for inst in &block.instructions {
                 inst.for_each_place_use(|op, _| {
@@ -233,7 +233,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             });
         }
-        let mut slots: Vec<SlotId> = named.into_iter().filter(|s| self.slot_vars.contains_key(s)).collect();
+        let mut slots: Vec<SlotId> = named.into_iter_unordered().filter(|s| self.slot_vars.contains_key(s)).collect();
         slots.sort_by_key(|s| s.0);
         for s in slots {
             let home = self.slot_home(builder, s);
@@ -243,8 +243,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Declare the variables of the slots held in registers.
-    pub(super) fn declare_slot_vars(&mut self, builder: &mut FunctionBuilder, slots: &FxHashSet<SlotId>) {
-        for &s in slots {
+    pub(super) fn declare_slot_vars(&mut self, builder: &mut FunctionBuilder, slots: &LookupSet<SlotId>) {
+        for &s in slots.sorted_by_key(|s| s.0) {
             let cut = reg_pieces(&self.func.slot_types[s.0 as usize]).expect("chosen for registers");
             let vars: Vec<Variable> = cut.iter().map(|&(_, t)| builder.declare_var(t)).collect();
             self.slot_vars.insert(s, vars);

@@ -1,0 +1,16 @@
+// Two functions that each declare a const of one name.
+//
+// Function-level consts were inlined from one map keyed by bare name, so one
+// function's `X` replaced the other's, and `g` returned 1.
+fun f(): u32
+  const X: u32 = 1
+  ret X
+end fun
+
+fun g(): u32
+  const X: u32 = 2
+  ret X
+end fun
+
+debuglog f()
+debuglog g()

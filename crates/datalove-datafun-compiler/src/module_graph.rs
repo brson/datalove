@@ -4,7 +4,6 @@
 
 use rmx::prelude::*;
 use bct::lookup::LookupMap;
-use rmx::rustc_hash::FxHashMap;
 use rmx::std::hash::Hash;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{FunHead, FunParam, FunSignature};
@@ -188,10 +187,10 @@ pub struct RiderSources<'db> {
 fn rider_interfaces<'db>(
     db: &'db dyn salsa::Database,
     rider_sources: RiderSources<'db>,
-) -> FxHashMap<String, datalove_datafun_common::RiderInterface<'db>> {
+) -> LookupMap<String, datalove_datafun_common::RiderInterface<'db>> {
     use datalove_datafun_common::RiderInterface;
 
-    let mut interfaces: FxHashMap<String, RiderInterface<'db>> = FxHashMap::default();
+    let mut interfaces: LookupMap<String, RiderInterface<'db>> = LookupMap::default();
     for (name, source) in rider_sources.sources(db) {
         let parse_result = datalove_datafun_parser::parse_rider_interface(db, *source);
         let collected = check_rider_interface(db, *source);

@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
+bct.workspace = true
 datalove-datafun-ir.workspace = true
 datalove-datafun-interp.workspace = true
 datalove-datafun-cranelift.workspace = true
