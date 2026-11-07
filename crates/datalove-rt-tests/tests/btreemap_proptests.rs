@@ -1062,7 +1062,7 @@ proptest! {
             // Get each unique key and verify we get Some with correct value.
             let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc));
 
-            for (key, expected_value) in &expected_values {
+            for (key, expected_value) in expected_values.iter_unordered() {
                 let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_get_local(

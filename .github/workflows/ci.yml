@@ -70,6 +70,8 @@ jobs:
           # Only test-slow's check-wasm and test-wasm need this, but installing it
           # everywhere costs seconds and keeps the matrix uniform.
           targets: wasm32-unknown-unknown
+          # `just test` checks the hash container rule with clippy.
+          components: clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
