@@ -204,12 +204,12 @@ and `output` just produces a binding observable in the runtime environment.
 Let's just assume these are reasonable standins for some future way to
 impose I/O on a script.
 
-The `%{string = int}` type is a map from `string` to `int`.
-The `!` sigil indicates sites of potential early-return errors,
-here a missing key in the `budget` map, `budget[c]!`.
-"Greater than" is spelled `.>` because Datalove
-[treats `<` and `>` as matched brackets in the lexer](../datafun.md#user-content-comparison-and-equality).
-The remaining Datalove syntax in this example is similar to other common languages.
+> The `%{string = int}` type is a map from `string` to `int`.
+> The `!` sigil indicates sites of potential early-return errors,
+> here a missing key in the `budget` map, `budget[c]!`.
+> "Greater than" is spelled `.>` because Datalove
+> [treats `<` and `>` as matched brackets in the lexer](../datafun.md#user-content-comparison-and-equality).
+> The remaining Datalove syntax in this example is similar to other common languages.
 
 The script produces `output`:
 
@@ -310,7 +310,6 @@ then `over` reevaluates back to `["groceries"]`.
 
 What actually needs to recompile?
 What actually needs to rerun?
-
 Let's not belabor this.
 You get the idea. Inputs change.
 Reevaluate just what needs to reevaluate.
