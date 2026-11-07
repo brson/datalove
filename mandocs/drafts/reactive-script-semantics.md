@@ -72,7 +72,6 @@ I did not prove correctness.
 **Part 3. Results and Discussion**
 
 - [Functions and modules are bindings too](#user-content-functions-and-modules-are-bindings-too)
-- [Where the static picture is approximate](#user-content-where-the-static-picture-is-approximate)
 - [Validating this design with a literate test suite](#user-content-validating-this-design-with-a-literate-test-suite)
 - [Comparing to the literature](#user-content-comparing-to-the-literature)
 - [A live example of the Datalove scripting engine](#user-content-a-live-example-of-the-datalove-scripting-engine)
@@ -1373,30 +1372,6 @@ is to establish broad architectural capabilities early,
 develop the language later.
 Discover the big constraints now so I don't accidentally add
 incompatible semantics to the surface language.
-
-
-
-
-## Where the static picture is approximate
-
-<!--
-_But_ the operations are what the compiler sees, not what actually ran.
-_Therefore_ each case either fits the algebra conservatively or adds a rule.
-
-From the old draft:
-conditional and looping writes (conditional-write, loop-update),
-partial writes (partial-write),
-early returns, which block later readers like a break (return-early, return-early-before-take).
-Optimizations the algebra doesn't need:
-a rerun that produces the same value (same-value),
-and what rerunning costs.
-Where the engine does more than the algebra:
-a write to part of a binding counts as a write to all of it (partial-write),
-a rerun that comes out the same still reruns its readers (same-value),
-and a unit that returned early is assumed to have done everything its code could (return-early).
--->
-
-todo
 
 
 
