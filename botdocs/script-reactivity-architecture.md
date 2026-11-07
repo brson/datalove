@@ -541,26 +541,12 @@ separate test pins that the fixture has the shape the claim is about.
 | `datalove-doc-fixtures/tests/reactive_tests` | the step tables in `reactive/`, and that [script-reactivity-cases.md](script-reactivity-cases.md) shows them as rendered |
 | `datalove-doc-fixtures/tests/replay_tests` | the step tables in the replays the docs embed, against a session with modules and data |
 
-A step table says what each unit should do per step, with the engine's known
-extra work annotated; `crates/datalove-doc-fixtures/src/step_tables.rs` checks
-them. There, a unit counts as recompiled if salsa ran its typecheck, or ran an
-ownership analysis while compiling it (`query_events::compiling_unit`). Salsa's
-events say that a typecheck ran but not for which unit, since its key moves
-with the env, so the typecheck's own `unit_analysis` record names the unit,
-and there must be exactly one record for every typecheck salsa ran. Every
-step also checks the engine's own
-account of what it compiled against that, so a pass whose entry query does not
-record itself fails the fixtures it changes; removing the ownership hook fails
-every step where a unit's ownership analysis runs and its typecheck does not.
-And it checks that no script unit's typecheck or ownership analysis ran on a
-worker thread, where the engine's log cannot see it.
-
-**Every step is also checked against a fresh run**, which trusts neither the
-graph nor a table: a new engine runs the session's current units in order,
-and each unit must end the same way and hold the same bindings as in the
-session the step left. It is the definition of a correct step, so it catches
-what a hand-written `holds after` and the engine agree on wrongly; it found
-the units requiring a broken module left as having run.
+The step tables state, per step, what each unit should do, and check it
+against what salsa actually ran and against a fresh run of the session's
+current code, which is the definition of a correct step; see [Step
+tables](doc-fixtures.md#user-content-step-tables). Removing the engine's
+ownership hook fails every step where a unit's ownership analysis runs and its
+typecheck does not.
 
 **Falsification is what makes it evidence.** Each piece was checked by
 injecting a fault into the shipped code and confirming the tests reported the

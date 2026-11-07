@@ -46,9 +46,8 @@ modification. After each step a table says, for every unit:
 - **holds after**: its own bindings once the step is over, `moved` for one
   given away, `-` for none.
 
-Every step is also checked against a fresh run of the session's current code,
-which no table can get wrong: each unit has to end the same way and hold the
-same bindings as it does in a new session that runs the units in order.
+How the tables are checked, including against a fresh run of the session's
+current code, is in [Step tables](doc-fixtures.md#user-content-step-tables).
 
 What happens to a unit in a step is one of:
 
@@ -69,9 +68,7 @@ reaches and is not counted.
 
 Units keep the numbers they were entered with: a deleted unit leaves a gap, and
 an inserted one takes the next number, wherever it sits. A comment under a
-table lists where the engine does more work than the table asks; the test
-accepts exactly that much more, and fails if the engine stops needing it, so
-the comments stay true.
+table lists where the engine does more work than the table asks.
 
 To add a case, write a fixture (the format is at the top of
 `reactive_tests.rs`), add regions for it here --

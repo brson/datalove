@@ -1,8 +1,8 @@
 //! Step tables: what each unit of a session should do in a step, checked
 //! against the engine.
 //!
-//! A step is one change to the session -- units appended, or one unit
-//! edited, deleted or inserted -- and its `expect` table says, for every unit,
+//! A step is one change to the session -- units appended, one unit edited,
+//! deleted, inserted or moved, or a module or data file edited -- and its `expect` table says, for every unit,
 //! what the unit should do in that step and what its bindings should hold
 //! after it:
 //!

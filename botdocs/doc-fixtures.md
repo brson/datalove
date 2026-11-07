@@ -7,6 +7,7 @@ in the reactive scripting post, went in.
 ## Contents
 
 - [Why a crate of its own](#user-content-why-a-crate-of-its-own)
+- [Step tables](#user-content-step-tables)
 - [Session replays](#user-content-session-replays)
 - [The trace](#user-content-the-trace)
 - [The player](#user-content-the-player)
@@ -32,14 +33,42 @@ engine produced belongs there:
   run by `tests/reactive_tests.rs`.
 - `replays/`, the sessions the posts play, run by `tests/replay_tests.rs`.
 
-**Both are checked by step tables** (`src/step_tables.rs`): for each step, what
-every unit should do, what it uses, and what it holds after. A table states
-the rule, an `engine` table after it writes down where the engine does more
-work than the rule asks, and the test fails if the engine does anything else.
-The tables are never blessed, because they are the rules. Every step, with a
-table or without, is also checked against a fresh run: a new engine runs the
-session's current units in order, and each unit must end the same way and
-hold the same bindings.
+Both are checked by step tables.
+
+## Step tables
+
+A step is one change to a session: units appended, or one unit edited,
+deleted, inserted or moved, or a module or data file edited. After a step, an
+`expect` table says, for every unit, what it uses from earlier units, what
+happened to it, and what its bindings hold. The columns and the words they use
+are in [Reading the tables](script-reactivity-cases.md#user-content-reading-the-tables).
+`src/step_tables.rs` runs the session and checks each table.
+
+**A table states the rule, and the rule is never blessed.** The engine may do
+more work than the rule asks -- rerun a unit the rule leaves alone, or
+recompile one it only reruns -- and each such row is written down in an
+`engine` table after the step. Doing less, or failing differently, is never
+accepted, and an `engine` row the engine no longer needs fails too, so the
+annotations stay true. The `because` column is for the reader and is not
+checked.
+
+**A recompile is counted from salsa, not from the engine's say-so.** A unit
+counts as recompiled if salsa ran its typecheck, or ran an ownership analysis
+while compiling it (`query_events::compiling_unit`). Salsa's events say that a
+typecheck ran but not for which unit, since its key moves with the env, so the
+typecheck's own `unit_analysis` record names the unit, and there must be
+exactly one record for every typecheck salsa ran. Each step also checks the
+engine's own account of what it compiled against that, so a pass whose entry
+query does not record itself fails the fixtures it changes, and checks that no
+script unit's typecheck or ownership analysis ran on a worker thread, where
+the engine's log cannot see it.
+
+**Every step is also checked against a fresh run**, with a table or without:
+a new engine runs the session's current units in order, and each unit must
+end the same way and hold the same bindings as in the session the step left.
+This is the definition of a correct step, and it trusts neither the engine's
+graph nor a hand-written `holds after`, so it catches what the two agree on
+wrongly; it found the units requiring a broken module left as having run.
 
 ## Session replays
 
@@ -140,11 +169,12 @@ everything in each doc set's `assets` directory as a static asset.
 A replay is checked against the rules as well as recorded, so a change to the
 language breaks its test rather than quietly changing what the post shows. Its
 worldfile may hold `expect` sections, and `engine` sections after them, as the
-reactive fixtures do. An `expect` checks the inputs since the `expect` before
-it, which are either units appended -- the script entered at the start, say
--- or one `/edit`, `/edit-data`, `/delete`, `/insert` or `/move`. Inputs after
-the last `expect` have no table, though each is still checked against a fresh
-run. Units are named by the numbers the session gives them.
+reactive fixtures do; see [Step tables](#user-content-step-tables). An
+`expect` checks the inputs since the `expect` before it, which are either
+units appended -- the script entered at the start, say -- or one `/edit`,
+`/edit-data`, `/delete`, `/insert` or `/move`. Inputs after the last `expect`
+have no table, though each is still checked against a fresh run. Units are
+named by the numbers the session gives them.
 
 The test takes the tables out before it records the session, so they are not
 in the trace, and `datalove repl --load` refuses a worldfile that still has

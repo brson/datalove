@@ -10,10 +10,10 @@
 //! A replay may also hold `expect` tables, and `engine` tables after them,
 //! as the reactive fixtures do; see `datalove_doc_fixtures::step_tables`. An
 //! `expect` checks the inputs since the one before it, which are either units
-//! appended or one `/edit`, `/edit-data`, `/delete` or `/insert`. The tables are taken out
-//! before the session is recorded, so what a replay shows is checked against
-//! the rules, and a change in the language breaks the test rather than
-//! quietly changing the document.
+//! appended or one `/edit`, `/edit-data`, `/delete`, `/insert` or `/move`.
+//! The tables are taken out before the session is recorded, so what a replay
+//! shows is checked against the rules, and a change in the language breaks
+//! the test rather than quietly changing the document.
 //!
 //! `BLESS=1` records the replays again and writes the files instead of
 //! checking them. The step tables are never blessed: they are the rules.
