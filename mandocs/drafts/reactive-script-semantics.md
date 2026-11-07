@@ -208,7 +208,7 @@ The `%{string = int}` type is a map from `string` to `int`.
 The `!` sigil indicates sites of potential early-return errors,
 here a missing key in the `budget` map, `budget[c]!`.
 "Greater than" is spelled `.>` because Datalove
-[matches `<` and `>` in the lexer](../datalit.md) (todo find a better link here).
+[treats `<` and `>` as matched brackets in the lexer](../datafun.md#user-content-comparison-and-equality).
 The remaining Datalove syntax in this example is similar to other common languages.
 
 The script produces `output`:
