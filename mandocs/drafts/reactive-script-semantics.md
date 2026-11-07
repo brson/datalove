@@ -1319,7 +1319,60 @@ so the step ends.
 
 ## Functions and modules are bindings too
 
-todo
+All of the examples used to develop these rules so far
+were based on variable bindings.
+The motivating example from the beginning of this document
+though included modules and functions as well.
+
+```datalove
+require module sys/std/list
+require module sys/std/map
+require module sys/std/string
+
+...
+
+fun category(ref payee: string): string
+  if (
+    string.starts_with(ref payee, ref "TRADER JOES")
+    or string.starts_with(ref payee, ref "SAFEWAY")
+  )
+    ret "groceries"
+  else if (
+    string.contains(ref payee, ref "COFFEE")
+    or string.contains(ref payee, ref "CAFE")
+    or string.starts_with(ref payee, ref "TAQUERIA")
+  )
+    ret "dining"
+  else if string.starts_with(ref payee, ref "SHELL")
+    ret "car"
+  else if payee == "PG&E" or payee == "NETFLIX.COM"
+    ret "bills"
+  end if
+  ret "other"
+end fun
+
+...
+```
+
+These are also bindings and follow the same analysis,
+simplified since their values can't be mutated or moved.
+On each step the engine just needs to track where these
+are used and apply the same rules as `let` and `var`.
+
+This does suggest a constraint for future design directions though.
+It needs to continue to be easy to track the flow of bindings usage.
+Any language constructs that dynamically hide the flow of values
+will instantly complicate the reactive architecture.
+Imagine having traits.
+Then we need to follow the reach of all trait usages.
+Imagine having closures.
+Then we need to follow the reach of all values that disappear into them.
+
+These types of concerns are why one of [Datalove's principles](../principles.md)
+is to establish broad architectural capabilities early,
+develop the language later.
+Discover the big constraints now so I don't accidentally add
+incompatible semantics to the surface language.
 
 
 
