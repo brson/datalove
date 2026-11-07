@@ -307,6 +307,7 @@ pub struct ScriptContext {
     pub result: Option<ValueId>,
     pub result_name: Option<String>,
     pub exports: Vec<(String, ExportBinding)>,
+    pub unit: Option<u32>,
 }
 ```
 
@@ -330,6 +331,12 @@ is asking to see a binding an earlier unit owns, so there is nothing to compute
 and nothing to copy: the name is recorded, `result` is empty, and the executor
 reads that binding where it lives.
 
+`unit` is the unit's id in its script, stamped by the script compiler: every
+`(unit, id)` reference a later unit holds was lowered against it, and the
+executor keeps the unit's frame under it. It stays the unit's wherever units are
+spliced in or out around it. A unit built for anything but a session, such as a
+const expression, has none and runs as the next unit.
+
 ### NativeContext
 
 ```rust
@@ -339,6 +346,7 @@ pub struct NativeContext {
     pub return_type: IrType,
     symbol: String,                   // e.g. "dlr_std__list_push", read by symbol()
     pub undetermined_type_params: Vec<u32>,
+    pub intrinsic: Option<NativeIntrinsic>,
 }
 ```
 
@@ -346,8 +354,9 @@ A native function has a signature and a linker symbol and no blocks. It is
 built with `NativeContext::new(rider, function, ...)`, which spells the symbol
 by `native_symbol`, so nothing outside the IR crate knows the format.
 `undetermined_type_params` are the type parameters no argument determines, by
-position; a call hands over a descriptor for each, after the result. See
-[the native ABI](native-abi.md).
+position; a call hands over a descriptor for each, after the result.
+`intrinsic` is set for an `intrinsic native fun`, which a backend may open-code
+in place of the call. See [the native ABI](native-abi.md).
 
 ### Parameter Modes
 
@@ -734,7 +743,7 @@ assumes ownership analysis has proven the operand's state and neither reads nor
 writes a tracking byte. A tracked variant reads the byte before destroying
 anything and writes it afterwards.
 
-The full error catalogue (O001 to O013) is in the
+The full error catalogue (O001 to O016) is in the
 [compiler guide](compiler-guide.md#user-content-error-codes).
 
 ## 10. Constants
@@ -899,8 +908,8 @@ inlining with simplification, dead code, const promotion. The last three are
 **Const inlining and DCE** (`datalove-datafun-const`) evaluates a const
 binding's pre-lowered IR to a `ConstValue`, replaces the expression with a
 `Const` instruction, and then eliminates the instructions and blocks that leaves
-unreachable. `dce::instruction_dest` is the shared answer to "what does this
-instruction define".
+unreachable. `Instruction::dests` is the shared answer to "what does this
+instruction define", and `Instruction::dest` the one const inlining replaces.
 
 **Inlining** (`ir::inline`, temporary) replaces each call to a function marked
 `inline` by its body, after specialization: the callee's blocks renumbered in

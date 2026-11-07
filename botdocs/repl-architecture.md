@@ -1,7 +1,7 @@
 # REPL Architecture
 
 How the REPL is put together, and the decisions that shaped it. Explanation;
-describes the REPL as of October 2026.
+describes the REPL as of November 2026.
 
 Every script unit typed at the REPL, a fragment of statements or an
 expression, is compiled and run by the script engine's `Engine` on a worker
@@ -291,11 +291,9 @@ the reach is decided, and why the engine owns its database rather than
 borrowing it.
 
 `Engine::edit_module(library, package, module, source)` does the same from a
-module edit, in every session, and returns each session's report. Its seeds are the edited module, the modules that require it directly or not, and
-any module the edit broke or fixed. The units importing from those are
-re-derived, and then the units reading what those compute. The broken-or-fixed
-seed is what the import edge alone would miss: a module that leaves the compile
-because one it requires broke is in no graph to be found from.
+module edit, in every session, and returns each session's report. Which units
+it reaches is
+[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-4-re-derivation-is-a-walk-and-the-runtime-is-already-per-unit).
 
 **A module edit that does not compile is kept.** The roots are settled again,
 so the module leaves the compile with the modules requiring it, and the units
@@ -558,7 +556,7 @@ longer unit carries the same marks at its corners:
 The corners are the unit's rather than each line's, because a mark on every
 line makes a striped column, and top stripes and bottom stripes look alike
 down a few rows. The marks are the status color, a cell having one. The last
-step is the last unit, edit, delete or insert the engine carried out; a
+step is the last unit, edit, delete, insert or move the engine carried out; a
 command that changes nothing leaves the marks, and a reset leaves no units to
 mark. What a step compiled comes from the engine (see
 [script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-what-a-step-reports)),
@@ -571,11 +569,11 @@ the answer's `step` are the same list.
 
 **The app keeps its own copy of the session's units**, numbered as the
 `Session` numbers them, and changes it as each answered command changed the
-engine's: an appended unit is added and numbered, an edit, a delete or an
-insert is made, and a reset empties it. The bars come from the same answers:
-the unit appended, or the ones an edit reached, take what they came to. The code is these units, then the
-units on their way to the engine, which shows them without numbers since it
-has not given them any yet.
+engine's: an appended unit is added and numbered, an edit, a delete, an
+insert or a move is made, and a reset empties it. The bars come from the same
+answers: the unit appended, or the ones an edit reached, take what they came
+to. The code is these units, then the units on their way to the engine,
+which shows them without numbers since it has not given them any yet.
 
 **It is checked against the engine's.** Every eval answer carries the
 `Session`'s units, numbers and sources. When the app's copy differs, a rule of
@@ -592,8 +590,8 @@ when it is submitted too, or the units typed after it show appended to the sessi
 never see. The history keeps the old units until the engine answers the reset,
 since they are the engine's session until then, and `code_units` shows only
 the units after the last reset still in it. Appended units and resets are the
-only guesses the code makes: an edit, a delete or an insert shows once it is
-answered. `/load` gets this for nothing: it is a `/reset`
+only guesses the code makes: an edit, a delete, an insert or a move shows once
+it is answered. `/load` gets this for nothing: it is a `/reset`
 and the saved units, replayed together.
 
 **One unit is always selected** while the session has units, its number in

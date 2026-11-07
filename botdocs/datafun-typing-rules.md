@@ -716,8 +716,9 @@ where `walk` gives the bindings each collection admits, each of kind `let`:
 
 The collection is read in a borrowed position. A collection that is not a
 place is F108, one of any other type F087, and one with the wrong number of
-names for its type F109. The bindings are references into the collection; the ownership
-analysis, not the checker, keeps them from being moved or written.
+names for its type F109. The bindings are references into the collection;
+the ownership analysis, not the checker, keeps them from being moved or
+written.
 
 ```
 Γ ⊢ e ⇒ E    E = enum {v₁, ..., vₙ}
@@ -917,9 +918,9 @@ not reported again.
 | T062-T066 | A recursive type that is not well formed; as in datalit, and T066 for a type parameter inside one |
 
 A code missing from the table is unassigned; F011, F060, F065 and F075 are
-retired. Two parse
-errors belong to the same rules: P074, a declaration inside a block, and
-P077, a statement at the top level of a module that is not a declaration.
+retired. Two parse errors belong to the same rules: P074, a declaration
+inside a block, and P077, a statement at the top level of a module that is
+not a declaration.
 A fault in a literal form, which datafun shares with datalit, has datalit's
 T-code, as a fault in shared syntax has its D-code; the T rows above are
 those. They appear in data files too: a `.dlt` that does not have the type

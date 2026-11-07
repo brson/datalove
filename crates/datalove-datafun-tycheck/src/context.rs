@@ -194,7 +194,7 @@ pub struct TypeContext<'db> {
 /// the one way around that, being in scope throughout. So the walk records
 /// which functions each const's initializer calls, and which consts and
 /// functions each function's body names and calls; `check_const_deps` follows
-/// them. See `botdocs/plan-lexical-scope.md`.
+/// them. See "Const Evaluation" in `botdocs/compiler-guide.md`.
 #[derive(Default)]
 pub(crate) struct ConstDeps<'db> {
     /// The top-level consts in source order.
@@ -223,7 +223,7 @@ struct TopConst<'db> {
 /// function throughout. Name and import resolution find every declaration
 /// before the walk starts; these hold the ones it has not reached yet, so that
 /// a use above one is refused, and the refusal can say why. See
-/// `botdocs/plan-lexical-scope.md`.
+/// botspec 2.6.
 #[derive(Default)]
 pub(crate) struct DeclaredBelow<'db> {
     /// `const`, `let` and `var` names.

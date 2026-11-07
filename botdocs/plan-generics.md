@@ -1,12 +1,15 @@
 # Generics and Specialization
 
-> **Superseded in part.** Erasure -- Layer 1 of [The
-> design](#user-content-the-design), and everything from [What a first attempt
-> found](#user-content-what-a-first-attempt-found) through [Where this
-> stands](#user-content-where-this-stands) -- was replaced by [Generics by
-> Reference](plan-fat-generics.md): fat pointers, and descriptors built at run
-> time from one per type parameter. Those sections are history. Layer 2,
-> monomorphizing what is hot, and the const parameter sections still stand.
+> **Superseded.** Erasure -- Layer 1 of [The design](#user-content-the-design),
+> and everything from [What a first attempt
+> found](#user-content-what-a-first-attempt-found) on -- was replaced by
+> [Generics by Reference](plan-fat-generics.md). Layer 2 was replaced by
+> [Specializing Generics](plan-monomorphization.md), whose run-time experiment
+> found counters the wrong shape for choosing what to specialize. What still
+> stands is the reasoning: why not the const parameter machinery, why `<T>`,
+> why bounds are a closed set, and the prior art. Still open: closures, bounds
+> beyond `ord`, `fixedint` and `float`, and const arguments that are not const
+> bindings.
 
 How datalove should implement type parameters, and what to do about const parameter
 specialization now that it has been built and measured.

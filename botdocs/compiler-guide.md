@@ -84,20 +84,20 @@ Reference for the datalove-datafun compiler architecture.
 
 | Crate | Responsibility |
 |-------|----------------|
-| `bcts` (imported as `bct`) | Base compiler toolkit: `ModuleGraph`, `Module`, `ModuleId`, source maps, text interning |
+| `bcts` (imported as `bct`) | Base compiler toolkit: `ModuleGraph`, `Module`, `ModuleId`, source maps, text interning, `LookupMap` and `LookupSet`, the only hash containers (see [salsa-patterns.md](salsa-patterns.md)) |
 | `datalove-datafun-pkg` | Package loading, `PackageWorld`, worldfile parsing, module resolution |
 | `datalove-pkg-manifest` | A package's `manifest.toml`, read by `package_load` and by `sys/build.rs` |
 | `datalove-rti` | The runtime's call table as riders see it, and `ABI_VERSION` |
 | `datalove-buildinfo` | `BuildInfo`: whether this binary was built from a checkout or a release |
 | `datalove-paths` | `work_dir()`, where native components are built |
-| `datalove-vio` | `Fs`, the file I/O everything but the native toolchain goes through; `HostFs`, `MemFs`. See [A Virtual I/O Layer](plan-vio.md) |
+| `datalove-vio` | `Fs`, the file I/O everything but the native toolchain goes through; `HostFs`, `MemFs`, and `StaticFs` for files built into the binary. See [A Virtual I/O Layer](plan-vio.md) |
 | `datalove-ct` | Compile-time utilities, query logging |
 | `datalove-diagnostic` | Diagnostic/error infrastructure |
 | `datalove-diagnostic-codes` | Every diagnostic code, an enum per family (`DCode`, `OCode`, `PCode`, `TCode`, `FCode`) |
 | `datalove-datalit` | Data literal types and typechecking |
 | `datalove-exampletest` | Snapshot test harness |
 | `datalove-worldgen` | Generator for random worldfiles that typecheck |
-| `datalove` | Thin facade crate holding a plain salsa `Database` |
+| `datalove` | Facade re-exporting the crates of the toolchain |
 
 ### Drivers and tests
 
@@ -112,6 +112,8 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-tests` | Workspace-wide test suites |
 | `datalove-rt-tests` | Runtime tests, separated so the runtime need not depend on datalit |
 | `datalove-bench` | Divan benchmarks |
+| `datalove-doc-fixtures` | The fixtures behind what the docs show the engine producing, and the tests that keep them fresh; see [doc-fixtures.md](doc-fixtures.md) |
+| `datalove-wasm-smoke` | The compiler and bytecode interpreter built for `wasm32-unknown-unknown` and run under wasmi, with no threads (`just test-wasm`) |
 
 The `sys/` tree at the repository root is the standard library: `sys/std/*.dfm`
 modules, plus the `sys/std/rider` Rust crate and the `rider.dli` interface
@@ -136,7 +138,7 @@ Source Text
 [Phase 1: Parse]
     |   parse_phase
     |   Per-module: parse_module_full [tracked]
-    |   Rider sources arrive here as raw strings
+    |   Rider sources arrive here as `Source` inputs
     v   Output: ParsedModuleGraph (statements + resolved_riders)
     |
 [Phase 2: Name Resolution]
@@ -246,7 +248,7 @@ Phase 5b: Evaluate consts
     |   evaluate_all_module_consts (non-tracked)
     |   Uses CTFE evaluator with lowered functions
     |   Function-level consts qualified as "func_name::const_name"
-    v   Output: HashMap<ModuleId, ModulePreResolvedConsts>
+    v   Output: LookupMap<ModuleId, ModulePreResolvedConsts>
     |
 Phase 5b': Inline evaluated const values
     |   const_inlined_module [tracked], per module
@@ -610,6 +612,33 @@ instantiation rather than one; `evaluate_body_consts` defers it, and
 `evaluate_instantiation_consts` evaluates it with the parameter's value and the
 enclosing module's or script's consts in scope.
 
+**Consts are ordered by one walk.** Every scope is lexical but for functions,
+which are in scope throughout theirs (botspec 2.6), so a const's value may
+depend only on declarations above it, including through the functions it
+calls. The typechecker checks this in one search (`check_const_deps`): the
+walk records which functions each initializer calls and which consts and
+functions each body names, then takes the consts in source order and searches
+the functions each reaches for a const at or after it, which is F089 with the
+chain ("`C` calls `f`, which calls `g`, which names `D`"). A function searched
+from one const is fine for every const after it, so the search shares one
+visited set and each function is searched once. A cycle is a case of the same
+rule and has no message of its own.
+
+The check also gives each function the last const it names, and lowering keys
+on that:
+
+1. Lower every function that names no const.
+2. At each const in source order, evaluate it, then lower the functions some
+   const reaches whose last-named const it is.
+3. Lower the functions no const reaches, all together.
+
+Everything a const reaches is lowered before it is evaluated, so nothing waits
+or is retried and each function is lowered once. Step 2 runs a batch at a time
+on one thread; steps 1 and 3 run across modules in parallel, and since most
+functions that name a const are never called by one, most lowering stays
+there. Modules form a DAG under `require` (a cycle is F083), so a module's walk
+needs only the modules it requires to be finished.
+
 ## Generics
 
 A generic function is compiled once. Inside it, a value whose type mentions a
@@ -710,8 +739,8 @@ Execution:
     its functions are already in the process. `sys/std/rider/build.rs` reads
     `rider.dli` and generates a `symbols()` table pairing each declared name
     with `dlr_std__{name} as *const ()`, which is also what forces the linker
-    to keep them. `rider_load::register_linked_natives` matches the symbols
-    the compiled modules call against that table. No cargo, no dlopen. This is
+    to keep them. `RiderNatives::linked` looks the symbols the compiled
+    modules call up in that table. No cargo, no dlopen. This is
     how the `datalove` binary runs `sys/std` natives under the interpreter and
     the JIT - an AOT-compiled program is a separate executable, so addresses
     in this process are no use to it and it links a built component instead.
@@ -746,11 +775,12 @@ Execution:
     the other way, into the host, which is the direction that needs
     `-rdynamic` on ELF and has no equivalent on Windows at all.
 
-  Both end at `register_native`, so the interpreter sees no difference. Both
-  also return the raw addresses, which the JIT needs: it calls a native as an
-  import of its address rather than through the interpreter's table, so a driver must feed them to `JitEngine::register_native_symbol` as
-  well. Missing that is not a fallback to the interpreter but a panic inside
-  JIT compilation, which aborts the process.
+  Both end at `NativeFunctionTable::register_c`, so the interpreter sees no
+  difference. Both also return the raw addresses, which the JIT needs: it calls
+  a native as an import of its address rather than through the interpreter's
+  table, so a driver must feed them to `JitEngine::register_native_symbol` as
+  well. Missing that is not a fallback to the interpreter but a panic inside JIT
+  compilation, which aborts the process.
 
 Rider implementations follow the runtime C ABI:
 `extern "C-unwind" fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> u8`,
@@ -764,7 +794,7 @@ codegen emits by name, rather than a native function reached through the module
 system, is whether rider code itself needs it:
 
 - **The kernel**: `init` and `shutdown`, memory allocation, type descriptors,
-  `debuglog`, `any_destroy` and `any_clone`. A rider cannot be built without these,
+  `debuglog`, destroy and clone. A rider cannot be built without these,
   so they cannot live in one.
 - **Everything else belongs in a rider**: list, map, set, string, int arithmetic,
   table and tensor operations.
@@ -805,11 +835,12 @@ loads it with `load_library`, through the `package_load` that reads a library
 off disk, so which directories are packages and what each holds is decided in
 one place, and an embedded module's origin is `sys/std/list.dfm` as a file of
 it. It returns a `SystemLibrary`, which is that `PackageLibrary` plus
-`natives: Vec<(String, *const ())>`. Drivers
-hand it to `WorkspaceDescriptor::from_system_library` and to
-`register_linked_natives`. The raw addresses are not `Send`, which is why
-`ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` and calls it on the
-worker thread rather than being handed the value.
+`natives: Vec<(String, *const ())>`. Drivers hand it to
+`WorkspaceDescriptor::from_system_library`, and its natives to
+`to_compiler_with_natives`, which makes the `RiderNatives`. The raw addresses
+are not `Send`, which is why `ThreadedExecutor::spawn` takes
+`fn() -> SystemLibrary` and calls it on the worker thread rather than being
+handed the value.
 
 **The rider's crate is named, not embedded.** Where it is is a fact about the
 host the binary was built on, which the embedded files cannot answer, so
@@ -835,9 +866,10 @@ crates changes.
 The embedding sits at the top of the crate graph on purpose. Had it gone where
 `load_default_sys` used to live, in `datalove-datafun`, every `.dfm` edit would
 invalidate the bottom of the stack: 22 s to rebuild what `just test` compiles,
-against 0 s before. From `datalove-sys-packages`, which only the CLI and a couple of
-test targets depend on, the same edit costs about 7 s, nearly all of it
-relinking the debug binary.
+against 0 s before. From `datalove-sys-packages`, which only the `datalove`
+facade (and so the CLI), the wasm smoke and doc-fixture crates, and a few test
+targets depend on, the same edit costs about 7 s, nearly all of it relinking the
+debug binary.
 
 The loop that matters for stdlib work is untouched. `std_engine_tests`
 compiles `sys/` off disk through `WorkspaceDescriptor::load_sys_dir`, so
@@ -956,10 +988,12 @@ Scripts compile incrementally in REPL-style, accumulating exports across units.
     v   Output: IrCodeUnit with a Script context
 ```
 
-Script units accumulate via `AccumulatedLowerBindings`:
-- Tracks exports from prior units
-- Each unit increments `accumulated_unit_specs`
-- Functions reference prior units via `CodeRef::External { unit, id }`
+Each unit leaves a `UnitLowerRecord`: its exports, types, consts, and what it
+provides and uses. `lower_context_over` folds the records before unit *i*, so a
+unit's context comes from its position rather than from whatever the last append
+left behind, and `compile_unit_at` is the one driver for appending and for
+re-deriving. Functions reference prior units via
+`CodeRef::External { unit, id }`.
 
 ### Ownership across units
 
@@ -1127,32 +1161,8 @@ pub enum CodeUnitContext {
 }
 ```
 
-```rust
-pub struct FunctionContext {
-    pub params: Vec<ParamId>,
-    pub param_modes: Vec<ParamMode>,
-    pub param_types: Vec<IrType>,
-    pub return_type: IrType,
-    pub tracked_params: Vec<ParamId>,    // Out params needing runtime tracking
-    pub type_param_count: u32,           // One descriptor each, after the parameters
-    pub descriptor_table: Vec<IrType>,   // Dynamic types the body uses
-}
-
-pub struct ScriptContext {
-    pub unit_end_values: Vec<ValueId>,
-    pub unit_end_slots: Vec<SlotId>,
-    pub result: Option<ValueId>,
-    pub result_name: Option<String>,
-    pub exports: Vec<(String, ExportBinding)>,
-}
-
-pub struct NativeContext {
-    pub param_modes: Vec<ParamMode>,
-    pub param_types: Vec<IrType>,
-    pub return_type: IrType,
-    pub symbol: String, // e.g. "dlr_std__list_push"
-}
-```
+The three contexts' fields are listed and explained in
+[ir.md](ir.md#user-content-5-code-units).
 
 An `IrModule` is `{ functions: Vec<IrCodeUnit>, symbols: SymbolTable }`.
 Lookup at runtime goes through `ModuleFunctionRegistry` (keyed by
@@ -1183,41 +1193,12 @@ functions in both authorities:
 
 ### Parameter Modes
 
-```rust
-pub enum ParamMode {
-    In,  // Ownership transfers to callee
-    Out, // Write-only, callee must initialize
-    Ref, // Read-only borrow
-    Mut, // Read-write borrow
-}
-```
-
-Call sites repeat the mode: `ExprFunctionCall.arg_modes` holds the marker
-written before each argument, `None` meaning `in`. Typechecking rejects any
-disagreement with the callee's declared mode (F057), so later phases can read
-the mode off the call site alone. Ownership analysis does exactly that, which
-is why it needs no resolved call target to know how an argument is passed.
-
-Reading a parameter is `Operand::Param(p)`, not an instruction. Writing has
-four forms:
-
-- `ParamStore { param, value }` - store to Mut
-- `ParamStoreTracked { param, value }` - store to Out (marks it LIVE)
-- `ParamSetField { param, field_path, value }` - field write to Mut
-- `ParamSetFieldTracked { param, field_path, value }` - field write to Out
-
-`RefStore` and `RefSetField` generalize these to any reference-like operand.
-
-For `out` params, the **caller** destroys the existing value before the call,
-an instruction of its own: `DropViaRef` through a reference, `DropTracked` for
-a tracked binding or `out` param, `Drop` otherwise. The call itself does
-nothing to the destination.
-
-Stores never destroy. Where the stored type owns something, lowering emits the
-destroy in front of the store (`emit_drop_before_store` in `context.rs`):
-`Drop` for a `mut` param, `DropTracked` for an `out` one, `DropViaRef` through
-a reference, `DropField` for a field. Slot stores already had theirs from
-`store_slot`.
+`ParamMode` is `In`, `Out`, `Ref` or `Mut`. Call sites repeat the mode
+(`ExprFunctionCall.arg_modes`, `None` meaning `in`), and typechecking rejects a
+disagreement with the callee (F057), so ownership analysis reads the mode off
+the call site and needs no resolved call target. How parameters are read and
+written, and who destroys what an `out` parameter held, is in
+[ir.md](ir.md#user-content-parameter-modes).
 
 ### Enum Instructions
 
@@ -1259,30 +1240,16 @@ and how to measure whether a change memoizes.
 
 ### Database
 
-The compiler's database is in `datalove-datafun-compiler/src/lib.rs`:
-
-```rust
-#[salsa::db]
-#[derive(Default, Clone)]
-pub struct Database {
-    storage: salsa::Storage<Self>,
-}
-```
-
-Implements `DbClone` - shares `Arc<Zalsa>` global state, clones thread-local state.
-`Database::recording(recorder)` returns one that reports every query it runs;
-clones report to the same recorder, so work farmed out to rayon is recorded too.
-
-`bcts`, `datalove-datalit` and the `datalove` facade each declare their own
-plain salsa `Database` as well. Compiler work uses the datafun one, re-exported
-as `datalove_datafun::Database`.
+The compiler's database is `Database` in `datalove-datafun-compiler/src/lib.rs`,
+re-exported as `datalove_datafun::Database`; what cloning it shares and how
+`Database::recording` reports queries is in
+[salsa-architecture.md](salsa-architecture.md#user-content-the-databases).
 
 ### Tracked Functions
 
-There are 127 of them, 43 of which keep a memo for a module compile. A table
-here went stale within a session, twice -- it listed fifteen and was six
-queries and one signature out of date when that was noticed -- so the
-inventory lives in [salsa-architecture.md](salsa-architecture.md), grouped by
+A table of them here went stale within a session, twice -- it listed fifteen
+and was six queries and one signature out of date when that was noticed -- so
+the inventory lives in [salsa-architecture.md](salsa-architecture.md), grouped by
 granularity, with a command that regenerates it rather than a list to trust.
 
 The thing to take from it: a query's **granularity** -- one memo, or one per
@@ -1299,13 +1266,16 @@ memoized, and they are what stands between here and pulling per module.
 
 ### Incremental Compilation
 
-Key principle: `Module` objects are created once and reused. Updates use `set_source()`.
+Key principle: a module's `Source` is created once and reused, and an edit
+changes its text, not the source.
 
 `IncrementalModuleWorld`:
-- Stores `Module` objects in `BTreeMap<String, Module>`
-- `add_module()` creates new module once
-- `update_source()` preserves identity
-- Graph rebuilds reuse existing modules
+- Stores each module's `Source` in a `BTreeMap<String, Source>`, data files in
+  another
+- `add_module()` creates the source once
+- `update_source()` sets its text, preserving identity
+- `ModuleId`, `Module` and `ModuleGraph` are interned and rebuilt on demand,
+  which gives back the same handles
 
 Memoization behavior:
 - Whitespace-only changes: re-parses, but the `parse_module_ast` projection
@@ -1418,9 +1388,10 @@ having, not the other way round.
 
 `just test` runs the suite in parallel compiles, being the default.
 `just test-sequential` runs it under `DATALOVE_PARALLEL=0`; CI does not, since
-the sequential compile is a subset of the parallel one, and October 2026's
-audit and `LookupMap` are what keep salsa's id order, the one thing the two
-could disagree on, out of output (see salsa-patterns.md).
+the sequential compile is a subset of the parallel one, and the clippy ban
+that leaves `LookupMap` and `LookupSet` the only hash containers is what keeps
+salsa's id order, the one thing the two could disagree on, out of output (see
+salsa-patterns.md).
 
 **A large collection literal is parallel within itself.** A datalit list, map,
 set, table or tensor of 32-512KB or more, depending on the kind, is parsed in
@@ -1479,8 +1450,9 @@ a function is never named as a value; in a script or expression unit the
 earlier units' consts, from `external_consts_over`, because an earlier unit's
 `let` is a binding the unit may move out of rather than borrow. A const argument is not a move:
 the analysis reads `call_targets` to find the callee's const parameters and
-skips those arguments, and lowering hands the call a copy of its own
-(`lower_comptime_arg`), since the call consumes what it is given.
+skips those arguments, and lowering passes a const argument as a `ref`
+argument: the static for an outer const, the binding for a local one, the
+parameter for one passed on.
 
 Because nothing consumes a const, every one of a non-copy type is built once
 and borrowed through a `StaticRef`. A module or script const named from a
@@ -1492,7 +1464,7 @@ and promoted afterwards by `promote_function_consts`; see
 ### Error Codes
 
 Variants of `AnalysisError` in `datalove-datafun-sema`; `AnalysisError::code`
-gives each its `DCode`.
+gives each its `OCode`.
 
 | Code | Variant | Trigger |
 |------|---------|---------|
@@ -1575,8 +1547,14 @@ Values: `UNINIT = 0x00`, `LIVE = 0x01`, `MOVED = 0x02`
 
 All of them consume `IrCodeUnit` and agree with `ir::layout`.
 
-- **Interpreter** (`datalove-datafun-interp`) walks the IR directly.
-  `CallDispatcher` is the extension point: it can intercept a call and hand it
+- **Interpreter** (`datalove-datafun-interp`) runs a register bytecode by
+  default (`interp/src/bytecode/`): each body is lowered once from IR with
+  operand offsets, sizes and callees resolved, an optimization pass
+  (`bytecode/opt.rs`) and a verifier (`bytecode/verify.rs`) run over it, and an
+  instruction the bytecode has no op for runs on the IR walker (`Op::Ir`).
+  `DATALOVE_INTERP=ir` runs the IR walker alone, `bc-plain` the bytecode
+  without its optimization pass. The IR walker is the reference every engine
+  is tested against. `CallDispatcher` is the extension point: it can intercept a call and hand it
   to a JIT, or return `NotHandled` to fall through.
   Native rider calls are checked before the dispatcher.
 - **CTFE** (`interp/src/ctfe.rs`) is the interpreter used at compile time.
@@ -1647,8 +1625,9 @@ binary the CLI tests spawn. A bare `cargo test` has it off.
 
 It is one switch rather than two on purpose. The free-time checks read the
 same allocation map the leak report enumerates, so they cannot be kept
-without keeping the map, and the map is the whole cost: 13-17% of an
-allocation-heavy program. Keeping the checks in release was tried and saved
+without keeping the map, and the map is the whole cost: 11-13% of an
+allocation-heavy program (`storage.dfs`, `wordfreq.dfs`) since the map hashes
+with FxHash. Keeping the checks in release was tried and saved
 nothing. Nor should a release pay it, because **datalove is safe**: a program
 cannot reach `free` with the wrong size, or free a pointer twice, by being
 written badly. Only the compiler can, by lowering a drop wrongly, and the test
@@ -1820,6 +1799,20 @@ overflow checks costs the loop its registers (the panic path is enough), so
 the loop uses `wrapping_add`; and not recursing saves little by itself -- the
 saving is in what a loop that owns its frames can skip.
 
+**A call is mostly waiting on stores.** On `fib(38)` against CPython 3.14 the
+bytecode once ran 640 instructions and 233 cycles a call to CPython's 474 and
+91: `perf stat -M` on Zen 4 put 36% of our cycles on loads waiting for stores,
+not cache misses. What took fib from 6.6s to 4.4s was all about that: a result
+wrapped only to be returned written straight into the caller's slot
+(`ReturnOk`) rather than read back with wide loads across narrow stores; no
+reference counts on a planned call, since the frame borrows its layout from
+the plan (`FrameStack::push_borrowed`) and a replaced call-site cache is
+retired rather than dropped; the activation read back field by field rather
+than copied as a struct; and `enter_planned` and `leave` inlined into the
+loop. That left about 150 cycles a call, mostly the ops themselves: constants
+materialized per call, a branch after every unwrap, and one dispatch point
+that mispredicts three times as often as CPython's.
+
 **A call resolves its arguments into the callee's frame.** `execute_call_site`
 pushes the callee's frame (`FrameStack::push`), sets each argument straight
 into it, offers the dispatcher
@@ -1845,7 +1838,7 @@ to 0.83s. Natives have no frame and still take a list, as does the public
 pub fn compile_modules<'db>(
     db: &'db dyn DbClone,
     input: ModuleCompilationInput<'db>,
-    rider_sources: Vec<(String, String)>,
+    rider_sources: Vec<(String, bct::input::Source)>,
     mode: ParallelMode,
 ) -> ModuleCompilationOutput<'db>
 ```
@@ -1864,6 +1857,8 @@ pub fn lower_module_graph_with_evaluator<'db>(
     evaluator: &mut dyn CtfeEvaluator,
     skip_const_inlining: bool,
     skip_specialization: bool,
+    generics: GenericsPolicy,
+    const_cache: Option<&mut ConstCache>,
 ) -> ModuleGraphLoweringResult<'db>
 ```
 
@@ -2038,14 +2033,16 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 
 - `BLESS=1 cargo test` updates expected output. Unset `RUST_BACKTRACE` first.
 - Filter: `cargo test -- filter_name`
-- `just test` runs the whole suite; `just test-64` uses 64-bit collection
+- `just test` runs the whole suite, after clippy's ban on hash containers
+  other than `LookupMap` and `LookupSet`; `just test-64` uses 64-bit collection
   indexes, `just test-sequential` sets `DATALOVE_PARALLEL=0`, `just test-cut`
   parses every collection literal in chunks as well (see
   [plan-parallel-collections.md](plan-parallel-collections.md)), and `just
   test-extras` runs `just test-slow` -- the `slow_tests` features, the wasm
   build, `just test-wasm`, a smoke test of sys riders built from source and
-  `just test-worldgen` -- then `just test-demos`. Those five are CI's five jobs, and
-  `just test-ci` runs them all.
+  `just test-worldgen` -- then `just test-demos`. CI runs `test`, `test-64`,
+  `test-cut` and `test-extras` as four jobs, and `just test-ci` runs them all;
+  `test-sequential` is not in CI.
 - `DATALOVE_TEST_ENGINES=bytecode,jit` limits the suites that run a program
   on several engines -- `engine_tests`, `std_engine_tests`, and the cli's
   `backend_tests`, `aot_run_tests` and `deep_recursion_tests` -- to the ones
@@ -2073,13 +2070,12 @@ Most live in `crates/datalove-datafun/tests`.
 
 | Suite | Purpose |
 |-------|---------|
-| `parser_tests` | Parse and emit AST + diagnostics (in the compiler crate) |
-| `tycheck_tests`, `tycheck_world_tests` | Typecheck results |
+| `parser_tests`, `tycheck_tests` | Parse, typecheck, and emit diagnostics (in `datalove-datafun-compiler`) |
+| `tycheck_world_tests` | Typecheck results |
 | `ir_lower_tests` | IR lowering from worldfiles |
 | `ir_lower_script_tests` | Script IR lowering |
-| `ir_inline_tests` | Inlining transformations |
 | `ir_serial_tests` | IR serialization round-trip |
-| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the bytecode without its optimization pass (`bytecode/opt.rs`), the JIT, a chaos dispatcher, a JIT that enters every function's loops early by OSR and compiles nothing else, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
+| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the bytecode without its optimization pass (`bytecode/opt.rs`), the JIT, a chaos dispatcher, a JIT that enters every function's loops early by OSR and compiles nothing else, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. The fixture directives are documented in `engine_tests.rs` |
 | `aot_layout_tests` | Cranelift AOT layout compatibility |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `native_rider_tests` | End-to-end native rider calls |
@@ -2170,12 +2166,13 @@ end fun
 
 Section headers: `module <lib>/<pkg>/<mod>`, `module-add`, `module-remove`,
 `module-change-ws`, `module-change-ast`, `module-change-ty`,
-`scriptunit-fragment [id]`, `scriptunit-expr [id]`, `data <lib>/<pkg>/<name>`, `rider <name>`.
-The three `module-change-*` kinds drive the memoization tests. Script units
-are numbered from 1 in file order, and an id in a header must be that number.
-The reactive fixtures, which add `scriptunit-edit`, `scriptunit-delete` and
-`scriptunit-insert`, number an inserted unit after every unit before it in the
-file, as the REPL does.
+`scriptunit-fragment [id]`, `scriptunit-expr [id]`, `data <lib>/<pkg>/<name>`,
+`rider <name>`. The three `module-change-*` kinds drive the memoization tests.
+Script units are numbered from 1 in file order, and an id in a header must be
+that number. The reactive fixtures, which add `scriptunit-edit`,
+`scriptunit-delete`, `scriptunit-insert`, `scriptunit-move`, `module-edit` and
+`data-edit`, number an inserted unit after every unit before it in the file, as
+the REPL does.
 
 ## Key Files
 
@@ -2194,7 +2191,7 @@ file, as the REPL does.
 | `lower/src/func.rs` | `lower_function_for_module()` |
 | `lower/src/script.rs` | Script unit lowering |
 | `lower/src/const_expr.rs` | `lower_const_binding()`, `try_extract_literal()` |
-| `const/src/eval.rs` | `evaluate_prepared_const()` |
+| `const/src/eval.rs` | `evaluate_const_unit()` |
 | `const/src/inline.rs` | `inline_script_consts()`, `inline_module_functions()` |
 | `ir/src/lib.rs` | `IrCodeUnit`, `CodeRef`, `IrType`, `Instruction`; `Instruction::for_each_place_use`, how each instruction uses the places it names, which every analysis keeping a place out of its home reads |
 | `ir/src/simplify.rs` | `simplify`: copy forwarding, threading of options and results built to be unwrapped, block merging |
@@ -2207,8 +2204,7 @@ file, as the REPL does.
 | `datafun/src/driver/script_compiler.rs` | Script compilation |
 | `datafun/src/driver/workspace.rs` | `WorkspaceDescriptor`, `WorkspaceDelta` |
 | `datafun/src/driver/rider_build.rs` | Native component synthesis and cargo build, for riders found on disk |
-| `datafun/src/driver/rider_load.rs` | `register_linked_natives`, `load_rider_library` |
-| `cli/src/main.rs` | `register_natives()`, which wires both the interpreter table and the JIT |
+| `datafun/src/driver/rider_load.rs` | `RiderNatives`, the one resolver of natives per workspace; `register_natives()`, which wires the executor's interpreter table and JIT; `load_rider_library` |
 | `sys/build.rs` | Embeds `sys/` module sources and names each rider's crate and `INTERFACE` |
 | `sys/src/lib.rs` | `system_library()` |
 | `datafun/src/driver/compiled_world.rs` | `CompiledWorld` |

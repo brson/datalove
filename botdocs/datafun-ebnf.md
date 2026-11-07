@@ -213,7 +213,7 @@ NAME          = ? a word not beginning with an ASCII digit ? ;  (* non-ASCII: D0
 value_name    = NAME - ( "true" | "false" | "none" | "some" | "ok" | "er" | "data"
                        | "error" | "atom" | "term" | "enum" | "not" | "icall" ) ;
 param_name    = value_name - ( "mut" | "out" | "ref" | "const" ) ;
-type_name     = NAME - ( scalar type keyword | "atom" | "term" | "enum" ) ;
+type_name     = NAME - ( scalar type keyword | "atom" | "term" | "enum" | "rec" ) ;
                 (* each exclusion is P064, and the name is still taken *)
 dec_number    = digit_run, [ ".", digit_run ], [ ( "e" | "E" ), [ "+" | "-" ], digit_run ] ;
                 (* glued throughout; gaps: D019; letters on the end: D060 *)
@@ -316,7 +316,8 @@ sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
 | calls, `icall` | `Syn-Call`, `Syn-GenericCall`, `Check-GenericCall`, `Syn-Intrinsic` |
 | `binding` | `Pat-*`, `Let`, `Var-Uninit`, `Const` |
 | `set_stmt` | `Place-*`, `Set`, `Set-Compound` |
-| `if_stmt`, `loop_stmt`, `for_stmt`, `match_stmt`, `ret_stmt` | `If`, `If-Some`, `If-Ok`, `Loop`, `Loop-While`, `For`, `Match`, `Ret`, `Ret-Void` |
+| `if_stmt`, `loop_stmt`, `for_stmt`, `match_stmt`, `break_stmt`, `continue_stmt`, `ret_stmt` | `If`, `If-Some`, `If-Ok`, `Loop`, `Loop-While`, `For`, `Match`, `Break`, `Continue`, `Ret`, `Ret-Void` |
+| `debuglog_stmt`, `call_stmt` | `DebugLog`, `Call` |
 | `fun_def` | `Fun` |
 
 ## Differences from datalit
@@ -432,9 +433,10 @@ A code missing from the table is unassigned. The codes are `PCode` in
 
 Places the parser and [the spec](botspec.md) disagree, left as they are.
 
-- **A variable named `ref`, `mut` or `out` cannot be passed.** Section 2.1
-  reserves those words only for parameters, so `let out = 1` is legal, but an
-  argument starting with one is read as a mode marker (`expr.rs`,
-  `parse_arg_mode`): `call f(out)` is P081. The reserved words are there to keep
-  parsing simple, and this can be disambiguated some other way when it
-  matters.
+- **A variable named `ref`, `mut` or `out` cannot be passed bare.** Section
+  2.1 reserves those words only for parameters, so `let out = 1` is legal, but
+  an argument starting with one is read as a mode marker (`expr.rs`,
+  `parse_arg_mode`): `call f(out)` is P081, and `f((out))` passes it. The spec
+  now states this too, so it is less a disagreement than a wart: the reserved
+  words are there to keep parsing simple, and this can be disambiguated some
+  other way when it matters.

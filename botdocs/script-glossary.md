@@ -34,7 +34,8 @@ worldfile; `ScriptCompiler::compile_fragment`.
 `Unit::Expression`; `scriptunit-expr`; `is_expr`.
 
 **session**. The live, editable sequence of units the engine holds, and the
-REPL shows as its code. `ScriptSession`, the engine's `session` field;
+REPL shows as its code. `ScriptSession`, one per `SessionState`; an engine
+can hold several (`SessionId`, `SessionMut`), and the REPL uses the first.
 `repl::Session` adds the units' text.
 
 **script**. A sequence of units. A `.dfs` file is one written down. In the
@@ -42,9 +43,9 @@ compiler a unit is a `ScriptUnit` input linked to the one before it, so a
 unit is also the prefix of the session ending at it.
 
 **unit id**. The number a unit is given when it is made, from 1, and keeps
-while it is in the session, wherever units are inserted or deleted around
-it. Its IR, its frame and its functions are named by it, and the REPL shows
-it as the unit's number.
+while it is in the session, wherever it moves or units are inserted or
+deleted around it. Its IR, its frame and its functions are named by it, and
+the REPL shows it as the unit's number.
 
 ## Bindings and uses
 
@@ -81,8 +82,12 @@ given away by an earlier unit". "Moved" is fine in ownership-internal prose.
 ## Steps
 
 **step**. One operation on the session, an append, an edit, a delete, an
-insert, a truncation or a module edit, and what it did to each unit.
-`UnitStep`, `Engine::last_step`.
+insert, a move, a truncation, a module edit or a data edit, and what it did to
+each unit. `UnitStep`, `Engine::last_step`.
+
+**fresh run**. A new engine running the session's current units in order. A
+step is correct when every unit ends as it does in a fresh run and holds the
+same bindings; the step tables check every step against one.
 
 **compiled again**. The step ran the unit's parse, typecheck or ownership
 analysis: `UnitStep::compiled` (`Compiled { parse, typecheck, ownership }`). A
@@ -112,7 +117,8 @@ rerun.
 Capitalised, Edit is an edit that compiles (retract, then apply); Break one
 that does not (retract); Fix one that makes a unit compile that did not
 (apply). Delete is retract and Add apply. A lower-case edit is any change to a
-unit's code.
+unit's code. A move is a Delete and an Add of the same unit, taken as one
+step.
 
 **forward**. What a step does to the units after the modified one: rerun those
 that read a changed value, break or fix those whose names it took or gave
@@ -160,9 +166,10 @@ holds the engine's view.
 back the last change to the session and make it again (`ReplCommand::Undo`,
 `ReplCommand::Redo`, `Change`). Not the algebra's retract and apply.
 
-**replay**. Only re-submitting saved REPL inputs, from `/load` or
-`repl --load` (`ReplApp::replay`). Not recompiling a session from scratch, and
-not a rerun.
+**replay**. Re-submitting saved REPL inputs, from `/load` or `repl --load`
+(`ReplApp::replay`); and, in the docs, a recorded session a page plays back
+(`replays/`, `record_world`; see [doc-fixtures.md](doc-fixtures.md)). Not
+recompiling a session from scratch, and not a rerun.
 
 **inputs**. What the REPL's history and a saved session hold: units and
 commands both. **entry**: one item of the REPL's history.

@@ -291,7 +291,7 @@ key and the entity re-runs for an edit it cannot see.
 | `IrModuleId`s | the module's graph position | `ir_module_ids`, reading the module compiler's `ModuleIdTable` |
 | script units | `accumulated` diagnostics | per-unit reads |
 | script lowering | `accumulated_lower_bindings` | `UnitLowerRecord` folded per position |
-| `typecheck_script_unit` | `ScriptEnv` over `Vec<ModuleSpec>` | `Vec<Module>` plus `script_module_spec` |
+| `typecheck_script_unit` | `ScriptEnv` over `Vec<ModuleSpec>` | `Vec<Module>` plus `script_module_names` |
 
 **The last one is the clearest statement of the rule, because the fix was a type
 change and nothing else.** A `ModuleSpec` holds a module's path, source, spans,
@@ -301,8 +301,9 @@ gave every script unit a new `(script, env)` pair to answer, whether or not it
 imported from that module. A `Module` is interned over a `ModuleId` and a
 `Source`, and `set_text` changes a source's *text* and not its *handle*, so an
 env of `Module`s survives a module edit where an env of specs could not. The
-content is reached through `script_module_spec(db, module)`, per module, which a
-unit asks for the one module its import named.
+content is reached through `script_module_names(db, module)`, per module, which a
+unit asks for the one module its import named. It returns the module's
+declarations only, so a body edit does not re-run it.
 
 The test that catches this shape: **is anything in this key describing something
 the query is not about?** A script unit is not about the module set, so nothing

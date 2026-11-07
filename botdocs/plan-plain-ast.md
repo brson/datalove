@@ -5,7 +5,10 @@ ordinary data held by a memoized parse, the incremental boundary moves to an
 explicit summary of each module's items, and later phases name functions and
 expressions by stable keys rather than by salsa ids. Written October 2026,
 after the parser stopped copying tokens ([plan-parser.md](plan-parser.md)).
-Phases 0 to 2 and most of 3 are done; see [Progress](#user-content-progress).
+Phases 0 to 3 are done, with `TopLevel` left a tracked struct by choice. Of
+phase 4, `ResolvedCallTarget` is a plain value and the typechecker's
+per-expression tables are `BodyTable`s; `TypeFunction` is still tracked and the
+parse has no `lru`. See [Progress](#user-content-progress).
 
 ## Contents
 

@@ -1275,7 +1275,8 @@ fn module_graph_has_module_consts<'db>(
 /// each function is lowered once and is ready before any const that can call
 /// it. A const reaching a function that names a const at or below it was
 /// refused by the typechecker (F089), so nothing a const calls is still
-/// waiting when it runs. See `botdocs/plan-lexical-scope.md`.
+/// waiting when it runs. See "Const Evaluation" in
+/// `botdocs/compiler-guide.md`.
 ///
 /// `deferred` is what the first lowering left waiting, by module; what this
 /// lowers is merged into `lowered_modules`. Only the functions some const

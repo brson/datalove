@@ -1,7 +1,7 @@
 # The Native Rider ABI
 
 How a compiled datafun program calls a function written in Rust. A reference,
-current with the four backends as of October 2026.
+current with the four backends as of November 2026.
 
 ## Contents
 

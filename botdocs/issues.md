@@ -45,6 +45,7 @@ home here.
   - [A generic's descriptor-table cache holds one binding](#user-content-a-generics-descriptor-table-cache-holds-one-binding)
   - [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
   - [The C backend emits code the size of the data](#user-content-the-c-backend-emits-code-the-size-of-the-data)
+  - [The C backend calls a runtime function it never declares](#user-content-the-c-backend-calls-a-runtime-function-it-never-declares)
   - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
   - [The allocator keeps every block it has ever handed out](#user-content-the-allocator-keeps-every-block-it-has-ever-handed-out)
 
@@ -391,7 +392,7 @@ column, which is what column projection syntax (`t.x`) would give.
 `table_push_row`, `table_build_from_rows`, `table_get`, `table_set`,
 `table_clear` and `table_len`, none of them reachable from the language. The
 spec mentions column projections yielding a list view; `t.x` is F068 `has no
-fields` today, and `t[i]?` is F011, because indexing wants a list, map or
+fields` today, and `t[i]?` is F103, because indexing wants a list, map or
 tensor.
 
 Because nothing reaches `table_push_row`, a table's row count is whatever was
@@ -593,6 +594,16 @@ build -- but gets through it. Emitting the data as initialized bytes and
 building from them in a loop would make both proportional to the types rather
 than the values.
 
+### The C backend calls a runtime function it never declares
+
+**Reasoned about, not reproduced as a failure.** C AOT emits a call to
+`dtlv_rti_tensor_hyperplane_clone_local` (`c-aot/src/codegen.rs`, the row of a
+tensor taken by index) but `c-aot/src/lib.rs` writes no `extern` prototype for
+it, as it does for `dtlv_rti_tensor_set_local` and `_init_local`. The C
+compiler takes it as an implicit declaration, which C99 removed and which
+returns `int` where the function returns `RtStatus`. `for` over a tensor no
+longer reaches it, which is why nothing fails; the fix is one more prototype.
+
 ### A script's data const is copied into the unit that declares it
 
 **Reasoned, not measured.**
@@ -674,17 +685,14 @@ not against today's one-script-per-process.
 
 ### Every REPL unit is a new salsa input
 
-**Reasoned from the code.** `ScriptCompiler::compile_fragment` and
-`compile_expr` mint a `bct::input::Source` per call, and salsa never collects
-inputs, so a session grows by one input (and its text) per unit, forever. Small
-per unit; unbounded in a long session. Editing a unit already goes through a
-stable per-unit `Source` and `set_text`; appending does not.
-
-The same minting means a fresh compiler recompiling a session's units from
-scratch would reuse nothing, since identical text is a different input. Nothing
-does that today -- `Engine::reset` after a panic starts an empty session rather
-than recompiling the old one -- so that half only matters if recovery is ever meant to keep the
-session. Holding a stable `Source` per unit for appends too would fix both.
+**Reasoned from the code.** The script engine mints a `bct::input::Source`
+for each unit it inserts or appends and keeps it while the unit is in the
+session, so an edit is a `set_text` on the unit's own input. But salsa never
+collects inputs, so a deleted unit's input, and every unit's after a reset,
+stays with its text for the life of the database: a session grows by one input
+per unit it has ever held. Small per unit; unbounded in a long session.
+`ScriptCompiler::compile_fragment` and `compile_expr`, which callers outside the
+engine use, mint one per call the same way.
 
 ## Testing
 

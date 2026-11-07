@@ -7,51 +7,60 @@
 ---
 
 - [Language Specification](botspec.md)
-- [Compiler Guide](compiler-guide.md)
-- [The Datafun IR](ir.md)
-- [Generics: how it works](generics.md)
-- [REPL Architecture](repl-architecture.md)
-- [The Responsive Scripting Environment](script-reactivity-architecture.md)
-- [Script Reactivity, Case by Case](script-reactivity-cases.md)
-- [Reactive Scripts and the Literature](reactive-scripts-and-frp.md)
-- [Documentation Fixtures and Session Replays](doc-fixtures.md)
-- [Script Glossary](script-glossary.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datafun Grammar (EBNF)](datafun-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
 - [Datafun Typing Rules](datafun-typing-rules.md)
 - [Sigil Assignments](sigil-assignments.md)
-- [Salsa: idiomatic and effective use](salsa-patterns.md)
-- [The compiler's salsa architecture](salsa-architecture.md)
+
+---
+
+- [Compiler Guide](compiler-guide.md)
+- [The Datafun IR](ir.md)
+- [Generics: how it works](generics.md)
 - [The Native Rider ABI](native-abi.md)
+- [The compiler's salsa architecture](salsa-architecture.md)
+- [Salsa: idiomatic and effective use](salsa-patterns.md)
 - [Where Compile Time Goes](compile-time.md)
 - [Testing Under Miri](miri.md)
 
 ---
 
-- [Tables: What the Type System Is Missing](design-table-rows.md)
-- [Generics and Specialization](plan-generics.md)
-- [Script Reactivity](plan-script-reactivity.md)
-- [Script Sessions in Parallel](plan-multi-session.md)
+- [REPL Architecture](repl-architecture.md)
+- [The Responsive Scripting Environment](script-reactivity-architecture.md)
+- [Script Reactivity, Case by Case](script-reactivity-cases.md)
+- [Script Glossary](script-glossary.md)
+- [Documentation Fixtures and Session Replays](doc-fixtures.md)
+
+---
+
 - [A Virtual I/O Layer](plan-vio.md)
+- [Script Sessions in Parallel](plan-multi-session.md)
+- [Specializing Generics](plan-monomorphization.md)
+- [Consts Built Once](plan-static-consts.md)
+- [Recursive Structural Types](plan-recursive-types.md)
+- [Organizing the IR Passes](plan-ir-passes.md)
+- [A Runtime Datalit Loader](plan-datalit-loader.md)
+- [Tables: What the Type System Is Missing](design-table-rows.md)
+
+---
+
+- [Script Reactivity](plan-script-reactivity.md)
+- [Generics by Reference](plan-fat-generics.md)
+- [Generics and Specialization](plan-generics.md)
 - [A Register Bytecode for the Interpreter](plan-bytecode.md)
-- [A Frame Stack for the Interpreter](plan-frame-stack.md)
-- [Testing the Engines Against One Reference](plan-engine-tests.md)
 - [Tuning the JIT](plan-jit-tuning.md)
 - [Values in Registers for the Cranelift Backend](plan-values-in-registers.md)
 - [`for` Loops over the Collections](plan-for-loops.md)
-- [Generics by Reference](plan-fat-generics.md)
-- [Organizing the IR Passes](plan-ir-passes.md)
 - [A Parser That Reads Tokens in Place](plan-parser.md)
 - [A Plain-Data AST](plan-plain-ast.md)
 - [Parsing Large Collection Literals in Parallel](plan-parallel-collections.md)
-- [Lexical Scope at the Top Level](plan-lexical-scope.md)
 - [One Rule for Literals That Share a Type](plan-literal-typing.md)
-- [Recursive Structural Types](plan-recursive-types.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
 
+- [Reactive Scripts and the Literature](research/reactive-scripts-and-frp.md)
 - [Datalog-Style Programming with Atoms/Terms/Enums](research/research-datalog.md)
 - [Temporal Types](research/research-temporal-types.md)
 - [Lowering to WebAssembly Components](research/research-webcomponents.md)

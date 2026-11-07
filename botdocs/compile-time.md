@@ -143,16 +143,17 @@ What is left is constant factors at every layer, none above about 3%:
   [plan-plain-ast.md](plan-plain-ast.md).
 - Every name is interned as it is read.
 - Every bracket starts a sub-parser, a struct of a few hundred bytes, and
-  every line one more.
-- Tokens move as `TreeToken`s, and `BracerIter::next` merges four sequences
-  to produce each one.
+  every line one more. They no longer allocate, but they are still made.
+- The parser still reads each token as a `TreeToken`, a view the cursor
+  makes on demand, rather than reading the token array directly.
 
-Doing much better is a different parser: one cursor over the flat token array
-with each bracket's match index precomputed, and no token trees or
-sub-parsers. See [the plan for it](plan-parser.md), which has where the
-allocation was -- 35,726 allocations and 12MB to parse `sys/std` -- and what
-building it did: 26,189 and 5.6MB, and parsing from 27% of the run to 23%,
-the rest of the allocation being the AST's own.
+The parser now reads a cursor over the flat token array, with each bracket's
+match index precomputed by the bracer, and no token is copied into a vector;
+see [the plan for it](plan-parser.md), which has where the allocation was --
+35,726 allocations and 12MB to parse `sys/std` -- and what building it did:
+26,189 and 5.6MB, and parsing from 27% of the run to 23%, the rest of the
+allocation being the AST's own. Sub-parsers and the `TreeToken` view were
+kept, so one parser per parse is still open.
 
 ## Parallel compilation
 
@@ -446,7 +447,13 @@ goes in a data file.
 - The same two built `String`-keyed maps of the exports' parameter and return
   types; they look signatures up by interned name now (`export_signatures`).
 - `simplify` and dead code elimination hashed value and slot ids with SipHash;
-  they use `FxHashMap` and `FxHashSet`.
+  they use FxHash now.
+- The rest of std's SipHash maps and sets moved to FxHash in November 2026,
+  136.7M instructions to 135.0M. Every hash container outside the runtime is
+  now a `bct::lookup::LookupMap` or `LookupSet` (`crates/bcts/src/lookup.rs`),
+  FxHash seeded from `BCTS_LOOKUP_SEED`, as `clippy.toml` enforces; the seed
+  costs about 0.5%. The compile had grown from the 122-124M of the figures
+  above by then, for reasons not traced; those figures are not re-measured.
 - The lexer stepped through words and whitespace a `peek` and an `eat_char`
   per character, with the bounds and overflow checks each makes; it scans
   bytes now, decoding only where one is not ASCII. And the non-ASCII name

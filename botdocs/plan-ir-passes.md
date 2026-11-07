@@ -2,7 +2,9 @@
 
 A plan for running datafun's IR passes in one order, per function, memoized,
 and for the compile time they cost. Written October 2026, after `inline` and
-the cleanup after it (`ir::simplify`) made the passes a quarter of lowering.
+the cleanup after it (`ir::simplify`) made the passes a quarter of lowering. Phase 1, one pass order per function in
+the module's query, is done; per-function queries and lowering on demand are
+not started.
 
 ## Contents
 

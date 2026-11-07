@@ -654,8 +654,8 @@ question; the questions are under
 1. **Datalit.** Done; see [Phase 1 as built](#user-content-phase-1-as-built).
 2. **The Datafun checker.** Done.
 3. **The IR.** Done.
-4. **Backends.** Done, but for porting Storage, Json and Towers to
-   `benchvs`; see [Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built).
+4. **Backends.** Done, and Storage, Json and Towers are ported to `benchvs`;
+   see [Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built).
 5. **Deep values.** Measure the depth at which drop and clone overflow, then
    decide between explicit work stacks and a documented limit.
 

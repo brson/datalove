@@ -1746,7 +1746,8 @@ that require and import are ordinary edits. The module's contents are a
 provider that sits before every unit, and a script can only read them:
 nothing in a session takes, overwrites or updates a module's functions, so a
 module edit never needs a binding of the module's restored. It reaches the
-units that import from the module, and the forward rule goes on from them.
+units that import from the module, and, when it breaks or fixes the module,
+the units that require it; the forward rule goes on from them.
 What the units reached do to the session's own bindings is another matter,
 and the backward rule handles it as for any edit.
 
@@ -1907,9 +1908,8 @@ end fun
 <!-- end world -->
 
 A module that does not compile fails every unit that requires it, whether
-or not the unit imports from it, and fixing it brings them back. Unit 2's
-failure is what a fresh run gives; the engine left it as having run until the
-fresh-run check caught it.
+or not the unit imports from it, as a fresh run does, and fixing it brings
+them back.
 
 <!-- world module-edit step 6 -->
 **Step 6: the `require` is deleted.**

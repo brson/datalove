@@ -101,7 +101,8 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - List types: `[u32]`
 
 - `<` `>` - AngleOpen, AngleClose
-  - Comparison operators: `.<`, `.>`
+  - Type parameters on a function: `fun pick_first<T>(a: T, b: T): T`
+  - Part of comparison operators: `.<`, `.>`
 
 ### Earmuff Braces (Pipe-Delimited)
 
@@ -110,6 +111,10 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Tensor literals: `[| 1 2 3, 4 5 6 |]`
 - `{|` `|}` - BracePipeOpen, BracePipeClose
   - Table types and literals: `{| x: u32, y: u32 |}`
+- `(|` `|)` - ParenPipeOpen, ParenPipeClose
+  - Reserved. Lexed and balanced by the bracer, not read by the parser
+- `<|` `|>` - AnglePipeOpen, AnglePipeClose
+  - Reserved. Lexed and balanced by the bracer, not read by the parser
 
 ### Asymmetric Braces (close with `}`)
 
@@ -139,7 +144,7 @@ Early-return an error on overflow or division by zero.
 - `/!` - SlashExclamation: Checked division
 
 ### Assignment Operators
-Compound assignment, as bare arithmetic. Reserved, not yet used in parser.
+Compound assignment in `set`, as bare arithmetic: `set total += amount`.
 
 - `+=` - PlusEquals
 - `-=` - MinusEquals
@@ -164,7 +169,7 @@ Compound assignment, as bare arithmetic. Reserved, not yet used in parser.
 ## Three-Character Sigils
 
 ### Assignment Variants - Optional (?)
-Compound assignment, as optional arithmetic. Reserved, not yet used in parser.
+Compound assignment in `set`, as optional arithmetic.
 
 - `+?=` - PlusQuestionEquals
 - `-?=` - MinusQuestionEquals
@@ -172,7 +177,7 @@ Compound assignment, as optional arithmetic. Reserved, not yet used in parser.
 - `/?=` - SlashQuestionEquals
 
 ### Assignment Variants - Checked (!)
-Compound assignment, as checked arithmetic. Reserved, not yet used in parser.
+Compound assignment in `set`, as checked arithmetic.
 The lexer takes the longest sigil, so `+!=` is one sigil rather than `+` and
 `!=`; `a != b` is unaffected.
 

@@ -54,8 +54,8 @@ gets its own thread-local. That is what the rayon paths hand to workers.
 `Database::recording(recorder)` returns one that reports every query it runs,
 and clones report to the same recorder, so work farmed out to rayon is visible.
 
-`bcts`, `datalove-datalit` and the `datalove` facade each declare a plain salsa
-database of their own. Compiler work uses the datafun one, re-exported as
+`bcts` and `datalove-datalit` each declare a plain salsa database of their
+own. Compiler work uses the datafun one, re-exported as
 `datalove_datafun::Database`.
 
 ## What there is
@@ -64,8 +64,8 @@ database of their own. Compiler work uses the datafun one, re-exported as
 |---|---|---|
 | `#[salsa::input]` | 3 | `Source`, a path's text, changed with `set_text`; `ScriptUnit`, a script unit and its link to the unit before it, changed with `set_prev` when a unit is spliced in or out; and `ChunkPolicy`. |
 | `#[salsa::interned]` | 15 | Deduplicated by content: `InternedText`, `ModuleId`, `ModuleIdTable`, `Module`, `ModuleGraph`, `ModuleFuncIds`, `Package`, `PackageModule`, `PackageWorld`, `CompileRoots`, `InlineModules`, `DataFileQuery`, `ScriptEnv`, `ReachableFuncIds`, `RiderSources`. |
-| `#[salsa::tracked]` struct | 49 | Computed values with an identity. Two have a `#[tracked]` field; see below. |
-| `#[salsa::tracked]` fn | 122 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
+| `#[salsa::tracked]` struct | 37 | Computed values with an identity. Two have a `#[tracked]` field; see below. |
+| `#[salsa::tracked]` fn | 133 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
 ### The two structs with a tracked field, and why
 
@@ -118,7 +118,7 @@ look at each module; they must not look at each function.
 | `compute_func_id_map` | compiler | `FuncIdMap`: every function's `(IrModuleId, FuncId)` |
 | `func_id_lookup` | compiler | the same as a lookup map, memoized so it is built once per revision rather than once per const |
 | `graph_declares_consts` | compiler | whether phase 5b has anything to do |
-| `dependencies_of`, `import_demands`, `package_world_map`, `module_world_map`, `resolve_package_world`, `basic_config` | datafun/pkg | package resolution |
+| `dependencies_of`, `import_demands`, `package_world_map`, `module_world_map`, `resolve_package_world` | datafun/pkg | package resolution |
 
 ### A handful of memos: keyed on a phase's arguments
 
@@ -135,13 +135,11 @@ These are where the work is, and they are what an edit is supposed to re-run
 exactly one of. They may look at their own module's functions; they must not
 look at the rest of the world -- which is what `reachable_func_ids` is for.
 
-`parse`, `lex`, `bracer`,
-`parse_module_full`, `parse_module_ast`, `resolve_module_names`,
-`resolve_module_imports`, `module_import_demands`,
+`parse`, `lex`, `bracer`, `parse_module_full`, `parse_module_ast`,
+`resolve_module_names`, `resolve_module_imports`, `module_import_demands`,
 `typecheck_module`, `analyze_module`, `module_const_kinds`,
-`lower_module_functions`, `module_shape_inputs`, `shape_closed_module`,
-`merge_lowered`, `module_has_comptime_calls`, `ctfe_module_units`,
-`lower_module`, `module_code_units`, `reachable_func_ids`.
+`lower_module_functions`, `merge_lowered`, `module_has_comptime_calls`,
+`ctfe_module_units`, `lower_module`, `module_code_units`, `reachable_func_ids`.
 
 Some keep more than one memo per module -- `lower_module_functions` keeps one
 for the first lowering and one per batch of functions waiting on a const, and `reachable_func_ids` keeps one per module per
@@ -173,7 +171,7 @@ graph-keyed passes, and which module changed does not enter into it.
 
 The 19 are: the edited module's `parse`/`lex`/`bracer` chain, its
 `typecheck_module`, `analyze_module`, `lower_module_functions`,
-`module_shape_inputs`, `lower_module` and so on -- one each -- plus the
+`lower_module` and so on -- one each -- plus the
 graph-keyed passes that must re-run because one of their inputs moved. Nothing
 runs per unchanged module.
 

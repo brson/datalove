@@ -512,7 +512,7 @@ What the plan says, with these differences:
 - **Worldgen writes `for`** over a collection in scope, at its own
   probability (`for_probability`), since the roll for a statement rarely
   found one: one world in eighty had a `for` before, fifteen after.
-- **Not done:** the C AOT `static` view and the missing prototype, below in
+- **Not done:** the missing prototype, below in
   [Bugs](#user-content-bugs-found-on-the-way), which `for` no longer reaches.
 
 Fixtures: `engines/for_001` to `for_009`,

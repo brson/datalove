@@ -3,6 +3,8 @@
 Editing a script unit should compile again and rerun the units that depend on
 it, and no others.
 
+Written October 2026; all stages are implemented.
+
 **This is the plan, kept for why things are shaped as they are and what was tried
 and rejected.** What the code actually is, and how it is validated, is
 [script-reactivity-architecture.md](script-reactivity-architecture.md).

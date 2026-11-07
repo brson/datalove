@@ -2,8 +2,12 @@
 
 A plan for giving a const of a linear type one home for the life of the
 program, built once, and making every use of it a borrow of that home rather
-than a fresh copy on the heap. A feasibility study, written 2026-10-06; nothing
-here is implemented.
+than a fresh copy on the heap. A feasibility study, written 2026-10-06. Steps 1 to 3 of [Order of
+work](#user-content-order-of-work) are implemented: the ownership rule, statics
+for module, script and function consts, and const parameters by reference.
+Pooling non-copy literals, borrowing `match` and prebuilt AOT images are not.
+[Where things stand](#user-content-where-things-stand) describes the code
+before the work.
 
 ## Contents
 
@@ -315,7 +319,7 @@ evaluator has its own interpreter, so parallel scripts never share one.
 
 **Where each backend finds it.**
 
-- The bytecode engine has no op for it and runs it on the IR walker.
+- The bytecode engine has its own op, `Op::StaticRef`.
 - The jit resolves each `StaticRef` against the interpreter's pool when it
   compiles a function (`record_call` takes the interpreter for this) and
   embeds the address. The engine belongs to the interpreter, so compiled code

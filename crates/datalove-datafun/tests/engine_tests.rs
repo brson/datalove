@@ -3,7 +3,7 @@
 //! The IR walker is the reference: only its results are compared with the
 //! fixture's expected file. Every other engine that applies to the fixture
 //! runs it again in this process and must observe exactly what the reference
-//! observed. See `botdocs/plan-engine-tests.md`.
+//! observed.
 //!
 //! - **bytecode**: the whole analysis again, function bodies on the bytecode.
 //! - **plain**: the same on the bytecode as lowered, without its optimization

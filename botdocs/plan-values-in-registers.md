@@ -71,8 +71,7 @@ three places where compiled code has to put a value where the layout says:
 3. **Calls between the tiers.** `bridge.rs` calls compiled code with a pointer
    per parameter, and the stubs call `__jit_dispatch_call` the same way. This
    is a calling convention, not the frame layout: the parameter region already
-   moved out of the shared core into the interpreter's extension
-   ([plan-frame-stack.md](plan-frame-stack.md)).
+   moved out of the shared core into the interpreter's extension.
 
 Everything else is free. A value nobody addresses can live in registers from
 its definition to its last use, and its home goes unwritten.

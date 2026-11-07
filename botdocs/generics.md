@@ -6,7 +6,7 @@ real layout together with that value's *type descriptor* -- the runtime's
 `TyDesc` -- and the descriptors the body needs are built at run time from one
 descriptor per type parameter, which the caller hands over.
 
-This describes the implementation as it stands in October 2026, on all four
+This describes the implementation as it stands in November 2026, on all four
 engines. The language-level rules are
 [Section 8.7 of the spec](botspec.md#user-content-87-generic-functions). How it
 got here is [Generics by Reference](plan-fat-generics.md), which replaced the
@@ -282,6 +282,8 @@ type the bound does not admit is F092.
 
 **A const parameter whose type mentions a type parameter** is F077:
 specialization makes one copy per const value, and that copy is still generic.
+A `const` binding in a generic body whose type mentions one is F088, for the
+same reason: it is evaluated once, not once per binding.
 
 **A type parameter no argument or expectation determines** is F101, since the
 caller has no descriptor to pass. The types cannot be written at a call
@@ -304,9 +306,15 @@ entity, and a generic's body never contributes to its callers' calling
 convention. Monomorphization needs to see every call site before it can emit
 the callee, which is exactly what a REPL cannot give.
 
-Monomorphizing what is *hot* is [Specializing
-Generics](plan-monomorphization.md): an optimization over a complete
-implementation, not a different design.
+Specializing a generic for a concrete binding is an optimization over a
+complete implementation, not a different design, and two pieces of it exist.
+An `inline` generic is spliced into each caller with the call's bindings
+substituted (`ir::inline`). And a compile-time pass redirects each call at a
+concrete binding to an instance, the generic's IR with its type parameters
+substituted (`ir::instantiate`,
+`crates/datalove-datafun-compiler/src/instances.rs`); it is off by default
+and run only by the tests, on the IR walker. See
+[Specializing Generics](plan-monomorphization.md).
 
 ## Where the tests are
 
@@ -336,7 +344,12 @@ coverage: `102`-`105` (forwarding), `113` (return-position inference),
 `114`-`120` (building collections, recursion, deep types), and the bound
 tests `124`-`127`. Engine fixture `module_068_growing_type` is a growing type on
 every engine, and `deep_recursion_tests.rs` checks that generic recursion
-under the JIT is not bounded by the Rust stack.
+under the JIT is not bounded by the Rust stack. The `spec` and `specchaos`
+engines of `engine_tests` and `std_engine_tests` run each program on the IR
+walker with calls pointed at instances -- every call, or a seeded coin per
+site -- and compare it with the unspecialized run. An instance takes offsets
+from static types, so a fault on the descriptor path shows up there as a
+disagreement.
 
 Four engines agreeing is load-bearing here. Most faults in this area have
 been silent -- a wrong answer, not a crash -- and some were identical in all

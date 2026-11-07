@@ -36,7 +36,10 @@ engine produced belongs there:
 every unit should do, what it uses, and what it holds after. A table states
 the rule, an `engine` table after it writes down where the engine does more
 work than the rule asks, and the test fails if the engine does anything else.
-The tables are never blessed, because they are the rules.
+The tables are never blessed, because they are the rules. Every step, with a
+table or without, is also checked against a fresh run: a new engine runs the
+session's current units in order, and each unit must end the same way and
+hold the same bindings.
 
 ## Session replays
 
@@ -96,8 +99,8 @@ so changing one of those types changes the format: bump `TRACE_VERSION` in
 synchronous and can describe every unit directly. The app would give the
 history's own rules and `/undo` and `/redo`, but it describes only the
 selected unit, asking the engine on another thread. So a replay uses
-units and `/edit`, `/edit-data`, `/delete` and `/insert`; an `/undo` in one records a
-command error.
+units and `/edit`, `/edit-data`, `/delete`, `/insert` and `/move`; an `/undo`
+in one records a command error.
 
 ## The player
 
@@ -139,8 +142,9 @@ language breaks its test rather than quietly changing what the post shows. Its
 worldfile may hold `expect` sections, and `engine` sections after them, as the
 reactive fixtures do. An `expect` checks the inputs since the `expect` before
 it, which are either units appended -- the script entered at the start, say
--- or one `/edit`, `/edit-data`, `/delete` or `/insert`. Inputs after the last `expect` are
-not checked. Units are named by the numbers the session gives them.
+-- or one `/edit`, `/edit-data`, `/delete`, `/insert` or `/move`. Inputs after
+the last `expect` have no table, though each is still checked against a fresh
+run. Units are named by the numbers the session gives them.
 
 The test takes the tables out before it records the session, so they are not
 in the trace, and `datalove repl --load` refuses a worldfile that still has
@@ -156,8 +160,8 @@ them.
    worldfile that is not listed.
 3. Put an `expect` table after the steps worth checking; see
    [Step tables in a replay](#user-content-step-tables-in-a-replay).
-3. Run `BLESS=1 cargo test -p datalove-doc-fixtures`.
-4. Put the `div` and the two `script`s in the document.
+4. Run `BLESS=1 cargo test -p datalove-doc-fixtures`.
+5. Put the `div` and the two `script`s in the document.
 
 To look at a trace by hand, run
 `datalove repl --load <world> --record <path>`, which writes it as plain
@@ -168,7 +172,7 @@ JSON.
 - A replay shows what each unit did, and not why. The reasons are in its step
   tables' `because` column, which is written by hand, is not checked, and is
   not in the trace.
-- Nothing edits a module or a data file from a script, so a replay cannot show
-  `local` changing under a session, as the post's transactions example
-  imagines.
+- The REPL has `/edit-data` and no command to edit a module, so a replay can
+  show a data file changing under a session but not a module. The reactive
+  fixtures can, through their `module-edit` steps.
 - A unit's source is shown whole; there is no diff of what an edit changed.

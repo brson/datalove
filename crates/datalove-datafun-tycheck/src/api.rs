@@ -687,7 +687,7 @@ pub fn typecheck_module<'db>(
     ctx.seed_from_name_resolution(&name_resolution, Some(module_id));
 
     // One walk in source order. A declaration is in scope from where it is
-    // written, a function throughout; see `botdocs/plan-lexical-scope.md`.
+    // written, a function throughout; see botspec 2.6.
     ctx.declare_scope(parsed.statements(db));
     ctx.arena = Some(&parsed.body(db).arena);
     for statement in parsed.statements(db).iter() {

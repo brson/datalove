@@ -216,7 +216,7 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D023 | Tensor groups of different shapes | `expr.rs:541`, `chunk.rs:334` |
 | D030 | Table row with the wrong number of cells | `expr.rs:583`, `chunk.rs:183` |
 | D031 | A table header cell that is not a name | `expr.rs:610` |
-| D032 | `enum` type without `{` | `type_hint.rs:136` |
+| D032 | `enum` type without `{` | `type_hint.rs:159` |
 | D033 | A `,` with nothing before it, in a table or tensor | `expr.rs:450,518`, `chunk.rs:199` |
 | D034 | An extra token in a table header cell | `expr.rs:629` |
 | D035 | `atom` with no name | `expr.rs:191` |
@@ -226,18 +226,18 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D039 | A bad string escape | `expr.rs:254` |
 | D040 | A bad or empty tensor header | `expr.rs:468` |
 | D041 | A tensor body that does not fit its header | `expr.rs:486`, `chunk.rs:358` |
-| D042 | A tensor type of rank 0 | `type_hint.rs:222` |
+| D042 | A tensor type of rank 0 | `type_hint.rs:245` |
 | D043 | A non-ASCII name | `mod.rs:40` |
-| D044 | Map type without `=` | `type_hint.rs:183` |
-| D045 | Bad tensor rank | `type_hint.rs:229` |
-| D046 | Unexpected token in a type | `type_hint.rs:271` |
-| D047 | Tensor type without its `,` | `type_hint.rs:213` |
-| D048 | Struct or table type field without its name or `:` | `type_hint.rs:390,403` |
+| D044 | Map type without `=` | `type_hint.rs:206` |
+| D045 | Bad tensor rank | `type_hint.rs:252` |
+| D046 | Unexpected token in a type | `type_hint.rs:294` |
+| D047 | Tensor type without its `,` | `type_hint.rs:236` |
+| D048 | Struct or table type field without its name or `:` | `type_hint.rs:413,426` |
 | D049 | Hint without its `/` | `expr.rs:43` |
 | D050 | `-` not glued to a decimal number | `expr.rs:141` |
-| D051 | Atom type with no name | `type_hint.rs:100,333` |
-| D052 | Term type with no name | `type_hint.rs:115,353` |
-| D053 | An enum variant that is not `atom` or `term` | `type_hint.rs:363` |
+| D051 | Atom type with no name | `type_hint.rs:100,356` |
+| D052 | Term type with no name | `type_hint.rs:115,376` |
+| D053 | An enum variant that is not `atom` or `term` | `type_hint.rs:386` |
 | D054 | A close bracket with no open | `mod.rs:37`, through `parser_util.rs` `emit_bracer_errors` |
 | D055 | An open bracket never closed | `mod.rs:37`, through `parser_util.rs` `emit_bracer_errors` |
 | D056 | `rec` type with no name | `type_hint.rs:130` |
@@ -250,9 +250,9 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 D001 to D016 were the ownership codes, now O001 to O016
 ([spec Section 11.1](botspec.md#user-content-111-errors)), and are retired.
 D044 to D053 and D058 to D061 are faults that used to share a number with an
-ownership code or with another parse fault. Line numbers are as of October 2026 and drift; the
-code is a `DCode` variant in `crates/datalove-diagnostic-codes`, and its name
-is what to search for.
+ownership code or with another parse fault. Line numbers are as of November
+2026 and drift; the code is a `DCode` variant in
+`crates/datalove-diagnostic-codes`, and its name is what to search for.
 
 Type errors (T-codes) are listed in
 [Datalit Typing Rules](datalit-typing-rules.md#user-content-diagnostics).

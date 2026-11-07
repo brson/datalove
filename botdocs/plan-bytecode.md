@@ -21,8 +21,9 @@ the IR walker on every fixture from the first day.
 > **This is a plan, and a prototype of it.** The prototype is in
 > `crates/datalove-datafun-interp/src/bytecode/`, on by default since October
 > 2026 (`DATALOVE_INTERP=ir` turns it off); [What the prototype found](#user-content-what-the-prototype-found)
-> says how it went. The rest records the reasoning and the facts it rests on as
-> of October 2026.
+> says how it went. Calls items 1 to 4 are done since; item 5, inlining leaf
+> bodies at lowering, was not done as written, and nothing else here is open.
+> The rest records the reasoning and the facts it rests on as of October 2026.
 
 ## Contents
 
@@ -420,7 +421,7 @@ dispatcher suites, so the bytecode must handle a body being replaced.
 - **Differential from the first day.** Add bytecode variants of the interpreter
   fixture suites, the way the JIT suite ran the same fixtures under the JIT. The
   IR walker is the reference. (As built: a `test-bc` configuration, and since
-  then `engine_tests`; see `plan-engine-tests.md`.)
+  then `engine_tests`.)
 - **`bc-strict` for coverage**: the same suites with fallback forbidden show what
   is left to lower.
 - **Leak checking** stays on, as for every suite: destruction must be exact.
@@ -483,7 +484,7 @@ a bytecode loop header, which the shared frame layout makes possible.
 The prototype is the `bytecode` module of the interpreter crate, the
 interpreter's default engine (`DATALOVE_BC_STATS` for coverage, `DATALOVE_BC_DUMP` to print
 each body's ops). `engine_tests` runs every fixture on it and compares what it
-observes with the IR walker in the same process; see `plan-engine-tests.md`.
+observes with the IR walker in the same process.
 Before it was the default, a `test-bc` configuration ran the interpreter-driven
 suites on it against the IR walker's expected output, and they passed.
 
@@ -596,7 +597,7 @@ two and a half times CPython's 945ms, where it was four.
   than about ten thousand times a run.
 - Ops are 24 bytes rather than 16, which has not been measured as worth
   changing. (A call between bytecode bodies no longer recurses on the Rust
-  stack; see [plan-frame-stack.md](plan-frame-stack.md).)
+  stack; see "Performance Notes" in [the compiler guide](compiler-guide.md).)
 
 **What is left** is the call itself. In fib about a quarter of the time is in
 the fast call, a tenth in taking and entering the frame, the rest in the loop.
@@ -692,8 +693,9 @@ recognized when a call site first resolves it (`forwarder`), and the site
 calls the native itself, with the arguments as the forwarder's frame and call
 would have read them. A loop calling `list.len` went from about 1050
 instructions an iteration to 930 with the bridge's allocation gone, 800 with
-the cached target and 450 with forwarding; wordfreq from 37.2 to 29.5 billion. (1) and (2) are designed, built and
-measured in [plan-frame-stack.md](plan-frame-stack.md).
+the cached target and 450 with forwarding; wordfreq from 37.2 to 29.5 billion. (1) and (2) were built
+later; "Performance Notes" in [the compiler guide](compiler-guide.md) has the
+result.
 
 (1) and (2) are the structural change and most of the gain: fib, which is
 nothing but calls, is where CPython is still twice as fast, and that is the

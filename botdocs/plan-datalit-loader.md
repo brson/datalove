@@ -23,7 +23,10 @@ scheduled.
 The benchmark tables in [Tuning the JIT](plan-jit-tuning.md) and
 [Are We Fast Yet for benchvs](research/research-awfy-benchmarks.md) report the
 *running* phase of `datalove script --time`. The store demo's *compiling*
-phase is as large or larger, and almost all of it is reading its data files:
+phase is as large or larger, and almost all of it is reading its data files.
+These figures predate parallel parsing of large literals; [Where Compile Time
+Goes](compile-time.md) has the store demo at 205 ms sequential and 138 ms
+parallel:
 
 | Orders | `.dlt` data | Compiling | Running (jit) |
 |---|---|---|---|
@@ -31,7 +34,7 @@ phase is as large or larger, and almost all of it is reading its data files:
 | 200,000 | 36 MB | 2376 ms | 1690 ms |
 
 That is about 15 MB/s. In a profile of the whole run, the front end's share is
-about a third: the salsa lexer (`lex_chunk`), the bracer, the datalit parser
+about a third: the salsa lexer (`lex`), the bracer, the datalit parser
 building AST nodes (`ExprFull::new`), interning (`InternedText` through the
 salsa table), the datalit typechecker (`tycheck::check`,
 `check_int_fits_type`), then `datafile::Reader` and `parse_int_const`. A text

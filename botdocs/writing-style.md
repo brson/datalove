@@ -180,6 +180,9 @@ Observed from the existing docs; follow them.
   docs by relative link.
 - New docs get an entry in both `README.md` and `nav.md`, in the right
   section.
+- When a plan is finished, move its entry to History, update its status
+  paragraph, and fold anything the reference docs lack into them. Delete it
+  instead if nothing in it is worth keeping once that is done.
 - Plain ASCII punctuation. No emoji.
 
 ## Blog posts

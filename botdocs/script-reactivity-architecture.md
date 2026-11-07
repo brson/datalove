@@ -1,8 +1,8 @@
 # The responsive scripting environment
 
-How editing a script unit, or inserting or deleting one, compiles again and
-reruns the units that depend on it, and no others. Explanation; describes the
-engine as of November 2026.
+How editing a script unit, or inserting, deleting or moving one, compiles
+again and reruns the units that depend on it, and no others. Explanation;
+describes the engine as of November 2026.
 
 A REPL session is a list of script units, and an edit to one of them changes
 what the units after it would compute. Rerunning the whole session is
@@ -49,7 +49,9 @@ reruns X and the units that use what X provides, and deleting B reruns the
 units that used what B provided. Every other unit keeps its frame.
 
 Editing a module reruns the units that import from it, and the units those
-reach. A module edit that changes only a function body re-typechecks no unit.
+reach; an edit that breaks or fixes the module also reaches the units that
+require it. A module edit that changes only a function body re-typechecks no
+unit.
 
 **Unless a unit took or wrote what it reads.** A unit moves out of an earlier
 unit's binding as it would out of its own, and `set` writes into an earlier
@@ -213,8 +215,12 @@ from the old. The alias edge, from a `require` to an `import` that uses its
 alias, is added by hand: aliases resolve through `module_alias_before`, which
 `uses` does not record.
 
-A module edit's seeds are the units whose imports resolve into the modules
-it reaches. When the edit breaks a module or fixes one, the units that
+A module edit reaches the edited module, the modules that require it directly
+or not, and any module the edit broke or fixed. The last is what the import
+edges alone would miss: a module that leaves the compile because one it
+requires broke is in no graph to be found from. The seeds are the units whose
+imports resolve into the modules reached. When the edit breaks a module or
+fixes one, the units that
 require it are seeds too, imports or not, since a `require` of a module that
 does not compile fails. A body edit leaves a unit that only requires the
 module alone.
@@ -541,12 +547,20 @@ them. There, a unit counts as recompiled if salsa ran its typecheck, or ran an
 ownership analysis while compiling it (`query_events::compiling_unit`). Salsa's
 events say that a typecheck ran but not for which unit, since its key moves
 with the env, so the typecheck's own `unit_analysis` record names the unit,
-and there must be exactly one record for every typecheck salsa ran. Every step also checks the engine's own
+and there must be exactly one record for every typecheck salsa ran. Every
+step also checks the engine's own
 account of what it compiled against that, so a pass whose entry query does not
 record itself fails the fixtures it changes; removing the ownership hook fails
 every step where a unit's ownership analysis runs and its typecheck does not.
 And it checks that no script unit's typecheck or ownership analysis ran on a
 worker thread, where the engine's log cannot see it.
+
+**Every step is also checked against a fresh run**, which trusts neither the
+graph nor a table: a new engine runs the session's current units in order,
+and each unit must end the same way and hold the same bindings as in the
+session the step left. It is the definition of a correct step, so it catches
+what a hand-written `holds after` and the engine agree on wrongly; it found
+the units requiring a broken module left as having run.
 
 **Falsification is what makes it evidence.** Each piece was checked by
 injecting a fault into the shipped code and confirming the tests reported the
@@ -602,9 +616,11 @@ units directly when the question is about validity.
   to the typechecks it saves, and grows with the session.
 - **The engine keeps no history.** The REPL's `/undo` and `/redo` keep it,
   and need nothing new of the engine: undoing an edit *is* an edit, undoing an
-  append is `truncate_units`, and undoing an insert or a delete is the opposite
-  splice. See
+  append is `truncate_units`, and undoing an insert, a delete or a move is
+  the opposite splice. See
   [repl-architecture.md](repl-architecture.md#user-content-undo-and-redo).
 - **Only pure `fun`s exist**, so the only output is `debuglog`, and skipping a
   unit's execution skips nothing observable beyond it. `proc`s and real I/O
-  need virtualized I/O, which does not exist yet.
+  need the runtime's I/O behind a virtual layer, which does not exist yet:
+  `datalove-vio` covers only the compiler's own file reads and writes; see
+  [plan-vio.md](plan-vio.md).

@@ -62,7 +62,8 @@
 //! interpreter until no frame runs, and every cache is forgotten when bodies
 //! are replaced (`IrInterpreter::forget_compiled_bodies`).
 //!
-//! See `botdocs/plan-bytecode.md` and `botdocs/plan-frame-stack.md`.
+//! See `botdocs/plan-bytecode.md`, and "Performance Notes" in
+//! `botdocs/compiler-guide.md`.
 
 use datalove_datafun_ir::layout::{layout_of, option_payload_offset, result_payload_offset};
 use datalove_datafun_ir::{

@@ -1220,7 +1220,8 @@ it, F072.
 
 **View type restrictions:** Views can be passed to `ref` params but not to `mut`
 or `out` params (F073). Whole-value replacement of a view (`set row = ...`)
-would overwrite the view without affecting the parent's data. The `set t[i]? = new_row` form is likewise rejected for rank > 1 tensors
+would overwrite the view without affecting the parent's data. The
+`set t[i]? = new_row` form is likewise rejected for rank > 1 tensors
 (F073). Element-level mutation through views (e.g. `set row[j]? = val`) is
 semantically correct but currently also rejected because the typechecker cannot
 distinguish it from whole-view replacement at the call site. An element of a
@@ -1905,12 +1906,13 @@ end for
 ```
 
 The collection is written with `ref` (P088) and is a place: a name, a
-parameter, or a field or element of one (F108). Each element binding is a
-reference into the collection, as a `ref` parameter is: it cannot be moved,
-assigned, or passed `mut` or `out`, and `@` clones it. A tensor of rank above 1
-binds a view of each row, one rank less. An index binding is an `index`. A
-`for` binds one or two names (P086), two on a map and one on a set (F109).
-`break` and `continue` work as in `loop`; `continue` goes to the next element.
+parameter, or a field or element of one (F108), of a type in the list above
+(F087). Each element binding is a reference into the collection, as a `ref`
+parameter is: it cannot be moved, assigned, or passed `mut` or `out`, and `@`
+clones it. A tensor of rank above 1 binds a view of each row, one rank less.
+An index binding is an `index`. A `for` binds one or two names (P086), two on
+a map and one on a set (F109). `break` and `continue` work as in `loop`;
+`continue` goes to the next element.
 
 **Match** destructures an enum value:
 
@@ -2437,7 +2439,9 @@ parameters.
 ## 12. Bidirectional Type Inference
 
 Expressions can *synthesize* types (bottom-up) or *check* against expected
-types (top-down).
+types (top-down). This section is the informal account; the rules are in
+[Datalit Typing Rules](datalit-typing-rules.md#user-content-inference) and
+[Datafun Typing Rules](datafun-typing-rules.md#user-content-inference).
 
 **Integer synthesis**: bare integer literals synthesize as `int`
 (arbitrary-precision). When an expected type is available, integers check
@@ -2525,10 +2529,14 @@ for the output path, `--link`, `--run` and `--c`, the last emitting C and
 compiling that rather than emitting an object file directly. `script`,
 `script-ir`, `script-world` and `aot-compile` each take `--no-sys` to leave the
 system library out. `repl` takes `--script` to run a script through the REPL's
-engine without prompting, and `--load` to replay a session `/save` wrote.
+engine without prompting, `--load` to replay a session `/save` wrote, and,
+with `--load`, `--record` to write the replayed session as a JSON trace for
+the docs to replay instead of starting the REPL. `worldgen` takes an optional
+seed.
 
-A *worldfile* is a single text file holding several modules, data files,
-riders and a script as named sections; the tests and `worldgen` use them.
+A *worldfile* (`.world`) is a single text file holding several modules, data
+files, riders and a script as named sections; the tests and `worldgen` use
+them.
 `docs` builds `mandocs/` and `botdocs/` into HTML under `docs/` in the source
 tree.
 

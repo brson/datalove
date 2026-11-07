@@ -3,7 +3,7 @@
 How Datalove's reactive script semantics compares to FRP, reactive notebooks,
 incremental computation and build systems, and what to take from each.
 Written November 2026 for the "Comparing to FRP literature" section of
-[the reactive script semantics draft](../mandocs/drafts/reactive-script-semantics.md),
+[the reactive script semantics draft](../../mandocs/drafts/reactive-script-semantics.md),
 for review. Nothing here is decided. The sources marked *unverified* were cited
 from memory and not re-read; check them before citing them in a post.
 
@@ -50,7 +50,7 @@ needs: semantically a session is a pure function of its code and its inputs.
 ## The semantics, restated
 
 From the draft and
-[script-reactivity-architecture.md](script-reactivity-architecture.md):
+[script-reactivity-architecture.md](../script-reactivity-architecture.md):
 
 - A session is a list of units run in order. A unit provides bindings, and
   reads, takes, overwrites, updates or revives earlier units' bindings.
@@ -104,7 +104,7 @@ binding is visible statically: linear types for moves, `set` and `mut`/`out`
 parameters in signatures for writes. IPyflow's worst failure, a write through
 an alias inside a function, cannot happen. That is the strongest claim for the
 comparison section. The engine is held to it by the cases under
-[writes through function parameters](script-reactivity-cases.md#user-content-writes-through-function-parameters),
+[writes through function parameters](../script-reactivity-cases.md#user-content-writes-through-function-parameters),
 which include Rex's `flu_vaccine` edit and its `aliasing_val_swap`.
 
 ## The algebra is dependence analysis
@@ -279,9 +279,9 @@ In order:
 4. Port Rex's mutation and reassignment micro-benchmarks to worldfiles, for an
    outside benchmark that reports soundness and rerun ratio in its terms.
 5. Add differential oracle tests: a random session from `datalove worldgen`,
-   a random modification, compared against a fresh run. Today's validation
-   checks graph-derived reach and injected faults, and never a random case
-   against a fresh run.
+   a random modification, compared against a fresh run. Every fixture step is
+   now compared against a fresh run (November 2026); what is missing is random
+   sessions.
 6. Retract by what the old code did on its last run, recorded at runtime,
    rather than by its static operations. Apply has to stay static. This fixes
    the issue that a unit that did not run is assumed to have done what it would.
