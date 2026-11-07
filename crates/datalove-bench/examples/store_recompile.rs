@@ -32,7 +32,8 @@ fn main() {
 
     let mut db = datafun::Database::default();
     let sys = datalove_sys_packages::system_library();
-    let local = load_local_library(dir.as_ref()).expect("the store's local library loads");
+    let fs = datalove_vio::HostFs::new().expect("the working directory");
+    let local = load_local_library(&fs, dir.as_ref()).expect("the store's local library loads");
     let mut descriptor = WorkspaceDescriptor::from_system_library(&sys)
         .with_user_library(local)
         .expect("the store's library fits the workspace");

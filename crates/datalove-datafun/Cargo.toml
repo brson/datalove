@@ -23,6 +23,7 @@ datalove-datafun-tycheck.workspace = true
 datalove-datafun-resolve.workspace = true
 datalove-datafun-interp.workspace = true
 datalove-datafun-pkg.workspace = true
+datalove-vio.workspace = true
 datalove-buildinfo.workspace = true
 datalove-rtdt.workspace = true
 # For `ABI_VERSION`, which a rider library is checked against when loaded.

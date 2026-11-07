@@ -1105,6 +1105,7 @@ dependencies = [
  "datalove-rt",
  "datalove-script-engine",
  "datalove-sys-packages",
+ "datalove-vio",
 ]
 
 [[package]]
@@ -1124,6 +1125,7 @@ dependencies = [
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-sys-packages",
+ "datalove-vio",
  "divan",
  "rustmax",
  "salsa",
@@ -1185,6 +1187,7 @@ dependencies = [
  "datalove-rt",
  "datalove-rtdt",
  "datalove-rti",
+ "datalove-vio",
  "libloading",
  "ron",
  "rustmax",
@@ -1403,6 +1406,7 @@ dependencies = [
  "bcts",
  "datalove-exampletest",
  "datalove-pkg-manifest",
+ "datalove-vio",
  "rustmax",
  "salsa",
 ]
@@ -1499,6 +1503,7 @@ dependencies = [
  "datalove-repl",
  "datalove-script-engine",
  "datalove-sys-packages",
+ "datalove-vio",
  "rustmax",
 ]
 
@@ -1521,8 +1526,8 @@ dependencies = [
 name = "datalove-pkg-manifest"
 version = "0.1.0"
 dependencies = [
+ "datalove-vio",
  "serde",
- "tempfile",
  "toml 0.8.23",
 ]
 
@@ -1535,6 +1540,7 @@ dependencies = [
  "datalove-paths",
  "datalove-script-engine",
  "datalove-sys-packages",
+ "datalove-vio",
  "rustmax",
  "serde",
 ]
@@ -1545,6 +1551,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "datalove-repl",
+ "datalove-vio",
  "ratatui",
  "rustmax",
  "tui-textarea-2",
@@ -1615,6 +1622,7 @@ dependencies = [
  "datalove-datafun",
  "datalove-pkg-manifest",
  "datalove-rider-sys-std",
+ "datalove-vio",
  "rustmax",
 ]
 
@@ -1640,6 +1648,13 @@ dependencies = [
  "rand 0.8.5",
  "rustmax",
  "salsa",
+]
+
+[[package]]
+name = "datalove-vio"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
 ]
 
 [[package]]

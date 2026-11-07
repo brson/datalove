@@ -18,3 +18,4 @@ pub use datalove_repl as repl;
 pub use datalove_rt as rt;
 pub use datalove_script_engine as script_engine;
 pub use datalove_sys_packages as sys_packages;
+pub use datalove_vio as vio;

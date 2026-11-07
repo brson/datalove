@@ -3,7 +3,8 @@
 A plan for sending every file the compiler reads or writes through one
 trait-based interface, in a new `datalove-vio` crate, so that later the
 interpreter and compiled programs can do their I/O through it too. Written
-November 2026; not implemented.
+November 2026. Phases 1 to 3, the crate and the compiler's own I/O, are
+implemented; the runtime's is not.
 
 ## Contents
 
@@ -98,9 +99,10 @@ Synchronous, behind `Arc`, with the names and signatures of
 ```rust
 pub type DynFs = Arc<dyn Fs>;
 
-pub enum EntryKind { File, Dir }
+pub enum EntryKind { File, Dir, Other }
 
 pub trait Fs: Send + Sync + std::fmt::Debug + 'static {
+    fn current_dir(&self) -> &Path;
     fn kind(&self, path: &Path) -> io::Result<Option<EntryKind>>;
     fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
     fn read_to_string(&self, path: &Path) -> io::Result<String>;
@@ -112,6 +114,10 @@ pub trait Fs: Send + Sync + std::fmt::Debug + 'static {
 
 `kind` stands in for `exists`, `is_file` and `is_dir` together, since
 package loading needs to tell a file from a directory and `exists` cannot.
+`is_file` and `is_dir` are provided on top of it, answering as `Path`'s do, a
+path that cannot be looked at being neither. `Other` is a device, socket or
+fifo, which a host directory can hold. `current_dir` is what a relative path
+is relative to.
 `rename` and the durability operations are left out until something needs
 them; nothing in the compiler's own I/O does.
 
@@ -122,8 +128,8 @@ nothing to do and goes.
 
 Two implementations to begin with:
 
-- `HostFs`, over `std::fs`, with a working directory it resolves relative
-  paths against.
+- `HostFs`, over `std::fs`, with a working directory of its own, fixed when it
+  is made, that it resolves relative paths against.
 - `MemFs`, a tree in memory, for tests and wasm. Most of the tests that now
   lay out a `tempfile` directory to exercise package loading or
   `find_local_library` can use it instead; `HostFs` keeps a few of its own.
@@ -204,9 +210,10 @@ caller.
 
 ## Phases
 
-What exists: a compiler with no I/O in its phases, worldfile parsing over
-`impl Read`, and a runtime debug log with a sink. What is missing: any single
-place where file access goes through.
+What exists: phases 1 to 3. `crates/datalove-vio` holds the interface and
+both implementations, and every source read and output write of the compiler's
+drivers goes through it. What is missing: the runtime's I/O, and the deferred
+work in the open questions.
 
 1. **The crate.** `datalove-vio` with `Fs`, `EntryKind`, `HostFs` and `MemFs`,
    and tests of the two against each other.
@@ -221,8 +228,11 @@ place where file access goes through.
    compiled binary's runtime, and a `Stdio` part that takes over from
    `DebugOutputMode`.
 
-After phase 3, `std::fs` outside `datalove-vio` should appear only in the
-toolchain modules listed above, in build scripts and in test harnesses.
+After phase 3, `std::fs` outside `datalove-vio` appears only in the toolchain
+modules listed above, the debug output listed above, build scripts, test
+harnesses and the `doc` command. `sys/build.rs` reads manifests through a
+`HostFs`, since `datalove_pkg_manifest::load` takes an `Fs` wherever it is
+called from.
 
 ## Open questions
 

@@ -223,36 +223,6 @@ impl ModuleCompiler {
         }
     }
 
-    /// Load sys library from directory.
-    pub async fn load_sys_library_from_dir(
-        &mut self,
-        db: &dyn salsa::Database,
-        sys_dir: std::path::PathBuf,
-    ) -> AnyResult<()> {
-        use datalove_datafun_pkg::package_load;
-
-        let config = package_load::PackageWorldConfig {
-            dir_pkglib_system: sys_dir,
-            dir_pkglib_local: None,
-        };
-
-        let package_world_raw = package_load::load_world(config).await?;
-
-        // Extract rider sources and crate directories from loaded packages.
-        self.rider_sources.extend(package_world_raw.rider_sources());
-
-        for (pkg_name, pkg) in &package_world_raw.pkglib_system {
-            for (mod_name, pkg_module) in &pkg.modules {
-                self.add_module(db, "sys", pkg_name, mod_name, &pkg_module.text);
-            }
-            for (name, file) in &pkg.data {
-                self.add_data(db, "sys", pkg_name, name, &file.text);
-            }
-        }
-
-        Ok(())
-    }
-
     /// Add rider sources and crate directories from a loaded package world.
     pub fn add_riders_from_package_world(&mut self, world: &datalove_datafun_pkg::package_load::PackageWorld) {
         self.rider_sources.extend(world.rider_sources());

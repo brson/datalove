@@ -90,6 +90,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-rti` | The runtime's call table as riders see it, and `ABI_VERSION` |
 | `datalove-buildinfo` | `BuildInfo`: whether this binary was built from a checkout or a release |
 | `datalove-paths` | `work_dir()`, where native components are built |
+| `datalove-vio` | `Fs`, the file I/O everything but the native toolchain goes through; `HostFs`, `MemFs`. See [A Virtual I/O Layer](plan-vio.md) |
 | `datalove-ct` | Compile-time utilities, query logging |
 | `datalove-diagnostic` | Diagnostic/error infrastructure |
 | `datalove-diagnostic-codes` | Every diagnostic code, an enum per family (`DCode`, `OCode`, `PCode`, `TCode`, `FCode`) |
@@ -1973,7 +1974,7 @@ let sys = datalove_sys_packages::system_library();
 let descriptor = WorkspaceDescriptor::from_system_library(&sys);
 
 // A test compiling the tree it lives in.
-let descriptor = block_on(WorkspaceDescriptor::load_sys_dir(repo_root.join("sys")))?;
+let descriptor = WorkspaceDescriptor::load_sys_dir(&HostFs::new()?, repo_root.join("sys"))?;
 ```
 
 `from_package_world` and `from_worldfile_sections` build the other kinds.

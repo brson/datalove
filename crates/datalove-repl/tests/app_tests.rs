@@ -368,11 +368,11 @@ fn a_replayed_session_is_evaluated_without_parsing() {
 /// it.
 #[test]
 fn save_writes_the_history_up_to_itself() {
-    let dir = rmx::tempfile::tempdir().unwrap();
-    let path = dir.path().join("session.world");
+    let fs: datalove_vio::DynFs = std::sync::Arc::new(datalove_vio::MemFs::new());
+    let path = std::path::PathBuf::from("/session.world");
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
-    app.set_session_path(path.clone());
+    app.set_session_path(fs.clone(), path.clone());
 
     app.submit_input("fun f(): int".to_string());
     let fun = "fun f(): int\n    ret 1\nend fun";
@@ -396,7 +396,7 @@ fn save_writes_the_history_up_to_itself() {
         app.history()[2].eval_result,
         Some(repl::Outcome::Saved { inputs: 3, .. }),
     ), "{:?}", app.history()[2]);
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "\
+    assert_eq!(fs.read_to_string(&path).unwrap(), "\
 ----------
 scriptunit-fragment
 ----------
@@ -927,9 +927,9 @@ fn the_selected_unit_is_scrolled_into_view() {
 /// the `/load` included.
 #[test]
 fn load_resets_and_replays_the_saved_session() {
-    let dir = rmx::tempfile::tempdir().unwrap();
-    let path = dir.path().join("session.world");
-    std::fs::write(&path, "\
+    let fs: datalove_vio::DynFs = std::sync::Arc::new(datalove_vio::MemFs::new());
+    let path = std::path::PathBuf::from("/session.world");
+    fs.write(&path, b"\
 ----------
 scriptunit-fragment
 ----------
@@ -945,7 +945,7 @@ repl-command
 
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
-    app.set_session_path(path);
+    app.set_session_path(fs.clone(), path);
 
     app.submit_input("let old = 1".to_string());
     executor.queue(evaluated_let(0, "old"));
@@ -981,10 +981,10 @@ repl-command
 /// With nothing saved, `/load` is an error and the session is left alone.
 #[test]
 fn load_without_a_saved_session_is_an_error() {
-    let dir = rmx::tempfile::tempdir().unwrap();
+    let fs: datalove_vio::DynFs = std::sync::Arc::new(datalove_vio::MemFs::new());
     let executor = MockExecutor::default();
     let mut app = ReplApp::with_executor(executor.clone());
-    app.set_session_path(dir.path().join("missing.world"));
+    app.set_session_path(fs.clone(), std::path::PathBuf::from("/missing.world"));
 
     app.submit_input("/load".to_string());
 

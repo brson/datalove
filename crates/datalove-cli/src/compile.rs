@@ -14,6 +14,7 @@ use datalove::datafun::driver::{
 };
 use datalove::datafun::driver::rider_load::RiderNatives;
 use datalove::datafun_ir::IrCodeUnit;
+use datalove::vio::Fs;
 
 use crate::render;
 
@@ -42,17 +43,18 @@ pub struct CompiledScript<'db> {
 /// with `DATALOVE_BUILD_SYS_RIDERS` set the riders are built rather than taken
 /// from this binary, and that is where they build.
 pub fn compile_script<'db>(
+    fs: &dyn Fs,
     db: &'db datalove::datafun::Database,
     path: &Path,
     no_sys: bool,
 ) -> AnyResult<CompiledScript<'db>> {
-    let cwd = rmx::std::env::current_dir().context("failed to read the current directory")?;
+    let cwd = fs.current_dir();
     let sys = datalove::sys_packages::system_library();
-    let descriptor = WorkspaceDescriptor::for_command(&sys, no_sys, Some(path), &cwd)?
+    let descriptor = WorkspaceDescriptor::for_command(fs, &sys, no_sys, Some(path))?
         .with_work_dir(datalove::paths::work_dir()?);
 
     // The script is what says where compilation starts.
-    let source = rmx::std::fs::read_to_string(path)
+    let source = fs.read_to_string(path)
         .with_context(|| format!("Failed to read script file: {}", path.display()))?;
 
     let (mut module_compiler, natives) = descriptor.to_compiler_with_natives(db, &sys.natives);
@@ -62,13 +64,13 @@ pub fn compile_script<'db>(
     // resolution to report on.
     module_compiler.narrow_roots_to_script(db, &source, &[]);
     let compiled = module_compiler.compile(db);
-    bail_on_module_errors(db, &compiled, &module_compiler, &descriptor, path, &cwd)?;
+    bail_on_module_errors(db, &compiled, &module_compiler, &descriptor, path, cwd)?;
 
     let mut compiler = compiled.script_compiler_default(db)
         .expect("script_compiler should succeed after error check");
     let unit = compiler.compile_fragment(&source);
     let files = descriptor.source_files(&module_compiler);
-    check_unit(&compiler, &unit, &files, path, &LineOffsets::new(), &cwd)?;
+    check_unit(&compiler, &unit, &files, path, &LineOffsets::new(), cwd)?;
     let ir_unit = unit.ir_unit
         .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 

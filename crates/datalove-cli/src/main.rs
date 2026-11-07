@@ -2,6 +2,9 @@ use rmx::prelude::*;
 
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
+use rmx::std::sync::Arc;
+
+use datalove::vio::{DynFs, Fs, HostFs};
 
 mod compile;
 mod render;
@@ -182,46 +185,47 @@ struct WorldgenCommand {
 
 impl Cli {
     fn run(&self) -> AnyResult<()> {
+        let fs: DynFs = Arc::new(HostFs::new().context("failed to read the current directory")?);
         match &self.cmd {
-            Command::LitTycheck(cmd) => cmd.run(),
-            Command::LitAst(cmd) => cmd.run(),
-            Command::LitPretty(cmd) => cmd.run(),
+            Command::LitTycheck(cmd) => cmd.run(&*fs),
+            Command::LitAst(cmd) => cmd.run(&*fs),
+            Command::LitPretty(cmd) => cmd.run(&*fs),
             Command::LitOp(cmd) => cmd.run(),
-            Command::Repl(cmd) => cmd.run(),
-            Command::Script(cmd) => cmd.run(),
-            Command::ScriptIr(cmd) => cmd.run(),
-            Command::AotCompile(cmd) => cmd.run(),
+            Command::Repl(cmd) => cmd.run(fs),
+            Command::Script(cmd) => cmd.run(&*fs),
+            Command::ScriptIr(cmd) => cmd.run(&*fs),
+            Command::AotCompile(cmd) => cmd.run(&*fs),
             Command::TypecheckStd(cmd) => cmd.run(),
             Command::Docs(cmd) => cmd.run(),
-            Command::ScriptWorld(cmd) => cmd.run(),
+            Command::ScriptWorld(cmd) => cmd.run(&*fs),
             Command::Worldgen(cmd) => cmd.run(),
         }
     }
 }
 
 impl LitTycheckCommand {
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: &dyn Fs) -> AnyResult<()> {
         use datalove::datalit;
         use datalove::bct::input::Source;
 
         let db = datalit::Database::default();
 
-        let contents = rmx::std::fs::read_to_string(&self.file_path)?;
+        let contents = fs.read_to_string(&self.file_path)?;
         let source = Source::new(&db, contents.S());
-        let cwd = rmx::std::env::current_dir().unwrap_or_default();
+        let cwd = fs.current_dir();
 
         let parse_result = datalit::parser::parse(&db, source);
         let ast = parse_result.expr(&db);
         let parse_diags = datalit::parser::parse::accumulated::<datalove::diagnostic::ParseDiagnostic>(&db, source);
         if !parse_diags.is_empty() {
-            render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), &cwd);
+            render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), cwd);
             bail!("Parse error");
         }
 
         let resolved = datalit::resolve::resolve_names(&db, source, ast.clone());
         let result = datalit::tycheck::type_check(&db, ast.clone(), resolved);
         let type_diags = datalit::tycheck::type_check::accumulated::<datalove::diagnostic::TypeDiagnostic>(&db, ast, resolved);
-        render::render_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
+        render::render_type_diagnostics(&db, &type_diags, &self.file_path, cwd);
         if !result.errors(&db).is_empty() {
             bail!("Type error");
         }
@@ -232,14 +236,14 @@ impl LitTycheckCommand {
 }
 
 impl LitAstCommand {
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: &dyn Fs) -> AnyResult<()> {
         use datalove::datalit;
         use datalove::bct::input::Source;
 
         let db = datalit::Database::default();
 
         // Read the file.
-        let contents = rmx::std::fs::read_to_string(&self.file_path)?;
+        let contents = fs.read_to_string(&self.file_path)?;
         let source = Source::new(&db, contents.S());
 
         // Parse the expression.
@@ -255,14 +259,14 @@ impl LitAstCommand {
 }
 
 impl LitPrettyCommand {
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: &dyn Fs) -> AnyResult<()> {
         use datalove::datalit;
         use datalove::bct::input::Source;
 
         let db = datalit::Database::default();
 
         // Read the file.
-        let contents = rmx::std::fs::read_to_string(&self.file_path)?;
+        let contents = fs.read_to_string(&self.file_path)?;
         let source = Source::new(&db, contents.S());
 
         // Parse the expression.
@@ -379,26 +383,25 @@ impl LitOpCommand {
 }
 
 impl ReplCommand {
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: DynFs) -> AnyResult<()> {
         use datalove::datafun::driver::local_library_for;
 
-        // A command given no script looks for `local` here, and a REPL's
-        // workspace is this directory.
-        let cwd = rmx::std::env::current_dir().context("failed to read the current directory")?;
+        // A command given no script looks for `local` in the working
+        // directory, and a REPL's workspace is that directory.
         if let Some(script_path) = &self.script {
-            let local = local_library_for(Some(script_path), &cwd)?;
-            datalove::repl::run_script(datalove::sys_packages::system_library(), local, script_path)
+            let local = local_library_for(&*fs, Some(script_path))?;
+            datalove::repl::run_script(&*fs, datalove::sys_packages::system_library(), local, script_path)
         } else if let (Some(record_path), Some(world_path)) = (&self.record, &self.load) {
-            let trace = datalove::repl::record_world(datalove::sys_packages::system_library(), world_path)?;
+            let trace = datalove::repl::record_world(&*fs, datalove::sys_packages::system_library(), world_path)?;
             let json = rmx::serde_json::to_string_pretty(&trace)?;
-            std::fs::write(record_path, json)
+            fs.write(record_path, json.as_bytes())
                 .with_context(|| fmt!("failed to write {}", record_path.display()))
         } else {
-            let local = local_library_for(None, &cwd)?;
+            let local = local_library_for(&*fs, None)?;
             datalove_repl_rat::run(
+                fs,
                 datalove::sys_packages::system_library,
                 local,
-                &cwd,
                 self.load.as_deref(),
             )
         }
@@ -406,7 +409,7 @@ impl ReplCommand {
 }
 
 impl ScriptCommand {
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: &dyn Fs) -> AnyResult<()> {
         use datalove::datafun;
         use datalove::datafun_jit::{
             DispatcherConfig, DispatcherMode, OptimizingDispatcher, DEFAULT_JIT_THRESHOLD,
@@ -414,7 +417,7 @@ impl ScriptCommand {
 
         let start = std::time::Instant::now();
         let db = datafun::Database::default();
-        let script = compile::compile_script(&db, &self.file_path, self.no_sys)?;
+        let script = compile::compile_script(fs, &db, &self.file_path, self.no_sys)?;
 
         // The production defaults: compiling a function on its hundredth
         // call, and a loop's code, by OSR, on its thousandth iteration. On
@@ -492,20 +495,20 @@ impl ScriptCommand {
 }
 
 impl ScriptIrCommand {
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: &dyn Fs) -> AnyResult<()> {
         let db = datalove::datafun::Database::default();
-        let script = compile::compile_script(&db, &self.file_path, self.no_sys)?;
+        let script = compile::compile_script(fs, &db, &self.file_path, self.no_sys)?;
         println!("{}", script.ir_unit);
         Ok(())
     }
 }
 
 impl AotCompileCommand {
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: &dyn Fs) -> AnyResult<()> {
         use datalove::datafun::driver::{aot, rider_build};
 
         let db = datalove::datafun::Database::default();
-        let script = compile::compile_script(&db, &self.file_path, self.no_sys)?;
+        let script = compile::compile_script(fs, &db, &self.file_path, self.no_sys)?;
         let registry = script.compiled.module_registry();
         let ir_unit = &script.ir_unit;
         let work_dir = script.descriptor.work_dir.as_ref()
@@ -525,7 +528,7 @@ impl AotCompileCommand {
         let should_link = self.link || self.run;
 
         if self.c {
-            return self.compile_via_c(ir_unit, &registry, &rider_libs, should_link);
+            return self.compile_via_c(fs, ir_unit, &registry, &rider_libs, should_link);
         }
 
         // Compile to object bytes using driver::aot.
@@ -558,7 +561,7 @@ impl AotCompileCommand {
                 let exe_path = if output_path.is_absolute() {
                     output_path.C()
                 } else {
-                    std::env::current_dir()?.join(&output_path)
+                    fs.current_dir().join(&output_path)
                 };
                 let result = aot::run_executable(&exe_path)
                     .map_err(|e| anyhow!("{}", e))?;
@@ -571,7 +574,7 @@ impl AotCompileCommand {
             }
         } else {
             // Write object file.
-            rmx::std::fs::write(&output_path, &obj_bytes)
+            fs.write(&output_path, &obj_bytes)
                 .with_context(|| format!("Failed to write object file: {}", output_path.display()))?;
             println!("Wrote object file: {}", output_path.display());
         }
@@ -586,6 +589,7 @@ impl AotCompileCommand {
     /// one step, so there is no unlinked halfway point to write out.
     fn compile_via_c(
         &self,
+        fs: &dyn Fs,
         ir_unit: &datalove::datafun_ir::IrCodeUnit,
         registry: &datalove::datafun_ir::FunctionRegistry,
         rider_libs: &[PathBuf],
@@ -621,7 +625,7 @@ impl AotCompileCommand {
             let exe_path = if output_path.is_absolute() {
                 output_path.C()
             } else {
-                std::env::current_dir()?.join(&output_path)
+                fs.current_dir().join(&output_path)
             };
             let result = aot::run_executable(&exe_path).map_err(|e| anyhow!("{}", e))?;
             if !result.stdout.is_empty() {
@@ -744,14 +748,14 @@ impl ScriptWorldCommand {
     /// A unit that fails to compile, returns early, or reads from one that did
     /// stays in the session and the units after it still run, as they would at
     /// the REPL. A runtime error ends the session, and the run with it.
-    fn run(&self) -> AnyResult<()> {
+    fn run(&self, fs: &dyn Fs) -> AnyResult<()> {
         use datalove::datafun;
         use datafun::driver::WorkspaceDescriptor;
         use datalove::datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
         use datalove::script_engine::{Engine, Eval, Unit};
 
         // Read and parse the worldfile.
-        let file_contents = rmx::std::fs::read_to_string(&self.file_path)
+        let file_contents = fs.read_to_string(&self.file_path)
             .with_context(|| format!("Failed to read worldfile: {}", self.file_path.display()))?;
         let parsed = parse_worldfile_sections(file_contents.as_bytes())
             .with_context(|| format!("Failed to parse worldfile: {}", self.file_path.display()))?;
@@ -820,11 +824,11 @@ impl ScriptWorldCommand {
             .collect();
         drop(module_compiler);
 
-        let cwd = rmx::std::env::current_dir().unwrap_or_default();
+        let cwd = fs.current_dir();
         let module_errors = engine.module_errors();
         if !module_errors.is_empty() {
             render::render_stored_module_diagnostics(
-                engine.db(), &module_errors.diagnostics, &self.file_path, &line_offsets, &cwd);
+                engine.db(), &module_errors.diagnostics, &self.file_path, &line_offsets, cwd);
             // Lowering errors have no spans yet, so they are printed as they are.
             for error in &module_errors.lowering_errors {
                 eprintln!("{}", error);
@@ -843,7 +847,7 @@ impl ScriptWorldCommand {
                 let mut line_offsets = line_offsets.C();
                 line_offsets.insert(compiler.last_source().expect("a unit was compiled"), offset);
                 compile_error = Some(compile::check_unit(
-                    compiler, compiled, &files, &self.file_path, &line_offsets, &cwd)
+                    compiler, compiled, &files, &self.file_path, &line_offsets, cwd)
                     .expect_err("a unit was reported as failing to compile"));
             });
             let error = match eval {

@@ -2,6 +2,7 @@
 
 use rmx::prelude::*;
 use serde::Serialize;
+use datalove_vio::Fs;
 
 use crate::script::{Engine, EnvBinding};
 use crate::{Outcome, Input, InputParse, PackageLibrary, Session, SystemLibrary};
@@ -53,12 +54,13 @@ pub fn run_source(session: &mut Session, source: &str) -> Vec<InputResult> {
 ///
 /// `local` is the workspace's own library, if it has one.
 pub fn run_script(
+    fs: &dyn Fs,
     sys: SystemLibrary,
     local: Option<PackageLibrary>,
     script_path: &std::path::Path,
 ) -> AnyResult<()> {
     let mut session = Session::new(Engine::with_local(sys, local)?);
-    let contents = std::fs::read_to_string(script_path)
+    let contents = fs.read_to_string(script_path)
         .context("failed to read script file")?;
 
     for result in run_source(&mut session, &contents) {

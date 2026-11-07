@@ -16,5 +16,6 @@ datalove-ct.workspace = true
 datalove-datafun.workspace = true
 datalove-repl.workspace = true
 datalove-script-engine.workspace = true
+datalove-vio.workspace = true
 # The fixtures run against the system library the binary ships.
 datalove-sys-packages.workspace = true

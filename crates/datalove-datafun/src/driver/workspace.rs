@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use datalove_datafun_pkg::package_load::{PackageWorld, Package};
+use datalove_vio::Fs;
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 
 /// Immutable snapshot of all compilation inputs.
@@ -296,7 +297,7 @@ impl WorkspaceDescriptor {
     /// This reads the library the compiler was built from, so it is for use
     /// inside the source tree; a distributed binary carries its own library
     /// and uses [`from_system_library`](Self::from_system_library).
-    pub async fn load_sys_dir(sys_dir: PathBuf) -> rmx::anyhow::Result<Self> {
+    pub fn load_sys_dir(fs: &dyn Fs, sys_dir: PathBuf) -> rmx::anyhow::Result<Self> {
         use datalove_datafun_pkg::package_load;
 
         let config = package_load::PackageWorldConfig {
@@ -304,7 +305,7 @@ impl WorkspaceDescriptor {
             dir_pkglib_local: None,
         };
 
-        let world = package_load::load_world(config).await?;
+        let world = package_load::load_world(fs, config)?;
         Ok(Self::from_package_world(&world, CompilerOptions::default()))
     }
 
@@ -447,8 +448,9 @@ impl WorkspaceDescriptor {
 ///
 /// A command given a script looks beside the script, and then, for a script
 /// in a directory named `scripts`, beside that directory. One given no script
-/// looks in `cwd`. A command given a script does not look in `cwd`, so what a
-/// script means does not depend on where it is run from.
+/// looks in the working directory of `fs`. A command given a script does not
+/// look there, so what a script means does not depend on where it is run
+/// from.
 ///
 /// Nothing further up is looked at. With no manifest to say where a workspace
 /// begins, a walk to the root would find directories that are not workspaces
@@ -457,27 +459,28 @@ impl WorkspaceDescriptor {
 ///
 /// This is the command line's rule. The module compiler itself takes whatever library
 /// it is given.
-pub fn find_local_library(script: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
+pub fn find_local_library(fs: &dyn Fs, script: Option<&Path>) -> Option<PathBuf> {
+    let cwd = fs.current_dir();
     let Some(script) = script else {
         let here = cwd.join("local");
-        return here.is_dir().then_some(here);
+        return fs.is_dir(&here).then_some(here);
     };
     let script = cwd.join(script);
     let dir = script.parent()?;
     let beside = dir.join("local");
-    if beside.is_dir() {
+    if fs.is_dir(&beside) {
         return Some(beside);
     }
     if dir.file_name()? != "scripts" {
         return None;
     }
     let above = dir.parent()?.join("local");
-    above.is_dir().then_some(above)
+    fs.is_dir(&above).then_some(above)
 }
 
 /// Load the `local` library from `dir`.
-pub fn load_local_library(dir: &Path) -> AnyResult<PackageLibrary> {
-    let packages = datalove_datafun_pkg::package_load::load_library_dir(&dir.to_path_buf())
+pub fn load_local_library(fs: &dyn Fs, dir: &Path) -> AnyResult<PackageLibrary> {
+    let packages = datalove_datafun_pkg::package_load::load_library_dir(fs, dir)
         .with_context(|| fmt!("failed to load the local library at {}", dir.display()))?;
     Ok(package_library_from_map("local", &packages))
 }
@@ -485,9 +488,9 @@ pub fn load_local_library(dir: &Path) -> AnyResult<PackageLibrary> {
 /// The `local` library a command compiles against, if it finds one.
 ///
 /// Looked for where [`find_local_library`] says.
-pub fn local_library_for(script: Option<&Path>, cwd: &Path) -> AnyResult<Option<PackageLibrary>> {
-    find_local_library(script, cwd)
-        .map(|dir| load_local_library(&dir))
+pub fn local_library_for(fs: &dyn Fs, script: Option<&Path>) -> AnyResult<Option<PackageLibrary>> {
+    find_local_library(fs, script)
+        .map(|dir| load_local_library(fs, &dir))
         .transpose()
 }
 
@@ -495,20 +498,20 @@ impl WorkspaceDescriptor {
     /// The workspace a command compiles in.
     ///
     /// The system library unless `no_sys`, and the `local` library that
-    /// [`find_local_library`] finds for `script`, or in `cwd` for a command
-    /// given none.
+    /// [`find_local_library`] finds for `script`, or in the working directory
+    /// for a command given none.
     pub fn for_command(
+        fs: &dyn Fs,
         sys: &SystemLibrary,
         no_sys: bool,
         script: Option<&Path>,
-        cwd: &Path,
     ) -> AnyResult<Self> {
         let descriptor = if no_sys {
             WorkspaceDescriptor::empty()
         } else {
             WorkspaceDescriptor::from_system_library(sys)
         };
-        Ok(match local_library_for(script, cwd)? {
+        Ok(match local_library_for(fs, script)? {
             Some(local) => descriptor.with_user_library(local)?,
             None => descriptor,
         })
@@ -1031,89 +1034,94 @@ mod tests {
 #[cfg(test)]
 mod local_library_tests {
     use super::*;
-    use std::fs;
+    use datalove_vio::MemFs;
 
-    /// A directory to lay a workspace out in, with `dirs` made inside it.
-    fn layout(dirs: &[&str]) -> rmx::tempfile::TempDir {
-        let root = rmx::tempfile::tempdir().unwrap();
+    /// A filesystem at `cwd` to lay a workspace out in, with `dirs` made
+    /// inside `/ws`.
+    fn layout_at(cwd: &str, dirs: &[&str]) -> MemFs {
+        let fs = MemFs::with_current_dir(cwd);
+        fs.create_dir_all(Path::new("/ws")).unwrap();
         for dir in dirs {
-            fs::create_dir_all(root.path().join(dir)).unwrap();
+            fs.create_dir_all(&Path::new("/ws").join(dir)).unwrap();
         }
-        root
+        fs
+    }
+
+    fn layout(dirs: &[&str]) -> MemFs {
+        layout_at("/", dirs)
+    }
+
+    fn ws(path: &str) -> PathBuf {
+        Path::new("/ws").join(path)
     }
 
     #[test]
     fn local_beside_the_script() {
-        let ws = layout(&["local"]);
-        let found = find_local_library(Some(&ws.path().join("s.dfs")), Path::new("/"));
-        assert_eq!(found, Some(ws.path().join("local")));
+        let fs = layout(&["local"]);
+        let found = find_local_library(&fs, Some(&ws("s.dfs")));
+        assert_eq!(found, Some(ws("local")));
     }
 
     #[test]
     fn local_beside_a_scripts_directory() {
-        let ws = layout(&["local", "scripts"]);
-        let script = ws.path().join("scripts").join("s.dfs");
-        assert_eq!(find_local_library(Some(&script), Path::new("/")), Some(ws.path().join("local")));
+        let fs = layout(&["local", "scripts"]);
+        assert_eq!(find_local_library(&fs, Some(&ws("scripts/s.dfs"))), Some(ws("local")));
     }
 
     #[test]
     fn local_beside_the_script_comes_first() {
-        let ws = layout(&["local", "scripts/local"]);
-        let script = ws.path().join("scripts").join("s.dfs");
-        let found = find_local_library(Some(&script), Path::new("/"));
-        assert_eq!(found, Some(ws.path().join("scripts").join("local")));
+        let fs = layout(&["local", "scripts/local"]);
+        let found = find_local_library(&fs, Some(&ws("scripts/s.dfs")));
+        assert_eq!(found, Some(ws("scripts/local")));
     }
 
     #[test]
     fn only_a_directory_named_scripts_is_looked_above() {
-        let ws = layout(&["local", "tools"]);
-        let script = ws.path().join("tools").join("s.dfs");
-        assert_eq!(find_local_library(Some(&script), Path::new("/")), None);
+        let fs = layout(&["local", "tools"]);
+        assert_eq!(find_local_library(&fs, Some(&ws("tools/s.dfs"))), None);
     }
 
     #[test]
     fn nothing_further_up() {
-        let ws = layout(&["local", "a/scripts"]);
-        let script = ws.path().join("a").join("scripts").join("s.dfs");
-        assert_eq!(find_local_library(Some(&script), Path::new("/")), None);
+        let fs = layout(&["local", "a/scripts"]);
+        assert_eq!(find_local_library(&fs, Some(&ws("a/scripts/s.dfs"))), None);
     }
 
     #[test]
     fn a_script_is_found_relative_to_cwd() {
-        let ws = layout(&["local"]);
-        let found = find_local_library(Some(Path::new("s.dfs")), ws.path());
-        assert_eq!(found, Some(ws.path().join("local")));
+        let fs = layout_at("/ws", &["local"]);
+        let found = find_local_library(&fs, Some(Path::new("s.dfs")));
+        assert_eq!(found, Some(ws("local")));
     }
 
     #[test]
     fn a_script_does_not_look_in_cwd() {
-        let ws = layout(&["local", "elsewhere"]);
-        let script = ws.path().join("elsewhere").join("s.dfs");
-        assert_eq!(find_local_library(Some(&script), ws.path()), None);
+        let fs = layout_at("/ws", &["local", "elsewhere"]);
+        assert_eq!(find_local_library(&fs, Some(&ws("elsewhere/s.dfs"))), None);
     }
 
     #[test]
     fn without_a_script_cwd() {
-        let ws = layout(&["local"]);
-        assert_eq!(find_local_library(None, ws.path()), Some(ws.path().join("local")));
-        let empty = layout(&[]);
-        assert_eq!(find_local_library(None, empty.path()), None);
+        let fs = layout_at("/ws", &["local"]);
+        assert_eq!(find_local_library(&fs, None), Some(ws("local")));
+        let empty = layout_at("/ws", &[]);
+        assert_eq!(find_local_library(&empty, None), None);
     }
 
     #[test]
     fn a_file_named_local_is_not_a_library() {
-        let ws = layout(&[]);
-        fs::write(ws.path().join("local"), "").unwrap();
-        assert_eq!(find_local_library(Some(&ws.path().join("s.dfs")), Path::new("/")), None);
+        let fs = layout(&[]);
+        fs.add_file(ws("local"), "");
+        assert_eq!(find_local_library(&fs, Some(&ws("s.dfs"))), None);
     }
 
     #[test]
     fn local_library_loads_its_packages() {
-        let ws = layout(&["local/app"]);
-        let module = ws.path().join("local/app/greet.dfm");
-        fs::write(&module, "fun answer(): int\n  ret 42\nend fun\n").unwrap();
+        let fs = layout(&[]);
+        let module = ws("local/app/greet.dfm");
+        fs.add_file(&module, "fun answer(): int\n  ret 42\nend fun\n");
 
-        let library = load_local_library(&ws.path().join("local")).unwrap();
+        let library = load_local_library(&fs, &ws("local")).unwrap();
         assert_eq!(library.name, "local");
         let greet = &library.packages["app"].modules["greet"];
         assert_eq!(greet.origin.as_deref(), Some(module.as_path()));
@@ -1121,15 +1129,15 @@ mod local_library_tests {
 
     #[test]
     fn local_library_takes_a_rider() {
-        let ws = layout(&["local/app/rider"]);
-        fs::write(ws.path().join("local/app/m.dfm"), "").unwrap();
-        fs::write(ws.path().join("local/app/rider/rider.dli"), "native fun f(): int\n").unwrap();
-        fs::write(
-            ws.path().join("local/app/manifest.toml"),
+        let fs = layout(&[]);
+        fs.add_file(ws("local/app/m.dfm"), "");
+        fs.add_file(ws("local/app/rider/rider.dli"), "native fun f(): int\n");
+        fs.add_file(
+            ws("local/app/manifest.toml"),
             "[rider]\nname = \"app-rider\"\nversion = \"0.1.0\"\n",
-        ).unwrap();
+        );
 
-        let library = load_local_library(&ws.path().join("local")).unwrap();
+        let library = load_local_library(&fs, &ws("local")).unwrap();
         assert!(library.packages["app"].rider.is_some());
         let workspace = WorkspaceDescriptor::empty().with_user_library(library).unwrap();
         assert_eq!(workspace.user_rider_crates().len(), 1);

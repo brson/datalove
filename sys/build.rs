@@ -174,7 +174,8 @@ fn rider_crate(package_dir: &Path) -> Option<(String, String)> {
     }
 
     let has_rider = package_dir.join("rider").join("rider.dli").is_file();
-    let manifest = datalove_pkg_manifest::load(package_dir, has_rider)
+    let fs = datalove_vio::HostFs::new().expect("the working directory");
+    let manifest = datalove_pkg_manifest::load(&fs, package_dir, has_rider)
         .unwrap_or_else(|e| panic!("{e}"));
 
     manifest

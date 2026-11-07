@@ -8,13 +8,13 @@ use datalove_repl::{Trace, record_world};
 
 /// Record a worldfile of these sections, each a header and its source.
 fn record(sections: &[(&str, &str)]) -> Trace {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("session.world");
+    let fs = datalove_vio::MemFs::new();
+    let path = std::path::Path::new("/session.world");
     let text: String = sections.iter()
         .map(|(header, source)| fmt!("----------\n{header}\n----------\n{source}\n"))
         .collect();
-    std::fs::write(&path, text).X();
-    record_world(datalove_sys_packages::system_library(), &path).X()
+    fs.add_file(path, text);
+    record_world(&fs, datalove_sys_packages::system_library(), path).X()
 }
 
 /// Each unit of a step: its number, status, and whether the step compiled

@@ -68,9 +68,8 @@ fn fixtures(filters: &[String]) -> Vec<String> {
 /// Compile the library and each fixture, and write what they compiled to.
 fn prepare(names: &[String]) {
     let work_dir = repo_root().join("target/datalove-work/ir_replay_tests");
-    let descriptor = rmx::futures::executor::block_on(
-        WorkspaceDescriptor::load_sys_dir(repo_root().join("sys"))
-    ).expect("the standard library's sources must load")
+    let descriptor = WorkspaceDescriptor::load_sys_dir(&datalove_vio::HostFs::new().unwrap(), repo_root().join("sys"))
+        .expect("the standard library's sources must load")
         .with_work_dir(work_dir);
     let mut world = datafun::driver::CompiledWorld::new(&descriptor);
     let out = out_dir();

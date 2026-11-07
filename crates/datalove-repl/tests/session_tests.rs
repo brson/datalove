@@ -6,13 +6,16 @@ use rmx::prelude::*;
 use datalove_repl::app::{EntryStatus, ReplApp};
 use datalove_repl::{Command, ReplCommand, ThreadedExecutor, load_session};
 use datalove_repl::script::Unit;
+use datalove_vio::{DynFs, MemFs};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 type App = ReplApp<ThreadedExecutor>;
 
-fn app(save_path: &std::path::Path) -> App {
+fn app(fs: &DynFs, save_path: &Path) -> App {
     let executor = ThreadedExecutor::spawn(datalove_sys_packages::system_library, None);
     let mut app = ReplApp::with_executor(executor);
-    app.set_session_path(save_path.to_path_buf());
+    app.set_session_path(fs.clone(), save_path.to_path_buf());
     app
 }
 
@@ -45,11 +48,11 @@ fn outcomes(app: &App) -> Vec<(String, bool)> {
 
 #[test]
 fn a_saved_history_loads_back_to_the_same_session() {
-    let dir = rmx::tempfile::tempdir().X();
-    let first_path = dir.path().join("first.world");
-    let second_path = dir.path().join("second.world");
+    let fs: DynFs = Arc::new(MemFs::new());
+    let first_path = PathBuf::from("/first.world");
+    let second_path = PathBuf::from("/second.world");
 
-    let mut first = app(&first_path);
+    let mut first = app(&fs, &first_path);
     submit(&mut first, "let a: int = 2");
     // The line that opens the definition, then the definition.
     submit(&mut first, "fun double(x: int): int");
@@ -63,7 +66,7 @@ fn a_saved_history_loads_back_to_the_same_session() {
         "{:?}", first.history().last(),
     );
 
-    let inputs = load_session(&first_path).X();
+    let inputs = load_session(&*fs, &first_path).X();
     let kinds: Vec<&Command> = inputs.iter().map(|saved| &saved.command).collect();
     assert!(matches!(kinds[..], [
         Command::Unit(Unit::Fragment(_)),
@@ -73,7 +76,7 @@ fn a_saved_history_loads_back_to_the_same_session() {
         Command::Unit(Unit::Expression(_)),
     ]), "the save itself is not replayed: {kinds:?}");
 
-    let mut second = app(&second_path);
+    let mut second = app(&fs, &second_path);
     second.replay(inputs);
     settle(&mut second);
 
@@ -84,34 +87,34 @@ fn a_saved_history_loads_back_to_the_same_session() {
 
     submit(&mut second, "/save");
     assert_eq!(
-        std::fs::read_to_string(&second_path).X(),
-        std::fs::read_to_string(&first_path).X(),
+        fs.read_to_string(&second_path).X(),
+        fs.read_to_string(&first_path).X(),
     );
 }
 
 #[test]
 fn a_worldfile_with_modules_is_not_a_session() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("modules.world");
-    std::fs::write(&path, "----------\nmodule local/pkg/m\n----------\n\nfun f()\nend fun\n").X();
-    assert!(load_session(&path).is_err());
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/modules.world");
+    fs.write(&path, "----------\nmodule local/pkg/m\n----------\n\nfun f()\nend fun\n".as_bytes()).X();
+    assert!(load_session(&*fs, &path).is_err());
 }
 
 #[test]
 fn a_repl_command_section_has_to_hold_one() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("bad.world");
-    std::fs::write(&path, "----------\nrepl-command\n----------\n\nlet a = 1\n").X();
-    assert!(load_session(&path).is_err());
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/bad.world");
+    fs.write(&path, "----------\nrepl-command\n----------\n\nlet a = 1\n".as_bytes()).X();
+    assert!(load_session(&*fs, &path).is_err());
 }
 
 /// `/load` takes the session back to what was saved, whatever was done since.
 #[test]
 fn load_returns_to_the_saved_session() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("session.world");
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/session.world");
 
-    let mut app = app(&path);
+    let mut app = app(&fs, &path);
     submit(&mut app, "let a: int = 2");
     submit(&mut app, "let b = a + 1");
     submit(&mut app, "/save");
@@ -133,8 +136,8 @@ fn load_returns_to_the_saved_session() {
 /// in the new session, and the app keeps it.
 #[test]
 fn input_queued_behind_a_runtime_error_is_kept() {
-    let dir = rmx::tempfile::tempdir().X();
-    let mut app = app(&dir.path().join("session.world"));
+    let fs: DynFs = Arc::new(MemFs::new());
+    let mut app = app(&fs, &PathBuf::from("/session.world"));
 
     let unit = |source: &str| datalove_repl::SavedInput {
         input: source.S(),
@@ -167,10 +170,10 @@ fn code(app: &App) -> Vec<(Option<u32>, String)> {
 /// with them in it saved and loaded back to the same units.
 #[test]
 fn edits_save_and_load_back() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("session.world");
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/session.world");
 
-    let mut app = app(&path);
+    let mut app = app(&fs, &path);
     submit(&mut app, "let a = 1");
     submit(&mut app, "let b = a + 1");
     submit(&mut app, "b");
@@ -212,10 +215,10 @@ fn edits_save_and_load_back() {
 /// saved and loaded back to the same units.
 #[test]
 fn moves_save_and_load_back() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("session.world");
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/session.world");
 
-    let mut app = app(&path);
+    let mut app = app(&fs, &path);
     for unit in ["var a = 1", "let b = a + 1", "set a = 10"] {
         submit(&mut app, unit);
     }
@@ -238,8 +241,8 @@ fn moves_save_and_load_back() {
 /// is already in changes nothing.
 #[test]
 fn moves_that_go_nowhere_are_errors() {
-    let dir = rmx::tempfile::tempdir().X();
-    let mut app = app(&dir.path().join("session.world"));
+    let fs: DynFs = Arc::new(MemFs::new());
+    let mut app = app(&fs, &PathBuf::from("/session.world"));
     for unit in ["let a = 1", "let b = 2"] {
         submit(&mut app, unit);
     }
@@ -254,8 +257,8 @@ fn moves_that_go_nowhere_are_errors() {
 /// Undo moves a unit back where it was, and redo moves it again.
 #[test]
 fn undo_and_redo_a_move() {
-    let dir = rmx::tempfile::tempdir().X();
-    let mut app = app(&dir.path().join("session.world"));
+    let fs: DynFs = Arc::new(MemFs::new());
+    let mut app = app(&fs, &PathBuf::from("/session.world"));
     for unit in ["let a = 1", "let b = 2", "let c = 3"] {
         submit(&mut app, unit);
     }
@@ -284,8 +287,8 @@ fn marks(app: &App) -> Vec<(Option<u32>, bool, bool)> {
 /// no longer compiles does not run.
 #[test]
 fn the_code_shows_what_each_step_compiled_and_ran() {
-    let dir = rmx::tempfile::tempdir().X();
-    let mut app = app(&dir.path().join("session.world"));
+    let fs: DynFs = Arc::new(MemFs::new());
+    let mut app = app(&fs, &PathBuf::from("/session.world"));
     for unit in ["let a = 1", "let b = 2", "let c = 30", "let d = b + 5"] {
         submit(&mut app, unit);
     }
@@ -326,11 +329,11 @@ fn a_script_splits_at_its_separator_lines() {
 /// would show the help to someone loading it who did not ask.
 #[test]
 fn a_saved_help_is_not_replayed() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("help.world");
-    std::fs::write(&path, "----------\nrepl-command\n----------\n\n/help\n\n\
-        ----------\nscriptunit-fragment\n----------\n\nlet a = 1\n").X();
-    let inputs = load_session(&path).X();
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/help.world");
+    fs.write(&path, "----------\nrepl-command\n----------\n\n/help\n\n\
+        ----------\nscriptunit-fragment\n----------\n\nlet a = 1\n".as_bytes()).X();
+    let inputs = load_session(&*fs, &path).X();
     let kinds: Vec<&Command> = inputs.iter().map(|saved| &saved.command).collect();
     assert!(matches!(kinds[..], [Command::Unit(Unit::Fragment(_))]), "{kinds:?}");
 }
@@ -357,8 +360,8 @@ fn redo(app: &mut App) {
 /// checked against the engine's after every step.
 #[test]
 fn undo_and_redo_go_back_and_forth() {
-    let dir = rmx::tempfile::tempdir().X();
-    let mut app = app(&dir.path().join("session.world"));
+    let fs: DynFs = Arc::new(MemFs::new());
+    let mut app = app(&fs, &PathBuf::from("/session.world"));
     for unit in ["let a = 1", "let b = a + 1", "let c = 30"] {
         submit(&mut app, unit);
     }
@@ -398,9 +401,9 @@ fn undo_and_redo_go_back_and_forth() {
 /// same numbers.
 #[test]
 fn new_input_drops_the_redo_stack() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("session.world");
-    let mut app = app(&path);
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/session.world");
+    let mut app = app(&fs, &path);
     for unit in ["let a = 1", "let b = 2", "let c = 3"] {
         submit(&mut app, unit);
     }
@@ -424,9 +427,9 @@ fn new_input_drops_the_redo_stack() {
 /// `/load` runs in the session it loads, after its units.
 #[test]
 fn commands_typed_without_waiting_run_in_order() {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("session.world");
-    let mut app = app(&path);
+    let fs: DynFs = Arc::new(MemFs::new());
+    let path = PathBuf::from("/session.world");
+    let mut app = app(&fs, &path);
     submit(&mut app, "let a = 1");
     submit(&mut app, "/save");
 
@@ -459,8 +462,8 @@ fn detail(app: &mut App) -> datalove_repl::UnitDetail {
 /// of one that failed, its diagnostics, which show the Detail tab.
 #[test]
 fn the_selected_unit_is_described() {
-    let dir = rmx::tempfile::tempdir().X();
-    let mut app = app(&dir.path().join("session.world"));
+    let fs: DynFs = Arc::new(MemFs::new());
+    let mut app = app(&fs, &PathBuf::from("/session.world"));
     submit(&mut app, "var a = 1");
     submit(&mut app, "set a = a + 1");
 

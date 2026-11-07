@@ -7,6 +7,7 @@
 
 use rmx::prelude::*;
 use serde::Serialize;
+use datalove_vio::Fs;
 use std::collections::HashMap;
 
 use crate::app::{UnitStatus, status_of};
@@ -84,8 +85,8 @@ pub fn record_inputs(session: &mut Session, inputs: Vec<SavedInput>) -> Trace {
 /// and riders it requires beside it; see [`crate::read_world`]. Its modules
 /// are compiled from the start, as `script-world` compiles them, and one
 /// that does not compile is an error in the worldfile.
-pub fn record_world(sys: SystemLibrary, path: &std::path::Path) -> AnyResult<Trace> {
-    let world = crate::read_world(path)?;
+pub fn record_world(fs: &dyn Fs, sys: SystemLibrary, path: &std::path::Path) -> AnyResult<Trace> {
+    let world = crate::read_world(fs, path)?;
     let (workspace, modules) = world.workspace(&sys)?;
     let engine = Engine::with_options(sys, workspace, datalove_datafun::DebugOutputMode::Disabled, modules)?;
     let errors: Vec<String> = engine.module_errors().broken.iter()

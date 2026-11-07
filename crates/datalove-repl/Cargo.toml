@@ -12,6 +12,7 @@ rmx.workspace = true
 datalove-datafun.workspace = true
 datalove-script-engine.workspace = true
 datalove-paths.workspace = true
+datalove-vio.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

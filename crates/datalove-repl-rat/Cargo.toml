@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 rmx.workspace = true
 datalove-repl.workspace = true
+datalove-vio.workspace = true
 ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 tui-textarea.package = "tui-textarea-2"

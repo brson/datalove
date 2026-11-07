@@ -22,6 +22,8 @@ use std::io;
 use std::fs::File;
 use std::path::Path;
 
+use datalove_vio::DynFs;
+
 use crate::RatatuiApp;
 use crate::repl::{self, PackageLibrary, SystemLibrary, ThreadedExecutor};
 use crate::repl::app::{Panel, ReplExecutor, Scroll};
@@ -58,19 +60,19 @@ impl Drop for TerminalGuard {
 
 /// Run the ratatui-based REPL against the caller's system library.
 ///
-/// `local` is the workspace's own library, if it has one. `/save` writes
-/// the history to [`repl::SESSION_FILE_NAME`] in `workspace_root`, and
-/// `/load` reads it back. `load` is a session saved earlier to replay before
-/// the first prompt.
+/// `local` is the workspace's own library, if it has one. The workspace is
+/// the working directory of `fs`: `/save` writes the history to
+/// [`repl::SESSION_FILE_NAME`] there, and `/load` reads it back. `load` is a
+/// session saved earlier to replay before the first prompt.
 pub fn run(
+    fs: DynFs,
     sys: fn() -> SystemLibrary,
     local: Option<PackageLibrary>,
-    workspace_root: &Path,
     load: Option<&Path>,
 ) -> AnyResult<()> {
     // Before the terminal is taken over, so a file that cannot be read is
     // reported where the user can see it.
-    let replayed = load.map(repl::load_session).transpose()?;
+    let replayed = load.map(|path| repl::load_session(&*fs, path)).transpose()?;
 
     // Redirect stderr to a log file in temp directory to avoid corrupting terminal in raw mode.
     let stderr_log_path = std::env::temp_dir().join("datalove-repl.stderr");
@@ -111,7 +113,8 @@ pub fn run(
     // Create app and run it, passing the stderr log path.
     let executor = ThreadedExecutor::spawn(sys, local);
     let mut app = RatatuiApp::with_stderr_log(executor, stderr_log_path);
-    app.repl.set_session_path(workspace_root.join(repl::SESSION_FILE_NAME));
+    let session_path = fs.current_dir().join(repl::SESSION_FILE_NAME);
+    app.repl.set_session_path(fs, session_path);
     if let Some(inputs) = replayed {
         app.repl.replay(inputs);
     }

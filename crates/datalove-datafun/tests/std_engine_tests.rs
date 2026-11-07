@@ -59,9 +59,8 @@ fn describe_sys() -> WorkspaceDescriptor {
     // The work dir is unique to this suite so a concurrently running suite
     // builds its own component rather than rebuilding over this one's.
     let work_dir = repo_root.join("target").join("datalove-work").join("std_engine_tests");
-    rmx::futures::executor::block_on(
-        WorkspaceDescriptor::load_sys_dir(repo_root.join("sys"))
-    ).expect("the standard library's sources must load")
+    WorkspaceDescriptor::load_sys_dir(&datalove_vio::HostFs::new().unwrap(), repo_root.join("sys"))
+        .expect("the standard library's sources must load")
         .with_work_dir(work_dir)
 }
 

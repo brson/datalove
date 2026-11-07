@@ -444,8 +444,10 @@ are left out:
 - What was undone, which the `/save` dropped when it was entered.
 - Whatever a reset already took out of the history.
 
-An app given no path with `set_session_path`, as in the tests, answers `/save`
-and `/load` with an error.
+`set_session_path` takes the filesystem the file is in along with its path:
+the terminal app gives it the host's, and the session tests a `MemFs`. An app
+given no path, as in most of the app tests, answers `/save` and `/load` with an
+error.
 
 **A load replays through the app,** so the inputs show up in the history as
 though they had been typed. `ReplApp::replay` sends each one straight to

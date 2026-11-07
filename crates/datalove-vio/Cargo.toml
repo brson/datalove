@@ -1,0 +1,16 @@
+[package]
+name = "datalove-vio"
+description = "The file I/O interface datalove reads and writes through."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+# Deliberately std alone. The package manifest reader sits on this, and a build
+# script reads manifests, so nothing may come in behind it; later the runtime
+# will sit on it too.
+[dependencies]
+
+[dev-dependencies]
+tempfile = "3"

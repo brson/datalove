@@ -78,10 +78,10 @@ impl Fixture {
         if self.library.is_empty() {
             return Workspace::system();
         }
-        let dir = rmx::tempfile::tempdir().X();
-        let path = dir.path().join("library.world");
-        std::fs::write(&path, &self.library).X();
-        let world = datalove_repl::read_world(&path).X();
+        let fs = datalove_vio::MemFs::new();
+        let path = Path::new("/library.world");
+        fs.add_file(path, &self.library);
+        let world = datalove_repl::read_world(&fs, path).X();
         let sys = datalove_sys_packages::system_library();
         let (descriptor, also_roots) = world.workspace(&sys).X();
         Workspace { sys, descriptor, also_roots }

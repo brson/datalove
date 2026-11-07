@@ -5,6 +5,7 @@
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
+use datalove_vio::Fs;
 
 pub use datalove_script_engine as script;
 use script::Unit;
@@ -46,8 +47,8 @@ pub struct SavedInput {
 /// else, and the interactive REPL takes its library from the workspace, so a
 /// worldfile with modules, data, or riders in it is not one to load; a replay
 /// is, and [`read_world`] reads it.
-pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
-    let world = read_world(path)?;
+pub fn load_session(fs: &dyn Fs, path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
+    let world = read_world(fs, path)?;
     if let Some(section) = world.library.first() {
         bail!(
             "{} holds a '{}' section, and a REPL session is script units and \
@@ -97,12 +98,12 @@ impl World {
 /// nothing but what is shown, and would show the help to someone who did not
 /// ask. The sections that edit modules mid-file, which the memoization tests
 /// use, are not a session's.
-pub fn read_world(path: &std::path::Path) -> AnyResult<World> {
+pub fn read_world(fs: &dyn Fs, path: &std::path::Path) -> AnyResult<World> {
     use datalove_datafun::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 
-    let file = std::fs::File::open(path)
+    let text = fs.read(path)
         .with_context(|| fmt!("failed to open {}", path.display()))?;
-    let parsed = parse_worldfile_sections(file)
+    let parsed = parse_worldfile_sections(text.as_slice())
         .with_context(|| fmt!("failed to read {}", path.display()))?;
     let mut library = Vec::new();
     let mut inputs = Vec::new();

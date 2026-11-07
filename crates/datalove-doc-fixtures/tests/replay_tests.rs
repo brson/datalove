@@ -54,9 +54,9 @@ fn workspace_root() -> PathBuf {
 /// A replay's worldfile, taken apart: the session, written to a worldfile of
 /// its own without the tables, and the tables.
 struct Parsed {
-    /// Keeps the session's worldfile.
-    _dir: rmx::tempfile::TempDir,
-    /// The worldfile of the session alone.
+    /// Holds the session's worldfile.
+    fs: datalove_vio::MemFs,
+    /// The worldfile of the session alone, in `fs`.
     session: PathBuf,
     /// How many inputs the session has.
     inputs: usize,
@@ -86,10 +86,10 @@ fn parse(replay: &Replay) -> Parsed {
             }
         }
     }
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join(replay.world);
-    std::fs::write(&path, session).X();
-    Parsed { _dir: dir, session: path, inputs, checks }
+    let fs = datalove_vio::MemFs::new();
+    let path = Path::new("/").join(replay.world);
+    fs.add_file(&path, session);
+    Parsed { fs, session: path, inputs, checks }
 }
 
 /// The change an input makes, naming units by number as the session numbers
@@ -146,8 +146,8 @@ fn steps(replay: &Replay, inputs: &[SavedInput], checks: Vec<(usize, Check)>) ->
 
 /// The `.replay.js` file for a replay: its trace, registered with the player
 /// under its name.
-fn render(replay: &Replay, session: &Path) -> String {
-    let trace = record_world(datalove_sys_packages::system_library(), session).X();
+fn render(replay: &Replay, parsed: &Parsed) -> String {
+    let trace = record_world(&parsed.fs, datalove_sys_packages::system_library(), &parsed.session).X();
     let json = rmx::serde_json::to_string_pretty(&trace).X();
     fmt!(
         "// Recorded by crates/datalove-doc-fixtures from replays/{}.\n\
@@ -162,7 +162,7 @@ fn every_step_table_holds_for_the_engine() {
     let mut failures = Vec::new();
     for replay in REPLAYS {
         let parsed = parse(replay);
-        let world = read_world(&parsed.session).X();
+        let world = read_world(&parsed.fs, &parsed.session).X();
         assert_eq!(world.inputs.len(), parsed.inputs, "{}: every input is replayed", replay.world);
         let sys = datalove_sys_packages::system_library();
         let (descriptor, also_roots) = world.workspace(&sys).X();
@@ -179,7 +179,7 @@ fn replays_are_fresh() {
     for replay in REPLAYS {
         let path = workspace_root().join(replay.output);
         let parsed = parse(replay);
-        let rendered = render(replay, &parsed.session);
+        let rendered = render(replay, &parsed);
         if bless {
             std::fs::write(&path, rendered).X();
         } else if std::fs::read_to_string(&path).ok().as_deref() != Some(rendered.as_str()) {

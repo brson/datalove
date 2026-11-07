@@ -2,6 +2,7 @@
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
+use datalove_vio::DynFs;
 
 use crate as repl;
 use repl::script;
@@ -418,7 +419,7 @@ pub struct ReplApp<E: ReplExecutor> {
     stderr_log_path: Option<std::path::PathBuf>,
     /// Where `/save` writes the history and `/load` reads it back, if they
     /// have anywhere to.
-    session_path: Option<std::path::PathBuf>,
+    session_path: Option<(DynFs, std::path::PathBuf)>,
 }
 
 impl<E: ReplExecutor> ReplApp<E> {
@@ -470,8 +471,8 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     /// Have `/save` write the history to this path, and `/load` read it.
-    pub fn set_session_path(&mut self, path: std::path::PathBuf) {
-        self.session_path = Some(path);
+    pub fn set_session_path(&mut self, fs: DynFs, path: std::path::PathBuf) {
+        self.session_path = Some((fs, path));
     }
 
     /// Submit input text for processing.
@@ -1209,10 +1210,10 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     /// Read the session `/save` writes, for `/load`.
     fn load(&self) -> AnyResult<Vec<repl::SavedInput>> {
-        let Some(path) = &self.session_path else {
+        let Some((fs, path)) = &self.session_path else {
             bail!("this session was not given anywhere to load from");
         };
-        repl::load_session(path)
+        repl::load_session(&**fs, path)
     }
 
     /// Write the history up to and including the `/save` with this id.
@@ -1224,7 +1225,7 @@ impl<E: ReplExecutor> ReplApp<E> {
     fn save(&self, save_id: u64) -> AnyResult<repl::Outcome> {
         use datalove_datafun::package_load_worldfile::{WorldfileSection, write_worldfile};
 
-        let Some(path) = &self.session_path else {
+        let Some((fs, path)) = &self.session_path else {
             bail!("this session was not given anywhere to save to");
         };
 
@@ -1244,7 +1245,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             sections.push(section);
         }
 
-        std::fs::write(path, write_worldfile(&sections)?)
+        fs.write(path, write_worldfile(&sections)?.as_bytes())
             .with_context(|| fmt!("failed to write {}", path.display()))?;
         Ok(repl::Outcome::Saved { path: path.display().to_string(), inputs: sections.len() })
     }

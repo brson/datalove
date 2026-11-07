@@ -1,14 +1,11 @@
-//! Package loading from filesystem.
+//! Package loading from a filesystem.
 //!
 //! Plain Rust types for loading packages before converting to Salsa types.
 
 use rmx::prelude::*;
-use rmx::std::path::PathBuf;
-use rmx::futures::channel::mpsc;
-use rmx::std::thread;
+use rmx::std::path::{Path, PathBuf};
 use rmx::std::collections::BTreeMap;
-use rmx::std::fs;
-use rmx::futures::executor::block_on;
+use datalove_vio::Fs;
 
 pub type PackageName = String;
 pub type ModuleName = String;
@@ -80,12 +77,13 @@ pub struct PackageModule {
     pub text: String,
 }
 
-pub async fn load_world(
+pub fn load_world(
+    fs: &dyn Fs,
     config: PackageWorldConfig,
 ) -> AnyResult<PackageWorld> {
-    let pkglib_system = load_library(&config.dir_pkglib_system).await?;
+    let pkglib_system = load_library_dir(fs, &config.dir_pkglib_system)?;
     let pkglib_local = if let Some(ref dir) = config.dir_pkglib_local {
-        load_library(dir).await?
+        load_library_dir(fs, dir)?
     } else {
         BTreeMap::new()
     };
@@ -95,31 +93,26 @@ pub async fn load_world(
 }
 
 /// Load one library from its directory: every package directory in it.
-pub fn load_library_dir(dir: &PathBuf) -> AnyResult<BTreeMap<PackageName, Package>> {
-    block_on(load_library(dir))
-}
-
-async fn load_library(
-    dir: &PathBuf,
+pub fn load_library_dir(
+    fs: &dyn Fs,
+    dir: &Path,
 ) -> AnyResult<BTreeMap<PackageName, Package>> {
-    if !dir.is_dir() {
+    if !fs.is_dir(dir) {
         bail!("library path not a directory: '{dir:?}'");
     }
 
     let mut packages = BTreeMap::new();
 
-    for file in fs::read_dir(dir)? {
-        let file = file?;
-        let path = file.path();
-        if !path.is_dir() {
+    for path in fs.list_dir(dir)? {
+        if !fs.is_dir(&path) {
             continue;
         }
 
-        if !is_package(&path) {
+        if !is_package(fs, &path) {
             continue;
         }
 
-        let package = package_from_dir(path).await?;
+        let package = package_from_dir(fs, path)?;
         packages.insert(package.name.C(), package);
     }
 
@@ -133,18 +126,17 @@ async fn load_library(
 /// are beside the packages in it --- and those are left alone by not looking
 /// like a package rather than by being named here. `sys/build.rs` applies the
 /// same rule when it embeds the library.
-fn is_package(dir: &PathBuf) -> bool {
-    if dir.join(datalove_pkg_manifest::FILE_NAME).is_file() {
+fn is_package(fs: &dyn Fs, dir: &Path) -> bool {
+    if fs.is_file(&dir.join(datalove_pkg_manifest::FILE_NAME)) {
         return true;
     }
 
-    let Ok(entries) = fs::read_dir(dir) else { return false };
-    entries.filter_map(|entry| entry.ok()).any(|entry| {
-        entry.path().extension().is_some_and(|ext| ext == "dfm" || ext == "dlt")
-    })
+    let Ok(entries) = fs.list_dir(dir) else { return false };
+    entries.iter().any(|path| source_kind(path).is_some())
 }
 
-pub async fn package_from_dir(
+pub fn package_from_dir(
+    fs: &dyn Fs,
     dir: PathBuf,
 ) -> AnyResult<Package> {
     let Some(file_name) = dir.file_name() else {
@@ -154,20 +146,13 @@ pub async fn package_from_dir(
         bail!("non-utf8 module directory '{file_name:?}'");
     };
     let name = S(name);
-    let package = package_from_source_files(dir, name).await?;
-    Ok(package)
-}
 
-pub async fn package_from_source_files(
-    dir: PathBuf,
-    package_name: PackageName,
-) -> AnyResult<Package> {
-    // Check for the rider before spawning the module-loading thread. Both the
-    // interface and the crate live in `rider/`, so a packaged datalove package
-    // that has had the Rust stripped out still declares what it needs.
+    // Both the interface and the crate live in `rider/`, so a packaged
+    // datalove package that has had the Rust stripped out still declares
+    // what it needs.
     let rider_path = dir.join("rider").join("rider.dli");
-    let rider_source = if rider_path.is_file() {
-        Some(fs::read_to_string(&rider_path)
+    let rider_source = if fs.is_file(&rider_path) {
+        Some(fs.read_to_string(&rider_path)
             .context(fmt!("unable to read rider file {}", rider_path.display()))?)
     } else {
         None
@@ -175,7 +160,7 @@ pub async fn package_from_source_files(
     let rider_path = rider_source.is_some().then_some(rider_path);
     let rider_crate_dir = {
         let crate_dir = dir.join("rider");
-        if crate_dir.join("Cargo.toml").is_file() {
+        if fs.is_file(&crate_dir.join("Cargo.toml")) {
             Some(crate_dir)
         } else {
             None
@@ -185,34 +170,25 @@ pub async fn package_from_source_files(
     // The manifest is what names the rider's crate. `rider/Cargo.toml` would
     // say the same thing where it exists, but it does not survive packaging,
     // and reading two sources for one fact invites them to disagree.
-    let rider_crate = datalove_pkg_manifest::load(&dir, rider_source.is_some())?
+    let rider_crate = datalove_pkg_manifest::load(fs, &dir, rider_source.is_some())?
         .and_then(|manifest| manifest.rider);
-
-    let (tx, mut rx) = mpsc::channel(1);
-    {
-        thread::spawn(move || {
-            send_modules_blocking(
-                dir, tx,
-            );
-        });
-    }
 
     let mut modules = BTreeMap::new();
     let mut data = BTreeMap::new();
 
-    while let Some(next) = rx.next().await {
-        match next? {
-            (FileKind::Module, module) => {
-                modules.insert(module.name.C(), module);
-            }
-            (FileKind::Data, file) => {
-                data.insert(file.name.C(), file);
-            }
-        }
+    for path in fs.list_dir(&dir)? {
+        let Some(kind) = source_kind(&path) else {
+            continue;
+        };
+        let file = load_source_file(fs, path)?;
+        match kind {
+            FileKind::Module => modules.insert(file.name.C(), file),
+            FileKind::Data => data.insert(file.name.C(), file),
+        };
     }
 
     Ok(Package {
-        name: package_name,
+        name,
         modules,
         data,
         rider_source,
@@ -228,51 +204,24 @@ enum FileKind {
     Data,
 }
 
-fn send_modules_blocking(
-    dir: PathBuf,
-    mut tx: mpsc::Sender<AnyResult<(FileKind, PackageModule)>>,
-) {
-    if let Err(e) = send_modules_blocking_err(
-        dir, tx.C(),
-    ) {
-        let _ = block_on(tx.send(Err(e)));
+/// Which kind of source `path` is, by its extension, if it is one.
+fn source_kind(path: &Path) -> Option<FileKind> {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some("dfm") => Some(FileKind::Module),
+        Some("dlt") => Some(FileKind::Data),
+        _ => None,
     }
 }
 
-fn send_modules_blocking_err(
-    dir: PathBuf,
-    mut tx: mpsc::Sender<AnyResult<(FileKind, PackageModule)>>,
-) -> AnyResult<()> {
-    for file in fs::read_dir(dir)? {
-        let file = file?;
-        let Some(module) = load_source_file(file.path())? else {
-            continue;
-        };
-        if let Err(_) = block_on(tx.send(Ok(module))) {
-            return Ok(());
-        }
-    }
-
-    Ok(())
-}
-
-fn load_source_file(path: PathBuf) -> AnyResult<Option<(FileKind, PackageModule)>> {
-    let kind = match path.extension().and_then(|ext| ext.to_str()) {
-        Some("dfm") => FileKind::Module,
-        Some("dlt") => FileKind::Data,
-        _ => return Ok(None),
-    };
-
-    let Some(stem) = path.file_stem() else {
-        return Ok(None);
-    };
+fn load_source_file(fs: &dyn Fs, path: PathBuf) -> AnyResult<PackageModule> {
+    let stem = path.file_stem().expect("a file with an extension has a stem");
     let Some(name) = stem.to_str() else {
         bail!("file {} has non-utf-8 stem", path.display());
     };
     let name = S(name);
-    let text = fs::read_to_string(&path)
+    let text = fs.read_to_string(&path)
         .context(fmt!("unable to read file {}", path.display()))?;
-    return Ok(Some((kind, PackageModule {
+    Ok(PackageModule {
         name, path, text,
-    })));
+    })
 }
