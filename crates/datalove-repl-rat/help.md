@@ -52,9 +52,9 @@ With focus on the Code panel, **Up** and **Down** select a unit, and:
 - **Insert** writes a new unit to go before it.
 - **Alt+Up** and **Alt+Down** move it one place up or down.
 
-After an edit, the units that use what it touched are compiled and run
-again, and the rest are left as they were. A delete or an insert moves every
-unit after it, so all of those are compiled and run again. The same changes can be typed as commands:
+After an edit, a delete, an insert or a move, the units that use what it
+touched are compiled and run again, and the rest are left as they were. The
+same changes can be typed as commands:
 
 ```
 /edit N <source>

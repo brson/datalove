@@ -78,7 +78,8 @@ I did not prove correctness.
   [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
 - <!-- therefore -->
   [A complete recursive algebra of recompiles and reruns for moves and mutations](#user-content-a-complete-recursive-algebra-of-recompiles-and-reruns-for-moves-and-mutations)
- 
+- [Functions are bindings too](#user-content-functions-are-bindings-too)
+
 **Part 3. Results and Discussion**
 
 - <!-- but..therefore -->
@@ -310,10 +311,6 @@ end for
 `budget` is calculated before `category` is ever mentioned.
 Probably doesn't need to run again.
 
-todo our motivating example here is a change to a function
-while the rest of the document talks about variable bindings.
-need to reconcile.
-
 Continuing, imagine the month goes on,
 and my bank appends a coffee to the data file:
 
@@ -337,8 +334,9 @@ There are obstacles to doing this correctly and efficiently.
 todo probably need some anithesis here.
 
 I'll develop the rules Datalove follows to make
-these cases and more work correctly,
-then circle back to a live demonstration of how this particular script actually reacts to modifications.
+these cases and more work correctly.
+The rules are based on analysis of how bindings are used within a linear typesystem.
+I'll end with a live demonstration of how this particular script actually reacts to modifications.
 
 
 
@@ -1262,6 +1260,7 @@ or both:
 | edit         | yes                  | yes                |
 | rerun        | yes                  | yes, the same code |
 | data change  | yes                  | yes, the same code over new data |
+| move         | yes, in the old place | yes, in the new place |
 
 A change to the data a unit requires is a rerun of that unit,
 except that it now provides different values.
@@ -1270,6 +1269,10 @@ so it does to earlier bindings what it did before.
 If the new data doesn't have the type the unit requires it at,
 the unit no longer compiles,
 and the change is a break.
+
+A move is a delete and an add of the same unit,
+made in one step,
+so the session as it would stand between the two never runs.
 
 A modification of a unit `T` calls for more of them.
 
@@ -1325,6 +1328,86 @@ so the step ends.
 
 
 
+## Functions are bindings too
+
+Back to the motivating example,
+where the edit was to a function.
+Functions need nothing new.
+A function is a binding its unit provides,
+and a unit that calls it reads it.
+A `mut` parameter is marked at the call,
+so a call that writes an earlier binding is an update,
+exactly like `set b = b + 1`.
+
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+fun bump(mut x: int)
+  set x = x + 1
+end fun
+
+----------
+scriptunit-fragment 3
+----------
+
+call bump(mut b)
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b * 2
+```
+
+Edit the body of `bump` to double its argument.
+Unit 3 reads `bump`, so it reruns.
+And unit 3 updates `b`,
+so unit 1 reruns first,
+as it would for any update.
+
+**Step 2: the function's body is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 reruns and updates `b`, so `b` has to be as unit 3 first found it | `b` = 250 |
+| 2 | `fun bump(mut x: int); set x = x * 2; end fun` | - | recompiles, runs | edited | - |
+| 3 | `call bump(mut b)` | reads `bump` (2), updates `b` (1) | reruns | reads `bump` | - |
+| 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 3 | `c` = 500 |
+
+Now change the signature of `bump`
+so it no longer writes its argument.
+The edit is to unit 2,
+but it's unit 3 that stops writing `b`:
+its call no longer compiles.
+That break is a modification of its own,
+so it retracts the update,
+and unit 1 reruns to put `b` back.
+
+**Step 3: the function stops writing its argument.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 updated `b` when it last ran, and no longer compiles | `b` = 125 |
+| 2 | `fun bump(ref x: int): int; ret x + 1; end fun` | - | recompiles, runs | edited | - |
+| 3 | `call bump(mut b)` | - | recompile fails | `bump` no longer takes `mut` | - |
+| 4 | `let c = b * 2` | reads `b` (1) | reruns | reads `b`, which unit 3 no longer updates | `c` = 250 |
+
+In a language where any call can mutate its arguments,
+that write has to be discovered at run time.
+In Datalove it's in the signature,
+so the compiler sees it at every call.
+
+
+
+
 ## Where the static picture is approximate
 
 <!--
@@ -1339,8 +1422,9 @@ Optimizations the algebra doesn't need:
 a rerun that produces the same value (same-value),
 and what rerunning costs.
 Where the engine does more than the algebra:
-a delete or an insert renumbers every later unit,
-so the engine recompiles and reruns all of them (delete, insert).
+a write to part of a binding counts as a write to all of it (partial-write),
+a rerun that comes out the same still reruns its readers (same-value),
+and a unit that returned early is assumed to have done everything its code could (return-early).
 -->
 
 todo
@@ -1431,6 +1515,14 @@ Their code is merged into the tables as the "code" column when rendered to the d
 
 The "uses", "this step" and "holds after" columns of the table are validated.
 The "because" column is documentation for the reader.
+
+The tables are hand-written and could be wrong though.
+Every step is also held to an additional rule:
+the session must end up as a fresh run of the current code would leave it.
+After each step the test starts a new engine,
+runs the units as they now stand from the top,
+and compares how each unit ended and what it holds.
+That check doesn't trust the tables at all.
 
 I don't want to say more about the specifics of the test suite.
 What I do want to say is that I love thorough testing.
