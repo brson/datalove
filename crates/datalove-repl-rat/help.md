@@ -50,6 +50,7 @@ With focus on the Code panel, **Up** and **Down** select a unit, and:
 - **Enter** edits it in the input;
 - **Delete** deletes it;
 - **Insert** writes a new unit to go before it.
+- **Alt+Up** and **Alt+Down** move it one place up or down.
 
 After an edit, the units that use what it touched are compiled and run
 again, and the rest are left as they were. A delete or an insert moves every
@@ -60,7 +61,11 @@ unit after it, so all of those are compiled and run again. The same changes can 
 /delete N
 /insert before N <source>
 /insert after N <source>
+/move N before M
+/move N after M
 ```
+
+A unit moved keeps its number.
 
 ## Commands
 

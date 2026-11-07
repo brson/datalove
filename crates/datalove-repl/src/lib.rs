@@ -182,6 +182,9 @@ pub enum ReplCommand {
     /// Add a unit before or after the one with this number:
     /// `/insert before N <source>` or `/insert after N <source>`.
     Insert { place: Place, unit: u32, source: Unit },
+    /// Move a unit, keeping its number, before or after the one with the
+    /// number `beside`: `/move N before M` or `/move N after M`.
+    Move { unit: u32, place: Place, beside: u32 },
     /// Take back the last change to the session: `/undo`.
     Undo,
     /// Make again the last change taken back: `/redo`.
@@ -192,6 +195,11 @@ pub enum ReplCommand {
     /// What undoing a delete, or redoing an append or an insert, asks of the
     /// session. Nothing reads it from input.
     Restore { unit: u32, after: Option<u32>, source: Unit },
+    /// Move a unit to after the unit with the number `after`, or first.
+    ///
+    /// What undoing or redoing a move asks of the session. Nothing reads it
+    /// from input.
+    Reposition { unit: u32, after: Option<u32> },
     /// Say what the session has to say about the unit with this number.
     ///
     /// What the app asks to show the selected unit's detail. Nothing reads it
@@ -240,8 +248,8 @@ pub enum Outcome {
     CommandError(String),
     /// The history was saved, as this many inputs, to this path.
     Saved { path: String, inputs: usize },
-    /// What an `/edit`, `/delete` or `/insert` did to each unit it compiled
-    /// or re-derived, in the session's order.
+    /// What an `/edit`, `/delete`, `/insert` or `/move` did to each unit it
+    /// compiled or re-derived, in the session's order.
     Edited(Vec<UnitStep>),
 }
 
@@ -381,6 +389,20 @@ impl ReplCommand {
                 match numbered_source(rest) {
                     Some((unit, source)) => ReplCommand::Insert { place, unit, source },
                     None => usage("/insert before|after N <source>"),
+                }
+            }
+            "move" => {
+                let usage = || usage("/move N before|after M");
+                let (unit, rest) = split_word(args);
+                let (place, beside) = split_word(rest);
+                let place = match place {
+                    "before" => Place::Before,
+                    "after" => Place::After,
+                    _ => return usage(),
+                };
+                match (unit.parse(), beside.parse()) {
+                    (Ok(unit), Ok(beside)) => ReplCommand::Move { unit, place, beside },
+                    _ => usage(),
                 }
             }
             _ => ReplCommand::Unknown,

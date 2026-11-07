@@ -45,6 +45,12 @@ fn insert_says_which_side() {
 }
 
 #[test]
+fn move_names_the_unit_and_where_it_goes() {
+    assert!(matches!(command("/move 3 before 1"), ReplCommand::Move { unit: 3, place: Place::Before, beside: 1 }));
+    assert!(matches!(command("/move 1 after 12"), ReplCommand::Move { unit: 1, place: Place::After, beside: 12 }));
+}
+
+#[test]
 fn delete_takes_a_number() {
     assert!(matches!(command("/delete 7"), ReplCommand::Delete { unit: 7 }));
 }
@@ -68,6 +74,11 @@ fn malformed_commands_say_how_they_are_used() {
         ("/insert 2 let a = 1", "usage: /insert before|after N <source>"),
         ("/insert sideways 2 a", "usage: /insert before|after N <source>"),
         ("/insert after 2", "usage: /insert before|after N <source>"),
+        ("/move 3", "usage: /move N before|after M"),
+        ("/move 3 before", "usage: /move N before|after M"),
+        ("/move 3 under 1", "usage: /move N before|after M"),
+        ("/move x before 1", "usage: /move N before|after M"),
+        ("/move 3 before 1 2", "usage: /move N before|after M"),
         ("/reset now", "usage: /reset"),
     ] {
         match command(input) {

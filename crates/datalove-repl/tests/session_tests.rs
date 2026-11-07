@@ -207,6 +207,73 @@ fn edits_save_and_load_back() {
     assert_eq!(loaded, environment);
 }
 
+/// A move keeps the unit's number, and through a real engine the units
+/// read what they would in the new order; a session with a move in it is
+/// saved and loaded back to the same units.
+#[test]
+fn moves_save_and_load_back() {
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("session.world");
+
+    let mut app = app(&path);
+    for unit in ["var a = 1", "let b = a + 1", "set a = 10"] {
+        submit(&mut app, unit);
+    }
+    submit(&mut app, "/move 3 before 2");
+    let expected = vec![
+        (Some(1), "var a = 1".S()),
+        (Some(3), "set a = 10".S()),
+        (Some(2), "let b = a + 1".S()),
+    ];
+    assert_eq!(code(&app), expected);
+    assert_eq!(bindings(&app), [("a".S(), "10".S()), ("b".S(), "11".S())]);
+
+    submit(&mut app, "/save");
+    submit(&mut app, "/load");
+    assert_eq!(code(&app), expected, "the load numbers and orders the units as they were");
+    assert_eq!(bindings(&app), [("a".S(), "10".S()), ("b".S(), "11".S())]);
+}
+
+/// A move that names no unit, a unit beside itself, or the place the unit
+/// is already in changes nothing.
+#[test]
+fn moves_that_go_nowhere_are_errors() {
+    let dir = rmx::tempfile::tempdir().X();
+    let mut app = app(&dir.path().join("session.world"));
+    for unit in ["let a = 1", "let b = 2"] {
+        submit(&mut app, unit);
+    }
+    for input in ["/move 9 before 1", "/move 1 before 9", "/move 1 after 1", "/move 1 before 2", "/move 2 after 1"] {
+        submit(&mut app, input);
+    }
+    assert_eq!(code(&app), [(Some(1), "let a = 1".S()), (Some(2), "let b = 2".S())]);
+    let failed: Vec<bool> = app.history().iter().skip(2).map(|entry| matches!(entry.status, EntryStatus::Error)).collect();
+    assert_eq!(failed, [true; 5], "{:?}", outcomes(&app));
+}
+
+/// Undo moves a unit back where it was, and redo moves it again.
+#[test]
+fn undo_and_redo_a_move() {
+    let dir = rmx::tempfile::tempdir().X();
+    let mut app = app(&dir.path().join("session.world"));
+    for unit in ["let a = 1", "let b = 2", "let c = 3"] {
+        submit(&mut app, unit);
+    }
+    let before = code(&app);
+    submit(&mut app, "/move 1 after 3");
+    submit(&mut app, "/move 3 before 2");
+    let after = code(&app);
+    assert_eq!(after, [(Some(3), "let c = 3".S()), (Some(2), "let b = 2".S()), (Some(1), "let a = 1".S())]);
+
+    undo(&mut app);
+    assert_eq!(code(&app), [(Some(2), "let b = 2".S()), (Some(3), "let c = 3".S()), (Some(1), "let a = 1".S())]);
+    undo(&mut app);
+    assert_eq!(code(&app), before);
+    redo(&mut app);
+    redo(&mut app);
+    assert_eq!(code(&app), after);
+}
+
 /// What the last step did to each unit, from the real engine.
 fn marks(app: &App) -> Vec<(Option<u32>, bool, bool)> {
     app.code_units().iter().map(|unit| (unit.number, unit.compiled, unit.ran)).collect()

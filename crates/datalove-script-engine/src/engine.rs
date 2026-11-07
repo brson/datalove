@@ -888,6 +888,10 @@ impl Engine {
         self.first_mut().insert_unit(at, source, is_expr)
     }
 
+    pub fn move_unit(&mut self, id: u32, to: usize) -> Vec<UnitStep> {
+        self.first_mut().move_unit(id, to)
+    }
+
     pub fn restore_unit(&mut self, at: usize, id: u32, source: &str, is_expr: bool) -> Vec<UnitStep> {
         self.first_mut().restore_unit(at, id, source, is_expr)
     }
@@ -1127,6 +1131,30 @@ impl SessionMut<'_> {
         let mut step = self.compiling();
         let rederived = step.compile_units(&units, |compiler| compiler.relower_deleted(at, removed));
         step.state.executor.remove_unit(id);
+        step.rerun_and_explain(rederived)
+    }
+
+    /// Move unit `id` to position `to`, counted in the session as it is
+    /// after the move, and re-derive what that reaches.
+    ///
+    /// **A deletion and an insertion in one step**: the units its leaving
+    /// reaches, as for [`Self::delete_unit`], and the unit itself and what
+    /// its arriving reaches, as for [`Self::insert_unit`]. The session as it
+    /// would stand between the two is never run, so a runtime error there
+    /// cannot empty it. The unit keeps its id, and every other unit keeps
+    /// its place relative to the rest.
+    pub fn move_unit(&mut self, id: u32, to: usize) -> Vec<UnitStep> {
+        self.step(|session| session.move_unit_in_step(id, to))
+    }
+
+    fn move_unit_in_step(&mut self, id: u32, to: usize) -> Vec<UnitStep> {
+        let from = self.position(id);
+        self.state.session.move_unit(&mut self.shared.db, from, to);
+        let units = self.unit_sources();
+
+        let mut step = self.compiling();
+        let rederived = step.compile_units(&units, |compiler| compiler.relower_moved(from, to));
+        step.state.executor.move_unit(id, to);
         step.rerun_and_explain(rederived)
     }
 

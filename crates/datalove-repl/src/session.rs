@@ -85,6 +85,8 @@ impl Session {
                 ReplCommand::Delete { unit } => self.delete(unit),
                 ReplCommand::Insert { place, unit, source } => self.insert(place, unit, source),
                 ReplCommand::Restore { unit, after, source } => self.restore(unit, after, source),
+                ReplCommand::Move { unit, place, beside } => self.move_beside(unit, place, beside),
+                ReplCommand::Reposition { unit, after } => self.reposition(unit, after),
                 ReplCommand::Describe { unit } => match self.index_of(unit) {
                     Some(index) => Outcome::Detail(self.describe(index)),
                     None => no_unit(unit),
@@ -162,6 +164,54 @@ impl Session {
             engine.insert_unit(index, source.source(), source.is_expression())
         });
         self.splice(step, |units| units.insert(index, made))
+    }
+
+    fn move_beside(&mut self, number: u32, place: Place, beside: u32) -> Outcome {
+        let Some(from) = self.index_of(number) else {
+            return no_unit(number);
+        };
+        if number == beside {
+            return Outcome::CommandError(fmt!("unit {number} cannot be moved beside itself"));
+        }
+        let Some(index) = self.index_without(beside, from) else {
+            return no_unit(beside);
+        };
+        self.move_to(number, from, place.index(index))
+    }
+
+    /// Move a unit to after another, or first, as undoing or redoing a move
+    /// does.
+    fn reposition(&mut self, number: u32, after: Option<u32>) -> Outcome {
+        let Some(from) = self.index_of(number) else {
+            return no_unit(number);
+        };
+        let to = match after {
+            Some(after) => match self.index_without(after, from) {
+                Some(index) => index + 1,
+                None => return no_unit(after),
+            },
+            None => 0,
+        };
+        self.move_to(number, from, to)
+    }
+
+    /// Move the unit at `from` to `to`, counted in the session as it is
+    /// after the move.
+    fn move_to(&mut self, number: u32, from: usize, to: usize) -> Outcome {
+        if from == to {
+            return Outcome::CommandError(fmt!("unit {number} is there already"));
+        }
+        let step = self.guarded(number, "moving", |engine| engine.move_unit(number, to));
+        self.splice(step, |units| {
+            let unit = units.remove(from);
+            units.insert(to, unit);
+        })
+    }
+
+    /// Where unit `number` sits once the unit at `taken` is taken out.
+    fn index_without(&self, number: u32, taken: usize) -> Option<usize> {
+        let index = self.index_of(number)?;
+        Some(if index > taken { index - 1 } else { index })
     }
 
     /// What the session has to say about the unit at `index`.

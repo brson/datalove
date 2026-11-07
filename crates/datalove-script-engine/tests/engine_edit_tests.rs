@@ -870,6 +870,31 @@ fn a_runtime_error_in_a_rerun_empties_the_session() {
     assert_eq!(value_of(&mut engine, "c"), "3");
 }
 
+/// **A move never runs the session as it would stand between its deletion
+/// and its insertion.** Here that session recurses until the runtime gives up,
+/// which empties it; the move goes straight to the order asked for, where
+/// unit 5 finds `n` set and never recurses.
+#[test]
+fn a_move_does_not_run_the_session_between_its_halves() {
+    let units = "fun down(s: string): u32\n  let t = s@\n  ret icall add_wrapping_u32(down(t), : u32 / 1)\nend fun\n\
+        ---\nvar n = 0\n---\nvar w = 1\n---\nset n = 1\n\
+        ---\nvar a: u32 = 1\nif n == 0\n  set a = down(\"abc\")\nend if";
+
+    let mut moved = engine();
+    run(&mut moved, units);
+    let reports = moved.move_unit(4, 2);
+    assert!(!reports.iter().any(|report| report.eval.as_ref().is_some_and(Eval::resets)), "{reports:?}");
+    assert_eq!(moved.unit_ids(), [1, 2, 4, 3, 5]);
+    assert_eq!(value_of(&mut moved, "a"), "1");
+
+    // The same move as a deletion and then an insertion runs that session.
+    let mut split = engine();
+    run(&mut split, units);
+    let reports = split.delete_unit(4);
+    assert!(reports.iter().any(|report| matches!(report.eval, Some(Eval::RuntimeError(_)))), "{reports:?}");
+    assert_eq!(split.unit_count(), 0);
+}
+
 /// A unit's diagnostics render as text quoting the unit, and only its own:
 /// the unit after a failed one has none, though its typecheck asked of it.
 #[test]

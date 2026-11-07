@@ -214,6 +214,9 @@ pub enum Change {
     Edited { unit: u32, old: script::Unit, new: script::Unit },
     /// A unit deleted, from after the unit with the number `after`, or first.
     Deleted { unit: u32, after: Option<u32>, source: script::Unit },
+    /// A unit moved, from after the unit with the number `from_after` to
+    /// after the one with the number `to_after`; `None` is first.
+    Moved { unit: u32, from_after: Option<u32>, to_after: Option<u32> },
 }
 
 impl Change {
@@ -223,6 +226,7 @@ impl Change {
             Change::Made { unit, .. } => repl::ReplCommand::Delete { unit },
             Change::Edited { unit, old, .. } => repl::ReplCommand::Edit { unit, source: old },
             Change::Deleted { unit, after, source } => repl::ReplCommand::Restore { unit, after, source },
+            Change::Moved { unit, from_after, .. } => repl::ReplCommand::Reposition { unit, after: from_after },
         }
     }
 
@@ -232,6 +236,7 @@ impl Change {
             Change::Made { unit, after, source } => repl::ReplCommand::Restore { unit, after, source },
             Change::Edited { unit, new, .. } => repl::ReplCommand::Edit { unit, source: new },
             Change::Deleted { unit, .. } => repl::ReplCommand::Delete { unit },
+            Change::Moved { unit, to_after, .. } => repl::ReplCommand::Reposition { unit, after: to_after },
         }
     }
 }
@@ -746,6 +751,37 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.reveal_selected_unit();
     }
 
+    /// Move the selected unit one place up or down, as `/move` would, and
+    /// keep it selected; nothing happens at the end it would go past.
+    ///
+    /// The command goes into the history as though it had been typed.
+    pub fn move_selected(&mut self, up: bool) {
+        let Some(unit) = self.selected_unit() else {
+            return;
+        };
+        let numbers = self.numbers();
+        let index = numbers.iter().position(|number| *number == unit).expect("the selected unit is shown");
+        let (place, beside) = match up {
+            true => match index.checked_sub(1) {
+                Some(above) => (repl::Place::Before, numbers[above]),
+                None => return,
+            },
+            false => match numbers.get(index + 1) {
+                Some(below) => (repl::Place::After, *below),
+                None => return,
+            },
+        };
+        let side = match place {
+            repl::Place::Before => "before",
+            repl::Place::After => "after",
+        };
+        self.enqueue(
+            fmt!("/move {unit} {side} {beside}"),
+            repl::Command::ReplCommand(repl::ReplCommand::Move { unit, place, beside }),
+        );
+        self.reveal_selected_unit();
+    }
+
     /// Edit the selected unit in the input, which takes focus, multiline if
     /// the unit spans lines.
     ///
@@ -1064,6 +1100,20 @@ impl<E: ReplExecutor> ReplApp<E> {
                     }
                     None
                 }
+                R::Move { unit, place, beside } => self.index_of(*unit).map(|from| {
+                    let (from_after, to_after) = self.move_unit(from, |app| {
+                        place.index(app.index_of(*beside).expect("the unit moved beside is the engine's"))
+                    });
+                    Change::Moved { unit: *unit, from_after, to_after }
+                }),
+                R::Reposition { unit, after } => {
+                    if let Some(from) = self.index_of(*unit) {
+                        self.move_unit(from, |app| {
+                            after.map_or(0, |after| app.index_of(after).expect("the unit moved after is the engine's") + 1)
+                        });
+                    }
+                    None
+                }
                 // The data is the world's, not the session's, so there is
                 // nothing of the session to take back.
                 R::EditData { .. } => None,
@@ -1091,6 +1141,16 @@ impl<E: ReplExecutor> ReplApp<E> {
             status: UnitStatus::Waiting,
             outcome: None,
         });
+    }
+
+    /// Move the unit at `from` to where `to` says, asked once it is taken
+    /// out, and say the numbers of the units it was after and is after now.
+    fn move_unit(&mut self, from: usize, to: impl FnOnce(&Self) -> usize) -> (Option<u32>, Option<u32>) {
+        let from_after = self.number_before(from);
+        let moved = self.units.remove(from);
+        let to = to(self);
+        self.units.insert(to, moved);
+        (from_after, self.number_before(to))
     }
 
     /// The number of the unit before the one at `index`, if one is.

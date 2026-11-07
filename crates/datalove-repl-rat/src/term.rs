@@ -219,6 +219,13 @@ fn handle_key_event<E: ReplExecutor>(
             }
             // Anywhere else Ctrl+C asks whether to exit, and another exits.
             KeyCode::Char('c') if cancel => app.repl.ask_to_exit(),
+            // Alt+Up and Alt+Down move the focused code panel's selected unit.
+            KeyCode::Up if app.repl.focus() == Panel::Code && key.modifiers.contains(KeyModifiers::ALT) => {
+                app.repl.move_selected(true);
+            }
+            KeyCode::Down if app.repl.focus() == Panel::Code && key.modifiers.contains(KeyModifiers::ALT) => {
+                app.repl.move_selected(false);
+            }
             // Ahead of the textarea, which only gets these in multiline mode.
             KeyCode::Up => app.handle_scroll_key(Scroll::LineUp, key),
             KeyCode::Down => app.handle_scroll_key(Scroll::LineDown, key),

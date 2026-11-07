@@ -1,0 +1,94 @@
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+let c = b * 2
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = b + 1
+
+----------
+scriptunit-fragment 4
+----------
+
+let d = b + 0
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 126 |
+| 2 | reads `b` (1) | compiles, runs | new | `c` = 250 |
+| 3 | updates `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `d` = 126 |
+
+----------
+scriptunit-move 3 before 2
+----------
+
+----------
+expect the update moves up past a reader
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 reruns and updates `b`, so `b` has to be as unit 3 first found it | `b` = 126 |
+| 3 | updates `b` (1) | reruns | moved | - |
+| 2 | reads `b` (1) | reruns | reads `b` after unit 3, which now updates it first | `c` = 252 |
+| 4 | reads `b` (1) | reruns | reads `b` after unit 3 | `d` = 126 |
+
+----------
+scriptunit-move 3 after 4
+----------
+
+----------
+expect the update moves down past both readers
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 updated `b` before units 2 and 4 read it, and moves after them | `b` = 126 |
+| 2 | reads `b` (1) | reruns | reads `b`, which unit 3 no longer updates first | `c` = 250 |
+| 4 | reads `b` (1) | reruns | reads `b`, which unit 3 no longer updates first | `d` = 125 |
+| 3 | updates `b` (1) | reruns | moved | - |
+
+----------
+scriptunit-move 2 before 1
+----------
+
+----------
+expect a reader moves above its provider
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 2 | - | recompile fails | moved, and no unit before it provides `b` | - |
+| 1 | - | untouched | moving unit 2 changes nothing it provides | `b` = 126 |
+| 4 | reads `b` (1) | untouched | nothing changed `b` | `d` = 125 |
+| 3 | updates `b` (1) | untouched | nothing changed `b` | - |
+
+----------
+scriptunit-move 2 after 1
+----------
+
+----------
+expect the reader moves back below its provider
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 2 reads `b`, which unit 3 updated after it | `b` = 126 |
+| 2 | reads `b` (1) | recompiles, runs | moved | `c` = 250 |
+| 4 | reads `b` (1) | untouched | reads `b` before unit 3 updates it, as it did | `d` = 125 |
+| 3 | updates `b` (1) | reruns | updates `b` from unit 1 | - |

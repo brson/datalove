@@ -199,6 +199,7 @@ relower_reach(edited)            -> seeds = {edited}
 relower_module_reach(paths)      -> seeds = module_importers(paths)
 relower_inserted(at)             -> seeds = {at}
 relower_deleted(at, removed)     -> seeds = its readers; restore = its setters
+relower_moved(from, to)          -> a deletion's seeds and restore, and {to}
 truncate_units(n)                -> restore = the setters of what went
    all -> rederive_reach(seeds, restore) -> reach_from, compile, repeat -> rerun
 ```
@@ -327,8 +328,8 @@ that is an optimization not taken.
 
 ## Splices
 
-`truncate_units`, `delete_unit` and `insert_unit` change the list rather than a
-unit. **They move no id, so their reach is an edit's.** An insertion is an
+`truncate_units`, `delete_unit`, `insert_unit` and `move_unit` change the list
+rather than a unit. **They move no id, so their reach is an edit's.** An insertion is an
 edit from nothing and a deletion an edit to nothing:
 
 - **Insert.** `ScriptSession::insert_unit` makes the new unit, linked to the
@@ -349,8 +350,19 @@ edit from nothing and a deletion an edit to nothing:
   rule reruns one.
 - **Truncate** is a delete of every unit from `n` on, with nothing after them
   to reach, so only restore seeds.
+- **Move.** `ScriptSession::move_unit` splices the unit out and back in,
+  relinking three units, and its record goes with it. It is a delete and an
+  insert taken as one step, so the session between them is never compiled or
+  run: a runtime error there would empty it. The other units keep their order,
+  so the units that were before and after it are a split of the rest, and the
+  delete's seeds and restore seeds are worked out over the list as it is
+  after the move, by the helper both share, `departure`. The insert's seed is
+  the unit in its new place. The backward rule does the rest: a unit moved up
+  past a reader of a binding it changes finds its own held change, and
+  restores the binding's setter, and one moved down leaves its readers to
+  the delete's seeds.
 
-`ScriptCompiler::{relower_inserted, relower_deleted, truncate_units}` are the
+`ScriptCompiler::{relower_inserted, relower_deleted, relower_moved, truncate_units}` are the
 compiler's verbs. The links are input fields, so setting one needs `&mut db`,
 which is why the session splices the list and the compiler, built afterwards,
 re-derives; see [Crossing a database change](#user-content-crossing-a-database-change).
@@ -359,15 +371,17 @@ The executor runs the reach in place, as for an edit.
 `ScriptExecutor::insert_unit` puts an inserted unit in its place with no
 frame, and `rerun_unit` runs it there. `remove_unit` and `truncate_units`
 destroy what the frames that go owned and drop their functions with them,
-since an id can be given again, to a unit put back. Frames and functions are
-kept by id, so nothing else moves.
+since an id can be given again, to a unit put back. `move_unit` only changes
+the order; the moved unit's frame stays until it reruns in its new place,
+which a move always does. Frames and functions are kept by id, so nothing
+else moves.
 
 **A unit that stops compiling stays**, as an appended unit that fails does
 (see [Units that did not run to their end](#user-content-units-that-did-not-run-to-their-end)).
 Removing a unit that a later unit reads leaves the reader failing, and putting
 the binding back makes it compile and run again.
 
-`Engine::{truncate_units, delete_unit, insert_unit, restore_unit}` are the
+`Engine::{truncate_units, delete_unit, insert_unit, restore_unit, move_unit}` are the
 shipped verbs. `restore_unit` puts a unit back under the id it had, which is
 what undoing a delete is. An id is otherwise given once: the next unit made
 takes the next, and `Engine::set_next_id` gives the ids of units dropped from
@@ -390,8 +404,9 @@ by its id, and a place by its position: `Engine::edit_unit(id, source)`,
 `Engine::edit_module(library, package, module, source)`,
 `Engine::edit_data(library, package, name, text)`,
 `Engine::truncate_units(n)`, `Engine::delete_unit(id)`,
-`Engine::insert_unit(at, source, is_expr)` and
-`Engine::restore_unit(at, id, source, is_expr)`.
+`Engine::insert_unit(at, source, is_expr)`,
+`Engine::restore_unit(at, id, source, is_expr)` and
+`Engine::move_unit(id, to)`, where `to` is counted after the move.
 
 ## Units that did not run to their end
 

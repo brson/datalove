@@ -109,6 +109,8 @@ fn change(replay: &Replay, command: &Command, next: &mut u32) -> Change {
         Command::ReplCommand(ReplCommand::Delete { unit }) => Change::Delete { unit: unit.to_string() },
         Command::ReplCommand(ReplCommand::Insert { place, unit, source }) =>
             Change::Insert { entry: entry(source), place: *place, beside: unit.to_string() },
+        Command::ReplCommand(ReplCommand::Move { unit, place, beside }) =>
+            Change::Move { unit: unit.to_string(), place: *place, beside: beside.to_string() },
         other => todo!("{}: a replay with step tables that has {other:?}", replay.world),
     }
 }

@@ -117,7 +117,7 @@ what lets the tests drive the state machine with a scripted mock.
 ## The command queue
 
 Some commands are the engine's: units, and the commands that change the
-session, `/reset`, `/edit`, `/edit-data`, `/delete` and `/insert`. The rest are the app's:
+session, `/reset`, `/edit`, `/edit-data`, `/delete`, `/insert` and `/move`. The rest are the app's:
 `/undo`, `/redo`, `/save`, `/load`, `/help` and `/exit`, which read the history
 and the app's units, and may send the engine commands of their own. Each runs
 against what every command entered before it leaves, however fast they were
@@ -281,8 +281,8 @@ shows.
 
 `Engine::edit_unit(id, source)` changes one unit of the session and
 re-derives what the change reaches, leaving the rest of the session with the
-lowering and the frames it had. `Engine::truncate_units`, `delete_unit` and
-`insert_unit` splice the list and re-derive what the splice reaches, the same
+lowering and the frames it had. `Engine::truncate_units`, `delete_unit`,
+`insert_unit` and `move_unit` splice the list and re-derive what the splice reaches, the same
 way: a unit keeps its id wherever units are spliced around it, so a unit that
 uses nothing the splice changed is left alone. A unit that stops compiling
 stays, as one appended does.
@@ -324,6 +324,8 @@ and replayed:
 /delete N
 /insert before N <source>
 /insert after N <source>
+/move N before M
+/move N after M
 ```
 
 The source is whatever follows `N`, on its line and the lines after it, each
@@ -375,8 +377,10 @@ same with an empty input, titled "Insert before unit N", and sends
 `/insert before N <source>`. The new unit goes before the selected one, which
 stays selected, so inserting again puts the next one after it, above the same
 unit. There is no key for inserting after; appending is typing at the prompt.
+Alt+Up and Alt+Down send `/move N before M` or `/move N after M` for the unit
+above or below, and the moved unit stays selected.
 
-An edit, a delete or an insert answers with `Outcome::Edited`: what each unit it
+An edit, a delete, an insert or a move answers with `Outcome::Edited`: what each unit it
 reached came to, by number, in the session's order. A unit that fails at run
 time among them empties the session, as one appended does, and the app treats
 the answer as that reset.
@@ -394,9 +398,11 @@ history. Entering anything new drops it.
 when the engine answers the command that made it, from the app's units as the
 change left them: a unit made, by an append or an insert, with the unit before
 it and its source; a unit edited, with its old and new source; a unit
-deleted, with the unit before it and its source. Undo turns a change into the
-command that takes it back -- a delete, an edit back, or a `Restore`, which
-puts a unit back with the number it had -- and redo into the one that makes it
+deleted, with the unit before it and its source; a unit moved, with the units
+before it where it was and where it went. Undo turns a change into the
+command that takes it back -- a delete, an edit back, a `Restore`, which
+puts a unit back with the number it had, or a `Reposition`, which moves a
+unit to after another or first -- and redo into the one that makes it
 again. Undo is last in, first out, so a change is only ever undone or redone
 against the session it was made to, and the unit it names its place by is
 there. An entry that made no change -- `/help`, `/save`, `/load`, a failed
@@ -763,7 +769,7 @@ all.
 - **record_tests** -- a trace recorded through `record_world`: the statuses,
   the marks, and the details after appends and edits, and a worldfile's own
   data and modules as the session's library.
-- **command_tests** -- how `/edit`, `/delete` and `/insert` are read, sources
+- **command_tests** -- how `/edit`, `/delete`, `/insert` and `/move` are read, sources
   over several lines, comments before a command, and the usage of each.
 - **app_tests** -- the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
@@ -799,7 +805,7 @@ setup and the loop together.
 - No cancellation. The worker has no way to be interrupted, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
 - `/exit`, `/help`, `/reset`, `/save`, `/load`, `/edit`, `/edit-data`,
-  `/delete`, `/insert`, `/undo` and `/redo` are the only commands.
+  `/delete`, `/insert`, `/move`, `/undo` and `/redo` are the only commands.
 - Undo and redo have no key; they are typed.
 - A command whose source spans lines cannot be typed: an input starting with
   the sigil is a command on its first line. Only a replay, or an edit from

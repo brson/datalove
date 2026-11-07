@@ -1304,6 +1304,36 @@ fn deleting_the_selected_unit() {
     assert_eq!(app.selected_unit(), Some(2), "the last unit gives way to the one before it");
 }
 
+/// Alt+Up and Alt+Down send `/move` for the selected unit, which stays
+/// selected; at either end there is nowhere to go and nothing is sent.
+#[test]
+fn moving_the_selected_unit() {
+    for (up, input, command) in [
+        (true, "/move 2 before 1", (repl::Place::Before, 1)),
+        (false, "/move 2 after 3", (repl::Place::After, 3)),
+    ] {
+        let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = 2", "let c = 3"]);
+        app.focus_prev();
+        app.move_in_code(Scroll::LineUp);
+        app.move_selected(up);
+        assert!(matches!(
+            last_command(&executor),
+            repl::Command::ReplCommand(repl::ReplCommand::Move { unit: 2, place, beside }) if (place, beside) == command
+        ));
+        assert_eq!(app.history().last().map(|entry| entry.input.as_str()), Some(input));
+        assert_eq!(app.selected_unit(), Some(2));
+    }
+
+    let (mut app, _executor) = app_and_executor_with_units(&["let a = 1", "let b = 2"]);
+    app.focus_prev();
+    let entries = app.history().len();
+    assert_eq!(app.selected_unit(), Some(2));
+    app.move_selected(false);
+    app.move_in_code(Scroll::LineUp);
+    app.move_selected(true);
+    assert_eq!(app.history().len(), entries);
+}
+
 /// Enter in the code panel edits the selected unit in the input, and
 /// submitting sends `/edit`, puts back what the input held, and returns to
 /// the unit.

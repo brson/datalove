@@ -26,6 +26,7 @@ is the narrative version. How the engine does it is
 - [Writes through function parameters](#user-content-writes-through-function-parameters)
 - [Conditional writes, loops and parts of bindings](#user-content-conditional-writes-loops-and-parts-of-bindings)
 - [Splices](#user-content-splices)
+- [Moves](#user-content-moves)
 - [Returning early](#user-content-returning-early)
 - [Where the engine does more than the rules](#user-content-where-the-engine-does-more-than-the-rules)
 
@@ -120,7 +121,8 @@ modification _retracts_ the unit's old code, _applies_ its new code, or both:
 Add is an append or an insert. Fix is an edit that makes a unit compile that
 did not, Break one that makes it stop, and Edit one that compiles before and
 after. Capitalised, Edit is the modification; a lower-case edit is any change
-to a unit's code, Break and Fix included.
+to a unit's code, Break and Fix included. A move is a Delete and an Add of the
+same unit, taken as one step.
 
 ### The rules
 
@@ -2053,6 +2055,175 @@ let a_moved = a
 
 An inserted unit is an apply with nothing to retract. Unit 3 reads `a`, which unit 2
 took after it, so unit 1 reruns first and unit 2 takes it again.
+
+## Moves
+
+A move takes a unit out of one place and puts it in another, keeping its
+number. The session it ends with is the one a Delete and then an Add would
+end with, but the step goes straight there: the session as it stands between
+the two is never run, and the units each half reaches are rerun once.
+
+<!-- world move code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+let c = b * 2
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = b + 1
+
+----------
+scriptunit-fragment 4
+----------
+
+let d = b + 0
+```
+<!-- end world -->
+
+<!-- world move step 1 -->
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 126 |
+| 2 | `let c = b * 2` | reads `b` (1) | compiles, runs | new | `c` = 250 |
+| 3 | `set b = b + 1` | updates `b` (1) | compiles, runs | new | - |
+| 4 | `let d = b + 0` | reads `b` (1) | compiles, runs | new | `d` = 126 |
+<!-- end world -->
+
+<!-- world move step 2 -->
+**Step 2: the update moves up past a reader.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 reruns and updates `b`, so `b` has to be as unit 3 first found it | `b` = 126 |
+| 3 | `set b = b + 1` | updates `b` (1) | reruns | moved | - |
+| 2 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 3, which now updates it first | `c` = 252 |
+| 4 | `let d = b + 0` | reads `b` (1) | reruns | reads `b` after unit 3 | `d` = 126 |
+<!-- end world -->
+
+Unit 3 moves up past unit 2, which now reads `b` after the update. Unit 3
+updated `b` when it last ran, so unit 1 reruns first to build `b` as unit 3
+first finds it.
+
+<!-- world move step 3 -->
+**Step 3: the update moves down past both readers.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 updated `b` before units 2 and 4 read it, and moves after them | `b` = 126 |
+| 2 | `let c = b * 2` | reads `b` (1) | reruns | reads `b`, which unit 3 no longer updates first | `c` = 250 |
+| 4 | `let d = b + 0` | reads `b` (1) | reruns | reads `b`, which unit 3 no longer updates first | `d` = 125 |
+| 3 | `set b = b + 1` | updates `b` (1) | reruns | moved | - |
+<!-- end world -->
+
+Moving it down past both readers is the other half: they read `b` as unit 1
+made it, so they rerun after unit 1 does.
+
+<!-- world move step 4 -->
+**Step 4: a reader moves above its provider.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 2 | `let c = b * 2` | - | recompile fails | moved, and no unit before it provides `b` | - |
+| 1 | `var b = 125` | - | untouched | moving unit 2 changes nothing it provides | `b` = 126 |
+| 4 | `let d = b + 0` | reads `b` (1) | untouched | nothing changed `b` | `d` = 125 |
+| 3 | `set b = b + 1` | updates `b` (1) | untouched | nothing changed `b` | - |
+<!-- end world -->
+
+<!-- world move step 5 -->
+**Step 5: the reader moves back below its provider.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 2 reads `b`, which unit 3 updated after it | `b` = 126 |
+| 2 | `let c = b * 2` | reads `b` (1) | recompiles, runs | moved | `c` = 250 |
+| 4 | `let d = b + 0` | reads `b` (1) | untouched | reads `b` before unit 3 updates it, as it did | `d` = 125 |
+| 3 | `set b = b + 1` | updates `b` (1) | reruns | updates `b` from unit 1 | - |
+<!-- end world -->
+
+A reader moved above its provider stops compiling, as one would that a
+Delete left without the binding. Moving it back restores `b`, which unit 3
+updated after it. Unit 4 is left alone: it reads `b` before unit 3 updates
+it, and unit 1's rerun builds the value it read.
+
+<!-- world move-take code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+var w = 1
+
+----------
+scriptunit-fragment 3
+----------
+
+let e = b
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b + 1
+```
+<!-- end world -->
+
+<!-- world move-take step 1 -->
+**Step 1: all four units are entered, the last after `b` is taken.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` moved |
+| 2 | `var w = 1` | - | compiles, runs | new | `w` = 1 |
+| 3 | `let e = b` | takes `b` (1) | compiles, runs | new | `e` = 125 |
+| 4 | `let c = b + 1` | - | compile fails | new, and `b` was taken | - |
+<!-- end world -->
+
+<!-- world move-take step 2 -->
+**Step 2: the reader moves above the take.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 4 reads `b`, which unit 3 took after it | `b` moved |
+| 2 | `var w = 1` | - | untouched | moving unit 4 changes nothing it reads | `w` = 1 |
+| 4 | `let c = b + 1` | reads `b` (1) | recompiles, runs | moved | `c` = 126 |
+| 3 | `let e = b` | takes `b` (1) | reruns | takes `b` from unit 1 | `e` = 125 |
+<!-- end world -->
+
+A reader moved above a take finds `b` again, so unit 1 reruns to build it,
+and unit 3 takes it after the reader is done.
+
+<!-- world move-take step 3 -->
+**Step 3: a unit moves past units it has nothing to do with.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | untouched | nothing changed `b` | `b` moved |
+| 4 | `let c = b + 1` | reads `b` (1) | untouched | nothing changed `b` | `c` = 126 |
+| 2 | `var w = 1` | - | reruns | moved | `w` = 1 |
+| 3 | `let e = b` | takes `b` (1) | untouched | nothing changed `b` | `e` = 125 |
+<!-- end world -->
+
+A unit moved past units it shares nothing with reruns, since it has a new
+place, and nothing else does.
 
 ## Returning early
 

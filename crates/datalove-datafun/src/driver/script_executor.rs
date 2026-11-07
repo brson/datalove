@@ -381,6 +381,18 @@ impl ScriptExecutor {
         self.rebuild_script_ctx();
     }
 
+    /// Move unit `id` to position `to`, counted in the session as it is
+    /// after the move.
+    ///
+    /// Its frame stays until it is run again in its new place, which a move
+    /// always does.
+    pub fn move_unit(&mut self, id: u32, to: usize) {
+        let from = self.position(id);
+        self.order.remove(from);
+        self.order.insert(to, id);
+        self.rebuild_script_ctx();
+    }
+
     /// Take unit `id` out of the session, destroying what its frame owned.
     ///
     /// Nothing that stays reads from it once what its going reaches has run

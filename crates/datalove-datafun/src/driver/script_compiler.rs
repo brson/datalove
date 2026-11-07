@@ -454,6 +454,33 @@ impl ScriptSession {
         RemovedUnit { unit: removed.unit, record }
     }
 
+    /// Move the unit at position `from` to position `to`, counted in the
+    /// session as it is after the move, with its id and its record.
+    ///
+    /// **A splice out and a splice in, relinking three units**: the one after
+    /// it where it was, the one after it where it goes, and itself. No unit's
+    /// handle moves. Its record goes with it, being what the running session
+    /// went through, and [`ScriptCompiler::relower_moved`] works out what
+    /// the move reaches.
+    pub fn move_unit<D: salsa::Database>(&mut self, db: &mut D, from: usize, to: usize) {
+        let count = self.units.len();
+        assert!(from < count && to < count, "unit moved from {from} to {to} in a session of {count}");
+        assert_ne!(from, to, "a unit is moved to where it is");
+        let moved = self.units.remove(from);
+        let record = self.records.remove(from);
+        if let Some(after) = self.units.get(from) {
+            let prev = moved.unit.prev(&*db);
+            after.unit.set_prev(db).to(prev);
+        }
+        let prev = to.checked_sub(1).map(|before| self.units[before].unit);
+        moved.unit.set_prev(db).to(prev);
+        if let Some(after) = self.units.get(to) {
+            after.unit.set_prev(db).to(Some(moved.unit));
+        }
+        self.units.insert(to, moved);
+        self.records.insert(to, record);
+    }
+
     /// The type of `name`, which unit `id` provides, as datalove writes it.
     pub fn type_of(&self, id: u32, name: &str) -> &str {
         self.records[self.position(id)].type_of(name)
@@ -703,7 +730,6 @@ impl<'db> ScriptCompiler<'db> {
     pub fn relower_deleted(&mut self, at: usize, removed: RemovedUnit) -> Vec<(usize, ScriptCompilationResult)> {
         assert!(at <= self.units.len(), "unit {at} was removed but the script has {} units", self.units.len());
         let RemovedUnit { unit, record } = removed;
-        let (now_provides, now_uses) = self.graph_now();
         // What it provided as its typecheck says as well as its record, since a
         // unit that typechecked and failed later provides its names to the
         // typechecker and not to lowering: a later unit fails on one of them,
@@ -712,36 +738,77 @@ impl<'db> ScriptCompiler<'db> {
         if unit_parses(self.db, unit) {
             provided.extend(self.unit_provides_names(typecheck_script_unit(self.db, unit, self.env)));
         }
+        let others: Vec<usize> = (0..self.units.len()).collect();
+        let (seeds, restore) = self.departure(&record, &provided, &others[..at], &others[at..]);
+        self.rederive_reach(seeds, restore)
+    }
+
+    /// Re-derive what moving a unit from position `from` to `to` reaches,
+    /// in index order; `to` is where it sits now, and `from` where it sat.
+    ///
+    /// **A move is a deletion and an insertion, taken as one step**, so the
+    /// session as it would stand between them is never compiled or run. The
+    /// other units keep their order, so what leaving `from` reaches is
+    /// worked out as [`Self::relower_deleted`] works it out, over the units
+    /// as they are now, and what arriving at `to` reaches is an insertion's:
+    /// the moved unit, and what uses what it provides.
+    pub fn relower_moved(&mut self, from: usize, to: usize) -> Vec<(usize, ScriptCompilationResult)> {
+        let count = self.units.len();
+        assert!(from < count && to < count, "unit moved from {from} to {to} in a script of {count} units");
+        let record = self.unit_records[to].clone();
+        let (now_provides, _) = self.graph_now();
+        let provided: BTreeSet<String> = record.provides.iter().chain(&now_provides[to]).cloned().collect();
+        let others: Vec<usize> = (0..count).filter(|unit| *unit != to).collect();
+        let (mut seeds, restore) = self.departure(&record, &provided, &others[..from], &others[from..]);
+        seeds.insert(to);
+        self.rederive_reach(seeds, restore)
+    }
+
+    /// What a unit leaving its place reaches: the seeds and the units to
+    /// restore from, as [`Self::rederive_reach`] takes them.
+    ///
+    /// `record` is what it did there and `provided` the names it provided.
+    /// `earlier` and `later` are the units that were before it and after it,
+    /// in order, by where they sit now.
+    fn departure(
+        &self,
+        record: &UnitLowerRecord,
+        provided: &BTreeSet<String>,
+        earlier: &[usize],
+        later: &[usize],
+    ) -> (BTreeSet<usize>, BTreeSet<usize>) {
+        let (now_provides, now_uses) = self.graph_now();
         let changed: BTreeSet<String> = record.takes.iter().chain(&record.writes).cloned().collect();
 
-        // A later unit found a binding of the removed unit's when no unit
+        // A later unit found a binding of the departed unit's when no unit
         // between them provided, took or wrote the name.
         let sets = |unit: usize, name: &String| {
             now_provides[unit].contains(name)
                 || [&self.unit_records[unit].provides, &self.unit_records[unit].takes, &self.unit_records[unit].writes]
                     .iter().any(|names| names.contains(name))
         };
-        let seeds: BTreeSet<usize> = (at..self.units.len())
-            .filter(|later| {
-                now_uses[*later].iter().chain(&self.unit_records[*later].uses).any(|name| {
+        let seeds: BTreeSet<usize> = later.iter().enumerate()
+            .filter(|(nth, unit)| {
+                now_uses[**unit].iter().chain(&self.unit_records[**unit].uses).any(|name| {
                     (provided.contains(name) || changed.contains(name))
-                        && !(at..*later).any(|between| sets(between, name))
+                        && !later[..*nth].iter().any(|between| sets(*between, name))
                 })
             })
+            .map(|(_, unit)| *unit)
             .collect();
 
-        // The unit that builds a binding the removed unit took or wrote as it
-        // was before: its provider, or an overwrite or revival after that.
+        // The unit that builds a binding the departed unit took or wrote as
+        // it was before: its provider, or an overwrite or revival after that.
         let restore: BTreeSet<usize> = changed.iter()
             .filter_map(|name| {
-                (0..at).rev().find(|earlier| {
-                    let record = &self.unit_records[*earlier];
-                    now_provides[*earlier].contains(name)
+                earlier.iter().rev().copied().find(|unit| {
+                    let record = &self.unit_records[*unit];
+                    now_provides[*unit].contains(name)
                         || [&record.provides, &record.overwrites, &record.revives].iter().any(|names| names.contains(name))
                 })
             })
             .collect();
-        self.rederive_reach(seeds, restore)
+        (seeds, restore)
     }
 
     /// Drop the units from `n` on, and re-derive what their going reaches.

@@ -1,8 +1,8 @@
 //! Reactive sessions as step tables, checked against the engine.
 //!
 //! Each fixture in `reactive/` is a worldfile of script units followed
-//! by steps. A step is one modification -- an edit, a delete, an insert or an
-//! append -- and an `expect` table saying what each unit should do in that
+//! by steps. A step is one modification -- an edit, a delete, an insert, a
+//! move or an append -- and an `expect` table saying what each unit should do in that
 //! step and what its bindings should hold after it. Every fixture is shown in
 //! `botdocs/script-reactivity-cases.md`, rendered from here, which is where
 //! the rules they check are written down. How a table is checked is
@@ -18,6 +18,7 @@
 //! | `scriptunit-edit <unit>` | The unit's new source |
 //! | `scriptunit-delete <unit>` | Nothing |
 //! | `scriptunit-insert <unit> after <unit>` | The new unit's source |
+//! | `scriptunit-move <unit> before\|after <unit>` | Nothing |
 //! | `scriptunit-fragment [<unit>]` | A unit appended, after the first step |
 //!
 //! Units are named by the number they were entered as, whether appended or
@@ -98,6 +99,14 @@ fn parse_fixture(path: &Path) -> Fixture {
             }
             "scriptunit-edit" => pending = Some(Change::Edit { unit: args[0].S(), source: section.content }),
             "scriptunit-delete" => pending = Some(Change::Delete { unit: args[0].S() }),
+            "scriptunit-move" => {
+                let place = match args.get(1) {
+                    Some(&"before") => Place::Before,
+                    Some(&"after") => Place::After,
+                    _ => panic!("{name}: `scriptunit-move <unit> before|after <unit>`"),
+                };
+                pending = Some(Change::Move { unit: args[0].S(), place, beside: args[2].S() });
+            }
             "scriptunit-insert" => {
                 assert_eq!(args.get(1), Some(&"after"), "{name}: `scriptunit-insert <unit> after <unit>`");
                 let entry = Entry { unit: take_id(Some(args[0])), source: section.content, expression: false };
@@ -173,7 +182,7 @@ fn sources_by_step(fixture: &Fixture) -> Vec<Vec<(String, String)>> {
             }
             Change::Edit { unit, source } => set(&mut sources, unit, source),
             Change::Insert { entry, .. } => set(&mut sources, &entry.unit, &entry.source),
-            Change::Delete { .. } | Change::EditData { .. } => {}
+            Change::Delete { .. } | Change::Move { .. } | Change::EditData { .. } => {}
         }
         by_step.push(sources.clone());
     }

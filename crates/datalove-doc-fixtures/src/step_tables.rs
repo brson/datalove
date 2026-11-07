@@ -161,6 +161,8 @@ pub enum Change {
     Delete { unit: String },
     /// A unit put before or after the unit `beside`.
     Insert { entry: Entry, place: Place, beside: String },
+    /// A unit moved before or after the unit `beside`.
+    Move { unit: String, place: Place, beside: String },
 }
 
 pub struct Row {
@@ -411,6 +413,19 @@ impl Session {
                     self.states.remove(index);
                     ran.push((unit.C(), Ran::Deleted));
                     let reports = self.engine.delete_unit(id);
+                    ran.extend(self.reported(reports));
+                }
+                Change::Move { unit, place, beside } => {
+                    let id = self.id(unit);
+                    let from = self.index(unit);
+                    let name = self.units.remove(from);
+                    let code = self.code.remove(from);
+                    let state = self.states.remove(from);
+                    let to = place.index(self.index(beside));
+                    self.units.insert(to, name);
+                    self.code.insert(to, code);
+                    self.states.insert(to, state);
+                    let reports = self.engine.move_unit(id, to);
                     ran.extend(self.reported(reports));
                 }
                 Change::Insert { entry, place, beside } => {
