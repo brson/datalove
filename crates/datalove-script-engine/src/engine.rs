@@ -730,7 +730,8 @@ impl Engine {
             .collect();
         reached.insert(path);
         let broken_after: BTreeSet<String> = modules.errors.broken.keys().cloned().collect();
-        reached.extend(broken_before.symmetric_difference(&broken_after).cloned());
+        let broken_or_fixed: Vec<String> = broken_before.symmetric_difference(&broken_after).cloned().collect();
+        reached.extend(broken_or_fixed.iter().cloned());
         drop(modules);
 
         // A unit whose require failed is found here too: its imports are read
@@ -740,7 +741,7 @@ impl Engine {
         let rederived: BTreeMap<SessionId, _> = self.sessions.iter_mut()
             .map(|(id, state)| {
                 let rederived = state.resume(&shared.db, &compiled, changes, |compiler| {
-                    compiler.relower_module_reach(&reached)
+                    compiler.relower_module_reach(&reached, &broken_or_fixed)
                 });
                 (*id, rederived)
             })

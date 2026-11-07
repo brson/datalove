@@ -662,8 +662,15 @@ impl<'db> ScriptCompiler<'db> {
     /// driver that re-derived the whole script would over-propagate where the
     /// old behaviour under-propagated.
     ///
-    /// `edited` are module paths in `library/package/module` form, which is
-    /// what an import resolves an alias to.
+    /// **A unit that requires a module that broke or was fixed is reached
+    /// too**, being `broken_or_fixed`, whether or not it imports from it: a
+    /// `require` of a module that does not compile fails, and one of a module
+    /// that compiles again runs. A body edit leaves a unit that only requires
+    /// the module as it was.
+    ///
+    /// `edited` and `broken_or_fixed` are module paths in
+    /// `library/package/module` form, which is what an import resolves an
+    /// alias to and what a `require` names.
     ///
     /// The caller must put the new module IR in front of the executor --
     /// `ScriptExecutor::set_module_registry` -- before re-executing what comes
@@ -673,8 +680,10 @@ impl<'db> ScriptCompiler<'db> {
     pub fn relower_module_reach(
         &mut self,
         edited: &[String],
+        broken_or_fixed: &[String],
     ) -> Vec<(usize, ScriptCompilationResult)> {
-        let seeds = self.module_importers(edited);
+        let mut seeds = self.module_importers(edited);
+        seeds.extend(self.module_requirers(broken_or_fixed));
         self.rederive_reach(seeds, BTreeSet::new())
     }
 
@@ -917,6 +926,17 @@ impl<'db> ScriptCompiler<'db> {
                     .chain(now[*unit].iter())
                     .any(|path| edited.iter().any(|changed| changed == path))
             })
+            .collect()
+    }
+
+    /// The units that require one of `modules`, as their code says now.
+    fn module_requirers(&self, modules: &[String]) -> BTreeSet<usize> {
+        let db = self.db;
+        self.unit_typecheck_outputs().iter().enumerate()
+            .filter(|(_, output)| output.is_some_and(|output| {
+                output.new_module_aliases(db).iter().any(|(_, path)| modules.contains(path))
+            }))
+            .map(|(unit, _)| unit)
             .collect()
     }
 

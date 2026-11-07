@@ -1,7 +1,7 @@
 //! Reactive sessions as step tables, checked against the engine.
 //!
-//! Each fixture in `reactive/` is a worldfile of script units followed
-//! by steps. A step is one modification -- an edit, a delete, an insert, a
+//! Each fixture in `reactive/` is a worldfile of script units, and the
+//! modules and data they require, followed by steps. A step is one modification -- an edit, a delete, an insert, a
 //! move or an append -- and an `expect` table saying what each unit should do in that
 //! step and what its bindings should hold after it. Every fixture is shown in
 //! `botdocs/script-reactivity-cases.md`, rendered from here, which is where
@@ -19,6 +19,11 @@
 //! | `scriptunit-delete <unit>` | Nothing |
 //! | `scriptunit-insert <unit> after <unit>` | The new unit's source |
 //! | `scriptunit-move <unit> before\|after <unit>` | Nothing |
+//! | `module-edit <library/package/module>` | The module's new source |
+//! | `data-edit <library/package/name>` | The data's new text |
+//!
+//! `module` and `data` sections before the first step make the workspace
+//! the session runs in, as they do in any worldfile.
 //! | `scriptunit-fragment [<unit>]` | A unit appended, after the first step |
 //!
 //! Units are named by the number they were entered as, whether appended or
@@ -57,12 +62,29 @@ struct Fixture {
     name: String,
     /// The text of the unit sections before the first step, as written.
     units_text: String,
+    /// The `module` and `data` sections, as worldfile text.
+    library: String,
     steps: Vec<Step>,
 }
 
 impl Fixture {
     fn check(&self, number: usize) -> &Check {
         self.steps[number - 1].check.as_ref().expect("every step of a fixture is checked")
+    }
+
+    /// The system library, and the fixture's own modules and data, read as
+    /// any worldfile's are.
+    fn workspace(&self) -> Workspace {
+        if self.library.is_empty() {
+            return Workspace::system();
+        }
+        let dir = rmx::tempfile::tempdir().X();
+        let path = dir.path().join("library.world");
+        std::fs::write(&path, &self.library).X();
+        let world = datalove_repl::read_world(&path).X();
+        let sys = datalove_sys_packages::system_library();
+        let (descriptor, also_roots) = world.workspace(&sys).X();
+        Workspace { sys, descriptor, also_roots }
     }
 }
 
@@ -72,6 +94,7 @@ fn parse_fixture(path: &Path) -> Fixture {
     let units_text = text.split(&fmt!("{SEPARATOR}\nexpect")).next().X().trim().S();
 
     let mut steps: Vec<Step> = Vec::new();
+    let mut library = String::new();
     let mut pending: Option<Change> = None;
     let mut entered = Vec::new();
     // The id the next unit entered takes, by fragment or by insert.
@@ -97,6 +120,12 @@ fn parse_fixture(path: &Path) -> Fixture {
                     false => pending = Some(Change::Enter(vec![entry])),
                 }
             }
+            "module" | "data" => {
+                assert!(steps.is_empty(), "{name}: a `{kind}` section after the first step");
+                library.push_str(&fmt!("{SEPARATOR}\n{}\n{SEPARATOR}\n\n{}\n\n", section.header, section.content));
+            }
+            "module-edit" => pending = Some(Change::EditModule { path: args[0].S(), source: section.content }),
+            "data-edit" => pending = Some(Change::EditData { path: args[0].S(), text: section.content }),
             "scriptunit-edit" => pending = Some(Change::Edit { unit: args[0].S(), source: section.content }),
             "scriptunit-delete" => pending = Some(Change::Delete { unit: args[0].S() }),
             "scriptunit-move" => {
@@ -129,7 +158,7 @@ fn parse_fixture(path: &Path) -> Fixture {
         }
     }
     assert!(pending.is_none(), "{name}: a change with no `expect` after it");
-    Fixture { name, units_text, steps }
+    Fixture { name, units_text, library, steps }
 }
 
 fn fixtures() -> Vec<Fixture> {
@@ -145,7 +174,7 @@ fn fixtures() -> Vec<Fixture> {
 fn every_step_table_holds_for_the_engine() {
     let mut failures = Vec::new();
     for fixture in fixtures() {
-        failures.extend(run(&fixture.name, Workspace::system(), &fixture.steps));
+        failures.extend(run(&fixture.name, fixture.workspace(), &fixture.steps));
     }
     assert!(failures.is_empty(), "\n{}\n", failures.join("\n"));
 }
@@ -182,7 +211,7 @@ fn sources_by_step(fixture: &Fixture) -> Vec<Vec<(String, String)>> {
             }
             Change::Edit { unit, source } => set(&mut sources, unit, source),
             Change::Insert { entry, .. } => set(&mut sources, &entry.unit, &entry.source),
-            Change::Delete { .. } | Change::Move { .. } | Change::EditData { .. } => {}
+            Change::Delete { .. } | Change::Move { .. } | Change::EditData { .. } | Change::EditModule { .. } => {}
         }
         by_step.push(sources.clone());
     }
@@ -198,6 +227,11 @@ fn render_step(fixture: &Fixture, number: usize) -> String {
     let label = step.label.C().unwrap_or_else(|| fmt!("Step {number}"));
     writeln!(out, "**{label}: {}.**", step.title).X();
     writeln!(out).X();
+    match &fixture.steps[number - 1].change {
+        Change::EditModule { path, source } => writeln!(out, "```datalove\n// {path}\n{source}\n```\n").X(),
+        Change::EditData { path, text } => writeln!(out, "```datalove\n// {path}\n{text}\n```\n").X(),
+        _ => {}
+    }
     writeln!(out, "| unit | code | uses from earlier units | this step | because | holds after |").X();
     writeln!(out, "|------|------|-------------------------|-----------|---------|-------------|").X();
     for row in &step.expect {

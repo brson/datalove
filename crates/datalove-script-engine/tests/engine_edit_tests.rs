@@ -566,6 +566,31 @@ fn a_module_edit_that_does_not_compile_fails_its_units_until_fixed() {
     assert_eq!(value_of(&mut engine, "a"), "2", "the unit is back, calling the fixed module");
 }
 
+/// **A unit that only requires a module fails when it breaks**, and runs
+/// when it is fixed, as it would in a fresh run, though it imports nothing.
+///
+/// Found by the reactive fixtures' check against a fresh run: the units a
+/// module edit reaches were the ones importing from it, and a `require` in a
+/// unit of its own was left as having run.
+#[test]
+fn a_unit_that_only_requires_a_module_fails_while_it_is_broken() {
+    let mut engine = engine_with_module("fun f(x: int): int\n    ret x\nend fun\n");
+    run(&mut engine, "require module local/test/m\n---\nimport m.f\nlet a = f(1)\n---\nlet b = 20");
+
+    let reports = edit_module(&mut engine, "fun f(x: int): int\n    ret \"nope\"\nend fun\n");
+    assert_eq!(rederived(&reports), vec![1, 2]);
+    assert!(reports.iter().filter(|report| report.eval.is_some()).all(|report| matches!(report.eval, Some(Eval::NotCompiled(_)))), "{reports:?}");
+
+    let reports = edit_module(&mut engine, "fun f(x: int): int\n    ret x + 1\nend fun\n");
+    assert_eq!(rederived(&reports), vec![1, 2]);
+    assert_eq!(value_of(&mut engine, "a"), "2");
+
+    // A body edit leaves the unit that only requires the module alone.
+    let reports = edit_module(&mut engine, "fun f(x: int): int\n    ret x + 2\nend fun\n");
+    assert_eq!(rederived(&reports), vec![2]);
+    assert_eq!(value_of(&mut engine, "a"), "3");
+}
+
 /// A module that did not compile when a unit first required it comes in when
 /// an edit fixes it, and the unit with it.
 ///

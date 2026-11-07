@@ -24,6 +24,7 @@ is the narrative version. How the engine does it is
 - [Reruns that need reruns](#user-content-reruns-that-need-reruns)
 - [Values through intermediate bindings](#user-content-values-through-intermediate-bindings)
 - [Writes through function parameters](#user-content-writes-through-function-parameters)
+- [Modules and data](#user-content-modules-and-data)
 - [Conditional writes, loops and parts of bindings](#user-content-conditional-writes-loops-and-parts-of-bindings)
 - [Splices](#user-content-splices)
 - [Moves](#user-content-moves)
@@ -1737,6 +1738,282 @@ let shown = a * 10 + b
 | 4 | `let shown = a * 10 + b` | reads `a` (1), reads `b` (2) | reruns | reads `a` and `b` after unit 3 | `shown` = 89 |
 <!-- end world -->
 
+## Modules and data
+
+A module is a binding too. `require module local/test/m` provides the name
+`m`, and `import m.bump` reads `m` and provides `bump`, so edits to the units
+that require and import are ordinary edits. The module's contents are a
+provider that sits before every unit, and a script can only read them:
+nothing in a session takes, overwrites or updates a module's functions, so a
+module edit never needs a binding of the module's restored. It reaches the
+units that import from the module, and the forward rule goes on from them.
+What the units reached do to the session's own bindings is another matter,
+and the backward rule handles it as for any edit.
+
+<!-- world module-edit code -->
+```datalove
+----------
+module local/test/m
+----------
+
+fun bump(mut x: int)
+  set x = x + 1
+end fun
+
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+require module local/test/m
+
+----------
+scriptunit-fragment 3
+----------
+
+import m.bump
+
+----------
+scriptunit-fragment 4
+----------
+
+call bump(mut b)
+
+----------
+scriptunit-fragment 5
+----------
+
+let c = b * 2
+
+----------
+scriptunit-fragment 6
+----------
+
+let d = 100
+```
+<!-- end world -->
+
+<!-- world module-edit step 1 -->
+**Step 1: all six units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 126 |
+| 2 | `require module local/test/m` | - | compiles, runs | new | - |
+| 3 | `import m.bump` | reads `m` (2) | compiles, runs | new | - |
+| 4 | `call bump(mut b)` | reads `bump` (3), updates `b` (1) | compiles, runs | new | - |
+| 5 | `let c = b * 2` | reads `b` (1) | compiles, runs | new | `c` = 252 |
+| 6 | `let d = 100` | - | compiles, runs | new | `d` = 100 |
+<!-- end world -->
+
+<!-- world module-edit step 2 -->
+**Step 2: the body of `bump` is edited.**
+
+```datalove
+// local/test/m
+fun bump(mut x: int)
+  set x = x * 2
+end fun
+```
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 4 reruns and updates `b`, so `b` has to be as unit 4 first found it | `b` = 250 |
+| 2 | `require module local/test/m` | - | untouched | it only requires the module, which still compiles | - |
+| 3 | `import m.bump` | reads `m` (2) | reruns | imports from the module | - |
+| 4 | `call bump(mut b)` | reads `bump` (3), updates `b` (1) | reruns | reads `bump` | - |
+| 5 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 4 | `c` = 500 |
+| 6 | `let d = 100` | - | untouched | uses nothing | `d` = 100 |
+<!-- end world -->
+
+A body edit reaches unit 3, which imports from the module, and unit 4,
+which calls `bump`. Unit 4 updates `b`, so unit 1 reruns first, as in
+[writes through function parameters](#user-content-writes-through-function-parameters).
+Unit 2 only requires the module, and has nothing to do again.
+
+<!-- world module-edit step 3 -->
+**Step 3: `bump` stops writing its argument.**
+
+```datalove
+// local/test/m
+fun bump(ref x: int): int
+  ret x + 1
+end fun
+```
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 4 updated `b` when it last ran, and no longer compiles | `b` = 125 |
+| 2 | `require module local/test/m` | - | untouched | it only requires the module, which still compiles | - |
+| 3 | `import m.bump` | reads `m` (2) | recompiles, runs | imports `bump`, whose signature changed | - |
+| 4 | `call bump(mut b)` | - | recompile fails | `bump` no longer takes `mut` | - |
+| 5 | `let c = b * 2` | reads `b` (1) | reruns | reads `b`, which unit 4 no longer updates | `c` = 250 |
+| 6 | `let d = 100` | - | untouched | uses nothing | `d` = 100 |
+<!-- end world -->
+
+A signature edit typechecks the importer again. The call no longer compiles,
+which retracts its update.
+
+<!-- world module-edit step 4 -->
+**Step 4: the module stops compiling.**
+
+```datalove
+// local/test/m
+fun bump(mut x: int)
+  set x = "nope"
+end fun
+```
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | untouched | nothing changed `b` | `b` = 125 |
+| 2 | `require module local/test/m` | - | recompile fails | requires a module that does not compile | - |
+| 3 | `import m.bump` | - | recompile fails | imports from a module that does not compile | - |
+| 4 | `call bump(mut b)` | - | recompile fails | `bump` is gone | - |
+| 5 | `let c = b * 2` | reads `b` (1) | untouched | nothing changed `b` | `c` = 250 |
+| 6 | `let d = 100` | - | untouched | uses nothing | `d` = 100 |
+
+<!--
+Engine today, more than the rule asks:
+unit 1 recompiles: the module leaving the compile changes what every unit is typechecked against
+unit 5 recompiles: the module leaving the compile changes what every unit is typechecked against
+unit 6 recompiles: the module leaving the compile changes what every unit is typechecked against
+-->
+<!-- end world -->
+
+<!-- world module-edit step 5 -->
+**Step 5: the module is fixed.**
+
+```datalove
+// local/test/m
+fun bump(mut x: int)
+  set x = x + 10
+end fun
+```
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | untouched | `b` is as unit 1 made it | `b` = 135 |
+| 2 | `require module local/test/m` | - | reruns | requires the module, which compiles again | - |
+| 3 | `import m.bump` | reads `m` (2) | recompiles, runs | imports from the module, which compiles again | - |
+| 4 | `call bump(mut b)` | reads `bump` (3), updates `b` (1) | recompiles, runs | `bump` is back | - |
+| 5 | `let c = b * 2` | reads `b` (1) | reruns | reads `b` after unit 4, which updates it again | `c` = 270 |
+| 6 | `let d = 100` | - | untouched | uses nothing | `d` = 100 |
+<!-- end world -->
+
+A module that does not compile fails every unit that requires it, whether
+or not the unit imports from it, and fixing it brings them back. Unit 2's
+failure is what a fresh run gives; the engine left it as having run until the
+fresh-run check caught it.
+
+<!-- world module-edit step 6 -->
+**Step 6: the `require` is deleted.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 4 updated `b` when it last ran, and no longer compiles | `b` = 125 |
+| 2 | `require module local/test/m` | - | deleted | deleted | - |
+| 3 | `import m.bump` | - | recompile fails | no unit before it provides `m` | - |
+| 4 | `call bump(mut b)` | - | recompile fails | `bump` is gone | - |
+| 5 | `let c = b * 2` | reads `b` (1) | reruns | reads `b`, which unit 4 no longer updates | `c` = 250 |
+| 6 | `let d = 100` | - | untouched | uses nothing | `d` = 100 |
+<!-- end world -->
+
+Deleting the `require` takes `m` away from the import, the same as deleting
+any provider.
+
+A data file is compiled into the unit that requires it, as a const of the
+type the unit requires it at. A change to the data reruns that unit, and its
+readers after it. Data of another type breaks it, until the type comes back.
+
+<!-- world data-edit code -->
+```datalove
+----------
+data local/test/d
+----------
+
+5
+
+----------
+scriptunit-fragment 1
+----------
+
+require data local/test/d: int
+
+----------
+scriptunit-fragment 2
+----------
+
+let a = d + 1
+
+----------
+scriptunit-fragment 3
+----------
+
+let b = 20
+```
+<!-- end world -->
+
+<!-- world data-edit step 1 -->
+**Step 1: all three units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `require data local/test/d: int` | - | compiles, runs | new | `d` = 5 |
+| 2 | `let a = d + 1` | reads `d` (1) | compiles, runs | new | `a` = 6 |
+| 3 | `let b = 20` | - | compiles, runs | new | `b` = 20 |
+<!-- end world -->
+
+<!-- world data-edit step 2 -->
+**Step 2: the data changes.**
+
+```datalove
+// local/test/d
+7
+```
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `require data local/test/d: int` | - | reruns | requires the data, whose type is the same | `d` = 7 |
+| 2 | `let a = d + 1` | reads `d` (1) | reruns | reads `d` from unit 1 | `a` = 8 |
+| 3 | `let b = 20` | - | untouched | uses nothing | `b` = 20 |
+<!-- end world -->
+
+<!-- world data-edit step 3 -->
+**Step 3: the data changes type.**
+
+```datalove
+// local/test/d
+"seven"
+```
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `require data local/test/d: int` | - | recompile fails | requires the data as an `int` | - |
+| 2 | `let a = d + 1` | - | recompile fails | no unit before it provides `d` | - |
+| 3 | `let b = 20` | - | untouched | uses nothing | `b` = 20 |
+<!-- end world -->
+
+<!-- world data-edit step 4 -->
+**Step 4: the data is fixed.**
+
+```datalove
+// local/test/d
+9
+```
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `require data local/test/d: int` | - | recompiles, runs | requires the data, which has its type again | `d` = 9 |
+| 2 | `let a = d + 1` | reads `d` (1) | recompiles, runs | `d` is back | `a` = 10 |
+| 3 | `let b = 20` | - | untouched | uses nothing | `b` = 20 |
+<!-- end world -->
+
 ## Conditional writes, loops and parts of bindings
 
 <!-- world conditional-write code -->
@@ -2350,5 +2627,6 @@ Each is a comment under a table above.
 - A write to part of a binding counts as a write to all of it.
 - A rerun that comes out the same still reruns its readers.
 - A unit that returned early is assumed to have done everything its code could.
+- A module leaving or joining the compile typechecks every unit again.
 
 Recompiles are not held to anything tighter than salsa's memos.

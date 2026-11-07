@@ -1,0 +1,81 @@
+----------
+data local/test/d
+----------
+
+5
+
+----------
+scriptunit-fragment 1
+----------
+
+require data local/test/d: int
+
+----------
+scriptunit-fragment 2
+----------
+
+let a = d + 1
+
+----------
+scriptunit-fragment 3
+----------
+
+let b = 20
+
+----------
+expect all three units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `d` = 5 |
+| 2 | reads `d` (1) | compiles, runs | new | `a` = 6 |
+| 3 | - | compiles, runs | new | `b` = 20 |
+
+----------
+data-edit local/test/d
+----------
+
+7
+
+----------
+expect the data changes
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | requires the data, whose type is the same | `d` = 7 |
+| 2 | reads `d` (1) | reruns | reads `d` from unit 1 | `a` = 8 |
+| 3 | - | untouched | uses nothing | `b` = 20 |
+
+----------
+data-edit local/test/d
+----------
+
+"seven"
+
+----------
+expect the data changes type
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompile fails | requires the data as an `int` | - |
+| 2 | - | recompile fails | no unit before it provides `d` | - |
+| 3 | - | untouched | uses nothing | `b` = 20 |
+
+----------
+data-edit local/test/d
+----------
+
+9
+
+----------
+expect the data is fixed
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | requires the data, which has its type again | `d` = 9 |
+| 2 | reads `d` (1) | recompiles, runs | `d` is back | `a` = 10 |
+| 3 | - | untouched | uses nothing | `b` = 20 |

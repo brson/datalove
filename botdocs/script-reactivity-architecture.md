@@ -196,7 +196,7 @@ the reach are over the order. The unit's IR is stamped with its id
 
 ```
 relower_reach(edited)            -> seeds = {edited}
-relower_module_reach(paths)      -> seeds = module_importers(paths)
+relower_module_reach(paths, b)   -> seeds = module_importers(paths) + module_requirers(b)
 relower_inserted(at)             -> seeds = {at}
 relower_deleted(at, removed)     -> seeds = its readers; restore = its setters
 relower_moved(from, to)          -> a deletion's seeds and restore, and {to}
@@ -212,6 +212,12 @@ the new graph, though its reader must be told. One it *introduces* is absent
 from the old. The alias edge, from a `require` to an `import` that uses its
 alias, is added by hand: aliases resolve through `module_alias_before`, which
 `uses` does not record.
+
+A module edit's seeds are the units whose imports resolve into the modules
+it reaches. When the edit breaks a module or fixes one, the units that
+require it are seeds too, imports or not, since a `require` of a module that
+does not compile fails. A body edit leaves a unit that only requires the
+module alone.
 
 `FrameStore` is partitioned by unit id, so rerunning one is
 `ScriptExecutor::rerun_unit`. That runs the unit, then puts the new frame under

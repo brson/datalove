@@ -158,6 +158,8 @@ pub enum Change {
     Edit { unit: String, source: String },
     /// A data file's text replaced, by its `library/package/name` path.
     EditData { path: String, text: String },
+    /// A module's source replaced, by its `library/package/module` path.
+    EditModule { path: String, source: String },
     Delete { unit: String },
     /// A unit put before or after the unit `beside`.
     Insert { entry: Entry, place: Place, beside: String },
@@ -397,11 +399,16 @@ impl Session {
                     ran.extend(self.reported(reports));
                 }
                 Change::EditData { path, text } => {
-                    let [library, package, name] = path.splitn(3, '/').collect::<Vec<_>>()[..] else {
-                        panic!("data `{path}` is not a library/package/name path");
-                    };
+                    let [library, package, name] = library_path(path);
                     let first = self.engine.first_session();
                     let reports = self.engine.edit_data(library, package, name, text).remove(&first)
+                        .expect("every session is re-derived");
+                    ran.extend(self.reported(reports));
+                }
+                Change::EditModule { path, source } => {
+                    let [library, package, module] = library_path(path);
+                    let first = self.engine.first_session();
+                    let reports = self.engine.edit_module(library, package, module, source).remove(&first)
                         .expect("every session is re-derived");
                     ran.extend(self.reported(reports));
                 }
@@ -581,6 +588,12 @@ impl Session {
         }
         failures
     }
+}
+
+/// A `library/package/name` path, taken apart.
+fn library_path(path: &str) -> [&str; 3] {
+    let parts: Vec<&str> = path.splitn(3, '/').collect();
+    parts.try_into().unwrap_or_else(|_| panic!("`{path}` is not a library/package/name path"))
 }
 
 /// The workspace a session runs in.

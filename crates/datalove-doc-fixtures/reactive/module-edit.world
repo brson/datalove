@@ -1,0 +1,167 @@
+----------
+module local/test/m
+----------
+
+fun bump(mut x: int)
+  set x = x + 1
+end fun
+
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+require module local/test/m
+
+----------
+scriptunit-fragment 3
+----------
+
+import m.bump
+
+----------
+scriptunit-fragment 4
+----------
+
+call bump(mut b)
+
+----------
+scriptunit-fragment 5
+----------
+
+let c = b * 2
+
+----------
+scriptunit-fragment 6
+----------
+
+let d = 100
+
+----------
+expect all six units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 126 |
+| 2 | - | compiles, runs | new | - |
+| 3 | reads `m` (2) | compiles, runs | new | - |
+| 4 | reads `bump` (3), updates `b` (1) | compiles, runs | new | - |
+| 5 | reads `b` (1) | compiles, runs | new | `c` = 252 |
+| 6 | - | compiles, runs | new | `d` = 100 |
+
+----------
+module-edit local/test/m
+----------
+
+fun bump(mut x: int)
+  set x = x * 2
+end fun
+
+----------
+expect the body of `bump` is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 4 reruns and updates `b`, so `b` has to be as unit 4 first found it | `b` = 250 |
+| 2 | - | untouched | it only requires the module, which still compiles | - |
+| 3 | reads `m` (2) | reruns | imports from the module | - |
+| 4 | reads `bump` (3), updates `b` (1) | reruns | reads `bump` | - |
+| 5 | reads `b` (1) | reruns | reads `b` after unit 4 | `c` = 500 |
+| 6 | - | untouched | uses nothing | `d` = 100 |
+
+----------
+module-edit local/test/m
+----------
+
+fun bump(ref x: int): int
+  ret x + 1
+end fun
+
+----------
+expect `bump` stops writing its argument
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 4 updated `b` when it last ran, and no longer compiles | `b` = 125 |
+| 2 | - | untouched | it only requires the module, which still compiles | - |
+| 3 | reads `m` (2) | recompiles, runs | imports `bump`, whose signature changed | - |
+| 4 | - | recompile fails | `bump` no longer takes `mut` | - |
+| 5 | reads `b` (1) | reruns | reads `b`, which unit 4 no longer updates | `c` = 250 |
+| 6 | - | untouched | uses nothing | `d` = 100 |
+
+----------
+module-edit local/test/m
+----------
+
+fun bump(mut x: int)
+  set x = "nope"
+end fun
+
+----------
+expect the module stops compiling
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | nothing changed `b` | `b` = 125 |
+| 2 | - | recompile fails | requires a module that does not compile | - |
+| 3 | - | recompile fails | imports from a module that does not compile | - |
+| 4 | - | recompile fails | `bump` is gone | - |
+| 5 | reads `b` (1) | untouched | nothing changed `b` | `c` = 250 |
+| 6 | - | untouched | uses nothing | `d` = 100 |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 1 | recompiles | the module leaving the compile changes what every unit is typechecked against |
+| 5 | recompiles | the module leaving the compile changes what every unit is typechecked against |
+| 6 | recompiles | the module leaving the compile changes what every unit is typechecked against |
+
+----------
+module-edit local/test/m
+----------
+
+fun bump(mut x: int)
+  set x = x + 10
+end fun
+
+----------
+expect the module is fixed
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | `b` is as unit 1 made it | `b` = 135 |
+| 2 | - | reruns | requires the module, which compiles again | - |
+| 3 | reads `m` (2) | recompiles, runs | imports from the module, which compiles again | - |
+| 4 | reads `bump` (3), updates `b` (1) | recompiles, runs | `bump` is back | - |
+| 5 | reads `b` (1) | reruns | reads `b` after unit 4, which updates it again | `c` = 270 |
+| 6 | - | untouched | uses nothing | `d` = 100 |
+
+----------
+scriptunit-delete 2
+----------
+
+----------
+expect the `require` is deleted
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 4 updated `b` when it last ran, and no longer compiles | `b` = 125 |
+| 2 | - | deleted | deleted | - |
+| 3 | - | recompile fails | no unit before it provides `m` | - |
+| 4 | - | recompile fails | `bump` is gone | - |
+| 5 | reads `b` (1) | reruns | reads `b`, which unit 4 no longer updates | `c` = 250 |
+| 6 | - | untouched | uses nothing | `d` = 100 |

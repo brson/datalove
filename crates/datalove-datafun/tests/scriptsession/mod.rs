@@ -339,7 +339,7 @@ impl Session {
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let rederived = compiler.relower_module_reach(&[module.path()]);
+        let rederived = compiler.relower_module_reach(&[module.path()], &[]);
         self.script = Some(compiler.into_session());
         rederived
     }
