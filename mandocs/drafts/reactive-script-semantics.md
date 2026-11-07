@@ -1531,7 +1531,8 @@ don't have backwards analysis like Datalove.
 
 So while FRP research does apply to Datalove,
 and will moreso in the future when Datalove gets real I/O,
-the more useful comparison today seems to be to things like deterministic incremental build systems
+the more useful comparison today is to compiler optimization,
+deterministic incremental build systems,
 and live record-and-replay debuggers.
 Elm has something like this.
 Datalove's reactive algebra is a dependence analysis,
