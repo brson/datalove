@@ -218,7 +218,7 @@ impl LitTycheckCommand {
         let ast = parse_result.expr(&db);
         let parse_diags = datalit::parser::parse::accumulated::<datalove::diagnostic::ParseDiagnostic>(&db, source);
         if !parse_diags.is_empty() {
-            render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::new(), cwd);
+            render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &datalove::bct::render::LineOffsets::default(), cwd);
             bail!("Parse error");
         }
 

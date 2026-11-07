@@ -759,7 +759,7 @@ pub fn lower_expression<'db>(
             let IrType::Struct(fields) = &result_type else {
                 panic!("AnonStruct with non-struct type {:?} - typechecker should catch this", result_type);
             };
-            let field_types: std::collections::HashMap<String, IrType> =
+            let field_types: rmx::rustc_hash::FxHashMap<String, IrType> =
                 fields.iter().map(|(n, t)| (n.clone(), t.clone())).collect();
             let sorted_field_names: Vec<String> = match &result_type {
                 IrType::Struct(fields) => fields.iter().map(|(n, _)| n.clone()).collect(),
@@ -768,8 +768,8 @@ pub fn lower_expression<'db>(
 
             // Lower all field expressions and collect by name.
             // Track each non-Copy field value as pending intermediate.
-            let mut field_values: std::collections::HashMap<String, ValueId> =
-                std::collections::HashMap::new();
+            let mut field_values: rmx::rustc_hash::FxHashMap<String, ValueId> =
+                rmx::rustc_hash::FxHashMap::default();
             for field in struct_expr.fields.iter() {
                 let name = field.name.text(ctx.db).to_string();
                 let value = lower_expression(ctx, ctx.expr(field.value))?;

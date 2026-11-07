@@ -11,5 +11,5 @@ repository.workspace = true
 index-64 = ["datalove-datafun-ir/index-64"]
 
 [dependencies]
+rmx.workspace = true
 datalove-datafun-ir.workspace = true
-rustc-hash.workspace = true

@@ -8,7 +8,7 @@
 use rmx::prelude::*;
 use serde::Serialize;
 use datalove_vio::Fs;
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 
 use crate::app::{UnitStatus, status_of};
 use crate::script::{self, Engine, EnvBinding};
@@ -56,7 +56,7 @@ pub struct TraceUnit {
 /// Record a session's inputs.
 pub fn record_inputs(session: &mut Session, inputs: Vec<SavedInput>) -> Trace {
     // What each unit came to the last time a step re-derived it, by number.
-    let mut outcomes: HashMap<u32, script::Eval> = HashMap::new();
+    let mut outcomes: FxHashMap<u32, script::Eval> = FxHashMap::default();
     let mut steps = Vec::new();
 
     for SavedInput { input, command } in inputs {
@@ -98,7 +98,7 @@ pub fn record_world(fs: &dyn Fs, sys: SystemLibrary, path: &std::path::Path) -> 
     Ok(record_inputs(&mut Session::new(engine), world.inputs))
 }
 
-fn trace_units(session: &mut Session, outcomes: &HashMap<u32, script::Eval>) -> Vec<TraceUnit> {
+fn trace_units(session: &mut Session, outcomes: &FxHashMap<u32, script::Eval>) -> Vec<TraceUnit> {
     let last_step = session.last_step().to_vec();
     let numbered = session.units().to_vec();
     numbered.into_iter()

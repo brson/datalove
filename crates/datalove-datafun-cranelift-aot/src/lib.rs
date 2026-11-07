@@ -29,7 +29,8 @@ pub use datalove_datafun_cranelift::{
     CraneliftError,
 };
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+use rmx::rustc_hash::FxHashMap;
 
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, AbiParam, InstBuilder};
 use cranelift_codegen::isa::TargetIsa;
@@ -154,9 +155,9 @@ impl AotCompiler {
         // A data object for each const a `StaticRef` names, equal ones once,
         // built by `__dtlv_statics_init` before the script runs.
         let mut statics: Vec<(cranelift_module::DataId, IrType, std::sync::Arc<ConstValue>)> = Vec::new();
-        let mut static_consts = codegen::StaticConsts::new();
+        let mut static_consts = codegen::StaticConsts::default();
         {
-            let mut by_value: HashMap<(IrType, std::sync::Arc<ConstValue>), cranelift_module::DataId> = HashMap::new();
+            let mut by_value: FxHashMap<(IrType, std::sync::Arc<ConstValue>), cranelift_module::DataId> = FxHashMap::default();
             let mut units: Vec<&IrCodeUnit> = vec![&body_func];
             units.extend(unit.nested_units.iter());
             units.extend(registry.iter_module_code_units_with_ids().map(|(_, u)| u));
@@ -195,8 +196,8 @@ impl AotCompiler {
         // === Three-pass compilation for local and module functions ===
 
         // Pass 1: Declare all local functions (nested units) to get Cranelift FuncIds.
-        let mut local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, codegen::LocalCallee> =
-            HashMap::new();
+        let mut local_funcs: FxHashMap<datalove_datafun_ir::CodeUnitId, codegen::LocalCallee> =
+            FxHashMap::default();
         for func in &unit.nested_units {
             let sig = codegen::build_signature_for_func(func, self.isa.as_ref());
             let func_id = datalove_datafun_ir::CodeUnitId(func.id.0);

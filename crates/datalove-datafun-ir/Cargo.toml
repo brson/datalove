@@ -15,7 +15,6 @@ rmx.workspace = true
 serde = { version = "1", features = ["derive"] }
 ron = "0.8"
 salsa.workspace = true
-rustc-hash.workspace = true
 datalove-datafun-intrinsics.workspace = true
 datalove-datalit.workspace = true
 bct.workspace = true

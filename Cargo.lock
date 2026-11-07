@@ -235,7 +235,6 @@ version = "0.7.1"
 dependencies = [
  "ariadne",
  "enum-iterator",
- "rustc-hash",
  "rustmax",
  "salsa",
  "serde",
@@ -1255,7 +1254,6 @@ dependencies = [
  "datalove-rtdt",
  "rand 0.8.5",
  "ron",
- "rustc-hash",
  "rustmax",
  "salsa",
  "serde",
@@ -1266,7 +1264,7 @@ name = "datalove-datafun-const"
 version = "0.1.0"
 dependencies = [
  "datalove-datafun-ir",
- "rustc-hash",
+ "rustmax",
 ]
 
 [[package]]
@@ -1313,7 +1311,6 @@ dependencies = [
  "datalove-datafun-ir",
  "datalove-rt",
  "datalove-rtdt",
- "rustc-hash",
  "rustmax",
  "target-lexicon",
 ]
@@ -1326,7 +1323,6 @@ dependencies = [
  "datalove-datafun-ir",
  "datalove-rt",
  "datalove-rtdt",
- "rustc-hash",
  "rustmax",
 ]
 
@@ -1346,7 +1342,6 @@ dependencies = [
  "datalove-datalit",
  "datalove-rtdt",
  "ron",
- "rustc-hash",
  "rustmax",
  "salsa",
  "serde",
@@ -1364,7 +1359,6 @@ dependencies = [
  "datalove-datafun-sema",
  "datalove-datalit",
  "datalove-rtdt",
- "rustc-hash",
  "rustmax",
  "salsa",
 ]
@@ -1379,7 +1373,6 @@ dependencies = [
  "datalove-datafun-ir",
  "datalove-datafun-sema",
  "datalove-rtdt",
- "rustc-hash",
  "rustmax",
  "salsa",
 ]
@@ -1454,7 +1447,6 @@ dependencies = [
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-diagnostic-codes",
- "rustc-hash",
  "rustmax",
  "salsa",
 ]
@@ -1472,7 +1464,6 @@ dependencies = [
  "getrandom 0.2.16",
  "num-traits",
  "rand 0.8.5",
- "rustc-hash",
  "rustmax",
  "salsa",
  "serde",

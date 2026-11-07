@@ -6,7 +6,8 @@
 
 use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
-use rmx::std::collections::{BTreeMap, HashMap};
+use rmx::std::collections::BTreeMap;
+use rmx::rustc_hash::FxHashMap;
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::{Item, Statement};
@@ -343,7 +344,7 @@ impl<'db> ModulePreResolvedConsts<'db> {
     }
 
     /// Convert to a HashMap for efficient lookup.
-    pub fn to_hashmap(&self) -> HashMap<String, (IrType, Arc<ConstValue>)> {
+    pub fn to_hashmap(&self) -> FxHashMap<String, (IrType, Arc<ConstValue>)> {
         self.consts
             .iter()
             .map(|(name, ty, val)| (name.clone(), (ty.clone(), Arc::clone(val))))
@@ -513,7 +514,7 @@ pub fn lower_module<'db>(
 
     // Module-level consts, for the from-scratch path below. They are stored
     // under a bare name; a function-level one is qualified with its function.
-    let module_level_consts: HashMap<String, (IrType, Arc<ConstValue>)> = pre_resolved_consts
+    let module_level_consts: FxHashMap<String, (IrType, Arc<ConstValue>)> = pre_resolved_consts
         .as_ref()
         .map(|c| c.consts.iter()
             .filter(|(name, _, _)| !name.contains("::"))
@@ -592,7 +593,7 @@ pub fn lower_module<'db>(
 
             // Build const values map from pre-resolved consts.
             // Pre-resolved consts have qualified names like "func_name::const_name".
-            let const_values: HashMap<String, Arc<ConstValue>> = pre_resolved.consts
+            let const_values: FxHashMap<String, Arc<ConstValue>> = pre_resolved.consts
                 .iter()
                 .map(|(name, _ir_type, value)| (name.clone(), Arc::clone(value)))
                 .collect();
@@ -916,7 +917,7 @@ pub fn lower_module_functions<'db>(
     log_query("lower_functions", module.id(db).path(db), QueryPhase::Start);
 
     let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-    let module_consts: HashMap<String, (IrType, Arc<ConstValue>)> =
+    let module_consts: FxHashMap<String, (IrType, Arc<ConstValue>)> =
         module_consts.into_iter().map(|(name, (ty, value))| (name, (ty, value.0))).collect();
     let restricting = restrict.is_some();
     let restrict = restrict.as_ref();
@@ -1030,7 +1031,7 @@ pub fn lower_all_module_functions<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
-    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_consts: &LookupMap<ModuleId<'db>, FxHashMap<String, (IrType, Arc<ConstValue>)>>,
     deferred: &mut LookupMap<ModuleId<'db>, Vec<String>>,
     restrict: Option<&LookupMap<ModuleId<'db>, Vec<String>>>,
     mode: ParallelMode,
@@ -1116,7 +1117,7 @@ pub fn evaluate_all_module_consts<'db>(
     evaluator: &mut dyn CtfeEvaluator,
     lowered_functions: &LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     func_id_map: &FuncIdLookup<'db>,
-    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_consts: &LookupMap<ModuleId<'db>, FxHashMap<String, (IrType, Arc<ConstValue>)>>,
     module_level_errors: &LookupMap<ModuleId<'db>, Vec<String>>,
     mut cache: Option<&mut ConstCache>,
 ) -> LookupMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
@@ -1160,9 +1161,9 @@ pub fn evaluate_all_module_consts<'db>(
         let call_targets = single_typecheck.call_targets(db);
 
         // Get lowered functions for this module (if any).
-        let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
+        let (funcs, func_map): (&[Arc<IrCodeUnit>], FxHashMap<String, FuncId>) = match lowered_functions.get(module_id) {
             Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
-            None => (&[], HashMap::new()),
+            None => (&[], FxHashMap::default()),
         };
 
         // Evaluate function-level consts. A function's const parameters have a
@@ -1299,7 +1300,7 @@ fn evaluate_module_consts_in_order<'db>(
     rest: &mut LookupMap<ModuleId<'db>, Vec<String>>,
     errors_out: &mut LookupMap<ModuleId<'db>, Vec<String>>,
     mut cache: Option<&mut ConstCache>,
-) -> LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> {
+) -> LookupMap<ModuleId<'db>, FxHashMap<String, (IrType, Arc<ConstValue>)>> {
     let graph = parsed_graph.graph(db);
     let typecheck_module_results = typecheck_result.module_results(db);
     let ownership_results = ownership_analysis.module_results(db);
@@ -1341,7 +1342,7 @@ fn evaluate_module_consts_in_order<'db>(
 
         // The const each waiting function a const reaches waits on, by its
         // place among the module's consts.
-        let needs: HashMap<String, u32> = single_typecheck.const_needs(db).iter()
+        let needs: FxHashMap<String, u32> = single_typecheck.const_needs(db).iter()
             .map(|(name, index)| (name.text(db).S(), *index))
             .collect();
         let unreached: Vec<String> = waiting.iter()
@@ -1353,7 +1354,7 @@ fn evaluate_module_consts_in_order<'db>(
         }
 
         let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-        let mut consts: HashMap<String, (IrType, Arc<ConstValue>)> = HashMap::new();
+        let mut consts: FxHashMap<String, (IrType, Arc<ConstValue>)> = FxHashMap::default();
         let mut failed = false;
         let mut index = 0;
         for statement in parsed.statements(db).iter() {
@@ -1374,9 +1375,9 @@ fn evaluate_module_consts_in_order<'db>(
             let lowered = lowered_modules.iter()
                 .find(|(id, _)| *id == module_id)
                 .map(|(_, lowered)| lowered.functions(db));
-            let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match &lowered {
+            let (funcs, func_map): (&[Arc<IrCodeUnit>], FxHashMap<String, FuncId>) = match &lowered {
                 Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
-                None => (&[], HashMap::new()),
+                None => (&[], FxHashMap::default()),
             };
             let mut env = ConstEvalEnv {
                 db,
@@ -1463,7 +1464,7 @@ impl<'db> WaitingBatches<'db> {
     fn lower(
         &mut self,
         names: Vec<String>,
-        consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
+        consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
         lowered_modules: &mut LoweredModules<'db>,
         registry: &mut ModuleFunctionRegistry,
         evaluator: &mut dyn CtfeEvaluator,
@@ -1559,7 +1560,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // What this lowering does have is the data consts, which need no
     // evaluating; see `data_consts`.
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
-    let data_consts: LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> =
+    let data_consts: LookupMap<ModuleId<'db>, FxHashMap<String, (IrType, Arc<ConstValue>)>> =
         module_statements(db_salsa, parsed_graph)
             .filter_map(|(module_id, parsed)| {
                 let module_id = &module_id;
@@ -1805,7 +1806,7 @@ fn const_inlined_module<'db>(
     lowered: ModuleLowered<'db>,
     consts: ModulePreResolvedConsts<'db>,
 ) -> ModuleLowered<'db> {
-    let const_values: HashMap<String, Arc<ConstValue>> = consts.consts.iter()
+    let const_values: FxHashMap<String, Arc<ConstValue>> = consts.consts.iter()
         .map(|(name, _ir_type, value)| (name.clone(), Arc::clone(value)))
         .collect();
     let mut functions = lowered.functions(db).as_ref().clone();
@@ -1857,7 +1858,7 @@ fn specialize_module_graph<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &mut dyn CtfeEvaluator,
     func_id_map: FuncIdMap<'db>,
-    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_consts: &LookupMap<ModuleId<'db>, FxHashMap<String, (IrType, Arc<ConstValue>)>>,
     callable_modules: LoweredModules<'db>,
     modules: LoweredModules<'db>,
 ) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<String>)>) {
@@ -1936,7 +1937,7 @@ fn specialize_comptime_functions<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &mut dyn CtfeEvaluator,
     func_id_map: &FuncIdLookup<'db>,
-    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_consts: &LookupMap<ModuleId<'db>, FxHashMap<String, (IrType, Arc<ConstValue>)>>,
     mut lowered_functions: LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
 ) -> (LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<String>)>) {
     // Modules paired with their `IrModuleId`, which is also the order the copies

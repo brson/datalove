@@ -5,7 +5,7 @@
 //! by the runtime to understand the layout and structure of values.
 
 use rmx::prelude::*;
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use crate::tycheck::*;
 use datalove_rtdt as rtdt;
 
@@ -17,15 +17,15 @@ pub struct TyDescTable<'db> {
     /// Deduplication map: Type → TyDesc pointer.
     cache: bct::lookup::LookupMap<Type<'db>, *const rtdt::TyDesc>,
     /// Runtime-constructed Option cache: inner_tydesc → Option<T> tydesc.
-    runtime_option_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
+    runtime_option_cache: FxHashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Runtime-constructed Result cache: inner_tydesc → Result<T> tydesc.
-    runtime_result_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
+    runtime_result_cache: FxHashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Runtime-constructed List cache: element_tydesc → List<T> tydesc.
-    runtime_list_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
+    runtime_list_cache: FxHashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Runtime-constructed Map cache: (key_tydesc, value_tydesc) → Map<K, V> tydesc.
-    runtime_map_cache: HashMap<(*const rtdt::TyDesc, *const rtdt::TyDesc), *const rtdt::TyDesc>,
+    runtime_map_cache: FxHashMap<(*const rtdt::TyDesc, *const rtdt::TyDesc), *const rtdt::TyDesc>,
     /// Runtime-constructed Set cache: element_tydesc → Set<T> tydesc.
-    runtime_set_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
+    runtime_set_cache: FxHashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<rtdt::TyDesc>>,
     /// Storage for the descriptors of recursive types, which are written
@@ -46,11 +46,11 @@ impl<'db> TyDescTable<'db> {
         Self {
             db,
             cache: bct::lookup::LookupMap::new(),
-            runtime_option_cache: HashMap::new(),
-            runtime_result_cache: HashMap::new(),
-            runtime_list_cache: HashMap::new(),
-            runtime_map_cache: HashMap::new(),
-            runtime_set_cache: HashMap::new(),
+            runtime_option_cache: FxHashMap::default(),
+            runtime_result_cache: FxHashMap::default(),
+            runtime_list_cache: FxHashMap::default(),
+            runtime_map_cache: FxHashMap::default(),
+            runtime_set_cache: FxHashMap::default(),
             tydescs: Vec::new(),
             rec_tydescs: Vec::new(),
             recs_in_progress: Vec::new(),

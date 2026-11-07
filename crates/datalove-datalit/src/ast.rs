@@ -59,7 +59,7 @@ impl<'db> ExprFull<'db> {
         type_hint: Option<TypeHint<'db>>,
         expr: Expr<'db>,
     ) -> ExprFull<'db> {
-        let mut hasher = rustc_hash::FxHasher::default();
+        let mut hasher = rmx::rustc_hash::FxHasher::default();
         (local_index, &type_hint, &expr).hash(&mut hasher);
         let hash = hasher.finish();
         ExprFull(Arc::new(ExprNode { hash, local_index, type_hint, expr }))

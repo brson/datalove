@@ -23,7 +23,7 @@
 //! repeated there is `true`, its branch a jump. `simplify` then forwards the
 //! copies this leaves and drops the error exits nothing reaches.
 
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 
 use crate::*;
 
@@ -63,7 +63,7 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
         }
     }
     let order = reverse_postorder(unit);
-    let consts: HashMap<ValueId, ConstValue> = unit.blocks.iter()
+    let consts: FxHashMap<ValueId, ConstValue> = unit.blocks.iter()
         .flat_map(|b| &b.instructions)
         .filter_map(|i| match i {
             Instruction::Const { dest, value } => Some((*dest, value.clone())),
@@ -74,18 +74,18 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
         Operand::Value(v) if consts.contains_key(v) => Index::Const(consts[v].clone()),
         other => Index::Operand(*other),
     };
-    let mut at_end: Vec<Option<HashMap<Key, Known>>> = vec![None; n];
+    let mut at_end: Vec<Option<FxHashMap<Key, Known>>> = vec![None; n];
     let mut changed = false;
 
     for &b in &order {
         let id = unit.blocks[b].id;
         // What every way in agrees on, where every way in has been seen.
-        let incoming: Option<Vec<HashMap<Key, Known>>> = preds[b].iter()
+        let incoming: Option<Vec<FxHashMap<Key, Known>>> = preds[b].iter()
             .map(|&p| at_end[p].as_ref().map(|end| along_edge(end, &unit.blocks[p].terminator, id)))
             .collect();
         let mut known = match incoming {
             Some(states) if !states.is_empty() => agreed(states),
-            _ => HashMap::new(),
+            _ => FxHashMap::default(),
         };
 
         let mut trues: Vec<ValueId> = Vec::new();
@@ -142,7 +142,7 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
 /// What is known on the edge from a block ending in `term` to `to`, given
 /// what is known at the block's end: an index a check passed is in bounds on
 /// the edge taken when it did.
-fn along_edge(end: &HashMap<Key, Known>, term: &Terminator, to: BlockId) -> HashMap<Key, Known> {
+fn along_edge(end: &FxHashMap<Key, Known>, term: &Terminator, to: BlockId) -> FxHashMap<Key, Known> {
     let mut known = end.clone();
     if let Terminator::Branch { cond: Operand::Value(c), then_block, else_block, .. } = term
         && *then_block == to && *else_block != to
@@ -158,7 +158,7 @@ fn along_edge(end: &HashMap<Key, Known>, term: &Terminator, to: BlockId) -> Hash
 ///
 /// A value every way into a block knows is defined on every path to it, so
 /// its definition dominates the block.
-fn agreed(mut states: Vec<HashMap<Key, Known>>) -> HashMap<Key, Known> {
+fn agreed(mut states: Vec<FxHashMap<Key, Known>>) -> FxHashMap<Key, Known> {
     let mut known = states.pop().expect("at least one way in");
     for other in &states {
         known.retain(|key, k| {
@@ -202,7 +202,7 @@ fn unchanging_index(unit: &IrCodeUnit, op: &Operand) -> bool {
 /// Forget what `instr` may change: every element of a list it writes, drops
 /// or passes to a call, and, if it does any of those, every element reached
 /// through a reference, which may be the same place.
-fn forget_what_it_may_change(known: &mut HashMap<Key, Known>, instr: &Instruction) {
+fn forget_what_it_may_change(known: &mut FxHashMap<Key, Known>, instr: &Instruction) {
     if known.is_empty() {
         return;
     }

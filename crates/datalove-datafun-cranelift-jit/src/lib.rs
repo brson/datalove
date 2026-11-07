@@ -33,7 +33,7 @@ pub use stats::{CallFrom, FunctionStats, JitStats};
 
 use std::any::Any;
 
-use rustc_hash::FxHashMap;
+use rmx::rustc_hash::FxHashMap;
 use std::time::Instant;
 
 use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};

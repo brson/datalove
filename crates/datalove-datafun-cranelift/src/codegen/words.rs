@@ -18,7 +18,7 @@
 //! only kind a value held as words has. See
 //! `botdocs/plan-values-in-registers.md`.
 
-use std::collections::HashSet;
+use rmx::rustc_hash::FxHashSet;
 
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
@@ -165,12 +165,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// in registers: those no use takes an address of to keep or to write
     /// through. A tracked parameter is written to as it is moved, and stays in
     /// memory.
-    pub(super) fn find_word_values(&self) -> (HashSet<ValueId>, HashSet<ParamId>) {
-        let mut chosen: HashSet<ValueId> = self.func.value_types.iter().enumerate()
+    pub(super) fn find_word_values(&self) -> (FxHashSet<ValueId>, FxHashSet<ParamId>) {
+        let mut chosen: FxHashSet<ValueId> = self.func.value_types.iter().enumerate()
             .filter(|(_, ty)| self.osr_spec.is_none() && word_pieces(ty).is_some())
             .map(|(i, _)| ValueId(i as u32))
             .collect();
-        let mut params: HashSet<ParamId> = self.func_ctx.param_modes.iter().zip(&self.func_ctx.param_types).enumerate()
+        let mut params: FxHashSet<ParamId> = self.func_ctx.param_modes.iter().zip(&self.func_ctx.param_types).enumerate()
             .filter(|(i, (mode, ty))| matches!(super::arg_pass(**mode, ty), super::ArgPass::Value(_))
                 && !self.func_ctx.tracked_params.contains(&ParamId(*i as u32)))
             .map(|(i, _)| ParamId(i as u32))

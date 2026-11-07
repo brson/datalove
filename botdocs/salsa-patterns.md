@@ -423,10 +423,21 @@ compiles a fixture three times in **separate processes** and compares the bytes.
 
 ### Hashers
 
-Salsa already hashes with `rustc_hash::FxHasher` internally. Replacing std's
-SipHash in our own maps was measured: SipHash is 1.4 to 2.4 percent of runtime
-by phase, and switching the lot to `ahash` bought about 1 percent overall for a
-44-file diff. It was tried and backed out. Hashing is not where the time goes.
+Every hash map and set in the tree is `rustc_hash::FxHashMap` or `FxHashSet`,
+the hasher salsa uses internally; std's SipHash `HashMap` is not used. Build
+one with `default()`, since `new()` exists only for std's hasher.
+
+The hot maps moved first, one profile at a time; see
+[compile time](compile-time.md#user-content-what-was-fixed). The other 60-odd
+files followed in November 2026. They took a compile of every `sys/std` module
+from 136.7M instructions to 135.0M. A compiled program's speed did not change,
+except under leak checking: the runtime records every live allocation in a
+pointer-keyed map, and on FxHash that check costs `storage.dfs` 11% rather than
+19%, and `wordfreq.dfs` 13% rather than 23%.
+
+FxHash has no per-process seed, so iteration order no longer changes from run
+to run. But it still depends on insertion history, and on a salsa id where a key
+holds one, so the rule above still holds.
 
 ## Durability
 

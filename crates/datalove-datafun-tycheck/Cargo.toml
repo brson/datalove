@@ -12,7 +12,6 @@ index-64 = ["datalove-datalit/index-64", "datalove-datafun-common/index-64", "da
 
 [dependencies]
 datalove-diagnostic-codes.workspace = true
-rustc-hash.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true

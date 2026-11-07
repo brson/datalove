@@ -39,7 +39,6 @@ serde.features = ["rc"]
 enum-iterator.version = "2"
 salsa.version = "0.28.5"
 ariadne.version = "0.6"
-rustc-hash.version = "2"
 
 # The crates of this workspace, by version as well as by path: cargo will not
 # publish a dependency that has only a path, and a release bumps them here

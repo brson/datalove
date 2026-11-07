@@ -17,7 +17,7 @@ use rmx::prelude::*;
 use rmx::std::collections::hash_map::Entry;
 use rmx::std::fmt;
 use rmx::std::hash::{BuildHasher, Hash, Hasher};
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rmx::rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 /// A hash map for lookup, with no order to iterate in.
 #[derive(Clone, salsa::SalsaValue)]

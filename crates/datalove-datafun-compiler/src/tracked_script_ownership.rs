@@ -5,7 +5,7 @@
 //! incremental recompilation when new units are added to a batch.
 
 use rmx::prelude::*;
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use bct::input::Source;
 use datalove_datafun_ast::ast::{FunKey, ParsedExpr, Statement, TopLevel};
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
@@ -86,7 +86,7 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
         let mut map = bct::lookup::LookupMap::new();
 
         // Build name -> function lookup from statements.
-        let mut name_to_stmt: HashMap<&str, FunKey<'db>> = HashMap::new();
+        let mut name_to_stmt: FxHashMap<&str, FunKey<'db>> = FxHashMap::default();
         for stmt in stmts {
             if let Statement::Fun(func) = stmt {
                 let name = func.name().text(db);
@@ -134,7 +134,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     let body = top.body(db);
 
     // Build map of function name -> resolved param types for type alias support.
-    let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
+    let mut func_param_types: FxHashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = FxHashMap::default();
     for (name, func_type) in typecheck_result.function_types(db) {
         func_param_types.insert(name.text(db).S(), func_type.param_types(db).C());
     }

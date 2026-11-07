@@ -24,7 +24,8 @@ mod codegen;
 mod types;
 mod tydesc;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
+use rmx::rustc_hash::FxHashMap;
 use std::fmt::Write;
 
 use datalove_datafun_ir::{
@@ -72,7 +73,7 @@ pub struct CAotCompiler {
     /// Next unique ID for type descriptors.
     next_tydesc_id: u32,
     /// Mapping from IrType to tydesc variable name.
-    tydesc_names: HashMap<IrType, String>,
+    tydesc_names: FxHashMap<IrType, String>,
     /// The types the file being written has named a descriptor for.
     ///
     /// Each file defines the descriptors it uses, once its functions are
@@ -89,7 +90,7 @@ pub struct CAotCompiler {
     statics: Vec<(IrType, std::sync::Arc<ConstValue>)>,
     /// Each static's index, by the address of the `Arc` a `StaticRef` holds
     /// its value in.
-    static_index: HashMap<usize, usize>,
+    static_index: FxHashMap<usize, usize>,
 }
 
 impl Default for CAotCompiler {
@@ -103,17 +104,17 @@ impl CAotCompiler {
     pub fn new() -> Self {
         Self {
             next_tydesc_id: 0,
-            tydesc_names: HashMap::new(),
+            tydesc_names: FxHashMap::default(),
             file_tydescs: BTreeSet::new(),
             native_decls: Vec::new(),
             statics: Vec::new(),
-            static_index: HashMap::new(),
+            static_index: FxHashMap::default(),
         }
     }
 
     /// Number every const a `StaticRef` in the world names, equal ones once.
     fn collect_statics(&mut self, script_unit: &IrCodeUnit, registry: &FunctionRegistry) {
-        let mut by_value: HashMap<(IrType, std::sync::Arc<ConstValue>), usize> = HashMap::new();
+        let mut by_value: FxHashMap<(IrType, std::sync::Arc<ConstValue>), usize> = FxHashMap::default();
         let mut units: Vec<&IrCodeUnit> = vec![script_unit];
         units.extend(script_unit.nested_units.iter());
         units.extend(registry.iter_module_code_units_with_ids().map(|(_, unit)| unit));

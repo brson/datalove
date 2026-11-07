@@ -5,7 +5,7 @@
 //! incremental recompilation when new units are added to a batch.
 
 use rmx::prelude::*;
-use std::collections::{HashMap, HashSet};
+use rmx::rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind, TopLevel};
 use datalove_datafun_ir::{
@@ -116,8 +116,8 @@ pub fn lower_context_over(ids: &[u32], records: &[Arc<UnitLowerRecord>]) -> lowe
 /// The script-level consts in scope for a unit sitting after `records`.
 pub fn script_consts_over(
     records: &[Arc<UnitLowerRecord>],
-) -> HashMap<String, (IrType, Arc<ConstValue>)> {
-    let mut consts = HashMap::new();
+) -> FxHashMap<String, (IrType, Arc<ConstValue>)> {
+    let mut consts = FxHashMap::default();
     for record in records {
         for (name, ty, value) in &record.consts {
             consts.insert(name.clone(), (ty.clone(), value.clone()));
@@ -219,8 +219,8 @@ pub fn collect_const_graph<'db>(
 ) -> ConstBindingGraph {
     // First pass: collect all const bindings.
     let mut bindings = Vec::new();
-    let mut const_names: HashSet<String> = HashSet::new();
-    let mut name_to_stmt: HashMap<String, ConstStmtId> = HashMap::new();
+    let mut const_names: FxHashSet<String> = FxHashSet::default();
+    let mut name_to_stmt: FxHashMap<String, ConstStmtId> = FxHashMap::default();
 
     let expr_types = typecheck_result.expr_types(db);
 
@@ -269,8 +269,8 @@ pub fn collect_const_graph<'db>(
 fn find_const_refs<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
-    const_names: &HashSet<String>,
-    name_to_stmt: &HashMap<String, ConstStmtId>,
+    const_names: &FxHashSet<String>,
+    name_to_stmt: &FxHashMap<String, ConstStmtId>,
 ) -> Vec<ConstStmtId> {
     let mut refs = Vec::new();
     find_const_refs_inner(db, expr, const_names, name_to_stmt, &mut refs);
@@ -282,8 +282,8 @@ fn find_const_refs<'db>(
 fn find_const_refs_inner<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
-    const_names: &HashSet<String>,
-    name_to_stmt: &HashMap<String, ConstStmtId>,
+    const_names: &FxHashSet<String>,
+    name_to_stmt: &FxHashMap<String, ConstStmtId>,
     refs: &mut Vec<ConstStmtId>,
 ) {
     match expr.kind() {
@@ -435,7 +435,7 @@ fn topological_sort_consts(bindings: &[ConstBindingInfo]) -> Vec<ConstBindingInf
     }
 
     // Build index map: stmt_id -> index.
-    let stmt_to_idx: HashMap<ConstStmtId, usize> = bindings.iter()
+    let stmt_to_idx: FxHashMap<ConstStmtId, usize> = bindings.iter()
         .enumerate()
         .map(|(i, b)| (b.stmt_id, i))
         .collect();

@@ -305,7 +305,7 @@ impl<'a> Lowering<'a> {
     /// What the optimization pass may know of the IR, keyed by where things
     /// are in the frame, which is all its ops name.
     fn facts(&self) -> opt::Facts {
-        let mut values = rustc_hash::FxHashMap::default();
+        let mut values = rmx::rustc_hash::FxHashMap::default();
         for v in 0..self.func.value_types.len() {
             // A value of no size has the next value's offset, so it is left out
             // to keep that one's fact; and an op naming it moves no bytes,

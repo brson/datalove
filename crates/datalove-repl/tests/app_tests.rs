@@ -20,7 +20,7 @@ struct MockState {
     /// These are kept apart from the commands, which they come between.
     described: Vec<(u64, u32)>,
     /// Each command submitted for evaluation, by entry id.
-    submitted: std::collections::HashMap<u64, repl::Command>,
+    submitted: rmx::rustc_hash::FxHashMap<u64, repl::Command>,
     /// The units the pretend engine's session has, and the next number.
     session: Vec<repl::NumberedUnit>,
     next_number: u32,

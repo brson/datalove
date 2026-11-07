@@ -14,7 +14,7 @@ use datalove_rtdt::IndexRepr;
 #[cfg(not(target_arch = "wasm32"))]
 use std::ptr;
 #[cfg(not(target_arch = "wasm32"))]
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
 const PAGE_SIZE: usize = 4096;
@@ -119,12 +119,12 @@ mod unix_impl {
         /// Mappings carved into blocks of the size classes.
         small_pages: Vec<Page>,
         /// Large allocations, each its own mapping, by the address given out.
-        large_pages: HashMap<*mut u8, Page>,
+        large_pages: FxHashMap<*mut u8, Page>,
         /// Mappings of freed large allocations kept for reuse, the most
         /// recently freed last.
         large_cache: Vec<Page>,
         /// Active allocations for leak detection.
-        active_allocations: HashMap<*mut u8, AllocationInfo>,
+        active_allocations: FxHashMap<*mut u8, AllocationInfo>,
         /// Leak detection mode.
         leak_check_mode: LeakCheckMode,
     }
@@ -135,9 +135,9 @@ mod unix_impl {
             AllocLocal {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
                 small_pages: Vec::new(),
-                large_pages: HashMap::new(),
+                large_pages: FxHashMap::default(),
                 large_cache: Vec::new(),
-                active_allocations: HashMap::new(),
+                active_allocations: FxHashMap::default(),
                 leak_check_mode: LeakCheckMode::from_env(),
             }
         }
@@ -148,9 +148,9 @@ mod unix_impl {
             AllocLocal {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
                 small_pages: Vec::new(),
-                large_pages: HashMap::new(),
+                large_pages: FxHashMap::default(),
                 large_cache: Vec::new(),
-                active_allocations: HashMap::new(),
+                active_allocations: FxHashMap::default(),
                 leak_check_mode: mode,
             }
         }

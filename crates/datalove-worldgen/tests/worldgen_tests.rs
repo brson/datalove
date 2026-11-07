@@ -319,7 +319,7 @@ fn test_variable_declaration_format() {
 fn test_primitive_type_variety() {
     let config = WorldGenConfig::default();
 
-    let mut type_counts = std::collections::HashMap::new();
+    let mut type_counts = rmx::rustc_hash::FxHashMap::default();
 
     // Use more seeds to ensure less common types appear.
     for seed in 0..200 {
@@ -362,7 +362,7 @@ fn test_primitive_type_variety() {
 fn test_comparison_operators() {
     let config = WorldGenConfig::default();
 
-    let mut found_ops = std::collections::HashSet::new();
+    let mut found_ops = rmx::rustc_hash::FxHashSet::default();
 
     for seed in 0..100 {
         let wf = gen_worldfile_seeded(seed, config.clone());

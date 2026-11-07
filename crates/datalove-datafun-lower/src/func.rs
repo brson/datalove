@@ -7,7 +7,7 @@
 //!   function lowering. For script functions, called after `swap_body_state`.
 
 use std::sync::Arc;
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use datalove_datafun_ast::ast;
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext,
@@ -43,7 +43,7 @@ pub fn lower_function_for_module<'db>(
     analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[Type<'db>]>,
     resolved_return_type: Option<Type<'db>>,
-    module_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
+    module_consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
     data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), Some(func_id_map), data_files);

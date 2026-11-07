@@ -11,14 +11,14 @@
 //! through unsubstituted leaves a reference to a parameter the transformed
 //! function may no longer have, and nothing downstream reports that.
 
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 
 use crate::{Instruction, Operand, ParamId, Terminator};
 
 /// Replace Param operands in an instruction with the corresponding replacement operands.
 pub fn replace_params_in_instruction(
     instr: &Instruction,
-    replacements: &HashMap<ParamId, Operand>,
+    replacements: &FxHashMap<ParamId, Operand>,
 ) -> Instruction {
     map_operands_in_instruction(instr, |op| param_replacement(op, replacements))
 }
@@ -26,7 +26,7 @@ pub fn replace_params_in_instruction(
 /// Replace Param operands in a terminator with the corresponding replacement operands.
 pub fn replace_params_in_terminator(
     term: &Terminator,
-    replacements: &HashMap<ParamId, Operand>,
+    replacements: &FxHashMap<ParamId, Operand>,
 ) -> Terminator {
     map_operands_in_terminator(term, |op| param_replacement(op, replacements))
 }
@@ -38,7 +38,7 @@ fn replaced_param(param: ParamId, replace_operand: &impl Fn(&Operand) -> Operand
     (replaced != original).then_some(replaced)
 }
 
-fn param_replacement(op: &Operand, replacements: &HashMap<ParamId, Operand>) -> Operand {
+fn param_replacement(op: &Operand, replacements: &FxHashMap<ParamId, Operand>) -> Operand {
     if let Operand::Param(p) = op {
         if let Some(replacement) = replacements.get(p) {
             return replacement.clone();

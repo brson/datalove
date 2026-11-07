@@ -1,6 +1,6 @@
 //! Script fragment generation.
 
-use std::collections::HashSet;
+use rmx::rustc_hash::FxHashSet;
 
 use rand::Rng;
 use crate::config::WorldGenConfig;
@@ -27,7 +27,7 @@ pub fn gen_script<'db, R: Rng>(
     // and so on, so two of them export the same name, and a second import
     // under a name already bound is an error rather than a shadowing. The
     // module generator has kept to this; the script did not.
-    let mut imported_names: HashSet<String> = HashSet::new();
+    let mut imported_names: FxHashSet<String> = FxHashSet::default();
     for module in modules {
         if !module.functions.is_empty() || !module.generics.is_empty() {
             let mut required = false;

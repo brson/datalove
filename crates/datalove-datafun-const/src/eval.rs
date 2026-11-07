@@ -10,14 +10,14 @@
 //! crate, keeping the two concerns separate, and a const that is a literal is
 //! read off there without coming here at all.
 
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstValue, IrType, IrCodeUnit, CtfeEvaluator, CtfeError};
 
 /// Result of evaluating function-level consts in script functions.
 pub struct ScriptFunctionConstsResult {
     /// Successfully evaluated consts: qualified name -> (type, value).
-    pub consts: HashMap<String, (IrType, Arc<ConstValue>)>,
+    pub consts: FxHashMap<String, (IrType, Arc<ConstValue>)>,
     /// Errors encountered during evaluation.
     pub errors: Vec<String>,
 }
@@ -26,7 +26,7 @@ impl ScriptFunctionConstsResult {
     /// Create an empty result (no consts, no errors).
     pub fn empty() -> Self {
         Self {
-            consts: HashMap::new(),
+            consts: FxHashMap::default(),
             errors: Vec::new(),
         }
     }

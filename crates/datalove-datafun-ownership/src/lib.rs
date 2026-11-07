@@ -40,7 +40,7 @@
 //! - At loop body end for iteration-scoped bindings
 
 use rmx::prelude::*;
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, FunKey, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
     StmtMatch, MatchCaseKind,
@@ -108,7 +108,7 @@ struct AnalysisCtx<'a, 'db> {
     /// All bindings (indexed by BindingId).
     bindings: Vec<BindingInfo>,
     /// Name to binding ID mapping (current scope).
-    name_to_binding: rustc_hash::FxHashMap<String, BindingId>,
+    name_to_binding: rmx::rustc_hash::FxHashMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
     scope_stack: Vec<ScopeFrame<'db>>,
     /// The earlier units' bindings this unit names, which hold the first
@@ -133,13 +133,13 @@ struct AnalysisCtx<'a, 'db> {
     schedule: DropSchedule,
     /// The `var`s whose state the analysis cannot fix at every point, and
     /// which keep a tracking byte; see `compute_tracking`.
-    stays_tracked: std::collections::HashSet<BindingId>,
+    stays_tracked: rmx::rustc_hash::FxHashSet<BindingId>,
     /// The tracked vars that may hold a value where the analysis has them
     /// moved: one a loop body gives a value it was entered without, which
     /// holds nothing if the body never ran and something if it did. They are
     /// dropped wherever what is live would be, their tracking byte saying
     /// whether there is anything to drop; reading one is still refused.
-    maybe_held: std::collections::HashSet<BindingId>,
+    maybe_held: rmx::rustc_hash::FxHashSet<BindingId>,
     /// The ways out of each loop currently being analyzed, innermost last.
     ///
     /// `break` and `continue` carry no label, so both always belong to the
@@ -1425,7 +1425,7 @@ pub fn analyze_script_functions<'db>(
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     stmts: &'db [Statement<'db>],
-    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
+    func_param_types: Option<&FxHashMap<String, Vec<Type<'db>>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
     let mut analyses = bct::lookup::LookupMap::new();
     let mut errors = Vec::new();

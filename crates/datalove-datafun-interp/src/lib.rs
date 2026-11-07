@@ -197,11 +197,11 @@ pub struct IrInterpreter {
 /// `Arc`s share one entry.
 #[derive(Default)]
 struct StaticPool {
-    by_identity: rustc_hash::FxHashMap<usize, *const u8>,
+    by_identity: rmx::rustc_hash::FxHashMap<usize, *const u8>,
     /// Keyed by the descriptor and the value, which hashes by its shape: this
     /// is asked once for each new `Arc` a const arrives in, and the const can
     /// be a whole dataset.
-    by_value: rustc_hash::FxHashMap<(usize, datalove_datafun_ir::SharedConst), *const u8>,
+    by_value: rmx::rustc_hash::FxHashMap<(usize, datalove_datafun_ir::SharedConst), *const u8>,
     held: Vec<std::sync::Arc<ConstValue>>,
     /// Each value's storage and its descriptor, for destroying it.
     ///

@@ -1,7 +1,7 @@
 //! JIT compiler wrapping Cranelift's JITModule.
 
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
+use rmx::rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -120,7 +120,7 @@ pub struct JitCompiler {
     ///
     /// Populated after construction via `register_native_symbol()`.
     /// The JITModule's symbol lookup function checks this map.
-    native_symbols: Arc<Mutex<HashMap<String, SendPtr>>>,
+    native_symbols: Arc<Mutex<FxHashMap<String, SendPtr>>>,
     /// Whatever the native symbols' code lives in.
     ///
     /// Worse than the interpreter's case, which at least keeps its pointers in
@@ -141,17 +141,17 @@ pub struct JitCompiler {
     /// going through the stub to reach the code a third of a call. The cell's
     /// address is emitted into the code, so each is boxed to stay put and
     /// none is ever removed.
-    code_cells: rustc_hash::FxHashMap<FuncIdentity, Box<AtomicUsize>>,
+    code_cells: rmx::rustc_hash::FxHashMap<FuncIdentity, Box<AtomicUsize>>,
     /// The stub for each callee, made by the first compilation to call it and
     /// called by every later one: a stub depends on nothing but its callee,
     /// and making one is a Cranelift compilation of its own.
-    stubs: rustc_hash::FxHashMap<FuncIdentity, FuncId>,
+    stubs: rmx::rustc_hash::FxHashMap<FuncIdentity, FuncId>,
     /// The cells of functions forgotten since, kept because the code that
     /// reads them has their addresses.
     retired_cells: Vec<Box<AtomicUsize>>,
     /// The import for each native rider function, by symbol and the address
     /// it was registered at, likewise.
-    native_imports: HashMap<(String, u64), FuncId>,
+    native_imports: FxHashMap<(String, u64), FuncId>,
 }
 
 /// Wrapper for `*const u8` that implements `Send`.
@@ -227,7 +227,7 @@ impl JitCompiler {
         jit_builder.symbol("__jit_dispatch_call", trampoline::dispatch_fn_ptr());
 
         // Register a lookup function for dynamically-added native rider symbols.
-        let native_symbols: Arc<Mutex<HashMap<String, SendPtr>>> = Arc::new(Mutex::new(HashMap::new()));
+        let native_symbols: Arc<Mutex<FxHashMap<String, SendPtr>>> = Arc::new(Mutex::new(FxHashMap::default()));
         let lookup_symbols = native_symbols.clone();
         jit_builder.symbol_lookup_fn(Box::new(move |name| {
             lookup_symbols.lock().unwrap().get(name).map(|p| p.0)
@@ -270,7 +270,7 @@ impl JitCompiler {
             code_cells: Default::default(),
             stubs: Default::default(),
             retired_cells: Vec::new(),
-            native_imports: HashMap::new(),
+            native_imports: FxHashMap::default(),
         })
     }
 
@@ -362,10 +362,10 @@ impl JitCompiler {
         let callees = self.collect_call_targets(func);
 
         // Create stubs for each callee.
-        let mut local_funcs: HashMap<CodeUnitId, codegen::LocalCallee> = HashMap::new();
-        let mut external_funcs: HashMap<(u32, CodeUnitId), codegen::LocalCallee> = HashMap::new();
-        let mut module_funcs: HashMap<(IrModuleId, CodeUnitId), FuncId> = HashMap::new();
-        let mut code_cells: HashMap<FuncId, usize> = HashMap::new();
+        let mut local_funcs: FxHashMap<CodeUnitId, codegen::LocalCallee> = FxHashMap::default();
+        let mut external_funcs: FxHashMap<(u32, CodeUnitId), codegen::LocalCallee> = FxHashMap::default();
+        let mut module_funcs: FxHashMap<(IrModuleId, CodeUnitId), FuncId> = FxHashMap::default();
+        let mut code_cells: FxHashMap<FuncId, usize> = FxHashMap::default();
 
         for code_ref in callees {
             // Look up the callee's IR to get its signature.
@@ -489,8 +489,8 @@ impl JitCompiler {
     }
 
     /// Collect all unique Call targets in a code unit.
-    fn collect_call_targets(&self, func: &IrCodeUnit) -> HashSet<CodeRef> {
-        let mut targets = HashSet::new();
+    fn collect_call_targets(&self, func: &IrCodeUnit) -> FxHashSet<CodeRef> {
+        let mut targets = FxHashSet::default();
 
         // A `ComptimeCall` is a call too, where specialization left one: the
         // codegen compiles it as one, and its callee needs a stub as much.
@@ -731,10 +731,10 @@ fn check_runtime_addresses(jit_module: &JITModule, runtime: &RuntimeImports) {
 }
 
 /// The address of each runtime function compiled code may import, by symbol.
-fn runtime_addresses() -> HashMap<&'static str, *const u8> {
+fn runtime_addresses() -> FxHashMap<&'static str, *const u8> {
     macro_rules! addresses {
         ($($f:ident,)*) => {
-            HashMap::from([$((stringify!($f), datalove_rt::c::$f as *const u8)),*])
+            FxHashMap::from_iter([$((stringify!($f), datalove_rt::c::$f as *const u8)),*])
         };
     }
     addresses! {
@@ -841,7 +841,7 @@ fn register_libcalls(jit_builder: &mut JITBuilder) {
 /// compiled code runs against too. The engine belongs to the interpreter, so
 /// the code cannot outlive the pool.
 fn static_consts_of(func: &IrCodeUnit, interp: &mut IrInterpreter) -> codegen::StaticConsts {
-    let mut statics = codegen::StaticConsts::new();
+    let mut statics = codegen::StaticConsts::default();
     for block in &func.blocks {
         for instr in &block.instructions {
             let Instruction::StaticRef { dest, value } = instr else { continue };

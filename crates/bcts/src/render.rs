@@ -7,7 +7,7 @@
 
 use rmx::prelude::*;
 
-use rmx::std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use rmx::std::ops::Range;
 use rmx::std::path::{Path, PathBuf};
 
@@ -33,11 +33,11 @@ pub struct Renderer {
 /// source of its own, so a diagnostic about one counts its lines from the
 /// section and not from the file. With the section's place in the file
 /// given here, the line numbers are the file's.
-pub type LineOffsets = HashMap<crate::input::Source, usize>;
+pub type LineOffsets = FxHashMap<crate::input::Source, usize>;
 
 impl Default for Renderer {
     fn default() -> Self {
-        Renderer { colors: ColorGenerator::new(), line_offsets: LineOffsets::new() }
+        Renderer { colors: ColorGenerator::new(), line_offsets: LineOffsets::default() }
     }
 }
 
@@ -356,11 +356,11 @@ fn render_one_multi_source<'db>(
     // with the others there. One whose place is not known is numbered after
     // the first, since several sources came out of the same file and the
     // line numbers would not say which.
-    let mut source_to_id: HashMap<String, String> = HashMap::new();
-    let mut source_order: HashMap<String, usize> = HashMap::new();
-    let mut source_lines: HashMap<String, usize> = HashMap::new();
-    let mut sources: HashMap<String, Source<String>> = HashMap::new();
-    let mut names: HashMap<String, String> = HashMap::new();
+    let mut source_to_id: FxHashMap<String, String> = FxHashMap::default();
+    let mut source_order: FxHashMap<String, usize> = FxHashMap::default();
+    let mut source_lines: FxHashMap<String, usize> = FxHashMap::default();
+    let mut sources: FxHashMap<String, Source<String>> = FxHashMap::default();
+    let mut names: FxHashMap<String, String> = FxHashMap::default();
     let mut unlocated = 0usize;
 
     for label in &diag.labels {
@@ -453,9 +453,9 @@ fn shifted(span: &crate::text::ByteSpan, lines: usize) -> Range<usize> {
 
 /// Several in-memory sources, looked up by the id a label was given.
 struct MultiSourceCache {
-    sources: HashMap<String, Source<String>>,
+    sources: FxHashMap<String, Source<String>>,
     /// The name each source is shown by, which several may share.
-    names: HashMap<String, String>,
+    names: FxHashMap<String, String>,
 }
 
 impl Cache<String> for MultiSourceCache {

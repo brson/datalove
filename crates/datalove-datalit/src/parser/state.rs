@@ -4,7 +4,7 @@ use datalove_diagnostic_codes::DCode;
 use rmx::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-use rustc_hash::FxHashMap;
+use rmx::rustc_hash::FxHashMap;
 
 use bct::{
     bracer::{Cursor, TreeToken},

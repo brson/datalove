@@ -329,7 +329,7 @@ pub struct ReplApp<E: ReplExecutor> {
     editing: Option<Editing>,
     /// The commands submitted for undo and redo, and to renumber, by id,
     /// which have no entries in the history and are not yet answered.
-    unrecorded: std::collections::HashMap<u64, repl::Command>,
+    unrecorded: rmx::rustc_hash::FxHashMap<u64, repl::Command>,
     /// Commands entered and not yet run, with what was typed for each; see
     /// [`ReplApp::dispatch`].
     queue: std::collections::VecDeque<(String, repl::Command)>,
@@ -439,7 +439,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             multiline_mode: false,
             cancel_armed: false,
             editing: None,
-            unrecorded: std::collections::HashMap::new(),
+            unrecorded: rmx::rustc_hash::FxHashMap::default(),
             queue: std::collections::VecDeque::new(),
             stashed: None,
             focus: Panel::Input,

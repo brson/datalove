@@ -11,7 +11,7 @@
 //! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
 use std::sync::Arc;
-use std::collections::{HashMap, HashSet};
+use rmx::rustc_hash::{FxHashMap, FxHashSet};
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
@@ -84,9 +84,9 @@ pub fn lower_script_fragment_raw<'db>(
     body: &'db ast::Body<'db>,
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
-    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
-    func_return_types: Option<&HashMap<String, Type<'db>>>,
-    lowered_functions: Option<(Vec<IrCodeUnit>, HashMap<String, FuncId>)>,
+    func_param_types: Option<&FxHashMap<String, Vec<Type<'db>>>>,
+    func_return_types: Option<&FxHashMap<String, Type<'db>>>,
+    lowered_functions: Option<(Vec<IrCodeUnit>, FxHashMap<String, FuncId>)>,
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
     ctx.arena = Some(&body.arena);
@@ -102,7 +102,7 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.unit_end_drops = script_analysis.unit_end;
 
     // Track which functions have already been lowered (to skip in statement handling).
-    let already_lowered_funcs: HashSet<String>;
+    let already_lowered_funcs: FxHashSet<String>;
 
     // Handle lowered functions if provided.
     if let Some((functions, func_name_to_id)) = lowered_functions {
@@ -116,7 +116,7 @@ pub fn lower_script_fragment_raw<'db>(
 
         already_lowered_funcs = func_name_to_id.keys().cloned().collect();
     } else {
-        already_lowered_funcs = HashSet::new();
+        already_lowered_funcs = FxHashSet::default();
 
         // Pre-register all functions to enable forward references (mutual recursion).
         // This must happen before lowering any function bodies.
@@ -182,7 +182,7 @@ pub struct ScriptFunctionsLowered {
     /// `FuncId`; callers that want one function look it up by `id`.
     pub functions: Vec<IrCodeUnit>,
     /// Every function in the unit, deferred ones included, with its `FuncId`.
-    pub func_name_to_id: HashMap<String, FuncId>,
+    pub func_name_to_id: FxHashMap<String, FuncId>,
     /// Functions held back because they named a const with no value yet.
     pub deferred: Vec<String>,
 }
@@ -216,12 +216,12 @@ pub fn lower_script_functions<'db>(
     call_targets: &'db CallTargets<'db>,
     stmts: &[Statement<'db>],
     func_analyses: &ScriptFunctionAnalyses<'db>,
-    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
-    func_return_types: Option<&HashMap<String, Type<'db>>>,
+    func_param_types: Option<&FxHashMap<String, Vec<Type<'db>>>>,
+    func_return_types: Option<&FxHashMap<String, Type<'db>>>,
     func_id_map: &'db crate::FuncIdTable<'db>,
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
-    script_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
+    script_consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
     defer_missing_consts: bool,
     only: Option<&[String]>,
 ) -> Result<ScriptFunctionsLowered, LowerError> {
@@ -245,7 +245,7 @@ pub fn lower_script_functions<'db>(
     }
 
     // Build a map of function names to FuncIds.
-    let mut func_name_to_id: HashMap<String, FuncId> = HashMap::new();
+    let mut func_name_to_id: FxHashMap<String, FuncId> = FxHashMap::default();
     let mut lowered_units: Vec<IrCodeUnit> = Vec::new();
     let mut deferred: Vec<String> = Vec::new();
 
@@ -390,9 +390,9 @@ fn lower_statement_for_script<'db>(
     stmt: &'db datalove_datafun_ast::ast::Statement<'db>,
     _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
-    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
-    func_return_types: Option<&HashMap<String, Type<'db>>>,
-    already_lowered_funcs: &HashSet<String>,
+    func_param_types: Option<&FxHashMap<String, Vec<Type<'db>>>>,
+    func_return_types: Option<&FxHashMap<String, Type<'db>>>,
+    already_lowered_funcs: &FxHashSet<String>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
     // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,

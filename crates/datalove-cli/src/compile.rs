@@ -2,7 +2,7 @@
 //! what stopped it.
 
 use rmx::prelude::*;
-use rmx::std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use rmx::std::path::{Path, PathBuf};
 use rmx::std::sync::Arc;
 
@@ -70,7 +70,7 @@ pub fn compile_script<'db>(
         .expect("script_compiler should succeed after error check");
     let unit = compiler.compile_fragment(&source);
     let files = descriptor.source_files(&module_compiler);
-    check_unit(&compiler, &unit, &files, path, &LineOffsets::new(), cwd)?;
+    check_unit(&compiler, &unit, &files, path, &LineOffsets::default(), cwd)?;
     let ir_unit = unit.ir_unit
         .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
@@ -101,7 +101,7 @@ fn bail_on_module_errors<'db>(
         .chain(compiled.get_module_ownership_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
         .collect();
     let rendered = !diagnostics.is_empty();
-    render::render_module_diagnostics(db, diagnostics, &locate, script_path, &LineOffsets::new(), cwd);
+    render::render_module_diagnostics(db, diagnostics, &locate, script_path, &LineOffsets::default(), cwd);
 
     let unrendered = compiled.all_lowering_errors();
     for error in &unrendered {
@@ -131,7 +131,7 @@ fn bail_on_module_errors<'db>(
 pub fn check_unit(
     compiler: &ScriptCompiler<'_>,
     unit: &ScriptCompilationResult,
-    files: &HashMap<Source, PathBuf>,
+    files: &FxHashMap<Source, PathBuf>,
     file_path: &Path,
     line_offsets: &LineOffsets,
     cwd: &Path,

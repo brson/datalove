@@ -46,7 +46,8 @@
 //! instruction, so the values the rewrite will look for are the values the plan
 //! is built from, and the two cannot disagree.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+use rmx::rustc_hash::FxHashMap;
 
 use datalove_datafun_const::{eliminate_dead_code_unit, inline_function_consts};
 use datalove_datafun_ir::{
@@ -87,7 +88,7 @@ pub struct FuncMonomorphization {
     /// Distinct const argument tuples, in the order they were found.
     pub instantiations: Vec<Vec<ConstValue>>,
     /// Which instantiation a given tuple is.
-    value_to_index: HashMap<Vec<ConstValue>, usize>,
+    value_to_index: FxHashMap<Vec<ConstValue>, usize>,
     /// How to reach the copy for each instantiation, in the same order.
     ///
     /// Empty until the copies are made, and left empty for a function that
@@ -149,7 +150,7 @@ pub fn collect_instantiations_into(
             let entry = plan.funcs.entry(callee).or_insert_with(|| FuncMonomorphization {
                 comptime_param_indices: comptime_param_indices.clone(),
                 instantiations: Vec::new(),
-                value_to_index: HashMap::new(),
+                value_to_index: FxHashMap::default(),
                 copies: Vec::new(),
             });
 
@@ -200,11 +201,11 @@ pub fn monomorphize_function(
 
     // What each parameter becomes: a const parameter becomes the value it was
     // called with, and everything else keeps its meaning at a new index.
-    let mut substitutions: HashMap<ParamId, Operand> = HashMap::new();
+    let mut substitutions: FxHashMap<ParamId, Operand> = FxHashMap::default();
 
     let mut new_param_types = Vec::new();
     let mut new_param_modes = Vec::new();
-    let mut param_remap: HashMap<u32, u32> = HashMap::new();
+    let mut param_remap: FxHashMap<u32, u32> = FxHashMap::default();
     for (old_idx, (ty, mode)) in func_ctx.param_types.iter().zip(func_ctx.param_modes.iter()).enumerate() {
         if comptime_param_indices.contains(&old_idx) {
             continue;
@@ -368,7 +369,7 @@ pub fn rewrite_comptime_calls(
 pub fn specialize_script_unit(
     unit: &IrCodeUnit,
     module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
-    instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (HashMap<String, std::sync::Arc<ConstValue>>, Vec<String>),
+    instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (FxHashMap<String, std::sync::Arc<ConstValue>>, Vec<String>),
 ) -> (IrCodeUnit, Vec<String>) {
     let mut unit = unit.clone();
     let mut plan = MonomorphizationPlan::default();
@@ -460,7 +461,7 @@ pub fn over_limit(name: &str, mono: &FuncMonomorphization) -> Option<String> {
 fn comptime_values(
     args: &[Operand],
     comptime_param_indices: &[usize],
-    consts: &HashMap<ValueId, &ConstValue>,
+    consts: &FxHashMap<ValueId, &ConstValue>,
 ) -> Option<Vec<ConstValue>> {
     comptime_param_indices.iter()
         .map(|&idx| match args.get(idx)? {
@@ -476,8 +477,8 @@ fn comptime_values(
 ///
 /// Borrowed, since only the few passed as const arguments are wanted and a
 /// unit's statics include its data, as big as the data is.
-fn const_value_map(unit: &IrCodeUnit) -> HashMap<ValueId, &ConstValue> {
-    let mut map = HashMap::new();
+fn const_value_map(unit: &IrCodeUnit) -> FxHashMap<ValueId, &ConstValue> {
+    let mut map = FxHashMap::default();
 
     for block in &unit.blocks {
         for instr in &block.instructions {
@@ -510,7 +511,7 @@ fn const_value_map(unit: &IrCodeUnit) -> HashMap<ValueId, &ConstValue> {
 }
 
 /// Carry parameter ids across the renumbering, dropping the const parameters.
-fn remap_params(params: &[ParamId], param_remap: &HashMap<u32, u32>) -> Vec<ParamId> {
+fn remap_params(params: &[ParamId], param_remap: &FxHashMap<u32, u32>) -> Vec<ParamId> {
     params.iter()
         .filter_map(|p| param_remap.get(&p.0).copied().map(ParamId))
         .collect()

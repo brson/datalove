@@ -31,7 +31,7 @@
 //! the interpreter made to a slot before the entry is one the IR made, and
 //! the analysis, which reads the whole function, has ruled that slot out.
 
-use std::collections::{HashMap, HashSet};
+use rmx::rustc_hash::{FxHashMap, FxHashSet};
 
 use cranelift_codegen::ir as cl_ir;
 use cranelift_frontend::{FunctionBuilder, Variable};
@@ -59,8 +59,8 @@ pub(super) struct FieldPlace {
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// The slots to hold in registers, and the field references to keep as
     /// places in them.
-    pub(super) fn find_register_slots(&self) -> (HashSet<SlotId>, HashMap<ValueId, FieldPlace>) {
-        let mut chosen: HashSet<SlotId> = self.func.slot_types.iter().enumerate()
+    pub(super) fn find_register_slots(&self) -> (FxHashSet<SlotId>, FxHashMap<ValueId, FieldPlace>) {
+        let mut chosen: FxHashSet<SlotId> = self.func.slot_types.iter().enumerate()
             .map(|(i, ty)| (SlotId(i as u32), ty))
             .filter(|(id, ty)| !self.func.tracked_slots.contains(id)
                 && !matches!(ty, IrType::Cursor(_))
@@ -93,7 +93,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // How each value is used, for the field references.
-        let mut uses: HashMap<ValueId, Vec<(usize, usize, usize)>> = HashMap::new();
+        let mut uses: FxHashMap<ValueId, Vec<(usize, usize, usize)>> = FxHashMap::default();
         for (b, block) in self.func.blocks.iter().enumerate() {
             for (i, inst) in block.instructions.iter().enumerate() {
                 let mut at = 0;
@@ -114,7 +114,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             });
         }
 
-        let mut places = HashMap::new();
+        let mut places = FxHashMap::default();
         for block in &self.func.blocks {
             for inst in &block.instructions {
                 let Instruction::GetFieldRef { dest, src: Operand::Slot(s), field_index } = inst else { continue };
@@ -217,8 +217,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// In an OSR entry, give each slot held in registers that the compiled
     /// blocks name what the interpreter's frame holds for it.
-    pub(super) fn load_slots_from_frame(&self, builder: &mut FunctionBuilder, compiled: &HashSet<BlockId>) {
-        let mut named = HashSet::new();
+    pub(super) fn load_slots_from_frame(&self, builder: &mut FunctionBuilder, compiled: &FxHashSet<BlockId>) {
+        let mut named = FxHashSet::default();
         for block in self.func.blocks.iter().filter(|b| compiled.contains(&b.id)) {
             for inst in &block.instructions {
                 inst.for_each_place_use(|op, _| {
@@ -243,7 +243,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Declare the variables of the slots held in registers.
-    pub(super) fn declare_slot_vars(&mut self, builder: &mut FunctionBuilder, slots: &HashSet<SlotId>) {
+    pub(super) fn declare_slot_vars(&mut self, builder: &mut FunctionBuilder, slots: &FxHashSet<SlotId>) {
         for &s in slots {
             let cut = reg_pieces(&self.func.slot_types[s.0 as usize]).expect("chosen for registers");
             let vars: Vec<Variable> = cut.iter().map(|&(_, t)| builder.declare_var(t)).collect();

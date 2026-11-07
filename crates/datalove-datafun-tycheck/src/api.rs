@@ -4,7 +4,7 @@
 //! scripts, expressions, and module graphs.
 
 use rmx::prelude::*;
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use bct::lookup::LookupMap;
 use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
@@ -447,7 +447,7 @@ pub fn typecheck_script_unit<'db>(
             }
 
             // An import through a refused require was reported at the require.
-            let through_failed: std::collections::HashSet<u32> = parsed.statements(db).iter()
+            let through_failed: rmx::rustc_hash::FxHashSet<u32> = parsed.statements(db).iter()
                 .filter_map(|statement| match statement {
                     Statement::Import(import)
                         if ctx.failed_aliases.contains(import.module_name.as_str(db)) =>
@@ -990,7 +990,7 @@ fn require_chain<'db>(
 #[derive(Default)]
 struct RequireScope {
     /// What each alias names, by the path or rider it was required as.
-    aliases: HashMap<String, String>,
+    aliases: FxHashMap<String, String>,
 }
 
 impl RequireScope {
@@ -1172,7 +1172,7 @@ fn resolve_script_qualified_calls<'db>(
     calls: &[(InternedText<'db>, InternedText<'db>)],
     own_aliases: &[(InternedText<'db>, String)],
     inherited_alias: impl Fn(InternedText<'db>) -> Option<String>,
-    modules_by_path: &HashMap<String, Module<'db>>,
+    modules_by_path: &FxHashMap<String, Module<'db>>,
 ) -> (crate::QualifiedScope<'db>, Vec<String>) {
     let mut paths = Vec::new();
     let scope = resolve_qualified_calls(calls, |alias, name| {
@@ -1198,7 +1198,7 @@ fn resolve_script_qualified_calls<'db>(
 fn script_modules_by_path<'db>(
     db: &'db dyn crate::Db,
     env: ScriptEnv<'db>,
-) -> HashMap<String, Module<'db>> {
+) -> FxHashMap<String, Module<'db>> {
     env.modules(db).iter()
         .map(|module| (module.id(db).path(db).C(), *module))
         .collect()
@@ -1280,7 +1280,7 @@ fn collect_module_aliases<'db>(
 fn check_script_requires<'db>(
     db: &'db dyn crate::Db,
     parsed: &ParsedStatements<'db>,
-    modules_by_path: &HashMap<String, Module<'db>>,
+    modules_by_path: &FxHashMap<String, Module<'db>>,
 ) -> Vec<crate::RequireError> {
     use crate::{RequireError, RequireErrorKind as Kind};
 
@@ -1340,7 +1340,7 @@ fn resolve_script_imports<'db>(
     script: &ParsedStatements<'db>,
     own_aliases: &[(InternedText<'db>, String)],
     inherited_alias: impl Fn(InternedText<'db>) -> Option<String>,
-    modules_by_path: &HashMap<String, Module<'db>>,
+    modules_by_path: &FxHashMap<String, Module<'db>>,
 ) -> (
     Vec<(InternedText<'db>, TypeFunction<'db>, FunHead<'db>, Option<ModuleId<'db>>, u32)>,
     Vec<crate::UnresolvedImport>,

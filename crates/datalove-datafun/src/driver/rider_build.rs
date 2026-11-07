@@ -21,7 +21,7 @@
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
 
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::{LazyLock, Mutex};
@@ -84,8 +84,8 @@ fn rider_set_dir(riders: &[RiderCrate]) -> String {
 /// Components already built by this process, keyed by work dir, riders and kind.
 type ComponentKey = (PathBuf, Vec<RiderCrate>, Kind);
 
-static COMPONENT_CACHE: LazyLock<Mutex<HashMap<ComponentKey, PathBuf>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static COMPONENT_CACHE: LazyLock<Mutex<FxHashMap<ComponentKey, PathBuf>>> =
+    LazyLock::new(|| Mutex::new(FxHashMap::default()));
 
 /// Error from a failed native component build.
 #[derive(Debug)]

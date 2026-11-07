@@ -826,7 +826,7 @@ fn package_library_from_map(
 
 use super::module_compiler::ModuleCompiler;
 use super::rider_load::RiderNatives;
-use rmx::std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 
 impl WorkspaceDescriptor {
     /// Apply this descriptor to a fresh module compiler, populating all modules and riders.
@@ -880,7 +880,7 @@ impl WorkspaceDescriptor {
     /// from this descriptor was read from, by its source.
     ///
     /// For framing a diagnostic against the file its text came from.
-    pub fn source_files(&self, module_compiler: &ModuleCompiler) -> HashMap<bct::input::Source, PathBuf> {
+    pub fn source_files(&self, module_compiler: &ModuleCompiler) -> FxHashMap<bct::input::Source, PathBuf> {
         let modules = self.module_files().into_iter()
             .filter_map(|(path, file)| Some((module_compiler.module_source(&path)?, file)));
         let data = self.data_files().into_iter()

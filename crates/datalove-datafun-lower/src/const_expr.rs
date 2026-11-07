@@ -9,7 +9,7 @@
 //! 2. Caller passes the IR to `evaluate_prepared_const` in the const crate
 
 use std::sync::Arc;
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
     ConstValue, IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
@@ -32,15 +32,15 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     expr: ExprFun<'db>,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    resolved_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
+    resolved_consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
     return_type: Option<IrType>,
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
-    func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
+    func_name_to_id: &FxHashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db crate::FuncIdTable<'db>>,
     data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
     use datalove_datafun_ir::{CodeRef, FuncId};
-    use std::collections::HashSet;
+    use rmx::rustc_hash::FxHashSet;
 
     // Create a fresh LowerCtx with the provided type information and module func_id_map.
     let mut ctx = LowerCtx::new_for_module(
@@ -95,7 +95,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
             })
             .collect()
     };
-    let mut reached: HashSet<FuncId> = HashSet::new();
+    let mut reached: FxHashSet<FuncId> = FxHashSet::default();
     let mut nested_units: Vec<IrCodeUnit> = Vec::new();
     let mut pending = local_calls(&ctx.body.blocks);
     while let Some(func_id) = pending.pop() {
@@ -152,10 +152,10 @@ pub fn lower_const_binding<'db>(
     ir_type: &IrType,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    resolved_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
+    resolved_consts: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
     return_type: Option<IrType>,
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
-    func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
+    func_name_to_id: &FxHashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db crate::FuncIdTable<'db>>,
     data_files: &'db DataFiles,
 ) -> Result<(Option<IrCodeUnit>, Option<Arc<ConstValue>>), LowerError> {

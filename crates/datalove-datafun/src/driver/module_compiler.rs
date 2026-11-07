@@ -19,7 +19,8 @@
 //! ```
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, HashMap};
+use rmx::std::collections::BTreeMap;
+use rmx::rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
@@ -531,7 +532,7 @@ impl ModuleCompiler {
 
                 let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
                 let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
-                let mut module_consts = HashMap::new();
+                let mut module_consts = FxHashMap::default();
 
                 for (module_id, result) in lowering.module_results(db_salsa).iter_unordered() {
                     let module_path = module_id.path(db_salsa).clone();
@@ -573,7 +574,7 @@ impl ModuleCompiler {
                     Arc::new(ModuleFunctionRegistry::new()),
                     BTreeMap::new(),
                     BTreeMap::new(),
-                    HashMap::new(),
+                    FxHashMap::default(),
                 )
             };
 

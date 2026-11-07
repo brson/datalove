@@ -9,7 +9,7 @@
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use rustc_hash::FxHashMap;
+use rmx::rustc_hash::FxHashMap;
 
 use datalove_datafun_ir::IrModuleId;
 use datalove_datafun_interp::FuncIdentity;

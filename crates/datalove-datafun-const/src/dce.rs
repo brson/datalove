@@ -6,7 +6,7 @@
 //!
 //! These passes are used after const inlining to clean up orphaned code.
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rmx::rustc_hash::{FxHashMap, FxHashSet};
 use datalove_datafun_ir::dense::ValueSet;
 use datalove_datafun_ir::{
     BlockId, ExportBinding, Instruction, IrBlock, IrCodeUnit, IrType,

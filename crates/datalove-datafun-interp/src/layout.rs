@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use rustc_hash::FxHashMap;
+use rmx::rustc_hash::FxHashMap;
 
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::frame_layout::{FrameLayout, SlotLayout};

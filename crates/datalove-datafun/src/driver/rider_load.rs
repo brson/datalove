@@ -6,7 +6,7 @@
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
 
-use std::collections::HashMap;
+use rmx::rustc_hash::FxHashMap;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
 
 use datalove_datafun_interp::{NativeFunctionTable, NativeTarget};
@@ -261,8 +261,8 @@ impl std::fmt::Debug for LoadedLibrary {
 /// interpreter holding it is dropped, and not at whatever point a libc decides,
 /// and the symbols are looked up once per library rather than once per
 /// interpreter.
-static OPEN_LIBRARIES: LazyLock<Mutex<HashMap<PathBuf, Weak<LoadedLibrary>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static OPEN_LIBRARIES: LazyLock<Mutex<FxHashMap<PathBuf, Weak<LoadedLibrary>>>> =
+    LazyLock::new(|| Mutex::new(FxHashMap::default()));
 
 /// Open a rider library, or take a share of one already open.
 fn open_library(lib_path: &Path, rider_name: &str) -> AnyResult<Arc<LoadedLibrary>> {

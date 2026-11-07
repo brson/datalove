@@ -7,7 +7,8 @@
 //! straight off when it is a literal or names a const already evaluated, and
 //! the unit is run by the CTFE evaluator. Both compilers do it through here.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
+use rmx::rustc_hash::FxHashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -30,7 +31,7 @@ pub struct ConstEvalEnv<'a, 'db> {
     pub evaluator: &'a mut dyn CtfeEvaluator,
     /// The functions a const may call, lowered already.
     pub lowered: &'a [Arc<IrCodeUnit>],
-    pub func_name_to_id: &'a HashMap<String, FuncId>,
+    pub func_name_to_id: &'a FxHashMap<String, FuncId>,
     /// For calls into other modules.
     pub func_id_map: &'db FuncIdLookup<'db>,
     /// The data files a `require data` const may name, by path.
@@ -81,7 +82,7 @@ pub fn data_consts<'db>(
     body: &'db Body<'db>,
     expr_types: &ExprTypes<'db>,
     data_files: &lower::DataFiles,
-) -> HashMap<String, (IrType, Arc<ConstValue>)> {
+) -> FxHashMap<String, (IrType, Arc<ConstValue>)> {
     body.statements.iter()
         .filter_map(|statement| {
             let Statement::Const(binding) = statement else { return None };
@@ -117,7 +118,7 @@ pub fn evaluate_const<'db>(
     env: &mut ConstEvalEnv<'_, 'db>,
     init: ExprFun<'db>,
     ty: &IrType,
-    resolved: &HashMap<String, (IrType, Arc<ConstValue>)>,
+    resolved: &FxHashMap<String, (IrType, Arc<ConstValue>)>,
     func_return_type: Option<IrType>,
     deferred: &BTreeSet<String>,
 ) -> Result<Option<Arc<ConstValue>>, ConstError> {
@@ -156,7 +157,7 @@ pub fn evaluate_const<'db>(
 pub fn evaluate_body_consts<'db>(
     env: &mut ConstEvalEnv<'_, 'db>,
     func_stmt: &'db StmtFun<'db>,
-    mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
+    mut scope: FxHashMap<String, (IrType, Arc<ConstValue>)>,
     mut deferred: BTreeSet<String>,
 ) -> (Vec<(String, IrType, Arc<ConstValue>)>, Vec<NamedConstError>) {
     let db = env.db;
@@ -202,10 +203,10 @@ pub fn evaluate_body_consts<'db>(
 pub fn evaluate_instantiation_consts<'db>(
     env: &mut ConstEvalEnv<'_, 'db>,
     func_stmt: &'db StmtFun<'db>,
-    mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
+    mut scope: FxHashMap<String, (IrType, Arc<ConstValue>)>,
     comptime_param_indices: &[usize],
     values: &[ConstValue],
-) -> (HashMap<String, Arc<ConstValue>>, Vec<String>) {
+) -> (FxHashMap<String, Arc<ConstValue>>, Vec<String>) {
     let db = env.db;
     let params = func_stmt.params();
     for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {

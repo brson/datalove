@@ -15,7 +15,6 @@ datalove-diagnostic-codes.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
-rustc-hash.workspace = true
 serde = { version = "1", features = ["derive"] }
 datalove-diagnostic.workspace = true
 datalove-rtdt.workspace = true

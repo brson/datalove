@@ -16,7 +16,7 @@ pub enum StaticConstLoc {
 
 /// Where each static const lives, keyed by the address of the `Arc` a
 /// `StaticRef` holds its value in.
-pub type StaticConsts = HashMap<usize, StaticConstLoc>;
+pub type StaticConsts = FxHashMap<usize, StaticConstLoc>;
 
 /// The key a `StaticRef`'s value is found under in [`StaticConsts`].
 pub fn static_const_key(value: &std::sync::Arc<ConstValue>) -> usize {

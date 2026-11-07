@@ -31,7 +31,7 @@
 //! tests run every fixture on, so that each rule is checked against the ops
 //! it replaces.
 
-use rustc_hash::FxHashMap;
+use rmx::rustc_hash::FxHashMap;
 
 use super::{Ck, CkTy, Loc, Op};
 

@@ -25,7 +25,8 @@
 //! ```
 
 use rmx::prelude::*;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
+use rmx::rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 use datalove_datafun_ir::{ExportBinding, IrType, IrCodeUnit};
@@ -106,7 +107,7 @@ pub struct ScriptExecutor {
     /// where it sits.
     order: Vec<u32>,
     /// What each unit exports and what became of it, by id.
-    units: HashMap<u32, UnitState>,
+    units: FxHashMap<u32, UnitState>,
     pub env: ScriptEnvironment,
     interp: datalove_datafun_interp::IrInterpreter,
 }
@@ -176,7 +177,7 @@ impl ScriptExecutor {
         ScriptExecutor {
             script_ctx: lower::ScriptLowerContext::new(),
             order: Vec::new(),
-            units: HashMap::new(),
+            units: FxHashMap::default(),
             env: ScriptEnvironment::with_module_registry(module_registry),
             interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
         }

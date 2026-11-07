@@ -10,7 +10,8 @@
 //! run under rayon was invisible.
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeSet, HashMap};
+use rmx::std::collections::BTreeSet;
+use rmx::rustc_hash::FxHashMap;
 use rmx::std::sync::{Arc, Mutex};
 
 /// One query salsa ran, and the argument it ran on.
@@ -103,7 +104,7 @@ impl QueryRecorder {
 /// of them resolves back to its path.
 #[derive(Default)]
 pub struct ModuleKeys {
-    paths: HashMap<salsa::Id, String>,
+    paths: FxHashMap<salsa::Id, String>,
 }
 
 impl ModuleKeys {
