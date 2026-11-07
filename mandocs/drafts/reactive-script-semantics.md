@@ -314,9 +314,6 @@ Let's not belabor this.
 You get the idea. Inputs change.
 Reevaluate just what needs to reevaluate.
 
-There are obstacles to doing this correctly and efficiently.
-todo probably need some anithesis here.
-
 I'll develop the rules Datalove follows to make
 these cases and more work correctly.
 The rules are based on analysis of how bindings are used within a linear typesystem.
