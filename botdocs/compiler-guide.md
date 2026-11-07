@@ -795,21 +795,29 @@ Two things travel inside the binary, both assembled by
 
 | What | How | Where it comes from |
 |------|-----|---------------------|
-| Module sources | `build.rs` walks `sys/`, emits a table of `include_str!` | `sys/*/*.dfm` |
-| Rider interfaces | The rider crate's `INTERFACE` constant; see [below](#user-content-rider-manifests-and-interfaces) | `sys/*/rider/rider.dli` |
+| Modules, data files, manifests | `build.rs` walks `sys/`, emits a table of `include_bytes!` by path | `sys/*/*.dfm`, `*.dlt`, `manifest.toml` |
+| Rider interfaces | The rider crate's `INTERFACE` constant, in the same table at the path the file would have; see [below](#user-content-rider-manifests-and-interfaces) | `sys/*/rider/rider.dli` |
 | Rider functions | `datalove-rider-sys-std` is a normal dependency; its generated `symbols()` gives addresses | `sys/std/rider` |
 
-`system_library()` assembles them into a `SystemLibrary`, which is a
-`PackageLibrary` of sources plus `natives: Vec<(String, *const ())>`. Drivers
+The table is a filesystem: `datalove_sys_packages::files()` is a
+`datalove_vio::StaticFs` holding the library under `sys/`. `system_library()`
+loads it with `load_library`, through the `package_load` that reads a library
+off disk, so which directories are packages and what each holds is decided in
+one place, and an embedded module's origin is `sys/std/list.dfm` as a file of
+it. It returns a `SystemLibrary`, which is that `PackageLibrary` plus
+`natives: Vec<(String, *const ())>`. Drivers
 hand it to `WorkspaceDescriptor::from_system_library` and to
 `register_linked_natives`. The raw addresses are not `Send`, which is why
 `ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` and calls it on the
 worker thread rather than being handed the value.
 
-**The rider's crate is named, not embedded.** `build.rs` writes each package's
-`rider/` directory into the table as `rider_crate_dir`, by the same convention
-`package_load` uses when it reads a package off disk, and `system_library()`
-puts it in `RiderDescriptor::crate_dir`. So the std rider reaches an
+**The rider's crate is named, not embedded.** Where it is is a fact about the
+host the binary was built on, which the embedded files cannot answer, so
+`build.rs` writes each package's `rider/` directory into a table of its own,
+`RIDER_CRATE_DIRS`, by the same convention `package_load` uses when it reads a
+package off disk. `system_library()` puts it in `RiderDescriptor::crate_dir`
+after loading. A release build has none, `rider/` not being in the published
+crate, and its riders come from the registry. So the std rider reaches an
 AOT-compiled program the way any other rider does: the compiler synthesizes a
 native component for whatever riders the module graph holds and builds it with
 cargo. See [Native Riders](#user-content-native-riders).
@@ -837,8 +845,9 @@ compiles `sys/` off disk through `WorkspaceDescriptor::load_sys_dir`, so
 recompiles nothing at all.
 
 That only holds because the two copies cannot drift.
-`sys/tests/embedded_matches_tree.rs` asserts the embedded
-table is byte-identical to `sys/`, and that every `native fun` a rider
+`sys/tests/embedded_matches_tree.rs` loads `sys/` off disk with the same
+loader and asserts the two libraries agree in every module, data file and
+rider, crate directory included, and that every `native fun` a rider
 interface declares is linked in. The REPL's `engine_tests` run against
 `system_library()`, so the suite covers the shipped path too.
 
@@ -914,8 +923,8 @@ is stripped from a published datalove package.
 The interface lives inside the rider crate, at `rider/rider.dli`, so the
 crate's own `build.rs` can read it within its package root. It reaches the
 compiler as Rust, not as a file: the crate exports
-`INTERFACE = include_str!("../rider.dli")`, and `sys/build.rs` writes
-`rider_interface: Some(<crate>::INTERFACE)` into the embedded table. The
+`INTERFACE = include_str!("../rider.dli")`, and `sys/build.rs` puts
+`<crate>::INTERFACE` into the embedded table as `sys/<package>/rider/rider.dli`. The
 reason is a cargo behaviour worth knowing: **a nested `Cargo.toml` silently
 removes its whole directory from the package around it, and `include` cannot
 override that.** `datalove-sys-packages` is `sys/`, so `sys/std/rider/` is never

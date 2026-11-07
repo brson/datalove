@@ -27,6 +27,7 @@ rmx.workspace = true
 datalove-datafun.workspace = true
 # Each sys rider, for the interface it declares and the functions it exports.
 datalove-rider-sys-std.workspace = true
+datalove-vio.workspace = true
 
 [build-dependencies]
 datalove-pkg-manifest.workspace = true

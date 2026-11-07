@@ -77,7 +77,7 @@ pub use module_compiler::ModuleCompiler;
 pub use workspace::{
     WorkspaceDescriptor, WorkspaceDelta, SystemLibrary,
     PackageLibrary, PackageDescriptor, ModuleDescriptor,
-    RiderDescriptor, RiderCrate, CompilerOptions, find_local_library, load_local_library, local_library_for,
+    RiderDescriptor, RiderCrate, CompilerOptions, find_local_library, load_library, load_local_library, local_library_for,
 };
 
 #[cfg(test)]

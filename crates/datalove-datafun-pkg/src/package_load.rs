@@ -124,8 +124,8 @@ pub fn load_library_dir(
 /// A package has modules or data, or has a manifest and intends to. A library root can
 /// hold other things --- `sys` is itself a Rust crate, so `src` and `target`
 /// are beside the packages in it --- and those are left alone by not looking
-/// like a package rather than by being named here. `sys/build.rs` applies the
-/// same rule when it embeds the library.
+/// like a package rather than by being named here. The embedded system
+/// library is loaded through this as well, so the rule is applied here only.
 fn is_package(fs: &dyn Fs, dir: &Path) -> bool {
     if fs.is_file(&dir.join(datalove_pkg_manifest::FILE_NAME)) {
         return true;

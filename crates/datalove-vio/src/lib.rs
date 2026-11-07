@@ -3,7 +3,8 @@
 //! Every file the compiler reads or writes goes through an [`Fs`]: package
 //! libraries, manifests, scripts, worldfiles, saved sessions, and the outputs
 //! a driver writes. A driver makes one, usually a [`HostFs`], and hands it
-//! down; a test or a wasm build hands down a [`MemFs`] instead.
+//! down; a test or a wasm build hands down a [`MemFs`] instead. Files built
+//! into a binary, like the system library, are a [`StaticFs`].
 //!
 //! The native toolchain is not behind this. Building a rider, linking a
 //! program and loading a shared library all hand files to another program,
@@ -224,6 +225,89 @@ fn normalize(path: &Path) -> PathBuf {
     out
 }
 
+/// A read-only filesystem over files compiled into the binary.
+///
+/// Each file is named by its path from the root, as `sys/std/list.dfm`; the
+/// directories are whatever those paths pass through. The working directory
+/// is the root.
+#[derive(Debug)]
+pub struct StaticFs {
+    files: &'static [(&'static str, &'static [u8])],
+}
+
+impl StaticFs {
+    pub fn new(files: &'static [(&'static str, &'static [u8])]) -> StaticFs {
+        StaticFs { files }
+    }
+
+    /// `path` from the root, as the files are named.
+    fn resolve(path: &Path) -> PathBuf {
+        let full = normalize(&Path::new("/").join(path));
+        full.strip_prefix("/").expect("a path from the root").to_path_buf()
+    }
+
+    fn file(&self, path: &Path) -> Option<&'static [u8]> {
+        self.files.iter()
+            .find(|(name, _)| Path::new(name) == path)
+            .map(|(_, data)| *data)
+    }
+}
+
+impl Fs for StaticFs {
+    fn current_dir(&self) -> &Path {
+        Path::new("/")
+    }
+
+    fn kind(&self, path: &Path) -> io::Result<Option<EntryKind>> {
+        let full = StaticFs::resolve(path);
+        if self.file(&full).is_some() {
+            return Ok(Some(EntryKind::File));
+        }
+        let is_dir = self.files.iter().any(|(name, _)| Path::new(name).starts_with(&full));
+        Ok(is_dir.then_some(EntryKind::Dir))
+    }
+
+    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        match self.file(&StaticFs::resolve(path)) {
+            Some(data) => Ok(data.to_vec()),
+            None if self.is_dir(path) => Err(is_a_directory(path)),
+            None => Err(not_found(path)),
+        }
+    }
+
+    fn read_to_string(&self, path: &Path) -> io::Result<String> {
+        String::from_utf8(self.read(path)?)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+
+    fn list_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        match self.kind(path)? {
+            Some(EntryKind::Dir) => {}
+            Some(_) => return Err(not_a_directory(path)),
+            None => return Err(not_found(path)),
+        }
+        let full = StaticFs::resolve(path);
+        let children = self.files.iter()
+            .filter_map(|(name, _)| Path::new(name).strip_prefix(&full).ok())
+            .filter_map(|rest| rest.components().next())
+            .map(|child| path.join(child))
+            .collect::<BTreeSet<_>>();
+        Ok(children.into_iter().collect())
+    }
+
+    fn write(&self, path: &Path, _data: &[u8]) -> io::Result<()> {
+        Err(read_only(path))
+    }
+
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        Err(read_only(path))
+    }
+}
+
+fn read_only(path: &Path) -> io::Error {
+    io::Error::new(io::ErrorKind::ReadOnlyFilesystem, format!("{}: read-only filesystem", path.display()))
+}
+
 fn not_found(path: &Path) -> io::Error {
     io::Error::new(io::ErrorKind::NotFound, format!("{}: no such file or directory", path.display()))
 }
@@ -415,6 +499,46 @@ mod tests {
             let e = fs.read_to_string(Path::new("f")).unwrap_err();
             assert_eq!(e.kind(), io::ErrorKind::InvalidData);
         });
+    }
+
+    static FILES: &[(&str, &[u8])] = &[
+        ("lib/pkg/a.dfm", b"a"),
+        ("lib/pkg/b.dfm", b"b"),
+        ("lib/pkg/sub/c.dli", b"c"),
+        ("top", b"t"),
+    ];
+
+    #[test]
+    fn static_files_read_and_list() {
+        let fs = StaticFs::new(FILES);
+        assert_eq!(fs.read_to_string(Path::new("lib/pkg/a.dfm")).unwrap(), "a");
+        assert_eq!(fs.read_to_string(Path::new("/lib/./pkg/sub/../b.dfm")).unwrap(), "b");
+        assert_eq!(
+            fs.list_dir(Path::new("lib/pkg")).unwrap(),
+            [Path::new("lib/pkg/a.dfm"), Path::new("lib/pkg/b.dfm"), Path::new("lib/pkg/sub")],
+        );
+        assert_eq!(fs.list_dir(Path::new("/")).unwrap(), [Path::new("/lib"), Path::new("/top")]);
+    }
+
+    #[test]
+    fn static_directories_are_what_the_paths_pass_through() {
+        let fs = StaticFs::new(FILES);
+        assert_eq!(fs.kind(Path::new("lib")).unwrap(), Some(EntryKind::Dir));
+        assert_eq!(fs.kind(Path::new("lib/pkg/sub")).unwrap(), Some(EntryKind::Dir));
+        assert_eq!(fs.kind(Path::new("/")).unwrap(), Some(EntryKind::Dir));
+        assert_eq!(fs.kind(Path::new("top")).unwrap(), Some(EntryKind::File));
+        // A prefix of a name is not a directory.
+        assert_eq!(fs.kind(Path::new("lib/pk")).unwrap(), None);
+        assert!(fs.list_dir(Path::new("top")).is_err());
+        assert_eq!(fs.read(Path::new("lib")).unwrap_err().kind(), io::ErrorKind::IsADirectory);
+        assert_eq!(fs.read(Path::new("nope")).unwrap_err().kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn static_files_are_read_only() {
+        let fs = StaticFs::new(FILES);
+        assert_eq!(fs.write(Path::new("top"), b"").unwrap_err().kind(), io::ErrorKind::ReadOnlyFilesystem);
+        assert_eq!(fs.create_dir_all(Path::new("d")).unwrap_err().kind(), io::ErrorKind::ReadOnlyFilesystem);
     }
 
     #[test]

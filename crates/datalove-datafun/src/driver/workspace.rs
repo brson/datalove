@@ -110,8 +110,9 @@ pub struct ModuleDescriptor {
     /// Source text of the module.
     pub source: Arc<str>,
 
-    /// Filesystem path, if loaded from disk.
-    /// Used for diagnostics and file-watching, not compilation.
+    /// The path it was read from, in whatever filesystem it was read from,
+    /// if it was read from one: the host's, or the one the system library is
+    /// embedded as. Used for diagnostics, not compilation.
     pub origin: Option<PathBuf>,
 }
 
@@ -478,11 +479,16 @@ pub fn find_local_library(fs: &dyn Fs, script: Option<&Path>) -> Option<PathBuf>
     fs.is_dir(&above).then_some(above)
 }
 
+/// Load the library `name` from `dir` in `fs`: every package directory in it.
+pub fn load_library(fs: &dyn Fs, name: &str, dir: &Path) -> AnyResult<PackageLibrary> {
+    let packages = datalove_datafun_pkg::package_load::load_library_dir(fs, dir)
+        .with_context(|| fmt!("failed to load the {name} library at {}", dir.display()))?;
+    Ok(package_library_from_map(name, &packages))
+}
+
 /// Load the `local` library from `dir`.
 pub fn load_local_library(fs: &dyn Fs, dir: &Path) -> AnyResult<PackageLibrary> {
-    let packages = datalove_datafun_pkg::package_load::load_library_dir(fs, dir)
-        .with_context(|| fmt!("failed to load the local library at {}", dir.display()))?;
-    Ok(package_library_from_map("local", &packages))
+    load_library(fs, "local", dir)
 }
 
 /// The `local` library a command compiles against, if it finds one.
@@ -550,9 +556,8 @@ impl WorkspaceDescriptor {
 
     /// The file each module is read from, by module path, for diagnostics.
     ///
-    /// A module with no file on disk, like one of the system library compiled
-    /// into this binary, is named by where it sits in its library, as
-    /// `sys/std/string.dfm`.
+    /// A module read from no file, like one from a worldfile, is named by
+    /// where it sits in its library, as `local/app/main.dfm`.
     pub fn module_files(&self) -> BTreeMap<ModulePath, PathBuf> {
         self.all_modules()
             .map(|(path, module)| {
@@ -566,8 +571,8 @@ impl WorkspaceDescriptor {
     /// The file each rider interface is read from, by rider name, for
     /// diagnostics.
     ///
-    /// Named the way [`module_files`](Self::module_files) names one with no
-    /// file on disk, as the system library's riders, compiled in, have none.
+    /// Named the way [`module_files`](Self::module_files) names one read from
+    /// no file.
     pub fn rider_files(&self) -> BTreeMap<String, PathBuf> {
         self.libraries()
             .flat_map(|lib| lib.packages.values().filter_map(move |pkg| {
@@ -582,8 +587,8 @@ impl WorkspaceDescriptor {
 
     /// The file each data file is read from, by path, for diagnostics.
     ///
-    /// Named the way [`module_files`](Self::module_files) names one with no
-    /// file on disk.
+    /// Named the way [`module_files`](Self::module_files) names one read from
+    /// no file.
     pub fn data_files(&self) -> BTreeMap<ModulePath, PathBuf> {
         self.all_data()
             .map(|(path, file)| {

@@ -3,117 +3,106 @@
 //! Everything else in the test suite compiles `sys/` off disk, which is only
 //! a test of what ships if the two agree.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+use datalove_datafun::driver::{PackageLibrary, load_library};
 
 /// The library, which is this crate's own directory.
 fn sys_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// Package name to module name to source text, as the tree has it.
-fn packages_on_disk() -> BTreeMap<String, BTreeMap<String, String>> {
-    dir_entries(&sys_dir()).into_iter()
-        .filter(|path| path.is_dir())
-        // The library root is this crate, so `src`, `tests` and `target` are
-        // beside the packages. Same rule as `build.rs` and `package_load`: a
-        // package has modules or a manifest.
-        .filter(|path| is_package(path))
-        .map(|package_dir| {
-            let modules = dir_entries(&package_dir).into_iter()
-                .filter(|path| path.extension().is_some_and(|ext| ext == "dfm"))
-                .map(|path| (file_stem(&path), read(&path)))
-                .collect();
-            (file_name(&package_dir), modules)
-        })
-        .collect()
+/// The library as the tree has it, read by the loader the embedded one goes
+/// through.
+///
+/// Its files are named as the embedded ones are, from the directory above
+/// the library, so `sys/std/list.dfm` for both. Everything else is as read.
+fn library_on_disk() -> PackageLibrary {
+    let fs = datalove_vio::HostFs::new().expect("the working directory");
+    let mut library = load_library(&fs, "sys", &sys_dir()).expect("sys/ loads");
+    let above = sys_dir().parent().expect("sys/ is in a directory").to_path_buf();
+    let rename = |origin: &mut Option<PathBuf>| {
+        if let Some(path) = origin {
+            *path = path.strip_prefix(&above).expect("a file of sys/").to_path_buf();
+        }
+    };
+    for package in library.packages.values_mut() {
+        for file in package.modules.values_mut().chain(package.data.values_mut()) {
+            rename(&mut file.origin);
+        }
+        if let Some(rider) = &mut package.rider {
+            rename(&mut rider.origin);
+        }
+    }
+    library
 }
 
+/// Every package, module, data file and rider interface is embedded verbatim,
+/// under the name the tree gives it.
+///
+/// Riders included: each names the crate the tree's manifest names, and the
+/// crate directory baked in at build time is the one the tree has. The
+/// compiler hands that directory to cargo, so the two agreeing is what keeps
+/// an embedded library and a disk one building the same component.
 #[test]
-fn every_module_is_embedded_verbatim() {
-    let sys = datalove_sys_packages::system_library();
-    let on_disk = packages_on_disk();
-
-    let embedded: BTreeMap<String, BTreeMap<String, String>> = sys.library.packages.iter()
-        .map(|(name, package)| {
-            let modules = package.modules.iter()
-                .map(|(name, module)| (name.clone(), module.source.to_string()))
-                .collect();
-            (name.clone(), modules)
-        })
-        .collect();
+fn the_embedded_library_is_the_tree() {
+    let embedded = datalove_sys_packages::system_library().library;
+    let on_disk = library_on_disk();
 
     assert_eq!(
-        embedded.keys().collect::<Vec<_>>(),
-        on_disk.keys().collect::<Vec<_>>(),
+        embedded.packages.keys().collect::<Vec<_>>(),
+        on_disk.packages.keys().collect::<Vec<_>>(),
         "the embedded library and sys/ hold different packages",
     );
-
-    for (package, modules) in &on_disk {
-        assert_eq!(
-            embedded[package].keys().collect::<Vec<_>>(),
-            modules.keys().collect::<Vec<_>>(),
-            "package {package} holds different modules embedded than in sys/",
-        );
-        for (module, source) in modules {
+    for (name, package) in &on_disk.packages {
+        let copy = &embedded.packages[name];
+        for (kind, files, copies) in [
+            ("modules", &package.modules, &copy.modules),
+            ("data files", &package.data, &copy.data),
+        ] {
             assert_eq!(
-                &embedded[package][module], source,
-                "sys/{package}/{module}.dfm differs from the embedded copy",
+                copies.keys().collect::<Vec<_>>(),
+                files.keys().collect::<Vec<_>>(),
+                "sys/{name} holds different {kind} embedded than in the tree",
             );
-        }
-    }
-}
-
-#[test]
-fn every_rider_interface_is_embedded_verbatim() {
-    let sys = datalove_sys_packages::system_library();
-
-    for (name, package) in &sys.library.packages {
-        let interface = sys_dir().join(name).join("rider").join("rider.dli");
-        match &package.rider {
-            Some(rider) => assert_eq!(
-                rider.interface_source.to_string(), read(&interface),
-                "sys/{name}/rider/rider.dli differs from the embedded copy",
-            ),
-            None => assert!(
-                !interface.is_file(),
-                "sys/{name} has a rider interface that was not embedded",
-            ),
-        }
-    }
-}
-
-/// Every rider crate named by the embedded table is where it says it is.
-///
-/// The name is a path baked in at build time, and the compiler hands it to
-/// cargo to build a native component from. `build.rs` finds it by the same
-/// convention `package_load` uses on a package read off disk, so the two
-/// agreeing is what keeps an embedded library and a disk one building the
-/// same component.
-#[test]
-fn every_rider_crate_is_where_it_is_named() {
-    let sys = datalove_sys_packages::system_library();
-
-    for (name, package) in &sys.library.packages {
-        let Some(rider) = &package.rider else { continue };
-        let on_disk = sys_dir().join(name).join("rider");
-
-        match &rider.crate_dir {
-            Some(dir) => {
-                assert_eq!(
-                    dir, &on_disk,
-                    "sys/{name}'s rider crate is embedded as a path it is not at",
-                );
+            for (file, descriptor) in files {
                 assert!(
-                    dir.join("Cargo.toml").is_file(),
-                    "{} has no Cargo.toml", dir.display(),
+                    &copies[file] == descriptor,
+                    "{:?} differs from the embedded copy", descriptor.origin,
                 );
             }
-            None => assert!(
-                !on_disk.join("Cargo.toml").is_file(),
-                "sys/{name} has a rider crate that was not named",
+        }
+        match (&package.rider, &copy.rider) {
+            (Some(rider), Some(embedded)) => {
+                assert!(
+                    rider.interface_source == embedded.interface_source,
+                    "sys/{name}/rider/rider.dli differs from the embedded copy",
+                );
+                assert_eq!(rider.origin, embedded.origin, "sys/{name}'s rider interface is named differently");
+                assert_eq!(rider.crate_spec, embedded.crate_spec, "sys/{name}'s rider crate is named differently");
+                assert_eq!(rider.crate_dir, embedded.crate_dir, "sys/{name}'s rider crate is somewhere else");
+            }
+            (rider, embedded) => assert_eq!(
+                rider.is_some(), embedded.is_some(),
+                "sys/{name} has a rider in one and not the other",
             ),
         }
+    }
+}
+
+/// Every rider crate the embedded library names is a crate.
+#[test]
+fn every_rider_crate_is_a_crate() {
+    let sys = datalove_sys_packages::system_library();
+
+    for (name, package) in &sys.library.packages {
+        let Some(dir) = package.rider.as_ref().and_then(|rider| rider.crate_dir.as_ref()) else {
+            continue;
+        };
+        assert!(
+            Path::new(dir).join("Cargo.toml").is_file(),
+            "sys/{name}'s rider crate, {}, has no Cargo.toml", dir.display(),
+        );
     }
 }
 
@@ -136,35 +125,4 @@ fn every_declared_native_is_linked() {
             );
         }
     }
-}
-
-/// Whether a directory in the library is a package.
-fn is_package(dir: &Path) -> bool {
-    dir.join("manifest.toml").is_file()
-        || dir_entries(dir).iter()
-            .any(|path| path.extension().is_some_and(|ext| ext == "dfm"))
-}
-
-fn dir_entries(dir: &Path) -> Vec<PathBuf> {
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("unable to read {}: {e}", dir.display()))
-        .map(|entry| entry.expect("a readable directory entry").path())
-        .collect();
-    entries.sort();
-    entries
-}
-
-fn read(path: &Path) -> String {
-    std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("unable to read {}: {e}", path.display()))
-}
-
-fn file_name(path: &Path) -> String {
-    path.file_name().expect("a named path")
-        .to_str().expect("a utf-8 file name").to_string()
-}
-
-fn file_stem(path: &Path) -> String {
-    path.file_stem().expect("a named file")
-        .to_str().expect("a utf-8 file name").to_string()
 }

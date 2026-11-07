@@ -4,7 +4,8 @@ A plan for sending every file the compiler reads or writes through one
 trait-based interface, in a new `datalove-vio` crate, so that later the
 interpreter and compiled programs can do their I/O through it too. Written
 November 2026. Phases 1 to 3, the crate and the compiler's own I/O, are
-implemented; the runtime's is not.
+implemented, and so is the embedded system library as a filesystem of its
+own; the runtime's I/O is not.
 
 ## Contents
 
@@ -14,6 +15,7 @@ implemented; the runtime's is not.
 - [The interface](#user-content-the-interface)
 - [Where the handle goes](#user-content-where-the-handle-goes)
 - [The native toolchain stays outside](#user-content-the-native-toolchain-stays-outside)
+- [The embedded system library](#user-content-the-embedded-system-library)
 - [Megaspace-iostack](#user-content-megaspace-iostack)
 - [Phases](#user-content-phases)
 - [Open questions](#user-content-open-questions)
@@ -134,6 +136,9 @@ Two implementations to begin with:
   lay out a `tempfile` directory to exercise package loading or
   `find_local_library` can use it instead; `HostFs` keeps a few of its own.
 
+And a third, for the system library: `StaticFs`, read-only, over a table of
+paths and contents compiled into the binary.
+
 The crate depends on `std` alone, as megaspace-fs does, so that it can sit
 below `datalove-pkg-manifest` now and below `datalove-rt` later without
 pulling anything in with it.
@@ -152,8 +157,8 @@ The CLI and the REPL each make one `HostFs` at startup and hand it down. As
 - `read_world`, `load_session`, `run_script`, and the app's `/save`
 
 Nothing below the driver changes, since nothing below it does I/O. The
-embedded system library keeps its own path through `SystemLibrary`; see
-[Open questions](#user-content-open-questions).
+system library brings a filesystem of its own; see
+[The embedded system library](#user-content-the-embedded-system-library).
 
 For the runtime, later, a handle sits in `RtLocal` beside
 `debug_output_mode`, and a compiled binary installs a `HostFs` when its
@@ -191,7 +196,37 @@ finds `rider/Cargo.toml` through `Fs` and records the directory in
 `RiderDescriptor::crate_dir`, and the toolchain hands that path to cargo. That
 works for `HostFs`. For a package in a `MemFs` there is no such directory,
 and the build has to refuse, as it does now for a workspace with no work
-dir.
+dir. Today it does not know to: a `MemFs` package holding a `rider/Cargo.toml`
+is given a crate directory cargo will not find.
+
+## The embedded system library
+
+The binary carries `sys/` inside it, and used to turn a table that
+`sys/build.rs` generated straight into package descriptors, with a loader and
+a rule for what counts as a package of its own. Now the table is a
+`StaticFs`: every module, data file and manifest under `sys/`, at its path,
+and each rider interface at the path its file would have, the interface
+arriving as the rider crate's `INTERFACE` constant because cargo leaves
+`rider/` out of the sys package. `datalove_sys_packages::system_library()`
+loads it with `load_library`, through the same `package_load` as a library on
+disk.
+
+**Each library brings its own filesystem.** The workspace's `local/` comes
+from the driver's `HostFs` and `sys/` from the `StaticFs`, and nothing merges
+the two into one namespace. The compiler does not need one: a module's
+`origin` is shown in diagnostics and never read. Rooting the embedded files at
+`sys/` makes an embedded module's origin `sys/std/list.dfm`, which is what
+diagnostics showed when it had none.
+
+**The rider crate directory is the library's to supply.** Where a rider's crate
+is is a fact about the host, for the toolchain, and the embedded files cannot
+answer it: probing them for `rider/Cargo.toml` finds nothing, which would
+quietly move a checkout build's riders from path dependencies to the registry.
+So `build.rs` writes the directories into a table of their own,
+`RIDER_CRATE_DIRS`, and `system_library()` sets them on the loaded riders.
+
+`sys/tests/embedded_matches_tree.rs` loads `sys/` off disk with the same
+loader and holds the two libraries equal, crate directories included.
 
 ## Megaspace-iostack
 
@@ -236,13 +271,14 @@ called from.
 
 ## Open questions
 
-- **The embedded system library as a filesystem.** `sys/src/lib.rs` builds
-  `SystemLibrary` from a table that `sys/build.rs` generates, while
-  `WorkspaceDescriptor::load_sys_dir` goes through `package_load`. If the
-  table became a read-only `Fs`, mounted at `sys/` over the host, one loader
-  would serve both. That is a goal, deferred. It needs a mount table, and it
-  changes what an embedded module's `origin` is: `sys/std/x.dfm` rather than
-  `None`.
+- **One namespace.** A `MountFs`, sending each call to the filesystem
+  mounted at the longest matching prefix, would put the workspace and the
+  system library in one path space, which script I/O may want. Where `sys`
+  goes in it is the hard part: `/sys` shadows Linux's, any absolute path may
+  be real, and a relative `sys` shadows a checkout's own `sys/`. It is the same
+  question as which paths a script sees. Once there is one, a mount could
+  also answer the rider crate directory, by forwarding a `host_path` query to
+  a host directory mounted inside the embedded tree.
 - **Worldfiles as a filesystem.** A worldfile could be laid out in a `MemFs`
   and loaded like a directory. But `from_worldfile_sections` gives a rider
   with no matching package a package of its own, which loading from disk
