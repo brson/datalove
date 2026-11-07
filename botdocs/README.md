@@ -45,6 +45,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [Specializing Generics](plan-monomorphization.md)
 - [Script Reactivity](plan-script-reactivity.md)
 - [Script Sessions in Parallel](plan-multi-session.md)
+- [A Virtual I/O Layer](plan-vio.md)
 - [A Register Bytecode for the Interpreter](plan-bytecode.md)
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
 - [Testing the Engines Against One Reference](plan-engine-tests.md)
