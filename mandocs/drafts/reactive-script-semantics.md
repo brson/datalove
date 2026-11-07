@@ -74,7 +74,7 @@ I did not prove correctness.
 - [Functions and modules are bindings too](#user-content-functions-and-modules-are-bindings-too)
 - [Where the static picture is approximate](#user-content-where-the-static-picture-is-approximate)
 - [Validating this design with a literate test suite](#user-content-validating-this-design-with-a-literate-test-suite)
-- [Comparing to FRP literature](#user-content-comparing-to-frp-literature)
+- [Comparing to the literature](#user-content-comparing-to-the-literature)
 - [A live example of the Datalove scripting engine](#user-content-a-live-example-of-the-datalove-scripting-engine)
 
 
@@ -1516,7 +1516,7 @@ bread and butter compiler stuff.
 todo compare the terminology here with PL literature
 
 There is one paper that applies directly to this work,
-[When Do Reactive Notebooks Fail to React?](todo), by Lu et. al. 2025.
+[When Do Reactive Notebooks Fail to React?](https://arxiv.org/abs/2511.21994), by Lu et. al. 2025.
 They examine existing reactive notebooks to find cases where
 their replay behavior is non-deterministic.
 They developed a language and testing methodology.
