@@ -1526,8 +1526,8 @@ though I think the current architecture is a reasonable foundation for future wo
 Datalove's rerun algebra concerns itself primarily
 with repairing the effects of moves and mutations,
 tractable because of its linear typesystem.
-FRP seems to be focused on languages with immutable types,
-typical functional languages.
+FRP nodes don't mutate each other's values so those systems
+don't have backwards analysis like Datalove.
 
 So while FRP research does apply to Datalove,
 and will moreso in the future when Datalove gets real I/O,
