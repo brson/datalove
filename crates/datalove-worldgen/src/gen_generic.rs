@@ -336,5 +336,6 @@ pub fn gen_generic_call<'db, R: Rng>(
         }
     };
 
+    ctx.called.insert(sig.name.clone());
     (prelude, call, result)
 }

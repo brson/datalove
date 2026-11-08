@@ -11,11 +11,10 @@ repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
-bct.workspace = true
-datalove-ct.workspace = true
-datalove-datafun.workspace = true
+datalove-script-steps.workspace = true
+
+[dev-dependencies]
 datalove-repl.workspace = true
-datalove-script-engine.workspace = true
 datalove-vio.workspace = true
-# The fixtures run against the system library the binary ships.
+# The replays are recorded against the system library the binary ships.
 datalove-sys-packages.workspace = true

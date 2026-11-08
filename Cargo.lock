@@ -1495,11 +1495,8 @@ dependencies = [
 name = "datalove-doc-fixtures"
 version = "0.1.0"
 dependencies = [
- "bcts",
- "datalove-ct",
- "datalove-datafun",
  "datalove-repl",
- "datalove-script-engine",
+ "datalove-script-steps",
  "datalove-sys-packages",
  "datalove-vio",
  "rustmax",
@@ -1614,6 +1611,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-script-steps"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-ct",
+ "datalove-datafun",
+ "datalove-repl",
+ "datalove-script-engine",
+ "datalove-sys-packages",
+ "datalove-vio",
+ "rustmax",
+]
+
+[[package]]
 name = "datalove-sys-packages"
 version = "0.1.0"
 dependencies = [
@@ -1642,7 +1653,9 @@ dependencies = [
  "datalove-datafun-tycheck",
  "datalove-diagnostic",
  "datalove-exampletest",
+ "datalove-repl",
  "datalove-rt",
+ "datalove-script-steps",
  "datalove-worldgen",
  "rand 0.8.5",
  "rustmax",

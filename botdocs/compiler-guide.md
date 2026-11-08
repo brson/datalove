@@ -113,6 +113,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-rt-tests` | Runtime tests, separated so the runtime need not depend on datalit |
 | `datalove-bench` | Divan benchmarks |
 | `datalove-doc-fixtures` | The fixtures behind what the docs show the engine producing, and the tests that keep them fresh; see [doc-fixtures.md](doc-fixtures.md) |
+| `datalove-script-steps` | Script sessions driven a change at a time and compared with a fresh run, for the step tables and the generated sessions |
 | `datalove-wasm-smoke` | The compiler and bytecode interpreter built for `wasm32-unknown-unknown` and run under wasmi, with no threads (`just test-wasm`) |
 
 The `sys/` tree at the repository root is the standard library: `sys/std/*.dfm`
@@ -2086,6 +2087,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `parallel_warm_tests` | That in a parallel compile every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
 | `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`), `worldgen_dual_tests` (in `datalove-tests`) | Generated worldfiles typecheck, cover the AST, and run the same both ways. See [Worldgen Coverage](#user-content-worldgen-coverage) |
+| `generative_reactive_tests` (in `datalove-tests`) | Generated scripts, cut into units and edited, deleted, reordered and inserted at random, leave the session as a fresh run of its code would after every step. Seeds 0 to 19 in `just test`, 20 to 219 in `just test-generative`; a failing seed is shrunk and written out as a worldfile |
 
 ### index-64
 

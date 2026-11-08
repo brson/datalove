@@ -678,6 +678,7 @@ pub fn gen_function_call<'db, R: Rng>(
         })
         .collect();
 
+    ctx.called.insert(func.name.clone());
     format!("{}({})", func.name, args.join(", "))
 }
 

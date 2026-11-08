@@ -179,6 +179,10 @@ pub struct GenContext<'db> {
     /// Variables that are protected from moving inside a loop.
     /// These can still be borrowed (used in operators) but not moved.
     pub loop_protected_variables: LookupSet<String>,
+
+    /// The functions a call has been written to, by name, so that a script
+    /// can import each somewhere before the statement that first calls it.
+    pub called: LookupSet<String>,
 }
 
 impl<'db> GenContext<'db> {
@@ -198,6 +202,7 @@ impl<'db> GenContext<'db> {
             generic_functions: Vec::new(),
             consumed_variables: LookupSet::default(),
             loop_protected_variables: LookupSet::default(),
+            called: LookupSet::default(),
         }
     }
 

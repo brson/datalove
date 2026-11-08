@@ -19,4 +19,4 @@ mod worldfile;
 
 pub use config::WorldGenConfig;
 pub use datalove_datalit::Database;
-pub use worldfile::gen_worldfile_seeded;
+pub use worldfile::{GenSession, gen_session_seeded, gen_worldfile_seeded};

@@ -42,7 +42,8 @@ deleted, inserted or moved, or a module or data file edited. After a step, an
 `expect` table says, for every unit, what it uses from earlier units, what
 happened to it, and what its bindings hold. The columns and the words they use
 are in [Reading the tables](script-reactivity-cases.md#user-content-reading-the-tables).
-`src/step_tables.rs` runs the session and checks each table.
+`src/step_tables.rs` checks each table, on a session that
+`datalove-script-steps` runs.
 
 **A table states the rule, and the rule is never blessed.** The engine may do
 more work than the rule asks -- rerun a unit the rule leaves alone, or

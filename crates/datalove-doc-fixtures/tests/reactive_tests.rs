@@ -37,10 +37,8 @@ use rmx::prelude::*;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use datalove_doc_fixtures::step_tables::{Change, Check, Entry, Step, Workspace, run, sections};
-use datalove_repl::Place;
-
-const SEPARATOR: &str = datalove_doc_fixtures::step_tables::SEPARATOR;
+use datalove_doc_fixtures::step_tables::{Check, Step, run};
+use datalove_script_steps::{Change, Read, SEPARATOR, SessionReader, Workspace, sections};
 
 /// The document whose examples are rendered from the fixtures, all of them.
 const DOC: &str = "botdocs/script-reactivity-cases.md";
@@ -71,21 +69,6 @@ impl Fixture {
     fn check(&self, number: usize) -> &Check {
         self.steps[number - 1].check.as_ref().expect("every step of a fixture is checked")
     }
-
-    /// The system library, and the fixture's own modules and data, read as
-    /// any worldfile's are.
-    fn workspace(&self) -> Workspace {
-        if self.library.is_empty() {
-            return Workspace::system();
-        }
-        let fs = datalove_vio::MemFs::new();
-        let path = Path::new("/library.world");
-        fs.add_file(path, &self.library);
-        let world = datalove_repl::read_world(&fs, path).X();
-        let sys = datalove_sys_packages::system_library();
-        let (descriptor, also_roots) = world.workspace(&sys).X();
-        Workspace { sys, descriptor, also_roots }
-    }
 }
 
 fn parse_fixture(path: &Path) -> Fixture {
@@ -94,71 +77,41 @@ fn parse_fixture(path: &Path) -> Fixture {
     let units_text = text.split(&fmt!("{SEPARATOR}\nexpect")).next().X().trim().S();
 
     let mut steps: Vec<Step> = Vec::new();
-    let mut library = String::new();
+    let mut reader = SessionReader::new(&name);
     let mut pending: Option<Change> = None;
     let mut entered = Vec::new();
-    // The id the next unit entered takes, by fragment or by insert.
-    let mut next = 1;
-    let mut take_id = |id: Option<&str>| {
-        let unit = next.S();
-        if let Some(id) = id {
-            assert_eq!(id, unit, "{name}: a new unit takes the next id");
-        }
-        next += 1;
-        unit
-    };
 
     for section in sections(&text) {
-        let mut words = section.header.split_whitespace();
-        let kind = words.next().X();
-        let args: Vec<&str> = words.collect();
-        match kind {
-            "scriptunit-fragment" => {
-                let entry = Entry { unit: take_id(args.first().copied()), source: section.content, expression: false };
-                match steps.is_empty() {
-                    true => entered.push(entry),
-                    false => pending = Some(Change::Enter(vec![entry])),
+        match reader.read(&section) {
+            Read::Library => assert!(steps.is_empty(), "{name}: a library section after the first step"),
+            Read::Entry(entry) => match steps.is_empty() {
+                true => entered.push(entry),
+                false => pending = Some(Change::Enter(vec![entry])),
+            },
+            Read::Change(change) => pending = Some(change),
+            Read::Other => {
+                let (kind, title) = section.header.split_once(' ').unwrap_or((&section.header, ""));
+                match kind {
+                    "expect" => {
+                        let change = if steps.is_empty() {
+                            Change::Enter(std::mem::take(&mut entered))
+                        } else {
+                            pending.take().unwrap_or_else(|| panic!("{name}: an `expect` with no change before it"))
+                        };
+                        let check = Check::parse(title, &section.content);
+                        steps.push(Step { change, check: Some(check) });
+                    }
+                    "engine" => {
+                        let step = steps.last_mut().unwrap_or_else(|| panic!("{name}: an `engine` table before any step"));
+                        step.check.as_mut().X().add_engine(&section.content);
+                    }
+                    other => panic!("{name}: unknown section `{other}`"),
                 }
             }
-            "module" | "data" => {
-                assert!(steps.is_empty(), "{name}: a `{kind}` section after the first step");
-                library.push_str(&fmt!("{SEPARATOR}\n{}\n{SEPARATOR}\n\n{}\n\n", section.header, section.content));
-            }
-            "module-edit" => pending = Some(Change::EditModule { path: args[0].S(), source: section.content }),
-            "data-edit" => pending = Some(Change::EditData { path: args[0].S(), text: section.content }),
-            "scriptunit-edit" => pending = Some(Change::Edit { unit: args[0].S(), source: section.content }),
-            "scriptunit-delete" => pending = Some(Change::Delete { unit: args[0].S() }),
-            "scriptunit-move" => {
-                let place = match args.get(1) {
-                    Some(&"before") => Place::Before,
-                    Some(&"after") => Place::After,
-                    _ => panic!("{name}: `scriptunit-move <unit> before|after <unit>`"),
-                };
-                pending = Some(Change::Move { unit: args[0].S(), place, beside: args[2].S() });
-            }
-            "scriptunit-insert" => {
-                assert_eq!(args.get(1), Some(&"after"), "{name}: `scriptunit-insert <unit> after <unit>`");
-                let entry = Entry { unit: take_id(Some(args[0])), source: section.content, expression: false };
-                pending = Some(Change::Insert { entry, place: Place::After, beside: args[2].S() });
-            }
-            "expect" => {
-                let change = if steps.is_empty() {
-                    Change::Enter(std::mem::take(&mut entered))
-                } else {
-                    pending.take().unwrap_or_else(|| panic!("{name}: an `expect` with no change before it"))
-                };
-                let check = Check::parse(&args.join(" "), &section.content);
-                steps.push(Step { change, check: Some(check) });
-            }
-            "engine" => {
-                let step = steps.last_mut().unwrap_or_else(|| panic!("{name}: an `engine` table before any step"));
-                step.check.as_mut().X().add_engine(&section.content);
-            }
-            other => panic!("{name}: unknown section `{other}`"),
         }
     }
     assert!(pending.is_none(), "{name}: a change with no `expect` after it");
-    Fixture { name, units_text, library, steps }
+    Fixture { name, units_text, library: reader.library, steps }
 }
 
 fn fixtures() -> Vec<Fixture> {
@@ -174,7 +127,7 @@ fn fixtures() -> Vec<Fixture> {
 fn every_step_table_holds_for_the_engine() {
     let mut failures = Vec::new();
     for fixture in fixtures() {
-        failures.extend(run(&fixture.name, fixture.workspace(), &fixture.steps));
+        failures.extend(run(&fixture.name, Workspace::from_worldfile(&fixture.library), &fixture.steps));
     }
     assert!(failures.is_empty(), "\n{}\n", failures.join("\n"));
 }

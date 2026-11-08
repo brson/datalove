@@ -1451,9 +1451,9 @@ chain from its head, however expensive the head is.
 ## Shadowing
 
 A unit that binds a name an earlier unit binds shadows it, and the units after
-it find the new binding. So an edit that adds a shadow moves a later write from
-one binding to another. In unit 3, `set b = 500` overwrote unit 1's `b`. Once
-unit 2 binds `b` too, it overwrites unit 2's, and unit 1's `b` holds 500
+it find the new binding. So an edit that adds a shadow redirects a later write
+from one binding to another. In unit 3, `set b = 500` overwrote unit 1's `b`.
+Once unit 2 binds `b` too, it overwrites unit 2's, and unit 1's `b` holds 500
 although nothing in the session writes it now. Unit 3 reruns for the changed
 value, and retracting its old code restores the binding that code wrote, unit
 1's, by rerunning unit 1. The binding is the one the code found when it ran,
@@ -1520,10 +1520,10 @@ let c = b + 1
 | 4 | `let c = b + 1` | reads `b` (1) | reruns | its `b` is unit 1's again, of the same type | `c` = 501 |
 <!-- end world -->
 
-Taking the shadow away moves the write back, and restores nothing: unit 3
+Taking the shadow away sends the write back, and restores nothing: unit 3
 overwrites unit 1's `b`, and needs nothing it held.
 
-Inserting a unit that shadows `b` moves the write as the edit did, and
+Inserting a unit that shadows `b` redirects the write as the edit did, and
 restores unit 1 the same way.
 
 <!-- world shadow step 4 -->

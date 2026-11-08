@@ -83,6 +83,7 @@ datalove-rt = { version = "0.1.0", path = "crates/datalove-rt" }
 datalove-rtdt = { version = "0.1.0", path = "crates/datalove-rtdt" }
 datalove-rti = { version = "0.1.0", path = "crates/datalove-rti" }
 datalove-script-engine = { version = "0.1.0", path = "crates/datalove-script-engine" }
+datalove-script-steps = { version = "0.1.0", path = "crates/datalove-script-steps" }
 datalove-sys-packages = { version = "0.1.0", path = "sys" }
 datalove-vio = { version = "0.1.0", path = "crates/datalove-vio" }
 datalove-worldgen = { version = "0.1.0", path = "crates/datalove-worldgen" }

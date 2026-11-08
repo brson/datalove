@@ -550,6 +550,7 @@ separate test pins that the fixture has the shape the claim is about.
 | `datalove-script-engine/tests/engine_edit_tests` | the shipped entry points end to end, failed units going green, modules joining and breaking, reruns |
 | `datalove-doc-fixtures/tests/reactive_tests` | the step tables in `reactive/`, and that [script-reactivity-cases.md](script-reactivity-cases.md) shows them as rendered |
 | `datalove-doc-fixtures/tests/replay_tests` | the step tables in the replays the docs embed, against a session with modules and data |
+| `datalove-tests/tests/generative_reactive_tests` | generated sessions, modified at random, against a fresh run only |
 
 The step tables state, per step, what each unit should do, and check it
 against what salsa actually ran and against a fresh run of the session's

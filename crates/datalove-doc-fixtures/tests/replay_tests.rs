@@ -21,7 +21,8 @@
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};
 
-use datalove_doc_fixtures::step_tables::{Change, Check, Entry, SEPARATOR, Step, Workspace, run, sections};
+use datalove_doc_fixtures::step_tables::{Check, Step, run};
+use datalove_script_steps::{Change, Entry, SEPARATOR, Workspace, sections};
 use datalove_repl::script::Unit;
 use datalove_repl::{Command, ReplCommand, SavedInput, read_world, record_world};
 

@@ -33,8 +33,16 @@ rand = "0.8"
 
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
+# For the generated sessions, driven a change at a time.
+datalove-script-steps.workspace = true
+datalove-repl.workspace = true
 
 [[test]]
 name = "worldgen_dual_tests"
 path = "tests/worldgen_dual_tests.rs"
+harness = false
+
+[[test]]
+name = "generative_reactive_tests"
+path = "tests/generative_reactive_tests.rs"
 harness = false
