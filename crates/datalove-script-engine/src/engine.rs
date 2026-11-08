@@ -1389,13 +1389,30 @@ impl Compiling<'_> {
     }
 
     /// Report the bindings a fragment provides, as the compiler recorded
-    /// them.
+    /// them, with what each holds in the fragment's own frame.
+    ///
+    /// Its own, and not the nearest binding of each name: a unit rerun
+    /// before a later one that shadows a name would otherwise report the
+    /// later unit's binding, which may no longer be the later unit's either,
+    /// since it has not been rerun yet.
     fn report_bindings(&mut self, ir_unit: &IrCodeUnit) -> Eval {
-        let exports = ir_unit.script_context()
-            .expect("a compiled fragment is a script unit")
-            .exports
-            .C();
-        Eval::Ran(exports.iter().map(|(name, binding)| self.eval_binding(name, binding)).collect())
+        let ctx = ir_unit.script_context().expect("a compiled fragment is a script unit");
+        let id = ctx.unit.expect("a compiled unit is numbered");
+        let exports = ctx.exports.C();
+        let held = self.state.executor.unit_bindings(id);
+        let value = |name: &str| {
+            held.iter().rev().find(|(bound, _)| bound == name)
+                .map(|(_, value)| value.C())
+                .expect("the unit's frame holds what it exports")
+        };
+        let ty = |name: &str| self.state.session.type_of(id, name).S();
+        Eval::Ran(exports.iter()
+            .map(|(name, binding)| match binding {
+                ExportBinding::Function(_) => EvalBinding::Function { name: name.C() },
+                ExportBinding::Value(_) => EvalBinding::Value { name: name.C(), ty: ty(name), value: value(name) },
+                ExportBinding::Slot(_) => EvalBinding::Slot { name: name.C(), ty: ty(name), value: value(name) },
+            })
+            .collect())
     }
 
     /// Run each re-lowered unit again in place, reporting what it came to.
@@ -1432,28 +1449,6 @@ impl Compiling<'_> {
             reports.push(UnitStep::rederived(id, eval));
         }
         reports
-    }
-
-    /// Describe one exported binding, looking up its current value.
-    fn eval_binding(&mut self, name: &str, binding: &ExportBinding) -> EvalBinding {
-        match binding {
-            ExportBinding::Function(_) => EvalBinding::Function { name: name.S() },
-            ExportBinding::Value(_) => {
-                let (ty, value) = self.binding_type_and_value(name);
-                EvalBinding::Value { name: name.S(), ty, value }
-            }
-            ExportBinding::Slot(_) => {
-                let (ty, value) = self.binding_type_and_value(name);
-                EvalBinding::Slot { name: name.S(), ty, value }
-            }
-        }
-    }
-
-    /// The type and value of the nearest binding of `name`.
-    fn binding_type_and_value(&mut self, name: &str) -> (String, Option<String>) {
-        let (_, value) = self.state.executor.get_binding(name)
-            .expect("the executor registered the unit's exports before executing it");
-        (self.type_of(name), value)
     }
 
     /// The type of the nearest binding of `name`, as datalove writes it.

@@ -575,7 +575,7 @@ fn needs_integer_type_hint(type_hint: &TypeHint<'_>) -> bool {
 }
 
 /// Generate a literal expression matching the given type using datalit.
-fn gen_literal<'db, R: Rng>(
+pub fn gen_literal<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHint<'db>,

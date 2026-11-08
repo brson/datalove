@@ -300,6 +300,10 @@ up each name a reached unit took or wrote on the held graph, and where that
 finds another provider than the name finds now, reruns the nearest unit that
 sets the old binding without reading it, among the units that still find it.
 Inserting a unit that shadows a name is the same edit, and goes the same way.
+So is reordering one to between a provider and a writer, but a reorder has put
+the records in their new order before the reach is taken, so the held graph
+also keeps the order the units ran in, `HeldGraph::ran`, and the held provider
+is looked up in that.
 
 **Overwrites and revivals narrow it.** `UnitLowerRecord::overwrites` is the
 part of `writes` the unit writes on every way through it, early returns
@@ -332,6 +336,14 @@ the edit either way.
 The records the reach reads are the units' current ones, so an edit that makes
 a unit overwrite what it used to update shrinks the reach once the unit is
 compiled. `rederive_reach` iterates until it settles, either way.
+
+**But a unit that compiles differently is a modification of its own.** A unit
+that did not compile and does now is a Fix, and one that did and does not is a
+Break, so `rederive_reach` makes it a seed as soon as it compiles that way, by
+the `compiled` flag of its record against the held one. Otherwise the shrinking
+above could drop it: an overwrite that compiles for the first time is reached
+while it has no record, and left out once its record says it overwrites, with
+the units after it that use what it provides.
 
 These are reruns, and they are what make the reach sound without copying
 anything. The cost is running the rerun's start again, which may be the
@@ -369,7 +381,9 @@ edit from nothing and a deletion an edit to nothing:
   took or wrote is left as it left it, so the nearest unit before it that
   sets the binding without reading it -- its provider, or an overwrite or
   revival after that -- is a *restore* seed: rerun, as section 5's backward
-  rule reruns one.
+  rule reruns one. That unit is found by the records, not the typecheck: a
+  unit that typechecks and fails later holds no binding for the deleted one
+  to have taken or written.
 - **Truncate** is a delete of every unit from `n` on, with nothing after them
   to reach, so only restore seeds.
 - **Move.** `ScriptSession::move_unit` splices the unit out and back in,
@@ -576,6 +590,37 @@ reach and not values.** Both holes had the same shape: a correct piece of
 machinery that no test could tell from a missing one. That is the argument for
 injecting a fault per piece rather than per claim, and for asserting what a
 program computed alongside how far an edit travelled.
+
+**Generated sessions find what the hand-written cases did not think of.**
+`generative_reactive_tests` found six bugs the tables passed: the shadow of
+section 5, by an edit, an insert and a reorder; a reorder whose restore picked
+a unit that no longer compiles; a Fix dropped from the reach (the paragraph on
+units that compile differently); a rerun unit reporting a later unit's binding
+of a shadowed name; and a unit's export marked given away when the unit had
+bound the name again. Most were found only once worldgen made sessions that
+overwrite, update, take, revive and shadow bindings across units
+(`WorldGenConfig::binding_access_probability`). Planting faults in seeds 0 to
+49, without those statements and with them:
+
+| fault | seeds failing, without | with |
+|---|---|---|
+| no backward rule | 6 | 22 |
+| the forward rule reaches only the seeds | 31 | 27 |
+| a rerun reruns no one after it | 7 | 35 |
+| no restore of a shadowed binding | 0 | 2 |
+| a reorder's restore in the new order | 0 | 0 |
+| no Fix or Break as a seed | 0 | 0 |
+| a departure's restore by the typecheck | 0 | 0 |
+| a rerun reports the nearest binding | 0 | 1 |
+| an export given away by a shadowed binding | 0 | 0 |
+
+The four the seeds miss are each caught by a session kept in
+`crates/datalove-tests/tests/generative_reactive/`, the shrunk session that
+found it, except the last, which is `engine_edit_tests`'s
+`a_name_given_away_and_bound_again_is_there_for_a_later_unit`. The seeds
+rarely build the shape a bug needs, a shadow between a provider and a writer
+most of all: at 2 in 50 for the shadow, finding the next such bug takes the
+hundreds of seeds of `just test-generative`, and luck.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit

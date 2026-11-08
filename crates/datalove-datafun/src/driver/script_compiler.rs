@@ -104,6 +104,12 @@ struct HeldGraph {
     takes: Vec<BTreeSet<String>>,
     /// How each unit provided each of its bindings; see [`binding_shape`].
     shapes: Vec<LookupMap<String, BindingShape>>,
+    /// The units in the order they ran in, by where they sit now: the same
+    /// order, but after a reorder, which has already put the records where
+    /// the units now sit.
+    ran: Vec<usize>,
+    /// Whether each unit compiled.
+    compiled: Vec<bool>,
 }
 
 /// How a unit provides a binding: as a slot or a value, and of which type.
@@ -644,7 +650,7 @@ impl<'db> ScriptCompiler<'db> {
             "unit {edited} was edited but the script has {} units",
             self.units.len(),
         );
-        self.rederive_reach(BTreeSet::from([edited]), BTreeSet::new())
+        self.rederive_reach(BTreeSet::from([edited]), BTreeSet::new(), None)
     }
 
     /// Re-lower the units an edit to the modules at `edited` reaches.
@@ -685,7 +691,7 @@ impl<'db> ScriptCompiler<'db> {
     ) -> Vec<(usize, ScriptCompilationResult)> {
         let mut seeds = self.module_importers(edited);
         seeds.extend(self.module_requirers(broken_or_fixed));
-        self.rederive_reach(seeds, BTreeSet::new())
+        self.rederive_reach(seeds, BTreeSet::new(), None)
     }
 
     /// Re-lower the units an edit to the data file at `data` reaches.
@@ -710,7 +716,7 @@ impl<'db> ScriptCompiler<'db> {
         seeds.extend(self.unit_typecheck_outputs().iter().enumerate()
             .filter(|(_, output)| output.is_some_and(|output| output.result(db).data_files(db).contains_key(data)))
             .map(|(unit, _)| unit));
-        self.rederive_reach(seeds, BTreeSet::new())
+        self.rederive_reach(seeds, BTreeSet::new(), None)
     }
 
     /// Re-derive what the unit [`ScriptSession::insert_unit`] put at `at`
@@ -724,7 +730,7 @@ impl<'db> ScriptCompiler<'db> {
     /// later unit's IR names it by, and no id moved.
     pub fn relower_inserted(&mut self, at: usize) -> Vec<(usize, ScriptCompilationResult)> {
         assert!(at < self.units.len(), "unit {at} was inserted but the script has {} units", self.units.len());
-        self.rederive_reach(BTreeSet::from([at]), BTreeSet::new())
+        self.rederive_reach(BTreeSet::from([at]), BTreeSet::new(), None)
     }
 
     /// Re-derive what taking `removed` out of the script from position `at`
@@ -750,7 +756,7 @@ impl<'db> ScriptCompiler<'db> {
         }
         let others: Vec<usize> = (0..self.units.len()).collect();
         let (seeds, restore) = self.departure(&record, &provided, &others[..at], &others[at..]);
-        self.rederive_reach(seeds, restore)
+        self.rederive_reach(seeds, restore, None)
     }
 
     /// Re-derive what moving a unit from position `from` to `to` reaches,
@@ -771,7 +777,7 @@ impl<'db> ScriptCompiler<'db> {
         let others: Vec<usize> = (0..count).filter(|unit| *unit != to).collect();
         let (mut seeds, restore) = self.departure(&record, &provided, &others[..from], &others[from..]);
         seeds.insert(to);
-        self.rederive_reach(seeds, restore)
+        self.rederive_reach(seeds, restore, Some((from, to)))
     }
 
     /// What a unit leaving its place reaches: the seeds and the units to
@@ -809,12 +815,13 @@ impl<'db> ScriptCompiler<'db> {
 
         // The unit that builds a binding the departed unit took or wrote as
         // it was before: its provider, or an overwrite or revival after that.
+        // By the records, not the typecheck: a unit that typechecks and fails
+        // later built nothing for the departed unit to take or write.
         let restore: BTreeSet<usize> = changed.iter()
             .filter_map(|name| {
                 earlier.iter().rev().copied().find(|unit| {
                     let record = &self.unit_records[*unit];
-                    now_provides[*unit].contains(name)
-                        || [&record.provides, &record.overwrites, &record.revives].iter().any(|names| names.contains(name))
+                    [&record.provides, &record.overwrites, &record.revives].iter().any(|names| names.contains(name))
                 })
             })
             .collect();
@@ -838,7 +845,6 @@ impl<'db> ScriptCompiler<'db> {
         // typechecked again, which they would be if the modules moved.
         let gone = self.unit_records.split_off(n);
         self.units.truncate(n);
-        let (now_provides, _) = self.graph_now();
         let sets = |record: &UnitLowerRecord, name: &String| {
             [&record.provides, &record.overwrites, &record.revives].iter().any(|names| names.contains(name))
         };
@@ -849,13 +855,12 @@ impl<'db> ScriptCompiler<'db> {
                 if gone[..at].iter().any(|earlier| sets(earlier, name)) {
                     continue;
                 }
-                let setter = (0..n).rev().find(|earlier| {
-                    now_provides[*earlier].contains(name) || sets(&self.unit_records[*earlier], name)
-                });
+                // By the records, as a departure's restore is found.
+                let setter = (0..n).rev().find(|earlier| sets(&self.unit_records[*earlier], name));
                 restore.extend(setter);
             }
         }
-        self.rederive_reach(BTreeSet::new(), restore)
+        self.rederive_reach(BTreeSet::new(), restore, None)
     }
 
     /// Compile each of `units` again, in the order given.
@@ -885,13 +890,18 @@ impl<'db> ScriptCompiler<'db> {
     /// compiled, and the reach is taken again with what they now do, until it
     /// settles. What the units did before the edit is held from the
     /// start, being what the running session went through.
+    ///
+    /// `moved` is a reorder's `from` and `to`, for the order the units ran
+    /// in.
     fn rederive_reach(
         &mut self,
         seeds: BTreeSet<usize>,
         restore: BTreeSet<usize>,
+        moved: Option<(usize, usize)>,
     ) -> Vec<(usize, ScriptCompilationResult)> {
-        let held = self.held_graph();
+        let held = self.held_graph(moved);
         let mut changed = held.changed.C();
+        let mut seeds = seeds;
         for _ in 0..=self.unit_records.len() {
             let units = self.reach_from(&seeds, &restore, &held, &changed);
             let results = self.rederive(units.C());
@@ -900,11 +910,20 @@ impl<'db> ScriptCompiler<'db> {
                     changed[unit].insert(name.C());
                 }
             }
+            // A unit that compiles where it did not, or no longer compiles,
+            // is a Fix or a Break: a modification of its own, so a seed, and
+            // the units that use what it provides now or did are reached
+            // from it.
+            for unit in &units {
+                if self.unit_records[*unit].compiled != held.compiled[*unit] {
+                    seeds.insert(*unit);
+                }
+            }
             // What the units do now can shrink the reach as well as grow it:
             // an edit that makes a unit overwrite what it updated needs no
             // rerun, which only its new record says. The results are for the
             // reach as it settles; a unit compiled on the way and left out of
-            // it compiled to what it was.
+            // it compiled to what it was, since one that did not is a seed.
             if self.reach_from(&seeds, &restore, &held, &changed) == units {
                 return results;
             }
@@ -1106,11 +1125,18 @@ impl<'db> ScriptCompiler<'db> {
                 // so what built the old one runs again. That is the nearest
                 // unit that sets it without reading it, among the units that
                 // still find it.
+                //
+                // The binding it changed is found in the order the units
+                // ran in, which a reorder has changed. A provider that now
+                // sits after the unit is the unit reordered, which reruns
+                // and builds its bindings again anyway.
                 for name in &held.changed[unit] {
-                    let Some(old) = (0..unit).rev().find(|earlier| held.provides[*earlier].contains(name)) else {
+                    let at = held.ran.iter().position(|ran| *ran == unit).X();
+                    let Some(old) = held.ran[..at].iter().rev().copied()
+                        .find(|earlier| held.provides[*earlier].contains(name)) else {
                         continue;
                     };
-                    if provider(unit, name) == Some(old) {
+                    if old > unit || provider(unit, name) == Some(old) {
                         continue;
                     }
                     let shadow = (old + 1..unit).find(|later| provides[*later].contains(name))
@@ -1131,7 +1157,14 @@ impl<'db> ScriptCompiler<'db> {
 
     /// What each unit provided, used, and took or wrote of earlier units'
     /// bindings, as its record held it before anything is compiled again.
-    fn held_graph(&self) -> HeldGraph {
+    ///
+    /// `moved` is a reorder's `from` and `to`: the unit at `to` ran at `from`.
+    fn held_graph(&self, moved: Option<(usize, usize)>) -> HeldGraph {
+        let mut ran: Vec<usize> = (0..self.unit_records.len()).collect();
+        if let Some((from, to)) = moved {
+            ran.remove(to);
+            ran.insert(from, to);
+        }
         let set = |names: &[String]| names.iter().cloned().collect::<BTreeSet<String>>();
         HeldGraph {
             provides: self.unit_records.iter().map(|record| set(&record.provides)).collect(),
@@ -1141,6 +1174,8 @@ impl<'db> ScriptCompiler<'db> {
                 .collect(),
             takes: self.unit_records.iter().map(|record| set(&record.takes)).collect(),
             shapes: self.unit_records.iter().map(|record| binding_shapes(record)).collect(),
+            ran,
+            compiled: self.unit_records.iter().map(|record| record.compiled).collect(),
         }
     }
 
@@ -2431,6 +2466,7 @@ impl<'db> ScriptCompiler<'db> {
     ) {
         let script_ctx = ir_unit.script_context();
         self.unit_records[index] = Arc::new(UnitLowerRecord {
+            compiled: true,
             exports: script_ctx.map(|ctx| ctx.exports.C()).unwrap_or_default(),
             value_types: ir_unit.value_types.C(),
             slot_types: ir_unit.slot_types.C(),

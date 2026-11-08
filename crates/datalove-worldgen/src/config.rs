@@ -40,6 +40,13 @@ pub struct WorldGenConfig {
     /// Number of statements in script (min, max).
     pub script_statements: (usize, usize),
 
+    /// Probability that a script statement acts on a binding an earlier
+    /// statement made: overwrites, updates, takes or revives it, or binds
+    /// its name again. In a session the earlier statement is often in
+    /// another unit, which is what the engine's reach has to follow. Zero
+    /// draws nothing, so it leaves the rest of what a seed makes alone.
+    pub binding_access_probability: u32,
+
     /// Maximum nesting depth for control flow.
     pub max_control_flow_depth: usize,
 
@@ -118,6 +125,7 @@ impl Default for WorldGenConfig {
             const_probability: 30,
             match_probability: 40,
             script_statements: (1, 5),
+            binding_access_probability: 0,
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,

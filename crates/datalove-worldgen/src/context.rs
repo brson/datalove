@@ -211,6 +211,12 @@ impl<'db> GenContext<'db> {
         self.consumed_variables.insert(name.S());
     }
 
+    /// Give a consumed variable a value again, by a revive or a new binding
+    /// of its name.
+    pub fn revive_variable(&mut self, name: &str) {
+        self.consumed_variables.remove(name);
+    }
+
     /// Check if a variable has been consumed.
     pub fn is_consumed(&self, name: &str) -> bool {
         self.consumed_variables.contains(name)

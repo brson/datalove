@@ -428,10 +428,19 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     }
 
     /// The names this unit exports that hold no value.
+    ///
+    /// A unit exports the last binding of each name, so one that a later
+    /// binding of the name shadows says nothing about the export, given away
+    /// or not.
     fn dead_exports(&self) -> Vec<String> {
         let mut dead = Vec::new();
         for (id, info) in self.bindings.iter().enumerate().skip(self.externals.len()) {
             if !info.is_script_unit || info.ty.is_copy() || info.is_borrowed() {
+                continue;
+            }
+            let shadowed = self.bindings[id + 1..].iter()
+                .any(|later| later.is_script_unit && later.name == info.name);
+            if shadowed {
                 continue;
             }
             if self.get_state(BindingId(id as u32)) == Some(BindingState::Moved) {

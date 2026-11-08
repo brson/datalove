@@ -29,6 +29,10 @@ use crate::tracked_script_ownership::ExternalBinding;
 /// `botdocs/plan-script-reactivity.md`.
 #[derive(Clone, Default)]
 pub struct UnitLowerRecord {
+    /// Whether the unit compiled. The record of one that did not is the
+    /// default, which provides and does nothing, and so is the record of a
+    /// unit that compiled and does nothing; this tells them apart.
+    pub compiled: bool,
     /// The names this unit exported, as its `ScriptContext` recorded them.
     pub exports: Vec<(String, ExportBinding)>,
     /// The unit's value types, which say what an exported value is of.

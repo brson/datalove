@@ -1,0 +1,38 @@
+----------
+scriptunit-fragment 1
+----------
+
+var v0: ?%{f32 = int} = none
+
+----------
+scriptunit-fragment 2
+----------
+
+
+
+----------
+scriptunit-fragment 3
+----------
+
+if true
+  set v0 = some : %{f32 = int} / %{: f32 / 207.6 = : int / 34}
+end if
+
+----------
+scriptunit-fragment 4
+----------
+
+
+
+----------
+scriptunit-insert 5 after 4
+----------
+
+var v0: ?%{f32 = int} = some : %{f32 = int} / %{: f32 / 200.6 = : int / 27}
+
+----------
+scriptunit-move 5 after 2
+----------
+
+
+

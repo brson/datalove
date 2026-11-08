@@ -1,0 +1,32 @@
+----------
+scriptunit-fragment 1
+----------
+
+
+
+----------
+scriptunit-fragment 2
+----------
+
+if true xor false
+  set v0 = [: ?string / some : string / "test", : ?string / some : string / "data"]
+end if
+
+----------
+scriptunit-fragment 3
+----------
+
+set v0 = []
+
+----------
+scriptunit-fragment 4
+----------
+
+debuglog v0
+
+----------
+scriptunit-insert 5 after 1
+----------
+
+var v0: [?string] = [: ?string / none]
+

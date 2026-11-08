@@ -1,0 +1,42 @@
+----------
+scriptunit-fragment 1
+----------
+
+var v0: string = "newline\nhere"
+
+----------
+scriptunit-fragment 2
+----------
+
+
+
+----------
+scriptunit-fragment 3
+----------
+
+
+
+----------
+scriptunit-fragment 4
+----------
+
+let v2: string = v0
+
+----------
+scriptunit-fragment 5
+----------
+
+let v4: string = v2
+
+----------
+scriptunit-edit 3
+----------
+
+let v2: string = v0
+
+----------
+scriptunit-move 5 after 2
+----------
+
+
+

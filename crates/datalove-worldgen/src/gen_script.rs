@@ -5,9 +5,10 @@ use bct::lookup::{LookupMap, LookupSet};
 
 use rand::Rng;
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, ModuleInfo};
+use crate::context::{GenContext, ModuleInfo, Variable, is_linear_type};
 use crate::gen_stmt::gen_body_statement;
-use crate::gen_expr::gen_expr;
+use crate::gen_expr::{gen_bool_expr, gen_expr, gen_literal};
+use crate::gen_type::gen_type_hint_and_spelling;
 use crate::pretty::pretty_type_hint;
 
 /// Generate a script fragment that uses module functions.
@@ -91,7 +92,12 @@ pub fn gen_script_items<'db, R: Rng>(
     let stmt_count = rng.gen_range(config.script_statements.0..=config.script_statements.1);
 
     for _ in 0..stmt_count {
-        let stmt = gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, "");
+        let access = config.binding_access_probability > 0
+            && config.check_probability(rng, config.binding_access_probability);
+        let stmt = match access {
+            true => gen_binding_access(db, rng, config, &mut ctx, &mut var_counter),
+            false => gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, ""),
+        };
         push(rng, &mut items, &mut ctx, stmt);
     }
 
@@ -119,4 +125,99 @@ pub fn gen_script_items<'db, R: Rng>(
     }
 
     items
+}
+
+/// A statement that makes a binding for later statements to act on, or acts
+/// on one an earlier statement made.
+///
+/// Each writes a literal, which reads nothing, so it compiles wherever the
+/// binding it names is in scope:
+///
+/// - a `var` of a type picked at random, since few other statements make
+///   one, and a `var` is what the rest write;
+/// - an overwrite, `set v = <literal>`, of a `var`;
+/// - an update, the same under an `if`, since a write that may not happen
+///   keeps what the binding held;
+/// - a take, `let w = v`, of a binding of a type that is moved rather than
+///   copied;
+/// - a revive, `set v = <literal>`, of a `var` taken before;
+/// - a shadow, `let v` or `var v` again, of the same type, which the
+///   statements after it find instead.
+fn gen_binding_access<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+) -> String {
+    let live = |ctx: &GenContext<'db>, v: &Variable<'db>| !ctx.is_consumed(&v.name);
+    let writable: Vec<Variable<'db>> = ctx.variables.iter()
+        .filter(|v| v.is_mutable && live(ctx, v))
+        .cloned()
+        .collect();
+    let takable: Vec<Variable<'db>> = ctx.variables.iter()
+        .filter(|v| is_linear_type(&v.type_hint) && live(ctx, v) && !ctx.is_loop_protected(&v.name))
+        .cloned()
+        .collect();
+    let revivable: Vec<Variable<'db>> = ctx.variables.iter()
+        .filter(|v| v.is_mutable && !live(ctx, v))
+        .cloned()
+        .collect();
+
+    let mut kinds: Vec<u8> = vec![5];
+    if !writable.is_empty() {
+        kinds.extend([0, 1]);
+    }
+    if !takable.is_empty() {
+        kinds.push(2);
+    }
+    if !revivable.is_empty() {
+        kinds.push(3);
+    }
+    if !ctx.variables.is_empty() {
+        kinds.push(4);
+    }
+    let pick = |rng: &mut R, from: &[Variable<'db>]| from[rng.gen_range(0..from.len())].clone();
+
+    match kinds[rng.gen_range(0..kinds.len())] {
+        0 => {
+            let v = pick(rng, &writable);
+            format!("set {} = {}", v.name, gen_literal(db, rng, v.type_hint, config))
+        }
+        1 => {
+            let v = pick(rng, &writable);
+            let condition = gen_bool_expr(db, rng, config, ctx);
+            let value = gen_literal(db, rng, v.type_hint, config);
+            format!("if {}\n  set {} = {}\nend if", condition, v.name, value)
+        }
+        2 => {
+            let v = pick(rng, &takable);
+            let name = format!("v{}", *var_counter);
+            *var_counter += 1;
+            let ty = pretty_type_hint(db, v.type_hint.clone());
+            ctx.consume_variable(&v.name);
+            ctx.variables.push(Variable { name: name.clone(), type_hint: v.type_hint, is_mutable: false });
+            format!("let {}: {} = {}", name, ty, v.name)
+        }
+        3 => {
+            let v = pick(rng, &revivable);
+            ctx.revive_variable(&v.name);
+            format!("set {} = {}", v.name, gen_literal(db, rng, v.type_hint, config))
+        }
+        4 => {
+            let v = pick(rng, &ctx.variables.clone());
+            ctx.revive_variable(&v.name);
+            let keyword = if v.is_mutable { "var" } else { "let" };
+            let ty = pretty_type_hint(db, v.type_hint.clone());
+            format!("{} {}: {} = {}", keyword, v.name, ty, gen_literal(db, rng, v.type_hint, config))
+        }
+        _ => {
+            let name = format!("v{}", *var_counter);
+            *var_counter += 1;
+            let (type_hint, ty) = gen_type_hint_and_spelling(db, rng, config, &ctx.type_aliases);
+            let value = gen_literal(db, rng, type_hint.clone(), config);
+            ctx.variables.push(Variable { name: name.clone(), type_hint, is_mutable: true });
+            format!("var {}: {} = {}", name, ty, value)
+        }
+    }
 }

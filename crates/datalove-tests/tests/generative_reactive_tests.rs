@@ -18,6 +18,11 @@
 //! can be made. A seed that runs longer than [`SEED_TIMEOUT`] fails too, and
 //! is written out unshrunk.
 //!
+//! A shrunk session that once failed and was fixed is kept in
+//! `tests/generative_reactive/`, and every one of them is run before the
+//! seeds, and must agree with a fresh run. Its units need not compile as
+//! entered: shrinking keeps a session that fails a unit and fixes it.
+//!
 //! The run also says how much it exercised, and fails if that is too little
 //! to mean anything: every unit must compile when first entered, enough
 //! units must still run after the changes, and every kind of change must have
@@ -31,6 +36,9 @@
 //!   [`DEFAULT_COUNT`]. `just test-generative` runs more.
 //! - `GENERATIVE_REACTIVE_WORLD`: a written session to run, rather than any
 //!   seed, as a failing seed prints.
+//! - `GENERATIVE_REACTIVE_NO_SHRINK`: write failing seeds out unshrunk, for
+//!   counting the seeds a planted fault fails, where shrinking each would
+//!   take minutes.
 
 use rmx::prelude::*;
 use std::path::PathBuf;
@@ -149,6 +157,7 @@ impl Order {
 fn generate(seed: u64) -> Case {
     let mut config = WorldGenConfig::default();
     config.script_statements = (6, 14);
+    config.binding_access_probability = 50;
     let session = gen_session_seeded(seed, config);
     let mut rng = Pcg64::seed_from_u64(seed);
 
@@ -271,9 +280,9 @@ impl Verdict {
 /// What a run exercised.
 #[derive(Default)]
 struct Tally {
-    /// Units entered, and of those, the ones that did not compile.
+    /// Units entered, and of those, the ones that did not compile, by name.
     entered: usize,
-    failed_on_entry: usize,
+    failed_on_entry: Vec<String>,
     /// Units in the sessions after their changes, and of those, the ones
     /// that ran to their end.
     remaining: usize,
@@ -282,8 +291,8 @@ struct Tally {
     resets: usize,
     /// Changes made, by kind: edits, deletes, reorders, inserts.
     changes: [usize; 4],
-    /// What the remaining units do to earlier units' bindings, by verb:
-    /// reads, takes, overwrites, updates, revives.
+    /// What the units do to earlier units' bindings as they are entered, by
+    /// verb: reads, takes, overwrites, updates, revives.
     uses: [usize; 5],
 }
 
@@ -293,7 +302,7 @@ const VERBS: [&str; 5] = ["reads", "takes", "overwrites", "updates", "revives"];
 impl Tally {
     fn add(&mut self, other: &Tally) {
         self.entered += other.entered;
-        self.failed_on_entry += other.failed_on_entry;
+        self.failed_on_entry.extend(other.failed_on_entry.iter().cloned());
         self.remaining += other.remaining;
         self.still_running += other.still_running;
         self.resets += other.resets;
@@ -331,7 +340,7 @@ impl Tally {
             .map(|(verb, count)| fmt!("{count} {verb}"))
             .collect();
         fmt!(
-            "{} units entered, {} still run of {} after {}, {} sessions reset; earlier bindings: {}",
+            "{} units entered, {} still run of {} after {}, {} sessions reset; as entered, units use earlier units' bindings: {}",
             self.entered, self.still_running, self.remaining, changes.join(", "), self.resets, uses.join(", "),
         )
     }
@@ -406,7 +415,17 @@ fn run(case: &Case) -> Verdict {
         match change {
             Change::Enter(_) => {
                 tally.entered += touched.len();
-                tally.failed_on_entry += touched.iter().filter(|(_, outcome)| outcome.ran == Ran::Fails).count();
+                tally.failed_on_entry.extend(touched.iter()
+                    .filter(|(_, outcome)| outcome.ran == Ran::Fails)
+                    .map(|(unit, _)| unit.C()));
+                if session.reset().is_none() {
+                    for index in 0..session.units().len() {
+                        for used in session.uses(index) {
+                            let verb = VERBS.iter().position(|verb| used.starts_with(verb)).X();
+                            tally.uses[verb] += 1;
+                        }
+                    }
+                }
             }
             Change::Edit { .. } => tally.changes[0] += 1,
             Change::Delete { .. } => tally.changes[1] += 1,
@@ -429,15 +448,6 @@ fn run(case: &Case) -> Verdict {
 
     tally.remaining = session.states().len();
     tally.still_running = session.states().iter().filter(|ran| **ran == Ran::Runs).count();
-    for index in 0..session.units().len() {
-        if session.has_failed(&session.units()[index]) {
-            continue;
-        }
-        for used in session.uses(index) {
-            let verb = VERBS.iter().position(|verb| used.starts_with(verb)).X();
-            tally.uses[verb] += 1;
-        }
-    }
     Verdict::Agrees(tally)
 }
 
@@ -548,6 +558,23 @@ fn env_u64(name: &str, default: u64) -> u64 {
     }
 }
 
+/// The kept sessions, by file name, in name order.
+fn corpus() -> Vec<(String, Case)> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/generative_reactive");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir).X()
+        .map(|entry| entry.X().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "world"))
+        .collect();
+    paths.sort();
+    paths.into_iter()
+        .map(|path| {
+            let name = path.file_name().X().to_string_lossy().S();
+            let (library, changes) = read_changes(&name, &std::fs::read_to_string(&path).X());
+            (name, Case { library, changes })
+        })
+        .collect()
+}
+
 /// Write a failing case where it can be run again, and say how.
 fn write_out(seed: u64, case: &Case) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("generative-reactive");
@@ -565,10 +592,22 @@ fn main() {
         let (library, changes) = read_changes(&path, &text);
         let verdict = check(&Case { library, changes }, SEED_TIMEOUT);
         println!("{path}: {}", verdict.describe());
+        if let Verdict::Agrees(tally) = &verdict && !tally.failed_on_entry.is_empty() {
+            println!("units that do not compile when entered: {}", tally.failed_on_entry.join(", "));
+        }
         if !matches!(verdict, Verdict::Agrees(_)) {
             std::process::exit(1);
         }
         return;
+    }
+
+    let mut broken = Vec::new();
+    for (name, case) in corpus() {
+        let verdict = check(&case, SEED_TIMEOUT);
+        if !matches!(verdict, Verdict::Agrees(_)) {
+            println!("{name}: \x1b[31mFAIL\x1b[0m\n  {}", verdict.describe().replace('\n', "\n  "));
+            broken.push(name);
+        }
     }
 
     let start = env_u64("GENERATIVE_REACTIVE_SEED", DEFAULT_SEED);
@@ -586,23 +625,26 @@ fn main() {
         let verdict = check(&case, SEED_TIMEOUT);
         let Verdict::Agrees(tally) = &verdict else {
             println!("seed {seed}: \x1b[31mFAIL\x1b[0m\n  {}", verdict.describe().replace('\n', "\n  "));
+            let shrink_it = std::env::var("GENERATIVE_REACTIVE_NO_SHRINK").is_err();
             let case = match verdict {
                 Verdict::Hangs => case,
+                _ if !shrink_it => case,
                 _ => {
                     println!("  shrinking...");
                     shrink(case, &verdict)
                 }
             };
             let path = write_out(seed, &case);
-            println!("  the session, shrunk unless it hangs, is {}", path.display());
+            println!("  the session is {}", path.display());
             println!("  run it with GENERATIVE_REACTIVE_WORLD={} cargo test -p datalove-tests --test generative_reactive_tests", path.display());
             failed.push(seed);
             continue;
         };
-        if tally.failed_on_entry > 0 {
+        if !tally.failed_on_entry.is_empty() {
+            let path = write_out(seed, &case);
             println!(
-                "seed {seed}: \x1b[31mFAIL\x1b[0m\n  {} of its {} units do not compile as generated, which is a worldgen bug",
-                tally.failed_on_entry, tally.entered,
+                "seed {seed}: \x1b[31mFAIL\x1b[0m\n  units {} of {} do not compile as generated, which is a worldgen bug; the session is {}",
+                tally.failed_on_entry.join(", "), tally.entered, path.display(),
             );
             failed.push(seed);
             continue;
@@ -618,10 +660,13 @@ fn main() {
     for shortfall in &shortfalls {
         println!("\x1b[31mtoo little exercised\x1b[0m: {shortfall}");
     }
+    if !broken.is_empty() {
+        println!("failing kept sessions: {}", broken.join(", "));
+    }
     if !failed.is_empty() {
         println!("failing seeds: {failed:?}");
     }
-    if !failed.is_empty() || !shortfalls.is_empty() {
+    if !broken.is_empty() || !failed.is_empty() || !shortfalls.is_empty() {
         std::process::exit(1);
     }
 }

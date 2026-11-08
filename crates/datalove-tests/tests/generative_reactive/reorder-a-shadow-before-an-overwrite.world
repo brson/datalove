@@ -1,0 +1,36 @@
+----------
+scriptunit-fragment 1
+----------
+
+var v0: u32 = : u32 / 166
+
+----------
+scriptunit-fragment 2
+----------
+
+
+
+----------
+scriptunit-fragment 3
+----------
+
+set v0 = : u32 / 72
+
+----------
+scriptunit-fragment 4
+----------
+
+
+
+----------
+scriptunit-edit 4
+----------
+
+var v0: u32 = : u32 / 166
+
+----------
+scriptunit-move 4 after 2
+----------
+
+
+

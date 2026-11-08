@@ -1,0 +1,36 @@
+----------
+scriptunit-fragment 1
+----------
+
+var v0: f64 = 228.2
+
+----------
+scriptunit-fragment 2
+----------
+
+let a1: f32 = 227.3
+if : u32 / 11 >= : u32 / 149
+  set v0 = 17.2
+end if
+
+----------
+scriptunit-fragment 3
+----------
+
+
+
+----------
+scriptunit-edit 3
+----------
+
+let a1: f32 = 227.3
+if : u32 / 11 >= : u32 / 149
+  set v0 = 17.2
+end if
+
+----------
+scriptunit-edit 3
+----------
+
+
+

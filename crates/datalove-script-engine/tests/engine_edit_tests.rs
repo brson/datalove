@@ -12,7 +12,7 @@ use rmx::prelude::*;
 use datalove_datafun::driver::{
     ModuleDescriptor, PackageDescriptor, PackageLibrary, WorkspaceDescriptor,
 };
-use datalove_script_engine::{Engine, Eval, TextStyle, Unit, UnitStep};
+use datalove_script_engine::{Engine, Eval, EvalBinding, TextStyle, Unit, UnitStep};
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
 const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
@@ -100,6 +100,46 @@ fn engine_with_modules_and_data(modules: &[(&str, &str)], data: &[(&str, &str)])
 /// A value-only edit, which is the case that needs execution to cascade
 /// where analysis did not: no type moved, so nothing but B was
 /// re-typechecked, and `d` would sit at 7 if D had not run again.
+/// What unit `id` came to in a step's reports, if the step re-derived it.
+fn came_to(reports: &[UnitStep], id: u32) -> &Eval {
+    reports.iter()
+        .find(|report| report.unit == id)
+        .and_then(|report| report.eval.as_ref())
+        .unwrap_or_else(|| panic!("unit {id} is re-derived"))
+}
+
+/// A unit rerun ahead of a later unit that shadows one of its names reports
+/// its own binding, not the later unit's, which has not been rerun yet and
+/// may no longer have the name at all.
+#[test]
+fn a_unit_rerun_before_a_shadow_reports_its_own_binding() {
+    let mut engine = engine();
+    run(&mut engine, "var b = 1\n---\nlet a = 2\nset b = 3\n---\nlet a = 4\nset b = 5");
+    let own = Eval::Ran(vec![EvalBinding::Value { name: "a".S(), ty: "int".S(), value: Some("2".S()) }]);
+
+    // Unit 3 stops overwriting `b`, so unit 2, the nearest to set it before
+    // unit 3, reruns to rebuild it, while unit 3 still binds `a`.
+    let reports = engine.edit_unit(3, "let a = 4");
+    assert_eq!(came_to(&reports, 2), &own);
+
+    // And with unit 3's `a` gone as well, which the engine once looked up
+    // in unit 3's record and did not find.
+    engine.edit_unit(3, "let a = 4\nset b = 5");
+    let reports = engine.edit_unit(3, "let z = 0");
+    assert_eq!(came_to(&reports, 2), &own);
+    assert_eq!(value_of(&mut engine, "b"), "3");
+}
+
+/// A unit that gives a binding away and binds the name again exports the
+/// new binding, which a later unit may use.
+#[test]
+fn a_name_given_away_and_bound_again_is_there_for_a_later_unit() {
+    let mut engine = engine();
+    let evals = run(&mut engine, "let s = \"a\"\nlet t = s\nlet s = \"b\"\n---\nlet u = s");
+    assert!(matches!(evals[1], Eval::Ran(_)), "{:?}", evals[1]);
+    assert_eq!(value_of(&mut engine, "u"), "\"b\"");
+}
+
 #[test]
 fn editing_a_unit_rederives_what_it_reaches() {
     let mut engine = engine();
