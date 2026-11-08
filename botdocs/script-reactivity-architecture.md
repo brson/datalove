@@ -319,10 +319,11 @@ the same. The reach uses them three ways:
   what the binding is matters to it, and its provider says that. So when its
   provider is re-derived it is only rerun, to write the binding again, and the
   units after it that read the binding are left alone. That holds while the
-  provider provides the binding as it did, as a slot or a value and of the
-  same type (`BindingShape`, compared against the held records). Otherwise
-  the write itself compiles to something else -- a literal of another type,
-  or no write at all -- and the unit is re-derived. If its write was
+  same provider provides the binding as it did, as a slot or a value and of
+  the same type (`BindingShape`, compared against the held records).
+  Otherwise the write itself compiles to something else -- a literal of
+  another type, no write at all, or a write to another binding, a shadow put
+  in between -- and the unit is re-derived. If its write was
   retracted, it reruns.
 - The unit a rerun starts from, to rebuild a binding as a reader finds it, is
   the nearest unit before the reader that sets it without reading it: its
@@ -483,6 +484,24 @@ unit keeps its types, and it is in the reach of the failed unit because it uses
 names that unit provides. When the failed unit goes green, its dependents are
 re-derived with it and run.
 
+**But the reach is taken before anything runs**, so it cannot know which
+units will be blocked, and a blocked unit does nothing. One that overwrites a
+binding would be taken to write it, which shields the units after it that
+read the binding and leaves what it wrote last time in place. So `reach_from`
+works out which units *may* be blocked: those that read a binding whose
+provider may return early, by `UnitLowerRecord::may_return_early`, which is
+whether its IR has a `UnitEarlyReturn`, or whose provider may be blocked
+itself, in the session as it is now or as it was before the edit, since one
+that was blocked last time wrote nothing then. An overwrite by one of those
+is a write that may not happen, which counts as an update, as a conditional
+write does: the reach goes back to rebuild the binding first, and shields
+nothing after it. So does a take by one, which the forward rule otherwise
+counts on to leave the binding empty after it, as it was. The step stays one
+pass, each unit run at most once and in order; the cost is rerunning a
+provider for an overwrite that did happen. A unit that returns early needs
+none of this: what it overwrites it overwrites on every way through it, early
+returns included.
+
 **A unit that did not run has no frame.** `FrameStore::frames` is
 `Vec<Option<ScriptFrame>>`, by id. `ScriptExecutor::skip_unit` appends a unit
 with none, and `clear_unit` empties one an edit broke, destroying what it
@@ -625,6 +644,11 @@ found it, and the third by one of those and by `engine_edit_tests`'s
 can catch: it fails a unit in the session and in the fresh run alike, so the
 two agree. It is a compile bug that a shadow made reachable, and
 `a_name_given_away_and_bound_again_is_there_for_a_later_unit` is its test.
+
+Once worldgen also divided by a divisor a change could set to 0, units
+returned early and blocked others, and the generated sessions found that a
+unit blocked at run time had been taken to overwrite what it no longer
+writes; see the paragraph on the reach being taken before anything runs.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit

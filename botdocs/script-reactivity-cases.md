@@ -154,6 +154,12 @@ unit, and the rules apply to it in turn. Collect them until nothing new is
 added, then run the collected units in order. Each unit joins at most once,
 and there are finitely many units, so the step ends.
 
+A unit that comes to be blocked when it runs, where it was not, did nothing,
+so overwrote nothing: that is a Break of its own, and one that stops being
+blocked is a Fix. Whether a unit is blocked is only known once it runs, so
+the engine treats an overwrite by a unit that may be blocked as an update;
+see [Returning early](#user-content-returning-early).
+
 Two consequences are worth spelling out. Retracting a read restores nothing,
 and neither does applying an overwrite. And a later overwrite shields the
 units after it from a changed value only while it writes what it wrote before:
@@ -1538,6 +1544,63 @@ restores unit 1 the same way.
 | 4 | `let c = b + 1` | reads `b` (5) | reruns | its `b` is unit 5's now, of the same type | `c` = 501 |
 <!-- end world -->
 
+An overwrite does not care how an earlier unit left a binding, so it shields
+the units after it while the binding is the one it was. A shadow makes it
+another one. Here unit 3 overwrites `b` after unit 2 updates it, and inserting
+a shadow above both makes the binding they write unit 5's: unit 3 is rerun as
+code that names unit 5's `b`, and unit 4, after it, reads that.
+
+<!-- world shadow-before-an-update code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var b = 1
+
+----------
+scriptunit-fragment 2
+----------
+
+set b = b + 1
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = 10
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b + 5
+```
+<!-- end world -->
+
+<!-- world shadow-before-an-update step 1 -->
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 1` | - | compiles, runs | new | `b` = 10 |
+| 2 | `set b = b + 1` | updates `b` (1) | compiles, runs | new | - |
+| 3 | `set b = 10` | overwrites `b` (1) | compiles, runs | new | - |
+| 4 | `let c = b + 5` | reads `b` (1) | compiles, runs | new | `c` = 15 |
+<!-- end world -->
+
+<!-- world shadow-before-an-update step 2 -->
+**Step 2: a unit that shadows `b` is inserted after unit 1.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 1` | - | reruns | rerun: units 2 and 3 wrote unit 1's `b` when they last ran, and now write unit 5's | `b` = 1 |
+| 5 | `var b = 100` | - | compiles, runs | new | `b` = 10 |
+| 2 | `set b = b + 1` | updates `b` (5) | reruns | its `b` is unit 5's now, of the same type | - |
+| 3 | `set b = 10` | overwrites `b` (5) | reruns | its `b` is unit 5's now, another binding, though of the same type | - |
+| 4 | `let c = b + 5` | reads `b` (5) | reruns | its `b` is unit 5's now, of the same type | `c` = 15 |
+<!-- end world -->
+
 ## Values through intermediate bindings
 
 <!-- world values-through-bindings code -->
@@ -2708,6 +2771,90 @@ unit 1 reruns: assumes a unit that returned early did everything its code could,
 
 What a unit gives away is decided by its code, so unit 4 cannot name `a` though
 nothing took it at run time.
+
+A blocked unit does nothing at all, though, and that is decided at run time.
+Unit 4 overwrites `b`, and is blocked once unit 3 returns early, so its
+overwrite is retracted as a Break's would be: unit 2 reruns to build `b` again,
+and unit 5, which the overwrite shielded, reads what unit 2 builds.
+
+<!-- world blocked-overwrite code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var d = 5
+
+----------
+scriptunit-fragment 2
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 3
+----------
+
+let q = 100 /! d
+
+----------
+scriptunit-fragment 4
+----------
+
+set b = 500
+let e = q + 1
+
+----------
+scriptunit-fragment 5
+----------
+
+let c = b + 1
+```
+<!-- end world -->
+
+<!-- world blocked-overwrite step 1 -->
+**Step 1: all five units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var d = 5` | - | compiles, runs | new | `d` = 5 |
+| 2 | `var b = 125` | - | compiles, runs | new | `b` = 500 |
+| 3 | `let q = 100 /! d` | reads `d` (1) | compiles, runs | new | `q` = 20 |
+| 4 | `set b = 500; let e = q + 1` | overwrites `b` (2), reads `q` (3) | compiles, runs | new | `e` = 21 |
+| 5 | `let c = b + 1` | reads `b` (2) | compiles, runs | new | `c` = 501 |
+<!-- end world -->
+
+<!-- world blocked-overwrite step 2 -->
+**Step 2: unit 1 is edited so unit 3 returns early.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var d = 0` | - | recompiles, runs | edited | `d` = 0 |
+| 2 | `var b = 125` | - | reruns | rerun: unit 4 overwrote `b` when it last ran, and is blocked now | `b` = 125 |
+| 3 | `let q = 100 /! d` | reads `d` (1) | reruns, returns early | `100 /! 0` | - |
+| 4 | `set b = 500; let e = q + 1` | overwrites `b` (2), reads `q` (3) | is blocked | unit 3 did not finish | - |
+| 5 | `let c = b + 1` | reads `b` (2) | reruns | reads `b`, which unit 4, blocked, no longer overwrites | `c` = 126 |
+<!-- end world -->
+
+<!-- world blocked-overwrite step 3 -->
+**Step 3: unit 1 is edited back so unit 3 finishes.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var d = 5` | - | recompiles, runs | edited | `d` = 5 |
+| 2 | `var b = 125` | - | untouched | unit 4 overwrites `b` and needs nothing it held | `b` = 500 |
+| 3 | `let q = 100 /! d` | reads `d` (1) | reruns | reads `d` from unit 1 | `q` = 20 |
+| 4 | `set b = 500; let e = q + 1` | overwrites `b` (2), reads `q` (3) | reruns | reads `q` from unit 3, which finished | `e` = 21 |
+| 5 | `let c = b + 1` | reads `b` (2) | reruns | reads `b` after unit 4, which overwrites it again | `c` = 501 |
+
+<!--
+Engine today, more than the rule asks:
+unit 2 reruns: unit 4 reads from unit 3, which may return early, so its overwrite may not happen and counts as an update
+-->
+<!-- end world -->
+
+When unit 3 finishes again, unit 4 runs and overwrites `b`, so unit 2 is left
+alone, as a Fix of an overwrite leaves it.
 
 ## Where the engine does more than the rules
 

@@ -1,0 +1,86 @@
+----------
+scriptunit-fragment 1
+----------
+
+var d = 5
+
+----------
+scriptunit-fragment 2
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 3
+----------
+
+let q = 100 /! d
+
+----------
+scriptunit-fragment 4
+----------
+
+set b = 500
+let e = q + 1
+
+----------
+scriptunit-fragment 5
+----------
+
+let c = b + 1
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `d` = 5 |
+| 2 | - | compiles, runs | new | `b` = 500 |
+| 3 | reads `d` (1) | compiles, runs | new | `q` = 20 |
+| 4 | overwrites `b` (2), reads `q` (3) | compiles, runs | new | `e` = 21 |
+| 5 | reads `b` (2) | compiles, runs | new | `c` = 501 |
+
+----------
+scriptunit-edit 1
+----------
+
+var d = 0
+
+----------
+expect unit 1 is edited so unit 3 returns early
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `d` = 0 |
+| 2 | - | reruns | rerun: unit 4 overwrote `b` when it last ran, and is blocked now | `b` = 125 |
+| 3 | reads `d` (1) | reruns, returns early | `100 /! 0` | - |
+| 4 | overwrites `b` (2), reads `q` (3) | is blocked | unit 3 did not finish | - |
+| 5 | reads `b` (2) | reruns | reads `b`, which unit 4, blocked, no longer overwrites | `c` = 126 |
+
+----------
+scriptunit-edit 1
+----------
+
+var d = 5
+
+----------
+expect unit 1 is edited back so unit 3 finishes
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `d` = 5 |
+| 2 | - | untouched | unit 4 overwrites `b` and needs nothing it held | `b` = 500 |
+| 3 | reads `d` (1) | reruns | reads `d` from unit 1 | `q` = 20 |
+| 4 | overwrites `b` (2), reads `q` (3) | reruns | reads `q` from unit 3, which finished | `e` = 21 |
+| 5 | reads `b` (2) | reruns | reads `b` after unit 4, which overwrites it again | `c` = 501 |
+
+----------
+engine
+----------
+
+| unit | this step | note |
+|------|-----------|------|
+| 2 | reruns | unit 4 reads from unit 3, which may return early, so its overwrite may not happen and counts as an update |

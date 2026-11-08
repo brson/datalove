@@ -33,6 +33,10 @@ pub struct UnitLowerRecord {
     /// default, which provides and does nothing, and so is the record of a
     /// unit that compiled and does nothing; this tells them apart.
     pub compiled: bool,
+    /// Whether the unit's code may return early from its top level, through
+    /// `ret`, `!`, `?` or a checked operator; then a unit that reads what it
+    /// binds may be blocked.
+    pub may_return_early: bool,
     /// The names this unit exported, as its `ScriptContext` recorded them.
     pub exports: Vec<(String, ExportBinding)>,
     /// The unit's value types, which say what an exported value is of.

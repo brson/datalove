@@ -4,6 +4,7 @@ use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 
 use rand::Rng;
+use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, ModuleInfo, Variable, is_linear_type};
 use crate::gen_stmt::gen_body_statement;
@@ -143,7 +144,12 @@ pub fn gen_script_items<'db, R: Rng>(
 ///   copied;
 /// - a revive, `set v = <literal>`, of a `var` taken before;
 /// - a shadow, `let v` or `var v` again, of the same type, which the
-///   statements after it find instead.
+///   statements after it find instead;
+/// - a divisor, `var dN: int` of a small literal, named so that a test can
+///   find it and set it to 0;
+/// - a quotient by one, `let v: int = <literal> /! dN`, which returns early
+///   from its unit when the divisor is 0, and blocks the units that read
+///   what it binds.
 fn gen_binding_access<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -165,7 +171,14 @@ fn gen_binding_access<'db, R: Rng>(
         .cloned()
         .collect();
 
-    let mut kinds: Vec<u8> = vec![5];
+    let divisors: Vec<Variable<'db>> = ctx.variables.iter()
+        .filter(|v| v.name.starts_with('d') && live(ctx, v))
+        .cloned()
+        .collect();
+    let mut kinds: Vec<u8> = vec![5, 6];
+    if !divisors.is_empty() {
+        kinds.extend([7, 7]);
+    }
     if !writable.is_empty() {
         kinds.extend([0, 1]);
     }
@@ -204,6 +217,19 @@ fn gen_binding_access<'db, R: Rng>(
             let v = pick(rng, &revivable);
             ctx.revive_variable(&v.name);
             format!("set {} = {}", v.name, gen_literal(db, rng, v.type_hint, config))
+        }
+        6 => {
+            let name = format!("d{}", *var_counter);
+            *var_counter += 1;
+            ctx.variables.push(Variable { name: name.clone(), type_hint: TypeHint::Int, is_mutable: true });
+            format!("var {}: int = {}", name, rng.gen_range(1..10))
+        }
+        7 => {
+            let d = pick(rng, &divisors);
+            let name = format!("v{}", *var_counter);
+            *var_counter += 1;
+            ctx.variables.push(Variable { name: name.clone(), type_hint: TypeHint::Int, is_mutable: false });
+            format!("let {}: int = {} /! {}", name, rng.gen_range(0..200), d.name)
         }
         4 => {
             let v = pick(rng, &ctx.variables.clone());

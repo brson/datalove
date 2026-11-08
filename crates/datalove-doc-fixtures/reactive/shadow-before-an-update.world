@@ -1,0 +1,52 @@
+----------
+scriptunit-fragment 1
+----------
+
+var b = 1
+
+----------
+scriptunit-fragment 2
+----------
+
+set b = b + 1
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = 10
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b + 5
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 10 |
+| 2 | updates `b` (1) | compiles, runs | new | - |
+| 3 | overwrites `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 15 |
+
+----------
+scriptunit-insert 5 after 1
+----------
+
+var b = 100
+
+----------
+expect a unit that shadows `b` is inserted after unit 1
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: units 2 and 3 wrote unit 1's `b` when they last ran, and now write unit 5's | `b` = 1 |
+| 5 | - | compiles, runs | new | `b` = 10 |
+| 2 | updates `b` (5) | reruns | its `b` is unit 5's now, of the same type | - |
+| 3 | overwrites `b` (5) | reruns | its `b` is unit 5's now, another binding, though of the same type | - |
+| 4 | reads `b` (5) | reruns | its `b` is unit 5's now, of the same type | `c` = 15 |

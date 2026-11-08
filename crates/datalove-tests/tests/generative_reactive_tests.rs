@@ -13,8 +13,10 @@
 //! earlier unit's binding, which a session entered once to look says which
 //! are: a shadow of the binding is put between its provider and the writer,
 //! by an insert, an edit or a reorder, or added to the writer itself, or the
-//! writer is reordered above its provider. Those are the arrangements the reach has been wrong about, and
-//! random changes make them rarely.
+//! writer is reordered above its provider. Those are the arrangements the
+//! reach has been wrong about, and random changes make them rarely. Other
+//! changes set a divisor worldgen made to 0, so that a unit dividing by it
+//! returns early and the units reading what that unit binds are blocked.
 //!
 //! A unit can also take the session with it, by a runtime error or a crash,
 //! which ends the case: a fresh run must then reset too, the same way.
@@ -92,12 +94,36 @@ struct Case {
     changes: Vec<Change>,
     /// How many of the changes were aimed, by kind; see [`AIMED_KINDS`].
     /// None for a session read from a file.
-    aimed: [usize; 4],
+    aimed: [usize; 5],
 }
 
-const AIMED_KINDS: [&str; 4] = [
+const AIMED_KINDS: [&str; 5] = [
     "shadows inserted", "shadows edited in", "shadows reordered in", "writers reordered above their providers",
+    "divisors zeroed",
 ];
+
+/// `source` with every divisor worldgen declared or set set to 0, or `None`
+/// if it has none: a top-level `var dN: int = <digits>` or `set dN = <digits>`.
+fn zero_divisors(source: &str) -> Option<String> {
+    let zeroed = |line: &str| {
+        let rest = line.strip_prefix("var d").or_else(|| line.strip_prefix("set d"))?;
+        let (name, value) = rest.split_once(" = ")?;
+        let name_ok = name.strip_suffix(": int").unwrap_or(name).chars().all(|c| c.is_ascii_digit());
+        (name_ok && !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()) && value != "0")
+            .then(|| fmt!("{}0", &line[..line.len() - value.len()]))
+    };
+    let mut any = false;
+    let lines: Vec<String> = source.lines()
+        .map(|line| match zeroed(line) {
+            Some(zero) => {
+                any = true;
+                zero
+            }
+            None => line.S(),
+        })
+        .collect();
+    any.then(|| lines.join("\n"))
+}
 
 /// A unit that takes or writes a binding an earlier unit provides, by
 /// name.
@@ -237,10 +263,21 @@ fn generate(seed: u64) -> Case {
     let mut next = entries.len() + 1;
 
     let aims = accesses(&session.library, &entries);
-    let mut aimed = [0; 4];
+    let mut aimed = [0; 5];
 
     let mut changes = vec![Change::Enter(entries)];
     while changes.len() <= CHANGES {
+        if rng.random_range(0..6) == 0 {
+            let zeroable: Vec<(String, String)> = live.iter()
+                .filter_map(|(unit, original)| Some((unit.C(), zero_divisors(original)?)))
+                .collect();
+            if !zeroable.is_empty() {
+                let (unit, source) = zeroable[rng.random_range(0..zeroable.len())].C();
+                aimed[4] += 1;
+                changes.push(Change::Edit { unit, source });
+                continue;
+            }
+        }
         if !aims.is_empty() && rng.random_range(0..3) == 0 {
             let access = &aims[rng.random_range(0..aims.len())];
             if let Some((kind, made)) = aim(&mut rng, &mut live, &mut next, &session.shadows, access) {
@@ -426,7 +463,11 @@ struct Tally {
     /// Changes made, by kind: edits, deletes, reorders, inserts.
     changes: [usize; 4],
     /// Of those, the aimed ones, by kind; see [`AIMED_KINDS`].
-    aimed: [usize; 4],
+    aimed: [usize; 5],
+    /// Units that had returned early, and that were blocked, when a step
+    /// ended, summed over the steps.
+    returned_early: usize,
+    blocked: usize,
     /// What the units do to earlier units' bindings as they are entered, by
     /// verb: reads, takes, overwrites, updates, revives.
     uses: [usize; 5],
@@ -442,6 +483,8 @@ impl Tally {
         self.remaining += other.remaining;
         self.still_running += other.still_running;
         self.resets += other.resets;
+        self.returned_early += other.returned_early;
+        self.blocked += other.blocked;
         for (sum, count) in self.changes.iter_mut().zip(other.changes) {
             *sum += count;
         }
@@ -468,6 +511,12 @@ impl Tally {
                 shortfalls.push(fmt!("{kind}: none"));
             }
         }
+        if self.returned_early == 0 {
+            shortfalls.push("no unit returned early".S());
+        }
+        if self.blocked == 0 {
+            shortfalls.push("no unit was blocked".S());
+        }
         for (verb, count) in VERBS.iter().zip(self.uses).skip(1) {
             if count == 0 {
                 shortfalls.push(fmt!("no unit {verb} an earlier unit's binding"));
@@ -487,8 +536,11 @@ impl Tally {
             .map(|(verb, count)| fmt!("{count} {verb}"))
             .collect();
         fmt!(
-            "{} units entered, {} still run of {} after {} ({}), {} sessions reset; as entered, units use earlier units' bindings: {}",
-            self.entered, self.still_running, self.remaining, changes.join(", "), aimed.join(", "), self.resets, uses.join(", "),
+            "{} units entered, {} still run of {} after {} ({}), {} sessions reset; \
+             after a step, {} units had returned early and {} were blocked; \
+             as entered, units use earlier units' bindings: {}",
+            self.entered, self.still_running, self.remaining, changes.join(", "), aimed.join(", "), self.resets,
+            self.returned_early, self.blocked, uses.join(", "),
         )
     }
 }
@@ -584,6 +636,8 @@ fn run(case: &Case) -> Verdict {
         if session.reset().is_some() {
             break;
         }
+        tally.returned_early += session.states().iter().filter(|ran| **ran == Ran::ReturnsEarly).count();
+        tally.blocked += session.states().iter().filter(|ran| **ran == Ran::Blocked).count();
     }
     if !failures.is_empty() {
         return Verdict::Disagrees(failures);
@@ -717,7 +771,7 @@ fn corpus() -> Vec<(String, Case)> {
         .map(|path| {
             let name = path.file_name().X().to_string_lossy().S();
             let (library, changes) = read_changes(&name, &std::fs::read_to_string(&path).X());
-            (name, Case { library, changes, aimed: [0; 4] })
+            (name, Case { library, changes, aimed: [0; 5] })
         })
         .collect()
 }
@@ -737,7 +791,7 @@ fn main() {
     if let Ok(path) = std::env::var("GENERATIVE_REACTIVE_WORLD") {
         let text = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
         let (library, changes) = read_changes(&path, &text);
-        let verdict = check(&Case { library, changes, aimed: [0; 4] }, SEED_TIMEOUT);
+        let verdict = check(&Case { library, changes, aimed: [0; 5] }, SEED_TIMEOUT);
         println!("{path}: {}", verdict.describe());
         if let Verdict::Agrees(tally) = &verdict && !tally.failed_on_entry.is_empty() {
             println!("units that do not compile when entered: {}", tally.failed_on_entry.join(", "));

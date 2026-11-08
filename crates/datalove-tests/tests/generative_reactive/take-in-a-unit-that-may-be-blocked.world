@@ -1,0 +1,31 @@
+----------
+scriptunit-fragment 1
+----------
+
+var d0: int = 1
+
+----------
+scriptunit-fragment 2
+----------
+
+let v4: int = d0
+
+----------
+scriptunit-fragment 3
+----------
+
+set d0 = 13
+
+----------
+scriptunit-fragment 4
+----------
+
+let v6: int = 161 /! d0
+
+----------
+scriptunit-edit 1
+----------
+
+var d0: int = 0
+let v1: int = 39 /! d0
+

@@ -1,0 +1,62 @@
+----------
+scriptunit-fragment 1
+----------
+
+require module local/gen/core_0
+
+----------
+scriptunit-fragment 2
+----------
+
+import core_0.gen0_0
+let a0: [[|u8, 2|]] = [: [|u8, 2|] / [| : u8 / 198, : u8 / 150 |], : [|u8, 2|] / [| : u8 / 22, : u8 / 66, : u8 / 231 |], : [|u8, 2|] / [| 1 3 | : u8 / 106 : u8 / 135 : u8 / 55 |]]
+let v1: bool = gen0_0(ref a0)
+
+----------
+scriptunit-fragment 3
+----------
+
+
+
+----------
+scriptunit-fragment 4
+----------
+
+
+
+----------
+scriptunit-fragment 5
+----------
+
+if : u32 / 218 >= : u32 / 16 or v1
+  set d3 = 44
+end if
+var d3: int = 122
+
+----------
+scriptunit-fragment 6
+----------
+
+if false or : u32 / 193 <= : u32 / 66
+end if
+set d3 = 71
+
+----------
+scriptunit-fragment 7
+----------
+
+let v10: int = 5 /! d3
+
+----------
+scriptunit-edit 3
+----------
+
+var d3: int = 0
+let v4: int = 21 /! d3
+
+----------
+scriptunit-insert 8 after 4
+----------
+
+var d3: int = 125
+

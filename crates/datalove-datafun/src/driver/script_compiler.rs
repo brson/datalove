@@ -45,7 +45,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData, ExternalBinding,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, ExportBinding, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, ExportBinding, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError, Terminator};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_tycheck::{
@@ -110,6 +110,8 @@ struct HeldGraph {
     ran: Vec<usize>,
     /// Whether each unit compiled.
     compiled: Vec<bool>,
+    /// Whether each unit's code may return early.
+    may_return_early: Vec<bool>,
 }
 
 /// How a unit provides a binding: as a slot or a value, and of which type.
@@ -1024,12 +1026,45 @@ impl<'db> ScriptCompiler<'db> {
             (0..unit).rev().find(|earlier| provides[*earlier].contains(name))
         };
 
+        // The unit that provided `name` to `unit` before the edit, in the
+        // order the units ran in.
+        let held_provider = |unit: usize, name: &String| {
+            let at = held.ran.iter().position(|ran| *ran == unit).X();
+            held.ran[..at].iter().rev().copied().find(|earlier| held.provides[*earlier].contains(name))
+        };
+
+        // Whether `unit` may be blocked when it runs, or may have been when
+        // it last ran: whether it reads a binding whose provider may return
+        // early, or may be blocked itself, now or before the edit. Which
+        // units are is only known once they run, after the reach is taken,
+        // so the reach takes any that may be to write nothing, as it takes a
+        // write that may not happen: one that wrote nothing last time and
+        // writes now changes what the units after it read.
+        let mut may_block_now = vec![false; count];
+        let mut may_block_held = vec![false; count];
+        for unit in 0..count {
+            may_block_now[unit] = uses[unit].iter().any(|name| {
+                provider(unit, name).is_some_and(|provider| {
+                    self.unit_records[provider].may_return_early || may_block_now[provider]
+                })
+            });
+        }
+        for unit in held.ran.iter().copied() {
+            may_block_held[unit] = held.uses[unit].iter().any(|name| {
+                held_provider(unit, name).is_some_and(|provider| {
+                    held.may_return_early[provider] || may_block_held[provider]
+                })
+            });
+        }
+        let may_block: Vec<bool> = (0..count).map(|unit| may_block_now[unit] || may_block_held[unit]).collect();
+
         // Whether `unit` writes the binding `name` without reading what it
         // held, as it does now: an overwrite, or a revival, which cannot read
-        // a binding that was given away.
+        // a binding that was given away. One by a unit that may be blocked is
+        // a write that may not happen, which counts as an update.
         let writes_without_reading = |unit: usize, name: &String| {
             let record = &self.unit_records[unit];
-            record.overwrites.contains(name) || record.revives.contains(name)
+            !may_block[unit] && (record.overwrites.contains(name) || record.revives.contains(name))
         };
 
         // The nearest unit before `unit` that set the binding `name` without
@@ -1054,6 +1089,13 @@ impl<'db> ScriptCompiler<'db> {
             held.shapes[provider].get(name) != binding_shape(&self.unit_records[provider], name).as_ref()
         };
 
+        // Whether `name` is another binding to `unit` than before the edit:
+        // another unit provides it, or the same one another way.
+        let provider_moved = |unit: usize, name: &String| match provider(unit, name) {
+            Some(now) => held_provider(unit, name) != Some(now) || reshaped(now, name),
+            None => held_provider(unit, name).is_some(),
+        };
+
         let mut rerun_starts = restore.C();
         loop {
             let mut rederived = vec![false; count];
@@ -1061,23 +1103,27 @@ impl<'db> ScriptCompiler<'db> {
             for unit in 0..count {
                 // A unit that writes a binding without reading it does not
                 // care how an earlier unit left it, only what the binding is,
-                // which its provider says. While the provider provides it as
-                // it did, the unit writes what it wrote before, so the units
-                // after it see no new value. It is rerun, since its provider
-                // undid its write.
+                // which its provider says. While the same provider provides
+                // it as it did, the unit writes what it wrote before, so the
+                // units after it see no new value. It is rerun, since its
+                // provider undid its write. A provider that is another unit
+                // now, a shadow put in between, is another binding, which the
+                // unit's code has to name.
                 //
                 // Nor does a unit after a take that is still there: the
-                // binding holds nothing after it, as it did before.
+                // binding holds nothing after it, as it did before. Unless
+                // the take is by a unit that may be blocked, which then may
+                // not happen.
                 rederived[unit] = seeds.contains(&unit)
                     || uses[unit].iter().any(|name| {
                         source(unit, name).is_some_and(|source| {
                             let still_taken = !provides[source].contains(name)
+                                && !may_block[source]
                                 && held.takes[source].contains(name)
                                 && self.unit_records[source].takes.contains(name);
                             rederived[source]
                                 && !still_taken
-                                && (!writes_without_reading(unit, name)
-                                    || (provides[source].contains(name) && reshaped(source, name)))
+                                && (!writes_without_reading(unit, name) || provider_moved(unit, name))
                         })
                     });
                 restoring[unit] = !rederived[unit]
@@ -1176,6 +1222,7 @@ impl<'db> ScriptCompiler<'db> {
             shapes: self.unit_records.iter().map(|record| binding_shapes(record)).collect(),
             ran,
             compiled: self.unit_records.iter().map(|record| record.compiled).collect(),
+            may_return_early: self.unit_records.iter().map(|record| record.may_return_early).collect(),
         }
     }
 
@@ -2467,6 +2514,8 @@ impl<'db> ScriptCompiler<'db> {
         let script_ctx = ir_unit.script_context();
         self.unit_records[index] = Arc::new(UnitLowerRecord {
             compiled: true,
+            may_return_early: ir_unit.blocks.iter()
+                .any(|block| matches!(block.terminator, Terminator::UnitEarlyReturn { .. })),
             exports: script_ctx.map(|ctx| ctx.exports.C()).unwrap_or_default(),
             value_types: ir_unit.value_types.C(),
             slot_types: ir_unit.slot_types.C(),
