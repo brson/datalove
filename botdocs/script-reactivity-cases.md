@@ -2856,6 +2856,99 @@ unit 2 reruns: unit 4 reads from unit 3, which may return early, so its overwrit
 When unit 3 finishes again, unit 4 runs and overwrites `b`, so unit 2 is left
 alone, as a Fix of an overwrite leaves it.
 
+A blocked unit's revive is retracted the same way, but what it leaves is a
+binding given away, and the units after it were compiled as if it had been
+revived. So a unit that reads a binding a unit that did not finish would have
+written is blocked too, when the binding holds nothing. Unit 6 takes `a`, which
+unit 5 revives; once unit 5 is blocked, `a` is as unit 2 left it, given away,
+and unit 6 is blocked on unit 5.
+
+<!-- world blocked-revive code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var a = [1]
+
+----------
+scriptunit-fragment 2
+----------
+
+let b = a
+
+----------
+scriptunit-fragment 3
+----------
+
+var d = 5
+
+----------
+scriptunit-fragment 4
+----------
+
+let q = 100 /! d
+
+----------
+scriptunit-fragment 5
+----------
+
+let e = q + 1
+set a = [2]
+
+----------
+scriptunit-fragment 6
+----------
+
+let c = a
+```
+<!-- end world -->
+
+<!-- world blocked-revive step 1 -->
+**Step 1: all six units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var a = [1]` | - | compiles, runs | new | `a` taken |
+| 2 | `let b = a` | takes `a` (1) | compiles, runs | new | `b` = [1] |
+| 3 | `var d = 5` | - | compiles, runs | new | `d` = 5 |
+| 4 | `let q = 100 /! d` | reads `d` (3) | compiles, runs | new | `q` = 20 |
+| 5 | `let e = q + 1; set a = [2]` | reads `q` (4), revives `a` (1) | compiles, runs | new | `e` = 21 |
+| 6 | `let c = a` | takes `a` (1) | compiles, runs | new | `c` = [2] |
+<!-- end world -->
+
+<!-- world blocked-revive step 2 -->
+**Step 2: unit 3 is edited so unit 4 returns early.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var a = [1]` | - | reruns | rerun: unit 5 revived `a` when it last ran, and is blocked now | `a` taken |
+| 2 | `let b = a` | takes `a` (1) | reruns | it took `a`, which unit 1 builds again | `b` = [1] |
+| 3 | `var d = 0` | - | recompiles, runs | edited | `d` = 0 |
+| 4 | `let q = 100 /! d` | reads `d` (3) | reruns, returns early | `100 /! 0` | - |
+| 5 | `let e = q + 1; set a = [2]` | reads `q` (4), revives `a` (1) | is blocked | unit 4 did not finish | - |
+| 6 | `let c = a` | takes `a` (1) | is blocked | unit 5 did not finish | - |
+<!-- end world -->
+
+<!-- world blocked-revive step 3 -->
+**Step 3: unit 3 is edited back so unit 4 finishes.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var a = [1]` | - | untouched | unit 5 revives `a` and needs nothing it held | `a` taken |
+| 2 | `let b = a` | takes `a` (1) | untouched | uses nothing that changed | `b` = [1] |
+| 3 | `var d = 5` | - | recompiles, runs | edited | `d` = 5 |
+| 4 | `let q = 100 /! d` | reads `d` (3) | reruns | reads `d` from unit 3 | `q` = 20 |
+| 5 | `let e = q + 1; set a = [2]` | reads `q` (4), revives `a` (1) | reruns | reads `q` from unit 4, which finished | `e` = 21 |
+| 6 | `let c = a` | takes `a` (1) | reruns | takes `a` after unit 5, which revives it again | `c` = [2] |
+
+<!--
+Engine today, more than the rule asks:
+unit 1 reruns: unit 5 reads from unit 4, which may return early, so its revive may not happen and counts as an update
+unit 2 reruns: it took `a`, which unit 1 builds again
+-->
+<!-- end world -->
+
 ## Where the engine does more than the rules
 
 Each is a comment under a table above.

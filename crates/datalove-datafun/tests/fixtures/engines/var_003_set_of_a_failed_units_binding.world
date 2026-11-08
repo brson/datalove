@@ -1,0 +1,31 @@
+----------
+scriptunit-fragment
+----------
+
+// A unit that typechecks and fails ownership leaves its bindings to the
+// typechecker and not to lowering. A later unit that sets one fails as one
+// that reads it does, at the top level and inside a block alike.
+
+var d: int = 1
+let e: int = d
+
+----------
+scriptunit-fragment
+----------
+
+debuglog d
+var a: int = 2
+
+----------
+scriptunit-fragment
+----------
+
+set a = 3
+
+----------
+scriptunit-fragment
+----------
+
+if true
+  set a = 4
+end if

@@ -436,8 +436,10 @@ fn lower_statement_for_script<'db>(
                 }
 
                 let value_id = lower_expression(ctx, ctx.expr(set_stmt.value))?;
+                // Not found, it is bound by an earlier unit that typechecked
+                // and did not compile.
                 let operand = ctx.lookup_var(&root_name_str)
-                    .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+                    .ok_or_else(|| LowerError::BindingNotAvailable(root_name_str.clone()))?;
                 match operand {
                     Operand::Slot(slot) => {
                         let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);

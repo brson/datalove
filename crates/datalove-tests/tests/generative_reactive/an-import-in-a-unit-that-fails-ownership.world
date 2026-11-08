@@ -1,0 +1,74 @@
+----------
+module local/gen/math_0
+----------
+
+type Type0: i16
+type Type1: offset
+
+type Enum0_0: enum { atom Enum0_0V0, term Enum0_0V1 {| y1: { z9: i8 }, name0: offset, x4: u32 |}, term Enum0_0V2 string }
+
+type Enum0_1: enum { term Enum0_1V0 [%{string = int}], term Enum0_1V1 u32, term Enum0_1V2 u64, term Enum0_1V3 u32 }
+
+fun gen0_0<T>(ref x: [T]): bool
+  ret true
+end fun
+
+fun gen0_1<T>(a: T, b: T): bool where { T is fixedint, }
+  ret a != b
+end fun
+
+fun fn0(p0: bool, mut p1: u32, p2: i32): ?{ field5: int, name0: index }
+  set p1 = (: u32 / 58) -? (: u32 / 95)
+  let v0: Type0 = : i16 / 27
+  ret some : { field5: int, name0: index } / {field5 = : int / 25, name0 = : index / 197}
+end fun
+
+fun fn1(p0: string): offset
+  let v0: Type1 = : offset / 65
+  var v1: i64 = : i64 / 44
+  let a2: i32 = : i32 / 92
+  let a3: i32 = : i32 / 75
+  let v4: bool = gen0_1(a2, a3)
+  ret : offset / 40
+end fun
+
+----------
+data local/gen/x8
+----------
+
+94
+
+----------
+scriptunit-fragment 1
+----------
+
+var d0: int = 1
+let v1: int = d0
+
+----------
+scriptunit-fragment 2
+----------
+
+require module local/gen/math_0
+
+----------
+scriptunit-fragment 3
+----------
+
+let v7: int = d0
+import math_0.gen0_1
+
+----------
+scriptunit-fragment 4
+----------
+
+let a9: i8 = : i8 / 1
+let a10: i8 = : i8 / 94
+let v11: bool = gen0_1(a9, a10)
+
+----------
+scriptunit-move 1 after 4
+----------
+
+
+

@@ -6,7 +6,7 @@ use datalove_datalit::Database;
 use crate::config::WorldGenConfig;
 use crate::gen_module::{plan_module_graph, gen_module_type_aliases, gen_module_function_sigs, gen_module_generic_sigs, gen_module};
 use crate::gen_expr::gen_literal;
-use crate::gen_script::{gen_script, gen_script_items};
+use crate::gen_script::gen_script_items;
 use crate::pretty::pretty_type_hint;
 
 /// Generate a complete worldfile from a seed.
@@ -17,11 +17,16 @@ pub fn gen_worldfile_seeded(seed: u64, config: WorldGenConfig) -> String {
     gen_worldfile_tracked(&db, seed, config)
 }
 
-/// A generated REPL session: the modules it requires, and its script units.
+/// A generated REPL session: the modules and data it requires, and its
+/// script units.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GenSession {
-    /// The module sections, as worldfile text.
+    /// The module and data sections, as worldfile text.
     pub library: String,
+    /// Each module's `library/package/module` path and source.
+    pub modules: Vec<(String, String)>,
+    /// Each data file's `library/package/name` path and text.
+    pub data: Vec<(String, String)>,
     /// The script units, in order.
     pub units: Vec<String>,
     /// For each name the script's top level binds, a statement that binds
@@ -43,9 +48,10 @@ fn gen_session_tracked<'db>(
     config: WorldGenConfig,
 ) -> GenSession {
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    let modules = gen_modules(db, &mut rng, &config);
-    let library = modules.1.join("\n\n");
-    let (items, variables) = gen_script_items(db, &mut rng, &config, &modules.0);
+    let (infos, modules) = gen_modules(db, &mut rng, &config);
+    let script = gen_script_items(db, &mut rng, &config, &infos);
+    let library = library_sections(&modules, &script.data).join("\n\n");
+    let (items, variables) = (script.items, script.variables);
     let mut units = Vec::new();
     let mut items = items.into_iter().peekable();
     while items.peek().is_some() {
@@ -64,7 +70,7 @@ fn gen_session_tracked<'db>(
         let value = gen_literal(db, &mut rng, v.type_hint, &config);
         shadows.push((v.name.clone(), format!("{} {}: {} = {}", keyword, v.name, ty, value)));
     }
-    GenSession { library, units, shadows }
+    GenSession { library, modules, data: script.data, units, shadows }
 }
 
 /// Internal tracked function for worldfile generation.
@@ -86,24 +92,30 @@ fn gen_worldfile_inner<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
 ) -> String {
-    let (modules, mut sections) = gen_modules(db, rng, config);
-
-    // Generate script section.
-    let script_source = gen_script(db, rng, config, &modules);
+    let (infos, modules) = gen_modules(db, rng, config);
+    let script = gen_script_items(db, rng, config, &infos);
+    let mut sections = library_sections(&modules, &script.data);
     sections.push(format!(
         "----------\nscriptunit-fragment\n----------\n\n{}",
-        script_source
+        script.items.join("\n")
     ));
 
     sections.join("\n\n")
 }
 
-/// Generate the modules, and their worldfile sections.
+/// The worldfile sections of `modules` and `data`, each a path and its text.
+fn library_sections(modules: &[(String, String)], data: &[(String, String)]) -> Vec<String> {
+    let module = modules.iter().map(|(path, source)| format!("----------\nmodule {}\n----------\n\n{}", path, source));
+    let data = data.iter().map(|(path, text)| format!("----------\ndata {}\n----------\n\n{}", path, text));
+    module.chain(data).collect()
+}
+
+/// Generate the modules, and each one's path and source.
 fn gen_modules<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-) -> (Vec<crate::context::ModuleInfo<'db>>, Vec<String>) {
+) -> (Vec<crate::context::ModuleInfo<'db>>, Vec<(String, String)>) {
     let mut sections = Vec::new();
 
     // Plan module graph.
@@ -125,11 +137,7 @@ fn gen_modules<'db, R: Rng>(
 
         let source = gen_module(db, rng, module, config, &prior_modules);
 
-        sections.push(format!(
-            "----------\nmodule {}\n----------\n\n{}",
-            module.path(),
-            source
-        ));
+        sections.push((module.path(), source));
     }
 
     (modules, sections)

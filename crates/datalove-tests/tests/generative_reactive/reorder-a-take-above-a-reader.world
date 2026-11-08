@@ -1,0 +1,115 @@
+----------
+module local/gen/data_0
+----------
+
+type Type0: f64
+type Type1: [u64]
+
+const CONST0_0: string = "data"
+
+type Enum0_0: enum { term Enum0_0V0 %{f64 = [offset]}, term Enum0_0V1 string }
+
+type Enum0_1: enum { term Enum0_1V0 i16, term Enum0_1V1 index, term Enum0_1V2 string, atom Enum0_1V3 }
+
+fun gen0_0<T>(a: T, b: T): [T]
+  ret [a, b]
+end fun
+
+fun gen0_1<T>(x: T)
+  let unwanted: T = x
+end fun
+
+fun fn0(ref p0: offset, p1: %{f64 = i32})
+  let a0: string = "data"
+  call gen0_1(a0)
+  const C1: {| z4: i64, z8: f64 |} = {| z4, z8; : i64 / 74, : f64 / 64.8; : i64 / 123, : f64 / 102.6 |}
+  ret
+end fun
+
+fun fn1(ref p0: i16, out p1: u32)
+  set p1 = : u32 / 181
+  let v0: [i16] = [: i16 / 109, : i16 / 36]
+  let a1: i32 = : i32 / 103
+  call gen0_1(a1)
+  let v2: [string] = [: string / "value", : string / "a", : string / "newline\nhere"]
+  ret
+end fun
+
+----------
+module local/gen/core_1
+----------
+
+type Type0: i16
+
+const CONST1_0: index = : index / 72
+
+type Enum1_0: enum { atom Enum1_0V0, term Enum1_0V1 (f32, {}, offset), atom Enum1_0V2 }
+
+fun gen1_0<T>(a: T, b: T): bool where { T is fixedint, }
+  ret a >= b
+end fun
+
+fun gen1_1<T>(x: T)
+  let unwanted: T = x
+end fun
+
+fun gen1_2<T>(x: T): (T, T)
+  ret (x@, x)
+end fun
+
+fun fn0(p0: f32, p1: u64, p2: f64)
+  let a0: u64 = : u64 / 159
+  let a1: u64 = : u64 / 108
+  let v2: bool = gen1_0(a0, a1)
+  let v3: atom Enum1_0V0 = atom Enum1_0V0
+  let v4: Enum1_0 = enum { atom Enum1_0V0 }
+  match v4
+  case atom Enum1_0V0
+    let v5: i64 = : i64 / 111
+    var v6: i64 = : i64 / 1
+  case term Enum1_0V1 v7
+    let v8: f64 = 238.9
+    var v9: error = error : u32 / 161
+  case atom Enum1_0V2
+    let v10: Type0 = : i16 / 12
+    let v11: Type0 = v10
+  end match
+  ret
+end fun
+
+----------
+scriptunit-fragment 1
+----------
+
+
+
+----------
+scriptunit-fragment 2
+----------
+
+
+
+----------
+scriptunit-fragment 3
+----------
+
+let v13: int = 169 /! d3
+
+----------
+scriptunit-fragment 4
+----------
+
+let v14: int = d3
+
+----------
+scriptunit-edit 1
+----------
+
+var d3: int = 0
+
+----------
+scriptunit-move 4 after 2
+----------
+
+
+

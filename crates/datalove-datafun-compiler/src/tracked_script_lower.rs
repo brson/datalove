@@ -65,6 +65,11 @@ pub struct UnitLowerRecord {
     /// before reading what they held. Running the unit again needs nothing of
     /// such a binding as it was. The rest of `writes` it updated.
     pub overwrites: Vec<String>,
+    /// The names this unit's typecheck provided at its last compile, whether
+    /// or not the compile went on to finish: what the later units'
+    /// typechecks resolved against. A unit that typechecked and failed later
+    /// provides these and none of `provides`.
+    pub typechecked: Vec<String>,
     /// The names this unit provides, as the typechecker recorded them.
     ///
     /// Kept as owned text because the reach of an edit is computed across a

@@ -1,0 +1,49 @@
+----------
+scriptunit-fragment 1
+----------
+
+var v0: [bool] = [: bool / false]
+
+----------
+scriptunit-fragment 2
+----------
+
+let v1: [bool] = v0
+let v2: [bool] = v1
+
+----------
+scriptunit-fragment 3
+----------
+
+
+
+----------
+scriptunit-fragment 4
+----------
+
+var v4: int = 21
+let v5: int = 123 /! d3
+
+----------
+scriptunit-fragment 5
+----------
+
+for v6, v7 in ref v2
+  if false
+    set v4 = 103
+  end if
+end for
+set v0 = [: bool / true, : bool / true]
+
+----------
+scriptunit-fragment 6
+----------
+
+debuglog v0
+
+----------
+scriptunit-edit 3
+----------
+
+var d3: int = 0
+

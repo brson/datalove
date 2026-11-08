@@ -3096,6 +3096,58 @@ impl IrCodeUnit {
         }
     }
 
+    /// The slots of earlier script units this unit's code writes, its
+    /// functions' included, as a unit id and a slot index.
+    ///
+    /// A store or a field set into one, and one passed to a call, which may
+    /// write it through a `mut` or `out` parameter. A unit that did not run to
+    /// its end may not have written them, which the executor checks a later
+    /// unit that names one against.
+    pub fn script_slots_written(&self) -> std::collections::BTreeSet<(u32, u32)> {
+        let mut slots = std::collections::BTreeSet::new();
+        self.collect_script_slots(&mut slots, false);
+        slots
+    }
+
+    /// The slots of earlier script units this unit's code reads or writes,
+    /// its functions' included, as a unit id and a slot index.
+    pub fn script_slots_named(&self) -> std::collections::BTreeSet<(u32, u32)> {
+        let mut slots = std::collections::BTreeSet::new();
+        self.collect_script_slots(&mut slots, true);
+        slots
+    }
+
+    fn collect_script_slots(&self, slots: &mut std::collections::BTreeSet<(u32, u32)>, reads: bool) {
+        let external = |op: &Operand| match op {
+            Operand::ExternalSlot { unit, slot } => Some((*unit, slot.0)),
+            _ => None,
+        };
+        for block in &self.blocks {
+            for instr in &block.instructions {
+                match instr {
+                    Instruction::SlotStoreCopy { dest: SlotDest::External { unit, slot }, .. }
+                    | Instruction::SlotStoreCopyTracked { dest: SlotDest::External { unit, slot }, .. }
+                    | Instruction::SlotStoreMove { dest: SlotDest::External { unit, slot }, .. }
+                    | Instruction::SlotStoreMoveTracked { dest: SlotDest::External { unit, slot }, .. }
+                    | Instruction::SetField { slot: SlotDest::External { unit, slot }, .. }
+                    | Instruction::SetFieldTracked { slot: SlotDest::External { unit, slot }, .. } => {
+                        slots.insert((*unit, slot.0));
+                    }
+                    _ => {}
+                }
+                if reads || instr.call_target().is_some() {
+                    instr.for_each_operand(|op| slots.extend(external(op)));
+                }
+            }
+            if reads {
+                block.terminator.for_each_operand(|op| slots.extend(external(op)));
+            }
+        }
+        for nested in &self.nested_units {
+            nested.collect_script_slots(slots, reads);
+        }
+    }
+
     /// Create a native function code unit (no blocks, just signature + symbol).
     pub fn native(id: CodeUnitId, name: String, ctx: NativeContext) -> Self {
         Self {

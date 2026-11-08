@@ -97,6 +97,8 @@ pub struct RemovedUnit {
 /// is taken over beside the graph as it is now.
 struct HeldGraph {
     provides: Vec<BTreeSet<String>>,
+    /// What each unit's typecheck provided; see `UnitLowerRecord::typechecked`.
+    typechecked: Vec<BTreeSet<String>>,
     uses: Vec<BTreeSet<String>>,
     /// What each unit took or wrote of earlier units' bindings.
     changed: Vec<BTreeSet<String>>,
@@ -1006,7 +1008,7 @@ impl<'db> ScriptCompiler<'db> {
         changed: &[BTreeSet<String>],
     ) -> Vec<usize> {
         let count = held.provides.len();
-        let (now_provides, now_uses) = self.graph_now();
+        let (now_provides, now_uses, now_typechecked) = self.graph_now_typechecked();
         assert_eq!(
             count, now_provides.len(),
             "a record per unit and a typecheck output per unit, or the two graphs \
@@ -1024,6 +1026,19 @@ impl<'db> ScriptCompiler<'db> {
             .collect();
         let provider = |unit: usize, name: &String| {
             (0..unit).rev().find(|earlier| provides[*earlier].contains(name))
+        };
+        let typechecked: Vec<_> = (0..count)
+            .map(|unit| union(&held.typechecked[unit], &now_typechecked[unit]))
+            .collect();
+
+        // The unit `unit`'s typecheck found `name` in, when that is not the
+        // unit the binding comes from: one that typechecked and failed later,
+        // which provides the name to the typechecker and not to lowering. A
+        // unit that resolved a name there, an imported function's say,
+        // compiles differently once that unit typechecks differently.
+        let typecheck_only_provider = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| typechecked[*earlier].contains(name))
+                .filter(|found| provider(unit, name) != Some(*found))
         };
 
         // The unit that provided `name` to `unit` before the edit, in the
@@ -1096,6 +1111,12 @@ impl<'db> ScriptCompiler<'db> {
             None => held_provider(unit, name).is_some(),
         };
 
+        // Whether `earlier` ran before `later` when they last ran.
+        let ran_before = |earlier: usize, later: usize| {
+            let at = |unit: usize| held.ran.iter().position(|ran| *ran == unit).X();
+            at(earlier) < at(later)
+        };
+
         let mut rerun_starts = restore.C();
         loop {
             let mut rederived = vec![false; count];
@@ -1113,14 +1134,19 @@ impl<'db> ScriptCompiler<'db> {
                 // Nor does a unit after a take that is still there: the
                 // binding holds nothing after it, as it did before. Unless
                 // the take is by a unit that may be blocked, which then may
-                // not happen.
+                // not happen, or the unit came after the take only by a
+                // reorder, and read the binding before it was taken.
                 rederived[unit] = seeds.contains(&unit)
+                    || uses[unit].iter().any(|name| {
+                        typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])
+                    })
                     || uses[unit].iter().any(|name| {
                         source(unit, name).is_some_and(|source| {
                             let still_taken = !provides[source].contains(name)
                                 && !may_block[source]
                                 && held.takes[source].contains(name)
-                                && self.unit_records[source].takes.contains(name);
+                                && self.unit_records[source].takes.contains(name)
+                                && ran_before(source, unit);
                             rederived[source]
                                 && !still_taken
                                 && (!writes_without_reading(unit, name) || provider_moved(unit, name))
@@ -1214,6 +1240,7 @@ impl<'db> ScriptCompiler<'db> {
         let set = |names: &[String]| names.iter().cloned().collect::<BTreeSet<String>>();
         HeldGraph {
             provides: self.unit_records.iter().map(|record| set(&record.provides)).collect(),
+            typechecked: self.unit_records.iter().map(|record| set(&record.typechecked)).collect(),
             uses: self.unit_records.iter().map(|record| set(&record.uses)).collect(),
             changed: self.unit_records.iter()
                 .map(|record| record.takes.iter().chain(&record.writes).cloned().collect())
@@ -1241,26 +1268,36 @@ impl<'db> ScriptCompiler<'db> {
     /// for the first time, or differently, is reached anyway, and the reach
     /// is taken again with what its new record provides.
     fn graph_now(&self) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
+        let (provides, uses, _) = self.graph_now_typechecked();
+        (provides, uses)
+    }
+
+    /// [`Self::graph_now`], and what each unit's typecheck provides, whether
+    /// or not the unit compiled.
+    fn graph_now_typechecked(&self) -> (Vec<Vec<String>>, Vec<Vec<String>>, Vec<Vec<String>>) {
         let outputs = self.unit_typecheck_outputs();
         let mut provides = Vec::with_capacity(outputs.len());
         let mut uses = Vec::with_capacity(outputs.len());
+        let mut typechecked = Vec::with_capacity(outputs.len());
         for (index, output) in outputs.iter().enumerate() {
             match output {
-                Some(output) if !self.unit_records[index].compiled => {
-                    provides.push(Vec::new());
-                    uses.push(self.unit_used_names(index, *output));
-                }
                 Some(output) => {
-                    provides.push(self.unit_provides_names(*output));
+                    let names = self.unit_provides_names(*output);
+                    provides.push(match self.unit_records[index].compiled {
+                        true => names.clone(),
+                        false => Vec::new(),
+                    });
                     uses.push(self.unit_used_names(index, *output));
+                    typechecked.push(names);
                 }
                 None => {
                     provides.push(Vec::new());
                     uses.push(Vec::new());
+                    typechecked.push(Vec::new());
                 }
             }
         }
-        (provides, uses)
+        (provides, uses, typechecked)
     }
 
     /// The modules each unit imports from, as things stand now.
@@ -1601,7 +1638,12 @@ impl<'db> ScriptCompiler<'db> {
         // position in the script it is.
         let mut result = datalove_ct::query_events::compiling_unit(index, || self.run_phases(index, &unit));
         match &mut result.ir_unit {
-            None => self.unit_records[index] = Arc::default(),
+            None => {
+                let typechecked = self.unit_typecheck_outputs()[index]
+                    .map(|output| self.unit_provides_names(output))
+                    .unwrap_or_default();
+                self.unit_records[index] = Arc::new(UnitLowerRecord { typechecked, ..UnitLowerRecord::default() });
+            }
             Some(ir_unit) => {
                 ir_unit.script_context_mut()
                     .expect("a script unit compiles to a script code unit")
@@ -2536,6 +2578,7 @@ impl<'db> ScriptCompiler<'db> {
             takes: ownership.takes.C(),
             writes: ownership.writes.C(),
             overwrites: ownership.overwrites.C(),
+            typechecked: self.unit_provides_names(typecheck.output),
             provides: self.unit_provides_names(typecheck.output),
             uses: self.unit_used_names(index, typecheck.output),
             imports: typecheck.output.imported_modules(self.db).C(),

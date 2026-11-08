@@ -2,7 +2,7 @@
 //! run.
 //!
 //! A seed makes a session with worldgen: modules, and a script cut into
-//! units. The units are entered, then changed a dozen times -- edited,
+//! units, and data files some of them require. The units are entered, then changed a dozen times -- edited,
 //! deleted, reordered, or put back after a delete -- and after every change the
 //! session must be what a new engine running its current code from the top
 //! leaves: each unit come to the same end and hold the same bindings. That is
@@ -17,6 +17,10 @@
 //! reach has been wrong about, and random changes make them rarely. Other
 //! changes set a divisor worldgen made to 0, so that a unit dividing by it
 //! returns early and the units reading what that unit binds are blocked.
+//! And some edit a module the units import from, or a data file they
+//! require: a number in it changed, or put back as generated, or, for a
+//! module, a function renamed or one that does not compile added, and for
+//! data, text of another type or text that does not parse.
 //!
 //! A unit can also take the session with it, by a runtime error or a crash,
 //! which ends the case: a fresh run must then reset too, the same way.
@@ -231,7 +235,7 @@ impl Order {
                 self.units.insert(to, name);
                 true
             }
-            Change::EditModule { .. } | Change::EditData { .. } => todo!("module and data edits"),
+            Change::EditModule { .. } | Change::EditData { .. } => true,
         }
     }
 
@@ -267,6 +271,16 @@ fn generate(seed: u64) -> Case {
 
     let mut changes = vec![Change::Enter(entries)];
     while changes.len() <= CHANGES {
+        if rng.random_range(0..10) == 0 {
+            let (path, original) = session.modules[rng.random_range(0..session.modules.len())].C();
+            changes.push(Change::EditModule { path, source: edit_module(&mut rng, &original) });
+            continue;
+        }
+        if !session.data.is_empty() && rng.random_range(0..8) == 0 {
+            let (path, original) = session.data[rng.random_range(0..session.data.len())].C();
+            changes.push(Change::EditData { path, text: edit_data(&mut rng, &original) });
+            continue;
+        }
         if rng.random_range(0..6) == 0 {
             let zeroable: Vec<(String, String)> = live.iter()
                 .filter_map(|(unit, original)| Some((unit.C(), zero_divisors(original)?)))
@@ -327,6 +341,38 @@ fn generate(seed: u64) -> Case {
     }
     assert!(Order::admits(&changes), "seed {seed} makes changes that cannot be made");
     Case { library: session.library, changes, aimed }
+}
+
+/// A generated module's source edited: a number changed, as generated, a
+/// function renamed, which its importers then do not find, or a function
+/// that does not compile added, which fails the module.
+fn edit_module(rng: &mut Pcg64, original: &str) -> String {
+    match rng.random_range(0..6) {
+        0..=1 => perturb(rng, original),
+        2 => original.S(),
+        3 => {
+            let declared: Vec<usize> = original.match_indices("fun ").map(|(at, _)| at + "fun ".len())
+                .filter(|at| original[..*at - "fun ".len()].ends_with('\n') || *at == "fun ".len())
+                .collect();
+            assert!(!declared.is_empty(), "worldgen declares a function in every module");
+            let at = declared[rng.random_range(0..declared.len())];
+            let end = original[at..].find(|c: char| !c.is_alphanumeric() && c != '_').map_or(original.len(), |len| at + len);
+            fmt!("{}_gone{}", &original[..end], &original[end..])
+        }
+        _ => fmt!("{original}\n\nfun broken(): int\n  ret \"no\"\nend fun"),
+    }
+}
+
+/// A generated data file's text edited: a number changed, as generated,
+/// text of another type, or text that does not parse.
+fn edit_data(rng: &mut Pcg64, original: &str) -> String {
+    match rng.random_range(0..5) {
+        0..=1 => perturb(rng, original),
+        2 => original.S(),
+        3 if original.trim_start().starts_with('"') => "5".S(),
+        3 => "\"text\"".S(),
+        _ => "(".S(),
+    }
 }
 
 /// Changes aimed at `access`, and which kind of [`AIMED_KINDS`] they are;
@@ -460,8 +506,12 @@ struct Tally {
     still_running: usize,
     /// Cases that ended in a unit taking the session with it.
     resets: usize,
-    /// Changes made, by kind: edits, deletes, reorders, inserts.
-    changes: [usize; 4],
+    /// Changes made, by kind; see [`CHANGE_KINDS`].
+    changes: [usize; 6],
+    /// Units a module edit, and a data edit, ran again, summed over the
+    /// edits.
+    rerun_by_module: usize,
+    rerun_by_data: usize,
     /// Of those, the aimed ones, by kind; see [`AIMED_KINDS`].
     aimed: [usize; 5],
     /// Units that had returned early, and that were blocked, when a step
@@ -473,7 +523,7 @@ struct Tally {
     uses: [usize; 5],
 }
 
-const CHANGE_KINDS: [&str; 4] = ["edits", "deletes", "reorders", "inserts"];
+const CHANGE_KINDS: [&str; 6] = ["edits", "deletes", "reorders", "inserts", "module edits", "data edits"];
 const VERBS: [&str; 5] = ["reads", "takes", "overwrites", "updates", "revives"];
 
 impl Tally {
@@ -485,6 +535,8 @@ impl Tally {
         self.resets += other.resets;
         self.returned_early += other.returned_early;
         self.blocked += other.blocked;
+        self.rerun_by_module += other.rerun_by_module;
+        self.rerun_by_data += other.rerun_by_data;
         for (sum, count) in self.changes.iter_mut().zip(other.changes) {
             *sum += count;
         }
@@ -510,6 +562,12 @@ impl Tally {
             if count == 0 {
                 shortfalls.push(fmt!("{kind}: none"));
             }
+        }
+        if self.rerun_by_module == 0 {
+            shortfalls.push("no module edit ran a unit again".S());
+        }
+        if self.rerun_by_data == 0 {
+            shortfalls.push("no data edit ran a unit again".S());
         }
         if self.returned_early == 0 {
             shortfalls.push("no unit returned early".S());
@@ -537,10 +595,10 @@ impl Tally {
             .collect();
         fmt!(
             "{} units entered, {} still run of {} after {} ({}), {} sessions reset; \
-             after a step, {} units had returned early and {} were blocked; \
+             module edits ran {} units again and data edits {}; after a step, {} units had returned early and {} were blocked; \
              as entered, units use earlier units' bindings: {}",
             self.entered, self.still_running, self.remaining, changes.join(", "), aimed.join(", "), self.resets,
-            self.returned_early, self.blocked, uses.join(", "),
+            self.rerun_by_module, self.rerun_by_data, self.returned_early, self.blocked, uses.join(", "),
         )
     }
 }
@@ -630,7 +688,14 @@ fn run(case: &Case) -> Verdict {
             Change::Delete { .. } => tally.changes[1] += 1,
             Change::Move { .. } => tally.changes[2] += 1,
             Change::Insert { .. } => tally.changes[3] += 1,
-            Change::EditModule { .. } | Change::EditData { .. } => todo!("module and data edits"),
+            Change::EditModule { .. } => {
+                tally.changes[4] += 1;
+                tally.rerun_by_module += touched.iter().filter(|(_, outcome)| outcome.ran != Ran::No).count();
+            }
+            Change::EditData { .. } => {
+                tally.changes[5] += 1;
+                tally.rerun_by_data += touched.iter().filter(|(_, outcome)| outcome.ran != Ran::No).count();
+            }
         }
         failures.extend(session.differs_from_fresh(&fmt!("step {}", number + 1)));
         if session.reset().is_some() {
@@ -732,7 +797,9 @@ fn sources(changes: &[Change]) -> Vec<SourceAt> {
     for (index, change) in changes.iter().enumerate() {
         match change {
             Change::Enter(entries) => found.extend((0..entries.len()).map(|entry| (index, Some(entry)))),
-            Change::Edit { .. } | Change::Insert { .. } => found.push((index, None)),
+            Change::Edit { .. } | Change::Insert { .. } | Change::EditModule { .. } | Change::EditData { .. } => {
+                found.push((index, None));
+            }
             _ => {}
         }
     }
@@ -744,6 +811,8 @@ fn source(changes: &mut [Change], (index, entry): SourceAt) -> &mut String {
         (Change::Enter(entries), Some(entry)) => &mut entries[entry].source,
         (Change::Edit { source, .. }, None) => source,
         (Change::Insert { entry, .. }, None) => &mut entry.source,
+        (Change::EditModule { source, .. }, None) => source,
+        (Change::EditData { text, .. }, None) => text,
         _ => unreachable!("`sources` says where the sources are"),
     }
 }

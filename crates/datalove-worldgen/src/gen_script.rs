@@ -6,24 +6,24 @@ use bct::lookup::{LookupMap, LookupSet};
 use rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, ModuleInfo, Variable, is_linear_type};
+use crate::context::{ConstDef, GenContext, ModuleInfo, Variable, is_linear_type};
 use crate::gen_stmt::gen_body_statement;
 use crate::gen_expr::{gen_bool_expr, gen_expr, gen_literal};
 use crate::gen_type::gen_type_hint_and_spelling;
 use crate::pretty::pretty_type_hint;
 
-/// Generate a script fragment that uses module functions.
-pub fn gen_script<'db, R: Rng>(
-    db: &'db dyn salsa::Database,
-    rng: &mut R,
-    config: &WorldGenConfig,
-    modules: &[ModuleInfo<'db>],
-) -> String {
-    gen_script_items(db, rng, config, modules).0.join("\n")
+/// A generated script.
+pub struct GenScript<'db> {
+    /// Its top-level items, in order.
+    pub items: Vec<String>,
+    /// The bindings its top level makes.
+    pub variables: Vec<Variable<'db>>,
+    /// The data files it requires, as `library/package/name` paths and
+    /// their text.
+    pub data: Vec<(String, String)>,
 }
 
-/// Generate a script as its top-level items, in order, and the bindings
-/// its top level makes.
+/// Generate a script as its top-level items.
 ///
 /// An item is a statement, a `require` or an `import`. Each function a
 /// statement calls is imported somewhere before that statement and after the
@@ -36,8 +36,9 @@ pub fn gen_script_items<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
     modules: &[ModuleInfo<'db>],
-) -> (Vec<String>, Vec<Variable<'db>>) {
+) -> GenScript<'db> {
     let mut ctx = GenContext::new();
+    let mut data = Vec::new();
 
     // What may be imported, and from where.
     //
@@ -97,7 +98,7 @@ pub fn gen_script_items<'db, R: Rng>(
         let access = config.binding_access_probability > 0
             && config.check_probability(rng, config.binding_access_probability);
         let stmt = match access {
-            true => gen_binding_access(db, rng, config, &mut ctx, &mut var_counter),
+            true => gen_binding_access(db, rng, config, &mut ctx, &mut var_counter, &mut data),
             false => gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, ""),
         };
         push(rng, &mut items, &mut ctx, stmt);
@@ -126,7 +127,7 @@ pub fn gen_script_items<'db, R: Rng>(
         }
     }
 
-    (items, ctx.variables)
+    GenScript { items, variables: ctx.variables, data }
 }
 
 /// A statement that makes a binding for later statements to act on, or acts
@@ -149,13 +150,16 @@ pub fn gen_script_items<'db, R: Rng>(
 ///   find it and set it to 0;
 /// - a quotient by one, `let v: int = <literal> /! dN`, which returns early
 ///   from its unit when the divisor is 0, and blocks the units that read
-///   what it binds.
+///   what it binds;
+/// - a data require, `require data local/gen/xN: <type>` of a simple type,
+///   whose file, a literal of the type, goes in `data`, for a test to edit.
 fn gen_binding_access<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
+    data: &mut Vec<(String, String)>,
 ) -> String {
     let live = |ctx: &GenContext<'db>, v: &Variable<'db>| !ctx.is_consumed(&v.name);
     let writable: Vec<Variable<'db>> = ctx.variables.iter()
@@ -175,18 +179,20 @@ fn gen_binding_access<'db, R: Rng>(
         .filter(|v| v.name.starts_with('d') && live(ctx, v))
         .cloned()
         .collect();
-    let mut kinds: Vec<u8> = vec![5, 6];
+    let mut kinds: Vec<u8> = vec![5, 6, 8];
     if !divisors.is_empty() {
         kinds.extend([7, 7]);
     }
     if !writable.is_empty() {
         kinds.extend([0, 1]);
     }
+    // Takes and revives twice: a revive needs a take of a `var` before it,
+    // which is rare enough that a run of 20 seeds can otherwise make none.
     if !takable.is_empty() {
-        kinds.push(2);
+        kinds.extend([2, 2]);
     }
     if !revivable.is_empty() {
-        kinds.push(3);
+        kinds.extend([3, 3]);
     }
     if !ctx.variables.is_empty() {
         kinds.push(4);
@@ -230,6 +236,22 @@ fn gen_binding_access<'db, R: Rng>(
             *var_counter += 1;
             ctx.variables.push(Variable { name: name.clone(), type_hint: TypeHint::Int, is_mutable: false });
             format!("let {}: int = {} /! {}", name, rng.gen_range(0..200), d.name)
+        }
+        8 => {
+            let name = format!("x{}", *var_counter);
+            *var_counter += 1;
+            let type_hint = match rng.gen_range(0..4) {
+                0 => TypeHint::Int,
+                1 => TypeHint::I64,
+                2 => TypeHint::Bool,
+                _ => TypeHint::String,
+            };
+            let ty = pretty_type_hint(db, type_hint.clone());
+            let path = format!("local/gen/{}", name);
+            data.push((path.clone(), gen_literal(db, rng, type_hint.clone(), config)));
+            // A data binding is a const, read wherever it is named.
+            ctx.consts.push(ConstDef { name, type_hint });
+            format!("require data {}: {}", path, ty)
         }
         4 => {
             let v = pick(rng, &ctx.variables.clone());

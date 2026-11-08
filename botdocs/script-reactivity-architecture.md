@@ -226,6 +226,15 @@ earlier unit's function under that name decides whether the import binds it
 or is a duplicate, so when the earlier unit drops it, this unit is reached and
 its record comes to provide the name.
 
+That makes two providers of a name, which are usually one unit: the unit the
+binding comes from at run time, by the records, and the unit the typechecker
+resolved the name to, which may have typechecked and failed later. A unit that
+resolved a name, an imported function's say, in a unit of the second kind is
+reached when that unit is: it typechecks differently once that unit does. So
+each record keeps what its typecheck provided, `typechecked`, whether or not
+the compile went on, and the forward rule follows that edge as well, where it
+leads somewhere other than the binding's provider.
+
 A module edit reaches the edited module, the modules that require it directly
 or not, and any module the edit broke or fixed. The last is what the import
 edges alone would miss: a module that leaves the compile because one it
@@ -343,7 +352,8 @@ the same. The reach uses them three ways:
 
 Nor is a unit re-derived because a unit before it that takes a binding was. If
 the take is there before the edit and after it, the binding holds nothing after
-the edit either way.
+the edit either way. Unless a reorder put the take before the unit: it ran
+first and read the binding, which now holds nothing when it runs.
 
 The records the reach reads are the units' current ones, so an edit that makes
 a unit overwrite what it used to update shrinks the reach once the unit is
@@ -488,7 +498,13 @@ the failures it can see:
   every unit a unit's code names -- external operands, external slot stores,
   cross-unit calls, its functions' bodies included -- and a unit that reads
   one whose status is not `Ran` is `Blocked`. A bare-name expression unit reads
-  its binding outside its code, so its provider counts too.
+  its binding outside its code, so its provider counts too. So does a unit
+  between that is not `Ran` and would have written a slot the unit names
+  (`IrCodeUnit::script_slots_written`), when the slot holds nothing: the unit
+  would have revived a binding given away, and the code after it was compiled
+  as if it had. One that holds a value is read as it is, the write undone.
+  The lowering half has the same shape: a `set` of a name a unit that did not
+  compile binds fails to lower as a read of one does.
 
 Blocking rather than hiding the names keeps the static view honest: the later
 unit keeps its types, and it is in the reach of the failed unit because it uses
@@ -664,6 +680,18 @@ Two more came out of later seeds: a take past a unit that typechecks and
 fails ownership, which the typecheck graph took for the provider, and an
 import that came to bind a name another unit had imported first, whose record
 never said so. Both are the corrections to the post-edit graph in section 4.
+
+Then the sessions came to require data, and to have their modules and data
+edited: a number changed, or put back, a function renamed or one that fails
+added to a module, data of another type or that does not parse. Those edits
+found nothing in the module and data paths. Changing what every seed drew
+found a reorder that put a take before a unit that read the binding, which
+the forward rule took for a take that was there all along; a unit run after
+a blocked one that would have revived what it read, which panicked reading
+nothing; a `set` of a name bound by a unit that failed ownership, which
+panicked in lowering; and a call to a function imported by such a unit, left
+running when a reorder made that unit fail to typecheck too, which the
+typecheck edge above now reaches.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit

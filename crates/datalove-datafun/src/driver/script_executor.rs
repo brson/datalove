@@ -148,6 +148,9 @@ struct UnitExports {
     bindings: Vec<(String, ExportBinding)>,
     value_types: Vec<IrType>,
     slot_types: Vec<IrType>,
+    /// The slots of earlier units it writes, by unit id and slot index; see
+    /// [`IrCodeUnit::script_slots_written`].
+    writes: BTreeSet<(u32, u32)>,
 }
 
 impl UnitExports {
@@ -158,6 +161,7 @@ impl UnitExports {
             bindings: script_ctx.exports.C(),
             value_types: ir_unit.value_types.C(),
             slot_types: ir_unit.slot_types.C(),
+            writes: ir_unit.script_slots_written(),
         }
     }
 }
@@ -474,8 +478,25 @@ impl ScriptExecutor {
     /// `at` is where the unit sits; everything it reads sits before it. A
     /// unit that is a bare name reads that binding outside its code, so the
     /// unit providing it counts too.
+    ///
+    /// **So does a unit between that did not run to its end and would have
+    /// written a slot this one names, which holds nothing.** A unit that did
+    /// not finish did not write the slot, so it holds what it held before,
+    /// which is read as it is. But if that was nothing, the unit would have
+    /// revived a binding given away, and the code after it, compiled as if
+    /// it had, has nothing to read.
     fn blockers(&self, at: usize, ir_unit: &IrCodeUnit) -> Vec<u32> {
         let mut read: BTreeSet<u32> = ir_unit.script_units_read().into_iter().collect();
+        let named = ir_unit.script_slots_named();
+        let empty = |(unit, slot): (u32, u32)| {
+            self.unit(unit).status == UnitStatus::Ran
+                && self.env.frames.external_slot(unit, datalove_datafun_ir::SlotId(slot)).is_none()
+        };
+        read.extend(self.order[..at].iter().copied().filter(|writer| {
+            let state = self.unit(*writer);
+            state.status != UnitStatus::Ran
+                && state.exports.writes.iter().any(|slot| named.contains(slot) && empty(*slot))
+        }));
         let script_ctx = ir_unit.script_context().expect("a script code unit");
         if let Some(name) = &script_ctx.result_name {
             read.extend(self.provider_before(at, name));

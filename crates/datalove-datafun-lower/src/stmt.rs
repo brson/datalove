@@ -772,6 +772,8 @@ fn lower_set_simple<'db>(
             store_external_slot(ctx, &root_name_str, unit, slot, value_id);
             Ok(())
         }
+        // Bound by an earlier unit that typechecked and did not compile.
+        None => Err(LowerError::BindingNotAvailable(root_name_str)),
         _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
     }
 }
