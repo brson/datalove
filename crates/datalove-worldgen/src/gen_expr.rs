@@ -5,7 +5,7 @@ use rmx::rand::Rng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, FunctionSig, Param, ParamMode, is_linear_type, types_match};
+use crate::context::{GenContext, FunctionSig, Param, ParamMode, Variable, is_linear_type, types_match};
 use crate::gen_type::{gen_bool_type, gen_u32_type};
 use crate::pretty::{pretty_expr, pretty_type_hint};
 
@@ -668,6 +668,15 @@ pub fn gen_function_call<'db, R: Rng>(
         spoken_for.push((i, name));
     }
 
+    // An `in` argument names none of them: a binding passed to a `mut` or
+    // `out` parameter and read again in the same call is an aliased mutable
+    // argument. They are hidden while the `in` arguments are written.
+    let mut hidden: Vec<(usize, Variable<'db>)> = Vec::new();
+    for at in (0..ctx.variables.len()).rev() {
+        if spoken_for.iter().any(|(_, name)| *name == ctx.variables[at].name) {
+            hidden.push((at, ctx.variables.remove(at)));
+        }
+    }
     let args: Vec<String> = func
         .params
         .iter()
@@ -677,6 +686,9 @@ pub fn gen_function_call<'db, R: Rng>(
             Option::None => gen_expr(db, rng, param.type_hint.C(), config, ctx),
         })
         .collect();
+    for (at, variable) in hidden.into_iter().rev() {
+        ctx.variables.insert(at, variable);
+    }
 
     ctx.called.insert(func.name.C());
     format!("{}({})", func.name, args.join(", "))

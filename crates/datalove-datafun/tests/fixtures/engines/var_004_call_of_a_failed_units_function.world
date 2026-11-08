@@ -1,0 +1,25 @@
+----------
+scriptunit-fragment
+----------
+
+// A unit that typechecks and fails ownership leaves its functions to the
+// typechecker and not to lowering. A later unit that calls one fails as one
+// that reads its bindings does.
+
+var d: int = 1
+let e: int = d
+
+----------
+scriptunit-fragment
+----------
+
+debuglog d
+fun f(): int
+  ret 2
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+let g: int = f()

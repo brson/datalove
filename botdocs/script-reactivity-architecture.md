@@ -505,7 +505,8 @@ the failures it can see:
   would have revived a binding given away, and the code after it was compiled
   as if it had. One that holds a value is read as it is, the write undone.
   The lowering half has the same shape: a `set` of a name a unit that did not
-  compile binds fails to lower as a read of one does.
+  compile binds, or a call of a function it declares, fails to lower as a
+  read of one does.
 
 Blocking rather than hiding the names keeps the static view honest: the later
 unit keeps its types, and it is in the reach of the failed unit because it uses
@@ -700,6 +701,12 @@ showed a binding looked the name up as the whole session has it, not as the
 unit finds it where it sits, and panicked when a later shadow of the name had
 been taken or had not run. And a reorder that moved a take past a revive was
 taken for a take the readers after it had already seen.
+
+Then functions declared in script units, `fun sfN`, whose bodies read consts
+and call the functions before them, and calls of them from later units and
+expression units; and a revive aimed after a take of a `var`, which the
+generated units rarely made. A call of a function declared by a unit that
+failed ownership panicked in lowering, as the `set` had.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit

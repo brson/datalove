@@ -1,0 +1,41 @@
+----------
+scriptunit-fragment 1
+----------
+
+var v2: string = ""
+
+----------
+scriptunit-fragment 2
+----------
+
+
+
+----------
+scriptunit-fragment 3
+----------
+
+if not false
+  set v2 = "hello"
+end if
+fun sf0(): string
+  ret ""
+end fun
+
+----------
+scriptunit-fragment 4
+----------
+
+let v7: string = sf0()
+
+----------
+scriptunit-insert 5 after 2
+----------
+
+
+
+----------
+scriptunit-edit 5
+----------
+
+let v10: string = v2
+

@@ -2,7 +2,8 @@
 //! run.
 //!
 //! A seed makes a session with worldgen: modules, and a script cut into
-//! units, some of them expressions, and data files some of them require. The units are entered, then changed a dozen times -- edited,
+//! units, some of them expressions or declaring functions that later units
+//! call, and data files some of them require. The units are entered, then changed a dozen times -- edited,
 //! deleted, reordered, or put back after a delete -- and after every change the
 //! session must be what a new engine running its current code from the top
 //! leaves: each unit come to the same end and hold the same bindings. That is
@@ -17,6 +18,7 @@
 //! reach has been wrong about, and random changes make them rarely. Other
 //! changes set a divisor worldgen made to 0, so that a unit dividing by it
 //! returns early and the units reading what that unit binds are blocked.
+//! Others revive a `var` a unit takes, by a unit put right after it.
 //! And some edit a module the units import from, or a data file they
 //! require: a number in it changed, or put back as generated, or, for a
 //! module, a function renamed or one that does not compile added, and for
@@ -103,12 +105,12 @@ struct Case {
     changes: Vec<Change>,
     /// How many of the changes were aimed, by kind; see [`AIMED_KINDS`].
     /// None for a session read from a file.
-    aimed: [usize; 5],
+    aimed: [usize; 6],
 }
 
-const AIMED_KINDS: [&str; 5] = [
+const AIMED_KINDS: [&str; 6] = [
     "shadows inserted", "shadows edited in", "shadows reordered in", "writers reordered above their providers",
-    "divisors zeroed",
+    "divisors zeroed", "revives inserted after a take",
 ];
 
 /// `source` with every divisor worldgen declared or set set to 0, or `None`
@@ -141,6 +143,8 @@ struct Access {
     provider: String,
     /// The binding's name.
     name: String,
+    /// What the writer does to it: takes, overwrites, updates or revives.
+    verb: String,
 }
 
 /// What each unit, entered, takes or writes of earlier units' bindings;
@@ -171,10 +175,12 @@ fn accesses(library: &str, entries: &[Entry]) -> Vec<Access> {
                         if used.starts_with("reads") {
                             continue;
                         }
-                        let (_, rest) = used.split_once('`').X();
+                        let (verb, rest) = used.split_once('`').X();
                         let (name, rest) = rest.split_once('`').X();
                         let provider = rest.trim().trim_start_matches('(').trim_end_matches(')');
-                        found.push(Access { writer: writer.C(), provider: provider.S(), name: name.S() });
+                        found.push(Access {
+                            writer: writer.C(), provider: provider.S(), name: name.S(), verb: verb.trim().S(),
+                        });
                     }
                 }
                 found
@@ -275,7 +281,7 @@ fn generate(seed: u64) -> Case {
     let mut next = entries.len() + 1;
 
     let aims = accesses(&session.library, &entries);
-    let mut aimed = [0; 5];
+    let mut aimed = [0; 6];
 
     let mut changes = vec![Change::Enter(entries)];
     while changes.len() <= CHANGES {
@@ -419,6 +425,18 @@ fn aim(
         let entry = Entry { unit, source: shadow.C(), expression: false };
         Change::Insert { entry, place: Place::After, beside: live[after].0.C() }
     };
+    // A `var` taken is revived, by a unit put right after the taker that
+    // sets it to the shadow's literal, half the time it can be: a revive
+    // needs a take before it, which the units as generated rarely have.
+    if access.verb == "takes" && shadow.starts_with("var ") && rng.random_bool(0.5) {
+        let (_, value) = shadow.split_once(" = ").X();
+        let unit = next.S();
+        *next += 1;
+        let source = fmt!("set {} = {value}", access.name);
+        live.insert(writer + 1, (unit.C(), source.C()));
+        let entry = Entry { unit, source, expression: false };
+        return Some((5, vec![Change::Insert { entry, place: Place::After, beside: access.writer.C() }]));
+    }
     let made = match rng.random_range(0..4) {
         0 => {
             let after = rng.random_range(provider..writer);
@@ -530,17 +548,21 @@ struct Tally {
     /// edits.
     rerun_by_module: usize,
     rerun_by_data: usize,
+    /// Units entered that declare a function, and that call one an earlier
+    /// unit declares.
+    functions_declared: usize,
+    functions_called: usize,
     /// Expression units entered, and how often one ran again after.
     expressions_entered: usize,
     expressions_rerun: usize,
     /// Of those, the aimed ones, by kind; see [`AIMED_KINDS`].
-    aimed: [usize; 5],
+    aimed: [usize; 6],
     /// Units that had returned early, and that were blocked, when a step
     /// ended, summed over the steps.
     returned_early: usize,
     blocked: usize,
-    /// What the units do to earlier units' bindings as they are entered, by
-    /// verb: reads, takes, overwrites, updates, revives.
+    /// What the units do to earlier units' bindings as they are entered or
+    /// inserted, by verb: reads, takes, overwrites, updates, revives.
     uses: [usize; 5],
 }
 
@@ -559,6 +581,8 @@ impl Tally {
         self.rerun_by_module += other.rerun_by_module;
         self.rerun_by_data += other.rerun_by_data;
         self.expressions_entered += other.expressions_entered;
+        self.functions_declared += other.functions_declared;
+        self.functions_called += other.functions_called;
         self.expressions_rerun += other.expressions_rerun;
         for (sum, count) in self.changes.iter_mut().zip(other.changes) {
             *sum += count;
@@ -585,6 +609,12 @@ impl Tally {
             if count == 0 {
                 shortfalls.push(fmt!("{kind}: none"));
             }
+        }
+        if self.functions_declared == 0 {
+            shortfalls.push("no unit declared a function".S());
+        }
+        if self.functions_called == 0 {
+            shortfalls.push("no unit called a function an earlier unit declared".S());
         }
         if self.expressions_entered == 0 {
             shortfalls.push("no expression unit was entered".S());
@@ -624,11 +654,11 @@ impl Tally {
             .collect();
         fmt!(
             "{} units entered, {} of them expressions, {} still run of {} after {} ({}), {} sessions reset; \
-             expression units ran again {} times; \
+             expression units ran again {} times; {} units declared functions and {} called an earlier unit's; \
              module edits ran {} units again and data edits {}; after a step, {} units had returned early and {} were blocked; \
-             as entered, units use earlier units' bindings: {}",
+             as entered or inserted, units use earlier units' bindings: {}",
             self.entered, self.expressions_entered, self.still_running, self.remaining, changes.join(", "),
-            aimed.join(", "), self.resets, self.expressions_rerun,
+            aimed.join(", "), self.resets, self.expressions_rerun, self.functions_declared, self.functions_called,
             self.rerun_by_module, self.rerun_by_data, self.returned_early, self.blocked, uses.join(", "),
         )
     }
@@ -693,6 +723,25 @@ fn check(case: &Case, timeout: Duration) -> Verdict {
     }
 }
 
+/// How many of `entries` declare a function worldgen names `sfN`, and how
+/// many call one an earlier entry declares.
+fn functions_across(entries: &[Entry]) -> (usize, usize) {
+    let mut declared: Vec<String> = Vec::new();
+    let (mut declaring, mut calling) = (0, 0);
+    for entry in entries {
+        if declared.iter().any(|name| entry.source.contains(&fmt!("{name}("))) {
+            calling += 1;
+        }
+        let names: Vec<String> = entry.source.lines()
+            .filter_map(|line| line.strip_prefix("fun sf"))
+            .map(|rest| fmt!("sf{}", rest.split('(').next().X()))
+            .collect();
+        declaring += usize::from(!names.is_empty());
+        declared.extend(names);
+    }
+    (declaring, calling)
+}
+
 fn run(case: &Case) -> Verdict {
     let workspace = Workspace::from_worldfile(&case.library);
     let mut session = Session::start(workspace.sys, workspace.descriptor, workspace.also_roots);
@@ -708,6 +757,9 @@ fn run(case: &Case) -> Verdict {
         }
         match change {
             Change::Enter(entries) => {
+                let (declared, called) = functions_across(entries);
+                tally.functions_declared += declared;
+                tally.functions_called += called;
                 expressions.extend(entries.iter().filter(|entry| entry.expression).map(|entry| entry.unit.as_str()));
                 tally.expressions_entered += entries.iter().filter(|entry| entry.expression).count();
                 tally.entered += touched.len();
@@ -730,6 +782,12 @@ fn run(case: &Case) -> Verdict {
                 tally.changes[3] += 1;
                 if entry.expression {
                     expressions.push(&entry.unit);
+                }
+                if session.reset().is_none() {
+                    for used in session.uses(session.index(&entry.unit)) {
+                        let verb = VERBS.iter().position(|verb| used.starts_with(verb)).X();
+                        tally.uses[verb] += 1;
+                    }
                 }
             }
             Change::EditModule { .. } => {
@@ -884,7 +942,7 @@ fn corpus() -> Vec<(String, Case)> {
         .map(|path| {
             let name = path.file_name().X().to_string_lossy().S();
             let (library, changes) = read_changes(&name, &std::fs::read_to_string(&path).X());
-            (name, Case { library, changes, aimed: [0; 5] })
+            (name, Case { library, changes, aimed: [0; 6] })
         })
         .collect()
 }
@@ -904,7 +962,7 @@ fn main() {
     if let Ok(path) = std::env::var("GENERATIVE_REACTIVE_WORLD") {
         let text = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
         let (library, changes) = read_changes(&path, &text);
-        let verdict = check(&Case { library, changes, aimed: [0; 5] }, SEED_TIMEOUT);
+        let verdict = check(&Case { library, changes, aimed: [0; 6] }, SEED_TIMEOUT);
         println!("{path}: {}", verdict.describe());
         if let Verdict::Agrees(tally) = &verdict && !tally.failed_on_entry.is_empty() {
             println!("units that do not compile when entered: {}", tally.failed_on_entry.join(", "));

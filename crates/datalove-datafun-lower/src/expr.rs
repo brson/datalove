@@ -519,7 +519,7 @@ pub fn lower_expression<'db>(
             let expr_temp_mark = ctx.expr_temps_mark();
 
             // Resolve function reference using typechecker's resolved call target.
-            let func_ref = ctx.resolve_call(expr, call);
+            let func_ref = ctx.resolve_call(expr, call)?;
 
             // Get param modes and types from the resolved call target.
             let target = ctx.call_targets.and_then(|t| t.get_call(expr, call));

@@ -6,9 +6,10 @@ use bct::lookup::{LookupMap, LookupSet};
 use rmx::rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
-use crate::context::{ConstDef, GenContext, ModuleInfo, Variable, is_linear_type};
+use crate::context::{ConstDef, FunctionSig, GenContext, ModuleInfo, Variable, is_linear_type};
+use crate::gen_function::{gen_function, gen_function_signature};
 use crate::gen_stmt::gen_body_statement;
-use crate::gen_expr::{gen_bool_expr, gen_expr, gen_literal};
+use crate::gen_expr::{can_call, gen_bool_expr, gen_expr, gen_function_call, gen_literal};
 use crate::gen_type::gen_type_hint_and_spelling;
 use crate::pretty::pretty_type_hint;
 
@@ -76,8 +77,10 @@ pub fn gen_script_items<'db, R: Rng>(
     let mut imported: LookupSet<String> = LookupSet::default();
     let fragment = |text: String| ScriptItem { text, expression: false };
     let mut push = |rng: &mut R, items: &mut Vec<ScriptItem>, ctx: &mut GenContext<'db>, item: ScriptItem| {
+        // A module's function, not yet imported; a function the script
+        // declares is called by name.
         let mut called: Vec<String> = ctx.called.drain_unordered()
-            .filter(|name| !imported.contains(name))
+            .filter(|name| sources.contains_key(name) && !imported.contains(name))
             .collect();
         // In the order they were first called would be as good, but a set
         // has no order, and the output has to follow from the seed.
@@ -149,8 +152,10 @@ pub fn gen_script_items<'db, R: Rng>(
 
 /// An expression unit's code: the name of a live binding, which the unit
 /// shows, read outside its code, a const's name cloned, since a const is
-/// borrowed wherever it is named and the unit's value is moved out, or an
-/// expression of a simple type, which may read some.
+/// borrowed wherever it is named and the unit's value is moved out, a call
+/// of a function the script declared, which an expression unit, a unit of
+/// its own, always makes from another unit, or an expression of a simple
+/// type, which may read some.
 fn gen_expression_unit<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -164,6 +169,14 @@ fn gen_expression_unit<'db, R: Rng>(
         .collect();
     if !named.is_empty() && rng.random_bool(0.5) {
         return named[rng.random_range(0..named.len())].C();
+    }
+    let callable: Vec<FunctionSig<'db>> = ctx.functions.iter()
+        .filter(|func| func.return_type.is_some() && can_call(db, func, ctx))
+        .cloned()
+        .collect();
+    if !callable.is_empty() && rng.random_bool(0.5) {
+        let func = &callable[rng.random_range(0..callable.len())];
+        return gen_function_call(db, rng, func, config, ctx);
     }
     let type_hint = match rng.random_range(0..3) {
         0 => TypeHint::Int,
@@ -196,6 +209,9 @@ fn gen_expression_unit<'db, R: Rng>(
 ///   what it binds;
 /// - a read of such a quotient, `let v: int = q + <literal>`, which a unit
 ///   of its own is blocked by when the quotient's unit returns early;
+/// - a function, `fun sfN(...)`, whose body may read consts and call the
+///   functions declared before it, and a call of one, which a later unit
+///   compiles against;
 /// - a data require, `require data local/gen/xN: <type>` of a simple type,
 ///   whose file, a literal of the type, goes in `data`, for a test to edit.
 fn gen_binding_access<'db, R: Rng>(
@@ -236,16 +252,25 @@ fn gen_binding_access<'db, R: Rng>(
     if !writable.is_empty() {
         kinds.extend([0, 1]);
     }
-    // Takes and revives twice: a revive needs a take of a `var` before it,
-    // which is rare enough that a run of 20 seeds can otherwise make none.
+    // Takes twice and revives three times, and a take is of a `var` half
+    // the time it can be: a revive needs a take of a `var` before it, which
+    // is rare enough that a run of 20 seeds can otherwise make none.
     if !takable.is_empty() {
         kinds.extend([2, 2]);
     }
     if !revivable.is_empty() {
-        kinds.extend([3, 3]);
+        kinds.extend([3, 3, 3]);
     }
     if !ctx.variables.is_empty() {
         kinds.push(4);
+    }
+    kinds.extend([10, 10]);
+    let callable: Vec<FunctionSig<'db>> = ctx.functions.iter()
+        .filter(|func| can_call(db, func, ctx))
+        .cloned()
+        .collect();
+    if !callable.is_empty() {
+        kinds.extend([11, 11, 11]);
     }
     let pick = |rng: &mut R, from: &[Variable<'db>]| from[rng.random_range(0..from.len())].C();
 
@@ -261,7 +286,11 @@ fn gen_binding_access<'db, R: Rng>(
             format!("if {}\n  set {} = {}\nend if", condition, v.name, value)
         }
         2 => {
-            let v = pick(rng, &takable);
+            let vars: Vec<Variable<'db>> = takable.iter().filter(|v| v.is_mutable).cloned().collect();
+            let v = match !vars.is_empty() && rng.random_bool(0.5) {
+                true => pick(rng, &vars),
+                false => pick(rng, &takable),
+            };
             let name = format!("v{}", *var_counter);
             *var_counter += 1;
             let ty = pretty_type_hint(db, v.type_hint.C());
@@ -310,6 +339,34 @@ fn gen_binding_access<'db, R: Rng>(
             // A data binding is a const, read wherever it is named.
             ctx.consts.push(ConstDef { name, type_hint });
             format!("require data {}: {}", path, ty)
+        }
+        10 => {
+            // Its body may name the consts so far and call the functions the
+            // script declared so far, not a module's, whose import the body
+            // would not bring along. Not the script's own consts, `CN`: the
+            // body numbers its consts from `C0`, which would shadow them.
+            let name = format!("sf{}", ctx.functions.len());
+            let sig = gen_function_signature(db, rng, &name, config);
+            let mut scope = GenContext::new();
+            scope.consts = ctx.consts.iter().filter(|c| !c.name.starts_with('C')).cloned().collect();
+            scope.functions = ctx.functions.C();
+            let source = gen_function(db, rng, &sig, config, &scope);
+            ctx.functions.push(sig);
+            source
+        }
+        11 => {
+            let func = callable[rng.random_range(0..callable.len())].C();
+            let call = gen_function_call(db, rng, &func, config, ctx);
+            match func.return_type {
+                Some(ret) => {
+                    let name = format!("v{}", *var_counter);
+                    *var_counter += 1;
+                    let ty = pretty_type_hint(db, ret.C());
+                    ctx.variables.push(Variable { name: name.C(), type_hint: ret, is_mutable: false });
+                    format!("let {}: {} = {}", name, ty, call)
+                }
+                None => format!("call {}", call),
+            }
         }
         4 => {
             let v = pick(rng, &ctx.variables.C());

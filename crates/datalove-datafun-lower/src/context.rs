@@ -467,8 +467,11 @@ impl<'db> LowerCtx<'db> {
     /// then maps it to an IR code reference.
     ///
     /// For module functions (module_id = Some), looks up in `func_id_map`.
-    /// For local functions (module_id = None), uses `func_scope` lookup.
-    pub fn resolve_call(&self, expr: ExprFun<'db>, call: &ExprFunctionCall<'db>) -> CodeRef {
+    /// For local functions (module_id = None), uses `func_scope` lookup. One
+    /// the typechecker found and that lookup does not is an earlier script
+    /// unit's that typechecked and did not compile, which is an error for
+    /// the unit lowered, as a binding of one is.
+    pub fn resolve_call(&self, expr: ExprFun<'db>, call: &ExprFunctionCall<'db>) -> Result<CodeRef, crate::LowerError> {
         let key = ExprKey::of_call(expr, call);
         let func_name = call.name.text(self.db).S();
 
@@ -489,16 +492,12 @@ impl<'db> LowerCtx<'db> {
                         "module function not in func_id_map: {}",
                         resolved_func_name
                     ));
-                CodeRef::Module { module: ir_mod, id: CodeUnitId(func_id.0) }
+                Ok(CodeRef::Module { module: ir_mod, id: CodeUnitId(func_id.0) })
             }
             None => {
-                // Local function resolved by typechecker - use func_scope lookup.
                 let resolved_func_name = target.func().name.text(self.db).S();
                 self.lookup_func(&resolved_func_name)
-                    .unwrap_or_else(|| panic!(
-                        "local function '{}' not found - typechecker should catch this",
-                        resolved_func_name
-                    ))
+                    .ok_or(crate::LowerError::BindingNotAvailable(resolved_func_name))
             }
         }
     }
