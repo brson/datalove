@@ -1,5 +1,6 @@
 //! List indexing instruction compilation.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, BlockArg, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -78,7 +79,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let list_ty = self.get_operand_type(list)?;
         let elem_ty = match &list_ty {
-            IrType::List(e) => e.as_ref().clone(),
+            IrType::List(e) => e.as_ref().C(),
             _ => return Err(CraneliftError::Codegen(format!(
                 "ListGet on non-list type: {:?}", list_ty
             ))),
@@ -285,7 +286,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let list_ty = self.get_operand_type(list)?;
         let elem_ty = match &list_ty {
-            IrType::List(e) => e.as_ref().clone(),
+            IrType::List(e) => e.as_ref().C(),
             _ => return Err(CraneliftError::Codegen(format!(
                 "ListElementRef on non-list type: {:?}", list_ty
             ))),

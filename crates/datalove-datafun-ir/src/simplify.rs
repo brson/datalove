@@ -28,6 +28,7 @@
 //! Then the blocks are put in reverse postorder and those nothing reaches are
 //! dropped. Dead instructions are dead code elimination's.
 
+use rmx::prelude::*;
 use crate::dense::{ValueMap, ValueSet};
 
 use crate::params::{map_operands_in_instruction, map_operands_in_terminator};
@@ -87,11 +88,11 @@ fn substitute(unit: &mut IrCodeUnit, subst: &ValueMap<Operand>) {
         return;
     }
     let resolve = |op: &Operand| -> Operand {
-        let mut op = op.clone();
+        let mut op = op.C();
         loop {
             match &op {
                 Operand::Value(v) | Operand::ValueRef(v) if subst.contains_key(v) => {
-                    let to = subst[v].clone();
+                    let to = subst[v].C();
                     op = match (&op, to) {
                         (Operand::ValueRef(_), Operand::Value(x)) => Operand::ValueRef(x),
                         (Operand::ValueRef(_), other) => unreachable!("a reference through {other:?}"),
@@ -127,7 +128,7 @@ fn forward_copies(unit: &mut IrCodeUnit) -> bool {
                 && unchanging(unit, src)
                 && (matches!(src, Operand::Value(_)) || !named.contains(dest))
             {
-                subst.insert(*dest, src.clone());
+                subst.insert(*dest, src.C());
             }
         }
     }
@@ -196,8 +197,8 @@ fn substitute_block_params(unit: &mut IrCodeUnit) -> bool {
         else {
             continue;
         };
-        let params = unit.blocks[b].params.clone();
-        let mut terminator = unit.blocks[from].terminator.clone();
+        let params = unit.blocks[b].params.C();
+        let mut terminator = unit.blocks[from].terminator.C();
         let Some(args) = edge_args_mut(&mut terminator, target) else { continue };
         let ok = args.iter().zip(&params).all(|(arg, param)| {
             unchanging(unit, arg) && (matches!(arg, Operand::Value(_)) || !named.contains(param))
@@ -382,7 +383,7 @@ fn thread_known_unwraps(unit: &mut IrCodeUnit) -> bool {
             if (p != 0 && preds[p] == 0) || !pred.terminator.successors().contains(&target) {
                 continue;
             }
-            let mut terminator = pred.terminator.clone();
+            let mut terminator = pred.terminator.C();
             let built = edge_args_mut(&mut terminator, target)
                 .and_then(|args| match args.as_slice() {
                     [Operand::Value(w)] if uses.get(w).copied().unwrap_or(0) == 1 => defs.get(w).copied(),
@@ -421,7 +422,7 @@ fn thread_known_unwraps(unit: &mut IrCodeUnit) -> bool {
                     retarget_edge(&mut unit.blocks[*p].terminator, target, to, Vec::new());
                 }
                 (Some(dest), many) => {
-                    let ty = unit.value_types[dest.0 as usize].clone();
+                    let ty = unit.value_types[dest.0 as usize].C();
                     let param = ValueId(unit.value_count);
                     unit.value_count += 1;
                     unit.value_types.push(ty);
@@ -453,10 +454,10 @@ fn thread_known_unwraps(unit: &mut IrCodeUnit) -> bool {
 
 /// Point the edge of `term` to `from` at `to`, passing `args`.
 fn retarget_edge(term: &mut Terminator, from: BlockId, to: BlockId, args: Vec<Operand>) {
-    *term = match term.clone() {
+    *term = match term.C() {
         Terminator::Goto { .. } => Terminator::Goto { target: to, args },
         Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
-            let (t, then_args) = if then_block == from { (to, args.clone()) } else { (then_block, then_args) };
+            let (t, then_args) = if then_block == from { (to, args.C()) } else { (then_block, then_args) };
             let (e, else_args) = if else_block == from { (to, args) } else { (else_block, else_args) };
             Terminator::Branch { cond, then_block: t, then_args, else_block: e, else_args }
         }
@@ -594,7 +595,7 @@ mod tests {
         param_types.extend([IrType::Bool, IrType::Bool]);
         IrCodeUnit {
             id: CodeUnitId(0),
-            name: "f".to_string(),
+            name: "f".S(),
             blocks,
             value_count,
             slot_count: 0,

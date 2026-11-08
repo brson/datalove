@@ -131,13 +131,13 @@ pub fn analyze_module<'db>(
                     func_name,
                     format_analysis_errors(&analysis.errors),
                 );
-                all_errors.push(formatted.clone());
+                all_errors.push(formatted.C());
                 (None, vec![formatted])
             };
 
             let single_analysis = SingleFunctionAnalysis::new(
                 db,
-                func_name.clone(),
+                func_name.C(),
                 opt_analysis,
                 errors,
             );

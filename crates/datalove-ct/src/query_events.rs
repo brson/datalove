@@ -64,7 +64,7 @@ impl QueryRecorder {
 
     /// The event handler to give `salsa::Storage::new`.
     pub fn callback(&self) -> Box<dyn Fn(salsa::Event) + Send + Sync> {
-        let executed = self.executed.clone();
+        let executed = self.executed.C();
         Box::new(move |event| {
             let salsa::EventKind::WillExecute { database_key } = event.kind else {
                 return;
@@ -73,7 +73,7 @@ impl QueryRecorder {
             // how to name itself. It renders as `query_name(Id(3))`; the id is
             // available on its own, so only the name is taken from the text.
             let rendered = format!("{database_key:?}");
-            let query = rendered.split('(').next().unwrap_or(&rendered).to_string();
+            let query = rendered.split('(').next().unwrap_or(&rendered).S();
             let on_worker = rmx::rayon::current_thread_index().is_some();
             let compiling = COMPILING.get();
             executed.lock().X().push(ExecutedQuery { query, key: database_key.key_index(), on_worker, compiling });
@@ -92,7 +92,7 @@ impl QueryRecorder {
 
     /// What has been recorded, without disturbing it.
     pub fn snapshot(&self) -> Vec<ExecutedQuery> {
-        self.executed.lock().X().clone()
+        self.executed.lock().X().C()
     }
 }
 

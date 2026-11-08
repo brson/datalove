@@ -2,6 +2,7 @@
 //!
 //! Provides TypeContext for tracking errors during typechecking.
 
+use rmx::prelude::*;
 use datalove_diagnostic_codes::TCode;
 use bct::text::{InternedText, TextSpan};
 use bct::diagnostic::DiagnosticBuilder;
@@ -38,7 +39,7 @@ impl<'db> TypeContext<'db> {
     pub fn convert_hint(&self, expr: &ExprFull<'db>, hint: &TypeHint<'db>) -> Result<Type<'db>, TypeError> {
         convert_type_hint(self.db, hint).map_err(|error| {
             if let Some(ts) = self.get_span(expr) {
-                if let Some(builder) = rec_diagnostic(self.db, &error, ts.clone()) {
+                if let Some(builder) = rec_diagnostic(self.db, &error, ts.C()) {
                     builder.emit_type();
                     return error;
                 }

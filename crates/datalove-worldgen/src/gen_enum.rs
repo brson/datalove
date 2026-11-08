@@ -9,6 +9,7 @@
 //! -- because what the match has to get right is the discriminant and the
 //! payload it names, not how elaborate the payload is.
 
+use rmx::prelude::*;
 use rand::Rng;
 
 use datalove_datalit::ast::TypeHint;
@@ -59,7 +60,7 @@ pub fn format_enum<'db>(db: &'db dyn salsa::Database, def: &EnumDef<'db>) -> Str
         .variants
         .iter()
         .map(|v| match &v.payload {
-            Some(ty) => format!("term {} {}", v.name, pretty_type_hint(db, ty.clone())),
+            Some(ty) => format!("term {} {}", v.name, pretty_type_hint(db, ty.C())),
             Option::None => format!("atom {}", v.name),
         })
         .collect();
@@ -95,12 +96,12 @@ pub fn gen_enum_value<'db, R: Rng>(
         Some(ty) => {
             let name = format!("a{}", *var_counter);
             *var_counter += 1;
-            let value = gen_expr(db, rng, ty.clone(), config, ctx);
+            let value = gen_expr(db, rng, ty.C(), config, ctx);
             let bind = format!(
                 "{}let {}: {} = {}",
                 indent,
                 name,
-                pretty_type_hint(db, ty.clone()),
+                pretty_type_hint(db, ty.C()),
                 value
             );
             let written = if as_literal {
@@ -142,10 +143,10 @@ pub fn gen_bare_variant_let<'db, R: Rng>(
     let variant = &def.variants[rng.gen_range(0..def.variants.len())];
     match &variant.payload {
         Some(ty) => {
-            let written = pretty_type_hint(db, ty.clone());
+            let written = pretty_type_hint(db, ty.C());
             let name = format!("a{}", *var_counter);
             *var_counter += 1;
-            let value = gen_expr(db, rng, ty.clone(), config, ctx);
+            let value = gen_expr(db, rng, ty.C(), config, ctx);
             let bind = format!("{}let {}: {} = {}", indent, name, written, value);
             (
                 vec![bind],
@@ -183,7 +184,7 @@ pub fn gen_match<'db, R: Rng>(
                 .enums
                 .iter()
                 .find(|e| e.name.as_str() == name.name.text(db))
-                .map(|e| (v.name.clone(), e.clone())),
+                .map(|e| (v.name.C(), e.C())),
             _ => Option::None,
         })
         .collect();
@@ -192,7 +193,7 @@ pub fn gen_match<'db, R: Rng>(
         return Option::None;
     }
 
-    let (scrutinee, def) = candidates[rng.gen_range(0..candidates.len())].clone();
+    let (scrutinee, def) = candidates[rng.gen_range(0..candidates.len())].C();
     ctx.consume_variable(&scrutinee);
 
     let mut lines = vec![format!("{}match {}", indent, scrutinee)];
@@ -201,14 +202,14 @@ pub fn gen_match<'db, R: Rng>(
     // An arm is a branch, and a branch may not move what was declared outside
     // it -- moving in one and not another is refused. The same rule an `if`
     // keeps, kept the same way.
-    let saved_variables = ctx.variables.clone();
-    let saved_consumed = ctx.consumed_variables.clone();
-    let saved_protected = ctx.loop_protected_variables.clone();
+    let saved_variables = ctx.variables.C();
+    let saved_consumed = ctx.consumed_variables.C();
+    let saved_protected = ctx.loop_protected_variables.C();
     let outer_linear: Vec<String> = ctx
         .variables
         .iter()
         .filter(|v| crate::context::is_linear_type(&v.type_hint))
-        .map(|v| v.name.clone())
+        .map(|v| v.name.C())
         .collect();
     for name in &outer_linear {
         ctx.loop_protect_variable(name);
@@ -227,8 +228,8 @@ pub fn gen_match<'db, R: Rng>(
     };
 
     for variant in def.variants.iter().take(covered) {
-        let branch_variables = ctx.variables.clone();
-        let branch_consumed = ctx.consumed_variables.clone();
+        let branch_variables = ctx.variables.C();
+        let branch_consumed = ctx.consumed_variables.C();
 
         match &variant.payload {
             Some(ty) => {
@@ -237,7 +238,7 @@ pub fn gen_match<'db, R: Rng>(
                 lines.push(format!("{}case term {} {}", indent, variant.name, bound));
                 ctx.variables.push(Variable {
                     name: bound,
-                    type_hint: ty.clone(),
+                    type_hint: ty.C(),
                     is_mutable: false,
                 });
             }

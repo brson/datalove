@@ -7,6 +7,7 @@
 //! descriptors it points to, and the emitter is shared by every function
 //! compiled into a module so that each is emitted once.
 
+use rmx::prelude::*;
 use bct::lookup::LookupMap;
 use std::mem::{align_of, offset_of, size_of};
 
@@ -246,7 +247,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define tydesc data: {}", e)))?;
 
-        self.tydescs.insert(ty.clone(), data_id);
+        self.tydescs.insert(ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -281,13 +282,13 @@ impl TyDescEmitter {
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
             .map_err(|e| CraneliftError::Module(format!("declare rec tydesc: {}", e)))?;
-        self.tydescs.insert(ty.clone(), data_id);
+        self.tydescs.insert(ty.C(), data_id);
         let unfolded = ty.exposed().into_owned();
         // A descriptor of the unfolding made before this one is set aside, so
         // that one is made into the reserved data, and put back after: the
         // two are alike, and what already points at the first may go on.
         let earlier = self.tydescs.remove(&unfolded);
-        self.reserved.insert(unfolded.clone(), data_id);
+        self.reserved.insert(unfolded.C(), data_id);
         let defined = self.emit(module, &unfolded)?;
         assert_eq!(defined, data_id, "the unfolding's descriptor is defined into the reserved data");
         if let Some(earlier) = earlier {
@@ -302,7 +303,7 @@ impl TyDescEmitter {
         module: &mut M,
         elem_ty: &IrType,
     ) -> Result<DataId, CraneliftError> {
-        let list_ty = IrType::List(Box::new(elem_ty.clone()));
+        let list_ty = IrType::List(Box::new(elem_ty.C()));
 
         // Check cache (may have been emitted during recursive call).
         if let Some(&id) = self.tydescs.get(&list_ty) {
@@ -355,7 +356,7 @@ impl TyDescEmitter {
         module: &mut M,
         elem_ty: &IrType,
     ) -> Result<DataId, CraneliftError> {
-        let set_ty = IrType::Set(Box::new(elem_ty.clone()));
+        let set_ty = IrType::Set(Box::new(elem_ty.C()));
 
         // Check cache.
         if let Some(&id) = self.tydescs.get(&set_ty) {
@@ -410,7 +411,7 @@ impl TyDescEmitter {
         key_ty: &IrType,
         val_ty: &IrType,
     ) -> Result<DataId, CraneliftError> {
-        let map_ty = IrType::Map(Box::new(key_ty.clone()), Box::new(val_ty.clone()));
+        let map_ty = IrType::Map(Box::new(key_ty.C()), Box::new(val_ty.C()));
 
         // Check cache.
         if let Some(&id) = self.tydescs.get(&map_ty) {
@@ -471,7 +472,7 @@ impl TyDescEmitter {
         elem_ty: &IrType,
         rank: u32,
     ) -> Result<DataId, CraneliftError> {
-        let tensor_ty = IrType::Tensor(Box::new(elem_ty.clone()), rank);
+        let tensor_ty = IrType::Tensor(Box::new(elem_ty.C()), rank);
 
         // Check cache.
         if let Some(&id) = self.tydescs.get(&tensor_ty) {
@@ -528,7 +529,7 @@ impl TyDescEmitter {
         module: &mut M,
         inner_ty: &IrType,
     ) -> Result<DataId, CraneliftError> {
-        let option_ty = IrType::Option(Box::new(inner_ty.clone()));
+        let option_ty = IrType::Option(Box::new(inner_ty.C()));
 
         // Check cache.
         if let Some(&id) = self.tydescs.get(&option_ty) {
@@ -582,7 +583,7 @@ impl TyDescEmitter {
         module: &mut M,
         ok_ty: &IrType,
     ) -> Result<DataId, CraneliftError> {
-        let result_ty = IrType::Result(Box::new(ok_ty.clone()));
+        let result_ty = IrType::Result(Box::new(ok_ty.C()));
 
         // Check cache.
         if let Some(&id) = self.tydescs.get(&result_ty) {
@@ -712,7 +713,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define ref tydesc: {}", e)))?;
 
-        self.tydescs.insert(ref_ty.clone(), data_id);
+        self.tydescs.insert(ref_ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -834,7 +835,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define tuple tydesc: {}", e)))?;
 
-        self.tydescs.insert(original_ty.clone(), data_id);
+        self.tydescs.insert(original_ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -859,7 +860,7 @@ impl TyDescEmitter {
 
         // Compute struct layout (size, align, field offsets).
         let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
-        let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
+        let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.C()).collect();
         let field_offsets = if original_ty.is_dynamic() {
             vec![0; field_types.len()]
         } else {
@@ -984,7 +985,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define struct tydesc: {}", e)))?;
 
-        self.tydescs.insert(original_ty.clone(), data_id);
+        self.tydescs.insert(original_ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -1140,7 +1141,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define enum tydesc: {}", e)))?;
 
-        self.tydescs.insert(original_ty.clone(), data_id);
+        self.tydescs.insert(original_ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -1199,7 +1200,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define atom tydesc: {}", e)))?;
 
-        self.tydescs.insert(original_ty.clone(), data_id);
+        self.tydescs.insert(original_ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -1268,7 +1269,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define term tydesc: {}", e)))?;
 
-        self.tydescs.insert(original_ty.clone(), data_id);
+        self.tydescs.insert(original_ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -1296,7 +1297,7 @@ impl TyDescEmitter {
         // from rows. A table whose rows are written out has one already, from
         // the row values themselves, but an empty table mentions the tuple
         // nowhere else and could not be built at all without this.
-        let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).clone()).collect());
+        let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).C()).collect());
         self.emit(module, &row_ty)?;
 
         // Create the columns array as a separate data object.
@@ -1413,7 +1414,7 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| CraneliftError::Module(format!("define table tydesc: {}", e)))?;
 
-        self.tydescs.insert(original_ty.clone(), data_id);
+        self.tydescs.insert(original_ty.C(), data_id);
         Ok(data_id)
     }
 
@@ -1480,19 +1481,19 @@ mod tests {
 
     fn create_test_module() -> ObjectModule {
         let mut settings_builder = settings::builder();
-        settings_builder.set("opt_level", "speed").unwrap();
+        settings_builder.set("opt_level", "speed").X();
         let flags = settings::Flags::new(settings_builder);
 
         let isa = isa::lookup(Triple::host())
-            .unwrap()
+            .X()
             .finish(flags)
-            .unwrap();
+            .X();
 
         let obj_builder = ObjectBuilder::new(
             isa,
             "test",
             cranelift_module::default_libcall_names(),
-        ).unwrap();
+        ).X();
 
         ObjectModule::new(obj_builder)
     }
@@ -1523,8 +1524,8 @@ mod tests {
         let mut emitter = TyDescEmitter::new();
 
         // Emit same type twice.
-        let id1 = emitter.emit(&mut module, &IrType::I32).unwrap();
-        let id2 = emitter.emit(&mut module, &IrType::I32).unwrap();
+        let id1 = emitter.emit(&mut module, &IrType::I32).X();
+        let id2 = emitter.emit(&mut module, &IrType::I32).X();
 
         // Should return same DataId.
         assert_eq!(id1, id2);
@@ -1535,7 +1536,7 @@ mod tests {
         let emitter = TyDescEmitter::new();
 
         // Check I32 layout.
-        let bytes = emitter.build_tydesc_bytes(&IrType::I32).unwrap();
+        let bytes = emitter.build_tydesc_bytes(&IrType::I32).X();
         assert_eq!(bytes.len(), TYDESC_SIZE);
         assert_eq!(bytes[OFFSET_TYPE_TAG], TyTag::I32 as u8);
 

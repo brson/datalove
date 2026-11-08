@@ -8,6 +8,7 @@
 //! 1. Caller uses `lower_const_binding` to lower a const expression to IR
 //! 2. Caller passes the IR to `evaluate_prepared_const` in the const crate
 
+use rmx::prelude::*;
 use std::sync::Arc;
 use bct::lookup::LookupMap;
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
@@ -54,7 +55,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     ctx.arena = Some(expr.arena());
 
     // Pre-populate const bindings from previously resolved values.
-    ctx.const_bindings = resolved_consts.clone();
+    ctx.const_bindings = resolved_consts.C();
 
     // Set return type for early-return operators (? and !).
     ctx.return_type = return_type;
@@ -104,7 +105,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         }
         if let Some(unit) = lowered_functions.iter().find(|f| f.id.0 == func_id.0) {
             pending.extend(local_calls(&unit.blocks));
-            nested_units.push((**unit).clone());
+            nested_units.push((**unit).C());
         }
     }
     nested_units.sort_by_key(|unit| unit.id.0);
@@ -169,7 +170,7 @@ pub fn lower_const_binding<'db>(
         if place.steps.is_empty() {
             let name_str = place.root.text(db);
             if let Some((_, value)) = resolved_consts.get(name_str) {
-                return Ok((None, Some(value.clone())));
+                return Ok((None, Some(value.C())));
             }
         }
     }

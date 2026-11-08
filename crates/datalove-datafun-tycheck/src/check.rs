@@ -114,7 +114,7 @@ fn check_unhinted<'db>(
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
                     // Check payload against inner type.
-                    let expected_inner = Type::Datalit(*opt.inner_type.clone());
+                    let expected_inner = Type::Datalit(*opt.inner_type.C());
                     check_expr(ctx, ctx.expr(some_expr.payload), &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
@@ -131,7 +131,7 @@ fn check_unhinted<'db>(
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Result(res)) => {
                     // Check payload against inner type.
-                    let expected_inner = Type::Datalit(*res.inner_type.clone());
+                    let expected_inner = Type::Datalit(*res.inner_type.C());
                     check_expr(ctx, ctx.expr(ok_expr.payload), &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
@@ -502,7 +502,7 @@ fn check_unhinted<'db>(
                 Type::Datalit(datalit::tycheck::Type::Term(expected_term)) => {
                     if term_expr.name == expected_term.name {
                         // Check payload against expected payload type.
-                        let expected_payload = Type::Datalit(*expected_term.payload.clone());
+                        let expected_payload = Type::Datalit(*expected_term.payload.C());
                         check_expr(ctx, ctx.expr(term_expr.payload), &expected_payload)?;
                         ctx.store_expr_type(expr, expected);
                         Ok(())
@@ -519,7 +519,7 @@ fn check_unhinted<'db>(
                         Some(v) => {
                             match &v.payload {
                                 Some(payload_ty) => {
-                                    let expected_payload = Type::Datalit(*payload_ty.clone());
+                                    let expected_payload = Type::Datalit(*payload_ty.C());
                                     check_expr(ctx, ctx.expr(term_expr.payload), &expected_payload)?;
                                     ctx.store_expr_type(expr, expected);
                                     Ok(())
@@ -628,7 +628,7 @@ pub fn check_list_elements<'db>(
     // Callers ensure expected_ty is a List type before calling.
     let expected_elem_ty = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::List(list_ty)) => {
-            Type::Datalit((*list_ty.element_type).clone())
+            Type::Datalit((*list_ty.element_type).C())
         }
         _ => unreachable!("check_list_elements called with non-list type"),
     };
@@ -655,7 +655,7 @@ pub fn check_set_elements<'db>(
     // Callers ensure expected_ty is a Set type before calling.
     let expected_elem_ty = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => {
-            Type::Datalit((*set_ty.element_type).clone())
+            Type::Datalit((*set_ty.element_type).C())
         }
         _ => unreachable!("check_set_elements called with non-set type"),
     };
@@ -683,8 +683,8 @@ pub fn check_map_entries<'db>(
     let (expected_key_ty, expected_value_ty) = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::Map(map_ty)) => {
             (
-                Type::Datalit((*map_ty.key_type).clone()),
-                Type::Datalit((*map_ty.value_type).clone()),
+                Type::Datalit((*map_ty.key_type).C()),
+                Type::Datalit((*map_ty.value_type).C()),
             )
         }
         _ => unreachable!("check_map_entries called with non-map type"),
@@ -715,7 +715,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     // Callers ensure expected_ty is a Tensor type before calling.
     let (elem_type, expected_rank) = match &inner_ty {
         Type::Datalit(datalit::tycheck::Type::Tensor(tensor_ty)) => {
-            (tensor_ty.element_type.clone(), tensor_ty.rank)
+            (tensor_ty.element_type.C(), tensor_ty.rank)
         }
         _ => unreachable!("check_tensor_shape_and_elements called with non-tensor type"),
     };
@@ -786,7 +786,7 @@ pub fn check_tuple_elements<'db>(
 
     // Check each element against expected field type using bidirectional checking.
     for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-        let expected_elem_ty = Type::Datalit(expected_field.clone(),
+        let expected_elem_ty = Type::Datalit(expected_field.C(),
         );
         let elem = ctx.expr(*elem);
         check_expr(ctx, elem, &expected_elem_ty)?;
@@ -840,7 +840,7 @@ pub fn check_struct_fields<'db>(
             ));
         }
 
-        let expected_field_ty = Type::Datalit(*expected_field.ty.clone());
+        let expected_field_ty = Type::Datalit(*expected_field.ty.C());
         check_expr(ctx, ctx.expr(field.value), &expected_field_ty)?;
     }
 
@@ -860,7 +860,7 @@ pub fn check_table_rows<'db>(
     let expected_columns = &table_ty.columns;
 
     // Validate column count matches.
-    let ty = || type_to_string(db, &Type::Datalit(datalit::tycheck::Type::Table(table_ty.clone())));
+    let ty = || type_to_string(db, &Type::Datalit(datalit::tycheck::Type::Table(table_ty.C())));
     if header.len() != expected_columns.len() {
         return Err(shape_error(
             ctx, expr, TCode::TableColumnCount,
@@ -894,7 +894,7 @@ pub fn check_table_rows<'db>(
         }
 
         for (elem, col) in row.elements.iter().zip(expected_columns.iter()) {
-            let expected_col_ty = Type::Datalit(*col.ty.clone());
+            let expected_col_ty = Type::Datalit(*col.ty.C());
             check_expr(ctx, ctx.expr(*elem), &expected_col_ty)?;
         }
     }

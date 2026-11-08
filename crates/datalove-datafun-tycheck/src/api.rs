@@ -180,11 +180,11 @@ pub fn unit_ast<'db>(
 ) -> ScriptUnitSpec<'db> {
     let source = unit.source(db);
     if unit.is_expr(db) {
-        let parsed = datalove_datafun_parser::parse_expr(db, source).parsed.clone();
+        let parsed = datalove_datafun_parser::parse_expr(db, source).parsed.C();
         let spans = datalove_datafun_parser::datafun_expr_spans(db, source);
         return ScriptUnitSpec::new(source, spans, ScriptUnitKind::Expr(parsed));
     }
-    let parsed = datalove_datafun_parser::parse(db, source).parsed.clone();
+    let parsed = datalove_datafun_parser::parse(db, source).parsed.C();
     let spans = datalove_datafun_parser::datafun_spans(db, source);
     ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed))
 }
@@ -254,7 +254,7 @@ pub fn binding_before<'db>(
             if let Some((_, ty, is_mutable)) =
                 provides.vars.iter().rev().find(|(n, _, _)| *n == name)
             {
-                found.var = Some((ty.clone(), *is_mutable));
+                found.var = Some((ty.C(), *is_mutable));
                 found.is_const = provides.consts.contains(&name);
             }
         }
@@ -267,7 +267,7 @@ pub fn binding_before<'db>(
             if let Some((_, ast, module_id)) =
                 provides.fn_asts.iter().rev().find(|(n, _, _)| *n == name)
             {
-                found.func_ast = Some((ast.clone(), *module_id));
+                found.func_ast = Some((ast.C(), *module_id));
             }
         }
     }
@@ -304,7 +304,7 @@ pub fn type_alias_before<'db>(
 ) -> Option<Type<'db>> {
     units_before(db, unit).find_map(|earlier| {
         let aliases = &unit_provides(db, earlier, env).type_aliases;
-        aliases.iter().rev().find(|(n, _)| *n == name).map(|(_, ty)| ty.clone())
+        aliases.iter().rev().find(|(n, _)| *n == name).map(|(_, ty)| ty.C())
     })
 }
 
@@ -333,7 +333,7 @@ pub fn typecheck_script_unit<'db>(
     let modules_by_path = script_modules_by_path(db, env);
 
     let unit_spec = unit_ast(db, unit);
-    let mut ctx = TypeContext::new(db, unit_spec.spans.clone());
+    let mut ctx = TypeContext::new(db, unit_spec.spans.C());
     ctx.data_files = env.data(db).C();
     ctx.record_uses();
 
@@ -440,7 +440,7 @@ pub fn typecheck_script_unit<'db>(
                     continue;
                 }
                 bound.insert(item_name, source_module_id);
-                ctx.import_below(local_index, item_name, func_ty, Some(func_ast.clone()), source_module_id);
+                ctx.import_below(local_index, item_name, func_ty, Some(func_ast.C()), source_module_id);
                 new_fns.push((item_name, func_ty));
                 new_fn_asts.push((item_name, func_ast, source_module_id));
             }
@@ -480,21 +480,21 @@ pub fn typecheck_script_unit<'db>(
                     Statement::Let(let_stmt) => {
                         for name in let_stmt.binding.names() {
                             if let Some(binding) = ctx.variables.get(&name) {
-                                new_vars.push((name, binding.ty.clone(), binding.is_mutable));
+                                new_vars.push((name, binding.ty.C(), binding.is_mutable));
                             }
                         }
                     }
                     Statement::Var(var_stmt) => {
                         for name in var_stmt.binding.names() {
                             if let Some(binding) = ctx.variables.get(&name) {
-                                new_vars.push((name, binding.ty.clone(), binding.is_mutable));
+                                new_vars.push((name, binding.ty.C(), binding.is_mutable));
                             }
                         }
                     }
                     Statement::Const(const_stmt) => {
                         let name = const_stmt.name;
                         if let Some(binding) = ctx.variables.get(&name) {
-                            new_vars.push((name, binding.ty.clone(), binding.is_mutable));
+                            new_vars.push((name, binding.ty.C(), binding.is_mutable));
                             new_consts.push(name);
                         }
                     }
@@ -671,7 +671,7 @@ pub fn typecheck_module<'db>(
             ctx.add_error(err);
             continue;
         }
-        let source = source_module.path(db).to_string();
+        let source = source_module.path(db).S();
         if let Some(first) = import_sources.get(local_name) {
             if *first != source {
                 let err = ctx.error_duplicate_import(*local_index, *local_name, first, &source);
@@ -680,7 +680,7 @@ pub fn typecheck_module<'db>(
             continue;
         }
         import_sources.insert(*local_name, source);
-        ctx.import_below(*local_index, *local_name, *func_type, func_ast.clone(), Some(*source_module));
+        ctx.import_below(*local_index, *local_name, *func_type, func_ast.C(), Some(*source_module));
     }
 
     // Seed context from pre-computed name resolution (replaces Pass 0/1).
@@ -698,8 +698,8 @@ pub fn typecheck_module<'db>(
     ctx.report_inline_cycles();
 
     // Use exports from name resolution (already computed).
-    let exports = name_resolution.functions(db).clone();
-    let type_aliases = name_resolution.type_aliases(db).clone();
+    let exports = name_resolution.functions(db).C();
+    let type_aliases = name_resolution.type_aliases(db).C();
 
     // Build imports list for result.
     let imports: Vec<_> = resolved_imports.iter()
@@ -856,8 +856,8 @@ pub fn resolve_module_imports<'db>(
     for (_alias, target_id) in parsed_graph.get_requires(db, module_id) {
         let dep = graph.get_module(db, *target_id)
             .expect("a resolved require names a module in the graph");
-        dep_exports.insert(*target_id, resolve_module_exports(db, dep).clone());
-        dep_function_asts.insert(*target_id, module_function_asts(db, dep).clone());
+        dep_exports.insert(*target_id, resolve_module_exports(db, dep).C());
+        dep_function_asts.insert(*target_id, module_function_asts(db, dep).C());
     }
 
     // Call internal implementation.
@@ -1054,7 +1054,7 @@ fn resolve_module_imports_internal<'db>(
                         let func_ast = module_function_asts
                             .get(&source_module_id)
                             .and_then(|funcs| funcs.iter().find(|(n, _)| *n == item_name))
-                            .map(|(_, ast)| ast.clone());
+                            .map(|(_, ast)| ast.C());
 
                         resolved_imports.push(
                             (item_name, func_type, func_ast, source_module_id, import.local_index),
@@ -1085,7 +1085,7 @@ fn resolve_module_imports_internal<'db>(
                     let synthetic_module_id = rider.module_id;
                     let synthetic_fun = rider.function_stubs.iter()
                         .find(|(n, _)| *n == item_name)
-                        .map(|(_, stub)| stub.clone())
+                        .map(|(_, stub)| stub.C())
                         .expect("a rider function has a stub, both coming from its interface");
                     resolved_imports.push(
                         (item_name, func_type, Some(synthetic_fun), synthetic_module_id, import.local_index),
@@ -1115,7 +1115,7 @@ fn resolve_module_imports_internal<'db>(
             return Some(func.map(|func| {
                 let ast = module_function_asts.get(&module_id)
                     .and_then(|funcs| funcs.iter().find(|(n, _)| *n == name))
-                    .map(|(_, ast)| ast.clone())
+                    .map(|(_, ast)| ast.C())
                     .expect("an exported function has an AST, both coming from its module");
                 (func, ast, module_id)
             }));
@@ -1127,7 +1127,7 @@ fn resolve_module_imports_internal<'db>(
         Some(func.map(|func| {
             let stub = rider.function_stubs.iter()
                 .find(|(n, _)| *n == name)
-                .map(|(_, stub)| stub.clone())
+                .map(|(_, stub)| stub.C())
                 .expect("a rider function has a stub, both coming from its interface");
             (func, stub, rider.module_id)
         }))
@@ -1242,7 +1242,7 @@ fn module_function<'db>(
         .map(|(_, func_ty)| *func_ty)?;
     let ast = collected.function_asts.iter()
         .find(|(declared, _)| *declared == name)
-        .map(|(_, ast)| ast.clone())?;
+        .map(|(_, ast)| ast.C())?;
     Some((func_ty, ast))
 }
 
@@ -1318,8 +1318,8 @@ fn check_script_requires<'db>(
 /// A function defined in the session itself has no module to name.
 fn module_description<'db>(db: &'db dyn crate::Db, module_id: Option<ModuleId<'db>>) -> String {
     match module_id {
-        Some(id) => id.path(db).to_string(),
-        None => "this session".to_string(),
+        Some(id) => id.path(db).S(),
+        None => "this session".S(),
     }
 }
 

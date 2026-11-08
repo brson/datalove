@@ -29,6 +29,7 @@
 //! (`simplify`), which also puts the blocks back in an order the compiled
 //! backends can translate.
 
+use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 use std::sync::Arc;
 
@@ -43,7 +44,7 @@ use crate::*;
 /// call the later unit's function of the same id. Its local calls become
 /// `CodeRef::External` calls into `unit` before it moves.
 pub fn with_calls_into_unit(callee: &IrCodeUnit, unit: u32) -> IrCodeUnit {
-    let mut callee = callee.clone();
+    let mut callee = callee.C();
     for block in &mut callee.blocks {
         for instr in &mut block.instructions {
             if let Instruction::Call { func, .. } | Instruction::ComptimeCall { func, .. } = instr
@@ -149,21 +150,21 @@ impl<'r> Inliner<'r> {
     /// expanded.
     fn inline_callee(&mut self, func: &CodeRef) -> Option<Arc<IrCodeUnit>> {
         if let Some(callee) = self.callees.get(func) {
-            return callee.clone();
+            return callee.C();
         }
         let Some(callee) = (self.resolve)(func) else {
-            self.callees.insert(func.clone(), None);
+            self.callees.insert(func.C(), None);
             return None;
         };
         debug_assert!(is_inline(&callee), "`resolve` found {}, which is not inline", callee.name);
         assert!(!self.stack.contains(func),
             "inline function {} is recursive, which typecheck refuses (F085)", callee.name);
-        self.stack.push(func.clone());
-        let mut body = (*callee).clone();
+        self.stack.push(func.C());
+        let mut body = (*callee).C();
         self.expand(&mut body);
         self.stack.pop();
         let body = Arc::new(body);
-        self.callees.insert(func.clone(), Some(Arc::clone(&body)));
+        self.callees.insert(func.C(), Some(Arc::clone(&body)));
         Some(body)
     }
 }
@@ -171,7 +172,7 @@ impl<'r> Inliner<'r> {
 /// Replace the call at instruction `i` of block `b` of `caller` by `callee`'s
 /// body.
 fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
-    let Instruction::Call { dest, args, bindings, .. } = caller.blocks[b].instructions[i].clone() else {
+    let Instruction::Call { dest, args, bindings, .. } = caller.blocks[b].instructions[i].C() else {
         unreachable!("a splice is at a call");
     };
     // A generic callee is bound first, and what its body does for a `T` that
@@ -190,9 +191,9 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
         (&bound, Vec::new())
     };
     let ctx = callee.function_context().expect("an inline callee is a function");
-    let subst = |ty: &IrType| if bindings.is_empty() { ty.clone() } else { ty.substitute(&bindings) };
+    let subst = |ty: &IrType| if bindings.is_empty() { ty.C() } else { ty.substitute(&bindings) };
     let caller_modes: Vec<ParamMode> = caller.function_context()
-        .map(|c| c.param_modes.clone())
+        .map(|c| c.param_modes.C())
         .unwrap_or_default();
     let caller_tracked: LookupSet<SlotId> = caller.tracked_slots.iter().copied().collect();
 
@@ -224,18 +225,18 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
         .filter(|p| subst(&ctx.param_types[p.0 as usize]).is_copy())
         .collect();
     for (k, &param) in ctx.params.iter().enumerate() {
-        let arg = args[k].clone();
+        let arg = args[k].C();
         let ty = subst(&ctx.param_types[param.0 as usize]);
         match ctx.param_modes[param.0 as usize] {
             ParamMode::In => {
                 let v = ValueId(values.len() as u32);
-                values.push(ty.clone());
+                values.push(ty.C());
                 let dest = ValueId(value_base + v.0);
                 bind.push(match &arg {
-                    _ if ty.is_copy() => Instruction::Copy { dest, src: arg.clone() },
+                    _ if ty.is_copy() => Instruction::Copy { dest, src: arg.C() },
                     Operand::Slot(s) if caller_tracked.contains(s) => Instruction::SlotLoadMoveTracked { dest, slot: *s },
                     Operand::Slot(s) => Instruction::SlotLoadMove { dest, slot: *s },
-                    _ => Instruction::Move { dest, src: arg.clone() },
+                    _ => Instruction::Move { dest, src: arg.C() },
                 });
                 in_callee.insert(param, Operand::Value(v));
             }
@@ -245,7 +246,7 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
             ParamMode::Out => {
                 let copy = ty.is_copy();
                 let s = SlotId(slots.len() as u32);
-                slots.push(ty.clone());
+                slots.push(ty.C());
                 tracked.push(s);
                 out_slots.insert(param, s);
                 in_callee.insert(param, Operand::Slot(s));
@@ -259,7 +260,7 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
                         Instruction::ParamStoreTracked { param: *q, value: Operand::Value(w) }
                     }
                     Operand::Param(q) => Instruction::ParamStore { param: *q, value: Operand::Value(w) },
-                    Operand::Value(_) | Operand::ValueRef(_) => Instruction::RefStore { dest: arg.clone(), value: Operand::Value(w) },
+                    Operand::Value(_) | Operand::ValueRef(_) => Instruction::RefStore { dest: arg.C(), value: Operand::Value(w) },
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                         unreachable!("a function body names no earlier unit's binding")
                     }
@@ -279,16 +280,16 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
             Some(Operand::Value(v)) => Operand::Value(remap_value(*v)),
             Some(Operand::Slot(s)) => Operand::Slot(remap_slot(*s)),
             Some(other) => unreachable!("a parameter bound to {other:?}"),
-            None => op.clone(),
+            None => op.C(),
         },
         Operand::Value(v) => Operand::Value(remap_value(*v)),
         Operand::ValueRef(v) => Operand::ValueRef(remap_value(*v)),
         Operand::Slot(s) => Operand::Slot(remap_slot(*s)),
-        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => op.clone(),
+        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => op.C(),
     };
     let argument = |op: &Operand| match op {
-        Operand::Param(p) => in_caller.get(p).cloned().unwrap_or_else(|| op.clone()),
-        _ => op.clone(),
+        Operand::Param(p) => in_caller.get(p).cloned().unwrap_or_else(|| op.C()),
+        _ => op.C(),
     };
 
     let mut blocks: Vec<IrBlock> = Vec::with_capacity(callee.blocks.len() + 1);
@@ -377,18 +378,18 @@ fn out_stores(instr: &Instruction, out_slots: &LookupMap<ParamId, SlotId>, copy:
         Instruction::ParamStoreTracked { param, value } | Instruction::ParamStore { param, value }
             if out_slots.contains_key(param) =>
         {
-            slot_store(out_slots[param], value.clone(), true, copy.contains(param))
+            slot_store(out_slots[param], value.C(), true, copy.contains(param))
         }
         Instruction::ParamSetFieldTracked { param, field_path, value } | Instruction::ParamSetField { param, field_path, value }
             if out_slots.contains_key(param) =>
         {
             Instruction::SetFieldTracked {
                 slot: SlotDest::Local(out_slots[param]),
-                field_path: field_path.clone(),
-                value: value.clone(),
+                field_path: field_path.C(),
+                value: value.C(),
             }
         }
-        _ => instr.clone(),
+        _ => instr.C(),
     }
 }
 
@@ -409,7 +410,7 @@ fn through_arguments(
         Instruction::Drop { operand: Operand::Param(p) } => match in_caller.get(p)? {
             Operand::Value(r) | Operand::ValueRef(r) => Instruction::DropViaRef { ref_value: *r },
             Operand::Param(q) if tracked_param(q) => Instruction::DropTracked { operand: Operand::Param(*q) },
-            other => Instruction::Drop { operand: other.clone() },
+            other => Instruction::Drop { operand: other.C() },
         },
         Instruction::ParamStore { param, value } => {
             let value = argument(value);
@@ -417,11 +418,11 @@ fn through_arguments(
                 Operand::Slot(t) => slot_store(*t, value, caller_tracked.contains(t), copy.contains(param)),
                 Operand::Param(q) if tracked_param(q) => Instruction::ParamStoreTracked { param: *q, value },
                 Operand::Param(q) => Instruction::ParamStore { param: *q, value },
-                dest => Instruction::RefStore { dest: dest.clone(), value },
+                dest => Instruction::RefStore { dest: dest.C(), value },
             }
         }
         Instruction::ParamSetField { param, field_path, value } => {
-            let (field_path, value) = (field_path.clone(), argument(value));
+            let (field_path, value) = (field_path.C(), argument(value));
             match in_caller.get(param)? {
                 Operand::Slot(t) if caller_tracked.contains(t) => {
                     Instruction::SetFieldTracked { slot: SlotDest::Local(*t), field_path, value }
@@ -431,7 +432,7 @@ fn through_arguments(
                     Instruction::ParamSetFieldTracked { param: *q, field_path, value }
                 }
                 Operand::Param(q) => Instruction::ParamSetField { param: *q, field_path, value },
-                dest => Instruction::RefSetField { dest: dest.clone(), field_path, value },
+                dest => Instruction::RefSetField { dest: dest.C(), field_path, value },
             }
         }
         _ => return None,
@@ -441,19 +442,19 @@ fn through_arguments(
 /// A terminator with its targets renumbered.
 pub(crate) fn retarget(term: &Terminator, block: impl Fn(BlockId) -> BlockId) -> Terminator {
     match term {
-        Terminator::Goto { target, args } => Terminator::Goto { target: block(*target), args: args.clone() },
+        Terminator::Goto { target, args } => Terminator::Goto { target: block(*target), args: args.C() },
         Terminator::Branch { cond, then_block, then_args, else_block, else_args } => Terminator::Branch {
-            cond: cond.clone(),
+            cond: cond.C(),
             then_block: block(*then_block),
-            then_args: then_args.clone(),
+            then_args: then_args.C(),
             else_block: block(*else_block),
-            else_args: else_args.clone(),
+            else_args: else_args.C(),
         },
         Terminator::Switch { discriminant, cases, default } => Terminator::Switch {
-            discriminant: discriminant.clone(),
+            discriminant: discriminant.C(),
             cases: cases.iter().map(|(v, b)| (*v, block(*b))).collect(),
             default: block(*default),
         },
-        Terminator::Return { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => term.clone(),
+        Terminator::Return { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => term.C(),
     }
 }

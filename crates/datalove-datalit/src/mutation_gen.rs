@@ -389,7 +389,7 @@ fn apply_arity_mismatch<'db>(
 
     
 
-    match (type_hint.clone(), inner_expr) {
+    match (type_hint.C(), inner_expr) {
         (TypeHint::AnonTuple(_th), Expr::AnonTuple(t)) => {
             let elements = t.elements.C();
             if elements.len() < 2 {
@@ -525,7 +525,7 @@ fn apply_duplicate_field<'db>(
     
 
     // Check if this is an anon struct with at least 2 fields.
-    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.clone(), inner_expr) {
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.C(), inner_expr) {
         let fields = s.fields.C();
         if fields.len() < 2 {
             return None;
@@ -571,7 +571,7 @@ fn apply_wrong_field_name<'db>(
     
 
     // Check if this is an anon struct.
-    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.clone(), inner_expr) {
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.C(), inner_expr) {
         let fields = s.fields.C();
         if fields.is_empty() {
             return None;
@@ -614,7 +614,7 @@ fn apply_swap_map_key_value<'db>(
     
 
     // Check if this is a map with at least one entry where key/value types differ.
-    if let (TypeHint::Map(map_th), Expr::Map(m)) = (type_hint.clone(), inner_expr) {
+    if let (TypeHint::Map(map_th), Expr::Map(m)) = (type_hint.C(), inner_expr) {
         let entries = m.entries.C();
         if entries.is_empty() {
             return None;
@@ -674,5 +674,5 @@ fn pretty_type_hint<'db>(
     th: TypeHint<'db>,
     out: &mut String,
 ) {
-    out.push_str(&th.syntax(db).to_string());
+    out.push_str(&th.syntax(db).S());
 }

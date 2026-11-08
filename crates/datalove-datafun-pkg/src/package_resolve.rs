@@ -69,7 +69,7 @@ pub fn to_module_graph<'db>(
 
     let path_of = |module: PackageModule<'db>| pkg_module_to_path.get(&module)
         .cloned()
-        .unwrap_or_else(|| module.name(db).to_string());
+        .unwrap_or_else(|| module.name(db).S());
 
     // Topological sort modules.
     let sorted_modules = topological_sort_modules(db, graph, &path_of)
@@ -82,7 +82,7 @@ pub fn to_module_graph<'db>(
     for pkg_module in &sorted_modules {
         let path = path_of(*pkg_module);
         let source = pkg_module.text(db);
-        let module_id = builder.add_module(path.clone(), source);
+        let module_id = builder.add_module(path.C(), source);
         path_to_module_id.insert(path, module_id);
     }
 
@@ -107,7 +107,7 @@ pub fn to_module_graph<'db>(
                     // Get the target module's path and ModuleId.
                     if let Some(target_path) = pkg_module_to_path.get(target_pkg_module) {
                         if let Some(&target_id) = path_to_module_id.get(target_path) {
-                            requires.push((module_alias.clone(), target_id));
+                            requires.push((module_alias.C(), target_id));
                         }
                     }
                 }

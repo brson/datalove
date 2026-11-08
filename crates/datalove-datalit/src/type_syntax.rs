@@ -162,7 +162,7 @@ mod tests {
             (TypeSyntax::Function(vec![word("int"), word("string")], Box::new(word("bool"))), "fun(int, string): bool"),
         ];
         for (syntax, written) in cases {
-            assert_eq!(syntax.to_string(), written);
+            assert_eq!(syntax.S(), written);
         }
     }
 
@@ -191,7 +191,7 @@ mod tests {
             let errors = crate::parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
             assert!(errors.is_empty(), "{written} does not parse");
             let hint = parsed.type_hint().unwrap_or_else(|| panic!("{written} is not read as a hint"));
-            assert_eq!(hint.syntax(&db).to_string(), written);
+            assert_eq!(hint.syntax(&db).S(), written);
         }
     }
 }

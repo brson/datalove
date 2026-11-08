@@ -11,6 +11,7 @@
 //! through unsubstituted leaves a reference to a parameter the transformed
 //! function may no longer have, and nothing downstream reports that.
 
+use rmx::prelude::*;
 use bct::lookup::LookupMap;
 
 use crate::{Instruction, Operand, ParamId, Terminator};
@@ -41,10 +42,10 @@ fn replaced_param(param: ParamId, replace_operand: &impl Fn(&Operand) -> Operand
 fn param_replacement(op: &Operand, replacements: &LookupMap<ParamId, Operand>) -> Operand {
     if let Operand::Param(p) = op {
         if let Some(replacement) = replacements.get(p) {
-            return replacement.clone();
+            return replacement.C();
         }
     }
-    op.clone()
+    op.C()
 }
 
 /// Rebuild an instruction with each of its operands passed through
@@ -125,26 +126,26 @@ pub fn map_operands_in_instruction(
         Instruction::Call { dest, func, args, bindings } =>
             Instruction::Call {
                 dest: *dest,
-                func: func.clone(),
+                func: func.C(),
                 args: args.iter().map(replace_operand).collect(),
-                bindings: bindings.clone(),
+                bindings: bindings.C(),
             },
         Instruction::ComptimeCall {
             dest, func, args, comptime_param_indices, bindings,
         } => Instruction::ComptimeCall {
             dest: *dest,
-            func: func.clone(),
+            func: func.C(),
             args: args.iter().map(replace_operand).collect(),
-            comptime_param_indices: comptime_param_indices.clone(),
-            bindings: bindings.clone(),
+            comptime_param_indices: comptime_param_indices.C(),
+            bindings: bindings.C(),
         },
         Instruction::Pack { dest, ty, fields } => Instruction::Pack {
             dest: *dest,
-            ty: ty.clone(),
+            ty: ty.C(),
             fields: fields.iter().map(replace_operand).collect(),
         },
         Instruction::Unpack { dests, src } => Instruction::Unpack {
-            dests: dests.clone(),
+            dests: dests.C(),
             src: replace_operand(src),
         },
         Instruction::GetField {
@@ -240,7 +241,7 @@ pub fn map_operands_in_instruction(
             elements,
         } => Instruction::TensorNew {
             dest: *dest,
-            shape: shape.clone(),
+            shape: shape.C(),
             elements: elements.iter().map(replace_operand).collect(),
         },
         Instruction::TableNew { dest, rows } => Instruction::TableNew {
@@ -248,19 +249,19 @@ pub fn map_operands_in_instruction(
             rows: rows.iter().map(replace_operand).collect(),
         },
         Instruction::SlotStoreCopy { dest, value } => Instruction::SlotStoreCopy {
-            dest: dest.clone(),
+            dest: dest.C(),
             value: replace_operand(value),
         },
         Instruction::SlotStoreCopyTracked { dest, value } => Instruction::SlotStoreCopyTracked {
-            dest: dest.clone(),
+            dest: dest.C(),
             value: replace_operand(value),
         },
         Instruction::SlotStoreMove { dest, value } => Instruction::SlotStoreMove {
-            dest: dest.clone(),
+            dest: dest.C(),
             value: replace_operand(value),
         },
         Instruction::SlotStoreMoveTracked { dest, value } => Instruction::SlotStoreMoveTracked {
-            dest: dest.clone(),
+            dest: dest.C(),
             value: replace_operand(value),
         },
         Instruction::SetField {
@@ -268,8 +269,8 @@ pub fn map_operands_in_instruction(
             field_path,
             value,
         } => Instruction::SetField {
-            slot: slot.clone(),
-            field_path: field_path.clone(),
+            slot: slot.C(),
+            field_path: field_path.C(),
             value: replace_operand(value),
         },
         Instruction::SetFieldTracked {
@@ -277,15 +278,15 @@ pub fn map_operands_in_instruction(
             field_path,
             value,
         } => Instruction::SetFieldTracked {
-            slot: slot.clone(),
-            field_path: field_path.clone(),
+            slot: slot.C(),
+            field_path: field_path.C(),
             value: replace_operand(value),
         },
         Instruction::ParamStore { param, value } => {
             // If the param is being replaced, convert to RefStore.
             if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefStore {
-                    dest: replacement.clone(),
+                    dest: replacement.C(),
                     value: replace_operand(value),
                 }
             } else {
@@ -299,7 +300,7 @@ pub fn map_operands_in_instruction(
             // If the param is being replaced, convert to RefStoreTracked.
             if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefStoreTracked {
-                    dest: replacement.clone(),
+                    dest: replacement.C(),
                     value: replace_operand(value),
                 }
             } else {
@@ -317,14 +318,14 @@ pub fn map_operands_in_instruction(
             // If the param is being replaced, convert to RefSetField.
             if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefSetField {
-                    dest: replacement.clone(),
-                    field_path: field_path.clone(),
+                    dest: replacement.C(),
+                    field_path: field_path.C(),
                     value: replace_operand(value),
                 }
             } else {
                 Instruction::ParamSetField {
                     param: *param,
-                    field_path: field_path.clone(),
+                    field_path: field_path.C(),
                     value: replace_operand(value),
                 }
             }
@@ -337,14 +338,14 @@ pub fn map_operands_in_instruction(
             // If the param is being replaced, convert to RefSetFieldTracked.
             if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefSetFieldTracked {
-                    dest: replacement.clone(),
-                    field_path: field_path.clone(),
+                    dest: replacement.C(),
+                    field_path: field_path.C(),
                     value: replace_operand(value),
                 }
             } else {
                 Instruction::ParamSetFieldTracked {
                     param: *param,
-                    field_path: field_path.clone(),
+                    field_path: field_path.C(),
                     value: replace_operand(value),
                 }
             }
@@ -363,7 +364,7 @@ pub fn map_operands_in_instruction(
             value,
         } => Instruction::RefSetField {
             dest: replace_operand(dest),
-            field_path: field_path.clone(),
+            field_path: field_path.C(),
             value: replace_operand(value),
         },
         Instruction::RefSetFieldTracked {
@@ -372,7 +373,7 @@ pub fn map_operands_in_instruction(
             value,
         } => Instruction::RefSetFieldTracked {
             dest: replace_operand(dest),
-            field_path: field_path.clone(),
+            field_path: field_path.C(),
             value: replace_operand(value),
         },
         Instruction::Drop { operand } => Instruction::Drop {
@@ -380,7 +381,7 @@ pub fn map_operands_in_instruction(
         },
         Instruction::DropField { base, field_path } => Instruction::DropField {
             base: replace_operand(base),
-            field_path: field_path.clone(),
+            field_path: field_path.C(),
         },
         Instruction::DropTracked { operand } => Instruction::DropTracked {
             operand: replace_operand(operand),
@@ -394,7 +395,7 @@ pub fn map_operands_in_instruction(
             args,
         } => Instruction::Intrinsic {
             dest: *dest,
-            intrinsic: intrinsic.clone(),
+            intrinsic: intrinsic.C(),
             args: args.iter().map(replace_operand).collect(),
         },
         Instruction::UnitEndDrop { operand } => Instruction::UnitEndDrop {
@@ -415,7 +416,7 @@ pub fn map_operands_in_instruction(
         | Instruction::CursorElem { .. }
         | Instruction::CursorIndex { .. }
         | Instruction::CursorValue { .. }
-        | Instruction::Nop => instr.clone(),
+        | Instruction::Nop => instr.C(),
         Instruction::ListGet { dest, is_valid, list, index } => Instruction::ListGet {
             dest: *dest,
             is_valid: *is_valid,
@@ -520,7 +521,7 @@ pub fn map_operands_in_terminator(
         }
         Terminator::Switch { discriminant, cases, default } => Terminator::Switch {
             discriminant: replace_operand(discriminant),
-            cases: cases.clone(),
+            cases: cases.C(),
             default: *default,
         },
         Terminator::Return { value } => Terminator::Return {

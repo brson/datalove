@@ -99,9 +99,9 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
             if let Some(&func) = name_to_stmt.get(name.as_str()) {
                 let analysis = FunctionAnalysis {
                     errors: Vec::new(), // Errors already extracted at analysis boundary.
-                    schedule: data.schedule.clone(),
-                    bindings: data.bindings.clone(),
-                    tracking: data.tracking.clone(),
+                    schedule: data.schedule.C(),
+                    bindings: data.bindings.C(),
+                    tracking: data.tracking.C(),
                 };
                 map.insert(func, analysis);
             }
@@ -177,7 +177,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     // Check for script analysis errors.
     if !script_analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&script_analysis.errors);
-        let structured_errors = script_analysis.errors.clone();
+        let structured_errors = script_analysis.errors.C();
         emit_ownership_errors(db, &datalove_datafun_parser::datafun_spans(db, source), &structured_errors);
         return ScriptUnitOwnershipResult::new(
             db,
@@ -204,8 +204,8 @@ pub fn analyze_script_fragment_tracked<'db>(
         .collect();
     func_analyses_data.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let dead_exports = script_analysis.dead_exports.clone();
-    let revived_exports = script_analysis.revived_exports.clone();
+    let dead_exports = script_analysis.dead_exports.C();
+    let revived_exports = script_analysis.revived_exports.C();
     let taken_externals = script_analysis.taken_externals;
     let written_externals = script_analysis.written_externals;
     let overwritten_externals = script_analysis.overwritten_externals;
@@ -259,7 +259,7 @@ pub fn analyze_script_expr_tracked<'db>(
 
     if !analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&analysis.errors);
-        let structured_errors = analysis.errors.clone();
+        let structured_errors = analysis.errors.C();
         emit_ownership_errors(db, &datalove_datafun_parser::datafun_expr_spans(db, source), &structured_errors);
         return ScriptUnitOwnershipResult::new(
             db, Vec::new(), None, vec![error_msg], structured_errors,

@@ -43,11 +43,11 @@ impl ThreadedExecutor {
             // thread's lifetime.
             match start_engine(sys(), local) {
                 Ok(engine) => {
-                    let _ = worker_tx.send(WorkerResponse::EngineReady);
+                    worker_tx.send(WorkerResponse::EngineReady).I();
                     worker_thread(Session::new(engine), worker_rx, worker_tx);
                 }
                 Err(message) => {
-                    let _ = worker_tx.send(WorkerResponse::EngineDead { message });
+                    worker_tx.send(WorkerResponse::EngineDead { message }).I();
                 }
             }
         });
@@ -78,7 +78,7 @@ fn start_engine(sys: SystemLibrary, local: Option<PackageLibrary>) -> Result<Eng
 
 impl ReplExecutor for ThreadedExecutor {
     fn submit_eval(&mut self, id: u64, command: Command) {
-        let _ = self.worker_tx.send(WorkerRequest { id, command });
+        self.worker_tx.send(WorkerRequest { id, command }).I();
     }
 
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {

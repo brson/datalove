@@ -171,7 +171,7 @@ fn diagnostics_json<'db>(
         let diag = d.to_diagnostic(db);
         let labels: Vec<_> = diag.labels.iter().map(|label| json!({
             "span": [label.span.start, label.span.end],
-            "text": text.get(label.span.clone()).unwrap_or("<not a boundary>"),
+            "text": text.get(label.span.C()).unwrap_or("<not a boundary>"),
             "message": label.message.map(|m| m.as_str(db).S()),
         })).collect();
         json!({
@@ -206,7 +206,7 @@ fn datafun(text: &str) -> String {
     let expr_diagnostics = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
 
     let output = json!({
-        "ast": datalove_datafun_ast::ast_serde::Script::from_ast(&db, result.parsed.clone()),
+        "ast": datalove_datafun_ast::ast_serde::Script::from_ast(&db, result.parsed.C()),
         "qualified_calls": qualified,
         "expr_spans": expr_spans,
         "break_spans": spans_json(&result.break_spans),

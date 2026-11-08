@@ -120,7 +120,7 @@ pub fn script_consts_over(
     let mut consts = LookupMap::default();
     for record in records {
         for (name, ty, value) in &record.consts {
-            consts.insert(name.clone(), (ty.clone(), value.clone()));
+            consts.insert(name.C(), (ty.C(), value.C()));
         }
     }
     consts
@@ -141,7 +141,7 @@ pub fn external_consts_over(records: &[Arc<UnitLowerRecord>]) -> Vec<String> {
         }
         for (name, _, _) in &record.consts {
             if !consts.contains(name) {
-                consts.push(name.clone());
+                consts.push(name.C());
             }
         }
     }
@@ -234,7 +234,7 @@ pub fn collect_const_graph<'db>(
             let expr = body.arena.get(const_stmt.value);
             // Const statements are numbered in the order they appear.
             let stmt_id = ConstStmtId(bindings.len() as u32);
-            let name = const_stmt.name.text(db).to_string();
+            let name = const_stmt.name.text(db).S();
 
             // Get the type from the typechecker's table.
             let ir_type = expr_types
@@ -242,8 +242,8 @@ pub fn collect_const_graph<'db>(
                 .map(|ty| IrType::from_tycheck(db, ty))
                 .unwrap_or(IrType::Unit);
 
-            const_names.insert(name.clone());
-            name_to_stmt.insert(name.clone(), stmt_id);
+            const_names.insert(name.C());
+            name_to_stmt.insert(name.C(), stmt_id);
             binding_exprs.push(expr);
             bindings.push(ConstBindingInfo {
                 stmt_id,
@@ -463,7 +463,7 @@ fn topological_sort_consts(bindings: &[ConstBindingInfo]) -> Vec<ConstBindingInf
     let mut result = Vec::with_capacity(n);
 
     while let Some(idx) = queue.pop() {
-        result.push(bindings[idx].clone());
+        result.push(bindings[idx].C());
         for &dep_idx in &dependents[idx] {
             in_degree[dep_idx] -= 1;
             if in_degree[dep_idx] == 0 {

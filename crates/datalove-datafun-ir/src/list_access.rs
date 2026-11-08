@@ -23,6 +23,7 @@
 //! repeated there is `true`, its branch a jump. `simplify` then forwards the
 //! copies this leaves and drops the error exits nothing reaches.
 
+use rmx::prelude::*;
 use bct::lookup::LookupMap;
 
 use crate::*;
@@ -66,12 +67,12 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
     let consts: LookupMap<ValueId, ConstValue> = unit.blocks.iter()
         .flat_map(|b| &b.instructions)
         .filter_map(|i| match i {
-            Instruction::Const { dest, value } => Some((*dest, value.clone())),
+            Instruction::Const { dest, value } => Some((*dest, value.C())),
             _ => None,
         })
         .collect();
     let index_of = |op: &Operand| match op {
-        Operand::Value(v) if consts.contains_key(v) => Index::Const(consts[v].clone()),
+        Operand::Value(v) if consts.contains_key(v) => Index::Const(consts[v].C()),
         other => Index::Operand(*other),
     };
     let mut at_end: Vec<Option<LookupMap<Key, Known>>> = vec![None; n];
@@ -102,7 +103,7 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
                         Instruction::Copy { dest: *is_valid, src: Operand::Value(c) }
                     } else {
                         k.check = Some(*is_valid);
-                        rewritten.push(instr.clone());
+                        rewritten.push(instr.C());
                         continue;
                     }
                 }
@@ -112,14 +113,14 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
                         Some(r) => Instruction::Copy { dest: *dest, src: Operand::Value(r) },
                         None => {
                             k.element = Some(*dest);
-                            rewritten.push(instr.clone());
+                            rewritten.push(instr.C());
                             continue;
                         }
                     }
                 }
                 other => {
                     forget_what_it_may_change(&mut known, other);
-                    rewritten.push(other.clone());
+                    rewritten.push(other.C());
                     continue;
                 }
             };
@@ -132,7 +133,7 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
         if let Terminator::Branch { cond: Operand::Value(c), then_block, then_args, .. } = &block.terminator
             && trues.contains(c)
         {
-            block.terminator = Terminator::Goto { target: *then_block, args: then_args.clone() };
+            block.terminator = Terminator::Goto { target: *then_block, args: then_args.C() };
         }
         at_end[b] = Some(known);
     }
@@ -143,7 +144,7 @@ pub fn reuse_list_accesses(unit: &mut IrCodeUnit) -> bool {
 /// what is known at the block's end: an index a check passed is in bounds on
 /// the edge taken when it did.
 fn along_edge(end: &LookupMap<Key, Known>, term: &Terminator, to: BlockId) -> LookupMap<Key, Known> {
-    let mut known = end.clone();
+    let mut known = end.C();
     if let Terminator::Branch { cond: Operand::Value(c), then_block, else_block, .. } = term
         && *then_block == to && *else_block != to
     {
@@ -254,7 +255,7 @@ mod tests {
         let value_count = 32;
         IrCodeUnit {
             id: CodeUnitId(0),
-            name: "f".to_string(),
+            name: "f".S(),
             blocks,
             value_count,
             slot_count: 1,

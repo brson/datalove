@@ -10,12 +10,12 @@ use datalove_datalit::tydesc_table::TyDescTable;
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.C());
     datalove_datalit::tycheck::type_check(db, parsed, resolved)
 }
 
 fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
-    let source = bct::input::Source::new(db, source_text.to_string());
+    let source = bct::input::Source::new(db, source_text.S());
     Ok(compile(db, source))
 }
 
@@ -628,7 +628,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
@@ -687,7 +687,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
@@ -772,7 +772,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
@@ -832,7 +832,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
@@ -916,7 +916,7 @@ fn test_clone_leak_regression_seed_980509222901775213() {
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
     let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
     assert!(typechecked.errors(&db).is_empty(), "Type checking failed for seed {}", seed);
 

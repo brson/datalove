@@ -12,6 +12,7 @@
 //! `with_inputs`, which divan does not time. Reusing them would measure a memo
 //! hit and nothing else.
 
+use rmx::prelude::*;
 use divan::Bencher;
 
 use bct::input::Source;
@@ -51,7 +52,7 @@ fn module_texts(sys: &datafun::driver::SystemLibrary) -> Vec<String> {
         .packages
         .values()
         .flat_map(|package| package.modules.values())
-        .map(|module| module.source.to_string())
+        .map(|module| module.source.S())
         .collect()
 }
 

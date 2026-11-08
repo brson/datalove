@@ -3,13 +3,14 @@
 //! The synthetic world has no generics and no consts, so it exercises the
 //! paths that early out. This one is what the compiler actually compiles.
 
+use rmx::prelude::*;
 use datalove_datafun as datafun;
 use datafun::driver::WorkspaceDescriptor;
 
 fn main() {
     let mut args = std::env::args().skip(1);
     let iterations: usize = args.next().and_then(|a| a.parse().ok()).unwrap_or(200);
-    let mode = args.next().unwrap_or_else(|| "noop".to_string());
+    let mode = args.next().unwrap_or_else(|| "noop".S());
     let edit = mode == "edit" || mode == "local";
     // `local` edits a module of one's own that calls into the system library,
     // which is what an editing session does. `edit` edits the system library
@@ -40,7 +41,7 @@ fn main() {
     // changing its body keeps the function ids where they are, so this is one
     // function's worth of real change, which is what an edit usually is.
     let (package, module, text) = sys.library.packages.iter()
-        .flat_map(|(p, pkg)| pkg.modules.iter().map(move |(m, d)| (p.clone(), m.clone(), d.source.to_string())))
+        .flat_map(|(p, pkg)| pkg.modules.iter().map(move |(m, d)| (p.C(), m.C(), d.source.S())))
         .next()
         .expect("the system library has modules");
     if local {

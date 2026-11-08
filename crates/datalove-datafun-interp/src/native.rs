@@ -5,6 +5,7 @@
 //! interpreter calls through this table when executing `NativeContext` code
 //! units.
 
+use rmx::prelude::*;
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -249,12 +250,12 @@ impl NativeFunctionTable {
     /// it leads to is held by the table.
     pub fn lookup(&self, symbol: &str) -> Result<NativeTarget, InterpError> {
         if let Some(target) = self.table.borrow().get(symbol) {
-            return Ok(target.clone());
+            return Ok(target.C());
         }
         let resolver = self.resolver.as_ref()
             .unwrap_or_else(|| panic!("native function not registered: {}", symbol));
         let target = resolver.resolve(symbol).map_err(InterpError::RuntimeError)?;
-        self.insert(symbol.to_string(), target.clone());
+        self.insert(symbol.S(), target.C());
         Ok(target)
     }
 

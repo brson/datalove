@@ -124,7 +124,7 @@ impl<'db> TypeRec<'db> {
     /// The body with the whole put back where its name was: the type a value
     /// of this one is, one level down.
     pub fn unfold(&self) -> Type<'db> {
-        let whole = Type::Rec(self.clone());
+        let whole = Type::Rec(self.C());
         substitute(&self.body, 0, &whole)
     }
 }
@@ -137,8 +137,8 @@ fn substitute<'db>(ty: &Type<'db>, depth: u32, whole: &Type<'db>) -> Type<'db> {
         .map(|f| TypeNamedField { name: f.name, ty: sub(&f.ty) })
         .collect();
     match ty {
-        Type::RecVar(index) if *index == depth => whole.clone(),
-        Type::RecVar(_) => ty.clone(),
+        Type::RecVar(index) if *index == depth => whole.C(),
+        Type::RecVar(_) => ty.C(),
         Type::Rec(r) => Type::Rec(TypeRec { name: r.name, body: Box::new(substitute(&r.body, depth + 1, whole)) }),
         Type::AnonTuple(t) => Type::AnonTuple(TypeAnonTuple { fields: t.fields.iter().map(|f| substitute(f, depth, whole)).collect() }),
         Type::AnonStruct(s) => Type::AnonStruct(TypeAnonStruct { fields: fields(&s.fields) }),
@@ -157,7 +157,7 @@ fn substitute<'db>(ty: &Type<'db>, depth: u32, whole: &Type<'db>) -> Type<'db> {
         }),
         Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16 | Type::U32 | Type::I32
         | Type::U64 | Type::I64 | Type::Index | Type::Offset | Type::F32 | Type::F64
-        | Type::Int | Type::String | Type::Data | Type::Error | Type::Atom(_) | Type::Var(_) => ty.clone(),
+        | Type::Int | Type::String | Type::Data | Type::Error | Type::Atom(_) | Type::Var(_) => ty.C(),
     }
 }
 
@@ -653,7 +653,7 @@ struct RecBinder<'db> {
 }
 
 fn rec_error(db: &dyn crate::Db, kind: RecErrorKind, name: InternedText<'_>, local_index: Option<u32>) -> TypeError {
-    TypeError::Rec(RecError { kind, name: name.as_str(db).to_string(), local_index })
+    TypeError::Rec(RecError { kind, name: name.as_str(db).S(), local_index })
 }
 
 impl<'db> RecScope<'db> {
@@ -928,7 +928,7 @@ impl OpenLiteral {
 /// A type as datalove writes it, for error messages and anything else a
 /// reader sees.
 pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
-    ty.syntax(db).to_string()
+    ty.syntax(db).S()
 }
 
 impl<'db> Type<'db> {
@@ -1049,8 +1049,8 @@ pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
         // / 0` is a thing a person can write, and saying so is the answer; it
         // used to bring the compiler down here instead.
         _ => Err(TypeError::TypeMismatch {
-            expected: "an integer type".to_string(),
-            actual: "a hint that is not one".to_string(),
+            expected: "an integer type".S(),
+            actual: "a hint that is not one".S(),
         }),
     }
 }

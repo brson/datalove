@@ -203,7 +203,7 @@ impl Preamble {
         LAST_RUN.with(|run| {
             let run = run.borrow();
             if run.loops_entered == 0 {
-                return Err("the osr engine entered no loop".to_string());
+                return Err("the osr engine entered no loop".S());
             }
             if run.loops_refused != 0 {
                 return Err(format!("the osr engine was refused at {} loops", run.loops_refused));
@@ -233,8 +233,8 @@ impl ExecutorHooks for Setup {
         LAST_RUN.with(|run| {
             let stats = executor.bytecode_stats();
             *run.borrow_mut() = LastRun {
-                bytecode_ops: stats.op_kinds.clone(),
-                escaped: stats.escaped_kinds.clone(),
+                bytecode_ops: stats.op_kinds.C(),
+                escaped: stats.escaped_kinds.C(),
                 ..LastRun::default()
             };
         });
@@ -356,7 +356,7 @@ fn run_aot(
         })
         .X();
     let unit = compiler.compile_fragment(source).ir_unit.ok_or("the fragment did not compile")?;
-    let dir = rmx::tempfile::tempdir().map_err(|e| e.to_string())?;
+    let dir = rmx::tempfile::tempdir().map_err(|e| e.S())?;
     build_and_run(&unit, &compiled.module_registry(), dir.path())
 }
 
@@ -371,7 +371,7 @@ fn run_exe(exe: &Path) -> Result<String, String> {
 }
 
 fn cranelift_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -> Result<String, String> {
-    let mut compiler = AotCompiler::new_for_host().map_err(|e| e.to_string())?;
+    let mut compiler = AotCompiler::new_for_host().map_err(|e| e.S())?;
     let product = compiler
         .compile_script_unit_in_world(unit, registry)
         .map_err(|e| format!("compile failed: {e}"))?;
@@ -390,10 +390,10 @@ fn c_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -
     }
     for (filename, content) in &output.files {
         let path = dir.join(filename);
-        std::fs::write(&path, content).map_err(|e| e.to_string())?;
+        std::fs::write(&path, content).map_err(|e| e.S())?;
         cmd.arg(path);
     }
-    cmd.arg(datafun::driver::aot::runtime_only_component().map_err(|e| e.to_string())?);
+    cmd.arg(datafun::driver::aot::runtime_only_component().map_err(|e| e.S())?);
     let exe = dir.join("test");
     cmd.args(["-ldl", "-lpthread", "-lm", "-o"]).arg(&exe);
     let cc = cmd.output().map_err(|e| format!("failed to run cc: {e}"))?;
@@ -456,20 +456,20 @@ fn check(path: &Path) -> Result<String, String> {
             Differential::Jit => Some(Setup {
                 differential: Some(engine),
                 engine: Engine::IrWalker,
-                dispatcher: Some(Box::new(JitEngine::new(1).map_err(|e| e.to_string())?)),
+                dispatcher: Some(Box::new(JitEngine::new(1).map_err(|e| e.S())?)),
             }),
             Differential::Chaos => Some(Setup {
                 differential: Some(engine),
                 engine: Engine::Bytecode,
                 dispatcher: Some(Box::new(
-                    OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.to_string())?,
+                    OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.S())?,
                 )),
             }),
             Differential::Osr => Some(Setup {
                 differential: Some(engine),
                 engine: Engine::Bytecode,
                 dispatcher: Some({
-                    let mut jit = JitEngine::new(u32::MAX).map_err(|e| e.to_string())?;
+                    let mut jit = JitEngine::new(u32::MAX).map_err(|e| e.S())?;
                     jit.set_osr_threshold(1 + (seed % 3) as u32);
                     Box::new(jit)
                 }),
@@ -526,10 +526,10 @@ fn report() -> Result<(), String> {
         let refused = CHAOS_LOOPS_REFUSED.load(Ordering::Relaxed);
         println!("chaos: {compiled} functions JIT-compiled, {loops} loops entered ({refused} refused)");
         if compiled == 0 {
-            return Err("the chaos dispatcher never engaged: 0 compiled".to_string());
+            return Err("the chaos dispatcher never engaged: 0 compiled".S());
         }
         if loops == 0 {
-            return Err("the chaos dispatcher never entered a loop".to_string());
+            return Err("the chaos dispatcher never entered a loop".S());
         }
     }
     if datalove_exampletest::engine_enabled("osr") {
@@ -537,7 +537,7 @@ fn report() -> Result<(), String> {
         let osr_refused = OSR_LOOPS_REFUSED.load(Ordering::Relaxed);
         println!("osr: {osr} loops entered ({osr_refused} refused)");
         if osr == 0 {
-            return Err("the osr engine never entered a loop".to_string());
+            return Err("the osr engine never entered a loop".S());
         }
     }
     let jit = JIT_LOOPS.load(Ordering::Relaxed);

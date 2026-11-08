@@ -8,6 +8,7 @@
 //! so these build libraries that lie about their interface and confirm they
 //! are turned away.
 
+use rmx::prelude::*;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -48,7 +49,7 @@ fn a_different_interface_is_refused() {
 
     let mut table = NativeFunctionTable::new();
     let result = load_rider_library(
-        &lib, "test", &["dlr_test__nothing".to_string()], &mut table);
+        &lib, "test", &["dlr_test__nothing".S()], &mut table);
 
     let error = match result {
         Ok(_) => panic!("a mismatched library must be refused"),
@@ -81,7 +82,7 @@ fn saying_nothing_is_refused() {
 
     let mut table = NativeFunctionTable::new();
     let result = load_rider_library(
-        &lib, "test", &["dlr_test__nothing".to_string()], &mut table);
+        &lib, "test", &["dlr_test__nothing".S()], &mut table);
 
     let error = match result {
         Ok(_) => panic!("a library with no version must be refused"),
@@ -108,7 +109,7 @@ fn the_same_interface_loads() {
 
     let mut table = NativeFunctionTable::new();
     let loaded = load_rider_library(
-        &lib, "test", &["dlr_test__nothing".to_string()], &mut table);
+        &lib, "test", &["dlr_test__nothing".S()], &mut table);
 
     assert!(loaded.is_ok(), "a matching library must load");
 }

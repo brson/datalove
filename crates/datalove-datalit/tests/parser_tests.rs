@@ -15,12 +15,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .iter()
         .map(|d| {
             let diag = d.to_diagnostic(&db);
-            let code = diag.code.map(|c| c.as_str(&db).to_string());
+            let code = diag.code.map(|c| c.as_str(&db).S());
             let labels: Vec<_> = diag.labels.iter().map(|label| {
                 json!({
                     "span": [label.span.start, label.span.end],
-                    "text": source_text[label.span.clone()].to_string(),
-                    "message": label.message.map(|m| m.as_str(&db).to_string())
+                    "text": source_text[label.span.C()].S(),
+                    "message": label.message.map(|m| m.as_str(&db).S())
                 })
             }).collect();
             json!({

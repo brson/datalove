@@ -5,6 +5,7 @@
 //! arrangement directly rather than through an interpreter: two holders of one
 //! library, and the library going when the last of them does.
 
+use rmx::prelude::*;
 use datalove_datafun as datafun;
 use datafun::driver::rider_build::build_rider_dylib;
 use datafun::driver::rider_load::{load_rider_library, open_library_count};
@@ -21,9 +22,9 @@ fn std_rider() -> RiderCrate {
         .canonicalize()
         .expect("sys/std/rider is in the tree");
     RiderCrate {
-        rider_name: "std".to_string(),
-        crate_name: "datalove-rider-sys-std".to_string(),
-        version: "0.1.0".to_string(),
+        rider_name: "std".S(),
+        crate_name: "datalove-rider-sys-std".S(),
+        version: "0.1.0".S(),
         dir: Some(dir),
     }
 }
@@ -43,7 +44,7 @@ fn dylib() -> PathBuf {
 #[test]
 fn a_library_is_opened_once_and_closed_by_its_last_holder() {
     let path = dylib();
-    let symbols = vec![A_SYMBOL.to_string()];
+    let symbols = vec![A_SYMBOL.S()];
 
     let mut table_one = NativeFunctionTable::new();
     let one = load_rider_library(&path, "std", &symbols, &mut table_one)
@@ -66,7 +67,7 @@ fn a_library_is_opened_once_and_closed_by_its_last_holder() {
     drop(one);
     assert_eq!(open_library_count(), 1, "the other holder still has it");
 
-    let code = two.native_fn_ptrs.clone();
+    let code = two.native_fn_ptrs.C();
     drop(two);
     drop(table_one);
     drop(table_two);

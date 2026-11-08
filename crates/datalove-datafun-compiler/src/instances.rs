@@ -17,6 +17,7 @@
 //! unit puts them in its own `nested_units`, as const specialization does with
 //! its copies (`specialize`).
 
+use rmx::prelude::*;
 use bct::lookup::LookupMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -169,7 +170,7 @@ impl<'a> Instantiator<'a> {
     ) -> Option<CodeRef> {
         let key = (callee, bindings.to_vec());
         if let Some(made) = self.made.get(&key) {
-            return Some(made.clone());
+            return Some(made.C());
         }
         if grows(chain, callee, bindings) {
             return None;
@@ -184,7 +185,7 @@ impl<'a> Instantiator<'a> {
         let (id, code_ref) = (self.place)(callee);
         let mut unit = instantiate(&generic, bindings, id, format!("{}__g{}", generic.name, id.0));
         clean_copy_types(&mut unit);
-        self.made.insert(key.clone(), code_ref.clone());
+        self.made.insert(key.C(), code_ref.C());
         let mut chain = chain.to_vec();
         chain.push(key);
         pending.push((Instance { generic: callee, unit }, chain));
@@ -292,7 +293,7 @@ pub fn instantiate_script_unit(
 ) {
     let local: LookupMap<CodeUnitId, Arc<IrCodeUnit>> = unit.nested_units.iter()
         .filter(|f| is_instantiable(f))
-        .map(|f| (f.id, Arc::new(f.clone())))
+        .map(|f| (f.id, Arc::new(f.C())))
         .collect();
     let generic = |key: CalleeKey| match key {
         CalleeKey::Local(id) => local.get(&id).cloned(),
@@ -380,7 +381,7 @@ mod tests {
     fn calls(unit: &IrCodeUnit) -> Vec<(CodeRef, Vec<IrType>)> {
         unit.blocks.iter().flat_map(|b| &b.instructions)
             .filter_map(|instr| match instr {
-                Instruction::Call { func, bindings, .. } => Some((func.clone(), bindings.clone())),
+                Instruction::Call { func, bindings, .. } => Some((func.C(), bindings.C())),
                 _ => None,
             })
             .collect()

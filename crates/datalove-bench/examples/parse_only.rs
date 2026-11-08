@@ -20,7 +20,7 @@ fn main() {
     let sys = datalove_sys_packages::system_library();
     let modules: Vec<(String, String)> = sys.library.packages.iter()
         .flat_map(|(p, pkg)| pkg.modules.iter()
-            .map(move |(m, d)| (fmt!("sys/{p}/{m}"), d.source.to_string())))
+            .map(move |(m, d)| (fmt!("sys/{p}/{m}"), d.source.S())))
         .collect();
     let bytes: usize = modules.iter().map(|(_, text)| text.len()).sum();
 

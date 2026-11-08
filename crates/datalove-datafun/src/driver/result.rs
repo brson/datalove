@@ -5,6 +5,7 @@
 //! - [`ScriptCompilationResult`]: Output of script compilation (no execution).
 //! - [`ScriptUnitResult`]: Combined compile+execute result for tests.
 
+use rmx::prelude::*;
 use datalove_datafun_ir::IrCodeUnit;
 
 /// Typecheck result summary (serializable).
@@ -101,8 +102,8 @@ impl ScriptCompilationResult {
         match (&self.typecheck, &self.ownership, &self.lowering) {
             (TypecheckResult::ParseError { errors }, _, _) => Some(errors.join("; ")),
             (TypecheckResult::Error { errors }, _, _) => Some(errors.join("; ")),
-            (_, OwnershipResult::Error { message }, _) => Some(message.clone()),
-            (_, _, LoweringResult::Error { message }) => Some(message.clone()),
+            (_, OwnershipResult::Error { message }, _) => Some(message.C()),
+            (_, _, LoweringResult::Error { message }) => Some(message.C()),
             _ => None,
         }
     }

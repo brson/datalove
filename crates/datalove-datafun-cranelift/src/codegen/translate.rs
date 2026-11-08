@@ -1,6 +1,7 @@
 //! Compiling a body: its blocks, their parameters, and each instruction to
 //! the codegen for its kind.
 
+use rmx::prelude::*;
 use super::*;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -11,7 +12,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// already been declared, and `compile_as` where the name has to be one the
     /// caller chooses.
     pub fn compile(self) -> Result<FuncId, CraneliftError> {
-        let symbol = self.func.name.clone();
+        let symbol = self.func.name.C();
         self.compile_as(&symbol).map(|defined| defined.id)
     }
 
@@ -120,7 +121,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         if self.osr_spec.is_some() {
-            self.enter_osr(&mut builder, reachable.clone().expect("an OSR entry has its reachable blocks"))?;
+            self.enter_osr(&mut builder, reachable.C().expect("an OSR entry has its reachable blocks"))?;
         } else {
             // Set up entry block with parameters.
             let entry_block = self.blocks[&BlockId(0)];
@@ -145,7 +146,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         self.param_values.insert(param_id, param_values[at.start]);
                     }
                     ArgPass::Value(_) => {
-                        let regs = param_values[at.clone()].to_vec();
+                        let regs = param_values[at.C()].to_vec();
                         let size = types::ir_type_size(ty).max(1);
                         let home = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
                             cl_ir::StackSlotKind::ExplicitSlot, size, 3));

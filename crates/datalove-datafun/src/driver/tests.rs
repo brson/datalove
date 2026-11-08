@@ -1,3 +1,4 @@
+use rmx::prelude::*;
 use super::*;
 use datalove_rt::c::DebugOutputMode;
 
@@ -13,8 +14,8 @@ struct TestContext<'db> {
 
 impl<'db> TestContext<'db> {
     fn new(compiled: &CompiledModules<'db>, db: &'db dyn salsa::Database) -> Self {
-        let compiler = compiled.script_compiler_default(db).unwrap();
-        let executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
+        let compiler = compiled.script_compiler_default(db).X();
+        let executor = compiled.script_executor(DebugOutputMode::Disabled, None).X();
         Self { compiler, executor }
     }
 
@@ -185,8 +186,8 @@ end fun
                 let db_ref = db_clone.as_salsa_db();
 
                 // Create compiler and executor from the shared compiled modules.
-                let mut compiler = compiled.script_compiler_default(db_ref).unwrap();
-                let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
+                let mut compiler = compiled.script_compiler_default(db_ref).X();
+                let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).X();
 
                 // Import and use the shared module function.
                 let compiled_unit = compiler.compile_fragment("require module local/pkg/math\nimport math.square");
@@ -219,13 +220,13 @@ end fun
                 let expected = val * val;
                 assert_eq!(output, format!("{}", expected),
                     "thread {} expected {} but got {}", i, expected, output);
-                results.lock().unwrap().push((i, expected));
+                results.lock().X().push((i, expected));
             });
         }
     });
 
     // Verify all threads completed.
-    let mut results = results.into_inner().unwrap();
+    let mut results = results.into_inner().X();
     results.sort_by_key(|(i, _)| *i);
     let values: Vec<_> = results.into_iter().map(|(_, v)| v).collect();
     assert_eq!(values, vec![100, 400, 900, 1600]);

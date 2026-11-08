@@ -1,5 +1,6 @@
 //! Script fragment generation.
 
+use rmx::prelude::*;
 use bct::lookup::LookupSet;
 
 use rand::Rng;
@@ -32,7 +33,7 @@ pub fn gen_script<'db, R: Rng>(
         if !module.functions.is_empty() || !module.generics.is_empty() {
             let mut required = false;
             for func in &module.functions {
-                if !imported_names.insert(func.name.clone()) {
+                if !imported_names.insert(func.name.C()) {
                     continue;
                 }
                 if !required {
@@ -40,11 +41,11 @@ pub fn gen_script<'db, R: Rng>(
                     required = true;
                 }
                 lines.push(format!("import {}.{}", module.alias(), func.name));
-                ctx.imported_functions.push(func.clone());
+                ctx.imported_functions.push(func.C());
             }
             // The generics too, under the same one-name-once rule.
             for sig in &module.generics {
-                if !imported_names.insert(sig.name.clone()) {
+                if !imported_names.insert(sig.name.C()) {
                     continue;
                 }
                 if !required {
@@ -52,7 +53,7 @@ pub fn gen_script<'db, R: Rng>(
                     required = true;
                 }
                 lines.push(format!("import {}.{}", module.alias(), sig.name));
-                ctx.generic_functions.push(sig.clone());
+                ctx.generic_functions.push(sig.C());
             }
             if required {
                 lines.push(String::new());
@@ -80,12 +81,12 @@ pub fn gen_script<'db, R: Rng>(
         // Use debuglog to output the value.
         lines.push(format!("debuglog {}", var.name));
     } else if !ctx.imported_functions.is_empty() {
-        let func = ctx.imported_functions[rng.gen_range(0..ctx.imported_functions.len())].clone();
+        let func = ctx.imported_functions[rng.gen_range(0..ctx.imported_functions.len())].C();
         if let Some(ret_ty) = func.return_type {
             // Bound to a name carrying the type before it is printed. Some
             // expressions cannot say their own type -- `er error 100` does not
             // know what its ok side is -- and the binding is what tells them.
-            let call = gen_expr(db, rng, ret_ty.clone(), config, &mut ctx);
+            let call = gen_expr(db, rng, ret_ty.C(), config, &mut ctx);
             let name = format!("v{}", var_counter);
             lines.push(String::new());
             lines.push(format!(

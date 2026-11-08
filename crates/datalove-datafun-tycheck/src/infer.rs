@@ -63,7 +63,7 @@ pub enum Undecided<'db> {
 /// The type inferred for an expression, inferring it now if nothing has yet.
 pub fn infer<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<'db> {
     if let Some(ty) = ctx.inference.types.get(expr) {
-        return ty.clone();
+        return ty.C();
     }
     // Inference reads names and hints the way checking does, and the lookups
     // report what they do not find. Checking will report it again where it
@@ -156,7 +156,7 @@ fn infer_expr<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<'db>
         },
         None => infer_unhinted(ctx, expr),
     };
-    ctx.inference.types.insert(expr, ty.clone());
+    ctx.inference.types.insert(expr, ty.C());
     ty
 }
 
@@ -325,7 +325,7 @@ fn infer_field<'db>(ctx: &mut TypeContext<'db>, base: &PType<'db>, field: &Field
         }
         (PType::AnonStruct(fields), FieldSelector::Name(name)) => {
             let name = name.text(db);
-            fields.iter().find(|(n, _)| n.text(db) == name).map(|(_, t)| t.clone())
+            fields.iter().find(|(n, _)| n.text(db) == name).map(|(_, t)| t.C())
                 .unwrap_or_else(|| unknown(ctx))
         }
         _ => unknown(ctx),
@@ -356,7 +356,7 @@ fn infer_call<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>, call: &ExprFu
     let found = match call.qualifier {
         Some(alias) => ctx.qualified.functions.iter()
             .find(|f| f.alias == alias && f.name == name)
-            .map(|f| (f.func, Some(f.ast.clone()))),
+            .map(|f| (f.func, Some(f.ast.C()))),
         None => ctx.lookup_function(name).map(|func| (func, ctx.lookup_function_ast(name).map(|(ast, _)| ast))),
     };
     let args: Vec<ExprFun<'db>> = call.args.iter().map(|&arg| expr.at(arg)).collect();
@@ -398,7 +398,7 @@ fn instantiate<'db>(ty: &DT<'db>, params: &[(InternedText<'db>, PType<'db>)]) ->
     };
     match ty {
         DT::Var(name) => match params.iter().find(|(p, _)| p == name) {
-            Some((_, var)) => var.clone(),
+            Some((_, var)) => var.C(),
             None => PType::Known(ty.C()),
         },
         DT::AnonTuple(t) => PType::AnonTuple(t.fields.iter().map(|f| instantiate(f, params)).collect()),

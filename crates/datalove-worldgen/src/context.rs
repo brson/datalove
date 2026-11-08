@@ -1,5 +1,6 @@
 //! Generation context for tracking scope during worldfile generation.
 
+use rmx::prelude::*;
 use bct::lookup::LookupSet;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
@@ -202,7 +203,7 @@ impl<'db> GenContext<'db> {
 
     /// Mark a variable as consumed (moved). It can't be used again.
     pub fn consume_variable(&mut self, name: &str) {
-        self.consumed_variables.insert(name.to_string());
+        self.consumed_variables.insert(name.S());
     }
 
     /// Check if a variable has been consumed.
@@ -212,7 +213,7 @@ impl<'db> GenContext<'db> {
 
     /// Mark a variable as loop-protected (can be borrowed but not moved).
     pub fn loop_protect_variable(&mut self, name: &str) {
-        self.loop_protected_variables.insert(name.to_string());
+        self.loop_protected_variables.insert(name.S());
     }
 
     /// Check if a variable is loop-protected.
@@ -307,7 +308,7 @@ impl<'db> GenContext<'db> {
         self.variables
             .iter()
             .filter(|v| {
-                if !types_match(db, v.type_hint.clone(), type_hint.clone()) {
+                if !types_match(db, v.type_hint.C(), type_hint.C()) {
                     return false;
                 }
                 // Filter out consumed variables.
@@ -335,7 +336,7 @@ impl<'db> GenContext<'db> {
         self.variables
             .iter()
             .filter(|v| {
-                if !types_match(db, v.type_hint.clone(), type_hint.clone()) {
+                if !types_match(db, v.type_hint.C(), type_hint.C()) {
                     return false;
                 }
                 // Filter out consumed variables.
@@ -448,36 +449,36 @@ pub fn types_match<'db>(
         (TypeHint::Data, TypeHint::Data) => true,
         (TypeHint::Error, TypeHint::Error) => true,
         (TypeHint::List(la), TypeHint::List(lb)) => {
-            types_match(db, (*la.element_type).clone(), (*lb.element_type).clone())
+            types_match(db, (*la.element_type).C(), (*lb.element_type).C())
         }
         (TypeHint::Option(oa), TypeHint::Option(ob)) => {
-            types_match(db, (*oa.inner_type).clone(), (*ob.inner_type).clone())
+            types_match(db, (*oa.inner_type).C(), (*ob.inner_type).C())
         }
         (TypeHint::Result(ra), TypeHint::Result(rb)) => {
-            types_match(db, (*ra.inner_type).clone(), (*rb.inner_type).clone())
+            types_match(db, (*ra.inner_type).C(), (*rb.inner_type).C())
         }
         (TypeHint::Map(ma), TypeHint::Map(mb)) => {
-            types_match(db, (*ma.key_type).clone(), (*mb.key_type).clone())
-                && types_match(db, (*ma.value_type).clone(), (*mb.value_type).clone())
+            types_match(db, (*ma.key_type).C(), (*mb.key_type).C())
+                && types_match(db, (*ma.value_type).C(), (*mb.value_type).C())
         }
         (TypeHint::Set(sa), TypeHint::Set(sb)) => {
-            types_match(db, (*sa.element_type).clone(), (*sb.element_type).clone())
+            types_match(db, (*sa.element_type).C(), (*sb.element_type).C())
         }
         (TypeHint::AnonTuple(ta), TypeHint::AnonTuple(tb)) => {
             ta.fields.len() == tb.fields.len()
                 && ta.fields.iter().zip(tb.fields.iter())
-                    .all(|(a, b)| types_match(db, a.clone(), b.clone()))
+                    .all(|(a, b)| types_match(db, a.C(), b.C()))
         }
         (TypeHint::AnonStruct(sa), TypeHint::AnonStruct(sb)) => {
             sa.fields.len() == sb.fields.len()
                 && sa.fields.iter().zip(sb.fields.iter())
                     .all(|(fa, fb)| {
                         fa.name.as_str(db) == fb.name.as_str(db)
-                            && types_match(db, (*fa.type_hint).clone(), (*fb.type_hint).clone())
+                            && types_match(db, (*fa.type_hint).C(), (*fb.type_hint).C())
                     })
         }
         (TypeHint::Tensor(ta), TypeHint::Tensor(tb)) => {
-            ta.rank == tb.rank && types_match(db, (*ta.element_type).clone(), (*tb.element_type).clone())
+            ta.rank == tb.rank && types_match(db, (*ta.element_type).C(), (*tb.element_type).C())
         }
         (TypeHint::Alias(na), TypeHint::Alias(nb)) => {
             na.name.as_str(db) == nb.name.as_str(db)
@@ -523,17 +524,17 @@ mod tests {
     fn test_variables_of_type_inner<'db>(db: &'db dyn salsa::Database) {
         let mut ctx = GenContext::new();
         ctx.variables.push(Variable {
-            name: "x".to_string(),
+            name: "x".S(),
             type_hint: TypeHint::U32,
             is_mutable: false,
         });
         ctx.variables.push(Variable {
-            name: "y".to_string(),
+            name: "y".S(),
             type_hint: TypeHint::I32,
             is_mutable: false,
         });
         ctx.variables.push(Variable {
-            name: "z".to_string(),
+            name: "z".S(),
             type_hint: TypeHint::U32,
             is_mutable: true,
         });
@@ -565,17 +566,17 @@ mod tests {
         let _ = db;
         let mut ctx = GenContext::new();
         ctx.variables.push(Variable {
-            name: "immut".to_string(),
+            name: "immut".S(),
             type_hint: TypeHint::U32,
             is_mutable: false,
         });
         ctx.variables.push(Variable {
-            name: "mut1".to_string(),
+            name: "mut1".S(),
             type_hint: TypeHint::U32,
             is_mutable: true,
         });
         ctx.variables.push(Variable {
-            name: "mut2".to_string(),
+            name: "mut2".S(),
             type_hint: TypeHint::U32,
             is_mutable: true,
         });
@@ -599,21 +600,21 @@ mod tests {
 
         // Local function named "compute".
         ctx.functions.push(FunctionSig {
-            name: "compute".to_string(),
+            name: "compute".S(),
             params: vec![],
             return_type: Some(TypeHint::U32),
         });
 
         // Imported function also named "compute" (should be shadowed).
         ctx.imported_functions.push(FunctionSig {
-            name: "compute".to_string(),
-            params: vec![Param { name: "x".to_string(), type_hint: TypeHint::U32, mode: ParamMode::In }],
+            name: "compute".S(),
+            params: vec![Param { name: "x".S(), type_hint: TypeHint::U32, mode: ParamMode::In }],
             return_type: Some(TypeHint::U32),
         });
 
         // Another imported function with different name.
         ctx.imported_functions.push(FunctionSig {
-            name: "helper".to_string(),
+            name: "helper".S(),
             params: vec![],
             return_type: None,
         });
@@ -624,7 +625,7 @@ mod tests {
         assert_eq!(callables.len(), 2);
 
         // Local "compute" should be included (no params).
-        let compute = callables.iter().find(|f| f.name == "compute").unwrap();
+        let compute = callables.iter().find(|f| f.name == "compute").X();
         assert!(compute.params.is_empty(), "Should be local compute with no params");
 
         // Helper should be included.
@@ -634,9 +635,9 @@ mod tests {
     #[test]
     fn test_module_info_path() {
         let info: ModuleInfo<'_> = ModuleInfo {
-            library: "local".to_string(),
-            package: "gen".to_string(),
-            module: "utils".to_string(),
+            library: "local".S(),
+            package: "gen".S(),
+            module: "utils".S(),
             functions: vec![],
             type_aliases: vec![],
             enums: vec![],

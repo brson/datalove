@@ -14,6 +14,7 @@
 //! A reference to a dynamic type is a plain pointer here, and its descriptor
 //! is the table entry of what it points at.
 
+use rmx::prelude::*;
 use super::*;
 
 use datalove_rt::c::RtHeader;
@@ -70,10 +71,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let num_params = builder.ins().iconst(cl_types::I32, count as i64);
 
         // The entries built from templates, by their table index.
-        let table = self.func_ctx.descriptor_table.clone();
+        let table = self.func_ctx.descriptor_table.C();
         let built: Vec<(usize, IrType)> = table.iter().enumerate()
             .filter(|(_, ty)| !matches!(ty, IrType::Param(_)))
-            .map(|(i, ty)| (i, ty.clone()))
+            .map(|(i, ty)| (i, ty.C()))
             .collect();
         let built_values = if built.is_empty() {
             Vec::new()
@@ -92,11 +93,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Storage on the shadow stack, given back on every return.
         let values: Vec<(ValueId, IrType)> = self.func.value_types.iter().enumerate()
             .filter(|(_, ty)| is_dynamic_value(ty))
-            .map(|(i, ty)| (ValueId(i as u32), ty.clone()))
+            .map(|(i, ty)| (ValueId(i as u32), ty.C()))
             .collect();
         let slots: Vec<(SlotId, IrType)> = self.func.slot_types.iter().enumerate()
             .filter(|(_, ty)| is_dynamic_value(ty))
-            .map(|(i, ty)| (SlotId(i as u32), ty.clone()))
+            .map(|(i, ty)| (SlotId(i as u32), ty.C()))
             .collect();
         if values.is_empty() && slots.is_empty() {
             return Ok(());
@@ -159,7 +160,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         let mut hit = builder.ins().iconst(cl_types::I8, 1);
-        for (i, &param) in self.type_param_values.clone().iter().enumerate() {
+        for (i, &param) in self.type_param_values.C().iter().enumerate() {
             let cached = builder.ins().load(PTR_TYPE, MemFlagsData::new(), cache, i as i32 * word);
             let same = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, cached, param);
             hit = builder.ins().band(hit, same);
@@ -187,7 +188,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             builder.ins().store(MemFlagsData::new(), desc, cache, (count + k) as i32 * word);
             fresh.push(desc.into());
         }
-        for (i, &param) in self.type_param_values.clone().iter().enumerate() {
+        for (i, &param) in self.type_param_values.C().iter().enumerate() {
             builder.ins().store(MemFlagsData::new(), param, cache, i as i32 * word);
         }
         builder.ins().jump(join, &fresh);
@@ -360,8 +361,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<cl_ir::Value, CraneliftError> {
         if !ty.is_dynamic() {
             let field_types: Vec<IrType> = match ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(flds) => flds.iter().map(|(_, t)| t.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(flds) => flds.iter().map(|(_, t)| t.C()).collect(),
                 other => return Err(CraneliftError::Codegen(format!("a field of {other}"))),
             };
             let offset = types::compute_tuple_field_offsets(&field_types)[index as usize];
@@ -544,5 +545,5 @@ fn supports_dynamic(instr: &Instruction) -> bool {
 /// An instruction's name, for a refusal to say what was refused.
 fn instruction_name(instr: &Instruction) -> String {
     let text = format!("{:?}", instr);
-    text.split([' ', '{', '(']).next().unwrap_or("an instruction").to_string()
+    text.split([' ', '{', '(']).next().unwrap_or("an instruction").S()
 }

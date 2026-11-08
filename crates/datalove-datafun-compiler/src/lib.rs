@@ -70,7 +70,7 @@ impl Database {
 
 impl datalove_datafun_tycheck::DbClone for Database {
     fn dyn_clone(&self) -> Box<dyn datalove_datafun_tycheck::DbClone + Send> {
-        Box::new(self.clone())
+        Box::new(self.C())
     }
 
     fn as_salsa_db(&self) -> &dyn salsa::Database {

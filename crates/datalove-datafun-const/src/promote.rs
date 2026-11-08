@@ -16,6 +16,7 @@
 //! unspecialized original is an ordinary binding, and so is every const when
 //! const inlining is skipped.
 
+use rmx::prelude::*;
 use datalove_datafun_ir::dense::ValueSet;
 use std::sync::Arc;
 
@@ -52,7 +53,7 @@ pub fn promote_function_consts(func: &mut IrCodeUnit) {
 
     let through_ref = |op: &Operand| match op {
         Operand::Value(v) if promoted.contains(v) => Operand::ValueRef(*v),
-        other => other.clone(),
+        other => other.C(),
     };
     for block in &mut func.blocks {
         block.instructions.retain(|instr| match instr {

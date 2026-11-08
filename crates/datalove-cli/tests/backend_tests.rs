@@ -25,8 +25,8 @@ fn run(binary: &Path, args: &[&std::ffi::OsStr]) -> Result<String, String> {
         .output()
         .map_err(|e| format!("failed to execute binary: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).S();
+    let stderr = String::from_utf8_lossy(&output.stderr).S();
 
     if !output.status.success() {
         return Err(format!("exited with {}\n{}{}", output.status, stdout, stderr));

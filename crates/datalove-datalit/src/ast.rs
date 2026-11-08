@@ -75,7 +75,7 @@ impl<'db> ExprFull<'db> {
     }
 
     pub fn type_hint(&self) -> Option<TypeHint<'db>> {
-        self.0.type_hint.clone()
+        self.0.type_hint.C()
     }
 
     pub fn expr(&self) -> &Expr<'db> {

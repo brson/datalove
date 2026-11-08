@@ -108,7 +108,7 @@ fn expression_keys_are_stable_across_a_revision() {
         let spans = datalove_datafun_parser::datafun_spans(db, source);
         spans.entries.iter()
             .map(|e| (
-                e.expr_key.fn_name.map(|n| n.as_str(db).to_string()),
+                e.expr_key.fn_name.map(|n| n.as_str(db).S()),
                 e.expr_key.local_index,
             ))
             .collect::<Vec<_>>()

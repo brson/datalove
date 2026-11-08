@@ -138,11 +138,11 @@ fn build(
     let mut cache = COMPONENT_CACHE.lock()
         .expect("native component cache poisoned");
     if let Some(path) = cache.get(&key) {
-        return Ok(path.clone());
+        return Ok(path.C());
     }
 
     let path = build_uncached(work_dir, riders, kind)?;
-    cache.insert(key, path.clone());
+    cache.insert(key, path.C());
     Ok(path)
 }
 
@@ -162,13 +162,13 @@ fn build_uncached(
         let dep = match &rider.dir {
             Some(dir) => Dep::Path(dir.canonicalize()
                 .map_err(|e| RiderBuildError {
-                    rider_name: rider.rider_name.clone(),
+                    rider_name: rider.rider_name.C(),
                     message: format!("failed to canonicalize rider path: {}", e),
                     stderr: String::new(),
                 })?),
-            None => Dep::Registry(rider.version.clone()),
+            None => Dep::Registry(rider.version.C()),
         };
-        rider_deps.push((rider.crate_name.clone(), dep));
+        rider_deps.push((rider.crate_name.C(), dep));
     }
 
     let synth_dir = work_dir.join(kind.dir_name()).join(rider_set_dir(riders));
@@ -231,7 +231,7 @@ fn build_uncached(
         if let Some(checkout) = datalove_buildinfo::BUILD_INFO.checkout() {
             let workspace_lock = checkout.join("Cargo.lock");
             if workspace_lock.is_file() {
-                let _ = std::fs::copy(&workspace_lock, &synth_lock);
+                std::fs::copy(&workspace_lock, &synth_lock).I();
             }
         }
     }
@@ -271,9 +271,9 @@ fn build_uncached(
 
     if !output.status.success() {
         return Err(RiderBuildError {
-            rider_name: "native-component".to_string(),
+            rider_name: "native-component".S(),
             message: format!("cargo build exited with {}", output.status),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).S(),
         });
     }
 
@@ -326,7 +326,7 @@ fn runtime_dep(
 ) -> Result<Dep, RiderBuildError> {
     match info {
         datalove_buildinfo::BuildInfo::Prod { version } => {
-            Ok(Dep::Registry(version.to_string()))
+            Ok(Dep::Registry(version.S()))
         }
         datalove_buildinfo::BuildInfo::Local { checkout, .. } => {
             let checkout = Path::new(checkout);
@@ -397,7 +397,7 @@ fn write_if_changed(path: &Path, contents: &str) -> std::io::Result<()> {
 /// complete version or the other.
 fn write_atomic(path: &Path, contents: &str) -> std::io::Result<()> {
     let n = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let file_name = path.file_name().unwrap().to_string_lossy();
+    let file_name = path.file_name().X().to_string_lossy();
     // Leading dot keeps the transient file out of cargo's way.
     let tmp = path.with_file_name(format!(".{}.tmp{}-{}", file_name, std::process::id(), n));
     std::fs::write(&tmp, contents)?;
@@ -406,7 +406,7 @@ fn write_atomic(path: &Path, contents: &str) -> std::io::Result<()> {
 
 fn build_err(rider_name: &str, message: String) -> RiderBuildError {
     RiderBuildError {
-        rider_name: rider_name.to_string(),
+        rider_name: rider_name.S(),
         message,
         stderr: String::new(),
     }
@@ -422,7 +422,7 @@ fn find_cdylib(target_dir: &Path, lib_name: &str) -> Result<PathBuf, RiderBuildE
 
     for path in &candidates {
         if path.is_file() {
-            return Ok(path.clone());
+            return Ok(path.C());
         }
     }
 
@@ -441,7 +441,7 @@ fn find_staticlib(target_dir: &Path, lib_name: &str) -> Result<PathBuf, RiderBui
 
     for path in &candidates {
         if path.is_file() {
-            return Ok(path.clone());
+            return Ok(path.C());
         }
     }
 
@@ -458,9 +458,9 @@ mod tests {
 
     fn rider(name: &str) -> RiderCrate {
         RiderCrate {
-            rider_name: name.to_string(),
+            rider_name: name.S(),
             crate_name: format!("datalove-rider-{}", name),
-            version: "0.1.0".to_string(),
+            version: "0.1.0".S(),
             dir: None,
         }
     }
@@ -529,7 +529,7 @@ mod tests {
         };
         let error = runtime_dep(&info, "datalove-rt")
             .err().expect("a missing checkout cannot be named");
-        let message = error.to_string();
+        let message = error.S();
         assert!(message.contains("/nowhere/this/tree/went"), "{message}");
         assert!(message.contains("no longer there"), "{message}");
     }

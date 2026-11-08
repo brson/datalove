@@ -14,6 +14,7 @@
 //! and drops what it is left holding. None of that depends on the body being
 //! elaborate; it depends on the type the call chose.
 
+use rmx::prelude::*;
 use rand::Rng;
 
 use datalove_datalit::ast::{
@@ -252,7 +253,7 @@ pub fn gen_generic_call<'db, R: Rng>(
         .iter()
         .map(|(_, bound)| bound.pick(db, rng, config))
         .collect();
-    let t = chosen[0].clone();
+    let t = chosen[0].C();
 
     let list_of = |ty: TypeHint<'db>| TypeHint::List(TypeHintList { element_type: Box::new(ty) });
 
@@ -263,14 +264,14 @@ pub fn gen_generic_call<'db, R: Rng>(
                     ty: TypeHint<'db>| -> String {
         let name = format!("a{}", *var_counter);
         *var_counter += 1;
-        let value = gen_expr(db, rng, ty.clone(), config, ctx);
+        let value = gen_expr(db, rng, ty.C(), config, ctx);
         prelude.push(format!("let {}: {} = {}", name, pretty_type_hint(db, ty), value));
         name
     };
 
     let (call, result) = match sig.shape {
         Shape::Identity => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
             (format!("{}({})", sig.name, a), Some(t))
         }
         Shape::Consume => {
@@ -278,33 +279,33 @@ pub fn gen_generic_call<'db, R: Rng>(
             (format!("{}({})", sig.name, a), None)
         }
         Shape::Duplicate => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
-            let pair = TypeHint::AnonTuple(TypeHintAnonTuple { fields: vec![t.clone(), t] });
+            let a = bind(rng, ctx, &mut prelude, t.C());
+            let pair = TypeHint::AnonTuple(TypeHintAnonTuple { fields: vec![t.C(), t] });
             (format!("{}({})", sig.name, a), Some(pair))
         }
         Shape::Wrap => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
             let opt = TypeHint::Option(TypeHintOption { inner_type: Box::new(t) });
             (format!("{}({})", sig.name, a), Some(opt))
         }
         Shape::Listify => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
             (format!("{}({})", sig.name, a), Some(list_of(t)))
         }
         Shape::ListifyTwo => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
-            let b = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
+            let b = bind(rng, ctx, &mut prelude, t.C());
             (format!("{}({}, {})", sig.name, a, b), Some(list_of(t)))
         }
         Shape::Setify => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
             let set = TypeHint::Set(TypeHintSet { element_type: Box::new(t) });
             (format!("{}({})", sig.name, a), Some(set))
         }
         Shape::Mapify => {
-            let v = chosen[1].clone();
-            let a = bind(rng, ctx, &mut prelude, t.clone());
-            let b = bind(rng, ctx, &mut prelude, v.clone());
+            let v = chosen[1].C();
+            let a = bind(rng, ctx, &mut prelude, t.C());
+            let b = bind(rng, ctx, &mut prelude, v.C());
             let map = TypeHint::Map(TypeHintMap {
                 key_type: Box::new(t),
                 value_type: Box::new(v),
@@ -318,18 +319,18 @@ pub fn gen_generic_call<'db, R: Rng>(
             (format!("{}(ref {})", sig.name, a), Some(TypeHint::Bool))
         }
         Shape::AddChecked => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
-            let b = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
+            let b = bind(rng, ctx, &mut prelude, t.C());
             let opt = TypeHint::Option(TypeHintOption { inner_type: Box::new(t) });
             (format!("{}({}, {})", sig.name, a, b), Some(opt))
         }
         Shape::Multiply => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
-            let b = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
+            let b = bind(rng, ctx, &mut prelude, t.C());
             (format!("{}({}, {})", sig.name, a, b), Some(t))
         }
         Shape::Compare(_) => {
-            let a = bind(rng, ctx, &mut prelude, t.clone());
+            let a = bind(rng, ctx, &mut prelude, t.C());
             let b = bind(rng, ctx, &mut prelude, t);
             (format!("{}({}, {})", sig.name, a, b), Some(TypeHint::Bool))
         }

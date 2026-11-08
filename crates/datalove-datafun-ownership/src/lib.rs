@@ -422,7 +422,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         };
         self.errors.push(AnalysisError::CannotMoveConst {
             expr_key,
-            name: name.to_string(),
+            name: name.S(),
             recovery_hint,
         });
     }
@@ -435,7 +435,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 continue;
             }
             if self.get_state(BindingId(id as u32)) == Some(BindingState::Moved) {
-                dead.push(info.name.clone());
+                dead.push(info.name.C());
             }
         }
         dead
@@ -1932,7 +1932,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
             {
                 ctx.errors.push(AnalysisError::OutParamPartialWrite {
                     expr_key: ctx.expr(stmt.value).key(),
-                    name: root_name.to_string(),
+                    name: root_name.S(),
                 });
             }
         }
@@ -2344,17 +2344,17 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
             // For now, use a placeholder - the typechecker has validated it.
             let input_ty = ctx.expr_type(ctx.expr(stmt.input));
             let variant_name = match &case.kind {
-                MatchCaseKind::Term { name, .. } => name.text(ctx.db).to_string(),
+                MatchCaseKind::Term { name, .. } => name.text(ctx.db).S(),
                 _ => unreachable!(),
             };
             let payload_ty = match &input_ty {
                 IrType::Enum(variants) => {
                     variants.iter()
                         .find(|(n, _)| n == &variant_name)
-                        .and_then(|(_, payload)| payload.clone())
+                        .and_then(|(_, payload)| payload.C())
                         .unwrap_or(IrType::Unit)
                 }
-                IrType::Term(_, payload) => *payload.clone(),
+                IrType::Term(_, payload) => *payload.C(),
                 _ => IrType::Unit,
             };
             ctx.alloc_binding(name, payload_ty, false, None);
@@ -2510,7 +2510,7 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
         ctx.alloc_binding(name.text(ctx.db).S(), ty, false, by_ref.then_some(ParamMode::Ref));
     }
 
-    ctx.walked.extend(walked.clone());
+    ctx.walked.extend(walked.C());
     analyze_statements(ctx, &stmt.body);
     if walked.is_some() {
         ctx.walked.pop();

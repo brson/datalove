@@ -1,5 +1,6 @@
 //! Running a script unit in the environment the units before it left.
 
+use rmx::prelude::*;
 use super::*;
 
 impl IrInterpreter {
@@ -104,9 +105,9 @@ impl IrInterpreter {
             self.runtime.handle(),
             at,
             script_frame,
-            unit.nested_units.clone(),
-            script_ctx.unit_end_values.clone(),
-            script_ctx.unit_end_slots.clone(),
+            unit.nested_units.C(),
+            script_ctx.unit_end_values.C(),
+            script_ctx.unit_end_slots.C(),
         );
 
         result

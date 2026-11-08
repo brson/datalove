@@ -5,6 +5,7 @@
 //! descriptor read with the value says what is really there, and the arms
 //! below read layouts and widths from it rather than from the static type.
 
+use rmx::prelude::*;
 use super::*;
 use datalove_rtdt::{AnyMut, AnyOut, AnyOwned, AnyRef};
 
@@ -1390,10 +1391,10 @@ impl IrInterpreter {
         match op {
             Operand::ValueRef(id) => frame.value_deref(*id),
             Operand::ExternalValue { unit, value } => {
-                frames.external_value(*unit, *value).unwrap()
+                frames.external_value(*unit, *value).X()
             }
             Operand::ExternalSlot { unit, slot } => {
-                frames.external_slot(*unit, *slot).unwrap()
+                frames.external_slot(*unit, *slot).X()
             }
             Operand::Value(_) | Operand::Slot(_) | Operand::Param(_) => {
                 unreachable!("read_operand reads these itself")

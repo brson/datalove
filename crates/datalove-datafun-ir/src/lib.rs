@@ -5,6 +5,7 @@
 //! - Simple slot-based interpretation
 //! - Direct lowering to LLVM/Cranelift (SSA values -> registers, slots -> stack)
 
+use rmx::prelude::*;
 use serde::{Deserialize, Serialize};
 use bct::lookup::LookupMap;
 
@@ -210,9 +211,9 @@ impl CursorKind {
     /// map's key, or a tensor's row of one rank less.
     pub fn elem_type(coll: &IrType) -> IrType {
         match coll {
-            IrType::List(elem) | IrType::Set(elem) | IrType::Tensor(elem, 1) => (**elem).clone(),
-            IrType::Tensor(elem, rank) => IrType::Tensor(elem.clone(), rank - 1),
-            IrType::Map(key, _) => (**key).clone(),
+            IrType::List(elem) | IrType::Set(elem) | IrType::Tensor(elem, 1) => (**elem).C(),
+            IrType::Tensor(elem, rank) => IrType::Tensor(elem.C(), rank - 1),
+            IrType::Map(key, _) => (**key).C(),
             other => panic!("a walk over a {other}"),
         }
     }
@@ -261,20 +262,20 @@ impl IrType {
         let sub = |t: &IrType| t.replace_rec_var(depth, whole);
         let boxed = |t: &IrType| Box::new(t.replace_rec_var(depth, whole));
         match self {
-            IrType::RecVar(index) if *index == depth => whole.clone(),
+            IrType::RecVar(index) if *index == depth => whole.C(),
             IrType::Rec(body) => IrType::Rec(Box::new(body.replace_rec_var(depth + 1, whole))),
             IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
             | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
             | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Data
             | IrType::Error | IrType::Atom(_) | IrType::Cursor(_) | IrType::Param(_)
-            | IrType::RecVar(_) => self.clone(),
+            | IrType::RecVar(_) => self.C(),
             IrType::Tuple(fields) => IrType::Tuple(fields.iter().map(sub).collect()),
-            IrType::Struct(fields) => IrType::Struct(fields.iter().map(|(n, t)| (n.clone(), sub(t))).collect()),
+            IrType::Struct(fields) => IrType::Struct(fields.iter().map(|(n, t)| (n.C(), sub(t))).collect()),
             IrType::Enum(variants) => IrType::Enum(
-                variants.iter().map(|(n, p)| (n.clone(), p.as_ref().map(sub))).collect(),
+                variants.iter().map(|(n, p)| (n.C(), p.as_ref().map(sub))).collect(),
             ),
-            IrType::Table(columns) => IrType::Table(columns.iter().map(|(n, t)| (n.clone(), boxed(t))).collect()),
-            IrType::Term(name, inner) => IrType::Term(name.clone(), boxed(inner)),
+            IrType::Table(columns) => IrType::Table(columns.iter().map(|(n, t)| (n.C(), boxed(t))).collect()),
+            IrType::Term(name, inner) => IrType::Term(name.C(), boxed(inner)),
             IrType::List(inner) => IrType::List(boxed(inner)),
             IrType::Set(inner) => IrType::Set(boxed(inner)),
             IrType::Option(inner) => IrType::Option(boxed(inner)),
@@ -316,20 +317,20 @@ impl IrType {
         let boxed = |t: &IrType| Box::new(t.substitute(args));
         match self {
             IrType::Param(i) => match args.get(*i as usize) {
-                Some(arg) => arg.clone(),
+                Some(arg) => arg.C(),
                 None => panic!("type parameter {i} substituted from {} arguments", args.len()),
             },
             IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
             | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
             | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Data
-            | IrType::Error | IrType::Atom(_) | IrType::Cursor(_) => self.clone(),
+            | IrType::Error | IrType::Atom(_) | IrType::Cursor(_) => self.C(),
             IrType::Tuple(fields) => IrType::Tuple(fields.iter().map(sub).collect()),
-            IrType::Struct(fields) => IrType::Struct(fields.iter().map(|(n, t)| (n.clone(), sub(t))).collect()),
+            IrType::Struct(fields) => IrType::Struct(fields.iter().map(|(n, t)| (n.C(), sub(t))).collect()),
             IrType::Enum(variants) => IrType::Enum(
-                variants.iter().map(|(n, p)| (n.clone(), p.as_ref().map(sub))).collect(),
+                variants.iter().map(|(n, p)| (n.C(), p.as_ref().map(sub))).collect(),
             ),
-            IrType::Table(columns) => IrType::Table(columns.iter().map(|(n, t)| (n.clone(), boxed(t))).collect()),
-            IrType::Term(name, inner) => IrType::Term(name.clone(), boxed(inner)),
+            IrType::Table(columns) => IrType::Table(columns.iter().map(|(n, t)| (n.C(), boxed(t))).collect()),
+            IrType::Term(name, inner) => IrType::Term(name.C(), boxed(inner)),
             IrType::List(inner) => IrType::List(boxed(inner)),
             IrType::Set(inner) => IrType::Set(boxed(inner)),
             IrType::Option(inner) => IrType::Option(boxed(inner)),
@@ -338,7 +339,7 @@ impl IrType {
             IrType::Ref(inner) => IrType::Ref(boxed(inner)),
             IrType::Map(k, v) => IrType::Map(boxed(k), boxed(v)),
             IrType::Rec(body) => IrType::Rec(boxed(body)),
-            IrType::RecVar(_) => self.clone(),
+            IrType::RecVar(_) => self.C(),
         }
     }
 
@@ -369,7 +370,7 @@ impl IrType {
             _ => {}
         }
         if !out.contains(self) {
-            out.push(self.clone());
+            out.push(self.C());
         }
     }
 
@@ -455,7 +456,7 @@ struct IrJoined<'a, I: Iterator<Item = &'a IrType> + Clone>(I);
 
 impl<'a, I: Iterator<Item = &'a IrType> + Clone> std::fmt::Display for IrJoined<'a, I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, ty) in self.0.clone().enumerate() {
+        for (i, ty) in self.0.C().enumerate() {
             if i > 0 { write!(f, ", ")?; }
             write!(f, "{}", ty)?;
         }
@@ -468,7 +469,7 @@ struct IrFields<'a, I: Iterator<Item = (&'a String, &'a IrType)> + Clone>(I);
 
 impl<'a, I: Iterator<Item = (&'a String, &'a IrType)> + Clone> std::fmt::Display for IrFields<'a, I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, (name, ty)) in self.0.clone().enumerate() {
+        for (i, (name, ty)) in self.0.C().enumerate() {
             if i > 0 { write!(f, ", ")?; }
             write!(f, "{}: {}", name, ty)?;
         }
@@ -564,7 +565,7 @@ impl IrType {
             TypeHint::AnonStruct(struct_) => {
                 let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint_inner(db, &f.type_hint, type_params)))
+                    .map(|f| (f.name.text(db).S(), Self::from_type_hint_inner(db, &f.type_hint, type_params)))
                     .collect();
                 IrType::Struct(fields)
             }
@@ -606,7 +607,7 @@ impl IrType {
                 let columns: Vec<_> = table.columns
                     .iter()
                     .map(|c| {
-                        let name = c.name.text(db).to_string();
+                        let name = c.name.text(db).S();
                         let ty = Self::from_type_hint_inner(db, &c.type_hint, type_params);
                         (name, Box::new(ty))
                     })
@@ -614,18 +615,18 @@ impl IrType {
                 IrType::Table(columns)
             }
             TypeHint::Atom(a) => {
-                let name = a.name.text(db).to_string();
+                let name = a.name.text(db).S();
                 IrType::Atom(name)
             }
             TypeHint::Term(t) => {
-                let name = t.name.text(db).to_string();
+                let name = t.name.text(db).S();
                 let payload = Self::from_type_hint_inner(db, &t.payload, type_params);
                 IrType::Term(name, Box::new(payload))
             }
             TypeHint::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
                     .map(|v| {
-                        let name = v.name.text(db).to_string();
+                        let name = v.name.text(db).S();
                         let payload = v.payload.as_ref().map(|p| Self::from_type_hint_inner(db, p, type_params));
                         (name, payload)
                     })
@@ -709,7 +710,7 @@ impl IrType {
             DlType::AnonStruct(struct_) => {
                 let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name.text(db).to_string(), Self::from_datalit_inner(db, &*f.ty, keep)))
+                    .map(|f| (f.name.text(db).S(), Self::from_datalit_inner(db, &*f.ty, keep)))
                     .collect();
                 IrType::Struct(fields)
             }
@@ -744,7 +745,7 @@ impl IrType {
                 let columns: Vec<_> = table.columns
                     .iter()
                     .map(|c| {
-                        let name = c.name.text(db).to_string();
+                        let name = c.name.text(db).S();
                         let ty = Self::from_datalit_inner(db, &*c.ty, keep);
                         (name, Box::new(ty))
                     })
@@ -752,18 +753,18 @@ impl IrType {
                 IrType::Table(columns)
             }
             DlType::Atom(a) => {
-                let name = a.name.text(db).to_string();
+                let name = a.name.text(db).S();
                 IrType::Atom(name)
             }
             DlType::Term(t) => {
-                let name = t.name.text(db).to_string();
+                let name = t.name.text(db).S();
                 let payload = Self::from_datalit_inner(db, &t.payload, keep);
                 IrType::Term(name, Box::new(payload))
             }
             DlType::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
                     .map(|v| {
-                        let name = v.name.text(db).to_string();
+                        let name = v.name.text(db).S();
                         let payload = v.payload.as_ref().map(|p| Self::from_datalit_inner(db, p, keep));
                         (name, payload)
                     })
@@ -868,7 +869,7 @@ impl SymbolTable {
     pub fn define_func(&mut self, name: String, param_count: usize) -> FuncId {
         let id = FuncId(self.next_func_id);
         self.next_func_id += 1;
-        self.functions.push(FuncDef { id, name: name.clone(), param_count });
+        self.functions.push(FuncDef { id, name: name.C(), param_count });
         self.name_to_func.insert(name, id);
         id
     }
@@ -890,7 +891,7 @@ impl SymbolTable {
 
     /// Define a function with a specific ID (for reconstructing modules).
     pub fn define_func_with_id(&mut self, id: FuncId, name: String, param_count: usize) {
-        self.functions.push(FuncDef { id, name: name.clone(), param_count });
+        self.functions.push(FuncDef { id, name: name.C(), param_count });
         self.name_to_func.insert(name, id);
         // Update next_func_id to be at least one past this ID.
         if id.0 >= self.next_func_id {
@@ -1137,14 +1138,14 @@ pub fn ir_type_of_const_value(value: &ConstValue) -> IrType {
         ConstValue::Struct(fields) => {
             IrType::Struct(
                 fields.iter()
-                    .map(|(name, v)| (name.clone(), ir_type_of_const_value(v)))
+                    .map(|(name, v)| (name.C(), ir_type_of_const_value(v)))
                     .collect()
             )
         }
         ConstValue::Enum { variant, payload } => {
             // For enum, we can only infer a single-variant enum type.
             let payload_type = payload.as_ref().map(|p| ir_type_of_const_value(p));
-            IrType::Enum(vec![(variant.clone(), payload_type)])
+            IrType::Enum(vec![(variant.C(), payload_type)])
         }
         ConstValue::OptionNone => {
             // Cannot fully infer the inner type for None; default to Unit.
@@ -1193,10 +1194,10 @@ pub fn ir_type_of_const_value(value: &ConstValue) -> IrType {
             let col_types: Vec<(String, Box<IrType>)> = if let Some(first_row) = rows.first() {
                 columns.iter()
                     .zip(first_row.iter())
-                    .map(|(name, value)| (name.clone(), Box::new(ir_type_of_const_value(value))))
+                    .map(|(name, value)| (name.C(), Box::new(ir_type_of_const_value(value))))
                     .collect()
             } else {
-                columns.iter().map(|name| (name.clone(), Box::new(IrType::Unit))).collect()
+                columns.iter().map(|name| (name.C(), Box::new(IrType::Unit))).collect()
             };
             IrType::Table(col_types)
         }
@@ -2233,7 +2234,7 @@ impl Instruction {
 
             // Aggregate construction
             Instruction::Pack { dest, .. } => vec![*dest],
-            Instruction::Unpack { dests, .. } => dests.clone(),
+            Instruction::Unpack { dests, .. } => dests.C(),
             Instruction::GetField { dest, .. } => vec![*dest],
             Instruction::GetFieldRef { dest, .. } => vec![*dest],
 
@@ -2931,7 +2932,7 @@ impl NativeContext {
     /// What a call binding `bindings` bound each undetermined type parameter
     /// to, in order: the types whose descriptors it hands over.
     pub fn undetermined_bindings(&self, bindings: &[IrType]) -> Vec<IrType> {
-        self.undetermined_type_params.iter().map(|&i| bindings[i as usize].clone()).collect()
+        self.undetermined_type_params.iter().map(|&i| bindings[i as usize].C()).collect()
     }
 
     /// The linker symbol the native is called by.
@@ -3239,7 +3240,7 @@ impl ConstBindingGraph {
     /// Create a new graph with bindings in topological order.
     pub fn new(bindings: Vec<ConstBindingInfo>) -> Self {
         let mut name_to_stmt: Vec<_> = bindings.iter()
-            .map(|b| (b.name.clone(), b.stmt_id))
+            .map(|b| (b.name.C(), b.stmt_id))
             .collect();
         name_to_stmt.sort_by(|a, b| a.0.cmp(&b.0));
         Self { bindings, name_to_stmt }
@@ -3433,7 +3434,7 @@ mod const_value_tests {
         // The wrapper is why: every variant holding a `ConstValue` inherits it
         // from the derive rather than from an arm someone has to remember.
         let nested = ConstValue::Tuple(vec![f64c(f64::NAN), ConstValue::I32(1)]);
-        assert_eq!(nested, nested.clone());
+        assert_eq!(nested, nested.C());
 
         let plus = ConstValue::OptionSome(Box::new(f64c(0.0)));
         let minus = ConstValue::OptionSome(Box::new(f64c(-0.0)));
@@ -3444,7 +3445,7 @@ mod const_value_tests {
     fn a_float_constant_serializes_as_the_float() {
         // `serde(transparent)` on the wrapper, so that what is written down
         // did not change when the relation did.
-        let json = rmx::serde_json::to_string(&f64c(1.5)).unwrap();
+        let json = rmx::serde_json::to_string(&f64c(1.5)).X();
         assert_eq!(json, r#"{"F64":1.5}"#);
     }
 }
@@ -3469,7 +3470,7 @@ mod dynamic_type_tests {
     fn function(param_types: Vec<IrType>, value_types: Vec<IrType>, blocks: Vec<IrBlock>) -> IrCodeUnit {
         IrCodeUnit {
             id: CodeUnitId(0),
-            name: "f".to_string(),
+            name: "f".S(),
             blocks,
             value_count: value_types.len() as u32,
             slot_count: 0,
@@ -3552,12 +3553,12 @@ mod dynamic_type_tests {
     fn the_table_holds_every_dynamic_type_parts_first() {
         let pair = IrType::Tuple(vec![t(0), IrType::U32]);
         let unit = function(
-            vec![list(pair.clone())],
-            vec![IrType::U32, IrType::Ref(Box::new(t(0))), option(pair.clone())],
+            vec![list(pair.C())],
+            vec![IrType::U32, IrType::Ref(Box::new(t(0))), option(pair.C())],
             vec![block(0, vec![], Terminator::Return { value: None })],
         );
         let table = descriptor_table(&unit);
-        assert_eq!(table, vec![t(0), pair.clone(), list(pair.clone()), option(pair)]);
+        assert_eq!(table, vec![t(0), pair.C(), list(pair.C()), option(pair)]);
     }
 
     #[test]

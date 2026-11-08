@@ -31,6 +31,7 @@
 //! tests run every fixture on, so that each rule is checked against the ops
 //! it replaces.
 
+use rmx::prelude::*;
 use bct::lookup::LookupMap;
 
 use super::{Ck, CkTy, Loc, Op};
@@ -404,7 +405,7 @@ fn duplicate_short_branches(blocks: &mut [Vec<Op>]) {
         if !target.iter().all(duplicable) {
             continue;
         }
-        let copy = target.clone();
+        let copy = target.C();
         blocks[b].pop();
         blocks[b].extend(copy);
     }

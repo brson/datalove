@@ -5,6 +5,7 @@
 //! led by the type rather than by the literal: a datalit integer is any
 //! integer type until something says which, and here the type says.
 
+use rmx::prelude::*;
 use std::sync::Arc;
 
 use bct::input::Source;
@@ -23,13 +24,13 @@ use crate::literal::{parse_float_const, parse_hex_const, parse_int_const, string
 ///
 /// Shared, so that what the memo holds is what every user of the const holds.
 pub fn data_file_value(db: &dyn salsa::Database, source: Source, ty: &IrType) -> Arc<ConstValue> {
-    Arc::clone(data_file_value_tracked(db, source, ty.clone()))
+    Arc::clone(data_file_value_tracked(db, source, ty.C()))
 }
 
 #[salsa::tracked(returns(ref))]
 fn data_file_value_tracked(db: &dyn salsa::Database, source: Source, ty: IrType) -> Arc<ConstValue> {
     let expr = datalit::parser::parse(db, source).expr(db);
-    let resolved = datalit::resolve::resolve_names(db, source, expr.clone());
+    let resolved = datalit::resolve::resolve_names(db, source, expr.C());
     Arc::new(Reader { db, resolved }.read(&expr, &ty))
 }
 
@@ -42,7 +43,7 @@ impl<'db> Reader<'db> {
     fn read(&self, expr: &ExprFull<'db>, ty: &IrType) -> ConstValue {
         let db = self.db;
         let expr_kind = expr.expr();
-        let text = |value: &bct::text::InternedText<'db>| value.as_str(db).to_owned();
+        let text = |value: &bct::text::InternedText<'db>| value.as_str(db).O();
         // A value of a recursive type is written as its unfolding is.
         let ty = ty.exposed();
         let ty = ty.as_ref();
@@ -74,7 +75,7 @@ impl<'db> Reader<'db> {
                     let field = record.fields.iter()
                         .find(|f| f.name.as_str(db) == name)
                         .expect("the typechecker checked every field is there");
-                    (name.clone(), self.read(&field.value, field_ty))
+                    (name.C(), self.read(&field.value, field_ty))
                 }).collect(),
             ),
 
@@ -88,11 +89,11 @@ impl<'db> Reader<'db> {
                 map.entries.iter().map(|entry| (self.read(&entry.key, key), self.read(&entry.value, value))).collect(),
             ),
             (Expr::Tensor(tensor), IrType::Tensor(element, _)) => ConstValue::Tensor {
-                shape: tensor.shape.clone(),
+                shape: tensor.shape.C(),
                 elements: tensor.elements.iter().map(|e| self.read(e, element)).collect(),
             },
             (Expr::Table(table), IrType::Table(columns)) => ConstValue::Table {
-                columns: columns.iter().map(|(name, _)| name.clone()).collect(),
+                columns: columns.iter().map(|(name, _)| name.C()).collect(),
                 rows: table.rows.iter().map(|row| {
                     row.elements.iter().zip(columns)
                         .map(|(e, (_, column_ty))| self.read(e, column_ty))
@@ -140,7 +141,7 @@ impl<'db> Reader<'db> {
     /// A `data` or `error` payload, which carries its own type: the one it
     /// synthesizes, as it was checked.
     fn read_boxed(&self, expr: &ExprFull<'db>) -> (Box<IrType>, Box<ConstValue>) {
-        let checked = datalit::tycheck::type_check(self.db, expr.clone(), self.resolved);
+        let checked = datalit::tycheck::type_check(self.db, expr.C(), self.resolved);
         let ty = checked.root_type(self.db).as_ref()
             .expect("the typechecker checked the payload");
         let ty = IrType::from_datalit(self.db, ty);

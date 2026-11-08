@@ -80,7 +80,7 @@ impl Binding {
     /// Split a binding into the name or the pattern a statement records.
     fn split_ast<'db>(db: &'db dyn Db, ast: &crate::ast::Binding<'db>) -> (Option<String>, Option<Self>) {
         use crate::ast::Binding as B;
-        let s = |t: &bct::text::InternedText<'db>| t.as_str(db).to_string();
+        let s = |t: &bct::text::InternedText<'db>| t.as_str(db).S();
         let pattern = match ast {
             B::Name(name) => return (Some(s(name)), None),
             B::Tuple(names) => Binding::Tuple { names: names.iter().map(s).collect() },
@@ -638,7 +638,7 @@ impl Statement {
             crate::ast::Statement::If(s) => Statement::If(StmtIf::from_ast(db, arena, s)),
             crate::ast::Statement::Loop(s) => Statement::Loop(StmtLoop::from_ast(db, arena, s)),
             crate::ast::Statement::For(s) => Statement::For(StmtFor {
-                bindings: s.bindings.iter().map(|b| b.as_str(db).to_string()).collect(),
+                bindings: s.bindings.iter().map(|b| b.as_str(db).S()).collect(),
                 iteratee: ExprFun::from_ast(db, arena.get(s.iteratee)),
                 body: s.body.iter().map(|s| Statement::from_ast(db, arena, s)).collect(),
             }),
@@ -659,8 +659,8 @@ impl Statement {
 impl StmtTypeAlias {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtTypeAlias<'db>) -> Self {
         StmtTypeAlias {
-            name: ast.name.as_str(db).to_string(),
-            type_hint: datalove_datalit::ast_serde::TypeHint::from_ast(db, ast.type_hint.clone()),
+            name: ast.name.as_str(db).S(),
+            type_hint: datalove_datalit::ast_serde::TypeHint::from_ast(db, ast.type_hint.C()),
         }
     }
 }
@@ -668,11 +668,11 @@ impl StmtTypeAlias {
 impl StmtNativeFun {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtNativeFun<'db>) -> Self {
         StmtNativeFun {
-            name: ast.name.as_str(db).to_string(),
-            type_params: ast.type_params.iter().map(|t| t.as_str(db).to_string()).collect(),
+            name: ast.name.as_str(db).S(),
+            type_params: ast.type_params.iter().map(|t| t.as_str(db).S()).collect(),
             type_bounds: bounds(&ast.type_bounds),
             params: ast.params.iter().map(|p| FunParam::from_ast(db, p)).collect(),
-            return_type: ast.return_type.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
+            return_type: ast.return_type.C().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
             intrinsic: ast.intrinsic,
         }
     }
@@ -692,7 +692,7 @@ impl StmtLet {
         StmtLet {
             name,
             pattern,
-            type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
+            type_hint: ast.type_hint.C().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
             value: ExprFun::from_ast(db, arena.get(ast.value)),
         }
     }
@@ -704,7 +704,7 @@ impl StmtVar {
         StmtVar {
             name,
             pattern,
-            type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
+            type_hint: ast.type_hint.C().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
             value: ast.value.map(|v| ExprFun::from_ast(db, arena.get(v))),
         }
     }
@@ -713,8 +713,8 @@ impl StmtVar {
 impl StmtConst {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::StmtConst<'db>) -> Self {
         StmtConst {
-            name: ast.name.as_str(db).to_string(),
-            type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
+            name: ast.name.as_str(db).S(),
+            type_hint: ast.type_hint.C().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
             value: ExprFun::from_ast(db, arena.get(ast.value)),
         }
     }
@@ -733,7 +733,7 @@ impl StmtSet {
 impl Place {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::Place<'db>) -> Self {
         Place {
-            root: ast.root.as_str(db).to_string(),
+            root: ast.root.as_str(db).S(),
             steps: ast.steps.iter().map(|s| PlaceStep::from_ast(db, arena, s)).collect(),
         }
     }
@@ -764,7 +764,7 @@ impl FieldSelector {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::FieldSelector<'db>) -> Self {
         match ast {
             crate::ast::FieldSelector::Name(name) => FieldSelector::Name {
-                name: name.as_str(db).to_string(),
+                name: name.as_str(db).S(),
             },
             crate::ast::FieldSelector::Index(idx) => FieldSelector::Index { index: *idx },
         }
@@ -774,9 +774,9 @@ impl FieldSelector {
 impl StmtFun {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &'db crate::ast::StmtFun<'db>) -> Self {
         StmtFun {
-            name: ast.name().as_str(db).to_string(),
+            name: ast.name().as_str(db).S(),
             inline: ast.signature().inline,
-            type_params: ast.type_params().iter().map(|t| t.as_str(db).to_string()).collect(),
+            type_params: ast.type_params().iter().map(|t| t.as_str(db).S()).collect(),
             type_bounds: bounds(ast.type_bounds()),
             params: ast.params().iter().map(|p| FunParam::from_ast(db, p)).collect(),
             return_type: ast.return_type().map(|rt| datalove_datalit::ast_serde::TypeHint::from_ast(db, rt)),
@@ -791,10 +791,10 @@ impl StmtFun {
 impl FunParam {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::FunParam<'db>) -> Self {
         FunParam {
-            name: ast.name.as_str(db).to_string(),
+            name: ast.name.as_str(db).S(),
             mode: ParamMode::from_ast(ast.mode),
             is_comptime: ast.is_comptime,
-            type_hint: datalove_datalit::ast_serde::TypeHint::from_ast(db, ast.type_hint.clone()),
+            type_hint: datalove_datalit::ast_serde::TypeHint::from_ast(db, ast.type_hint.C()),
         }
     }
 }
@@ -823,14 +823,14 @@ impl StmtRequire {
         match ast {
             crate::ast::StmtRequire::Module(m) => {
                 StmtRequire::Module(StmtRequireModule {
-                    import_space: m.import_space.as_str(db).to_string(),
-                    package_alias: m.package_alias.as_str(db).to_string(),
-                    module_alias: m.module_alias.as_str(db).to_string(),
+                    import_space: m.import_space.as_str(db).S(),
+                    package_alias: m.package_alias.as_str(db).S(),
+                    module_alias: m.module_alias.as_str(db).S(),
                 })
             }
             crate::ast::StmtRequire::Rider(r) => {
                 StmtRequire::Rider(StmtRequireRider {
-                    name: r.name.as_str(db).to_string(),
+                    name: r.name.as_str(db).S(),
                 })
             }
         }
@@ -840,8 +840,8 @@ impl StmtRequire {
 impl StmtImport {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtImport<'db>) -> Self {
         StmtImport {
-            module_name: ast.module_name.as_str(db).to_string(),
-            item_name: ast.item_name.as_str(db).to_string(),
+            module_name: ast.module_name.as_str(db).S(),
+            item_name: ast.item_name.as_str(db).S(),
         }
     }
 }
@@ -850,8 +850,8 @@ impl StmtIf {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::StmtIf<'db>) -> Self {
         StmtIf {
             condition: ExprFun::from_ast(db, arena.get(ast.condition)),
-            then_binding: ast.then_binding.map(|b| b.as_str(db).to_string()),
-            else_binding: ast.else_binding.map(|b| b.as_str(db).to_string()),
+            then_binding: ast.then_binding.map(|b| b.as_str(db).S()),
+            else_binding: ast.else_binding.map(|b| b.as_str(db).S()),
             then_body: ast.then_body.iter().map(|s| Statement::from_ast(db, arena, s)).collect(),
             else_body: ast.else_body.as_ref().map(|stmts| {
                 stmts.iter().map(|s| Statement::from_ast(db, arena, s)).collect()
@@ -893,11 +893,11 @@ impl MatchCaseKind {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::MatchCaseKind<'db>) -> Self {
         match ast {
             crate::ast::MatchCaseKind::Atom { name } => MatchCaseKind::Atom {
-                name: name.as_str(db).to_string(),
+                name: name.as_str(db).S(),
             },
             crate::ast::MatchCaseKind::Term { name, binding } => MatchCaseKind::Term {
-                name: name.as_str(db).to_string(),
-                binding: binding.as_str(db).to_string(),
+                name: name.as_str(db).S(),
+                binding: binding.as_str(db).S(),
             },
         }
     }
@@ -906,7 +906,7 @@ impl MatchCaseKind {
 impl StmtParseError {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtParseError<'db>) -> Self {
         StmtParseError {
-            message: ast.message.as_str(db).to_string(),
+            message: ast.message.as_str(db).S(),
         }
     }
 }
@@ -955,7 +955,7 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Ok(e) => ExprFunKind::Ok(ExprOk::from_ast(db, arena, e)),
             crate::ast::ExprFunKind::Er(e) => ExprFunKind::Er(ExprEr::from_ast(db, arena, e)),
             crate::ast::ExprFunKind::Data(e) => ExprFunKind::Data(ExprData::from_ast(db, arena, e)),
-            crate::ast::ExprFunKind::DataFile(e) => ExprFunKind::DataFile(ExprDataFile { path: e.path(db), data_alias: e.data_alias.as_str(db).to_string() }),
+            crate::ast::ExprFunKind::DataFile(e) => ExprFunKind::DataFile(ExprDataFile { path: e.path(db), data_alias: e.data_alias.as_str(db).S() }),
             crate::ast::ExprFunKind::Error(e) => ExprFunKind::Error(ExprError::from_ast(db, arena, e)),
 
             // Table expression.
@@ -963,20 +963,20 @@ impl ExprFunKind {
 
             // Atom/Term/Enum expressions.
             crate::ast::ExprFunKind::Hinted(e) => ExprFunKind::Hinted(ExprHinted {
-                type_hint: type_hint_from_ast(db, Some(e.type_hint.clone())),
+                type_hint: type_hint_from_ast(db, Some(e.type_hint.C())),
                 inner: Box::new(ExprFun::from_ast(db, arena.get(e.inner))),
             }),
             crate::ast::ExprFunKind::Atom(e) => ExprFunKind::Atom(ExprAtom {
-                type_hint: type_hint_from_ast(db, e.type_hint.clone()),
-                name: e.name.as_str(db).to_string(),
+                type_hint: type_hint_from_ast(db, e.type_hint.C()),
+                name: e.name.as_str(db).S(),
             }),
             crate::ast::ExprFunKind::Term(e) => ExprFunKind::Term(ExprTerm {
-                type_hint: type_hint_from_ast(db, e.type_hint.clone()),
-                name: e.name.as_str(db).to_string(),
+                type_hint: type_hint_from_ast(db, e.type_hint.C()),
+                name: e.name.as_str(db).S(),
                 payload: Box::new(ExprFun::from_ast(db, arena.get(e.payload))),
             }),
             crate::ast::ExprFunKind::EnumLiteral(e) => ExprFunKind::EnumLiteral(ExprEnumLiteral {
-                type_hint: type_hint_from_ast(db, e.type_hint.clone()),
+                type_hint: type_hint_from_ast(db, e.type_hint.C()),
                 variant: Box::new(ExprFun::from_ast(db, arena.get(e.variant))),
             }),
 
@@ -992,7 +992,7 @@ impl ExprFunKind {
 impl ExprIntrinsicCall {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprIntrinsicCall<'db>) -> Self {
         ExprIntrinsicCall {
-            name: ast.name.as_str(db).to_string(),
+            name: ast.name.as_str(db).S(),
             args: ast.args.iter().map(|a| ExprFun::from_ast(db, arena.get(*a))).collect(),
             arg_modes: modes(&ast.arg_modes),
         }
@@ -1012,8 +1012,8 @@ impl ExprBinOp {
 impl ExprFunctionCall {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprFunctionCall<'db>) -> Self {
         ExprFunctionCall {
-            qualifier: ast.qualifier.map(|q| q.as_str(db).to_string()),
-            name: ast.name.as_str(db).to_string(),
+            qualifier: ast.qualifier.map(|q| q.as_str(db).S()),
+            name: ast.name.as_str(db).S(),
             args: ast.args.iter().map(|a| ExprFun::from_ast(db, arena.get(*a))).collect(),
             arg_modes: modes(&ast.arg_modes),
         }
@@ -1121,7 +1121,7 @@ impl ExprIndex {
 impl ExprFunParseError {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprFunParseError<'db>) -> Self {
         ExprFunParseError {
-            message: ast.message.as_str(db).to_string(),
+            message: ast.message.as_str(db).S(),
         }
     }
 }
@@ -1138,7 +1138,7 @@ fn type_hint_from_ast<'db>(
 impl ExprLit {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprLit<'db>) -> Self {
         ExprLit {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
         }
     }
 }
@@ -1146,8 +1146,8 @@ impl ExprLit {
 impl ExprInt {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprInt<'db>) -> Self {
         ExprInt {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
-            value: ast.value.as_str(db).to_string(),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
+            value: ast.value.as_str(db).S(),
         }
     }
 }
@@ -1155,8 +1155,8 @@ impl ExprInt {
 impl ExprFloat {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprFloat<'db>) -> Self {
         ExprFloat {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
-            value: ast.value.as_str(db).to_string(),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
+            value: ast.value.as_str(db).S(),
         }
     }
 }
@@ -1164,8 +1164,8 @@ impl ExprFloat {
 impl ExprHex {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprHex<'db>) -> Self {
         ExprHex {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
-            value: ast.value.as_str(db).to_string(),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
+            value: ast.value.as_str(db).S(),
         }
     }
 }
@@ -1173,8 +1173,8 @@ impl ExprHex {
 impl ExprString {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprString<'db>) -> Self {
         ExprString {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
-            value: ast.value.as_str(db).to_string(),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
+            value: ast.value.as_str(db).S(),
         }
     }
 }
@@ -1182,7 +1182,7 @@ impl ExprString {
 impl ExprList {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprList<'db>) -> Self {
         ExprList {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
         }
     }
@@ -1191,7 +1191,7 @@ impl ExprList {
 impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
         }
     }
@@ -1200,7 +1200,7 @@ impl ExprSet {
 impl ExprMap {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprMap<'db>) -> Self {
         ExprMap {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             entries: ast.entries.iter().map(|e| ExprMapEntry::from_ast(db, arena, e)).collect(),
         }
     }
@@ -1218,8 +1218,8 @@ impl ExprMapEntry {
 impl ExprTensor {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprTensor<'db>) -> Self {
         ExprTensor {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
-            shape: ast.shape.clone(),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
+            shape: ast.shape.C(),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
             header: ast.header,
         }
@@ -1229,7 +1229,7 @@ impl ExprTensor {
 impl ExprAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprAnonTuple<'db>) -> Self {
         ExprAnonTuple {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
         }
     }
@@ -1238,7 +1238,7 @@ impl ExprAnonTuple {
 impl ExprAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprAnonStruct<'db>) -> Self {
         ExprAnonStruct {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             fields: ast.fields.iter().map(|f| ExprStructField::from_ast(db, arena, f)).collect(),
         }
     }
@@ -1247,7 +1247,7 @@ impl ExprAnonStruct {
 impl ExprStructField {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprStructField<'db>) -> Self {
         ExprStructField {
-            name: ast.name.as_str(db).to_string(),
+            name: ast.name.as_str(db).S(),
             value: ExprFun::from_ast(db, arena.get(ast.value)),
         }
     }
@@ -1257,8 +1257,8 @@ impl ExprStructField {
 impl ExprTable {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprTable<'db>) -> Self {
         ExprTable {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
-            header: ast.header.iter().map(|h| h.as_str(db).to_string()).collect(),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
+            header: ast.header.iter().map(|h| h.as_str(db).S()).collect(),
             rows: ast.rows.iter().map(|r| ExprTableRow::from_ast(db, arena, r)).collect(),
         }
     }
@@ -1275,7 +1275,7 @@ impl ExprTableRow {
 impl ExprSome {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprSome<'db>) -> Self {
         ExprSome {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             payload: Box::new(ExprFun::from_ast(db, arena.get(ast.payload))),
         }
     }
@@ -1284,7 +1284,7 @@ impl ExprSome {
 impl ExprOk {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprOk<'db>) -> Self {
         ExprOk {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             payload: Box::new(ExprFun::from_ast(db, arena.get(ast.payload))),
         }
     }
@@ -1293,7 +1293,7 @@ impl ExprOk {
 impl ExprEr {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprEr<'db>) -> Self {
         ExprEr {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             payload: Box::new(ExprFun::from_ast(db, arena.get(ast.payload))),
         }
     }
@@ -1302,7 +1302,7 @@ impl ExprEr {
 impl ExprData {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprData<'db>) -> Self {
         ExprData {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: Box::new(ExprFun::from_ast(db, arena.get(ast.value))),
         }
     }
@@ -1311,7 +1311,7 @@ impl ExprData {
 impl ExprError {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprError<'db>) -> Self {
         ExprError {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
+            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: Box::new(ExprFun::from_ast(db, arena.get(ast.value))),
         }
     }

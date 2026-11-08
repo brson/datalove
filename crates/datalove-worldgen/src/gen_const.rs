@@ -12,6 +12,7 @@
 //! const is a cycle the compiler has to refuse. A literal is clear of all of
 //! that.
 
+use rmx::prelude::*;
 use rand::Rng;
 
 use datalove_datalit::ast::TypeHint;
@@ -79,8 +80,8 @@ pub fn format_const<'db, R: Rng>(
     format!(
         "const {}: {} = {}",
         def.name,
-        pretty_type_hint(db, def.type_hint.clone()),
-        gen_const_value(db, rng, def.type_hint.clone(), config)
+        pretty_type_hint(db, def.type_hint.C()),
+        gen_const_value(db, rng, def.type_hint.C(), config)
     )
 }
 
@@ -91,7 +92,7 @@ pub fn gen_const_value<'db, R: Rng>(
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {
-    let expr = ast_gen::gen_expr_matching_type(db, rng, type_hint.clone(), &config.type_config, 0);
+    let expr = ast_gen::gen_expr_matching_type(db, rng, type_hint.C(), &config.type_config, 0);
     let written = pretty_expr(db, expr);
 
     // A fixed-width integer wants its type said, since a bare literal is an

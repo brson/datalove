@@ -37,7 +37,7 @@ impl salsa::Database for LoggingDatabase {}
 
 impl datalove_datafun_tycheck::DbClone for LoggingDatabase {
     fn dyn_clone(&self) -> Box<dyn datalove_datafun_tycheck::DbClone + Send> {
-        Box::new(self.clone())
+        Box::new(self.C())
     }
 
     fn as_salsa_db(&self) -> &dyn salsa::Database {
@@ -48,10 +48,10 @@ impl datalove_datafun_tycheck::DbClone for LoggingDatabase {
 impl LoggingDatabase {
     fn new() -> Self {
         let events = Arc::new(Mutex::new(Vec::new()));
-        let events_clone = events.clone();
+        let events_clone = events.C();
         Self {
             storage: salsa::Storage::new(Some(Box::new(move |event| {
-                events_clone.lock().unwrap().push(event);
+                events_clone.lock().X().push(event);
             }))),
             events,
         }

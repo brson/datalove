@@ -94,11 +94,11 @@ pub fn compile_modules<'db>(
     // The data files' large collections, parsed in chunks ahead of the
     // typecheck that asks for the files; see `datalit::parser::parse_chunk`.
     // Planning a file lexes and braces it, which stays sequential.
-    warm(db, mode, || data_chunks(db.as_salsa_db(), input.graph.clone()), |db, (source, collection, chunk)| {
+    warm(db, mode, || data_chunks(db.as_salsa_db(), input.graph.C()), |db, (source, collection, chunk)| {
         let _ = datalove_datalit::parser::parse_chunk(db, source, collection, chunk);
     });
 
-    let parsed_graph = parse_phase(db, mode, input.graph.clone(), input.resolved_requires, rider_sources.clone(), input.module_ids);
+    let parsed_graph = parse_phase(db, mode, input.graph.C(), input.resolved_requires, rider_sources.C(), input.module_ids);
     let name_resolution = resolve_phase(db, mode, parsed_graph);
     let typecheck_result = typecheck_phase(db, mode, parsed_graph, name_resolution);
     let ownership_analysis = ownership_phase(db, mode, parsed_graph, typecheck_result);
@@ -224,7 +224,7 @@ fn collect_results<'db>(
     for module in module_graph.iter_modules(db.as_salsa_db()) {
         let diags = parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(db.as_salsa_db(), module);
         if !diags.is_empty() {
-            let path = module.id(db.as_salsa_db()).path(db.as_salsa_db()).clone();
+            let path = module.id(db.as_salsa_db()).path(db.as_salsa_db()).C();
             let error_strings: Vec<String> = diags.iter()
                 .map(|d| {
                     let diag = d.to_diagnostic(db.as_salsa_db());
@@ -244,7 +244,7 @@ fn collect_results<'db>(
         if errors.is_empty() {
             continue;
         }
-        let path = module_id.path(db.as_salsa_db()).clone();
+        let path = module_id.path(db.as_salsa_db()).C();
 
         // Format pending diagnostics with location info.
         let pending = result.pending_diagnostics(db.as_salsa_db());
@@ -268,8 +268,8 @@ fn collect_results<'db>(
     for (module_id, result) in ownership_analysis.module_results(db.as_salsa_db()).iter_unordered() {
         let errors = result.errors(db.as_salsa_db());
         if !errors.is_empty() {
-            let path = module_id.path(db.as_salsa_db()).clone();
-            ownership_errors.insert(path, errors.clone());
+            let path = module_id.path(db.as_salsa_db()).C();
+            ownership_errors.insert(path, errors.C());
         }
     }
 

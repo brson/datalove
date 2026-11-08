@@ -111,7 +111,7 @@ fn main() {
         for (module_name, module) in &package.modules {
             modules.push((
                 format!("sys/{}/{}", package_name, module_name),
-                module.source.to_string(),
+                module.source.S(),
             ));
         }
     }

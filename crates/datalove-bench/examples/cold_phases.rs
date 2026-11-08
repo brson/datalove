@@ -68,7 +68,7 @@ fn one_cold_compile(
             module_ids: ModuleIdTable::numbering(&db, rider_sources.iter().map(|(name, _)| name), graph),
         },
         rider_sources.iter()
-            .map(|(name, text)| (name.clone(), bct::input::Source::new(&db, text.clone())))
+            .map(|(name, text)| (name.C(), bct::input::Source::new(&db, text.C())))
             .collect(),
         ParallelMode::Sequential,
     );
@@ -109,11 +109,11 @@ fn main() {
         for (module_name, module) in &package.modules {
             modules.push((
                 format!("sys/{}/{}", package_name, module_name),
-                module.source.to_string(),
+                module.source.S(),
             ));
         }
         if let Some(rider) = &package.rider {
-            rider_sources.push((package_name.C(), rider.interface_source.to_string()));
+            rider_sources.push((package_name.C(), rider.interface_source.S()));
         }
     }
     modules.push(("local/app/main".S(), LOCAL.S()));

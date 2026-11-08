@@ -1,3 +1,4 @@
+use rmx::prelude::*;
 use datalove_rtdt as rtdt;
 
 /// Float equality policy for comparison operations.
@@ -274,8 +275,8 @@ fn cmp_tydesc_parts(
                 ord => return ord,
             }
             for i in 0..info_a.num_fields() as usize {
-                let field_a = info_a.field(i).unwrap();
-                let field_b = info_b.field(i).unwrap();
+                let field_a = info_a.field(i).X();
+                let field_b = info_b.field(i).X();
                 match field_a.offset().cmp(&field_b.offset()) {
                     Ordering::Equal => {}
                     ord => return ord,
@@ -296,8 +297,8 @@ fn cmp_tydesc_parts(
                 ord => return ord,
             }
             for i in 0..info_a.num_fields() as usize {
-                let field_a = info_a.field(i).unwrap();
-                let field_b = info_b.field(i).unwrap();
+                let field_a = info_a.field(i).X();
+                let field_b = info_b.field(i).X();
                 match field_a.name().cmp(field_b.name()) {
                     Ordering::Equal => {}
                     ord => return ord,
@@ -331,8 +332,8 @@ fn cmp_tydesc_parts(
                 ord => return ord,
             }
             for i in 0..info_a.num_variants() as usize {
-                let variant_a = info_a.variant(i).unwrap();
-                let variant_b = info_b.variant(i).unwrap();
+                let variant_a = info_a.variant(i).X();
+                let variant_b = info_b.variant(i).X();
                 match variant_a.name().cmp(variant_b.name()) {
                     Ordering::Equal => {}
                     ord => return ord,
@@ -486,8 +487,8 @@ fn eq_tydesc_parts(
                 }
 
                 for i in 0..info_a.num_fields() as usize {
-                    let field_a = info_a.field(i).unwrap();
-                    let field_b = info_b.field(i).unwrap();
+                    let field_a = info_a.field(i).X();
+                    let field_b = info_b.field(i).X();
 
                     if field_a.offset() != field_b.offset() {
                         return false;
@@ -507,8 +508,8 @@ fn eq_tydesc_parts(
                 }
 
                 for i in 0..info_a.num_fields() as usize {
-                    let field_a = info_a.field(i).unwrap();
-                    let field_b = info_b.field(i).unwrap();
+                    let field_a = info_a.field(i).X();
+                    let field_b = info_b.field(i).X();
 
                     // Compare field names.
                     if field_a.name() != field_b.name() {
@@ -538,8 +539,8 @@ fn eq_tydesc_parts(
                 }
 
                 for i in 0..info_a.num_variants() as usize {
-                    let variant_a = info_a.variant(i).unwrap();
-                    let variant_b = info_b.variant(i).unwrap();
+                    let variant_a = info_a.variant(i).X();
+                    let variant_b = info_b.variant(i).X();
 
                     // Compare variant names.
                     if variant_a.name() != variant_b.name() {

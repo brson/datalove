@@ -1,5 +1,6 @@
 //! JIT compiler wrapping Cranelift's JITModule.
 
+use rmx::prelude::*;
 use std::any::Any;
 use bct::lookup::{LookupMap, LookupSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -79,7 +80,7 @@ mod perf_map {
 /// When the arena runs out of space, cranelift reports a generic allocation
 /// error. This annotates it so the user knows the arena size can be increased.
 fn jit_err(context: &str, err: impl std::fmt::Display) -> JitError {
-    let msg = err.to_string();
+    let msg = err.S();
     if msg.contains("region exhausted") {
         JitError::CompilationFailed(format!(
             "{context}: {msg} (JIT arena is {}MB — increase JIT_ARENA_SIZE if programs are large)",
@@ -185,7 +186,7 @@ impl JitCompiler {
         let triple = Triple::host();
 
         // Build target ISA.
-        let builder = cranelift_codegen::isa::lookup(triple.clone())
+        let builder = cranelift_codegen::isa::lookup(triple.C())
             .map_err(|e| JitError::CompilationFailed(format!("unsupported target: {}", e)))?;
 
         let mut settings_builder = settings::builder();
@@ -202,7 +203,7 @@ impl JitCompiler {
             .map_err(|e| JitError::CompilationFailed(format!("isa error: {}", e)))?;
 
         // Build JIT module with all required symbols registered.
-        let mut jit_builder = JITBuilder::with_isa(isa.clone(), cranelift_module::default_libcall_names());
+        let mut jit_builder = JITBuilder::with_isa(isa.C(), cranelift_module::default_libcall_names());
 
         // Use ArenaMemoryProvider to allocate code and data from a single
         // contiguous region. The default SystemMemoryProvider uses separate
@@ -228,9 +229,9 @@ impl JitCompiler {
 
         // Register a lookup function for dynamically-added native rider symbols.
         let native_symbols: Arc<Mutex<LookupMap<String, SendPtr>>> = Arc::new(Mutex::new(LookupMap::default()));
-        let lookup_symbols = native_symbols.clone();
+        let lookup_symbols = native_symbols.C();
         jit_builder.symbol_lookup_fn(Box::new(move |name| {
-            lookup_symbols.lock().unwrap().get(name).map(|p| p.0)
+            lookup_symbols.lock().X().get(name).map(|p| p.0)
         }));
 
         let mut jit_module = JITModule::new(jit_builder);
@@ -278,7 +279,7 @@ impl JitCompiler {
     ///
     /// Must be called before compiling any function that calls this native.
     pub fn register_native_symbol(&self, name: &str, addr: *const u8) {
-        self.native_symbols.lock().unwrap().insert(name.to_string(), SendPtr(addr));
+        self.native_symbols.lock().X().insert(name.S(), SendPtr(addr));
     }
 
     /// Hold what a registered native symbol's code lives in.
@@ -376,12 +377,12 @@ impl JitCompiler {
                 let sig = codegen::build_native_signature(native_ctx, self.isa.as_ref());
                 // A native with no symbol registered is one implemented in
                 // Rust, which only the interpreter can call.
-                let addr = self.native_symbols.lock().unwrap()
+                let addr = self.native_symbols.lock().X()
                     .get(native_ctx.symbol())
                     .map(|p| p.0 as u64)
                     .ok_or_else(|| JitError::Unsupported(format!(
                         "a call to native {}, which has no symbol registered", native_ctx.symbol())))?;
-                let cached = (native_ctx.symbol().to_owned(), addr);
+                let cached = (native_ctx.symbol().O(), addr);
                 let func_id = match self.native_imports.get(&cached) {
                     Some(&id) => id,
                     None => {
@@ -433,7 +434,7 @@ impl JitCompiler {
             func,
             self.isa.as_ref(),
             &mut self.jit_module,
-            self.runtime.clone(),
+            self.runtime.C(),
             &mut self.tydesc_emitter,
             Some(registry),
         );
@@ -499,9 +500,9 @@ impl JitCompiler {
         for block in &func.blocks {
             for inst in &block.instructions {
                 if let Some(code_ref) = inst.call_target()
-                    && seen.insert(code_ref.clone())
+                    && seen.insert(code_ref.C())
                 {
-                    targets.push(code_ref.clone());
+                    targets.push(code_ref.C());
                 }
             }
         }
@@ -522,7 +523,7 @@ impl JitCompiler {
         addr: u64,
     ) -> Result<FuncId, JitError> {
         let name = format!("{symbol}@{addr:x}");
-        self.native_symbols.lock().unwrap().insert(name.clone(), SendPtr(addr as *const u8));
+        self.native_symbols.lock().X().insert(name.C(), SendPtr(addr as *const u8));
         self.jit_module.declare_function(&name, Linkage::Import, sig)
             .map_err(|e| jit_err("declare native import", e))
     }
@@ -572,7 +573,7 @@ impl JitCompiler {
     ) -> Result<(), JitError> {
         let mut cl_func = cl_ir::Function::with_name_signature(
             cl_ir::UserFuncName::user(0, stub_id.as_u32()),
-            sig.clone(),
+            sig.C(),
         );
 
         let mut fb_ctx = FunctionBuilderContext::new();
@@ -594,7 +595,7 @@ impl JitCompiler {
 
         builder.switch_to_block(direct_block);
         builder.seal_block(direct_block);
-        let sig_ref = builder.import_signature(sig.clone());
+        let sig_ref = builder.import_signature(sig.C());
         let call = builder.ins().call_indirect(sig_ref, code_ptr, &params);
         let results = builder.inst_results(call).to_vec();
         builder.ins().return_(&results);
@@ -621,13 +622,13 @@ impl JitCompiler {
                 codegen::ArgPass::Pointer => user_args.push(params[at.start]),
                 codegen::ArgPass::Value(_) => {
                     let addr = stack_room(&mut builder, ty);
-                    codegen::store_regs(&mut builder, addr, ty, &params[at.clone()]);
+                    codegen::store_regs(&mut builder, addr, ty, &params[at.C()]);
                     user_args.push(addr);
                 }
             }
         }
         let user_args = &user_args;
-        let descriptors = params[layout.descriptors.clone()].to_vec();
+        let descriptors = params[layout.descriptors.C()].to_vec();
 
         // Build args array on stack.
         // Allocate stack slot for args array.

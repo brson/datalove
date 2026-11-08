@@ -3,6 +3,7 @@
 //! Transforms AST expressions into IR values and instructions. Handles literals,
 //! operators, function calls, tuples, records, and control flow expressions.
 
+use rmx::prelude::*;
 use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode};
 use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
@@ -26,7 +27,7 @@ use super::LowerError;
 /// `Operand::Value` are already managed by the drop schedule.
 fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), LowerError> {
     if let Some((const_type, const_value)) = ctx.lookup_const(name) {
-        let const_type = const_type.clone();
+        let const_type = const_type.C();
         let const_value = std::sync::Arc::clone(const_value);
         if !const_type.is_copy() {
             let dest = ctx.fresh_value(IrType::Ref(Box::new(const_type)));
@@ -36,7 +37,7 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), 
         let dest = ctx.fresh_value(const_type);
         ctx.emit(Instruction::Const {
             dest,
-            value: (*const_value).clone(),
+            value: (*const_value).C(),
         });
         return Ok((Operand::Value(dest), true));
     }
@@ -44,7 +45,7 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), 
     // const that has not been evaluated yet. The caller lowers this function
     // again once it has.
     let op = ctx.lookup_var(name)
-        .ok_or_else(|| LowerError::BindingNotAvailable(name.to_string()))?;
+        .ok_or_else(|| LowerError::BindingNotAvailable(name.S()))?;
 
     Ok((op, false))
 }
@@ -54,7 +55,7 @@ fn record_fresh_const_temp(ctx: &mut LowerCtx, operand: &Operand) {
     let Operand::Value(vid) = *operand else {
         unreachable!("lower_var_operand builds a const as a value");
     };
-    let ty = ctx.body.value_types[vid.0 as usize].clone();
+    let ty = ctx.body.value_types[vid.0 as usize].C();
     ctx.record_expr_temp(vid, ty);
 }
 
@@ -192,7 +193,7 @@ fn lower_call_arg<'db>(
                 // Taken out of the earlier unit's frame first, which marks it
                 // as holding nothing; the callee consumes what was taken.
                 let ty = ctx.expr_type(arg);
-                let dest = ctx.fresh_value(ty.clone());
+                let dest = ctx.fresh_value(ty.C());
                 if ty.is_copy() {
                     ctx.emit(Instruction::Copy { dest, src: operand });
                 } else {
@@ -290,8 +291,8 @@ pub fn lower_field_proj_as_ref<'db>(
     // When the base is a Place (with or without steps), build an extended
     // Place with the field step appended and delegate to lower_place_as_ref.
     if let ExprFunKind::Place(place) = ctx.expr(proj.base).kind() {
-        let mut extended = place.clone();
-        extended.steps.push(ast::PlaceStep::Field(proj.field.clone()));
+        let mut extended = place.C();
+        extended.steps.push(ast::PlaceStep::Field(proj.field.C()));
         return lower_place_as_ref(ctx, &extended);
     }
 
@@ -450,7 +451,7 @@ pub fn lower_expression<'db>(
                 Operand::Param(_) => {
                     // For params, emit Copy or Move from the param.
                     let param_type = ctx.expr_type(expr);
-                    let dest = ctx.fresh_value(param_type.clone());
+                    let dest = ctx.fresh_value(param_type.C());
                     if param_type.is_copy() {
                         ctx.emit(Instruction::Copy { dest, src: operand });
                     } else {
@@ -462,7 +463,7 @@ pub fn lower_expression<'db>(
                     // Taken out of the earlier unit's frame, which marks it
                     // as holding nothing.
                     let ext_type = ctx.expr_type(expr);
-                    let dest = ctx.fresh_value(ext_type.clone());
+                    let dest = ctx.fresh_value(ext_type.C());
                     if ext_type.is_copy() {
                         ctx.emit(Instruction::Copy { dest, src: operand });
                     } else {
@@ -490,7 +491,7 @@ pub fn lower_expression<'db>(
         }
         ExprFunKind::Int(lit) => {
             let result_type = ctx.expr_type(expr);
-            let dest = ctx.fresh_value(result_type.clone());
+            let dest = ctx.fresh_value(result_type.C());
             let text = lit.value.text(ctx.db);
             let const_value = parse_int_const(text, &result_type)
                 .unwrap_or_else(|_| panic!("invalid integer literal '{}' for type {:?} - typechecker should catch this", text, result_type));
@@ -499,7 +500,7 @@ pub fn lower_expression<'db>(
         }
         ExprFunKind::Hex(lit) => {
             let result_type = ctx.expr_type(expr);
-            let dest = ctx.fresh_value(result_type.clone());
+            let dest = ctx.fresh_value(result_type.C());
             let text = lit.value.text(ctx.db);
             let const_value = parse_hex_const(text, &result_type)
                 .unwrap_or_else(|_| panic!("invalid hex literal '{}' for type {:?} - typechecker should catch this", text, result_type));
@@ -535,10 +536,10 @@ pub fn lower_expression<'db>(
             // type parameters, and a parameter's type here is the callee's
             // written type with those substituted in.
             let type_params: Vec<bct::text::InternedText<'db>> = target
-                .map(|t| t.func().type_params().clone())
+                .map(|t| t.func().type_params().C())
                 .unwrap_or_default();
             let bindings: Vec<IrType> = target
-                .map(|t| t.type_args().clone())
+                .map(|t| t.type_args().C())
                 .unwrap_or_default()
                 .iter()
                 .map(|ty| ctx.ir_type(ty))
@@ -652,7 +653,7 @@ pub fn lower_expression<'db>(
             let IrType::List(elem_type) = &result_type else {
                 panic!("expected List type from typechecker");
             };
-            let elem_type = (**elem_type).clone();
+            let elem_type = (**elem_type).C();
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in list.elements.iter() {
@@ -674,7 +675,7 @@ pub fn lower_expression<'db>(
             let IrType::Set(elem_type) = &result_type else {
                 panic!("expected Set type from typechecker");
             };
-            let elem_type = (**elem_type).clone();
+            let elem_type = (**elem_type).C();
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in set.elements.iter() {
@@ -696,7 +697,7 @@ pub fn lower_expression<'db>(
             let IrType::Map(key_type, val_type) = &result_type else {
                 panic!("expected Map type from typechecker");
             };
-            let (key_type, val_type) = ((**key_type).clone(), (**val_type).clone());
+            let (key_type, val_type) = ((**key_type).C(), (**val_type).C());
             // Lower each entry and track keys/values as pending intermediates.
             let mut entries = Vec::new();
             for e in map.entries.iter() {
@@ -728,7 +729,7 @@ pub fn lower_expression<'db>(
         }
         ExprFunKind::Float(lit) => {
             let result_type = ctx.expr_type(expr);
-            let dest = ctx.fresh_value(result_type.clone());
+            let dest = ctx.fresh_value(result_type.C());
             let text = lit.value.text(ctx.db);
             let const_value = parse_float_const(text, &result_type)
                 .unwrap_or_else(|_| panic!("invalid float literal '{}' for type {:?} - typechecker should catch this", text, result_type));
@@ -739,7 +740,7 @@ pub fn lower_expression<'db>(
             let ty = ctx.expr_type(expr);
             let value = ctx.data_file_value(&file, &ty);
             let dest = ctx.fresh_value(ty);
-            ctx.emit_const(dest, (*value).clone());
+            ctx.emit_const(dest, (*value).C());
             Ok(dest)
         }
         ExprFunKind::String(string_expr) => {
@@ -760,9 +761,9 @@ pub fn lower_expression<'db>(
                 panic!("AnonStruct with non-struct type {:?} - typechecker should catch this", result_type);
             };
             let field_types: bct::lookup::LookupMap<String, IrType> =
-                fields.iter().map(|(n, t)| (n.clone(), t.clone())).collect();
+                fields.iter().map(|(n, t)| (n.C(), t.C())).collect();
             let sorted_field_names: Vec<String> = match &result_type {
-                IrType::Struct(fields) => fields.iter().map(|(n, _)| n.clone()).collect(),
+                IrType::Struct(fields) => fields.iter().map(|(n, _)| n.C()).collect(),
                 _ => unreachable!(),
             };
 
@@ -771,7 +772,7 @@ pub fn lower_expression<'db>(
             let mut field_values: bct::lookup::LookupMap<String, ValueId> =
                 bct::lookup::LookupMap::default();
             for field in struct_expr.fields.iter() {
-                let name = field.name.text(ctx.db).to_string();
+                let name = field.name.text(ctx.db).S();
                 let value = lower_expression(ctx, ctx.expr(field.value))?;
                 // Track as pending intermediate so it's dropped on early return.
                 if let Some(field_ty) = field_types.get(&name) {
@@ -803,10 +804,10 @@ pub fn lower_expression<'db>(
 
             let result_type = ctx.expr_type(expr);
             let elem_type = match &result_type {
-                IrType::Tensor(t, _) => (**t).clone(),
+                IrType::Tensor(t, _) => (**t).C(),
                 _ => panic!("expected Tensor type from typechecker"),
             };
-            let shape = tensor.shape.clone();
+            let shape = tensor.shape.C();
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in tensor.elements.iter() {
@@ -830,13 +831,13 @@ pub fn lower_expression<'db>(
             let IrType::Table(column_types) = &result_type else {
                 panic!("table literal with non-table type {:?} - typechecker should catch this", result_type);
             };
-            let column_types = column_types.clone();
+            let column_types = column_types.C();
 
             // Build tuple type for row from column types.
             let tuple_fields: Vec<_> = column_types.iter()
-                .map(|(_, ty)| (**ty).clone())
+                .map(|(_, ty)| (**ty).C())
                 .collect();
-            let row_type = IrType::Tuple(tuple_fields.clone());
+            let row_type = IrType::Tuple(tuple_fields.C());
 
             // Each row becomes a tuple operand.
             let mut rows = Vec::new();
@@ -852,7 +853,7 @@ pub fn lower_expression<'db>(
                 }
 
                 // Create tuple from elements.
-                let tuple_dest = ctx.fresh_value(row_type.clone());
+                let tuple_dest = ctx.fresh_value(row_type.C());
                 ctx.emit_pack(tuple_dest, TypeRef::Tuple(elem_operands.len() as u32), elem_operands);
                 // Elements consumed by Pack, but tuple itself is now pending.
                 ctx.clear_pending_intermediates();
@@ -907,7 +908,7 @@ pub fn lower_expression<'db>(
             match &result_type {
                 IrType::Atom(name) => {
                     // Atom is zero-sized. Emit a const to define the value.
-                    let variant_name = name.clone();
+                    let variant_name = name.C();
                     let dest = ctx.fresh_value(result_type);
                     ctx.emit(Instruction::Const {
                         dest,
@@ -921,7 +922,7 @@ pub fn lower_expression<'db>(
                 IrType::Enum(_) => {
                     // Atom used in enum context - emit EnumVariant.
                     let name_str = atom.name.as_str(ctx.db);
-                    let variants = result_type.enum_variants().unwrap();
+                    let variants = result_type.enum_variants().X();
                     let variant_index = variants.iter()
                         .position(|(n, _)| n == name_str)
                         .unwrap_or_else(|| panic!("atom variant '{}' not found in type", name_str))
@@ -953,7 +954,7 @@ pub fn lower_expression<'db>(
                 IrType::Enum(_) => {
                     // Term used in enum context - emit EnumVariant with payload.
                     let name_str = term.name.as_str(ctx.db);
-                    let variants = result_type.enum_variants().unwrap();
+                    let variants = result_type.enum_variants().X();
                     let variant_index = variants.iter()
                         .position(|(n, _)| n == name_str)
                         .unwrap_or_else(|| panic!("term variant '{}' not found in type", name_str))
@@ -1421,7 +1422,7 @@ fn lower_try_option<'db>(
 
     let src_id = lower_expression(ctx, ctx.expr(try_expr.operand))?;
     let result_type = ctx.expr_type(expr);
-    let dest = ctx.fresh_value(result_type.clone());
+    let dest = ctx.fresh_value(result_type.C());
     let is_some = ctx.fresh_value(IrType::Bool);
     ctx.emit(Instruction::UnwrapOption {
         dest,
@@ -1464,7 +1465,7 @@ fn lower_try_result<'db>(
 
     let src_id = lower_expression(ctx, ctx.expr(try_expr.operand))?;
     let result_type = ctx.expr_type(expr);
-    let ok_dest = ctx.fresh_value(result_type.clone());
+    let ok_dest = ctx.fresh_value(result_type.C());
     let err_dest = ctx.fresh_value(IrType::Error);
     let is_ok = ctx.fresh_value(IrType::Bool);
     ctx.emit(Instruction::UnwrapResult {
@@ -1745,13 +1746,13 @@ fn lower_place_as_ref<'db>(
 /// Get type of an operand for place lowering.
 pub(crate) fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
     match op {
-        Operand::Slot(s) => ctx.body.slot_types[s.0 as usize].clone(),
-        Operand::Param(p) => ctx.body.param_types[p.0 as usize].clone(),
-        Operand::Value(v) => ctx.body.value_types[v.0 as usize].clone(),
+        Operand::Slot(s) => ctx.body.slot_types[s.0 as usize].C(),
+        Operand::Param(p) => ctx.body.param_types[p.0 as usize].C(),
+        Operand::Value(v) => ctx.body.value_types[v.0 as usize].C(),
         Operand::ValueRef(v) => {
             let ref_ty = &ctx.body.value_types[v.0 as usize];
             match ref_ty {
-                IrType::Ref(inner) => inner.as_ref().clone(),
+                IrType::Ref(inner) => inner.as_ref().C(),
                 _ => panic!("ValueRef has non-Ref type: {:?}", ref_ty),
             }
         }
@@ -1767,7 +1768,7 @@ pub(crate) fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
                 Operand::ExternalSlot { .. } => ctx.external_slot_type(name),
                 _ => ctx.external_value_type(name),
             };
-            ty.expect("an external binding has a recorded type").clone()
+            ty.expect("an external binding has a recorded type").C()
         }
     }
 }
@@ -1775,8 +1776,8 @@ pub(crate) fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
 /// Get the type of a field from a base type.
 pub(crate) fn field_type_from_base(base_type: &IrType, field_index: u32) -> IrType {
     match base_type {
-        IrType::Struct(fields) => fields[field_index as usize].1.clone(),
-        IrType::Tuple(fields) => fields[field_index as usize].clone(),
+        IrType::Struct(fields) => fields[field_index as usize].1.C(),
+        IrType::Tuple(fields) => fields[field_index as usize].C(),
         _ => panic!("field access on non-struct/tuple type {:?}", base_type),
     }
 }
@@ -1805,7 +1806,7 @@ fn lower_clone_coerce<'db>(
     // Use lower_operand to borrow the operand (@ doesn't consume).
     let src = lower_operand(ctx, ctx.expr(cc_expr.operand))?;
 
-    let dest = ctx.fresh_value(dest_type.clone());
+    let dest = ctx.fresh_value(dest_type.C());
 
     // An atom or a term widening into an enum is built rather than copied.
     //
@@ -1821,8 +1822,8 @@ fn lower_clone_coerce<'db>(
     // it was not.
     if let IrType::Enum(variants) = &dest_type {
         let variant_name = match &src_type {
-            IrType::Atom(name) => Some(name.clone()),
-            IrType::Term(name, _) => Some(name.clone()),
+            IrType::Atom(name) => Some(name.C()),
+            IrType::Term(name, _) => Some(name.C()),
             _ => None,
         };
         if let Some(name) = variant_name {
@@ -1837,7 +1838,7 @@ fn lower_clone_coerce<'db>(
             // is built from -- moving it would free the same thing twice.
             let payload = match &src_type {
                 IrType::Term(_, _) => {
-                    let cloned = ctx.fresh_value(src_type.clone());
+                    let cloned = ctx.fresh_value(src_type.C());
                     ctx.emit(Instruction::Clone { dest: cloned, src });
                     Some(Operand::Value(cloned))
                 }
@@ -1899,7 +1900,7 @@ fn lower_field_proj<'db>(
     // the place walker lowers -- but the guard says so rather than relying on
     // it, because dropping something a binding owns would be worse.
     if !matches!(ctx.expr(proj.base).kind(), ExprFunKind::Place(_)) {
-        ctx.record_expr_temp(base_id, base_type.clone());
+        ctx.record_expr_temp(base_id, base_type.C());
     }
 
     // Get the field index.
@@ -1978,7 +1979,7 @@ fn lower_tuple_elements<'db>(
 
     let result_type = ctx.expr_type(expr);
     let element_types: Vec<IrType> = match &result_type {
-        IrType::Tuple(types) => types.clone(),
+        IrType::Tuple(types) => types.C(),
         // Single-element parens like `(x)` have the element's type, not a Tuple.
         _ => vec![],
     };

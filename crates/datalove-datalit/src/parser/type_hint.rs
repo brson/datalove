@@ -133,7 +133,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     .map(|why| (fmt!("a recursive type cannot be named `{}`", n.as_str(db)), DCode::RecNamedAsType, why)),
             };
             let local_index = match refused {
-                None => Some(stream.alias_index(name_ts.clone())),
+                None => Some(stream.alias_index(name_ts.C())),
                 Some(_) => None,
             };
             let body = parse_type_hint(stream);
@@ -408,7 +408,7 @@ impl<'db> Parser<'db> {
             None => {
                 // No name found - emit error and create placeholder.
                 let ts = self.peek_text_span();
-                let error_hint = self.emit_type_hint_error(ts.clone(),
+                let error_hint = self.emit_type_hint_error(ts.C(),
                     "expected field name in struct definition",
                     DCode::StructTypeFieldSyntax,
                     "expected field name"

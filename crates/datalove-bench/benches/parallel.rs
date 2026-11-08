@@ -1,5 +1,6 @@
 //! Benchmarks for parallel vs sequential compilation phases.
 
+use rmx::prelude::*;
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_compiler::module_graph::ModuleIdTable;
 use bct::lookup::LookupMap;
@@ -188,7 +189,7 @@ fn generate_sources() -> Vec<(String, String)> {
 /// still primed.
 fn setup_sources(db: &Database, sources: &[(String, String)]) -> Vec<(String, Source)> {
     sources.iter()
-        .map(|(path, text)| (path.clone(), Source::new(db, text.clone())))
+        .map(|(path, text)| (path.C(), Source::new(db, text.C())))
         .collect()
 }
 
@@ -196,7 +197,7 @@ fn setup_sources(db: &Database, sources: &[(String, String)]) -> Vec<(String, So
 fn setup_graph<'db>(db: &'db Database, sources: &[(String, Source)]) -> ModuleGraph<'db> {
     let mut builder = ModuleGraphBuilder::new(db);
     for (path, src) in sources {
-        builder.add_module(path.clone(), *src);
+        builder.add_module(path.C(), *src);
     }
     builder.build()
 }

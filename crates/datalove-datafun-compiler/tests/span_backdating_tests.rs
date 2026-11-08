@@ -27,10 +27,10 @@ impl salsa::Database for LoggingDatabase {}
 impl LoggingDatabase {
     fn new() -> Self {
         let events = Arc::new(Mutex::new(Vec::new()));
-        let events_clone = events.clone();
+        let events_clone = events.C();
         Self {
             storage: salsa::Storage::new(Some(Box::new(move |event| {
-                events_clone.lock().unwrap().push(event);
+                events_clone.lock().X().push(event);
             }))),
             events,
         }
@@ -95,7 +95,7 @@ fn an_edit_that_moves_no_span_leaves_the_table_identical() {
         let spans = datalove_datafun_parser::datafun_spans(db, source);
         spans.entries.iter()
             .map(|e| (
-                e.expr_key.fn_name.map(|n| n.as_str(db).to_string()),
+                e.expr_key.fn_name.map(|n| n.as_str(db).S()),
                 e.expr_key.local_index,
                 e.entry.span.start,
                 e.entry.span.end,

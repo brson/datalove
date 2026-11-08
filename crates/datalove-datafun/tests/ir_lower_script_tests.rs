@@ -32,7 +32,7 @@ fn build_const_graph<'db>(
         if let Statement::Const(const_stmt) = stmt {
             let expr = body.arena.get(const_stmt.value);
             let stmt_id = datalove_datafun_ir::ConstStmtId(bindings.len() as u32);
-            let name = const_stmt.name.text(db).to_string();
+            let name = const_stmt.name.text(db).S();
             // Get the type from the typechecker's table.
             let ir_type = expr_types
                 .get(expr)
@@ -70,7 +70,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         match section {
             WorldfileSection::ScriptFragment { source } => {
                 // Parse the fragment to get statements.
-                let source_obj = Source::new(&db, source.clone());
+                let source_obj = Source::new(&db, source.C());
                 let parse_result = datalove_datafun_parser::parse(&db, source_obj);
                 let parsed_ast = &parse_result.parsed;
                 let body = parsed_ast.body(&db);
@@ -100,7 +100,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'_>>> = LookupMap::default();
                 let mut func_return_types: LookupMap<String, datalove_datafun_tycheck::Type<'_>> = LookupMap::default();
                 for (name, func_type) in tycheck_result.function_types(&db) {
-                    let param_types = func_type.param_types(&db).clone();
+                    let param_types = func_type.param_types(&db).C();
                     func_param_types.insert(name.text(&db).S(), param_types);
                     let return_type = func_type.return_type(&db);
                     func_return_types.insert(name.text(&db).S(), return_type);
@@ -212,8 +212,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                             }
                         };
 
-                        resolved.insert(binding.stmt_id, binding.name.clone(), value.clone());
-                        resolved_consts_map.insert(binding.name.clone(), (binding.ir_type.clone(), value));
+                        resolved.insert(binding.stmt_id, binding.name.C(), value.C());
+                        resolved_consts_map.insert(binding.name.C(), (binding.ir_type.C(), value));
                     }
 
                     if let Some(err) = ctfe_error {
@@ -234,12 +234,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     Some((lowered_functions, func_name_to_id))
                 };
 
-                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.clone(), body, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.C(), body, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
                     Ok(ir_code_unit) => {
                         // Inline const values into the IR.
                         let const_values_map: LookupMap<String, Arc<datalove_datafun_ir::ConstValue>> = resolved_consts
                             .as_ref()
-                            .map(|rc| rc.iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
+                            .map(|rc| rc.iter().map(|(k, v)| (k.S(), v.C())).collect())
                             .unwrap_or_default();
                         let ir_unit = inline_script_consts(ir_code_unit, &const_values_map, &LookupMap::default());
 

@@ -135,7 +135,7 @@ fn datalit_once(shape: &Shape, text: &str) -> Stages {
     let declared = Source::new(&db, fmt!(": {} / {}{}{}{}{}{}",
         shape.ty, shape.open, shape.header, (shape.element)(0), shape.separator, (shape.element)(1), shape.close));
     let expected = match data_file_type(&db, DataFileQuery::new(&db, declared, None)) {
-        Ok(ty) => ty.clone(),
+        Ok(ty) => ty.C(),
         Err(errors) => panic!("`{}` is not a type: {errors:?}", shape.ty),
     };
     let ir_type = IrType::from_datalit(&db, &expected);
@@ -253,7 +253,7 @@ fn parse_once(shape: &Shape, text: &str, config: Config, pools: &[(usize, rmx::r
         let pool = &pools.iter().find(|(n, _)| *n == threads).expect("a pool of that size").1;
         let work: Vec<_> = plan.iter().enumerate()
             .flat_map(|(collection, planned)| (0..planned.chunks.len()).map(move |chunk| (collection as u32, chunk as u32)))
-            .map(|(collection, chunk)| (db.clone(), collection, chunk))
+            .map(|(collection, chunk)| (db.C(), collection, chunk))
             .collect();
         pool.install(|| work.into_par_iter().for_each(|(db, collection, chunk)| {
             let _ = datalove_datalit::parser::parse_chunk(&db, source, collection, chunk);

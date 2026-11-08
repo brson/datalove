@@ -23,7 +23,7 @@ fn an_edited_function_runs_as_edited() {
     for k in 2..=8 {
         session.edit(0, &format!("fun f(): u32\n  ret {k}\nend fun\n"));
         session.rederive(0);
-        assert_eq!(session.binding("r"), k.to_string(), "after editing `f` to return {k}");
+        assert_eq!(session.binding("r"), k.S(), "after editing `f` to return {k}");
     }
 }
 
@@ -38,6 +38,6 @@ fn a_caller_of_an_edited_function_calls_the_edited_body() {
     for k in 2..=8 {
         session.edit(0, &format!("fun f(): u32\n  ret {k}\nend fun\nfun g(): u32\n  ret f()\nend fun\n"));
         session.rederive(0);
-        assert_eq!(session.binding("r"), k.to_string(), "after editing `f` to return {k}");
+        assert_eq!(session.binding("r"), k.S(), "after editing `f` to return {k}");
     }
 }

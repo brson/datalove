@@ -260,14 +260,14 @@ impl<'db> Parser<'db> {
         let mut had_error = false;
         for part in &parts[..used] {
             for diagnostic in &part.diagnostics {
-                emit_stored(self.db, &self.sink, diagnostic.clone());
+                emit_stored(self.db, &self.sink, diagnostic.C());
             }
             items.extend(&part.items);
             self.expr_spans.extend(part.spans.iter().cloned());
             had_error |= part.had_error;
             if let Some(ts) = &part.leftover {
                 if !had_error {
-                    not_exhausted_error(self.db, ts.clone()).emit_to(&self.sink);
+                    not_exhausted_error(self.db, ts.C()).emit_to(&self.sink);
                 }
                 break;
             }
@@ -284,7 +284,7 @@ impl<'db> Parser<'db> {
         let mut rows = Vec::new();
         for part in self.chunk_parts(index) {
             for diagnostic in &part.diagnostics {
-                emit_stored(self.db, &self.sink, diagnostic.clone());
+                emit_stored(self.db, &self.sink, diagnostic.C());
             }
             self.had_error |= part.had_error;
             self.expr_spans.extend(part.spans.iter().cloned());
@@ -310,7 +310,7 @@ impl<'db> Parser<'db> {
         let parts = self.chunk_parts(index);
         for part in &parts {
             for diagnostic in &part.prelude {
-                emit_stored(self.db, &self.sink, diagnostic.clone());
+                emit_stored(self.db, &self.sink, diagnostic.C());
             }
             self.had_error |= part.had_error;
         }
@@ -323,7 +323,7 @@ impl<'db> Parser<'db> {
             let mut filed = 0;
             for group in groups {
                 for diagnostic in &part.diagnostics[filed..group.diagnostics_end as usize] {
-                    emit_stored(self.db, &self.sink, diagnostic.clone());
+                    emit_stored(self.db, &self.sink, diagnostic.C());
                 }
                 filed = group.diagnostics_end as usize;
                 match inner_shape {
@@ -333,7 +333,7 @@ impl<'db> Parser<'db> {
                             &format!("inconsistent tensor shape at group {}: expected {:?} but got {:?}",
                                 group_idx, expected, group.shape))
                             .code(DCode::TensorShapeMismatch.as_str())
-                            .primary_label(group.span.clone(), "shape mismatch")
+                            .primary_label(group.span.C(), "shape mismatch")
                             .emit_to(&self.sink);
                     }
                     Some(_) => {}
@@ -342,7 +342,7 @@ impl<'db> Parser<'db> {
                 group_idx += 1;
             }
             for diagnostic in &part.diagnostics[filed..] {
-                emit_stored(self.db, &self.sink, diagnostic.clone());
+                emit_stored(self.db, &self.sink, diagnostic.C());
             }
         }
         let mut shape = vec![group_idx as u32];

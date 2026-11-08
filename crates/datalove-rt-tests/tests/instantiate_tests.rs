@@ -18,13 +18,13 @@ use rtdt::{TyDesc, TyInfo, TyTag};
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.C());
     datalove_datalit::tycheck::type_check(db, parsed, resolved)
 }
 
 /// The descriptor of the type of a datalit value.
 fn tydesc_of<'db>(db: &'db Database, table: &mut TyDescTable<'db>, source_text: &str) -> *const TyDesc {
-    let source = bct::input::Source::new(db, source_text.to_string());
+    let source = bct::input::Source::new(db, source_text.S());
     let checked = compile(db, source);
     assert!(checked.errors(db).is_empty(), "{source_text} does not typecheck");
     let ty = checked.root_type(db).as_ref().expect("a type for the value");

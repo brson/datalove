@@ -44,10 +44,10 @@ struct TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         if self.enhanced_keyboard {
-            let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+            execute!(io::stdout(), PopKeyboardEnhancementFlags).I();
         }
-        let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture, Show);
+        disable_raw_mode().I();
+        execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture, Show).I();
 
         if std::thread::panicking() {
             println!(

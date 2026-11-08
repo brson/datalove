@@ -1,5 +1,6 @@
 //! Worldfile assembly and entry point.
 
+use rmx::prelude::*;
 use rand::{Rng, SeedableRng};
 use datalove_datalit::Database;
 use crate::config::WorldGenConfig;
@@ -79,7 +80,7 @@ mod tests {
     fn test_gen_worldfile_deterministic() {
         let config = WorldGenConfig::default();
 
-        let wf1 = gen_worldfile_seeded(42, config.clone());
+        let wf1 = gen_worldfile_seeded(42, config.C());
         let wf2 = gen_worldfile_seeded(42, config);
 
         assert_eq!(wf1, wf2, "Same seed should produce identical worldfiles");
@@ -89,7 +90,7 @@ mod tests {
     fn test_gen_worldfile_different_seeds() {
         let config = WorldGenConfig::default();
 
-        let wf1 = gen_worldfile_seeded(1, config.clone());
+        let wf1 = gen_worldfile_seeded(1, config.C());
         let wf2 = gen_worldfile_seeded(2, config);
 
         assert_ne!(wf1, wf2, "Different seeds should produce different worldfiles");
@@ -113,7 +114,7 @@ mod tests {
 
         // Test 100 different seeds.
         for seed in 0..100 {
-            let _wf = gen_worldfile_seeded(seed, config.clone());
+            let _wf = gen_worldfile_seeded(seed, config.C());
         }
     }
 }

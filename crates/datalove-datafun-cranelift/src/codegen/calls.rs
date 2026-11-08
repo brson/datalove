@@ -1,5 +1,6 @@
 //! Function call instruction compilation.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
@@ -42,7 +43,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.declared_callee(code_ref)
                     .expect("resolve_code_ref rejects a callee never declared")
                     .layout
-                    .clone()
+                    .C()
             }
             CodeRef::Module { module, id } => {
                 let registry = self.registry.expect("a module callee is resolved through the registry");
@@ -64,7 +65,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.declared_callee(code_ref)
                     .expect("resolve_code_ref rejects a callee never declared")
                     .param_modes
-                    .clone()
+                    .C()
             }
             CodeRef::Module { module, id } => {
                 let Some(registry) = self.registry else {
@@ -72,8 +73,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 };
                 registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
                     .and_then(|unit| match unit.function_context() {
-                        Some(c) => Some(c.param_modes.clone()),
-                        None => unit.native_context().map(|n| n.param_modes.clone()),
+                        Some(c) => Some(c.param_modes.C()),
+                        None => unit.native_context().map(|n| n.param_modes.C()),
                     })
                     .unwrap_or_default()
             }
@@ -126,8 +127,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<cl_ir::Value, CraneliftError> {
         // A reference describes the type it points at.
         let ty = match ty {
-            IrType::Ref(inner) => inner.as_ref().clone(),
-            other => other.clone(),
+            IrType::Ref(inner) => inner.as_ref().C(),
+            other => other.C(),
         };
         // A dynamic type's descriptor is its table entry.
         if ty.is_dynamic() {
@@ -155,7 +156,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         // A descriptor for each type parameter no argument
                         // determines, from what this call bound it to.
                         let undetermined = native.undetermined_bindings(bindings);
-                        let modes = native.param_modes.clone();
+                        let modes = native.param_modes.C();
                         let open_coded = match native.intrinsic {
                             Some(intrinsic) => self.compile_native_intrinsic(builder, intrinsic, &modes, dest, args)?,
                             None => false,
@@ -237,7 +238,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         CraneliftRepr::Scalar(_) => vec![self.get_operand_value(builder, arg)?],
                         CraneliftRepr::Aggregate(_) => self.operand_words(builder, arg, ty)?,
                     };
-                    call_args[at.clone()].copy_from_slice(&regs);
+                    call_args[at.C()].copy_from_slice(&regs);
                 }
             }
         }
@@ -245,7 +246,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Then a descriptor for each of the callee's type parameters, for what
         // this call bound it to.
         assert_eq!(bindings.len(), layout.descriptors.len(), "a binding per type parameter");
-        for (at, binding) in layout.descriptors.clone().zip(bindings) {
+        for (at, binding) in layout.descriptors.C().zip(bindings) {
             call_args[at] = self.static_tydesc(builder, binding)?;
         }
 
@@ -267,7 +268,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // For scalar sret returns, load the value from the sret location.
         if callee_uses_sret && has_result(dest_ty) {
             if let CraneliftRepr::Scalar(scalar_ty) = types::ir_type_to_cranelift(dest_ty) {
-                let frame_slot = self.frame_slot.unwrap();
+                let frame_slot = self.frame_slot.X();
                 let dest_offset = self.layout.value_offset(dest.0);
                 let ptr = frame_slot.addr(builder, dest_offset as i32);
                 let loaded = builder.ins().load(scalar_ty, MemFlagsData::new(), ptr, 0);
@@ -323,13 +324,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CodeRef::Local(_) | CodeRef::External { .. } => self.declared_callee(code_ref)
                 .expect("resolve_code_ref rejects a callee never declared")
                 .param_types
-                .clone(),
+                .C(),
             CodeRef::Module { module, id } => self.registry
                 .and_then(|r| r.get_module_function_as_unit(*module, CodeUnitId(id.0)))
                 .and_then(|u| u.function_context())
                 .expect("resolve_code_ref rejects a callee never declared")
                 .param_types
-                .clone(),
+                .C(),
         }
     }
 
@@ -421,7 +422,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Result out-param: pointer to dest slot + tydesc.
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ty = self.func.value_types[dest.0 as usize].C();
         let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_tydesc_addr = self.static_tydesc(builder, &dest_ty)?;
 

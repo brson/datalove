@@ -3,6 +3,7 @@
 //! Implements the `CtfeEvaluator` trait for the interpreter, allowing
 //! const expressions to be evaluated at compile time.
 
+use rmx::prelude::*;
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstF32, ConstF64, ConstValue, CtfeError, CtfeEvaluator, IrCodeUnit, IrType};
 use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry, NativeResolver};
@@ -58,7 +59,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         self.interp.forget_unit_bodies(0);
         // Create environment with module registry if available (for cross-module CTFE).
         let mut env = match &self.module_registry {
-            Some(registry) => ScriptEnvironment::with_module_registry(registry.clone()),
+            Some(registry) => ScriptEnvironment::with_module_registry(registry.C()),
             None => ScriptEnvironment::new(),
         };
 
@@ -82,7 +83,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         // Execute the unit.
         let completion = self.interp
             .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest))
-            .map_err(|e| CtfeError::InterpError(e.to_string()))?;
+            .map_err(|e| CtfeError::InterpError(e.S()))?;
 
         // Clean up the environment (frames from executed units).
         // This must happen before env is dropped to free any heap allocations.
@@ -95,7 +96,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             }
             UnitCompletion::EarlyReturn => {
                 Err(CtfeError::EarlyReturn(
-                    "const expression returned early via ! or ?".to_string()
+                    "const expression returned early via ! or ?".S()
                 ))
             }
         };
@@ -249,7 +250,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
             }
             IrType::Struct(fields) => {
                 // Struct layout is the same as tuple layout, just with named fields.
-                let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
+                let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.C()).collect();
                 let field_offsets = compute_tuple_field_offsets(&field_types);
 
                 // Extract each named field value.
@@ -257,7 +258,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 for (i, (name, field_type)) in fields.iter().enumerate() {
                     let field_ptr = ptr.add(field_offsets[i] as usize);
                     let field_value = extract_const_value(field_ptr, field_type)?;
-                    values.push((name.clone(), field_value));
+                    values.push((name.C(), field_value));
                 }
 
                 Ok(ConstValue::Struct(values))
@@ -282,12 +283,12 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                     let payload_ptr = ptr.add(payload_offset as usize);
                     let payload_value = extract_const_value(payload_ptr, payload_ty)?;
                     Ok(ConstValue::Enum {
-                        variant: variant_name.clone(),
+                        variant: variant_name.C(),
                         payload: Some(Box::new(payload_value)),
                     })
                 } else {
                     Ok(ConstValue::Enum {
-                        variant: variant_name.clone(),
+                        variant: variant_name.C(),
                         payload: None,
                     })
                 }
@@ -295,7 +296,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
             IrType::Atom(name) => {
                 // Atom is zero-sized.
                 Ok(ConstValue::Enum {
-                    variant: name.clone(),
+                    variant: name.C(),
                     payload: None,
                 })
             }
@@ -303,13 +304,13 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 // Term has same layout as payload.
                 let payload_value = extract_const_value(ptr, payload_ty)?;
                 Ok(ConstValue::Enum {
-                    variant: name.clone(),
+                    variant: name.C(),
                     payload: Some(Box::new(payload_value)),
                 })
             }
             IrType::String => {
                 // String layout: data ptr, size, capacity.
-                Ok(ConstValue::String((*(ptr as *const datalove_rtdt::String)).as_str().to_string()))
+                Ok(ConstValue::String((*(ptr as *const datalove_rtdt::String)).as_str().S()))
             }
             IrType::Result(inner) => {
                 // Result layout: tag (u8) at offset 0, payload at aligned offset.
@@ -416,11 +417,11 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
 
                 let num_rows = table_val.len.0 as usize;
                 if num_rows == 0 || table_val.data.is_null() {
-                    let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+                    let column_names: Vec<String> = columns.iter().map(|(name, _)| name.C()).collect();
                     Ok(ConstValue::Table { columns: column_names, rows: Vec::new() })
                 } else {
                     // Extract rows from columnar storage.
-                    let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+                    let column_names: Vec<String> = columns.iter().map(|(name, _)| name.C()).collect();
                     let column_types: Vec<&IrType> = columns.iter().map(|(_, ty)| ty.as_ref()).collect();
                     let mut rows = Vec::with_capacity(num_rows);
 
@@ -540,7 +541,7 @@ unsafe fn borrow_packed(
         );
         if status != datalove_rt::c::RtStatus::Ok || tydesc_ptr.is_null() {
             return Err(CtfeError::UnsupportedType(
-                "a `data` with nothing in it".to_string()));
+                "a `data` with nothing in it".S()));
         }
         // The value may point into `scratch`, which is this frame's. Reading it
         // out here keeps it alive for exactly as long as the caller needs.
@@ -617,7 +618,7 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
         TyTag::Struct => {
             let mut fields = Vec::new();
             for field in tydesc.iter_struct_fields() {
-                fields.push((field.name().to_string(), ir_type_from_tydesc(field.tydesc())?));
+                fields.push((field.name().S(), ir_type_from_tydesc(field.tydesc())?));
             }
             Ok(IrType::Struct(fields))
         }
@@ -625,28 +626,28 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
             let mut columns = Vec::new();
             for column in tydesc.table_column_tydescs() {
                 columns.push((
-                    column.name().to_string(),
+                    column.name().S(),
                     Box::new(ir_type_from_tydesc(column.tydesc())?),
                 ));
             }
             Ok(IrType::Table(columns))
         }
-        TyTag::Atom => Ok(IrType::Atom(tydesc.atom_info().0.to_string())),
+        TyTag::Atom => Ok(IrType::Atom(tydesc.atom_info().0.S())),
         TyTag::Term => {
             let (name, payload) = tydesc.term_info();
-            Ok(IrType::Term(name.to_string(), Box::new(ir_type_from_tydesc(payload)?)))
+            Ok(IrType::Term(name.S(), Box::new(ir_type_from_tydesc(payload)?)))
         }
         TyTag::Enum => {
             let info = tydesc.enum_info();
             let mut variants = Vec::new();
             for i in 0..info.num_variants() as usize {
                 let variant = info.variant(i).ok_or_else(|| CtfeError::UnsupportedType(
-                    "enum variant out of bounds".to_string()))?;
+                    "enum variant out of bounds".S()))?;
                 let payload = match variant.payload() {
                     core::option::Option::Some(ty) => Some(ir_type_from_tydesc(ty)?),
                     core::option::Option::None => None,
                 };
-                variants.push((variant.name().to_string(), payload));
+                variants.push((variant.name().S(), payload));
             }
             Ok(IrType::Enum(variants))
         }
@@ -699,7 +700,7 @@ unsafe fn extract_set_elements(
     loop {
         let tag = unsafe { *(node as *const u8) };
         if tag != 2 {
-            return Err(CtfeError::InterpError("expected leaf node".to_string()));
+            return Err(CtfeError::InterpError("expected leaf node".S()));
         }
 
         let len = unsafe { *((node as *const u8).add(4) as *const u32) };
@@ -779,7 +780,7 @@ unsafe fn extract_map_entries(
     loop {
         let tag = unsafe { *(node as *const u8) };
         if tag != 2 {
-            return Err(CtfeError::InterpError("expected leaf node".to_string()));
+            return Err(CtfeError::InterpError("expected leaf node".S()));
         }
 
         let len = unsafe { *((node as *const u8).add(4) as *const u32) };

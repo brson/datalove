@@ -13,6 +13,7 @@
 // page or list leaks sorted by address.
 #![allow(clippy::disallowed_types)]
 
+use rmx::prelude::*;
 use datalove_rtdt::IndexRepr;
 
 // Unix-only imports and constants (used by unix_impl and tests).
@@ -965,7 +966,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     fn test_size_class_index_is_smallest_fit() {
         for size in 1..=MAX_SMALL_SIZE {
-            let expected = SIZE_CLASSES.iter().position(|&class| size <= class).unwrap();
+            let expected = SIZE_CLASSES.iter().position(|&class| size <= class).X();
             assert_eq!(unix_impl::size_to_class_index(size), expected, "size {size}");
         }
     }
@@ -1380,7 +1381,7 @@ mod tests {
 
             assert!(result.is_err());
             if let Err(e) = result {
-                let msg = e.downcast_ref::<String>().unwrap();
+                let msg = e.downcast_ref::<String>().X();
                 assert!(msg.contains("Total leaked bytes: 300"));
                 assert!(msg.contains("Leaked allocations: 3"));
             }
@@ -1411,7 +1412,7 @@ mod tests {
 
             assert!(result.is_err());
             if let Err(e) = result {
-                let msg = e.downcast_ref::<String>().unwrap();
+                let msg = e.downcast_ref::<String>().X();
                 assert!(msg.contains("DATALOVE RUNTIME LEAK DETECTED"));
                 assert!(msg.contains("Backtrace:"));
             }
@@ -1535,7 +1536,7 @@ mod tests {
 
             assert!(result.is_err());
             if let Err(e) = result {
-                let msg = e.downcast_ref::<String>().unwrap();
+                let msg = e.downcast_ref::<String>().X();
                 assert!(msg.contains("Leaked allocations: 15"));
                 assert!(msg.contains("... and 5 more"));
             }

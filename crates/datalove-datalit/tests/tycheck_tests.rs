@@ -210,21 +210,21 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source = bct::input::Source::new(&db, source_text.S());
 
     let ast = datalove_datalit::parser::parse_integration_test(&db, source);
-    let resolved = datalove_datalit::resolve::resolve_names(&db, source, ast.clone());
-    let typechecked = datalove_datalit::tycheck::type_check(&db, ast.clone(), resolved);
+    let resolved = datalove_datalit::resolve::resolve_names(&db, source, ast.C());
+    let typechecked = datalove_datalit::tycheck::type_check(&db, ast.C(), resolved);
 
     // Collect accumulated type diagnostics with spans.
-    let type_diagnostics = datalove_datalit::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, ast.clone(), resolved);
+    let type_diagnostics = datalove_datalit::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, ast.C(), resolved);
     let diagnostics: Vec<_> = type_diagnostics
         .iter()
         .map(|d| {
             let diag = d.to_diagnostic(&db);
-            let code = diag.code.map(|c| c.as_str(&db).to_string());
+            let code = diag.code.map(|c| c.as_str(&db).S());
             let labels: Vec<_> = diag.labels.iter().map(|label| {
                 json!({
                     "span": [label.span.start, label.span.end],
-                    "text": source_text[label.span.clone()].to_string(),
-                    "message": label.message.map(|m| m.as_str(&db).to_string())
+                    "text": source_text[label.span.C()].S(),
+                    "message": label.message.map(|m| m.as_str(&db).S())
                 })
             }).collect();
             json!({
@@ -239,7 +239,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let serde_ast = datalove_datalit::ast_serde::ExprFull::from_ast(&db, ast);
 
     // Convert root type to JSON-serializable format.
-    let root_type_json = if let Some(root_type) = typechecked.root_type(&db).clone() {
+    let root_type_json = if let Some(root_type) = typechecked.root_type(&db).C() {
         Some(type_to_json(&db, &root_type))
     } else {
         None

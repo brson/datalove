@@ -12,12 +12,12 @@ use datalove_rt::c::{RtStatus, RtEq};
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.C());
     datalove_datalit::tycheck::type_check(db, parsed, resolved)
 }
 
 fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
-    let source = bct::input::Source::new(db, source_text.to_string());
+    let source = bct::input::Source::new(db, source_text.S());
     Ok(compile(db, source))
 }
 
@@ -971,8 +971,8 @@ mod proptests {
             let a_expr = format!(": int / {}", a);
             let b_expr = format!(": int / {}", b);
 
-            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
-            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
+            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).X();
+            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).X();
 
             // a + b
             let result1_ptr = unsafe {
@@ -1023,8 +1023,8 @@ mod proptests {
             let a_expr = format!(": int / {}", a);
             let b_expr = format!(": int / {}", b);
 
-            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
-            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
+            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).X();
+            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).X();
 
             // a * b
             let result1_ptr = unsafe {
@@ -1075,8 +1075,8 @@ mod proptests {
             let a_expr = format!(": int / {}", a);
             let b_expr = format!(": int / {}", b);
 
-            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
-            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
+            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).X();
+            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).X();
 
             // tmp = a + b
             let tmp_ptr = unsafe {
@@ -1126,7 +1126,7 @@ mod proptests {
 
             let a_expr = format!(": int / {}", a);
 
-            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
+            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).X();
 
             // neg1 = -a
             let neg1_ptr = unsafe {
@@ -1172,8 +1172,8 @@ mod proptests {
             let a_expr = format!(": int / {}", a);
             let b_expr = format!(": int / {}", b);
 
-            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
-            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
+            let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).X();
+            let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).X();
 
             // tmp = a * b
             let tmp_ptr = unsafe {
@@ -1857,7 +1857,7 @@ fn test_int_assign_refuses_itself() {
     let db = Database::default();
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let (value, tydesc) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 12345678901234567890").unwrap();
+    let (value, tydesc) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 12345678901234567890").X();
     // Caught rather than left to fail the test, so that the value is freed
     // before the runtime checks for leaks.
     let refused = std::panic::catch_unwind(|| unsafe {

@@ -1,5 +1,6 @@
 //! Pretty-printing for IR.
 
+use rmx::prelude::*;
 use rmx::regex::Regex;
 use std::fmt;
 use std::sync::LazyLock;
@@ -21,7 +22,7 @@ use crate::*;
 /// the ability to compare actual vs expected output (both use the same format).
 pub fn expand_ir_strings(ron: &str) -> String {
     // Match `ir: "...",` where the string may contain escaped characters.
-    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?m)^(\s*)ir: "((?:[^"\\]|\\.)*)","#).unwrap());
+    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?m)^(\s*)ir: "((?:[^"\\]|\\.)*)","#).X());
     let re = &*RE;
 
     re.replace_all(ron, |caps: &rmx::regex::Captures| {
@@ -46,7 +47,7 @@ pub fn expand_ir_strings(ron: &str) -> String {
         result.push_str(indent);
         result.push_str("\"\"\",");
         result
-    }).to_string()
+    }).S()
 }
 
 impl fmt::Display for ValueId {
@@ -270,7 +271,7 @@ impl fmt::Display for ConstValue {
 /// Convert limbs (little-endian base 2^32) to decimal string.
 fn limbs_to_decimal(limbs: &[u32], negative: bool) -> String {
     if limbs.is_empty() {
-        return "0".to_string();
+        return "0".S();
     }
 
     // Work with a copy of the limbs.
@@ -310,7 +311,7 @@ fn limbs_to_decimal(limbs: &[u32], negative: bool) -> String {
     }
 
     // First chunk has no leading zeros.
-    result.push_str(&chunks.last().unwrap().to_string());
+    result.push_str(&chunks.last().X().S());
 
     // Remaining chunks are padded to 9 digits.
     for i in (0..chunks.len() - 1).rev() {

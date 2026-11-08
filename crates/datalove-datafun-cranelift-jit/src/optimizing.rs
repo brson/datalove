@@ -5,6 +5,7 @@
 //! each entry pseudo-randomly from a seed so that tests cover every mix of
 //! compiled and interpreted code.
 
+use rmx::prelude::*;
 use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -474,8 +475,8 @@ mod tests {
         let config1 = DispatcherConfig::chaos(12345);
         let config2 = DispatcherConfig::chaos(12345);
 
-        let mut d1 = OptimizingDispatcher::with_config(config1).unwrap();
-        let mut d2 = OptimizingDispatcher::with_config(config2).unwrap();
+        let mut d1 = OptimizingDispatcher::with_config(config1).X();
+        let mut d2 = OptimizingDispatcher::with_config(config2).X();
 
         // They should produce the same random sequence.
         for _ in 0..100 {
@@ -488,8 +489,8 @@ mod tests {
         let config1 = DispatcherConfig::chaos(1);
         let config2 = DispatcherConfig::chaos(2);
 
-        let mut d1 = OptimizingDispatcher::with_config(config1).unwrap();
-        let mut d2 = OptimizingDispatcher::with_config(config2).unwrap();
+        let mut d1 = OptimizingDispatcher::with_config(config1).X();
+        let mut d2 = OptimizingDispatcher::with_config(config2).X();
 
         // Different seeds should produce different sequences.
         let mut different_count = 0;
@@ -506,7 +507,7 @@ mod tests {
     fn test_chaos_probability_methods() {
         // With 100% probability, should always return true.
         let config = DispatcherConfig::chaos_with_probabilities(42, 100, 100);
-        let mut d = OptimizingDispatcher::with_config(config).unwrap();
+        let mut d = OptimizingDispatcher::with_config(config).X();
 
         for _ in 0..100 {
             assert!(d.chaos_should_compile());
@@ -515,7 +516,7 @@ mod tests {
 
         // With 0% probability, should always return false.
         let config = DispatcherConfig::chaos_with_probabilities(42, 0, 0);
-        let mut d = OptimizingDispatcher::with_config(config).unwrap();
+        let mut d = OptimizingDispatcher::with_config(config).X();
 
         for _ in 0..100 {
             assert!(!d.chaos_should_compile());
@@ -526,7 +527,7 @@ mod tests {
     #[test]
     fn test_tuned_mode_always_returns_true_for_chaos_methods() {
         let config = DispatcherConfig::production();
-        let mut d = OptimizingDispatcher::with_config(config).unwrap();
+        let mut d = OptimizingDispatcher::with_config(config).X();
 
         // In tuned mode, chaos methods should always return true.
         for _ in 0..100 {

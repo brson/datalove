@@ -262,7 +262,7 @@ pub fn parse_for_test<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed.clone()
+    parse(db, source).parsed.C()
 }
 
 /// Public tracked wrapper for integration tests that returns just the ParsedStatements.
@@ -273,7 +273,7 @@ pub fn parse_integration_test<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed.clone()
+    parse(db, source).parsed.C()
 }
 
 /// Public tracked wrapper for integration code to enable diagnostic accumulation.
@@ -286,7 +286,7 @@ pub fn parse_for_diagnostics<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed.clone()
+    parse(db, source).parsed.C()
 }
 
 use datalove_datafun_ast::spans::{SpanMapEntry, DatafunSpans};
@@ -359,7 +359,7 @@ pub fn parse_module_ast<'db>(
     db: &'db dyn Db,
     module: bct::module_graph::Module<'db>,
 ) -> ast::ParsedStatements<'db> {
-    parse_module_full(db, module).parsed.clone()
+    parse_module_full(db, module).parsed.C()
 }
 
 /// What a module declares, its function bodies left out.
@@ -391,7 +391,7 @@ pub fn module_uses<'db>(
             .filter(|item| matches!(item, ast::Item::Require(_) | ast::Item::Import(_)))
             .cloned()
             .collect(),
-        qualified_calls: items.qualified_calls.clone(),
+        qualified_calls: items.qualified_calls.C(),
     }
 }
 
@@ -414,17 +414,17 @@ pub fn parse_result_spans<'db>(full: &ast::ParseResult<'db>) -> DatafunSpans<'db
     DatafunSpans::with_stmt_spans(
         full.expr_spans.iter().map(|e| SpanMapEntry {
             expr_key: e.expr_key,
-            entry: bct::text::TextSpan::new(e.source, e.span.clone()),
+            entry: bct::text::TextSpan::new(e.source, e.span.C()),
         }).collect(),
-        full.break_spans.clone(),
-        full.continue_spans.clone(),
-        full.ret_spans.clone(),
-        full.set_spans.clone(),
-        full.fun_spans.clone(),
-        full.type_alias_spans.clone(),
-        full.import_spans.clone(),
-        full.require_spans.clone(),
-        full.alias_spans.clone(),
+        full.break_spans.C(),
+        full.continue_spans.C(),
+        full.ret_spans.C(),
+        full.set_spans.C(),
+        full.fun_spans.C(),
+        full.type_alias_spans.C(),
+        full.import_spans.C(),
+        full.require_spans.C(),
+        full.alias_spans.C(),
     )
 }
 

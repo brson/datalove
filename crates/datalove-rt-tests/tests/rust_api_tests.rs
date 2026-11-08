@@ -12,12 +12,12 @@ use datalove_rtdt::{AnyOut, AnyOwned, AnyRef};
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.C());
     datalove_datalit::tycheck::type_check(db, parsed, resolved)
 }
 
 fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
-    let source = bct::input::Source::new(db, source_text.to_string());
+    let source = bct::input::Source::new(db, source_text.S());
     Ok(compile(db, source))
 }
 
@@ -76,7 +76,7 @@ fn test_memguard_new() -> AnyResult<()> {
     // Allocate with MemGuard.
     let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1);
     assert!(guard.is_some());
-    let guard = guard.unwrap();
+    let guard = guard.X();
     assert!(!guard.ptr().is_null());
 
     // Clean up the instantiated value.
@@ -97,7 +97,7 @@ fn test_memguard_ptr() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
-    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).unwrap();
+    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).X();
     let ptr1 = guard.ptr();
     let ptr2 = guard.ptr();
     assert_eq!(ptr1, ptr2);
@@ -120,7 +120,7 @@ fn test_memguard_tydesc() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
-    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).unwrap();
+    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).X();
     let tydesc = guard.tydesc();
     assert_eq!(tydesc, inst.tydesc.as_ptr());
 
@@ -141,7 +141,7 @@ fn test_memguard_leak() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
-    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).unwrap();
+    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).X();
     let leaked_ptr = guard.leak();
     assert!(!leaked_ptr.is_null());
 
@@ -168,7 +168,7 @@ fn test_memguard_into_value() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
-    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).unwrap();
+    let guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).X();
     let mem_ptr = guard.ptr();
 
     // Copy the value into the MemGuard's buffer.
@@ -215,7 +215,7 @@ fn test_memguard_drop() -> AnyResult<()> {
 
     // Create and drop MemGuard in inner scope.
     {
-        let _guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).unwrap();
+        let _guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).X();
     }
 
     unsafe {
@@ -444,7 +444,7 @@ fn test_memguard_to_valueguard_workflow() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Allocate with MemGuard.
-    let mem_guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).unwrap();
+    let mem_guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).X();
 
     // Clone value into MemGuard.
     let status = unsafe {
@@ -481,7 +481,7 @@ fn test_guards_with_complex_type() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Test MemGuard with complex type.
-    let mem_guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).unwrap();
+    let mem_guard = MemGuard::new(rt.handle(), inst.tydesc.as_ptr(), 1).X();
     let tydesc = mem_guard.tydesc();
     assert!(!tydesc.is_null());
 

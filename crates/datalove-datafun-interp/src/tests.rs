@@ -1,3 +1,4 @@
+use rmx::prelude::*;
 use crate::*;
 use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
@@ -20,7 +21,7 @@ fn make_func_unit(
 ) -> IrCodeUnit {
     IrCodeUnit {
         id: CodeUnitId(id),
-        name: name.to_string(),
+        name: name.S(),
         blocks,
         value_count,
         slot_count,
@@ -234,7 +235,7 @@ fn test_simple_function_call() {
     );
 
     // Create context with both functions.
-    let functions: Vec<IrCodeUnit> = vec![identity_fn, main_code_unit.clone()];
+    let functions: Vec<IrCodeUnit> = vec![identity_fn, main_code_unit.C()];
     let ctx = ExecutionContext::new(0, &functions);
 
     // Execute main, writing result to our storage.
@@ -247,7 +248,7 @@ fn test_simple_function_call() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&main_code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&main_code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).X();
 
     // Verify result is 10 (first parameter returned by identity).
     assert_eq!(result_storage, 10);
@@ -313,7 +314,7 @@ fn test_nested_function_calls() {
     );
 
     // Create context with both functions.
-    let functions: Vec<IrCodeUnit> = vec![passthrough_fn, nested_code_unit.clone()];
+    let functions: Vec<IrCodeUnit> = vec![passthrough_fn, nested_code_unit.C()];
     let ctx = ExecutionContext::new(0, &functions);
 
     // Create argument: 42.
@@ -331,7 +332,7 @@ fn test_nested_function_calls() {
 
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&nested_code_unit, None, vec![arg], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&nested_code_unit, None, vec![arg], ret_dest, &ctx, &registry, &mut frames).X();
 
     // Verify result is 42 (passthrough returns input unchanged).
     assert_eq!(result_storage, 42);
@@ -339,7 +340,7 @@ fn test_nested_function_calls() {
 
 /// Helper to run a function and get an i64 result.
 fn run_i64_function(code_unit: &IrCodeUnit) -> i64 {
-    let functions = [code_unit.clone()];
+    let functions = [code_unit.C()];
     let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: i64 = 0;
@@ -350,13 +351,13 @@ fn run_i64_function(code_unit: &IrCodeUnit) -> i64 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).X();
     result
 }
 
 /// Helper to run a function and get a u32 result.
 fn run_u32_function(code_unit: &IrCodeUnit) -> u32 {
-    let functions = [code_unit.clone()];
+    let functions = [code_unit.C()];
     let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: u32 = 0;
@@ -367,13 +368,13 @@ fn run_u32_function(code_unit: &IrCodeUnit) -> u32 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).X();
     result
 }
 
 /// Helper to run a function and get a bool result.
 fn run_bool_function(code_unit: &IrCodeUnit) -> bool {
-    let functions = [code_unit.clone()];
+    let functions = [code_unit.C()];
     let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: bool = false;
@@ -384,7 +385,7 @@ fn run_bool_function(code_unit: &IrCodeUnit) -> bool {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).X();
     result
 }
 
@@ -413,7 +414,7 @@ fn test_const_u8() {
     );
 
     let code_unit = IrCodeUnit::from(func);
-    let functions = [code_unit.clone()];
+    let functions = [code_unit.C()];
     let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: u8 = 0;
@@ -424,7 +425,7 @@ fn test_const_u8() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).X();
     assert_eq!(result, 42);
 }
 
@@ -449,7 +450,7 @@ fn test_const_i32() {
     );
 
     let code_unit = IrCodeUnit::from(func);
-    let functions = [code_unit.clone()];
+    let functions = [code_unit.C()];
     let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: i32 = 0;
@@ -460,7 +461,7 @@ fn test_const_i32() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).X();
     assert_eq!(result, -12345);
 }
 
@@ -1391,8 +1392,8 @@ fn test_pack_struct() {
     // fn test() -> i64 { let s = { x: 10, y: 20 }; let { x, _ } = s; x }
     // Pack struct, then unpack and return first field.
     let struct_ty = IrType::Struct(vec![
-        ("x".to_string(), IrType::I64),
-        ("y".to_string(), IrType::I64),
+        ("x".S(), IrType::I64),
+        ("y".S(), IrType::I64),
     ]);
 
     let func = make_test_func(
@@ -1425,8 +1426,8 @@ fn test_pack_struct() {
 fn test_unpack_struct() {
     // fn test() -> i64 { let { x, y } = { x: 10, y: 20 }; y }
     let struct_ty = IrType::Struct(vec![
-        ("x".to_string(), IrType::I64),
-        ("y".to_string(), IrType::I64),
+        ("x".S(), IrType::I64),
+        ("y".S(), IrType::I64),
     ]);
 
     let func = make_test_func(
@@ -1487,7 +1488,7 @@ fn test_crossunit_external_value() {
         vec![],
         vec![],
         None,
-        vec![("x".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        vec![("x".S(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
         vec![],
     );
 
@@ -1527,7 +1528,7 @@ fn test_crossunit_external_value() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment, no result).
-    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns x).
@@ -1537,7 +1538,7 @@ fn test_crossunit_external_value() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 42);
@@ -1569,7 +1570,7 @@ fn test_crossunit_external_slot() {
         vec![],
         vec![],
         None,
-        vec![("y".to_string(), datalove_datafun_ir::ExportBinding::Slot(SlotId(0)))],
+        vec![("y".S(), datalove_datafun_ir::ExportBinding::Slot(SlotId(0)))],
         vec![],
     );
 
@@ -1609,7 +1610,7 @@ fn test_crossunit_external_slot() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment).
-    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns y).
@@ -1619,7 +1620,7 @@ fn test_crossunit_external_slot() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 10);
@@ -1662,7 +1663,7 @@ fn test_crossunit_external_function() {
         vec![],
         vec![],
         None,
-        vec![("identity".to_string(), datalove_datafun_ir::ExportBinding::Function(CodeUnitId(0)))],
+        vec![("identity".S(), datalove_datafun_ir::ExportBinding::Function(CodeUnitId(0)))],
         vec![identity_fn],
     );
 
@@ -1707,7 +1708,7 @@ fn test_crossunit_external_function() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment with function).
-    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns identity(7)).
@@ -1717,7 +1718,7 @@ fn test_crossunit_external_function() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 7);  // identity(7) = 7
@@ -1745,7 +1746,7 @@ fn test_crossunit_chain() {
         vec![],
         vec![],
         None,
-        vec![("a".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        vec![("a".S(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
         vec![],
     );
 
@@ -1770,7 +1771,7 @@ fn test_crossunit_chain() {
         vec![],
         vec![],
         None,
-        vec![("b".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        vec![("b".S(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
         vec![],
     );
 
@@ -1810,9 +1811,9 @@ fn test_crossunit_chain() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 and unit 1 (fragments).
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 2 (returns b which is a copy of a).
@@ -1822,7 +1823,7 @@ fn test_crossunit_chain() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit2.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit2.C()), &mut env, ret_dest, Some(expr_dest)).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 5);  // b = a = 5
@@ -1882,7 +1883,7 @@ fn test_list_with_explicit_drop() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // destroy_live_values won't touch the list (not tracked), but explicit Drop already handled it.
@@ -1970,7 +1971,7 @@ fn test_script_with_function_and_list_drop() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2033,7 +2034,7 @@ fn test_multiple_explicit_drops() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2044,13 +2045,13 @@ fn test_ctfe_struct_with_string_destruction() {
     // Test that CTFE struct with string field is properly destroyed.
     // const P: {name: string, age: u32} = {name = "Alice", age = 30}
     let struct_type = IrType::Struct(vec![
-        ("name".to_string(), IrType::String),
-        ("age".to_string(), IrType::U32),
+        ("name".S(), IrType::String),
+        ("age".S(), IrType::U32),
     ]);
 
     let struct_const = ConstValue::Struct(vec![
-        ("name".to_string(), ConstValue::String("Alice".to_string())),
-        ("age".to_string(), ConstValue::U32(30)),
+        ("name".S(), ConstValue::String("Alice".S())),
+        ("age".S(), ConstValue::U32(30)),
     ]);
 
     let unit = make_script_unit(
@@ -2084,7 +2085,7 @@ fn test_ctfe_struct_with_string_destruction() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2095,13 +2096,13 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
     // Test that CTFE struct with string field is properly destroyed via unit_end_values.
     // This mimics how the test fixture works: const P binding that stays alive until env cleanup.
     let struct_type = IrType::Struct(vec![
-        ("name".to_string(), IrType::String),
-        ("age".to_string(), IrType::U32),
+        ("name".S(), IrType::String),
+        ("age".S(), IrType::U32),
     ]);
 
     let struct_const = ConstValue::Struct(vec![
-        ("name".to_string(), ConstValue::String("Alice".to_string())),
-        ("age".to_string(), ConstValue::U32(30)),
+        ("name".S(), ConstValue::String("Alice".S())),
+        ("age".S(), ConstValue::U32(30)),
     ]);
 
     let unit = make_script_unit(
@@ -2133,7 +2134,7 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2144,13 +2145,13 @@ fn test_ctfe_struct_with_string_and_debuglog() {
     // Test that CTFE struct with string field is properly destroyed when debuglog is used.
     // This exactly mimics the failing test fixture.
     let struct_type = IrType::Struct(vec![
-        ("name".to_string(), IrType::String),
-        ("age".to_string(), IrType::U32),
+        ("name".S(), IrType::String),
+        ("age".S(), IrType::U32),
     ]);
 
     let struct_const = ConstValue::Struct(vec![
-        ("name".to_string(), ConstValue::String("Alice".to_string())),
-        ("age".to_string(), ConstValue::U32(30)),
+        ("name".S(), ConstValue::String("Alice".S())),
+        ("age".S(), ConstValue::U32(30)),
     ]);
 
     let unit = make_script_unit(
@@ -2184,7 +2185,7 @@ fn test_ctfe_struct_with_string_and_debuglog() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2198,7 +2199,7 @@ fn test_ctfe_struct_with_string_and_debuglog() {
 #[test]
 fn test_const_error() {
     // Test ConstValue::Error - boxes an inner value.
-    let error_const = ConstValue::Error { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("test error message".to_string())) };
+    let error_const = ConstValue::Error { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("test error message".S())) };
 
     let unit = make_script_unit(
         vec![
@@ -2230,7 +2231,7 @@ fn test_const_error() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2271,7 +2272,7 @@ fn test_const_data() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2281,7 +2282,7 @@ fn test_const_data() {
 fn test_const_result_err() {
     // Test ConstValue::ResultErr - creates a Result::Err from an Error.
     let result_err_const = ConstValue::ResultErr(Box::new(
-        ConstValue::Error { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("error in result".to_string())) }
+        ConstValue::Error { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("error in result".S())) }
     ));
 
     let result_type = IrType::Result(Box::new(IrType::I32));
@@ -2316,7 +2317,7 @@ fn test_const_result_err() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2325,7 +2326,7 @@ fn test_const_result_err() {
 #[test]
 fn test_const_data_with_string() {
     // Test ConstValue::Data with a String inside.
-    let data_const = ConstValue::Data { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("boxed string".to_string())) };
+    let data_const = ConstValue::Data { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("boxed string".S())) };
 
     let unit = make_script_unit(
         vec![
@@ -2356,7 +2357,7 @@ fn test_const_data_with_string() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2396,7 +2397,7 @@ fn test_const_error_with_i32() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2442,7 +2443,7 @@ fn test_const_error_with_tuple() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2488,7 +2489,7 @@ fn test_const_data_with_tuple() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2532,7 +2533,7 @@ fn test_const_result_err_with_i32() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2572,7 +2573,7 @@ fn test_const_data_with_bool() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2612,7 +2613,7 @@ fn test_const_error_with_unit() {
     let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.C()), &mut env, ret_dest, None).X();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2696,7 +2697,7 @@ fn test_block_args_are_a_parallel_move() {
         vec![],
     );
 
-    let functions: Vec<IrCodeUnit> = vec![swap_once.clone()];
+    let functions: Vec<IrCodeUnit> = vec![swap_once.C()];
     let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: i64 = 0;
@@ -2704,7 +2705,7 @@ fn test_block_args_are_a_parallel_move() {
     let ret_dest = Destination { ptr: &mut result as *mut i64 as *mut u8, tydesc: ret_tydesc };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&swap_once, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&swap_once, None, vec![], ret_dest, &ctx, &registry, &mut frames).X();
 
     assert_eq!(result, 1, "after one swap b holds what a did");
 }

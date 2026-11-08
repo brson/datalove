@@ -10,6 +10,7 @@
 //! The two are kept in step by `layout_conformance_tests`, which walks a
 //! corpus of types and checks that both agree field by field.
 
+use rmx::prelude::*;
 use datalove_rtdt as rtdt;
 
 use crate::{CursorKind, IrType};
@@ -104,7 +105,7 @@ pub fn layout_of(ty: &IrType) -> TypeLayout {
         // Composites.
         IrType::Tuple(fields) => aggregate_layout(fields),
         IrType::Struct(fields) => {
-            let field_types: Vec<IrType> = fields.iter().map(|(_, ty)| ty.clone()).collect();
+            let field_types: Vec<IrType> = fields.iter().map(|(_, ty)| ty.C()).collect();
             aggregate_layout(&field_types)
         }
         // A term is transparent over its payload.
@@ -280,8 +281,8 @@ mod tests {
                 IrType::Map(Box::new(IrType::String), Box::new(IrType::U64)),
             ),
             (
-                IrType::Table(vec![("c".to_string(), Box::new(IrType::U8))]),
-                IrType::Table(vec![("c".to_string(), Box::new(IrType::String))]),
+                IrType::Table(vec![("c".S(), Box::new(IrType::U8))]),
+                IrType::Table(vec![("c".S(), Box::new(IrType::String))]),
             ),
         ];
         for (a, b) in cases {

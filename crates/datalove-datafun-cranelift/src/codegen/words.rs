@@ -18,6 +18,7 @@
 //! only kind a value held as words has. See
 //! `botdocs/plan-values-in-registers.md`.
 
+use rmx::prelude::*;
 use bct::lookup::LookupSet;
 
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
@@ -67,8 +68,8 @@ fn counts_at(ty: &IrType, base: u32, out: &mut Vec<u32>) {
         }
         IrType::Tuple(_) | IrType::Struct(_) => {
             let fields: Vec<IrType> = match ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(flds) => flds.iter().map(|(_, t)| t.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(flds) => flds.iter().map(|(_, t)| t.C()).collect(),
                 _ => unreachable!("matched"),
             };
             for (field, at) in fields.iter().zip(types::compute_tuple_field_offsets(&fields)) {
@@ -274,7 +275,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.words.insert(dest, words);
             return Ok(());
         }
-        let ty = self.func.value_types[dest.0 as usize].clone();
+        let ty = self.func.value_types[dest.0 as usize].C();
         let home = self.dest_addr(builder, dest)?;
         store_words_at(builder, home, &ty, &words);
         self.values.insert(dest, home);
@@ -285,7 +286,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// loaded from where it is.
     pub(super) fn operand_words(&mut self, builder: &mut FunctionBuilder, op: &Operand, ty: &IrType) -> Result<Vec<cl_ir::Value>, CraneliftError> {
         if let Some(words) = self.words_of(op) {
-            return Ok(words.clone());
+            return Ok(words.C());
         }
         if let Operand::Slot(s) = op
             && let Some(regs) = self.slot_regs(builder, *s)
@@ -416,7 +417,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 None => return Ok(false),
             }
         }
-        let ty = self.func.value_types[dest.0 as usize].clone();
+        let ty = self.func.value_types[dest.0 as usize].C();
         match Self::compose_words(builder, &ty, &parts) {
             Some(words) => {
                 self.words.insert(dest, words);
@@ -459,10 +460,10 @@ mod tests {
     /// writes from its parameters, and give its code. The module is the
     /// code's, and has to outlive every call.
     fn compile(params: &[cl_ir::Type], body: impl FnOnce(&mut FunctionBuilder, &[cl_ir::Value])) -> (JITModule, *const u8) {
-        let mut module = JITModule::new(JITBuilder::new(cranelift_module::default_libcall_names()).unwrap());
+        let mut module = JITModule::new(JITBuilder::new(cranelift_module::default_libcall_names()).X());
         let mut sig = Signature::new(module.isa().default_call_conv());
         sig.params.extend(params.iter().map(|&t| AbiParam::new(t)));
-        let id = module.declare_function("f", cranelift_module::Linkage::Local, &sig).unwrap();
+        let id = module.declare_function("f", cranelift_module::Linkage::Local, &sig).X();
         let mut ctx = module.make_context();
         ctx.func.signature = sig;
         let frontend = module.isa().frontend_config();
@@ -476,8 +477,8 @@ mod tests {
         body(&mut builder, &args);
         builder.ins().return_(&[]);
         builder.finalize(frontend);
-        module.define_function(id, &mut ctx).unwrap();
-        module.finalize_definitions().unwrap();
+        module.define_function(id, &mut ctx).X();
+        module.finalize_definitions().X();
         let code = module.get_finalized_function(id);
         (module, code)
     }
@@ -508,7 +509,7 @@ mod tests {
 
     #[test]
     fn a_value_is_cut_into_words_then_what_its_alignment_leaves() {
-        let pieces = |ty: &IrType| -> Vec<cl_ir::Type> { word_pieces(ty).unwrap().into_iter().map(|(_, t)| t).collect() };
+        let pieces = |ty: &IrType| -> Vec<cl_ir::Type> { word_pieces(ty).X().into_iter().map(|(_, t)| t).collect() };
         assert_eq!(pieces(&mixed().0), [cl_types::I64; 4], "padded to eight-byte alignment");
         let ty = IrType::Tuple(vec![IrType::U32, IrType::U32, IrType::U16]);
         assert_eq!(pieces(&ty), [cl_types::I64, cl_types::I32]);
@@ -564,7 +565,7 @@ mod tests {
     fn an_aggregate_part_is_extracted_as_its_own_words() {
         // `((u16, u32), u64)`: the inner tuple is the first piece.
         let inner = IrType::Tuple(vec![IrType::U16, IrType::U32]);
-        let ty = IrType::Tuple(vec![inner.clone(), IrType::U64]);
+        let ty = IrType::Tuple(vec![inner.C(), IrType::U64]);
         let src: [u8; 16] = std::array::from_fn(|i| (i as u8).wrapping_mul(17) | 1);
         let (_module, code) = compile(&[PTR_TYPE, PTR_TYPE], |b, args| {
             let words = load_words(b, args[0], &ty);
@@ -582,7 +583,7 @@ mod tests {
         // `(u32, (u32, u32), u32)`: the inner tuple straddles the first two
         // pieces.
         let inner = IrType::Tuple(vec![IrType::U32, IrType::U32]);
-        let ty = IrType::Tuple(vec![IrType::U32, inner.clone(), IrType::U32]);
+        let ty = IrType::Tuple(vec![IrType::U32, inner.C(), IrType::U32]);
         compile(&[PTR_TYPE], |b, args| {
             let words = load_words(b, args[0], &ty);
             assert!(Fc::extract_part(b, &ty, &words, 4, &inner).is_none());

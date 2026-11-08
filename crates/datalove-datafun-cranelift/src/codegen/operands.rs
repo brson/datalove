@@ -1,6 +1,7 @@
 //! Operands and values: what a `ValueId` is in Cranelift, an operand's
 //! address, value and type.
 
+use rmx::prelude::*;
 use super::*;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -234,23 +235,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(super) fn get_operand_type(&self, op: &Operand) -> Result<IrType, CraneliftError> {
         match op {
             Operand::Value(vid) => {
-                Ok(self.func.value_types[vid.0 as usize].clone())
+                Ok(self.func.value_types[vid.0 as usize].C())
             }
             Operand::ValueRef(vid) => {
                 // ValueRef dereferences, so return the inner type.
                 let ref_ty = &self.func.value_types[vid.0 as usize];
                 match ref_ty {
-                    IrType::Ref(inner) => Ok(inner.as_ref().clone()),
+                    IrType::Ref(inner) => Ok(inner.as_ref().C()),
                     _ => Err(CraneliftError::Codegen(format!(
                         "ValueRef on non-Ref type: {:?}", ref_ty
                     ))),
                 }
             }
             Operand::Param(pid) => {
-                Ok(self.func_ctx.param_types[pid.0 as usize].clone())
+                Ok(self.func_ctx.param_types[pid.0 as usize].C())
             }
             Operand::Slot(sid) => {
-                Ok(self.func.slot_types[sid.0 as usize].clone())
+                Ok(self.func.slot_types[sid.0 as usize].C())
             }
             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                 Err(CraneliftError::Unsupported(format!(

@@ -1,6 +1,7 @@
 //! Signatures: what a datalove function, a native and a local callee are
 //! called with.
 
+use rmx::prelude::*;
 use std::ops::Range;
 
 use super::*;
@@ -108,7 +109,7 @@ impl ParamLayout {
         let mut tys = vec![PTR_TYPE; self.len()];
         for (pass, at) in &self.args {
             if let ArgPass::Value(arg_tys) = pass {
-                tys[at.clone()].copy_from_slice(arg_tys);
+                tys[at.C()].copy_from_slice(arg_tys);
             }
         }
         tys
@@ -254,9 +255,9 @@ impl LocalCallee {
         let ctx = unit.function_context().expect("a local callee is a function");
         LocalCallee {
             func_id,
-            param_modes: ctx.param_modes.clone(),
+            param_modes: ctx.param_modes.C(),
             type_param_count: ctx.type_param_count,
-            param_types: ctx.param_types.clone(),
+            param_types: ctx.param_types.C(),
             layout: ParamLayout::of(ctx),
         }
     }
@@ -332,10 +333,10 @@ pub fn define_entry_adapter<M: Module>(
         let ptr = entry_args.next().expect("an entry pointer per argument");
         match pass {
             ArgPass::Pointer => args[at.start] = ptr,
-            ArgPass::Value(_) => args[at.clone()].copy_from_slice(&super::words::load_regs(&mut builder, ptr, ty)),
+            ArgPass::Value(_) => args[at.C()].copy_from_slice(&super::words::load_regs(&mut builder, ptr, ty)),
         }
     }
-    for (at, descriptor) in layout.descriptors.clone().zip(entry_args) {
+    for (at, descriptor) in layout.descriptors.C().zip(entry_args) {
         args[at] = descriptor;
     }
 

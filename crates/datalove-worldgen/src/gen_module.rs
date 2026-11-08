@@ -1,5 +1,6 @@
 //! Module generation.
 
+use rmx::prelude::*;
 use rand::Rng;
 use bct::lookup::LookupSet;
 use crate::config::WorldGenConfig;
@@ -26,8 +27,8 @@ pub fn plan_module_graph<'db, R: Rng>(
     for i in 0..module_count {
         let module_name = gen_module_name(rng, i);
         modules.push(ModuleInfo {
-            library: "local".to_string(),
-            package: "gen".to_string(),
+            library: "local".S(),
+            package: "gen".S(),
             module: module_name,
             functions: Vec::new(),
             type_aliases: Vec::new(),
@@ -118,8 +119,8 @@ pub fn gen_module<'db, R: Rng>(
     // shadowing. Nor is a name this module defines a function by imported,
     // which is an error too: every module names its functions `fn0`, `fn1`
     // and so on.
-    let mut imported_names: LookupSet<String> = info.functions.iter().map(|f| f.name.clone())
-        .chain(info.generics.iter().map(|g| g.name.clone()))
+    let mut imported_names: LookupSet<String> = info.functions.iter().map(|f| f.name.C())
+        .chain(info.generics.iter().map(|g| g.name.C()))
         .collect();
     let mut imported_generics: Vec<GenericSig> = Vec::new();
     for prior in prior_modules {
@@ -128,14 +129,14 @@ pub fn gen_module<'db, R: Rng>(
 
             // Import some functions.
             for func in &prior.functions {
-                if rng.gen_bool(0.7) && imported_names.insert(func.name.clone()) {
+                if rng.gen_bool(0.7) && imported_names.insert(func.name.C()) {
                     lines.push(format!("import {}.{}", prior.alias(), func.name));
                 }
             }
             for sig in &prior.generics {
-                if rng.gen_bool(0.7) && imported_names.insert(sig.name.clone()) {
+                if rng.gen_bool(0.7) && imported_names.insert(sig.name.C()) {
                     lines.push(format!("import {}.{}", prior.alias(), sig.name));
-                    imported_generics.push(sig.clone());
+                    imported_generics.push(sig.C());
                 }
             }
             lines.push(String::new());
@@ -144,8 +145,8 @@ pub fn gen_module<'db, R: Rng>(
 
     // Build module context.
     let mut ctx = GenContext::new();
-    ctx.type_aliases = info.type_aliases.clone();
-    ctx.functions = info.functions.clone();
+    ctx.type_aliases = info.type_aliases.C();
+    ctx.functions = info.functions.C();
 
     // Add imported functions from prior modules.
     for prior in prior_modules {
@@ -153,14 +154,14 @@ pub fn gen_module<'db, R: Rng>(
             // Check if we imported it.
             let import_line = format!("import {}.{}", prior.alias(), func.name);
             if lines.contains(&import_line) {
-                ctx.imported_functions.push(func.clone());
+                ctx.imported_functions.push(func.C());
             }
         }
     }
 
     // Generate type alias statements.
     for alias in &info.type_aliases {
-        lines.push(format_type_alias(db, &alias.name, alias.type_hint.clone()));
+        lines.push(format_type_alias(db, &alias.name, alias.type_hint.C()));
     }
     if !info.type_aliases.is_empty() {
         lines.push(String::new());
@@ -170,14 +171,14 @@ pub fn gen_module<'db, R: Rng>(
     // it is written above them. Bound to literals, since a const may name only
     // other consts and a call could close a cycle with a function that names
     // one.
-    ctx.consts = info.consts.clone();
+    ctx.consts = info.consts.C();
     for def in &info.consts {
         lines.push(crate::gen_const::format_const(db, rng, def, config));
         lines.push(String::new());
     }
 
     // Enum declarations, which the functions below match over.
-    ctx.enums = info.enums.clone();
+    ctx.enums = info.enums.C();
     for def in &info.enums {
         lines.push(crate::gen_enum::format_enum(db, def));
         lines.push(String::new());
@@ -185,7 +186,7 @@ pub fn gen_module<'db, R: Rng>(
 
     // Generic definitions first, so that the functions below may call them.
     // They call nothing themselves, so there is no recursion to prevent.
-    ctx.generic_functions = info.generics.clone();
+    ctx.generic_functions = info.generics.C();
     ctx.generic_functions.extend(imported_generics);
     for sig in &info.generics {
         lines.push(gen_generic_function(&sig.name, sig.shape));

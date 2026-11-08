@@ -8,6 +8,7 @@
 //! and disagreements are left for the caller's ordinary type check to report.
 
 
+use rmx::prelude::*;
 use bct::text::InternedText;
 use datalove_datalit as datalit;
 use datalit::tycheck::Type;
@@ -34,7 +35,7 @@ pub fn bind_type_params<'db>(
 ) {
     match (param, arg) {
         (Type::Var(name), found) => {
-            bindings.entry(*name).or_insert_with(|| found.clone());
+            bindings.entry(*name).or_insert_with(|| found.C());
         }
 
         (Type::List(p), Type::List(a)) => {
@@ -113,7 +114,7 @@ pub fn substitute_type_params<'db>(
     let sub = |t: &Type<'db>| Box::new(substitute_type_params(t, bindings));
 
     match ty {
-        Type::Var(name) => bindings.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        Type::Var(name) => bindings.get(name).cloned().unwrap_or_else(|| ty.C()),
 
         Type::List(t) => Type::List(datalit::tycheck::TypeList {
             element_type: sub(&t.element_type),
@@ -168,7 +169,7 @@ pub fn substitute_type_params<'db>(
         | Type::U32 | Type::I32 | Type::U64 | Type::I64
         | Type::Index | Type::Offset | Type::F32 | Type::F64
         | Type::Int | Type::String | Type::Data | Type::Error
-        | Type::Atom(_) | Type::RecVar(_) => ty.clone(),
+        | Type::Atom(_) | Type::RecVar(_) => ty.C(),
     }
 }
 

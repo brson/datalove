@@ -7,6 +7,7 @@
 //! By extracting these types, lowering can eventually be moved to its own crate
 //! without depending on the full ownership analysis module.
 
+use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::ModuleId;
 use datalove_diagnostic_codes::OCode;
@@ -237,7 +238,7 @@ impl<'db> Destructure<'db> {
             (Binding::Tuple(names), IrType::Tuple(fields)) => Destructure::Fields {
                 names: names.iter().zip(fields)
                     .enumerate()
-                    .map(|(i, (name, ty))| (*name, i as u32, ty.clone()))
+                    .map(|(i, (name, ty))| (*name, i as u32, ty.C()))
                     .collect(),
                 field_count: fields.len(),
             },
@@ -247,14 +248,14 @@ impl<'db> Destructure<'db> {
                         let field = b.field.as_str(db);
                         let index = fields.iter().position(|(name, _)| name == field)
                             .unwrap_or_else(|| panic!("field `{field}` not in {ty:?}"));
-                        (b.binding, index as u32, fields[index].1.clone())
+                        (b.binding, index as u32, fields[index].1.C())
                     })
                     .collect(),
                 field_count: fields.len(),
             },
             (Binding::Atom(_), IrType::Atom(_)) => Destructure::Nothing,
             (Binding::Term { binding, .. }, IrType::Term(_, payload)) => {
-                Destructure::Payload(*binding, (**payload).clone())
+                Destructure::Payload(*binding, (**payload).C())
             }
             _ => panic!("pattern does not fit {ty:?}; the typechecker should have caught it"),
         }

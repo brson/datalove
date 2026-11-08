@@ -567,7 +567,7 @@ proptest! {
             for (key, value) in &entries {
                 let key_str = format!("key_{}", key);
                 let value_str = format!("value_{}", value);
-                unique_keys.insert(key_str.clone());
+                unique_keys.insert(key_str.C());
 
                 let mut key_rt = create_runtime_string(rt, &key_str, &*_key_tydesc);
                 let mut value_rt = create_runtime_string(rt, &value_str, &*_value_tydesc);

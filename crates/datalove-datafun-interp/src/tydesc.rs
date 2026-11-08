@@ -3,6 +3,7 @@
 //! Converts `IrType` to runtime `TyDesc` pointers. TyDescs provide size, alignment,
 //! and type-specific info (field offsets, element types) for runtime operations.
 
+use rmx::prelude::*;
 use bct::lookup::LookupMap;
 
 use datalove_rtdt as rtdt;
@@ -62,8 +63,8 @@ impl IrTyDescTable {
         // be read off them.
         tydesc.flags = tydesc.computed_flags();
         self.tydescs.push(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const TyDesc;
-        self.cache.insert(ty.clone(), ptr);
+        let ptr = &**self.tydescs.last().X() as *const TyDesc;
+        self.cache.insert(ty.C(), ptr);
         ptr
     }
 
@@ -91,7 +92,7 @@ impl IrTyDescTable {
         // only way to what it holds, so a pointer taken before the move would
         // be invalidated by it.
         let ptr = self.rec_tydescs.last().expect("just pushed").get();
-        self.cache.insert(ty.clone(), ptr as *const TyDesc);
+        self.cache.insert(ty.C(), ptr as *const TyDesc);
         let body = self.get_or_create(&ty.exposed());
         // SAFETY: both are live descriptors, and nothing holds a reference to
         // the one written, only pointers. A descriptor owns nothing, so a copy
@@ -290,7 +291,7 @@ impl IrTyDescTable {
             tydesc: inner_tydesc,
         }];
         self.tuple_fields.push(field_info);
-        let fields_ptr = self.tuple_fields.last().unwrap().as_ptr();
+        let fields_ptr = self.tuple_fields.last().X().as_ptr();
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Tuple, flags: 0,  // Use Tuple tag to store inner tydesc
@@ -338,7 +339,7 @@ impl IrTyDescTable {
         }
 
         self.tuple_fields.push(field_info);
-        let fields_ptr = self.tuple_fields.last().unwrap().as_ptr();
+        let fields_ptr = self.tuple_fields.last().X().as_ptr();
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Tuple,
@@ -362,7 +363,7 @@ impl IrTyDescTable {
         // Store field names.
         let name_start = self.field_names.len();
         for (name, _) in fields {
-            self.field_names.push(name.clone());
+            self.field_names.push(name.C());
         }
 
         // Create field info with placeholder offsets.
@@ -401,7 +402,7 @@ impl IrTyDescTable {
         }
 
         self.struct_fields.push(field_info);
-        let fields_ptr = self.struct_fields.last().unwrap().as_ptr();
+        let fields_ptr = self.struct_fields.last().X().as_ptr();
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Struct,
@@ -426,7 +427,7 @@ impl IrTyDescTable {
         // Store variant names.
         let name_start = self.field_names.len();
         for (name, _) in variants {
-            self.field_names.push(name.clone());
+            self.field_names.push(name.C());
         }
 
         // Create variant info with placeholder offsets.
@@ -465,7 +466,7 @@ impl IrTyDescTable {
         }
 
         self.enum_variants.push(variant_info);
-        let variants_ptr = self.enum_variants.last().unwrap().as_ptr();
+        let variants_ptr = self.enum_variants.last().X().as_ptr();
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Enum,
@@ -482,8 +483,8 @@ impl IrTyDescTable {
     }
 
     fn create_atom_tydesc(&mut self, name: &str) -> Box<TyDesc> {
-        self.field_names.push(name.to_string());
-        let name_ref = self.field_names.last().unwrap();
+        self.field_names.push(name.S());
+        let name_ref = self.field_names.last().X();
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Atom,
             flags: 0,
@@ -504,8 +505,8 @@ impl IrTyDescTable {
         let size = payload_layout.size;
         let align = payload_layout.align;
 
-        self.field_names.push(name.to_string());
-        let name_ref = self.field_names.last().unwrap();
+        self.field_names.push(name.S());
+        let name_ref = self.field_names.last().X();
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Term,
             flags: 0,
@@ -639,7 +640,7 @@ impl IrTyDescTable {
         // Store column names.
         let name_start = self.field_names.len();
         for (name, _) in columns {
-            self.field_names.push(name.clone());
+            self.field_names.push(name.C());
         }
 
         // Create column info.
@@ -655,7 +656,7 @@ impl IrTyDescTable {
             .collect();
 
         self.table_columns.push(column_info);
-        let columns_ptr = self.table_columns.last().unwrap().as_ptr();
+        let columns_ptr = self.table_columns.last().X().as_ptr();
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Table,

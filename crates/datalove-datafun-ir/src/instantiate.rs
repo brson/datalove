@@ -15,6 +15,7 @@
 //! means what a call to its instance at that binding does, so any call site
 //! may be pointed at either.
 
+use rmx::prelude::*;
 use crate::*;
 
 /// `generic` with each type parameter `i` bound to `bindings[i]`: a concrete
@@ -57,7 +58,7 @@ pub fn instantiate(generic: &IrCodeUnit, bindings: &[IrType], id: CodeUnitId, na
 /// `instantiate` and inlining a generic have in common.
 pub fn substitute_types(generic: &IrCodeUnit, bindings: &[IrType]) -> IrCodeUnit {
     let subst = |ty: &IrType| ty.substitute(bindings);
-    let mut unit = generic.clone();
+    let mut unit = generic.C();
     unit.value_types = generic.value_types.iter().map(subst).collect();
     unit.slot_types = generic.slot_types.iter().map(subst).collect();
     for block in &mut unit.blocks {
@@ -93,7 +94,7 @@ pub fn clean_copy_types(unit: &mut IrCodeUnit) -> usize {
     let copy_slots: Vec<SlotId> = unit.tracked_slots.iter().copied()
         .filter(|s| unit.slot_types[s.0 as usize].is_copy())
         .collect();
-    let param_types: Vec<IrType> = unit.function_context().map(|ctx| ctx.param_types.clone()).unwrap_or_default();
+    let param_types: Vec<IrType> = unit.function_context().map(|ctx| ctx.param_types.C()).unwrap_or_default();
     let value_types = &unit.value_types;
     let slot_types = &unit.slot_types;
     let copy_operand = |op: &Operand| match op {
@@ -116,15 +117,15 @@ pub fn clean_copy_types(unit: &mut IrCodeUnit) -> usize {
         for instr in &mut block.instructions {
             let clean = match instr {
                 Instruction::Clone { dest, src } | Instruction::Move { dest, src } if copy_value(dest) => {
-                    Instruction::Copy { dest: *dest, src: src.clone() }
+                    Instruction::Copy { dest: *dest, src: src.C() }
                 }
                 Instruction::SlotStoreCopyTracked { dest, value } | Instruction::SlotStoreMoveTracked { dest, value }
                     if untracked(dest) =>
                 {
-                    Instruction::SlotStoreCopy { dest: dest.clone(), value: value.clone() }
+                    Instruction::SlotStoreCopy { dest: dest.C(), value: value.C() }
                 }
                 Instruction::SetFieldTracked { slot, field_path, value } if untracked(slot) => {
-                    Instruction::SetField { slot: slot.clone(), field_path: field_path.clone(), value: value.clone() }
+                    Instruction::SetField { slot: slot.C(), field_path: field_path.C(), value: value.C() }
                 }
                 Instruction::SlotLoadMoveTracked { dest, slot } if copy_slots.contains(slot) => {
                     Instruction::SlotLoadCopy { dest: *dest, slot: *slot }
@@ -175,7 +176,7 @@ mod tests {
     /// keeps a `var` of `?U`.
     fn generic() -> IrCodeUnit {
         let pair = IrType::Tuple(vec![t(0), list(t(1))]);
-        let value_types = vec![pair.clone(), t(0), list(t(1))];
+        let value_types = vec![pair.C(), t(0), list(t(1))];
         let call = Instruction::Call {
             dest: ValueId(1),
             func: CodeRef::Module { module: IrModuleId(0), id: CodeUnitId(1) },
@@ -184,7 +185,7 @@ mod tests {
         };
         let mut unit = IrCodeUnit {
             id: CodeUnitId(0),
-            name: "f".to_string(),
+            name: "f".S(),
             blocks: vec![IrBlock {
                 id: BlockId(0),
                 params: Vec::new(),
@@ -224,7 +225,7 @@ mod tests {
         assert_eq!(dynamic_type_in(&instance), None);
         assert_eq!(instance.id, CodeUnitId(7));
 
-        let ctx = instance.function_context().unwrap();
+        let ctx = instance.function_context().X();
         assert_eq!(ctx.type_param_count, 0);
         assert!(ctx.descriptor_table.is_empty());
         assert_eq!(ctx.param_types, vec![IrType::U32, list(IrType::String)]);

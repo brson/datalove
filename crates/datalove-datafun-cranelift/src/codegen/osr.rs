@@ -2,6 +2,7 @@
 //! running it (on-stack replacement): what is compiled, how the frame is read,
 //! and the values the loop reads that the code reached also makes.
 
+use rmx::prelude::*;
 use super::*;
 
 /// The blocks reachable from `from`, itself included.
@@ -55,7 +56,7 @@ pub(super) fn carried_into(
         used.retain_unordered(|v| !defined[&block.id].contains(v));
         uses.insert(block.id, used);
     }
-    let mut live_in = uses.clone();
+    let mut live_in = uses.C();
     loop {
         let mut changed = false;
         for block in blocks.iter().rev() {
@@ -231,7 +232,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let consts = self.func.blocks.iter()
             .flat_map(|b| &b.instructions)
             .filter_map(|instr| match instr {
-                Instruction::Const { dest, value } => Some((*dest, value.clone())),
+                Instruction::Const { dest, value } => Some((*dest, value.C())),
                 _ => None,
             })
             .collect();

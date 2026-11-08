@@ -284,7 +284,7 @@ impl<'db> Parser<'db> {
                     let inner = elements.into_iter().next().X();
                     match inner.type_hint() {
                         Some(_) => ast::Expr::Group(ast::ExprGroup { inner }),
-                        None => inner.expr().clone(),
+                        None => inner.expr().C(),
                     }
                 } else {
                     ast::Expr::AnonTuple(ast::ExprAnonTuple { elements })
@@ -412,7 +412,7 @@ impl<'db> Parser<'db> {
             None => {
                 // No name found - emit error and create placeholder.
                 let ts = self.peek_text_span();
-                let error_expr = self.emit_expr_error(ts.clone(),
+                let error_expr = self.emit_expr_error(ts.C(),
                     "expected field name in struct expression",
                     DCode::StructFieldSyntax,
                     "expected field name"

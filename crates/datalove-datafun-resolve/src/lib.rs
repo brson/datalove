@@ -3,6 +3,7 @@
 //! Provides name resolution (type aliases, function signatures) as a separate
 //! phase before typechecking. This crate has no dependency on tycheck.
 
+use rmx::prelude::*;
 use bct::text::InternedText;
 use bct::module_graph::Module;
 use datalove_ct::query_log::{log_query, QueryPhase};
@@ -74,14 +75,14 @@ pub fn resolve_names_inheriting<'db>(
                 let name = stmt.name;
                 if type_aliases_map.contains_key(&name) {
                     errors.push(TypeError::DuplicateTypeAlias {
-                        name: name.as_str(db).to_string(),
+                        name: name.as_str(db).S(),
                         local_index: stmt.local_index,
                     });
                     continue;
                 }
-                match convert_type_hint_inheriting(db, stmt.type_hint.clone(), &type_aliases_map, inherited) {
+                match convert_type_hint_inheriting(db, stmt.type_hint.C(), &type_aliases_map, inherited) {
                     Ok(ty) => {
-                        type_aliases_map.insert(name, ty.clone());
+                        type_aliases_map.insert(name, ty.C());
                         type_aliases_vec.push((name, ty));
                     }
                     Err(e) => errors.push(e),
@@ -89,12 +90,12 @@ pub fn resolve_names_inheriting<'db>(
                 continue;
             }
             Item::Fun(head) => {
-                (head.name, head.type_params().clone(), head.type_bounds().clone(),
-                 head.params().clone(), head.return_type(), Some(head), head.local_index)
+                (head.name, head.type_params().C(), head.type_bounds().C(),
+                 head.params().C(), head.return_type(), Some(head), head.local_index)
             }
             Item::NativeFun(stmt) => {
-                (stmt.name, stmt.type_params.clone(), stmt.type_bounds.clone(),
-                 stmt.params.clone(), stmt.return_type.clone(), None, stmt.local_index)
+                (stmt.name, stmt.type_params.C(), stmt.type_bounds.C(),
+                 stmt.params.C(), stmt.return_type.C(), None, stmt.local_index)
             }
             _ => continue,
         };
@@ -103,7 +104,7 @@ pub fn resolve_names_inheriting<'db>(
         // refused rather than allowed to replace it.
         if !defined.insert(name) {
             errors.push(TypeError::DuplicateFunction {
-                name: name.as_str(db).to_string(),
+                name: name.as_str(db).S(),
                 fun_local_index: local_index,
             });
             continue;
@@ -126,9 +127,9 @@ pub fn resolve_names_inheriting<'db>(
         // map for the length of this signature. Nothing else can see it, which
         // is what keeps one function's `T` from meaning another's.
         let type_aliases_map = if type_params.is_empty() {
-            type_aliases_map.clone()
+            type_aliases_map.C()
         } else {
-            let mut scoped = type_aliases_map.clone();
+            let mut scoped = type_aliases_map.C();
             for name in &type_params {
                 scoped.insert(*name, Type::Datalit(datalove_datalit::tycheck::Type::Var(*name)));
             }
@@ -141,7 +142,7 @@ pub fn resolve_names_inheriting<'db>(
         let mut param_comptime = Vec::with_capacity(params.len());
         let mut has_error = false;
         for param in &params {
-            match convert_type_hint_inheriting(db, param.type_hint.clone(), &type_aliases_map, inherited) {
+            match convert_type_hint_inheriting(db, param.type_hint.C(), &type_aliases_map, inherited) {
                 Ok(ty) => {
                     let position = format!("parameter `{}`", param.name.as_str(db));
                     // Whatever a function is handed, the runtime still has to
@@ -195,7 +196,7 @@ pub fn resolve_names_inheriting<'db>(
         let func_type = TypeFunction::new(db, param_types, param_modes, param_comptime, ret_ty);
         functions.push((name, func_type));
         if let Some(ast) = func_ast {
-            function_asts.push((name, ast.clone()));
+            function_asts.push((name, ast.C()));
         }
     }
 
@@ -296,7 +297,7 @@ pub fn module_function_asts<'db>(
 ) -> Vec<(InternedText<'db>, FunHead<'db>)> {
     datalove_datafun_parser::module_items(db, module).items.iter()
         .filter_map(|item| match item {
-            Item::Fun(head) => Some((head.name, head.clone())),
+            Item::Fun(head) => Some((head.name, head.C())),
             _ => None,
         })
         .collect()
@@ -316,8 +317,8 @@ fn unordered_collection_key_error<'db>(
     let Type::Datalit(dt) = ty else { return None };
     let name = datalove_datafun_common::generics::first_unordered_collection_key(dt, ordered)?;
     Some(TypeError::CollectionKeyNotOrdered {
-        param: name.as_str(db).to_string(),
-        position: position.to_string(),
+        param: name.as_str(db).S(),
+        position: position.S(),
         fun_local_index,
     })
 }

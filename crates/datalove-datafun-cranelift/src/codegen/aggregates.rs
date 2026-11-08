@@ -1,5 +1,6 @@
 //! Aggregate type instruction compilation (Pack, Unpack, Copy).
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -52,18 +53,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Get field offsets.
                 let field_types: Vec<_> = match dest_ty {
                     IrType::Unit => Vec::new(),  // Unit is empty tuple.
-                    IrType::Tuple(tys) => tys.clone(),
-                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                    IrType::Tuple(tys) => tys.C(),
+                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                     _ => {
                         panic!("`pack` into {:?}, which is neither a tuple nor a struct", dest_ty);
                     }
                 };
 
-                let dest_ty = dest_ty.clone();
+                let dest_ty = dest_ty.C();
                 if !dest_ty.is_dynamic() {
                     let offsets = types::compute_tuple_field_offsets(&field_types);
                     let rest: Vec<(&Operand, IrType, u32)> = fields.iter().zip(&field_types).zip(&offsets)
-                        .map(|((op, ty), &at)| (op, ty.clone(), at))
+                        .map(|((op, ty), &at)| (op, ty.C(), at))
                         .collect();
                     if self.build_words(builder, dest, Vec::new(), &rest)? {
                         return Ok(());
@@ -135,8 +136,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(_) => {
                 let field_types: Vec<_> = match &src_ty {
-                    IrType::Tuple(tys) => tys.clone(),
-                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                    IrType::Tuple(tys) => tys.C(),
+                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                     _ => {
                         panic!("`unpack` of {:?}, which is neither a tuple nor a struct", src_ty);
                     }
@@ -207,8 +208,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(_) => {
                 let field_types: Vec<_> = match &src_ty {
-                    IrType::Tuple(tys) => tys.clone(),
-                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                    IrType::Tuple(tys) => tys.C(),
+                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                     _ => {
                         panic!("field of {:?}, which is neither a tuple nor a struct", src_ty);
                     }
@@ -232,7 +233,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Source is a pointer to aggregate; load the field.
                 let base = self.get_operand_value(builder, src)?;
 
-                let field_ty = field_types[field_index as usize].clone();
+                let field_ty = field_types[field_index as usize].C();
                 let field_repr = types::ir_type_to_cranelift(&field_ty);
                 let field_addr = self.field_addr(builder, base, &src_ty, field_index)?;
 
@@ -295,8 +296,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let base = self.get_operand_value(builder, src)?;
 
                 let field_types: Vec<_> = match &src_ty {
-                    IrType::Tuple(tys) => tys.clone(),
-                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                    IrType::Tuple(tys) => tys.C(),
+                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                     _ => {
                         panic!("a reference to a field of {:?}, which is neither a tuple \
                                 nor a struct", src_ty);
@@ -353,8 +354,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         for &field_idx in field_path.iter() {
             let field_types: Vec<_> = match &current_ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => {
                     return Err(CraneliftError::Codegen(format!(
                         "set_field path through non-aggregate type: {:?}",
@@ -371,7 +372,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
-            current_ty = field_types[field_idx as usize].clone();
+            current_ty = field_types[field_idx as usize].C();
         }
 
 
@@ -405,8 +406,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         for &field_idx in field_path.iter() {
             let field_types: Vec<_> = match &current_ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => {
                     return Err(CraneliftError::Codegen(format!(
                         "field path through non-aggregate type: {:?}",
@@ -423,7 +424,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
-            current_ty = field_types[field_idx as usize].clone();
+            current_ty = field_types[field_idx as usize].C();
         }
         Ok((current_addr, current_ty))
     }
@@ -501,8 +502,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         for &field_idx in field_path.iter() {
             let field_types: Vec<_> = match &current_ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => {
                     return Err(CraneliftError::Codegen(format!(
                         "param_set_field_tracked path through non-aggregate type: {:?}",
@@ -519,7 +520,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
-            current_ty = field_types[field_idx as usize].clone();
+            current_ty = field_types[field_idx as usize].C();
         }
 
 

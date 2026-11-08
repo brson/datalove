@@ -7,6 +7,7 @@
 //! typed or shown: the REPL, `script-world`, and anything else that runs
 //! units one at a time drive it the same way.
 
+use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 mod engine;
@@ -50,7 +51,7 @@ pub struct EnvBinding {
 /// Why a blocked unit was not run, naming the units it waits on as the
 /// caller names them: by number in the REPL, by position from one in a file.
 pub fn blocked_reason(on: &[impl std::fmt::Display]) -> String {
-    let named: Vec<String> = on.iter().map(|unit| unit.to_string()).collect();
+    let named: Vec<String> = on.iter().map(|unit| unit.S()).collect();
     match named.as_slice() {
         [one] => format!("not run: it reads from unit {one}, which did not finish"),
         [rest @ .., last] => format!("not run: it reads from units {} and {last}, which did not finish", rest.join(", ")),
@@ -61,11 +62,11 @@ pub fn blocked_reason(on: &[impl std::fmt::Display]) -> String {
 /// What a panic carried, as a message.
 pub fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
     if let Some(message) = panic.downcast_ref::<&str>() {
-        message.to_string()
+        message.S()
     } else if let Some(message) = panic.downcast_ref::<String>() {
-        message.clone()
+        message.C()
     } else {
-        "Unknown panic".to_string()
+        "Unknown panic".S()
     }
 }
 

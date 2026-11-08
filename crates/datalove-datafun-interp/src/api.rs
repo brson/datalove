@@ -1,6 +1,7 @@
 //! What the interpreter offers its embedder beyond running code: the debug
 //! buffer, printing a value, destroying one.
 
+use rmx::prelude::*;
 use super::*;
 use datalove_rtdt::{AnyMut, AnyOut, AnyOwned, AnyRef};
 
@@ -21,7 +22,7 @@ impl IrInterpreter {
                 return String::new();
             }
             let bytes = std::slice::from_raw_parts(ptr, len);
-            String::from_utf8_lossy(bytes).to_string()
+            String::from_utf8_lossy(bytes).S()
         }
     }
 
@@ -50,7 +51,7 @@ impl IrInterpreter {
 
             if status != RtStatus::Ok {
                 return Err(InterpError::RuntimeError(
-                    "Failed to create output string".to_string(),
+                    "Failed to create output string".S(),
                 ));
             }
 
@@ -72,12 +73,12 @@ impl IrInterpreter {
                     &*string_tydesc,
                 );
                 return Err(InterpError::RuntimeError(
-                    "Failed to pretty-print value".to_string(),
+                    "Failed to pretty-print value".S(),
                 ));
             }
 
             // Extract string contents.
-            let result = output_string.as_str().to_string();
+            let result = output_string.as_str().S();
 
             // Destroy the output string.
             datalove_rt::c::dtlv_rti_string_destroy_local(

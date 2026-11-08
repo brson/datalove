@@ -79,7 +79,7 @@ impl<'db> TyDescTable<'db> {
 
         let tydesc = self.create_tydesc(ty);
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         self.cache.insert(ty.C(), ptr);
         ptr
     }
@@ -101,7 +101,7 @@ impl<'db> TyDescTable<'db> {
 
         let mut scratch = TyDescTable::new(self.db);
         let stand_in = scratch.get_or_create(&unit_type());
-        scratch.recs_in_progress = self.recs_in_progress.clone();
+        scratch.recs_in_progress = self.recs_in_progress.C();
         scratch.recs_in_progress.push(ty.C());
         for in_progress in &scratch.recs_in_progress {
             scratch.cache.insert(in_progress.C(), stand_in);
@@ -178,7 +178,7 @@ impl<'db> TyDescTable<'db> {
 
         // Store field array and get stable pointer.
         self.tuple_fields.push(field_info);
-        let fields_ptr = self.tuple_fields.last().unwrap().as_ptr();
+        let fields_ptr = self.tuple_fields.last().X().as_ptr();
 
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Tuple,
@@ -194,7 +194,7 @@ impl<'db> TyDescTable<'db> {
         });
 
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         ptr
     }
 
@@ -250,7 +250,7 @@ impl<'db> TyDescTable<'db> {
 
         // Store field array and get stable pointer.
         self.struct_fields.push(field_info);
-        let fields_ptr = self.struct_fields.last().unwrap().as_ptr();
+        let fields_ptr = self.struct_fields.last().X().as_ptr();
 
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Struct,
@@ -266,7 +266,7 @@ impl<'db> TyDescTable<'db> {
         });
 
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         ptr
     }
 
@@ -471,12 +471,12 @@ impl<'db> TyDescTable<'db> {
             Type::AnonTuple(t) => self.create_tuple_tydesc(&t.fields),
             Type::AnonStruct(s) => self.create_struct_tydesc(&s.fields),
 
-            Type::List(l) => self.create_list_tydesc(*l.element_type.clone()),
-            Type::Map(m) => self.create_map_tydesc(*m.key_type.clone(), *m.value_type.clone()),
-            Type::Set(s) => self.create_set_tydesc(*s.element_type.clone()),
-            Type::Option(o) => self.create_option_tydesc(*o.inner_type.clone()),
-            Type::Result(r) => self.create_result_tydesc(*r.inner_type.clone()),
-            Type::Tensor(t) => self.create_tensor_tydesc(*t.element_type.clone(), t.rank),
+            Type::List(l) => self.create_list_tydesc(*l.element_type.C()),
+            Type::Map(m) => self.create_map_tydesc(*m.key_type.C(), *m.value_type.C()),
+            Type::Set(s) => self.create_set_tydesc(*s.element_type.C()),
+            Type::Option(o) => self.create_option_tydesc(*o.inner_type.C()),
+            Type::Result(r) => self.create_result_tydesc(*r.inner_type.C()),
+            Type::Tensor(t) => self.create_tensor_tydesc(*t.element_type.C(), t.rank),
             Type::Table(t) => self.create_table_tydesc(&t.columns),
             Type::Atom(a) => self.create_atom_tydesc(a),
             Type::Term(t) => self.create_term_tydesc(t),
@@ -531,7 +531,7 @@ impl<'db> TyDescTable<'db> {
 
         // Store field array and get stable pointer.
         self.tuple_fields.push(field_info);
-        let fields_ptr = self.tuple_fields.last().unwrap().as_ptr();
+        let fields_ptr = self.tuple_fields.last().X().as_ptr();
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Tuple,
@@ -600,7 +600,7 @@ impl<'db> TyDescTable<'db> {
 
         // Store field array and get stable pointer.
         self.struct_fields.push(field_info);
-        let fields_ptr = self.struct_fields.last().unwrap().as_ptr();
+        let fields_ptr = self.struct_fields.last().X().as_ptr();
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Struct,
@@ -700,7 +700,7 @@ impl<'db> TyDescTable<'db> {
         }
 
         self.enum_variants.push(variant_info);
-        let variants = self.enum_variants.last().unwrap().as_ptr();
+        let variants = self.enum_variants.last().X().as_ptr();
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Enum,
@@ -787,7 +787,7 @@ impl<'db> TyDescTable<'db> {
         });
 
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         self.runtime_option_cache.insert(inner_tydesc, ptr);
         ptr
     }
@@ -883,7 +883,7 @@ impl<'db> TyDescTable<'db> {
 
         // Store column info array and get stable pointer.
         self.table_columns.push(col_info);
-        let columns_ptr = self.table_columns.last().unwrap().as_ptr();
+        let columns_ptr = self.table_columns.last().X().as_ptr();
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Table,
@@ -938,7 +938,7 @@ impl<'db> TyDescTable<'db> {
         });
 
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         self.runtime_result_cache.insert(inner_tydesc, ptr);
         ptr
     }
@@ -971,7 +971,7 @@ impl<'db> TyDescTable<'db> {
         });
 
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         self.runtime_list_cache.insert(element_tydesc, ptr);
         ptr
     }
@@ -1001,7 +1001,7 @@ impl<'db> TyDescTable<'db> {
         });
 
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         self.runtime_map_cache.insert(cache_key, ptr);
         ptr
     }
@@ -1026,7 +1026,7 @@ impl<'db> TyDescTable<'db> {
         });
 
         self.keep(tydesc);
-        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        let ptr = &**self.tydescs.last().X() as *const rtdt::TyDesc;
         self.runtime_set_cache.insert(element_tydesc, ptr);
         ptr
     }
@@ -1075,7 +1075,7 @@ mod tests {
     fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<crate::tycheck::TypecheckResult<'db>> {
         let source = bct::input::Source::new(db, source_text.S());
         let parsed = crate::parser::parse_for_test(db, source);
-        let resolved = crate::resolve::resolve_names(db, source, parsed.clone());
+        let resolved = crate::resolve::resolve_names(db, source, parsed.C());
         let typechecked = crate::tycheck::type_check(db, parsed, resolved);
         Ok(typechecked)
     }
@@ -1203,7 +1203,7 @@ mod tests {
     fn test_create_tuple_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": (bool, u32) / (true, 42)")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1231,7 +1231,7 @@ mod tests {
     fn test_create_struct_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": {x: u32, y: u32} / {x = 1, y = 2}")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1262,7 +1262,7 @@ mod tests {
     fn test_create_list_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": [u32] / [1, 2, 3]")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1284,7 +1284,7 @@ mod tests {
     fn test_create_map_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": %{u32 = string} / %{ 1 = \"one\", 2 = \"two\" }")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1309,7 +1309,7 @@ mod tests {
     fn test_create_set_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": #{u32} / #{ 1, 2, 3 }")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1331,7 +1331,7 @@ mod tests {
     fn test_create_option_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": ?u32 / some 42")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1353,7 +1353,7 @@ mod tests {
     fn test_create_result_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": !u32 / ok 42")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1395,7 +1395,7 @@ mod tests {
     fn test_nested_tuple_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "((1, 2), (3, 4))")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1425,7 +1425,7 @@ mod tests {
     fn test_option_of_list_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": ?[u32] / some [1, 2]")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);
@@ -1448,7 +1448,7 @@ mod tests {
     fn test_list_of_option_tydesc() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": [?u32] / [some 42, none]")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
+        let root_type = typechecked.root_type(&db).C().X();
 
         let mut table = TyDescTable::new(&db);
         let tydesc = table.get_or_create(&root_type);

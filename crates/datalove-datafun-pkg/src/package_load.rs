@@ -28,7 +28,7 @@ impl PackageWorld {
         let mut riders = Vec::new();
         for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
             if let Some(ref source) = pkg.rider_source {
-                riders.push((pkg.name.clone(), source.clone()));
+                riders.push((pkg.name.C(), source.C()));
             }
         }
         riders
@@ -42,7 +42,7 @@ impl PackageWorld {
         let mut dirs = Vec::new();
         for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
             if let Some(ref dir) = pkg.rider_crate_dir {
-                dirs.push((pkg.name.clone(), dir.clone()));
+                dirs.push((pkg.name.C(), dir.C()));
             }
         }
         dirs

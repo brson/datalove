@@ -8,6 +8,7 @@
 //! Ignored by default because building the compiler for wasm takes minutes
 //! from cold; `just test-wasm` runs it.
 
+use rmx::prelude::*;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -44,13 +45,13 @@ fn instantiate(path: &PathBuf) -> (Store<()>, Instance) {
     let module = Module::new(&engine, &bytes[..]).expect("the module validates");
     let mut linker = Linker::<()>::new(&engine);
     for import in module.imports() {
-        let (module_name, name) = (import.module().to_string(), import.name().to_string());
+        let (module_name, name) = (import.module().S(), import.name().S());
         assert!(module_name.starts_with("__wbindgen"), "the module imports {module_name}::{name}");
         let ExternType::Func(ty) = import.ty() else {
             panic!("the module imports {module_name}::{name}, which is not a function");
         };
         let message = format!("the module called {module_name}::{name}, which is JavaScript's");
-        linker.func_new(&module_name, &name, ty.clone(), move |_, _, _| Err(wasmi::Error::new(message.clone())))
+        linker.func_new(&module_name, &name, ty.C(), move |_, _, _| Err(wasmi::Error::new(message.C())))
             .expect("each import is bound once");
     }
     let mut store = Store::new(&engine, ());
@@ -60,10 +61,10 @@ fn instantiate(path: &PathBuf) -> (Store<()>, Instance) {
 
 /// What the last run left in the module's output buffer.
 fn output(store: &mut Store<()>, instance: &Instance) -> String {
-    let ptr = instance.get_typed_func::<(), i32>(&*store, "smoke_output_ptr").unwrap()
-        .call(&mut *store, ()).unwrap() as usize;
-    let len = instance.get_typed_func::<(), i32>(&*store, "smoke_output_len").unwrap()
-        .call(&mut *store, ()).unwrap() as usize;
+    let ptr = instance.get_typed_func::<(), i32>(&*store, "smoke_output_ptr").X()
+        .call(&mut *store, ()).X() as usize;
+    let len = instance.get_typed_func::<(), i32>(&*store, "smoke_output_len").X()
+        .call(&mut *store, ()).X() as usize;
     let memory = instance.get_memory(&*store, "memory").expect("the module exports its memory");
     String::from_utf8(memory.data(&*store)[ptr..ptr + len].to_vec()).expect("the output is text")
 }
@@ -75,7 +76,7 @@ fn run_in_wasm(path: &PathBuf, mode: ParallelMode) -> String {
         ParallelMode::Sequential => 0,
         ParallelMode::Parallel => 1,
     };
-    let result = instance.get_typed_func::<i32, i32>(&store, "smoke_run").unwrap()
+    let result = instance.get_typed_func::<i32, i32>(&store, "smoke_run").X()
         .call(&mut store, parallel);
     let report = output(&mut store, &instance);
     match result {
@@ -84,8 +85,8 @@ fn run_in_wasm(path: &PathBuf, mode: ParallelMode) -> String {
         Err(trap) => panic!("{mode:?} run trapped in wasm: {trap}; {report}"),
     }
     if mode == ParallelMode::Parallel {
-        let threads = instance.get_typed_func::<(), i32>(&store, "smoke_rayon_threads").unwrap()
-            .call(&mut store, ()).unwrap();
+        let threads = instance.get_typed_func::<(), i32>(&store, "smoke_rayon_threads").X()
+            .call(&mut store, ()).X();
         assert_eq!(threads, 1, "rayon's pool in wasm has more than the calling thread");
     }
     report

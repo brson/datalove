@@ -96,21 +96,21 @@ fn parse(replay: &Replay) -> Parsed {
 /// them; `next` is the number the next unit made takes.
 fn change(replay: &Replay, command: &Command, next: &mut u32) -> Change {
     let mut entry = |source: &Unit| {
-        let unit = next.to_string();
+        let unit = next.S();
         *next += 1;
         Entry { unit, source: source.source().S(), expression: source.is_expression() }
     };
     match command {
         Command::Unit(unit) => Change::Enter(vec![entry(unit)]),
         Command::ReplCommand(ReplCommand::Edit { unit, source }) =>
-            Change::Edit { unit: unit.to_string(), source: source.source().S() },
+            Change::Edit { unit: unit.S(), source: source.source().S() },
         Command::ReplCommand(ReplCommand::EditData { path, text }) =>
             Change::EditData { path: path.C(), text: text.C() },
-        Command::ReplCommand(ReplCommand::Delete { unit }) => Change::Delete { unit: unit.to_string() },
+        Command::ReplCommand(ReplCommand::Delete { unit }) => Change::Delete { unit: unit.S() },
         Command::ReplCommand(ReplCommand::Insert { place, unit, source }) =>
-            Change::Insert { entry: entry(source), place: *place, beside: unit.to_string() },
+            Change::Insert { entry: entry(source), place: *place, beside: unit.S() },
         Command::ReplCommand(ReplCommand::Move { unit, place, beside }) =>
-            Change::Move { unit: unit.to_string(), place: *place, beside: beside.to_string() },
+            Change::Move { unit: unit.S(), place: *place, beside: beside.S() },
         other => todo!("{}: a replay with step tables that has {other:?}", replay.world),
     }
 }

@@ -618,7 +618,7 @@ fn test_string_utf8_data() -> AnyResult<()> {
     // Verify it's valid UTF-8.
     let result = std::str::from_utf8(unsafe { get_string_bytes(&string) });
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), utf8_data);
+    assert_eq!(result.X(), utf8_data);
 
     // Clean up.
     unsafe {

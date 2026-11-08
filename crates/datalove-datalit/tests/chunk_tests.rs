@@ -43,10 +43,10 @@ fn analyze(text: &str, cut: bool) -> (Value, usize) {
     let parse_diagnostics = diagnostics(parser::parse::accumulated::<ParseDiagnostic>(&db, source)
         .iter().map(|d| d.to_diagnostic(&db)).collect());
 
-    let resolved = resolve::resolve_names(&db, source, expr.clone());
-    let checked = tycheck::type_check(&db, expr.clone(), resolved);
+    let resolved = resolve::resolve_names(&db, source, expr.C());
+    let checked = tycheck::type_check(&db, expr.C(), resolved);
     let root_type = checked.root_type(&db).as_ref().map(|ty| tycheck::type_to_string(&db, ty));
-    let type_diagnostics = diagnostics(tycheck::type_check::accumulated::<TypeDiagnostic>(&db, expr.clone(), resolved)
+    let type_diagnostics = diagnostics(tycheck::type_check::accumulated::<TypeDiagnostic>(&db, expr.C(), resolved)
         .iter().map(|d| d.to_diagnostic(&db)).collect());
 
     let report = json!({

@@ -119,14 +119,14 @@ const NOT_LITERALS: &[Case] = &[
 /// different words.
 fn error_kinds(errors: Vec<String>) -> Vec<String> {
     errors.into_iter()
-        .map(|error| error.split(['{', '(', ' ']).next().unwrap_or(&error).to_string())
+        .map(|error| error.split(['{', '(', ' ']).next().unwrap_or(&error).S())
         .collect()
 }
 
 fn datalit_errors(db: &datalove_datafun_compiler::Database, ty: &str, literal: &str) -> Vec<String> {
     let src = bct::input::Source::new(db, format!(": {ty} / {literal}"));
     let parsed = datalove_datalit::parser::parse_integration_test(db, src);
-    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed.C());
     let result = datalove_datalit::tycheck::type_check(db, parsed, resolved);
 
     error_kinds(result.errors(db).iter().map(|e| format!("{:?}", e.error(db))).collect())

@@ -2,6 +2,7 @@
 //!
 //! Declares external runtime functions that will be linked at load time.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, AbiParam};
 use cranelift_codegen::isa::CallConv;
 use cranelift_module::{FuncId, Linkage, Module};
@@ -975,13 +976,13 @@ mod tests {
 
     fn create_test_module() -> (ObjectModule, CallConv) {
         let mut settings_builder = settings::builder();
-        settings_builder.set("opt_level", "speed").unwrap();
+        settings_builder.set("opt_level", "speed").X();
         let flags = settings::Flags::new(settings_builder);
 
         let isa = isa::lookup(Triple::host())
-            .unwrap()
+            .X()
             .finish(flags)
-            .unwrap();
+            .X();
 
         let call_conv = isa.default_call_conv();
 
@@ -989,7 +990,7 @@ mod tests {
             isa,
             "test",
             cranelift_module::default_libcall_names(),
-        ).unwrap();
+        ).X();
 
         (ObjectModule::new(obj_builder), call_conv)
     }

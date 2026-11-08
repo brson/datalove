@@ -11,12 +11,12 @@ use datalove_rtdt::{AnyOwned, AnyRef};
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.C());
     datalove_datalit::tycheck::type_check(db, parsed, resolved)
 }
 
 fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
-    let source = bct::input::Source::new(db, source_text.to_string());
+    let source = bct::input::Source::new(db, source_text.S());
     Ok(compile(db, source))
 }
 
@@ -2297,7 +2297,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty(), "Generated expression should typecheck");
 
@@ -2348,17 +2348,17 @@ proptest! {
             },
             ..Default::default()
         };
-        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.C());
         let expr2 = gen_expr_full_seeded(&db, seed2, config);
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
-        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1.clone());
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1.C());
         let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
         prop_assert!(typechecked1.errors(&db).is_empty());
 
-        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2.clone());
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2.C());
         let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
         prop_assert!(typechecked2.errors(&db).is_empty());
 
@@ -2419,7 +2419,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
@@ -2473,7 +2473,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
@@ -2513,7 +2513,7 @@ proptest! {
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.C());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
@@ -2553,17 +2553,17 @@ proptest! {
             },
             ..Default::default()
         };
-        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.C());
         let expr2 = gen_expr_full_seeded(&db, seed2, config);
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
-        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1.clone());
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1.C());
         let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
         prop_assert!(typechecked1.errors(&db).is_empty());
 
-        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2.clone());
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2.C());
         let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
         prop_assert!(typechecked2.errors(&db).is_empty());
 
@@ -2626,17 +2626,17 @@ proptest! {
             },
             ..Default::default()
         };
-        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.C());
         let expr2 = gen_expr_full_seeded(&db, seed2, config);
 
         let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
-        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1.clone());
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1.C());
         let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
         prop_assert!(typechecked1.errors(&db).is_empty());
 
-        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2.clone());
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2.C());
         let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
         prop_assert!(typechecked2.errors(&db).is_empty());
 

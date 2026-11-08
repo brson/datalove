@@ -19,6 +19,7 @@
 //! projection at 100%, matching the dots in `import io_0.fn0`, and division at
 //! 100%, matching the slash in `: u32 / 5`. Both are in fact never generated.
 
+use rmx::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 use datalove_datafun::package_load_worldfile::{self, WorldfileSection};
@@ -384,7 +385,7 @@ fn walk_statements<'db>(
                     names: s
                         .type_params()
                         .iter()
-                        .map(|name| name.text(db).to_string())
+                        .map(|name| name.text(db).S())
                         .collect(),
                 };
                 for param in s.params().iter() {
@@ -459,7 +460,7 @@ fn measure(seeds: u64) -> Coverage {
     let config = WorldGenConfig::default();
 
     for seed in 0..seeds {
-        let worldfile = gen_worldfile_seeded(seed, config.clone());
+        let worldfile = gen_worldfile_seeded(seed, config.C());
         let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes())
             .expect("generated worldfile parses into sections");
 
@@ -467,8 +468,8 @@ fn measure(seeds: u64) -> Coverage {
         for section in &parsed.sections {
             let source_text = match section {
                 WorldfileSection::Module { source, .. }
-                | WorldfileSection::ModuleAdd { source, .. } => source.clone(),
-                WorldfileSection::ScriptFragment { source } => source.clone(),
+                | WorldfileSection::ModuleAdd { source, .. } => source.C(),
+                WorldfileSection::ScriptFragment { source } => source.C(),
                 _ => continue,
             };
             let source = bct::input::Source::new(&db, source_text);

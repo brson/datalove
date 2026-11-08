@@ -27,6 +27,7 @@ pub(crate) mod trampoline;
 pub mod optimizing;
 pub mod stats;
 
+use rmx::prelude::*;
 pub use trampoline::{DispatchContext, PreviousContext, set_dispatch_context, restore_dispatch_context};
 pub use optimizing::{OptimizingDispatcher, DispatcherConfig, DispatcherMode};
 pub use stats::{CallFrom, FunctionStats, JitStats};
@@ -215,7 +216,7 @@ impl JitEngine {
         let layout = call_ctx.interp.layout_for(func, body);
         let spec = datalove_datafun_cranelift::codegen::OsrSpec {
             header,
-            param_offsets: layout.param_offsets.clone(),
+            param_offsets: layout.param_offsets.C(),
             table_offset: layout.table_offset,
         };
         let start = Instant::now();
@@ -234,7 +235,7 @@ impl JitEngine {
                 self.stats.function(func, &body.name).osr_refusals.push((header, why));
                 *tier = Tier::Refused;
             }
-            Err(e) => return Err(InterpError::RuntimeError(e.to_string())),
+            Err(e) => return Err(InterpError::RuntimeError(e.S())),
         }
         Ok(tier.policy(self.osr_threshold))
     }
@@ -423,7 +424,7 @@ impl JitEngine {
         let callee_ctx = call_ctx.exec_ctx.for_callee(code_ref, call_ctx.registry);
         match self.record_call(key, func, call_ctx.weight, &callee_ctx, call_ctx.registry, call_ctx.interp) {
             Err(e) => JitDispatch {
-                result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
+                result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.S()))),
             },
             Ok(Recorded::Interpret) => {
                 self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight);
@@ -509,7 +510,7 @@ mod tests {
     ) -> IrCodeUnit {
         IrCodeUnit {
             id: CodeUnitId(id),
-            name: name.to_string(),
+            name: name.S(),
             blocks,
             value_count: value_types.len() as u32,
             slot_count: 0,
@@ -572,7 +573,7 @@ mod tests {
 
     #[test]
     fn test_call_counting() {
-        let mut jit = JitEngine::new(3).unwrap();
+        let mut jit = JitEngine::new(3).X();
         let func = make_test_function();
 
         // First two calls should not trigger compilation.
@@ -601,20 +602,20 @@ mod tests {
         ]));
         let list = IrType::List(Box::new(IrType::String));
         let func = make_func_unit(
-            0, "borrows", vec![], vec![], list.clone(),
+            0, "borrows", vec![], vec![], list.C(),
             vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
-                    Instruction::StaticRef { dest: ValueId(0), value: datalove_datafun_ir::SharedConst(value.clone()) },
+                    Instruction::StaticRef { dest: ValueId(0), value: datalove_datafun_ir::SharedConst(value.C()) },
                     Instruction::Clone { dest: ValueId(1), src: Operand::ValueRef(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             }],
-            vec![IrType::Ref(Box::new(list.clone())), list.clone()],
+            vec![IrType::Ref(Box::new(list.C())), list.C()],
         );
 
-        let mut jit = JitEngine::new(1).unwrap();
+        let mut jit = JitEngine::new(1).X();
         let mut interp = IrInterpreter::new();
         let ctx = ExecutionContext::new(0, std::slice::from_ref(&func));
         let registry = FunctionRegistry::new();
@@ -625,13 +626,13 @@ mod tests {
 
         // Compiling it built the value, so asking again finds the same one.
         let first = interp.static_const(&value, &list);
-        let again = interp.static_const(&std::sync::Arc::new((*value).clone()), &list);
+        let again = interp.static_const(&std::sync::Arc::new((*value).C()), &list);
         assert_eq!(first, again, "equal values share one entry");
     }
 
     #[test]
     fn test_compilation_produces_code() {
-        let mut jit = JitEngine::new(1).unwrap(); // Compile immediately
+        let mut jit = JitEngine::new(1).X(); // Compile immediately
         let func = make_test_function();
 
         match record(&mut jit, &func) {
@@ -648,7 +649,7 @@ mod tests {
         // Create runtime FIRST, like the integration test does.
         let runtime = datalove_rt::rust::Runtime::new();
 
-        let mut jit = JitEngine::new(1).unwrap();
+        let mut jit = JitEngine::new(1).X();
         let func = make_test_function();
 
         // Compile the function.
@@ -741,7 +742,7 @@ mod tests {
         );
 
         // Set up execution context with both functions.
-        let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.clone()];
+        let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.C()];
         let ctx = ExecutionContext::new(0, &functions);
         let registry = FunctionRegistry::new();
         let mut frames = FrameStore::new();
@@ -823,7 +824,7 @@ mod tests {
         );
 
         // Set up context with both functions.
-        let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.clone()];
+        let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.C()];
         let ctx = ExecutionContext::new(0, &functions);
         let registry = FunctionRegistry::new();
 

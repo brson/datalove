@@ -1,5 +1,6 @@
 //! Deep cloning for runtime values.
 
+use rmx::prelude::*;
 use crate::c::{RtStatus, impls::rt_local};
 use datalove_rtdt as rtdt;
 
@@ -445,7 +446,7 @@ unsafe fn clone_impl(
                                         table_in.len.0,
                                     )
                                 };
-                                let cleanup_col_info = ty.table_column_tydescs().nth(cleanup_col).unwrap();
+                                let cleanup_col_info = ty.table_column_tydescs().nth(cleanup_col).X();
                                 unsafe {
                                     let _ = crate::c::impls::destroy::any_destroy_local(
                                         rt,

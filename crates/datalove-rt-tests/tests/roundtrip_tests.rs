@@ -86,8 +86,8 @@ fn compile<'db>(
 ) -> (datalit::ast::ExprFull<'db>, datalit::resolve::ResolvedExpr<'db>, datalit::tycheck::TypecheckResult<'db>) {
     let parse_result = datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalit::resolve::resolve_names(db, source, parsed.clone());
-    let typechecked = datalit::tycheck::type_check(db, parsed.clone(), resolved);
+    let resolved = datalit::resolve::resolve_names(db, source, parsed.C());
+    let typechecked = datalit::tycheck::type_check(db, parsed.C(), resolved);
     (parsed, resolved, typechecked)
 }
 
@@ -144,7 +144,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     };
 
     // Extract the root type from the first typecheck.
-    let type1 = tycheck1.root_type(&db).clone().X();
+    let type1 = tycheck1.root_type(&db).C().X();
 
     // Step 2: Pretty-print using runtime pretty printer.
     let pretty1 = rt_pretty_print(&db, &type1, ptr1, tydesc1)?;
@@ -156,7 +156,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     };
 
     // Extract the root type from the second typecheck.
-    let type2 = tycheck2.root_type(&db).clone().X();
+    let type2 = tycheck2.root_type(&db).C().X();
 
     // Step 4: Pretty-print again.
     let pretty2 = rt_pretty_print(&db, &type2, ptr2, tydesc2)?;
@@ -164,7 +164,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Step 5: Parse and typecheck the second pretty-print to get the third type.
     let source3 = bct::input::Source::new(&db, pretty2.S());
     let (_parsed3, _resolved3, tycheck3) = compile(&db, source3);
-    let type3 = tycheck3.root_type(&db).clone().X();
+    let type3 = tycheck3.root_type(&db).C().X();
 
     // Step 6: Check that all three types are identical.
     let rt_handle = rt_inst.handle();

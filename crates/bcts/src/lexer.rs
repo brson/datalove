@@ -1032,7 +1032,7 @@ fn test_lex_error_spans() {
         lex(db, source)
             .tokens(db)
             .iter()
-            .map(|t| (t.span(), t.debug_str(s).to_string()))
+            .map(|t| (t.span(), t.debug_str(s).S()))
             .collect()
     }
 

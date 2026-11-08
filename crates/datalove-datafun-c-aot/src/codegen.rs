@@ -1,5 +1,6 @@
 //! C code generation for IR instructions and terminators.
 
+use rmx::prelude::*;
 use std::fmt::Write;
 use std::mem::offset_of;
 use datalove_rtdt as rtdt;
@@ -28,7 +29,7 @@ pub fn emit_static_lifecycle(
     // The const writer works within a function; this one has no IR of its own.
     let unit = IrCodeUnit {
         id: datalove_datafun_ir::CodeUnitId(0),
-        name: "__dtlv_statics_init".to_string(),
+        name: "__dtlv_statics_init".S(),
         blocks: Vec::new(),
         value_count: 0,
         slot_count: 0,
@@ -64,20 +65,20 @@ pub fn emit_static_lifecycle(
         takes_shadow: false,
     };
 
-    writeln!(out, "static void __dtlv_statics_init(void* rt) {{").unwrap();
+    writeln!(out, "static void __dtlv_statics_init(void* rt) {{").X();
     for (i, (ty, value)) in statics.iter().enumerate() {
         ctx.emit_const_at(out, &format!("((uint8_t*)__dtlv_static_{})", i), ty, value)?;
     }
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "}}").X();
+    writeln!(out).X();
 
-    writeln!(out, "static void __dtlv_statics_fini(void* rt) {{").unwrap();
+    writeln!(out, "static void __dtlv_statics_fini(void* rt) {{").X();
     for (i, (ty, _)) in statics.iter().enumerate() {
         let tydesc = ctx.tydesc_name(ty);
-        writeln!(out, "    dtlv_rti_any_destroy_local(rt, __dtlv_static_{}, &{});", i, tydesc).unwrap();
+        writeln!(out, "    dtlv_rti_any_destroy_local(rt, __dtlv_static_{}, &{});", i, tydesc).X();
     }
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "}}").X();
+    writeln!(out).X();
     Ok(())
 }
 
@@ -108,11 +109,11 @@ pub fn emit_function(
         params.push_str(", void* __sret");
     }
     for (i, _) in func_ctx.param_types.iter().enumerate() {
-        write!(&mut params, ", void* p{}", i).unwrap();
+        write!(&mut params, ", void* p{}", i).X();
     }
     // Then one descriptor per type parameter, last.
     for i in 0..func_ctx.type_param_count {
-        write!(&mut params, ", const dtlv_tydesc_t* tp{}", i).unwrap();
+        write!(&mut params, ", const dtlv_tydesc_t* tp{}", i).X();
     }
 
     let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {
@@ -124,17 +125,17 @@ pub fn emit_function(
     // Module functions are not static (they need to be visible across files).
     // Local functions are static.
     let static_prefix = if module_id.is_some() { "" } else { "static " };
-    writeln!(out, "{}{} {}({}) {{", static_prefix, return_type, func_name, params).unwrap();
-    writeln!(out, "    DTLV_CHECK_STACK(rt);").unwrap();
+    writeln!(out, "{}{} {}({}) {{", static_prefix, return_type, func_name, params).X();
+    writeln!(out, "    DTLV_CHECK_STACK(rt);").X();
 
     // Emit frame allocation.
     if layout.frame_size > 0 {
-        writeln!(out, "    _Alignas({}) uint8_t __frame[{}];", layout.frame_align, layout.frame_size).unwrap();
+        writeln!(out, "    _Alignas({}) uint8_t __frame[{}];", layout.frame_align, layout.frame_size).X();
     }
 
     // Initialize tracking bytes to UNINIT.
     if layout.tracking_count > 0 {
-        writeln!(out, "    memset(__frame + {}, TRACK_UNINIT, {});", layout.tracking_offset, layout.tracking_count).unwrap();
+        writeln!(out, "    memset(__frame + {}, TRACK_UNINIT, {});", layout.tracking_offset, layout.tracking_count).X();
     }
 
     check_dynamic_support(unit)?;
@@ -149,7 +150,7 @@ pub fn emit_function(
         registry,
         uses_sret,
         const_scratch: 0,
-        table: func_ctx.descriptor_table.clone(),
+        table: func_ctx.descriptor_table.C(),
         takes_shadow,
     };
 
@@ -160,8 +161,8 @@ pub fn emit_function(
         ctx.emit_block(out, block)?;
     }
 
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "}}").X();
+    writeln!(out).X();
 
     Ok(())
 }
@@ -190,29 +191,29 @@ fn emit_dynamic_prologue(
         .collect();
     for (i, ty) in table.iter().enumerate() {
         match ty {
-            IrType::Param(p) => writeln!(out, "    const dtlv_tydesc_t* __t{i} = tp{p};").unwrap(),
-            _ => writeln!(out, "    const dtlv_tydesc_t* __t{i};").unwrap(),
+            IrType::Param(p) => writeln!(out, "    const dtlv_tydesc_t* __t{i} = tp{p};").X(),
+            _ => writeln!(out, "    const dtlv_tydesc_t* __t{i};").X(),
         }
     }
     if !built.is_empty() {
         let params: Vec<String> = (0..n).map(|i| format!("tp{i}")).collect();
-        writeln!(out, "    const dtlv_tydesc_t* __tp[{}] = {{ {} }};", n.max(1), params.join(", ")).unwrap();
-        writeln!(out, "    static const dtlv_tydesc_t* __tc[{}];", n + built.len()).unwrap();
+        writeln!(out, "    const dtlv_tydesc_t* __tp[{}] = {{ {} }};", n.max(1), params.join(", ")).X();
+        writeln!(out, "    static const dtlv_tydesc_t* __tc[{}];", n + built.len()).X();
         let hit: Vec<String> = (0..n).map(|i| format!("__tc[{i}] == tp{i}")).collect();
-        writeln!(out, "    if ({}) {{", if hit.is_empty() { "1".to_string() } else { hit.join(" && ") }).unwrap();
+        writeln!(out, "    if ({}) {{", if hit.is_empty() { "1".S() } else { hit.join(" && ") }).X();
         for (k, (i, _)) in built.iter().enumerate() {
-            writeln!(out, "        __t{i} = __tc[{}];", n + k).unwrap();
+            writeln!(out, "        __t{i} = __tc[{}];", n + k).X();
         }
-        writeln!(out, "    }} else {{").unwrap();
+        writeln!(out, "    }} else {{").X();
         for (k, (i, ty)) in built.iter().enumerate() {
             let template = compiler.get_tydesc_name(ty);
-            writeln!(out, "        __t{i} = dtlv_rti_tydesc_instantiate(rt, &{template}, __tp, {n});").unwrap();
-            writeln!(out, "        __tc[{}] = __t{i};", n + k).unwrap();
+            writeln!(out, "        __t{i} = dtlv_rti_tydesc_instantiate(rt, &{template}, __tp, {n});").X();
+            writeln!(out, "        __tc[{}] = __t{i};", n + k).X();
         }
         for i in 0..n {
-            writeln!(out, "        __tc[{i}] = tp{i};").unwrap();
+            writeln!(out, "        __tc[{i}] = tp{i};").X();
         }
-        writeln!(out, "    }}").unwrap();
+        writeln!(out, "    }}").X();
     }
     let places: Vec<(u32, usize)> = unit.value_types.iter().enumerate()
         .filter(|(_, ty)| FunctionCodegenContext::is_dynamic_value(ty))
@@ -224,10 +225,10 @@ fn emit_dynamic_prologue(
     if places.is_empty() {
         return false;
     }
-    writeln!(out, "    uintptr_t __shadow_top = ((dtlv_rt_header_t*)rt)->shadow_top;").unwrap();
-    writeln!(out, "    uintptr_t __shadow_limit = ((dtlv_rt_header_t*)rt)->shadow_limit;").unwrap();
+    writeln!(out, "    uintptr_t __shadow_top = ((dtlv_rt_header_t*)rt)->shadow_top;").X();
+    writeln!(out, "    uintptr_t __shadow_limit = ((dtlv_rt_header_t*)rt)->shadow_limit;").X();
     for (offset, entry) in places {
-        writeln!(out, "    *(void**)(__frame + {offset}) = dtlv_shadow_bump(rt, __t{entry});").unwrap();
+        writeln!(out, "    *(void**)(__frame + {offset}) = dtlv_shadow_bump(rt, __t{entry});").X();
     }
     true
 }
@@ -277,7 +278,7 @@ fn check_dynamic_support(unit: &IrCodeUnit) -> Result<(), CAotError> {
             }
             if touches && !supports_dynamic(instr) {
                 let name = format!("{:?}", instr);
-                let name = name.split([' ', '{', '(']).next().unwrap_or("an instruction").to_string();
+                let name = name.split([' ', '{', '(']).next().unwrap_or("an instruction").S();
                 return Err(CAotError::Unsupported(format!(
                     "{name} on a value of a generic's type parameter, in {}",
                     unit.name)));
@@ -385,16 +386,16 @@ pub fn emit_script_body(
         &[],
     );
 
-    writeln!(out, "static void __script_body(void* rt) {{").unwrap();
+    writeln!(out, "static void __script_body(void* rt) {{").X();
 
     // Emit frame allocation.
     if layout.frame_size > 0 {
-        writeln!(out, "    _Alignas({}) uint8_t __frame[{}];", layout.frame_align, layout.frame_size).unwrap();
+        writeln!(out, "    _Alignas({}) uint8_t __frame[{}];", layout.frame_align, layout.frame_size).X();
     }
 
     // Initialize tracking bytes to UNINIT.
     if layout.tracking_count > 0 {
-        writeln!(out, "    memset(__frame + {}, TRACK_UNINIT, {});", layout.tracking_offset, layout.tracking_count).unwrap();
+        writeln!(out, "    memset(__frame + {}, TRACK_UNINIT, {});", layout.tracking_offset, layout.tracking_count).X();
     }
 
     // Silence unused variable warning if result is unused.
@@ -423,8 +424,8 @@ pub fn emit_script_body(
         ctx.emit_block(out, block)?;
     }
 
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "}}").X();
+    writeln!(out).X();
 
     Ok(())
 }
@@ -470,7 +471,7 @@ impl<'a> FunctionCodegenContext<'a> {
         if ty.is_dynamic() && !matches!(ty, IrType::Ref(_)) {
             return format!("(size_t){}->size", self.table_local(ty));
         }
-        types::ir_type_to_crepr(ty).layout().size.to_string()
+        types::ir_type_to_crepr(ty).layout().size.S()
     }
 
     /// Each field's offset in a tuple or struct of type `ty` (or one a
@@ -486,11 +487,11 @@ impl<'a> FunctionCodegenContext<'a> {
             return (0..count).map(|i| format!("dtlv_rti_field_offset({local}, {i})")).collect();
         }
         let field_types: Vec<IrType> = match ty {
-            IrType::Tuple(tys) => tys.clone(),
-            IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
+            IrType::Tuple(tys) => tys.C(),
+            IrType::Struct(fs) => fs.iter().map(|(_, t)| t.C()).collect(),
             _ => Vec::new(),
         };
-        types::compute_tuple_field_offsets(&field_types).iter().map(|o| o.to_string()).collect()
+        types::compute_tuple_field_offsets(&field_types).iter().map(|o| o.S()).collect()
     }
 
     /// The offset of the payload of an option, result, term or enum (variant
@@ -507,7 +508,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 None => 0,
             },
             _ => 0,
-        }.to_string()
+        }.S()
     }
 
     /// Whether a value of `ty` lives on the shadow stack, its frame slot
@@ -529,7 +530,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 if let Instruction::TensorIndexRef { dest, tensor, .. } = inst
                     && matches!(self.operand_type(tensor), IrType::Tensor(_, rank) if *rank > 1)
                 {
-                    writeln!(out, "    _Alignas(8) uint8_t __view{}[{}];", dest.0, tensor_size).unwrap();
+                    writeln!(out, "    _Alignas(8) uint8_t __view{}[{}];", dest.0, tensor_size).X();
                 }
             }
         }
@@ -542,7 +543,7 @@ impl<'a> FunctionCodegenContext<'a> {
         block: &datalove_datafun_ir::IrBlock,
     ) -> Result<(), CAotError> {
         // Emit block label.
-        writeln!(out, "__block_{}:", block.id.0).unwrap();
+        writeln!(out, "__block_{}:", block.id.0).X();
 
         // Handle block parameters (for loops).
         // Block params are initialized by goto/branch - we just need to mark their locations.
@@ -574,7 +575,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 // built the value into before the script ran.
                 let index = self.compiler.static_index(value);
                 writeln!(out, "    *(void**){} = (void*)__dtlv_static_{};",
-                    self.value_addr(*dest), index).unwrap();
+                    self.value_addr(*dest), index).X();
             }
             Instruction::Copy { dest, src } | Instruction::Move { dest, src } => {
                 self.emit_copy(out, *dest, src)?;
@@ -793,22 +794,22 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::CursorDone { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
                 let done = self.cursor_done(*cursor);
-                writeln!(out, "    *(bool_t*){dest_addr} = {done};").unwrap();
+                writeln!(out, "    *(bool_t*){dest_addr} = {done};").X();
             }
             Instruction::CursorElem { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
                 let elem = self.cursor_elem(*cursor);
-                writeln!(out, "    *(const void**){dest_addr} = {elem};").unwrap();
+                writeln!(out, "    *(const void**){dest_addr} = {elem};").X();
             }
             Instruction::CursorIndex { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
                 let index = self.cursor_index(*cursor);
-                writeln!(out, "    *(index_t*){dest_addr} = {index};").unwrap();
+                writeln!(out, "    *(index_t*){dest_addr} = {index};").X();
             }
             Instruction::CursorValue { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
                 let value = self.cursor_value(*cursor);
-                writeln!(out, "    *(const void**){dest_addr} = {value};").unwrap();
+                writeln!(out, "    *(const void**){dest_addr} = {value};").X();
             }
             Instruction::CursorAdvance { cursor, coll } => {
                 self.emit_cursor_advance(out, *cursor, coll);
@@ -875,7 +876,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 }
             }
             Operand::Param(pid) => {
-                let func_ctx = self.unit.function_context().unwrap();
+                let func_ctx = self.unit.function_context().X();
                 &func_ctx.param_types[pid.0 as usize]
             }
             Operand::Slot(sid) => {
@@ -911,7 +912,7 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Emit a constant into a value.
     fn emit_const(&mut self, out: &mut String, dest: ValueId, value: &ConstValue) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
-        let ty = self.value_type(dest).clone();
+        let ty = self.value_type(dest).C();
         self.emit_const_at(out, &dest_addr, &ty, value)
     }
 
@@ -942,47 +943,47 @@ impl<'a> FunctionCodegenContext<'a> {
                 // Nothing to store for Unit.
             }
             ConstValue::Bool(b) => {
-                writeln!(out, "    *(bool_t*){} = {};", dest_addr, if *b { 1 } else { 0 }).unwrap();
+                writeln!(out, "    *(bool_t*){} = {};", dest_addr, if *b { 1 } else { 0 }).X();
             }
             ConstValue::U8(v) => {
-                writeln!(out, "    *(uint8_t*){} = {};", dest_addr, v).unwrap();
+                writeln!(out, "    *(uint8_t*){} = {};", dest_addr, v).X();
             }
             ConstValue::I8(v) => {
-                writeln!(out, "    *(int8_t*){} = {};", dest_addr, v).unwrap();
+                writeln!(out, "    *(int8_t*){} = {};", dest_addr, v).X();
             }
             ConstValue::U16(v) => {
-                writeln!(out, "    *(uint16_t*){} = {};", dest_addr, v).unwrap();
+                writeln!(out, "    *(uint16_t*){} = {};", dest_addr, v).X();
             }
             ConstValue::I16(v) => {
-                writeln!(out, "    *(int16_t*){} = {};", dest_addr, v).unwrap();
+                writeln!(out, "    *(int16_t*){} = {};", dest_addr, v).X();
             }
             ConstValue::U32(v) => {
-                writeln!(out, "    *(uint32_t*){} = {};", dest_addr, v).unwrap();
+                writeln!(out, "    *(uint32_t*){} = {};", dest_addr, v).X();
             }
             ConstValue::I32(v) => {
-                writeln!(out, "    *(int32_t*){} = {};", dest_addr, v).unwrap();
+                writeln!(out, "    *(int32_t*){} = {};", dest_addr, v).X();
             }
             ConstValue::U64(v) => {
-                writeln!(out, "    *(uint64_t*){} = {}ULL;", dest_addr, v).unwrap();
+                writeln!(out, "    *(uint64_t*){} = {}ULL;", dest_addr, v).X();
             }
             // C has no negative literals, only negated positive ones, and the
             // most negative value of a type has no positive to negate. A
             // decimal literal past the signed range is likewise not a value C
             // will take without a suffix that allows it to be unsigned.
             ConstValue::I64(v) => {
-                let lit = if *v == i64::MIN { "INT64_MIN".to_string() } else { format!("{v}LL") };
-                writeln!(out, "    *(int64_t*){} = {};", dest_addr, lit).unwrap();
+                let lit = if *v == i64::MIN { "INT64_MIN".S() } else { format!("{v}LL") };
+                writeln!(out, "    *(int64_t*){} = {};", dest_addr, lit).X();
             }
             ConstValue::Index(v) => {
-                writeln!(out, "    *(index_t*){} = {}u;", dest_addr, v).unwrap();
+                writeln!(out, "    *(index_t*){} = {}u;", dest_addr, v).X();
             }
             ConstValue::Offset(v) => {
                 let lit = if *v == datalove_rtdt::OffsetRepr::MIN {
-                    "DTLV_OFFSET_MIN".to_string()
+                    "DTLV_OFFSET_MIN".S()
                 } else {
                     format!("{v}")
                 };
-                writeln!(out, "    *(offset_t*){} = {};", dest_addr, lit).unwrap();
+                writeln!(out, "    *(offset_t*){} = {};", dest_addr, lit).X();
             }
             // A float goes across as its bits rather than as a number written
             // out and read back. Decimal loses nothing for most values but
@@ -992,36 +993,36 @@ impl<'a> FunctionCodegenContext<'a> {
             // set where the literal did not.
             ConstValue::F32(v) => {
                 writeln!(out, "    {{ uint32_t __bits = {:#010x}u; memcpy({}, &__bits, 4); }}",
-                    v.0.to_bits(), dest_addr).unwrap();
+                    v.0.to_bits(), dest_addr).X();
             }
             ConstValue::F64(v) => {
                 writeln!(out, "    {{ uint64_t __bits = {:#018x}ull; memcpy({}, &__bits, 8); }}",
-                    v.0.to_bits(), dest_addr).unwrap();
+                    v.0.to_bits(), dest_addr).X();
             }
             ConstValue::Int { limbs, negative } => {
-                let ty = ty.clone();
+                let ty = ty.C();
                 let tydesc = self.tydesc_name(&ty);
                 if limbs.is_empty() {
                     // Zero.
-                    writeln!(out, "    dtlv_rti_int_from_limbs(rt, NULL, 0, 0, {}, &{});", dest_addr, tydesc).unwrap();
+                    writeln!(out, "    dtlv_rti_int_from_limbs(rt, NULL, 0, 0, {}, &{});", dest_addr, tydesc).X();
                 } else {
                     // Emit limbs as static array.
                     let limbs_str: Vec<String> = limbs.iter().map(|l| format!("0x{:08x}", l)).collect();
                     writeln!(out, "    {{ static const uint32_t __limbs[] = {{ {} }}; dtlv_rti_int_from_limbs(rt, __limbs, {}, {}, {}, &{}); }}",
-                        limbs_str.join(", "), limbs.len(), if *negative { 1 } else { 0 }, dest_addr, tydesc).unwrap();
+                        limbs_str.join(", "), limbs.len(), if *negative { 1 } else { 0 }, dest_addr, tydesc).X();
                 }
             }
             ConstValue::String(s) => {
-                let ty = ty.clone();
+                let ty = ty.C();
                 let tydesc = self.tydesc_name(&ty);
                 let bytes = s.as_bytes();
                 if bytes.is_empty() {
-                    writeln!(out, "    dtlv_rti_string_from_bytes(rt, NULL, 0, {}, &{});", dest_addr, tydesc).unwrap();
+                    writeln!(out, "    dtlv_rti_string_from_bytes(rt, NULL, 0, {}, &{});", dest_addr, tydesc).X();
                 } else {
                     // Emit string bytes.
                     let hex_bytes: Vec<String> = bytes.iter().map(|b| format!("0x{:02x}", b)).collect();
                     writeln!(out, "    {{ static const uint8_t __str[] = {{ {} }}; dtlv_rti_string_from_bytes(rt, __str, {}, {}, &{}); }}",
-                        hex_bytes.join(", "), bytes.len(), dest_addr, tydesc).unwrap();
+                        hex_bytes.join(", "), bytes.len(), dest_addr, tydesc).X();
                 }
             }
             ConstValue::List(elements) => {
@@ -1029,22 +1030,22 @@ impl<'a> FunctionCodegenContext<'a> {
                     return Err(CAotError::Codegen(format!(
                         "a list constant wants a list type, not {:?}", ty)));
                 };
-                let elem_ty = (**elem_ty).clone();
+                let elem_ty = (**elem_ty).C();
                 let list_tydesc = self.tydesc_name(ty);
                 let elem_tydesc = self.tydesc_name(&elem_ty);
                 let elem_size = types::ir_type_to_crepr(&elem_ty).layout().size.max(1);
 
                 writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});",
-                    dest_addr, list_tydesc).unwrap();
+                    dest_addr, list_tydesc).X();
                 for element in elements {
                     // Each element is built in a scratch buffer and pushed,
                     // which moves it into the list. The buffer goes out of
                     // scope with nothing left in it to release.
                     let scratch = self.next_const_scratch();
-                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", scratch, elem_size).unwrap();
+                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", scratch, elem_size).X();
                     self.emit_const_at(out, &scratch, &elem_ty, element)?;
                     writeln!(out, "    dtlv_rti_list_push_local(rt, {}, &{}, {}, &{}); }}",
-                        dest_addr, list_tydesc, scratch, elem_tydesc).unwrap();
+                        dest_addr, list_tydesc, scratch, elem_tydesc).X();
                 }
             }
             // An atom is one value of a type that has only that value, so it
@@ -1067,10 +1068,10 @@ impl<'a> FunctionCodegenContext<'a> {
                     .ok_or_else(|| CAotError::Codegen(format!(
                         "enum constant names variant '{}', which {:?} does not have",
                         variant, ty)))?;
-                writeln!(out, "    *(uint32_t*){} = {};", dest_addr, index).unwrap();
+                writeln!(out, "    *(uint32_t*){} = {};", dest_addr, index).X();
 
                 if let Some(payload) = payload {
-                    let payload_ty = variants[index].1.clone()
+                    let payload_ty = variants[index].1.C()
                         .ok_or_else(|| CAotError::Codegen(format!(
                             "enum constant gives variant '{}' a payload it does not take",
                             variant)))?;
@@ -1086,7 +1087,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 };
                 let offsets = ir_layout::aggregate_field_offsets(field_types);
                 for (i, element) in elements.iter().enumerate() {
-                    let field_ty = field_types[i].clone();
+                    let field_ty = field_types[i].C();
                     let field_addr = format!("({} + {})", dest_addr, offsets[i]);
                     self.emit_const_at(out, &field_addr, &field_ty, element)?;
                 }
@@ -1100,7 +1101,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 // what the offsets are computed from; the value's are matched
                 // to them by name.
                 let ordered: Vec<IrType> =
-                    field_types.iter().map(|(_, ty)| ty.clone()).collect();
+                    field_types.iter().map(|(_, ty)| ty.C()).collect();
                 let offsets = ir_layout::aggregate_field_offsets(&ordered);
                 for (name, field_value) in fields {
                     let index = field_types.iter().position(|(n, _)| n == name)
@@ -1112,14 +1113,14 @@ impl<'a> FunctionCodegenContext<'a> {
                 }
             }
             ConstValue::OptionNone => {
-                writeln!(out, "    *(uint8_t*){} = 1;", dest_addr).unwrap();
+                writeln!(out, "    *(uint8_t*){} = 1;", dest_addr).X();
             }
             ConstValue::OptionSome(inner) => {
                 let IrType::Option(inner_ty) = ty else {
                     return Err(CAotError::Codegen(format!(
                         "an option constant wants an option type, not {:?}", ty)));
                 };
-                writeln!(out, "    *(uint8_t*){} = 2;", dest_addr).unwrap();
+                writeln!(out, "    *(uint8_t*){} = 2;", dest_addr).X();
                 let offset = ir_layout::option_payload_offset(inner_ty);
                 let payload_addr = format!("({} + {})", dest_addr, offset);
                 self.emit_const_at(out, &payload_addr, inner_ty, inner)?;
@@ -1129,7 +1130,7 @@ impl<'a> FunctionCodegenContext<'a> {
                     return Err(CAotError::Codegen(format!(
                         "a result constant wants a result type, not {:?}", ty)));
                 };
-                writeln!(out, "    *(uint8_t*){} = 1;", dest_addr).unwrap();
+                writeln!(out, "    *(uint8_t*){} = 1;", dest_addr).X();
                 let offset = ir_layout::result_payload_offset(ok_ty);
                 let payload_addr = format!("({} + {})", dest_addr, offset);
                 self.emit_const_at(out, &payload_addr, ok_ty, inner)?;
@@ -1139,7 +1140,7 @@ impl<'a> FunctionCodegenContext<'a> {
                     return Err(CAotError::Codegen(format!(
                         "a result constant wants a result type, not {:?}", ty)));
                 };
-                writeln!(out, "    *(uint8_t*){} = 2;", dest_addr).unwrap();
+                writeln!(out, "    *(uint8_t*){} = 2;", dest_addr).X();
                 let offset = ir_layout::result_payload_offset(ok_ty);
                 let payload_addr = format!("({} + {})", dest_addr, offset);
                 // The error side is an `error` whatever the ok side is.
@@ -1154,7 +1155,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 // out from the value: an empty collection cannot say what it
                 // holds, and the descriptor a `data` carries has to be one
                 // this unit emitted.
-                let inner_ty = (**payload_type).clone();
+                let inner_ty = (**payload_type).C();
                 let inner_tydesc = self.tydesc_name(&inner_ty);
                 let inner_size = types::ir_type_to_crepr(&inner_ty).layout().size.max(1);
                 let pack = match value {
@@ -1162,31 +1163,31 @@ impl<'a> FunctionCodegenContext<'a> {
                     _ => "dtlv_rti_error_from_local",
                 };
                 let scratch = self.next_const_scratch();
-                writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", scratch, inner_size).unwrap();
+                writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", scratch, inner_size).X();
                 self.emit_const_at(out, &scratch, &inner_ty, inner)?;
-                writeln!(out, "    {}(rt, {}, &{}, {}); }}", pack, scratch, inner_tydesc, dest_addr).unwrap();
+                writeln!(out, "    {}(rt, {}, &{}, {}); }}", pack, scratch, inner_tydesc, dest_addr).X();
             }
             ConstValue::Set(elements) => {
                 let IrType::Set(elem_ty) = ty else {
                     return Err(CAotError::Codegen(format!(
                         "a set constant wants a set type, not {:?}", ty)));
                 };
-                let elem_ty = (**elem_ty).clone();
+                let elem_ty = (**elem_ty).C();
                 let set_tydesc = self.tydesc_name(ty);
                 let elem_tydesc = self.tydesc_name(&elem_ty);
                 let elem_size = types::ir_type_to_crepr(&elem_ty).layout().size.max(1);
 
                 writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});",
-                    dest_addr, set_tydesc).unwrap();
+                    dest_addr, set_tydesc).X();
                 for element in elements {
                     // Inserted one at a time, as a literal is, so that the set
                     // holds each element once and lets go of a duplicate.
                     let scratch = self.next_const_scratch();
                     writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}}; uint8_t {}_added = 0;",
-                        scratch, elem_size, scratch).unwrap();
+                        scratch, elem_size, scratch).X();
                     self.emit_const_at(out, &scratch, &elem_ty, element)?;
                     writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, {}, &{}, {}, &{}, &{}_added); }}",
-                        dest_addr, set_tydesc, scratch, elem_tydesc, scratch).unwrap();
+                        dest_addr, set_tydesc, scratch, elem_tydesc, scratch).X();
                 }
             }
             ConstValue::Map(entries) => {
@@ -1194,8 +1195,8 @@ impl<'a> FunctionCodegenContext<'a> {
                     return Err(CAotError::Codegen(format!(
                         "a map constant wants a map type, not {:?}", ty)));
                 };
-                let key_ty = (**key_ty).clone();
-                let value_ty = (**value_ty).clone();
+                let key_ty = (**key_ty).C();
+                let value_ty = (**value_ty).C();
                 let map_tydesc = self.tydesc_name(ty);
                 let key_tydesc = self.tydesc_name(&key_ty);
                 let value_tydesc = self.tydesc_name(&value_ty);
@@ -1203,16 +1204,16 @@ impl<'a> FunctionCodegenContext<'a> {
                 let value_size = types::ir_type_to_crepr(&value_ty).layout().size.max(1);
 
                 writeln!(out, "    dtlv_rti_btreemap_create_local(rt, {}, &{});",
-                    dest_addr, map_tydesc).unwrap();
+                    dest_addr, map_tydesc).X();
                 for (key, entry_value) in entries {
                     let key_scratch = self.next_const_scratch();
                     let value_scratch = self.next_const_scratch();
-                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", key_scratch, key_size).unwrap();
+                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", key_scratch, key_size).X();
                     self.emit_const_at(out, &key_scratch, &key_ty, key)?;
-                    writeln!(out, "    _Alignas(8) uint8_t {}[{}] = {{0}};", value_scratch, value_size).unwrap();
+                    writeln!(out, "    _Alignas(8) uint8_t {}[{}] = {{0}};", value_scratch, value_size).X();
                     self.emit_const_at(out, &value_scratch, &value_ty, entry_value)?;
                     writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, {}, &{}, {}, &{}); }}",
-                        dest_addr, map_tydesc, key_scratch, key_tydesc, value_scratch, value_tydesc).unwrap();
+                        dest_addr, map_tydesc, key_scratch, key_tydesc, value_scratch, value_tydesc).X();
                 }
             }
 
@@ -1221,7 +1222,7 @@ impl<'a> FunctionCodegenContext<'a> {
                     return Err(CAotError::Codegen(format!(
                         "a tensor constant wants a tensor type, not {:?}", ty)));
                 };
-                let elem_ty = (**elem_ty).clone();
+                let elem_ty = (**elem_ty).C();
                 let rank = *rank;
                 if shape.len() as u32 != rank {
                     return Err(CAotError::Codegen(format!(
@@ -1237,18 +1238,18 @@ impl<'a> FunctionCodegenContext<'a> {
                 // call a tensor literal makes.
                 let scratch = self.next_const_scratch();
                 writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};",
-                    scratch, (elem_size * elements.len() as u32).max(1)).unwrap();
+                    scratch, (elem_size * elements.len() as u32).max(1)).X();
                 for (i, element) in elements.iter().enumerate() {
                     let elem_addr = format!("({} + {})", scratch, i as u32 * elem_size);
                     self.emit_const_at(out, &elem_addr, &elem_ty, element)?;
                 }
                 // An extent is a `u32` in the IR and the runtime reads it as
                 // one, whatever width an index happens to be.
-                let extents: Vec<String> = shape.iter().map(|e| e.to_string()).collect();
+                let extents: Vec<String> = shape.iter().map(|e| e.S()).collect();
                 writeln!(out, "    static const uint32_t {}_shape[] = {{ {} }};",
-                    scratch, if extents.is_empty() { "0".to_string() } else { extents.join(", ") }).unwrap();
+                    scratch, if extents.is_empty() { "0".S() } else { extents.join(", ") }).X();
                 writeln!(out, "    dtlv_rti_tensor_init_local(rt, {}, {}, &{}, {}_shape, {}, {}, &{}); }}",
-                    scratch, elements.len(), elem_tydesc, scratch, rank, dest_addr, tensor_tydesc).unwrap();
+                    scratch, elements.len(), elem_tydesc, scratch, rank, dest_addr, tensor_tydesc).X();
             }
 
             ConstValue::Table { rows, .. } => {
@@ -1263,19 +1264,19 @@ impl<'a> FunctionCodegenContext<'a> {
                 // of rows. Cells go in the order the columns were written,
                 // which is the order every layer keeps them in.
                 let col_types: Vec<IrType> =
-                    columns.iter().map(|(_, ty)| (**ty).clone()).collect();
-                let row_ty = IrType::Tuple(col_types.clone());
+                    columns.iter().map(|(_, ty)| (**ty).C()).collect();
+                let row_ty = IrType::Tuple(col_types.C());
                 let row_tydesc = self.tydesc_name(&row_ty);
                 let offsets = ir_layout::aggregate_field_offsets(&col_types);
                 let row_size = types::ir_type_to_crepr(&row_ty).layout().size;
 
                 if rows.is_empty() {
                     writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});",
-                        dest_addr, table_tydesc).unwrap();
+                        dest_addr, table_tydesc).X();
                 } else {
                     let scratch = self.next_const_scratch();
                     writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};",
-                        scratch, (row_size * rows.len() as u32).max(1)).unwrap();
+                        scratch, (row_size * rows.len() as u32).max(1)).X();
                     for (row_index, row) in rows.iter().enumerate() {
                         let row_base = row_index as u32 * row_size;
                         for (column, cell) in row.iter().enumerate() {
@@ -1285,7 +1286,7 @@ impl<'a> FunctionCodegenContext<'a> {
                         }
                     }
                     writeln!(out, "    dtlv_rti_table_build_from_rows_local(rt, {}, &{}, {}, &{}, {}); }}",
-                        dest_addr, table_tydesc, scratch, row_tydesc, rows.len()).unwrap();
+                        dest_addr, table_tydesc, scratch, row_tydesc, rows.len()).X();
                 }
             }
         }
@@ -1301,10 +1302,10 @@ impl<'a> FunctionCodegenContext<'a> {
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).X();
             }
         }
         Ok(())
@@ -1315,11 +1316,11 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(src);
         let src_tydesc = self.operand_tydesc(src);
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
         let dest_tydesc = self.tydesc_name(&dest_ty);
 
         writeln!(out, "    dtlv_rti_clone_local(rt, {}, {}, {}, &{});",
-            src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
+            src_addr, src_tydesc, dest_addr, dest_tydesc).X();
         Ok(())
     }
 
@@ -1347,10 +1348,10 @@ impl<'a> FunctionCodegenContext<'a> {
             })? as u8;
             let lhs_td = self.operand_tydesc(lhs);
             let rhs_td = self.operand_tydesc(rhs);
-            let dest_ty = self.value_type(dest).clone();
+            let dest_ty = self.value_type(dest).C();
             let dest_td = self.tydesc_name(&dest_ty);
             writeln!(out, "    dtlv_rti_dyn_binop(rt, {code}, {lhs_addr}, {lhs_td}, \
-                {rhs_addr}, {rhs_td}, {dest_addr}, &{dest_td});").unwrap();
+                {rhs_addr}, {rhs_td}, {dest_addr}, &{dest_td});").X();
             return Ok(());
         }
 
@@ -1366,7 +1367,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 BinOp::Ne => 0,
                 _ => return Err(CAotError::Unsupported(format!("{:?} on {:?}", op, operand_ty))),
             };
-            writeln!(out, "    *(bool_t*){dest_addr} = {result};").unwrap();
+            writeln!(out, "    *(bool_t*){dest_addr} = {result};").X();
             return Ok(());
         }
 
@@ -1390,7 +1391,7 @@ impl<'a> FunctionCodegenContext<'a> {
             let lhs_td = self.operand_tydesc(lhs);
             let rhs_td = self.operand_tydesc(rhs);
             writeln!(out, "    {{ uint8_t __eq = dtlv_rti_eq_local(rt, {lhs_addr}, {lhs_td}, {rhs_addr}, {rhs_td}); \
-                if (__eq == EQ_ERROR) __builtin_trap(); *(bool_t*){dest_addr} = ({test}); }}").unwrap();
+                if (__eq == EQ_ERROR) __builtin_trap(); *(bool_t*){dest_addr} = ({test}); }}").X();
             return Ok(());
         }
 
@@ -1432,7 +1433,7 @@ impl<'a> FunctionCodegenContext<'a> {
             BinOp::Shr => ">>",
         };
 
-        writeln!(out, "    *({dest_c_ty}*){dest_addr} = (*({lhs_c_ty}*){lhs_addr}) {op_str} (*({lhs_c_ty}*){rhs_addr});").unwrap();
+        writeln!(out, "    *({dest_c_ty}*){dest_addr} = (*({lhs_c_ty}*){lhs_addr}) {op_str} (*({lhs_c_ty}*){rhs_addr});").X();
         Ok(())
     }
 
@@ -1441,8 +1442,8 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let lhs_addr = self.operand_addr(lhs);
         let rhs_addr = self.operand_addr(rhs);
-        let lhs_ty = self.operand_type(lhs).clone();
-        let dest_ty = self.value_type(dest).clone();
+        let lhs_ty = self.operand_type(lhs).C();
+        let dest_ty = self.value_type(dest).C();
         let lhs_tydesc = self.tydesc_name(&lhs_ty);
         let dest_tydesc = self.tydesc_name(&dest_ty);
 
@@ -1465,14 +1466,14 @@ impl<'a> FunctionCodegenContext<'a> {
                     _ => unreachable!(),
                 };
                 writeln!(out, "    {{ int8_t __ord = dtlv_rti_cmp_local(rt, {}, &{}, {}, &{}); *(bool_t*){} = ({}); }}",
-                    lhs_addr, lhs_tydesc, rhs_addr, lhs_tydesc, dest_addr, test).unwrap();
+                    lhs_addr, lhs_tydesc, rhs_addr, lhs_tydesc, dest_addr, test).X();
                 return Ok(());
             }
             _ => return Err(CAotError::Unsupported(format!("Int binop {:?}", op))),
         };
 
         writeln!(out, "    {}(rt, {}, &{}, {}, &{}, {}, &{});",
-            func, lhs_addr, lhs_tydesc, rhs_addr, lhs_tydesc, dest_addr, dest_tydesc).unwrap();
+            func, lhs_addr, lhs_tydesc, rhs_addr, lhs_tydesc, dest_addr, dest_tydesc).X();
         Ok(())
     }
 
@@ -1480,29 +1481,29 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_unaryop(&mut self, out: &mut String, dest: ValueId, op: UnaryOp, operand: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(operand);
-        let src_ty = self.operand_type(operand).clone();
+        let src_ty = self.operand_type(operand).C();
 
         // A type parameter bounded to `float`, whose width only the
         // descriptor says.
         if src_ty.is_dynamic() {
             assert_eq!(op, UnaryOp::Neg, "negation is the one operator a bounded type parameter has");
             let src_td = self.operand_tydesc(operand);
-            let dest_ty = self.value_type(dest).clone();
+            let dest_ty = self.value_type(dest).C();
             let dest_td = self.tydesc_name(&dest_ty);
             let code = datalove_rtdt::DynUnOp::Neg as u8;
-            writeln!(out, "    dtlv_rti_dyn_unop(rt, {code}, {src_addr}, {src_td}, {dest_addr}, &{dest_td});").unwrap();
+            writeln!(out, "    dtlv_rti_dyn_unop(rt, {code}, {src_addr}, {src_td}, {dest_addr}, &{dest_td});").X();
             return Ok(());
         }
 
         // Check if this is an Int operation.
         if matches!(src_ty, IrType::Int) {
-            let dest_ty = self.value_type(dest).clone();
+            let dest_ty = self.value_type(dest).C();
             let src_tydesc = self.tydesc_name(&src_ty);
             let dest_tydesc = self.tydesc_name(&dest_ty);
             match op {
                 UnaryOp::Neg => {
                     writeln!(out, "    dtlv_rti_int_neg(rt, {}, &{}, {}, &{});",
-                        src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
+                        src_addr, src_tydesc, dest_addr, dest_tydesc).X();
                 }
                 _ => return Err(CAotError::Unsupported(format!("Int unaryop {:?}", op))),
             }
@@ -1517,7 +1518,7 @@ impl<'a> FunctionCodegenContext<'a> {
             UnaryOp::BitNot => "~",
         };
 
-        writeln!(out, "    *({c_ty}*){dest_addr} = {op_str}(*({c_ty}*){src_addr});").unwrap();
+        writeln!(out, "    *({c_ty}*){dest_addr} = {op_str}(*({c_ty}*){src_addr});").X();
         Ok(())
     }
 
@@ -1535,7 +1536,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let overflow_addr = self.value_addr(overflow);
         let lhs_addr = self.operand_addr(lhs);
         let rhs_addr = self.operand_addr(rhs);
-        let lhs_ty = self.operand_type(lhs).clone();
+        let lhs_ty = self.operand_type(lhs).C();
 
         // A bigint has no width to overflow, so the only checked operation
         // over one is division, and what it reports is a zero divisor. The
@@ -1549,7 +1550,7 @@ impl<'a> FunctionCodegenContext<'a> {
             let tydesc = self.tydesc_name(&IrType::Int);
             writeln!(out,
                 "    *(bool_t*){} = dtlv_rti_int_div_checked(rt, {}, &{}, {}, &{}, {}, &{}) != 1;",
-                overflow_addr, lhs_addr, tydesc, rhs_addr, tydesc, dest_addr, tydesc).unwrap();
+                overflow_addr, lhs_addr, tydesc, rhs_addr, tydesc, dest_addr, tydesc).X();
             return Ok(());
         }
 
@@ -1562,10 +1563,10 @@ impl<'a> FunctionCodegenContext<'a> {
             })? as u8;
             let lhs_td = self.operand_tydesc(lhs);
             let rhs_td = self.operand_tydesc(rhs);
-            let dest_ty = self.value_type(dest).clone();
+            let dest_ty = self.value_type(dest).C();
             let dest_td = self.tydesc_name(&dest_ty);
             writeln!(out, "    dtlv_rti_dyn_binop_checked(rt, {code}, {lhs_addr}, {lhs_td}, \
-                {rhs_addr}, {rhs_td}, {dest_addr}, &{dest_td}, (bool_t*){overflow_addr});").unwrap();
+                {rhs_addr}, {rhs_td}, {dest_addr}, &{dest_td}, (bool_t*){overflow_addr});").X();
             return Ok(());
         }
 
@@ -1603,20 +1604,20 @@ impl<'a> FunctionCodegenContext<'a> {
                 IrType::Offset => Some("DTLV_OFFSET_MIN"),
                 _ => None,
             };
-            writeln!(out, "    if (*({c_ty}*){rhs_addr} == 0) {{").unwrap();
-            writeln!(out, "        *(bool_t*){overflow_addr} = 1;").unwrap();
-            writeln!(out, "        *({c_ty}*){dest_addr} = 0;").unwrap();
+            writeln!(out, "    if (*({c_ty}*){rhs_addr} == 0) {{").X();
+            writeln!(out, "        *(bool_t*){overflow_addr} = 1;").X();
+            writeln!(out, "        *({c_ty}*){dest_addr} = 0;").X();
             if let Some(min) = signed_min {
-                writeln!(out, "    }} else if (*({c_ty}*){lhs_addr} == {min} && *({c_ty}*){rhs_addr} == -1) {{").unwrap();
+                writeln!(out, "    }} else if (*({c_ty}*){lhs_addr} == {min} && *({c_ty}*){rhs_addr} == -1) {{").X();
                 writeln!(out, "        *(bool_t*){overflow_addr} = {};",
-                    if op == BinOp::Div { 1 } else { 0 }).unwrap();
-                writeln!(out, "        *({c_ty}*){dest_addr} = 0;").unwrap();
+                    if op == BinOp::Div { 1 } else { 0 }).X();
+                writeln!(out, "        *({c_ty}*){dest_addr} = 0;").X();
             }
-            writeln!(out, "    }} else {{").unwrap();
-            writeln!(out, "        *(bool_t*){overflow_addr} = 0;").unwrap();
+            writeln!(out, "    }} else {{").X();
+            writeln!(out, "        *(bool_t*){overflow_addr} = 0;").X();
             writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){lhs_addr} {} *({c_ty}*){rhs_addr};",
-                if op == BinOp::Div { "/" } else { "%" }).unwrap();
-            writeln!(out, "    }}").unwrap();
+                if op == BinOp::Div { "/" } else { "%" }).X();
+            writeln!(out, "    }}").X();
             return Ok(());
         }
 
@@ -1629,13 +1630,13 @@ impl<'a> FunctionCodegenContext<'a> {
                 _ => {
                     // Fall back to unchecked for other ops.
                     self.emit_binop(out, dest, op, lhs, rhs)?;
-                    writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).unwrap();
+                    writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).X();
                     return Ok(());
                 }
             };
             let is_signed = matches!(lhs_ty, IrType::I8 | IrType::I16);
             let wide_ty = if is_signed { "int32_t" } else { "uint32_t" };
-            writeln!(out, "    {{ {wide_ty} __tmp = ({wide_ty})*({c_ty}*){lhs_addr} {op_str} ({wide_ty})*({c_ty}*){rhs_addr}; *(bool_t*){overflow_addr} = (__tmp < {min_val} || __tmp > {max_val}); *({c_ty}*){dest_addr} = ({c_ty})__tmp; }}").unwrap();
+            writeln!(out, "    {{ {wide_ty} __tmp = ({wide_ty})*({c_ty}*){lhs_addr} {op_str} ({wide_ty})*({c_ty}*){rhs_addr}; *(bool_t*){overflow_addr} = (__tmp < {min_val} || __tmp > {max_val}); *({c_ty}*){dest_addr} = ({c_ty})__tmp; }}").X();
             return Ok(());
         }
 
@@ -1653,13 +1654,13 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => {
                 // Fall back to unchecked operation.
                 self.emit_binop(out, dest, op, lhs, rhs)?;
-                writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).unwrap();
+                writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).X();
                 return Ok(());
             }
         };
 
         writeln!(out, "    *(bool_t*){} = {}(*({c_ty}*){}, *({c_ty}*){}, ({c_ty}*){});",
-            overflow_addr, builtin, lhs_addr, rhs_addr, dest_addr).unwrap();
+            overflow_addr, builtin, lhs_addr, rhs_addr, dest_addr).X();
         Ok(())
     }
 
@@ -1670,7 +1671,7 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_op_assign(&mut self, out: &mut String, place: &Operand, op: BinOp, rhs: &Operand) -> Result<(), CAotError> {
         let place_addr = self.operand_addr(place);
         let rhs_addr = self.operand_addr(rhs);
-        let ty = self.operand_type(place).clone();
+        let ty = self.operand_type(place).C();
         if matches!(ty, IrType::Int) {
             let func = match op {
                 BinOp::Add => "dtlv_rti_int_add_assign",
@@ -1679,7 +1680,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 _ => panic!("{:?} on an `int` place, which the typechecker refuses", op),
             };
             let tydesc = self.tydesc_name(&IrType::Int);
-            writeln!(out, "    {func}(rt, {place_addr}, &{tydesc}, {rhs_addr}, &{tydesc});").unwrap();
+            writeln!(out, "    {func}(rt, {place_addr}, &{tydesc}, {rhs_addr}, &{tydesc});").X();
             return Ok(());
         }
         let op_str = match (op, &ty) {
@@ -1690,7 +1691,7 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => panic!("{:?} on a {:?} place, which lowering doesn't emit as an update", op, ty),
         };
         let c_ty = types::ir_type_to_c(&ty);
-        writeln!(out, "    *({c_ty}*){place_addr} {op_str} *({c_ty}*){rhs_addr};").unwrap();
+        writeln!(out, "    *({c_ty}*){place_addr} {op_str} *({c_ty}*){rhs_addr};").X();
         Ok(())
     }
 
@@ -1707,12 +1708,12 @@ impl<'a> FunctionCodegenContext<'a> {
         let overflow_addr = self.value_addr(overflow);
         let place_addr = self.operand_addr(place);
         let rhs_addr = self.operand_addr(rhs);
-        let ty = self.operand_type(place).clone();
+        let ty = self.operand_type(place).C();
         if matches!(ty, IrType::Int) {
             assert_eq!(op, BinOp::Div, "checked {:?} on an `int` place, which the typechecker refuses", op);
             let tydesc = self.tydesc_name(&IrType::Int);
             writeln!(out, "    *(bool_t*){overflow_addr} = \
-                dtlv_rti_int_div_assign_checked(rt, {place_addr}, &{tydesc}, {rhs_addr}, &{tydesc}) != 1;").unwrap();
+                dtlv_rti_int_div_assign_checked(rt, {place_addr}, &{tydesc}, {rhs_addr}, &{tydesc}) != 1;").X();
             return Ok(());
         }
 
@@ -1743,7 +1744,7 @@ impl<'a> FunctionCodegenContext<'a> {
             }
             _ => panic!("{:?} as a checked update; only Add, Sub, Mul and Div can fail", op),
         };
-        writeln!(out, "    {{ {c_ty} __r; bool_t __o = {failed}; *(bool_t*){overflow_addr} = __o; if (!__o) {a} = __r; }}").unwrap();
+        writeln!(out, "    {{ {c_ty} __r; bool_t __o = {failed}; *(bool_t*){overflow_addr} = __o; if (!__o) {a} = __r; }}").X();
         Ok(())
     }
 
@@ -1759,7 +1760,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let overflow_addr = self.value_addr(overflow);
         let src_addr = self.operand_addr(operand);
-        let src_ty = self.operand_type(operand).clone();
+        let src_ty = self.operand_type(operand).C();
 
         // A type parameter bounded to `fixedint`, which may turn out to be
         // unsigned; the runtime reads the descriptor and decides.
@@ -1769,10 +1770,10 @@ impl<'a> FunctionCodegenContext<'a> {
                     "no dynamic form of checked {:?}", op)));
             }
             let src_td = self.operand_tydesc(operand);
-            let dest_ty = self.value_type(dest).clone();
+            let dest_ty = self.value_type(dest).C();
             let dest_td = self.tydesc_name(&dest_ty);
             writeln!(out, "    dtlv_rti_dyn_neg_checked(rt, {src_addr}, {src_td}, \
-                {dest_addr}, &{dest_td}, (bool_t*){overflow_addr});").unwrap();
+                {dest_addr}, &{dest_td}, (bool_t*){overflow_addr});").X();
             return Ok(());
         }
 
@@ -1786,26 +1787,26 @@ impl<'a> FunctionCodegenContext<'a> {
                 match src_ty {
                     IrType::I8 => {
                         writeln!(out, "    {{ int8_t __v = *(int8_t*){}; *(bool_t*){} = (__v == INT8_MIN); *(int8_t*){} = (int8_t)-__v; }}",
-                            src_addr, overflow_addr, dest_addr).unwrap();
+                            src_addr, overflow_addr, dest_addr).X();
                     }
                     IrType::I16 => {
                         writeln!(out, "    {{ int16_t __v = *(int16_t*){}; *(bool_t*){} = (__v == INT16_MIN); *(int16_t*){} = (int16_t)-__v; }}",
-                            src_addr, overflow_addr, dest_addr).unwrap();
+                            src_addr, overflow_addr, dest_addr).X();
                     }
                     IrType::I32 => {
                         writeln!(out, "    {{ int32_t __v = *(int32_t*){}; *(bool_t*){} = (__v == INT32_MIN); *(int32_t*){} = -__v; }}",
-                            src_addr, overflow_addr, dest_addr).unwrap();
+                            src_addr, overflow_addr, dest_addr).X();
                     }
                     IrType::I64 => {
                         writeln!(out, "    {{ int64_t __v = *(int64_t*){}; *(bool_t*){} = (__v == INT64_MIN); *(int64_t*){} = -__v; }}",
-                            src_addr, overflow_addr, dest_addr).unwrap();
+                            src_addr, overflow_addr, dest_addr).X();
                     }
                     IrType::Offset => {
                         writeln!(out, "    {{ offset_t __v = *(offset_t*){}; *(bool_t*){} = (__v == DTLV_OFFSET_MIN); *(offset_t*){} = -__v; }}",
-                            src_addr, overflow_addr, dest_addr).unwrap();
+                            src_addr, overflow_addr, dest_addr).X();
                     }
                     IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 | IrType::Index => {
-                        writeln!(out, "    {{ {c_ty} __v = *({c_ty}*){src_addr}; *(bool_t*){overflow_addr} = (__v != 0); *({c_ty}*){dest_addr} = ({c_ty})0; }}").unwrap();
+                        writeln!(out, "    {{ {c_ty} __v = *({c_ty}*){src_addr}; *(bool_t*){overflow_addr} = (__v != 0); *({c_ty}*){dest_addr} = ({c_ty})0; }}").X();
                     }
                     _ => panic!("checked negation of {:?}, which is not a fixed-width integer", src_ty),
                 }
@@ -1813,7 +1814,7 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => {
                 // Other unary ops don't overflow.
                 self.emit_unaryop(out, dest, op, operand)?;
-                writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).unwrap();
+                writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).X();
             }
         }
         Ok(())
@@ -1823,13 +1824,13 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_widen(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(src);
-        let src_ty = self.operand_type(src).clone();
-        let dest_ty = self.value_type(dest).clone();
+        let src_ty = self.operand_type(src).C();
+        let dest_ty = self.value_type(dest).C();
         let src_tydesc = self.tydesc_name(&src_ty);
         let dest_tydesc = self.tydesc_name(&dest_ty);
 
         writeln!(out, "    dtlv_rti_int_from_fixed(rt, {}, &{}, {}, &{});",
-            src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
+            src_addr, src_tydesc, dest_addr, dest_tydesc).X();
         Ok(())
     }
 
@@ -1837,13 +1838,13 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_widen_fixed(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(src);
-        let src_ty = self.operand_type(src).clone();
-        let dest_ty = self.value_type(dest).clone();
+        let src_ty = self.operand_type(src).C();
+        let dest_ty = self.value_type(dest).C();
         let src_c_ty = types::ir_type_to_c(&src_ty);
         let dest_c_ty = types::ir_type_to_c(&dest_ty);
 
         // Simple cast - C handles sign/zero extension.
-        writeln!(out, "    *({dest_c_ty}*){dest_addr} = ({dest_c_ty})(*({src_c_ty}*){src_addr});").unwrap();
+        writeln!(out, "    *({dest_c_ty}*){dest_addr} = ({dest_c_ty})(*({src_c_ty}*){src_addr});").X();
         Ok(())
     }
 
@@ -1858,8 +1859,8 @@ impl<'a> FunctionCodegenContext<'a> {
         }
 
         let field_types: Vec<IrType> = match dest_ty {
-            IrType::Tuple(tys) => tys.clone(),
-            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+            IrType::Tuple(tys) => tys.C(),
+            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
             _ => return Err(CAotError::Codegen(format!("pack requires tuple/struct type, got {:?}", dest_ty))),
         };
 
@@ -1874,10 +1875,10 @@ impl<'a> FunctionCodegenContext<'a> {
 
             match repr {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "    *({c_ty}*){field_addr} = *({c_ty}*){src_addr};").unwrap();
+                    writeln!(out, "    *({c_ty}*){field_addr} = *({c_ty}*){src_addr};").X();
                 }
                 CRepr::Aggregate(_) => {
-                    writeln!(out, "    memcpy({}, {}, {});", field_addr, src_addr, self.size_expr(field_ty)).unwrap();
+                    writeln!(out, "    memcpy({}, {}, {});", field_addr, src_addr, self.size_expr(field_ty)).X();
                 }
             }
         }
@@ -1890,8 +1891,8 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_ty = self.operand_type(src);
 
         let field_types: Vec<IrType> = match src_ty {
-            IrType::Tuple(tys) => tys.clone(),
-            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+            IrType::Tuple(tys) => tys.C(),
+            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
             _ => return Err(CAotError::Codegen("unpack requires tuple/struct type".into())),
         };
 
@@ -1906,10 +1907,10 @@ impl<'a> FunctionCodegenContext<'a> {
 
             match repr {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){field_addr};").unwrap();
+                    writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){field_addr};").X();
                 }
                 CRepr::Aggregate(_) => {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, self.size_expr(field_ty)).unwrap();
+                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, self.size_expr(field_ty)).X();
                 }
             }
         }
@@ -1923,8 +1924,8 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
 
         let field_types: Vec<IrType> = match src_ty {
-            IrType::Tuple(tys) => tys.clone(),
-            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+            IrType::Tuple(tys) => tys.C(),
+            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
             _ => return Err(CAotError::Codegen("get_field requires tuple/struct type".into())),
         };
 
@@ -1936,10 +1937,10 @@ impl<'a> FunctionCodegenContext<'a> {
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){field_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){field_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, self.size_expr(field_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, self.size_expr(field_ty)).X();
             }
         }
         Ok(())
@@ -1952,11 +1953,11 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
 
         let field_types: Vec<IrType> = match src_ty {
-            IrType::Tuple(tys) => tys.clone(),
-            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+            IrType::Tuple(tys) => tys.C(),
+            IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
             IrType::Ref(inner) => match inner.as_ref() {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => return Err(CAotError::Codegen("get_field_ref requires tuple/struct type".into())),
             },
             _ => return Err(CAotError::Codegen("get_field_ref requires tuple/struct type".into())),
@@ -1966,7 +1967,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let field_offset = &offsets[field_index as usize];
 
         // Store pointer to field.
-        writeln!(out, "    *(void**){} = {} + {};", dest_addr, src_addr, field_offset).unwrap();
+        writeln!(out, "    *(void**){} = {} + {};", dest_addr, src_addr, field_offset).X();
         Ok(())
     }
 
@@ -1987,22 +1988,22 @@ impl<'a> FunctionCodegenContext<'a> {
         };
 
         // Navigate to the target field.
-        let mut current_addr = slot_addr.clone();
+        let mut current_addr = slot_addr.C();
         let mut current_ty = match slot {
-            SlotDest::Local(sid) => self.slot_type(*sid).clone(),
+            SlotDest::Local(sid) => self.slot_type(*sid).C(),
             SlotDest::External { .. } => IrType::Unit,
         };
 
         for &idx in field_path {
             let field_types: Vec<IrType> = match &current_ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => return Err(CAotError::Codegen("set_field requires tuple/struct type".into())),
             };
             let offsets = self.field_offsets(&current_ty, field_types.len());
             let field_offset = &offsets[idx as usize];
             current_addr = format!("({} + {})", current_addr, field_offset);
-            current_ty = field_types[idx as usize].clone();
+            current_ty = field_types[idx as usize].C();
         }
 
         // Copy value to field.
@@ -2011,10 +2012,10 @@ impl<'a> FunctionCodegenContext<'a> {
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).X();
             }
         }
 
@@ -2032,21 +2033,21 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_wrap_some(&mut self, out: &mut String, dest: ValueId, inner: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let inner_addr = self.operand_addr(inner);
-        let inner_ty = self.operand_type(inner).clone();
+        let inner_ty = self.operand_type(inner).C();
         let inner_repr = types::ir_type_to_crepr(&inner_ty);
-        let payload_offset = self.payload_offset(&self.value_type(dest).clone(), 0);
+        let payload_offset = self.payload_offset(&self.value_type(dest).C(), 0);
 
         // Set tag to Some (2).
-        writeln!(out, "    *(uint8_t*){} = OPTION_SOME;", dest_addr).unwrap();
+        writeln!(out, "    *(uint8_t*){} = OPTION_SOME;", dest_addr).X();
 
         // Move inner value (copy then zero source for non-copy types).
         let payload_addr = format!("({} + {})", dest_addr, payload_offset);
         match &inner_repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, self.size_expr(&inner_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, self.size_expr(&inner_ty)).X();
             }
         }
 
@@ -2057,7 +2058,7 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_wrap_none(&mut self, out: &mut String, dest: ValueId) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         // Set tag to None (1).
-        writeln!(out, "    *(uint8_t*){} = OPTION_NONE;", dest_addr).unwrap();
+        writeln!(out, "    *(uint8_t*){} = OPTION_NONE;", dest_addr).X();
         Ok(())
     }
 
@@ -2065,27 +2066,27 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_wrap_ok(&mut self, out: &mut String, dest: ValueId, inner: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let inner_addr = self.operand_addr(inner);
-        let inner_ty = self.operand_type(inner).clone();
+        let inner_ty = self.operand_type(inner).C();
         let dest_ty = self.value_type(dest);
 
         if !matches!(dest_ty, IrType::Result(_)) {
             return Err(CAotError::Codegen("wrap_ok requires Result type".into()));
         }
 
-        let payload_offset = self.payload_offset(&dest_ty.clone(), 0);
+        let payload_offset = self.payload_offset(&dest_ty.C(), 0);
 
         // Set tag to Ok (1).
-        writeln!(out, "    *(uint8_t*){} = RESULT_OK;", dest_addr).unwrap();
+        writeln!(out, "    *(uint8_t*){} = RESULT_OK;", dest_addr).X();
 
         // Move inner value (copy then zero source for non-copy types).
         let payload_addr = format!("({} + {})", dest_addr, payload_offset);
         let inner_repr = types::ir_type_to_crepr(&inner_ty);
         match &inner_repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, self.size_expr(&inner_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, self.size_expr(&inner_ty)).X();
             }
         }
 
@@ -2103,13 +2104,13 @@ impl<'a> FunctionCodegenContext<'a> {
         }
 
         let error_size = std::mem::size_of::<datalove_rtdt::Error>() as u32;
-        let payload_offset = self.payload_offset(&dest_ty.clone(), 0);
+        let payload_offset = self.payload_offset(&dest_ty.C(), 0);
 
         // Set tag to Err (2).
-        writeln!(out, "    *(uint8_t*){} = RESULT_ERR;", dest_addr).unwrap();
+        writeln!(out, "    *(uint8_t*){} = RESULT_ERR;", dest_addr).X();
 
         let payload_addr = format!("({} + {})", dest_addr, payload_offset);
-        writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, error_size).unwrap();
+        writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, error_size).X();
         Ok(())
     }
 
@@ -2119,19 +2120,19 @@ impl<'a> FunctionCodegenContext<'a> {
         let is_some_addr = self.value_addr(is_some);
         let src_addr = self.operand_addr(src);
         let dest_ty = self.value_type(dest);
-        let payload_offset = self.payload_offset(&self.operand_type(src).clone(), 0);
+        let payload_offset = self.payload_offset(&self.operand_type(src).C(), 0);
 
         // Read tag.
-        writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == OPTION_SOME);", is_some_addr, src_addr).unwrap();
+        writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == OPTION_SOME);", is_some_addr, src_addr).X();
 
         // Copy payload.
         let payload_addr = format!("({} + {})", src_addr, payload_offset);
         match types::ir_type_to_crepr(dest_ty) {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){payload_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){payload_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", dest_addr, payload_addr, self.size_expr(dest_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, payload_addr, self.size_expr(dest_ty)).X();
             }
         }
         Ok(())
@@ -2153,24 +2154,24 @@ impl<'a> FunctionCodegenContext<'a> {
         let ok_ty = self.value_type(ok_dest);
 
         let error_size = std::mem::size_of::<datalove_rtdt::Error>() as u32;
-        let payload_offset = self.payload_offset(&self.operand_type(src).clone(), 0);
+        let payload_offset = self.payload_offset(&self.operand_type(src).C(), 0);
 
         // Read tag.
-        writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == RESULT_OK);", is_ok_addr, src_addr).unwrap();
+        writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == RESULT_OK);", is_ok_addr, src_addr).X();
 
         // Copy ok payload.
         let payload_addr = format!("({} + {})", src_addr, payload_offset);
         match types::ir_type_to_crepr(ok_ty) {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){ok_addr} = *({c_ty}*){payload_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){ok_addr} = *({c_ty}*){payload_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", ok_addr, payload_addr, self.size_expr(ok_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", ok_addr, payload_addr, self.size_expr(ok_ty)).X();
             }
         }
 
         // Copy err payload.
-        writeln!(out, "    memcpy({}, {}, {});", err_addr, payload_addr, error_size).unwrap();
+        writeln!(out, "    memcpy({}, {}, {});", err_addr, payload_addr, error_size).X();
         Ok(())
     }
 
@@ -2185,21 +2186,21 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
 
         // Set discriminant.
-        writeln!(out, "    *(uint32_t*){} = {};", dest_addr, variant_index).unwrap();
+        writeln!(out, "    *(uint32_t*){} = {};", dest_addr, variant_index).X();
 
         // Copy payload if present.
         if let Some(payload_op) = payload {
             let payload_addr = self.operand_addr(payload_op);
             let payload_ty = self.operand_type(payload_op);
-            let payload_offset = self.payload_offset(&self.value_type(dest).clone(), variant_index);
+            let payload_offset = self.payload_offset(&self.value_type(dest).C(), variant_index);
             let dest_payload_addr = format!("({} + {})", dest_addr, payload_offset);
 
             match types::ir_type_to_crepr(payload_ty) {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "    *({c_ty}*){dest_payload_addr} = *({c_ty}*){payload_addr};").unwrap();
+                    writeln!(out, "    *({c_ty}*){dest_payload_addr} = *({c_ty}*){payload_addr};").X();
                 }
                 CRepr::Aggregate(_) => {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_payload_addr, payload_addr, self.size_expr(payload_ty)).unwrap();
+                    writeln!(out, "    memcpy({}, {}, {});", dest_payload_addr, payload_addr, self.size_expr(payload_ty)).X();
                 }
             }
         }
@@ -2215,7 +2216,7 @@ impl<'a> FunctionCodegenContext<'a> {
     ) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(src);
-        writeln!(out, "    *(uint32_t*){} = *(uint32_t*){};", dest_addr, src_addr).unwrap();
+        writeln!(out, "    *(uint32_t*){} = *(uint32_t*){};", dest_addr, src_addr).X();
         Ok(())
     }
 
@@ -2231,7 +2232,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_addr = self.operand_addr(src);
 
         // Get the enum type from src to find payload offset.
-        let src_ty = self.operand_type(src).clone();
+        let src_ty = self.operand_type(src).C();
         let variants = src_ty.enum_variants()
             .expect("EnumPayload src must be enum-like type");
         let payload_ty = variants[variant_index as usize].1.as_ref()
@@ -2241,13 +2242,13 @@ impl<'a> FunctionCodegenContext<'a> {
         match types::ir_type_to_crepr(payload_ty) {
             CRepr::Scalar(c_ty) => {
                 let src_payload = format!("({} + {})", src_addr, payload_offset);
-                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_payload};").unwrap();
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_payload};").X();
             }
             CRepr::Aggregate(layout) => {
                 if payload_ty.is_dynamic() || layout.size > 0 {
                     let src_payload = format!("({} + {})", src_addr, payload_offset);
                     writeln!(out, "    memcpy({}, {}, {});",
-                        dest_addr, src_payload, self.size_expr(payload_ty)).unwrap();
+                        dest_addr, src_payload, self.size_expr(payload_ty)).X();
                 }
             }
         }
@@ -2258,10 +2259,10 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_error_from(&mut self, out: &mut String, dest: ValueId, inner: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let inner_addr = self.operand_addr(inner);
-        let inner_ty = self.operand_type(inner).clone();
+        let inner_ty = self.operand_type(inner).C();
         let inner_tydesc = self.tydesc_name(&inner_ty);
 
-        writeln!(out, "    dtlv_rti_error_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
+        writeln!(out, "    dtlv_rti_error_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).X();
 
         Ok(())
     }
@@ -2270,10 +2271,10 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_data_from(&mut self, out: &mut String, dest: ValueId, inner: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let inner_addr = self.operand_addr(inner);
-        let inner_ty = self.operand_type(inner).clone();
+        let inner_ty = self.operand_type(inner).C();
         let inner_tydesc = self.tydesc_name(&inner_ty);
 
-        writeln!(out, "    dtlv_rti_data_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
+        writeln!(out, "    dtlv_rti_data_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).X();
 
         Ok(())
     }
@@ -2281,10 +2282,10 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Emit list new.
     fn emit_list_new(&mut self, out: &mut String, dest: ValueId, elements: &[Operand]) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
 
         let elem_ty = match &dest_ty {
-            IrType::List(e) => e.as_ref().clone(),
+            IrType::List(e) => e.as_ref().C(),
             _ => return Err(CAotError::Codegen("list_new requires List type".into())),
         };
 
@@ -2293,21 +2294,21 @@ impl<'a> FunctionCodegenContext<'a> {
 
         if elements.is_empty() {
             let list_tydesc = self.tydesc_name(&dest_ty);
-            writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, list_tydesc).unwrap();
+            writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, list_tydesc).X();
         } else if elem_ty.is_dynamic() {
             // Elements of a size known only at run time are pushed one at a
             // time rather than laid out in a buffer here.
             let list_tydesc = self.tydesc_name(&dest_ty);
-            writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, list_tydesc).unwrap();
+            writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, list_tydesc).X();
             for elem_op in elements {
                 let elem_addr = self.operand_addr(elem_op);
                 writeln!(out, "    dtlv_rti_list_push_local(rt, {}, &{}, {}, &{});",
-                    dest_addr, list_tydesc, elem_addr, elem_tydesc).unwrap();
+                    dest_addr, list_tydesc, elem_addr, elem_tydesc).X();
             }
         } else {
             // Allocate temp buffer for elements.
             let total_size = elem_layout.size * elements.len() as u32;
-            writeln!(out, "    {{ uint8_t __elems[{}];", total_size).unwrap();
+            writeln!(out, "    {{ uint8_t __elems[{}];", total_size).X();
 
             for (i, elem_op) in elements.iter().enumerate() {
                 let elem_addr = self.operand_addr(elem_op);
@@ -2315,18 +2316,18 @@ impl<'a> FunctionCodegenContext<'a> {
 
                 match types::ir_type_to_crepr(&elem_ty) {
                     CRepr::Scalar(c_ty) => {
-                        writeln!(out, "    *({}*)(__elems + {}) = *({}*){};", c_ty, offset, c_ty, elem_addr).unwrap();
+                        writeln!(out, "    *({}*)(__elems + {}) = *({}*){};", c_ty, offset, c_ty, elem_addr).X();
                     }
                     CRepr::Aggregate(layout) => {
                         if layout.size > 0 {
-                            writeln!(out, "    memcpy(__elems + {}, {}, {});", offset, elem_addr, layout.size).unwrap();
+                            writeln!(out, "    memcpy(__elems + {}, {}, {});", offset, elem_addr, layout.size).X();
                         }
                     }
                 }
             }
 
             writeln!(out, "    dtlv_rti_list_build_from_slice_local(rt, {}, &{}, __elems, {}); }}",
-                dest_addr, elem_tydesc, elements.len()).unwrap();
+                dest_addr, elem_tydesc, elements.len()).X();
         }
         Ok(())
     }
@@ -2334,14 +2335,14 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Emit set new.
     fn emit_set_new(&mut self, out: &mut String, dest: ValueId, elements: &[Operand]) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
 
         if !matches!(dest_ty, IrType::Set(_)) {
             return Err(CAotError::Codegen("set_new requires Set type".into()));
         }
         let set_tydesc = self.tydesc_name(&dest_ty);
 
-        writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});", dest_addr, set_tydesc).unwrap();
+        writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});", dest_addr, set_tydesc).X();
         if elements.is_empty() {
             return Ok(());
         }
@@ -2352,12 +2353,12 @@ impl<'a> FunctionCodegenContext<'a> {
         // order, and every lookup afterwards binary-searches into the wrong
         // place. `contains` said false for an element that was there.
         let added = format!("__sa{}", dest.0);
-        writeln!(out, "    bool_t {added};").unwrap();
+        writeln!(out, "    bool_t {added};").X();
         for elem_op in elements {
             let elem_addr = self.operand_addr(elem_op);
             let elem_td = self.operand_tydesc(elem_op);
             writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, {}, &{}, {}, {}, &{added});",
-                dest_addr, set_tydesc, elem_addr, elem_td).unwrap();
+                dest_addr, set_tydesc, elem_addr, elem_td).X();
         }
         Ok(())
     }
@@ -2365,17 +2366,17 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Emit map new.
     fn emit_map_new(&mut self, out: &mut String, dest: ValueId, entries: &[(Operand, Operand)]) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
 
         let (key_ty, val_ty) = match &dest_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            IrType::Map(k, v) => (k.as_ref().C(), v.as_ref().C()),
             _ => return Err(CAotError::Codegen("map_new requires Map type".into())),
         };
         let key_tydesc = self.tydesc_name(&key_ty);
         let val_tydesc = self.tydesc_name(&val_ty);
         let map_tydesc = self.tydesc_name(&dest_ty);
 
-        writeln!(out, "    dtlv_rti_btreemap_create_local(rt, {}, &{});", dest_addr, map_tydesc).unwrap();
+        writeln!(out, "    dtlv_rti_btreemap_create_local(rt, {}, &{});", dest_addr, map_tydesc).X();
         if entries.is_empty() {
             return Ok(());
         }
@@ -2389,7 +2390,7 @@ impl<'a> FunctionCodegenContext<'a> {
             let val_addr = self.operand_addr(val_op);
             let val_td = self.operand_tydesc(val_op);
             writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, {}, {}, {}, {});",
-                dest_addr, map_tydesc, key_addr, key_td, val_addr, val_td).unwrap();
+                dest_addr, map_tydesc, key_addr, key_td, val_addr, val_td).X();
         }
         Ok(())
     }
@@ -2397,16 +2398,16 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Emit tensor new.
     fn emit_tensor_new(&mut self, out: &mut String, dest: ValueId, shape: &[u32], elements: &[Operand]) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
 
         let (elem_ty, rank) = match &dest_ty {
-            IrType::Tensor(e, r) => (e.as_ref().clone(), *r),
+            IrType::Tensor(e, r) => (e.as_ref().C(), *r),
             _ => return Err(CAotError::Codegen("tensor_new requires Tensor type".into())),
         };
 
         let elem_tydesc = self.tydesc_name(&elem_ty);
         let dest_tydesc = self.tydesc_name(&dest_ty);
-        let shape_str: Vec<String> = shape.iter().map(|s| s.to_string()).collect();
+        let shape_str: Vec<String> = shape.iter().map(|s| s.S()).collect();
 
         // An element whose size only its descriptor says is gathered in a
         // buffer the runtime allocates at that size, and freed once
@@ -2414,17 +2415,17 @@ impl<'a> FunctionCodegenContext<'a> {
         if elem_ty.is_dynamic() {
             let n = elements.len();
             writeln!(out, "    {{ uint8_t* __elems = dtlv_rti_mem_alloc_raw_local(rt, {td}.size, {td}.align, {n});",
-                td = elem_tydesc).unwrap();
+                td = elem_tydesc).X();
             for (i, elem_op) in elements.iter().enumerate() {
                 let elem_addr = self.operand_addr(elem_op);
                 writeln!(out, "    memcpy(__elems + {i} * (size_t){td}.size, {}, (size_t){td}.size);",
-                    elem_addr, td = elem_tydesc).unwrap();
+                    elem_addr, td = elem_tydesc).X();
             }
-            writeln!(out, "    static const uint32_t __shape[] = {{ {} }};", shape_str.join(", ")).unwrap();
+            writeln!(out, "    static const uint32_t __shape[] = {{ {} }};", shape_str.join(", ")).X();
             writeln!(out, "    dtlv_rti_tensor_init_local(rt, __elems, {n}, &{}, __shape, {}, {}, &{});",
-                elem_tydesc, rank, dest_addr, dest_tydesc).unwrap();
+                elem_tydesc, rank, dest_addr, dest_tydesc).X();
             writeln!(out, "    dtlv_rti_mem_free_raw_local(rt, {td}.size, {td}.align, {n}, __elems); }}",
-                td = elem_tydesc).unwrap();
+                td = elem_tydesc).X();
             return Ok(());
         }
 
@@ -2433,7 +2434,7 @@ impl<'a> FunctionCodegenContext<'a> {
         // Allocate temp buffer for elements.
         let total_size = elem_layout.size * elements.len() as u32;
 
-        writeln!(out, "    {{ uint8_t __elems[{}];", total_size.max(1)).unwrap();
+        writeln!(out, "    {{ uint8_t __elems[{}];", total_size.max(1)).X();
 
         for (i, elem_op) in elements.iter().enumerate() {
             let elem_addr = self.operand_addr(elem_op);
@@ -2441,11 +2442,11 @@ impl<'a> FunctionCodegenContext<'a> {
 
             match types::ir_type_to_crepr(&elem_ty) {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "    *({}*)(__elems + {}) = *({}*){};", c_ty, offset, c_ty, elem_addr).unwrap();
+                    writeln!(out, "    *({}*)(__elems + {}) = *({}*){};", c_ty, offset, c_ty, elem_addr).X();
                 }
                 CRepr::Aggregate(layout) => {
                     if layout.size > 0 {
-                        writeln!(out, "    memcpy(__elems + {}, {}, {});", offset, elem_addr, layout.size).unwrap();
+                        writeln!(out, "    memcpy(__elems + {}, {}, {});", offset, elem_addr, layout.size).X();
                     }
                 }
             }
@@ -2453,61 +2454,61 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // Emit shape array. An extent is a `u32` in the IR and the runtime
         // reads it as one, whatever width an index happens to be.
-        writeln!(out, "    static const uint32_t __shape[] = {{ {} }};", shape_str.join(", ")).unwrap();
+        writeln!(out, "    static const uint32_t __shape[] = {{ {} }};", shape_str.join(", ")).X();
 
         writeln!(out, "    dtlv_rti_tensor_init_local(rt, __elems, {}, &{}, __shape, {}, {}, &{}); }}",
-            elements.len(), elem_tydesc, rank, dest_addr, dest_tydesc).unwrap();
+            elements.len(), elem_tydesc, rank, dest_addr, dest_tydesc).X();
         Ok(())
     }
 
     /// Emit table new.
     fn emit_table_new(&mut self, out: &mut String, dest: ValueId, rows: &[Operand]) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
 
         let columns = match &dest_ty {
-            IrType::Table(cols) => cols.clone(),
+            IrType::Table(cols) => cols.C(),
             _ => return Err(CAotError::Codegen("table_new requires Table type".into())),
         };
 
         let dest_tydesc = self.tydesc_name(&dest_ty);
 
         // Compute row type (tuple of column types).
-        let row_field_types: Vec<IrType> = columns.iter().map(|(_, ty)| (**ty).clone()).collect();
+        let row_field_types: Vec<IrType> = columns.iter().map(|(_, ty)| (**ty).C()).collect();
         let row_ty = IrType::Tuple(row_field_types);
         let row_tydesc = self.tydesc_name(&row_ty);
         let row_layout = types::ir_type_to_crepr(&row_ty).layout();
 
         if rows.is_empty() {
-            writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});", dest_addr, dest_tydesc).unwrap();
+            writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});", dest_addr, dest_tydesc).X();
         } else if row_ty.is_dynamic() {
             // Rows of a size known only at run time are pushed one at a time,
             // each with its own descriptor.
-            writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});", dest_addr, dest_tydesc).unwrap();
+            writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});", dest_addr, dest_tydesc).X();
             for row_op in rows {
                 let row_addr = self.operand_addr(row_op);
                 let row_td = self.operand_tydesc(row_op);
                 writeln!(out, "    dtlv_rti_table_push_row_local(rt, {}, &{}, {}, {});",
-                    dest_addr, dest_tydesc, row_addr, row_td).unwrap();
+                    dest_addr, dest_tydesc, row_addr, row_td).X();
             }
         } else {
             let total_size = row_layout.size * rows.len() as u32;
             // Aligned, because the runtime reads each row through the tuple
             // descriptor's offsets and those are computed from the columns'
             // own alignments.
-            writeln!(out, "    {{ _Alignas(8) uint8_t __rows[{}];", total_size.max(1)).unwrap();
+            writeln!(out, "    {{ _Alignas(8) uint8_t __rows[{}];", total_size.max(1)).X();
 
             for (i, row_op) in rows.iter().enumerate() {
                 let row_addr = self.operand_addr(row_op);
                 let offset = i as u32 * row_layout.size;
 
                 if row_layout.size > 0 {
-                    writeln!(out, "    memcpy(__rows + {}, {}, {});", offset, row_addr, row_layout.size).unwrap();
+                    writeln!(out, "    memcpy(__rows + {}, {}, {});", offset, row_addr, row_layout.size).X();
                 }
             }
 
             writeln!(out, "    dtlv_rti_table_build_from_rows_local(rt, {}, &{}, __rows, &{}, {}); }}",
-                dest_addr, dest_tydesc, row_tydesc, rows.len()).unwrap();
+                dest_addr, dest_tydesc, row_tydesc, rows.len()).X();
         }
         Ok(())
     }
@@ -2526,11 +2527,11 @@ impl<'a> FunctionCodegenContext<'a> {
         if let CodeRef::Module { module, id } = func {
             if let Some(unit) = self.registry.get_module_function_as_unit(*module, *id) {
                 if let Some(native) = unit.native_context() {
-                    let symbol = native.symbol().to_string();
+                    let symbol = native.symbol().S();
                     // A descriptor for each type parameter no argument
                     // determines, for what this call bound it to.
                     let undetermined = native.undetermined_bindings(bindings);
-                    let modes = native.param_modes.clone();
+                    let modes = native.param_modes.C();
                     self.emit_native_call(out, dest, &symbol, args, &undetermined)?;
                     self.mark_in_arguments_moved(out, &modes, args);
                     return Ok(());
@@ -2542,31 +2543,31 @@ impl<'a> FunctionCodegenContext<'a> {
         // For local function lookup, use parent_unit if available (for nested functions).
         let lookup_unit = self.parent_unit.unwrap_or(self.unit);
         let func_name = self.compiler.resolve_func_name_with_registry(func, lookup_unit, self.registry);
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
         let uses_sret = types::uses_sret(&dest_ty) || self.callee_returns_dynamic(func);
 
         // Build argument list.
         let mut call_args = String::from("rt");
         if uses_sret {
-            write!(&mut call_args, ", {}", self.value_addr(dest)).unwrap();
+            write!(&mut call_args, ", {}", self.value_addr(dest)).X();
         }
         for arg in args {
-            write!(&mut call_args, ", {}", self.operand_addr(arg)).unwrap();
+            write!(&mut call_args, ", {}", self.operand_addr(arg)).X();
         }
 
         // Then one descriptor for each of the callee's type parameters, for
         // what this call bound it to.
         for binding in bindings {
             let name = self.tydesc_name(binding);
-            write!(&mut call_args, ", &{}", name).unwrap();
+            write!(&mut call_args, ", &{}", name).X();
         }
 
         if uses_sret || dest_ty == IrType::Unit {
-            writeln!(out, "    {}({});", func_name, call_args).unwrap();
+            writeln!(out, "    {}({});", func_name, call_args).X();
         } else {
             let dest_addr = self.value_addr(dest);
             let c_ty = types::ir_type_to_c(&dest_ty);
-            writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).unwrap();
+            writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).X();
         }
         self.mark_out_destinations_live(out, func, args);
         let modes = self.callee_param_modes(func);
@@ -2594,12 +2595,12 @@ impl<'a> FunctionCodegenContext<'a> {
                 _ => None,
             };
             let Some(offset) = offset else { continue };
-            let ty = self.operand_type(arg).clone();
+            let ty = self.operand_type(arg).C();
             if ty.is_dynamic() {
                 writeln!(out, "    if (!({}.flags & {})) __frame[{}] = TRACK_MOVED;",
-                    self.tydesc_name(&ty), datalove_rtdt::TyDesc::PLAIN, offset).unwrap();
+                    self.tydesc_name(&ty), datalove_rtdt::TyDesc::PLAIN, offset).X();
             } else if !ty.is_copy() {
-                writeln!(out, "    __frame[{}] = TRACK_MOVED;", offset).unwrap();
+                writeln!(out, "    __frame[{}] = TRACK_MOVED;", offset).X();
             }
         }
     }
@@ -2649,14 +2650,14 @@ impl<'a> FunctionCodegenContext<'a> {
             CodeRef::External { .. } => None,
         };
         unit.and_then(|u| u.function_context())
-            .map(|ctx| ctx.param_modes.clone())
+            .map(|ctx| ctx.param_modes.C())
             .unwrap_or_default()
     }
 
     /// The descriptor for an operand, as a C expression of pointer type: its
     /// own type's, a static descriptor or a descriptor table entry.
     fn operand_tydesc(&mut self, operand: &Operand) -> String {
-        let ty = self.operand_type(operand).clone();
+        let ty = self.operand_type(operand).C();
         format!("&{}", self.tydesc_name(&ty))
     }
 
@@ -2682,20 +2683,20 @@ impl<'a> FunctionCodegenContext<'a> {
         for arg in args {
             let addr = self.operand_addr(arg);
             let tydesc = self.operand_tydesc(arg);
-            write!(&mut call_args, ", {}, {}", addr, tydesc).unwrap();
+            write!(&mut call_args, ", {}, {}", addr, tydesc).X();
         }
 
-        let dest_ty = self.value_type(dest).clone();
+        let dest_ty = self.value_type(dest).C();
         let dest_addr = self.value_addr(dest);
         let dest_tydesc = self.tydesc_name(&dest_ty);
-        write!(&mut call_args, ", {}, &{}", dest_addr, dest_tydesc).unwrap();
+        write!(&mut call_args, ", {}, &{}", dest_addr, dest_tydesc).X();
 
         for ty in undetermined {
             let name = self.tydesc_name(ty);
-            write!(&mut call_args, ", &{}", name).unwrap();
+            write!(&mut call_args, ", &{}", name).X();
         }
 
-        writeln!(out, "    {}({});", symbol, call_args).unwrap();
+        writeln!(out, "    {}({});", symbol, call_args).X();
         Ok(())
     }
 
@@ -2715,15 +2716,15 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         };
         let src_addr = self.operand_addr(value);
-        let ty = self.operand_type(value).clone();
+        let ty = self.operand_type(value).C();
         let repr = types::ir_type_to_crepr(&ty);
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(&ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(&ty)).X();
             }
         }
 
@@ -2744,10 +2745,10 @@ impl<'a> FunctionCodegenContext<'a> {
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){slot_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){slot_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", dest_addr, slot_addr, self.size_expr(ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, slot_addr, self.size_expr(ty)).X();
             }
         }
         Ok(())
@@ -2757,22 +2758,22 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_param_store(&mut self, out: &mut String, param: ParamId, value: &Operand, tracked: bool) -> Result<(), CAotError> {
         let param_addr = self.param_addr(param);
         let src_addr = self.operand_addr(value);
-        let func_ctx = self.unit.function_context().unwrap();
+        let func_ctx = self.unit.function_context().X();
         let ty = &func_ctx.param_types[param.0 as usize];
         let repr = types::ir_type_to_crepr(ty);
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){param_addr} = *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){param_addr} = *({c_ty}*){src_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", param_addr, src_addr, self.size_expr(ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", param_addr, src_addr, self.size_expr(ty)).X();
             }
         }
 
         if tracked {
             if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
-                writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).unwrap();
+                writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).X();
             }
         }
         Ok(())
@@ -2788,20 +2789,20 @@ impl<'a> FunctionCodegenContext<'a> {
         tracked: bool,
     ) -> Result<(), CAotError> {
         let param_addr = self.param_addr(param);
-        let func_ctx = self.unit.function_context().unwrap();
-        let mut current_ty = func_ctx.param_types[param.0 as usize].clone();
+        let func_ctx = self.unit.function_context().X();
+        let mut current_ty = func_ctx.param_types[param.0 as usize].C();
         let mut current_addr = param_addr;
 
         for &idx in field_path {
             let field_types: Vec<IrType> = match &current_ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => return Err(CAotError::Codegen("param_set_field requires tuple/struct type".into())),
             };
             let offsets = self.field_offsets(&current_ty, field_types.len());
             let field_offset = &offsets[idx as usize];
             current_addr = format!("({} + {})", current_addr, field_offset);
-            current_ty = field_types[idx as usize].clone();
+            current_ty = field_types[idx as usize].C();
         }
 
         let src_addr = self.operand_addr(value);
@@ -2809,16 +2810,16 @@ impl<'a> FunctionCodegenContext<'a> {
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).X();
             }
         }
 
         if tracked {
             if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
-                writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).unwrap();
+                writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).X();
             }
         }
         Ok(())
@@ -2828,15 +2829,15 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_ref_store(&mut self, out: &mut String, dest: &Operand, value: &Operand, tracked: bool) -> Result<(), CAotError> {
         let dest_addr = self.operand_addr(dest);
         let src_addr = self.operand_addr(value);
-        let ty = self.operand_type(value).clone();
+        let ty = self.operand_type(value).C();
         let repr = types::ir_type_to_crepr(&ty);
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(&ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(&ty)).X();
             }
         }
 
@@ -2862,7 +2863,7 @@ impl<'a> FunctionCodegenContext<'a> {
             Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => None,
         };
         if let Some(offset) = offset {
-            writeln!(out, "    __frame[{}] = TRACK_LIVE;", offset).unwrap();
+            writeln!(out, "    __frame[{}] = TRACK_LIVE;", offset).X();
         }
     }
 
@@ -2876,23 +2877,23 @@ impl<'a> FunctionCodegenContext<'a> {
         tracked: bool,
     ) -> Result<(), CAotError> {
         let mut current_addr = self.operand_addr(dest);
-        let mut current_ty = self.operand_type(dest).clone();
+        let mut current_ty = self.operand_type(dest).C();
 
         // Dereference if it's a Ref type.
         if let IrType::Ref(inner) = &current_ty {
-            current_ty = inner.as_ref().clone();
+            current_ty = inner.as_ref().C();
         }
 
         for &idx in field_path {
             let field_types: Vec<IrType> = match &current_ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => return Err(CAotError::Codegen("ref_set_field requires tuple/struct type".into())),
             };
             let offsets = self.field_offsets(&current_ty, field_types.len());
             let field_offset = &offsets[idx as usize];
             current_addr = format!("({} + {})", current_addr, field_offset);
-            current_ty = field_types[idx as usize].clone();
+            current_ty = field_types[idx as usize].C();
         }
 
         let src_addr = self.operand_addr(value);
@@ -2900,10 +2901,10 @@ impl<'a> FunctionCodegenContext<'a> {
 
         match repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").X();
             }
             CRepr::Aggregate(_) => {
-                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).unwrap();
+                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).X();
             }
         }
 
@@ -2916,7 +2917,7 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Emit drop.
     fn emit_drop(&mut self, out: &mut String, operand: &Operand, tracked: bool) -> Result<(), CAotError> {
         let addr = self.operand_addr(operand);
-        let ty = self.operand_type(operand).clone();
+        let ty = self.operand_type(operand).C();
         // A copy type owns nothing to destroy.
         if ty.is_copy() {
             return Ok(());
@@ -2934,12 +2935,12 @@ impl<'a> FunctionCodegenContext<'a> {
 
             if let Some(offset) = track_offset {
                 writeln!(out, "    if (__frame[{}] == TRACK_LIVE) {{ dtlv_rti_any_destroy_local(rt, {}, {}); __frame[{}] = TRACK_MOVED; }}",
-                    offset, addr, tydesc, offset).unwrap();
+                    offset, addr, tydesc, offset).X();
             } else {
-                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).unwrap();
+                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).X();
             }
         } else {
-            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).unwrap();
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).X();
         }
         Ok(())
     }
@@ -2949,34 +2950,34 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_drop_field(&mut self, out: &mut String, base: &Operand, field_path: &[u32]) -> Result<(), CAotError> {
         // A reference value names what it points at.
         let (addr, base_ty) = match self.operand_type(base) {
-            IrType::Ref(inner) => (format!("(*(void**){})", self.operand_addr(base)), inner.as_ref().clone()),
-            ty => (self.operand_addr(base), ty.clone()),
+            IrType::Ref(inner) => (format!("(*(void**){})", self.operand_addr(base)), inner.as_ref().C()),
+            ty => (self.operand_addr(base), ty.C()),
         };
         let mut addr = addr;
         let mut ty = base_ty;
         for &idx in field_path {
             let field_types: Vec<IrType> = match &ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(fs) => fs.iter().map(|(_, t)| t.C()).collect(),
                 other => return Err(CAotError::Codegen(format!(
                     "field path steps through a {:?}, which has no fields", other))),
             };
             let offsets = self.field_offsets(&ty, field_types.len());
             addr = format!("({} + {})", addr, offsets[idx as usize]);
-            ty = field_types[idx as usize].clone();
+            ty = field_types[idx as usize].C();
         }
         if !ty.is_copy() {
-            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, self.tydesc_name(&ty)).unwrap();
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, self.tydesc_name(&ty)).X();
         }
         Ok(())
     }
 
     /// Emit drop via ref.
     fn emit_drop_via_ref(&mut self, out: &mut String, ref_value: ValueId) -> Result<(), CAotError> {
-        let ref_ty = self.value_type(ref_value).clone();
+        let ref_ty = self.value_type(ref_value).C();
 
         let inner_ty = match &ref_ty {
-            IrType::Ref(inner) => (*inner).clone(),
+            IrType::Ref(inner) => (*inner).C(),
             _ => return Err(CAotError::Codegen("drop_via_ref requires Ref type".into())),
         };
 
@@ -2989,17 +2990,17 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_tydesc = self.tydesc_name(&inner_ty);
 
         // The ref_addr contains a pointer - dereference and destroy.
-        writeln!(out, "    dtlv_rti_any_destroy_local(rt, *(void**){}, &{});", ref_addr, inner_tydesc).unwrap();
+        writeln!(out, "    dtlv_rti_any_destroy_local(rt, *(void**){}, &{});", ref_addr, inner_tydesc).X();
         Ok(())
     }
 
     /// Emit debug log.
     fn emit_debuglog(&mut self, out: &mut String, operand: &Operand) -> Result<(), CAotError> {
         let addr = self.operand_addr(operand);
-        let ty = self.operand_type(operand).clone();
+        let ty = self.operand_type(operand).C();
         let tydesc = self.tydesc_name(&ty);
 
-        writeln!(out, "    dtlv_rti_debuglog_local(rt, {}, &{});", addr, tydesc).unwrap();
+        writeln!(out, "    dtlv_rti_debuglog_local(rt, {}, &{});", addr, tydesc).X();
         Ok(())
     }
 
@@ -3017,7 +3018,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let size_offset = std::mem::offset_of!(datalove_rtdt::List, size);
 
         writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
-            is_valid_addr, index_addr, list_addr, size_offset).unwrap();
+            is_valid_addr, index_addr, list_addr, size_offset).X();
         Ok(())
     }
 
@@ -3037,9 +3038,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let size_offset = std::mem::offset_of!(datalove_rtdt::List, size);
 
         // Get element type.
-        let list_ty = self.operand_type(list).clone();
+        let list_ty = self.operand_type(list).C();
         let elem_ty = match &list_ty {
-            IrType::List(e) => e.as_ref().clone(),
+            IrType::List(e) => e.as_ref().C(),
             _ => return Err(CAotError::Codegen(format!(
                 "ListGet on non-list type: {:?}", list_ty
             ))),
@@ -3049,35 +3050,35 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // Bounds check.
         writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
-            is_valid_addr, index_addr, list_addr, size_offset).unwrap();
+            is_valid_addr, index_addr, list_addr, size_offset).X();
 
         // Conditional load.
-        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).unwrap();
+        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).X();
 
         // Compute element address: data_ptr + index * elem_size.
         writeln!(out, "        void* __elem = *(void**){} + (size_t)*(index_t*){} * {};",
-            list_addr, index_addr, elem_size).unwrap();
+            list_addr, index_addr, elem_size).X();
 
         // Clone element to dest.
         match &elem_repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").unwrap();
+                writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").X();
             }
             CRepr::Aggregate(layout) => {
                 if layout.size > 0 {
                     let tydesc = self.tydesc_name(&elem_ty);
                     writeln!(out, "        dtlv_rti_clone_local(rt, __elem, &{}, {}, &{});",
-                        tydesc, dest_addr, tydesc).unwrap();
+                        tydesc, dest_addr, tydesc).X();
                 }
             }
         }
 
-        writeln!(out, "    }}").unwrap();
+        writeln!(out, "    }}").X();
 
         // Conditional tracking byte.
         if let Some(track_offset) = self.layout.value_tracking_byte(dest.0) {
             writeln!(out, "    __frame[{}] = *(bool_t*){} ? TRACK_LIVE : TRACK_UNINIT;",
-                track_offset, is_valid_addr).unwrap();
+                track_offset, is_valid_addr).X();
         }
 
         Ok(())
@@ -3097,9 +3098,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let value_addr = self.operand_addr(value);
 
         // Get element type.
-        let list_ty = self.operand_type(list).clone();
+        let list_ty = self.operand_type(list).C();
         let elem_ty = match &list_ty {
-            IrType::List(e) => e.as_ref().clone(),
+            IrType::List(e) => e.as_ref().C(),
             _ => return Err(CAotError::Codegen(format!(
                 "ListSet on non-list type: {:?}", list_ty
             ))),
@@ -3110,18 +3111,18 @@ impl<'a> FunctionCodegenContext<'a> {
             let is_valid_addr = self.value_addr(is_valid);
             let size_offset = std::mem::offset_of!(datalove_rtdt::List, size);
             writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
-                is_valid_addr, index_addr, list_addr, size_offset).unwrap();
+                is_valid_addr, index_addr, list_addr, size_offset).X();
             let elem_repr = types::ir_type_to_crepr(&elem_ty);
             let elem_addr = format!("(*(uint8_t**){} + (size_t)*(index_t*){} * {})",
                 list_addr, index_addr, elem_repr.layout().size);
             match elem_repr {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "    if (*(bool_t*){is_valid_addr}) *({c_ty}*){elem_addr} = *({c_ty}*){value_addr};").unwrap();
+                    writeln!(out, "    if (*(bool_t*){is_valid_addr}) *({c_ty}*){elem_addr} = *({c_ty}*){value_addr};").X();
                 }
                 CRepr::Aggregate(layout) => {
                     if layout.size > 0 {
                         writeln!(out, "    if (*(bool_t*){}) memcpy({}, {}, {});",
-                            is_valid_addr, elem_addr, value_addr, layout.size).unwrap();
+                            is_valid_addr, elem_addr, value_addr, layout.size).X();
                     }
                 }
             }
@@ -3133,7 +3134,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let list_tydesc = self.operand_tydesc(list);
         let value_tydesc = self.operand_tydesc(value);
         writeln!(out, "    *(bool_t*){} = dtlv_rti_list_set_local(rt, {}, {}, *(index_t*){}, {}, {}) == 1;",
-            self.value_addr(is_valid), list_addr, list_tydesc, index_addr, value_addr, value_tydesc).unwrap();
+            self.value_addr(is_valid), list_addr, list_tydesc, index_addr, value_addr, value_tydesc).X();
         Ok(())
     }
 
@@ -3149,9 +3150,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let list_addr = self.operand_addr(list);
         let index_addr = self.operand_addr(index);
 
-        let list_ty = self.operand_type(list).clone();
+        let list_ty = self.operand_type(list).C();
         let elem_ty = match &list_ty {
-            IrType::List(e) => e.as_ref().clone(),
+            IrType::List(e) => e.as_ref().C(),
             _ => return Err(CAotError::Codegen(format!(
                 "ListElementRef on non-list type: {:?}", list_ty
             ))),
@@ -3161,7 +3162,7 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // Store pointer to element: dest = &list.data[index].
         writeln!(out, "    *(void**){} = *(void**){} + (size_t)*(index_t*){} * {};",
-            dest_addr, list_addr, index_addr, elem_size).unwrap();
+            dest_addr, list_addr, index_addr, elem_size).X();
         Ok(())
     }
 
@@ -3177,9 +3178,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let map_addr = self.operand_addr(map);
         let key_addr = self.operand_addr(key);
 
-        let map_ty = self.operand_type(map).clone();
+        let map_ty = self.operand_type(map).C();
         let key_ty = match &map_ty {
-            IrType::Map(k, _) => k.as_ref().clone(),
+            IrType::Map(k, _) => k.as_ref().C(),
             _ => return Err(CAotError::Codegen(format!(
                 "MapContainsKey on non-map type: {:?}", map_ty
             ))),
@@ -3189,7 +3190,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let key_tydesc = self.tydesc_name(&key_ty);
 
         writeln!(out, "    dtlv_rti_btreemap_contains_key_local(rt, {}, {}, {}, &{}, (bool_t*){});",
-            map_addr, map_tydesc, key_addr, key_tydesc, is_valid_addr).unwrap();
+            map_addr, map_tydesc, key_addr, key_tydesc, is_valid_addr).X();
         Ok(())
     }
 
@@ -3207,9 +3208,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let map_addr = self.operand_addr(map);
         let key_addr = self.operand_addr(key);
 
-        let map_ty = self.operand_type(map).clone();
+        let map_ty = self.operand_type(map).C();
         let (key_ty, value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            IrType::Map(k, v) => (k.as_ref().C(), v.as_ref().C()),
             _ => return Err(CAotError::Codegen(format!(
                 "MapGet on non-map type: {:?}", map_ty
             ))),
@@ -3221,35 +3222,35 @@ impl<'a> FunctionCodegenContext<'a> {
         let value_tydesc = self.tydesc_name(&value_ty);
 
         // Get pointer to value (returns null on miss).
-        writeln!(out, "    {{").unwrap();
-        writeln!(out, "        void* __vptr;").unwrap();
+        writeln!(out, "    {{").X();
+        writeln!(out, "        void* __vptr;").X();
         writeln!(out, "        dtlv_rti_btreemap_get_value_ref_local(rt, {}, {}, {}, &{}, &__vptr);",
-            map_addr, map_tydesc, key_addr, key_tydesc).unwrap();
-        writeln!(out, "        *(bool_t*){} = __vptr != NULL;", is_valid_addr).unwrap();
+            map_addr, map_tydesc, key_addr, key_tydesc).X();
+        writeln!(out, "        *(bool_t*){} = __vptr != NULL;", is_valid_addr).X();
 
         // Conditionally clone value.
-        writeln!(out, "        if (__vptr != NULL) {{").unwrap();
+        writeln!(out, "        if (__vptr != NULL) {{").X();
 
         // Clone value to dest.
         match &value_repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "            *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
+                writeln!(out, "            *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").X();
             }
             CRepr::Aggregate(layout) => {
                 if layout.size > 0 {
                     writeln!(out, "            dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
-                        value_tydesc, dest_addr, value_tydesc).unwrap();
+                        value_tydesc, dest_addr, value_tydesc).X();
                 }
             }
         }
 
-        writeln!(out, "        }}").unwrap();
-        writeln!(out, "    }}").unwrap();
+        writeln!(out, "        }}").X();
+        writeln!(out, "    }}").X();
 
         // Conditional tracking byte.
         if let Some(track_offset) = self.layout.value_tracking_byte(dest.0) {
             writeln!(out, "    __frame[{}] = *(bool_t*){} ? TRACK_LIVE : TRACK_UNINIT;",
-                track_offset, is_valid_addr).unwrap();
+                track_offset, is_valid_addr).X();
         }
 
         Ok(())
@@ -3268,9 +3269,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let key_addr = self.operand_addr(key);
         let value_addr = self.operand_addr(value);
 
-        let map_ty = self.operand_type(map).clone();
+        let map_ty = self.operand_type(map).C();
         let key_ty = match &map_ty {
-            IrType::Map(k, _) => k.as_ref().clone(),
+            IrType::Map(k, _) => k.as_ref().C(),
             _ => return Err(CAotError::Codegen(format!(
                 "MapSetValue on non-map type: {:?}", map_ty
             ))),
@@ -3282,7 +3283,7 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // The runtime takes the value whether or not the key is there.
         writeln!(out, "    *(bool_t*){} = dtlv_rti_btreemap_set_value_local(rt, {}, {}, {}, &{}, {}, {}) == 1;",
-            self.value_addr(is_valid), map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
+            self.value_addr(is_valid), map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).X();
         Ok(())
     }
 
@@ -3301,9 +3302,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let key_addr = self.operand_addr(key);
         let value_addr = self.operand_addr(value);
 
-        let map_ty = self.operand_type(map).clone();
+        let map_ty = self.operand_type(map).C();
         let (key_ty, value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            IrType::Map(k, v) => (k.as_ref().C(), v.as_ref().C()),
             _ => return Err(CAotError::Codegen(format!(
                 "MapUpsert on non-map type: {:?}", map_ty
             ))),
@@ -3314,7 +3315,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let value_tydesc = self.tydesc_name(&value_ty);
 
         writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, {}, &{}, {}, &{});",
-            map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
+            map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).X();
         Ok(())
     }
 
@@ -3376,7 +3377,7 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_cursor_begin(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
         let coll_addr = self.operand_addr(coll);
         let cursor_addr = self.slot_addr(cursor);
-        let func = match (self.cursor_kind(cursor), self.operand_type(coll).clone()) {
+        let func = match (self.cursor_kind(cursor), self.operand_type(coll).C()) {
             (CursorKind::Stride, IrType::List(_)) => "dtlv_rti_list_cursor_begin_local",
             (CursorKind::Stride, IrType::Tensor(..)) => "dtlv_rti_tensor_cursor_begin_local",
             (CursorKind::Row, IrType::Tensor(..)) => "dtlv_rti_tensor_row_cursor_begin_local",
@@ -3385,7 +3386,7 @@ impl<'a> FunctionCodegenContext<'a> {
             (kind, ty) => panic!("a {kind:?} cursor over a {ty}"),
         };
         let coll_tydesc = self.operand_tydesc(coll);
-        writeln!(out, "    {func}(rt, {coll_addr}, {coll_tydesc}, {cursor_addr});").unwrap();
+        writeln!(out, "    {func}(rt, {coll_addr}, {coll_tydesc}, {cursor_addr});").X();
     }
 
     /// Move a walk on, as the runtime's advance does, on the cursor's fields
@@ -3403,14 +3404,14 @@ impl<'a> FunctionCodegenContext<'a> {
                 );
                 // On the integer, since after the last element it points past the
                 // buffer, where C does not define pointer arithmetic.
-                writeln!(out, "    *(uintptr_t*)({at} + {elem}) += *(uintptr_t*)({at} + {stride});").unwrap();
-                writeln!(out, "    *(index_t*)({at} + {index}) += 1;").unwrap();
+                writeln!(out, "    *(uintptr_t*)({at} + {elem}) += *(uintptr_t*)({at} + {stride});").X();
+                writeln!(out, "    *(index_t*)({at} + {index}) += 1;").X();
             }
             CursorKind::Row => {
                 let offset = offset_of!(rtdt::RowCursor, view) + offset_of!(rtdt::Tensor, offset_elems);
                 let (stride, index) = (offset_of!(rtdt::RowCursor, stride), offset_of!(rtdt::RowCursor, index));
-                writeln!(out, "    *(index_t*)({at} + {offset}) += *(index_t*)({at} + {stride});").unwrap();
-                writeln!(out, "    *(index_t*)({at} + {index}) += 1;").unwrap();
+                writeln!(out, "    *(index_t*)({at} + {offset}) += *(index_t*)({at} + {stride});").X();
+                writeln!(out, "    *(index_t*)({at} + {index}) += 1;").X();
             }
             CursorKind::Tree => {
                 let is_map = match self.operand_type(coll) {
@@ -3434,32 +3435,32 @@ impl<'a> FunctionCodegenContext<'a> {
                     offset_of!(rtdt::TreeCursor, values_offset),
                 );
                 let node_len = rtdt::TREE_NODE_LEN_OFFSET;
-                writeln!(out, "    {{ uint8_t* __c = (uint8_t*){at}; uint32_t __next = *(uint32_t*)(__c + {slot}) + 1;").unwrap();
-                writeln!(out, "      if (__next < *(uint32_t*)(__c + {leaf_len})) {{").unwrap();
-                writeln!(out, "        *(uint32_t*)(__c + {slot}) = __next;").unwrap();
-                writeln!(out, "        *(uintptr_t*)(__c + {elem}) += *(uintptr_t*)(__c + {elem_stride});").unwrap();
+                writeln!(out, "    {{ uint8_t* __c = (uint8_t*){at}; uint32_t __next = *(uint32_t*)(__c + {slot}) + 1;").X();
+                writeln!(out, "      if (__next < *(uint32_t*)(__c + {leaf_len})) {{").X();
+                writeln!(out, "        *(uint32_t*)(__c + {slot}) = __next;").X();
+                writeln!(out, "        *(uintptr_t*)(__c + {elem}) += *(uintptr_t*)(__c + {elem_stride});").X();
                 if is_map {
-                    writeln!(out, "        *(uintptr_t*)(__c + {value}) += *(uintptr_t*)(__c + {value_stride});").unwrap();
+                    writeln!(out, "        *(uintptr_t*)(__c + {value}) += *(uintptr_t*)(__c + {value_stride});").X();
                 }
-                writeln!(out, "      }} else {{").unwrap();
-                writeln!(out, "        uint8_t* __leaf = *(uint8_t**)(__c + {leaf});").unwrap();
-                writeln!(out, "        uint8_t* __n = *(uint8_t**)(__leaf + *(uint32_t*)(__c + {next_leaf_offset}));").unwrap();
-                writeln!(out, "        *(uint8_t**)(__c + {leaf}) = __n;").unwrap();
-                writeln!(out, "        *(uint32_t*)(__c + {slot}) = 0;").unwrap();
-                writeln!(out, "        if (__n) {{").unwrap();
-                writeln!(out, "          *(uint32_t*)(__c + {leaf_len}) = *(uint32_t*)(__n + {node_len});").unwrap();
-                writeln!(out, "          *(uint8_t**)(__c + {elem}) = __n + *(uint32_t*)(__c + {keys_offset});").unwrap();
+                writeln!(out, "      }} else {{").X();
+                writeln!(out, "        uint8_t* __leaf = *(uint8_t**)(__c + {leaf});").X();
+                writeln!(out, "        uint8_t* __n = *(uint8_t**)(__leaf + *(uint32_t*)(__c + {next_leaf_offset}));").X();
+                writeln!(out, "        *(uint8_t**)(__c + {leaf}) = __n;").X();
+                writeln!(out, "        *(uint32_t*)(__c + {slot}) = 0;").X();
+                writeln!(out, "        if (__n) {{").X();
+                writeln!(out, "          *(uint32_t*)(__c + {leaf_len}) = *(uint32_t*)(__n + {node_len});").X();
+                writeln!(out, "          *(uint8_t**)(__c + {elem}) = __n + *(uint32_t*)(__c + {keys_offset});").X();
                 if is_map {
-                    writeln!(out, "          *(uint8_t**)(__c + {value}) = __n + *(uint32_t*)(__c + {values_offset});").unwrap();
+                    writeln!(out, "          *(uint8_t**)(__c + {value}) = __n + *(uint32_t*)(__c + {values_offset});").X();
                 }
-                writeln!(out, "        }} else {{").unwrap();
-                writeln!(out, "          *(uint32_t*)(__c + {leaf_len}) = 0;").unwrap();
-                writeln!(out, "          *(uint8_t**)(__c + {elem}) = NULL;").unwrap();
+                writeln!(out, "        }} else {{").X();
+                writeln!(out, "          *(uint32_t*)(__c + {leaf_len}) = 0;").X();
+                writeln!(out, "          *(uint8_t**)(__c + {elem}) = NULL;").X();
                 if is_map {
-                    writeln!(out, "          *(uint8_t**)(__c + {value}) = NULL;").unwrap();
+                    writeln!(out, "          *(uint8_t**)(__c + {value}) = NULL;").X();
                 }
-                writeln!(out, "        }}").unwrap();
-                writeln!(out, "      }} }}").unwrap();
+                writeln!(out, "        }}").X();
+                writeln!(out, "      }} }}").X();
             }
         }
     }
@@ -3476,9 +3477,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let map_addr = self.operand_addr(map);
         let key_addr = self.operand_addr(key);
 
-        let map_ty = self.operand_type(map).clone();
+        let map_ty = self.operand_type(map).C();
         let key_ty = match &map_ty {
-            IrType::Map(k, _) => k.as_ref().clone(),
+            IrType::Map(k, _) => k.as_ref().C(),
             _ => return Err(CAotError::Codegen(format!(
                 "MapValueRef on non-map type: {:?}", map_ty
             ))),
@@ -3488,7 +3489,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let key_tydesc = self.tydesc_name(&key_ty);
 
         writeln!(out, "    dtlv_rti_btreemap_get_value_ref_local(rt, {}, {}, {}, &{}, (void**){});",
-            map_addr, map_tydesc, key_addr, key_tydesc, dest_addr).unwrap();
+            map_addr, map_tydesc, key_addr, key_tydesc, dest_addr).X();
         Ok(())
     }
 
@@ -3512,482 +3513,482 @@ impl<'a> FunctionCodegenContext<'a> {
         match intrinsic {
             // U32 bitwise operations.
             IntrinsicId::BitnotU32 => {
-                writeln!(out, "    *(uint32_t*){} = ~*(uint32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = ~*(uint32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::BitandU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} & *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} & *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitorU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} | *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} | *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitxorU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} ^ *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} ^ *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU32 => {
-                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint32_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint32_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ClzU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} ? __builtin_clz(*(uint32_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} ? __builtin_clz(*(uint32_t*){}) : 32;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::CtzU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} ? __builtin_ctz(*(uint32_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} ? __builtin_ctz(*(uint32_t*){}) : 32;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::SwapBytesU32 => {
-                writeln!(out, "    *(uint32_t*){} = __builtin_bswap32(*(uint32_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_bswap32(*(uint32_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ReverseBitsU32 => {
-                writeln!(out, "    {{ uint32_t __v = *(uint32_t*){}; __v = ((__v >> 1) & 0x55555555u) | ((__v & 0x55555555u) << 1); __v = ((__v >> 2) & 0x33333333u) | ((__v & 0x33333333u) << 2); __v = ((__v >> 4) & 0x0F0F0F0Fu) | ((__v & 0x0F0F0F0Fu) << 4); *(uint32_t*){} = __builtin_bswap32(__v); }}", arg0(), dest_addr).unwrap();
+                writeln!(out, "    {{ uint32_t __v = *(uint32_t*){}; __v = ((__v >> 1) & 0x55555555u) | ((__v & 0x55555555u) << 1); __v = ((__v >> 2) & 0x33333333u) | ((__v & 0x33333333u) << 2); __v = ((__v >> 4) & 0x0F0F0F0Fu) | ((__v & 0x0F0F0F0Fu) << 4); *(uint32_t*){} = __builtin_bswap32(__v); }}", arg0(), dest_addr).X();
             }
             IntrinsicId::AddWrappingU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} + *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} + *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SubWrappingU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} - *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} - *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MulWrappingU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} * *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} * *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::RemU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} % *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} % *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::U32ToI32 => {
-                writeln!(out, "    *(int32_t*){} = (int32_t)*(uint32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int32_t*){} = (int32_t)*(uint32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I32ToU32 => {
-                writeln!(out, "    *(uint32_t*){} = (uint32_t)*(int32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = (uint32_t)*(int32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::NegWrappingI32 => {
-                writeln!(out, "    *(int32_t*){} = -*(int32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int32_t*){} = -*(int32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI32 => {
-                writeln!(out, "    *(int32_t*){} = *(int32_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int32_t*){} = *(int32_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI32 => {
-                writeln!(out, "    *(int32_t*){} = *(int32_t*){} % *(int32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int32_t*){} = *(int32_t*){} % *(int32_t*){};", dest_addr, arg0(), arg1()).X();
             }
 
             // Platform query.
             IntrinsicId::IsBigEndian => {
-                writeln!(out, "    *(bool_t*){} = 0; // Assuming little-endian", dest_addr).unwrap();
+                writeln!(out, "    *(bool_t*){} = 0; // Assuming little-endian", dest_addr).X();
             }
 
             // F32 operations.
             IntrinsicId::IsNanF32 => {
-                writeln!(out, "    *(bool_t*){} = isnan(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(bool_t*){} = isnan(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::IsInfiniteF32 => {
-                writeln!(out, "    *(bool_t*){} = isinf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(bool_t*){} = isinf(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::F32ToBits => {
-                writeln!(out, "    memcpy({}, {}, 4);", dest_addr, arg0()).unwrap();
+                writeln!(out, "    memcpy({}, {}, 4);", dest_addr, arg0()).X();
             }
             IntrinsicId::BitsToF32 => {
-                writeln!(out, "    memcpy({}, {}, 4);", dest_addr, arg0()).unwrap();
+                writeln!(out, "    memcpy({}, {}, 4);", dest_addr, arg0()).X();
             }
             IntrinsicId::AbsF32 => {
-                writeln!(out, "    *(float*){} = fabsf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = fabsf(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::SqrtF32 => {
-                writeln!(out, "    *(float*){} = sqrtf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = sqrtf(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::FloorF32 => {
-                writeln!(out, "    *(float*){} = floorf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = floorf(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::CeilF32 => {
-                writeln!(out, "    *(float*){} = ceilf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = ceilf(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::RoundF32 => {
-                writeln!(out, "    *(float*){} = nearbyintf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = nearbyintf(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::TruncF32 => {
-                writeln!(out, "    *(float*){} = truncf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = truncf(*(float*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::CopysignF32 => {
-                writeln!(out, "    *(float*){} = copysignf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(float*){} = copysignf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MinF32 => {
-                writeln!(out, "    *(float*){} = dtlv_minf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(float*){} = dtlv_minf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MaxF32 => {
-                writeln!(out, "    *(float*){} = dtlv_maxf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(float*){} = dtlv_maxf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).X();
             }
 
             // F64 operations.
             IntrinsicId::IsNanF64 => {
-                writeln!(out, "    *(bool_t*){} = isnan(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(bool_t*){} = isnan(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::IsInfiniteF64 => {
-                writeln!(out, "    *(bool_t*){} = isinf(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(bool_t*){} = isinf(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::F32ToF64 => {
-                writeln!(out, "    *(double*){} = (double)*(float*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = (double)*(float*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::F64ToF32 => {
-                writeln!(out, "    *(float*){} = (float)*(double*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = (float)*(double*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U64ToF64 => {
-                writeln!(out, "    *(double*){} = (double)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = (double)*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I64ToF64 => {
-                writeln!(out, "    *(double*){} = (double)*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = (double)*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U64ToF32 => {
-                writeln!(out, "    *(float*){} = (float)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = (float)*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I64ToF32 => {
-                writeln!(out, "    *(float*){} = (float)*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = (float)*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U16ToU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(uint16_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(uint16_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U32ToU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(uint32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(uint32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U32ToU16 => {
-                writeln!(out, "    *(uint16_t*){} = (uint16_t)*(uint32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = (uint16_t)*(uint32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U64ToU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U64ToU16 => {
-                writeln!(out, "    *(uint16_t*){} = (uint16_t)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = (uint16_t)*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U64ToU32 => {
-                writeln!(out, "    *(uint32_t*){} = (uint32_t)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = (uint32_t)*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I16ToI8 => {
-                writeln!(out, "    *(int8_t*){} = (int8_t)*(int16_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int8_t*){} = (int8_t)*(int16_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I32ToI8 => {
-                writeln!(out, "    *(int8_t*){} = (int8_t)*(int32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int8_t*){} = (int8_t)*(int32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I32ToI16 => {
-                writeln!(out, "    *(int16_t*){} = (int16_t)*(int32_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int16_t*){} = (int16_t)*(int32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I64ToI8 => {
-                writeln!(out, "    *(int8_t*){} = (int8_t)*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int8_t*){} = (int8_t)*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I64ToI16 => {
-                writeln!(out, "    *(int16_t*){} = (int16_t)*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int16_t*){} = (int16_t)*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I64ToI32 => {
-                writeln!(out, "    *(int32_t*){} = (int32_t)*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int32_t*){} = (int32_t)*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::F64ToBits => {
-                writeln!(out, "    memcpy({}, {}, 8);", dest_addr, arg0()).unwrap();
+                writeln!(out, "    memcpy({}, {}, 8);", dest_addr, arg0()).X();
             }
             IntrinsicId::BitsToF64 => {
-                writeln!(out, "    memcpy({}, {}, 8);", dest_addr, arg0()).unwrap();
+                writeln!(out, "    memcpy({}, {}, 8);", dest_addr, arg0()).X();
             }
             IntrinsicId::AbsF64 => {
-                writeln!(out, "    *(double*){} = fabs(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = fabs(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::SqrtF64 => {
-                writeln!(out, "    *(double*){} = sqrt(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = sqrt(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::FloorF64 => {
-                writeln!(out, "    *(double*){} = floor(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = floor(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::CeilF64 => {
-                writeln!(out, "    *(double*){} = ceil(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = ceil(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::RoundF64 => {
-                writeln!(out, "    *(double*){} = nearbyint(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = nearbyint(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::TruncF64 => {
-                writeln!(out, "    *(double*){} = trunc(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = trunc(*(double*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::CopysignF64 => {
-                writeln!(out, "    *(double*){} = copysign(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(double*){} = copysign(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MinF64 => {
-                writeln!(out, "    *(double*){} = dtlv_min(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(double*){} = dtlv_min(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MaxF64 => {
-                writeln!(out, "    *(double*){} = dtlv_max(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(double*){} = dtlv_max(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).X();
             }
 
             // U64 operations.
             IntrinsicId::BitnotU64 => {
-                writeln!(out, "    *(uint64_t*){} = ~*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = ~*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::BitandU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} & *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} & *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitorU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} | *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} | *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitxorU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} ^ *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} ^ *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU64 => {
-                writeln!(out, "    *(uint32_t*){} = (uint32_t)__builtin_popcountll(*(uint64_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = (uint32_t)__builtin_popcountll(*(uint64_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ClzU64 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint64_t*){} ? (uint32_t)__builtin_clzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint64_t*){} ? (uint32_t)__builtin_clzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::CtzU64 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint64_t*){} ? (uint32_t)__builtin_ctzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint64_t*){} ? (uint32_t)__builtin_ctzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::SwapBytesU64 => {
-                writeln!(out, "    *(uint64_t*){} = __builtin_bswap64(*(uint64_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = __builtin_bswap64(*(uint64_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ReverseBitsU64 => {
-                writeln!(out, "    {{ uint64_t __v = *(uint64_t*){}; __v = ((__v >> 1) & 0x5555555555555555ull) | ((__v & 0x5555555555555555ull) << 1); __v = ((__v >> 2) & 0x3333333333333333ull) | ((__v & 0x3333333333333333ull) << 2); __v = ((__v >> 4) & 0x0F0F0F0F0F0F0F0Full) | ((__v & 0x0F0F0F0F0F0F0F0Full) << 4); *(uint64_t*){} = __builtin_bswap64(__v); }}", arg0(), dest_addr).unwrap();
+                writeln!(out, "    {{ uint64_t __v = *(uint64_t*){}; __v = ((__v >> 1) & 0x5555555555555555ull) | ((__v & 0x5555555555555555ull) << 1); __v = ((__v >> 2) & 0x3333333333333333ull) | ((__v & 0x3333333333333333ull) << 2); __v = ((__v >> 4) & 0x0F0F0F0F0F0F0F0Full) | ((__v & 0x0F0F0F0F0F0F0F0Full) << 4); *(uint64_t*){} = __builtin_bswap64(__v); }}", arg0(), dest_addr).X();
             }
             IntrinsicId::AddWrappingU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} + *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} + *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SubWrappingU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} - *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} - *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MulWrappingU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} * *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} * *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::RemU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} % *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} % *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::U64ToI64 => {
-                writeln!(out, "    *(int64_t*){} = (int64_t)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int64_t*){} = (int64_t)*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I64ToU64 => {
-                writeln!(out, "    *(uint64_t*){} = (uint64_t)*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = (uint64_t)*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::NegWrappingI64 => {
-                writeln!(out, "    *(int64_t*){} = -*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int64_t*){} = -*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI64 => {
-                writeln!(out, "    *(int64_t*){} = *(int64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int64_t*){} = *(int64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI64 => {
-                writeln!(out, "    *(int64_t*){} = *(int64_t*){} % *(int64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int64_t*){} = *(int64_t*){} % *(int64_t*){};", dest_addr, arg0(), arg1()).X();
             }
 
             // U8 operations.
             IntrinsicId::BitnotU8 => {
-                writeln!(out, "    *(uint8_t*){} = ~*(uint8_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = ~*(uint8_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::BitandU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} & *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} & *(uint8_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitorU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} | *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} | *(uint8_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitxorU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} ^ *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} ^ *(uint8_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU8 => {
-                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint8_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint8_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ClzU8 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint8_t*){} ? (uint32_t)(__builtin_clz(*(uint8_t*){}) - 24) : 8;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint8_t*){} ? (uint32_t)(__builtin_clz(*(uint8_t*){}) - 24) : 8;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::CtzU8 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint8_t*){} ? (uint32_t)__builtin_ctz(*(uint8_t*){}) : 8;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint8_t*){} ? (uint32_t)__builtin_ctz(*(uint8_t*){}) : 8;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::ReverseBitsU8 => {
-                writeln!(out, "    {{ uint8_t __v = *(uint8_t*){}; __v = ((__v >> 1) & 0x55) | ((__v & 0x55) << 1); __v = ((__v >> 2) & 0x33) | ((__v & 0x33) << 2); *(uint8_t*){} = (__v >> 4) | (__v << 4); }}", arg0(), dest_addr).unwrap();
+                writeln!(out, "    {{ uint8_t __v = *(uint8_t*){}; __v = ((__v >> 1) & 0x55) | ((__v & 0x55) << 1); __v = ((__v >> 2) & 0x33) | ((__v & 0x33) << 2); *(uint8_t*){} = (__v >> 4) | (__v << 4); }}", arg0(), dest_addr).X();
             }
             IntrinsicId::AddWrappingU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)(*(uint8_t*){} + *(uint8_t*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = (uint8_t)(*(uint8_t*){} + *(uint8_t*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SubWrappingU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)(*(uint8_t*){} - *(uint8_t*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = (uint8_t)(*(uint8_t*){} - *(uint8_t*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MulWrappingU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)(*(uint8_t*){} * *(uint8_t*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = (uint8_t)(*(uint8_t*){} * *(uint8_t*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::RemU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} % *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} % *(uint8_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::U8ToI8 => {
-                writeln!(out, "    *(int8_t*){} = (int8_t)*(uint8_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int8_t*){} = (int8_t)*(uint8_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I8ToU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(int8_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = (uint8_t)*(int8_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::NegWrappingI8 => {
-                writeln!(out, "    *(int8_t*){} = -*(int8_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int8_t*){} = -*(int8_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI8 => {
-                writeln!(out, "    *(int8_t*){} = *(int8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int8_t*){} = *(int8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI8 => {
-                writeln!(out, "    *(int8_t*){} = *(int8_t*){} % *(int8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int8_t*){} = *(int8_t*){} % *(int8_t*){};", dest_addr, arg0(), arg1()).X();
             }
 
             // U16 operations.
             IntrinsicId::BitnotU16 => {
-                writeln!(out, "    *(uint16_t*){} = ~*(uint16_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = ~*(uint16_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::BitandU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} & *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} & *(uint16_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitorU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} | *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} | *(uint16_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitxorU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} ^ *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} ^ *(uint16_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU16 => {
-                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint16_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint16_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ClzU16 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint16_t*){} ? (uint32_t)(__builtin_clz(*(uint16_t*){}) - 16) : 16;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint16_t*){} ? (uint32_t)(__builtin_clz(*(uint16_t*){}) - 16) : 16;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::CtzU16 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint16_t*){} ? (uint32_t)__builtin_ctz(*(uint16_t*){}) : 16;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint16_t*){} ? (uint32_t)__builtin_ctz(*(uint16_t*){}) : 16;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::SwapBytesU16 => {
-                writeln!(out, "    *(uint16_t*){} = __builtin_bswap16(*(uint16_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = __builtin_bswap16(*(uint16_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ReverseBitsU16 => {
-                writeln!(out, "    {{ uint16_t __v = *(uint16_t*){}; __v = ((__v >> 1) & 0x5555) | ((__v & 0x5555) << 1); __v = ((__v >> 2) & 0x3333) | ((__v & 0x3333) << 2); __v = ((__v >> 4) & 0x0F0F) | ((__v & 0x0F0F) << 4); *(uint16_t*){} = __builtin_bswap16(__v); }}", arg0(), dest_addr).unwrap();
+                writeln!(out, "    {{ uint16_t __v = *(uint16_t*){}; __v = ((__v >> 1) & 0x5555) | ((__v & 0x5555) << 1); __v = ((__v >> 2) & 0x3333) | ((__v & 0x3333) << 2); __v = ((__v >> 4) & 0x0F0F) | ((__v & 0x0F0F) << 4); *(uint16_t*){} = __builtin_bswap16(__v); }}", arg0(), dest_addr).X();
             }
             IntrinsicId::AddWrappingU16 => {
-                writeln!(out, "    *(uint16_t*){} = (uint16_t)(*(uint16_t*){} + *(uint16_t*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = (uint16_t)(*(uint16_t*){} + *(uint16_t*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SubWrappingU16 => {
-                writeln!(out, "    *(uint16_t*){} = (uint16_t)(*(uint16_t*){} - *(uint16_t*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = (uint16_t)(*(uint16_t*){} - *(uint16_t*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MulWrappingU16 => {
-                writeln!(out, "    *(uint16_t*){} = (uint16_t)(*(uint16_t*){} * *(uint16_t*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = (uint16_t)(*(uint16_t*){} * *(uint16_t*){});", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::RemU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} % *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} % *(uint16_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::U16ToI16 => {
-                writeln!(out, "    *(int16_t*){} = (int16_t)*(uint16_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int16_t*){} = (int16_t)*(uint16_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I16ToU16 => {
-                writeln!(out, "    *(uint16_t*){} = (uint16_t)*(int16_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = (uint16_t)*(int16_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::NegWrappingI16 => {
-                writeln!(out, "    *(int16_t*){} = -*(int16_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int16_t*){} = -*(int16_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI16 => {
-                writeln!(out, "    *(int16_t*){} = *(int16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int16_t*){} = *(int16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI16 => {
-                writeln!(out, "    *(int16_t*){} = *(int16_t*){} % *(int16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int16_t*){} = *(int16_t*){} % *(int16_t*){};", dest_addr, arg0(), arg1()).X();
             }
 
             // Index operations.
             IntrinsicId::BitnotIndex => {
-                writeln!(out, "    *(index_t*){} = ~*(index_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(index_t*){} = ~*(index_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::BitandIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} & *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} & *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitorIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} | *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} | *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::BitxorIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} ^ *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} ^ *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(index_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(index_t*){});", dest_addr, arg0()).X();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    *(uint32_t*){} = (uint32_t)__builtin_popcountll(*(index_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = (uint32_t)__builtin_popcountll(*(index_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ClzIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_clz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_clz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).X();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_clzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_clzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::CtzIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_ctz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_ctz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).X();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_ctzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_ctzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).X();
             }
             IntrinsicId::SwapBytesIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    *(index_t*){} = __builtin_bswap32(*(index_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(index_t*){} = __builtin_bswap32(*(index_t*){});", dest_addr, arg0()).X();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    *(index_t*){} = __builtin_bswap64(*(index_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(index_t*){} = __builtin_bswap64(*(index_t*){});", dest_addr, arg0()).X();
             }
             IntrinsicId::ReverseBitsIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    {{ index_t __v = *(index_t*){}; __v = ((__v >> 1) & 0x55555555u) | ((__v & 0x55555555u) << 1); __v = ((__v >> 2) & 0x33333333u) | ((__v & 0x33333333u) << 2); __v = ((__v >> 4) & 0x0F0F0F0Fu) | ((__v & 0x0F0F0F0Fu) << 4); *(index_t*){} = __builtin_bswap32(__v); }}", arg0(), dest_addr).unwrap();
+                writeln!(out, "    {{ index_t __v = *(index_t*){}; __v = ((__v >> 1) & 0x55555555u) | ((__v & 0x55555555u) << 1); __v = ((__v >> 2) & 0x33333333u) | ((__v & 0x33333333u) << 2); __v = ((__v >> 4) & 0x0F0F0F0Fu) | ((__v & 0x0F0F0F0Fu) << 4); *(index_t*){} = __builtin_bswap32(__v); }}", arg0(), dest_addr).X();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    {{ index_t __v = *(index_t*){}; __v = ((__v >> 1) & 0x5555555555555555ull) | ((__v & 0x5555555555555555ull) << 1); __v = ((__v >> 2) & 0x3333333333333333ull) | ((__v & 0x3333333333333333ull) << 2); __v = ((__v >> 4) & 0x0F0F0F0F0F0F0F0Full) | ((__v & 0x0F0F0F0F0F0F0F0Full) << 4); *(index_t*){} = __builtin_bswap64(__v); }}", arg0(), dest_addr).unwrap();
+                writeln!(out, "    {{ index_t __v = *(index_t*){}; __v = ((__v >> 1) & 0x5555555555555555ull) | ((__v & 0x5555555555555555ull) << 1); __v = ((__v >> 2) & 0x3333333333333333ull) | ((__v & 0x3333333333333333ull) << 2); __v = ((__v >> 4) & 0x0F0F0F0F0F0F0F0Full) | ((__v & 0x0F0F0F0F0F0F0F0Full) << 4); *(index_t*){} = __builtin_bswap64(__v); }}", arg0(), dest_addr).X();
             }
             IntrinsicId::AddWrappingIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} + *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} + *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SubWrappingIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} - *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} - *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::MulWrappingIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} * *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} * *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::RemIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} % *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} % *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::IndexToOffset => {
-                writeln!(out, "    *(offset_t*){} = (offset_t)*(index_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(offset_t*){} = (offset_t)*(index_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::IndexBits => {
-                writeln!(out, "    *(uint32_t*){} = DTLV_INDEX_BITS;", dest_addr).unwrap();
+                writeln!(out, "    *(uint32_t*){} = DTLV_INDEX_BITS;", dest_addr).X();
             }
 
             // Offset operations.
             IntrinsicId::OffsetToIndex => {
-                writeln!(out, "    *(index_t*){} = (index_t)*(offset_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(index_t*){} = (index_t)*(offset_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::IndexToU64 => {
-                writeln!(out, "    *(uint64_t*){} = (uint64_t)*(index_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = (uint64_t)*(index_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::U64ToIndex => {
-                writeln!(out, "    *(index_t*){} = (index_t)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(index_t*){} = (index_t)*(uint64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::OffsetToI64 => {
-                writeln!(out, "    *(int64_t*){} = (int64_t)*(offset_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(int64_t*){} = (int64_t)*(offset_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::I64ToOffset => {
-                writeln!(out, "    *(offset_t*){} = (offset_t)*(int64_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(offset_t*){} = (offset_t)*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::NegWrappingOffset => {
-                writeln!(out, "    *(offset_t*){} = -*(offset_t*){};", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(offset_t*){} = -*(offset_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrOffset => {
-                writeln!(out, "    *(offset_t*){} = *(offset_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(offset_t*){} = *(offset_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremOffset => {
-                writeln!(out, "    *(offset_t*){} = *(offset_t*){} % *(offset_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(offset_t*){} = *(offset_t*){} % *(offset_t*){};", dest_addr, arg0(), arg1()).X();
             }
         }
         Ok(())
@@ -3996,7 +3997,7 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Mark a slot as live.
     fn emit_mark_slot_live(&self, out: &mut String, sid: SlotId) -> Result<(), CAotError> {
         if let Some(track_offset) = self.layout.slot_tracking_byte(sid.0) {
-            writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).unwrap();
+            writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).X();
         }
         Ok(())
     }
@@ -4004,7 +4005,7 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Mark a slot as moved.
     fn emit_mark_slot_moved(&self, out: &mut String, sid: SlotId) -> Result<(), CAotError> {
         if let Some(track_offset) = self.layout.slot_tracking_byte(sid.0) {
-            writeln!(out, "    __frame[{}] = TRACK_MOVED;", track_offset).unwrap();
+            writeln!(out, "    __frame[{}] = TRACK_MOVED;", track_offset).X();
         }
         Ok(())
     }
@@ -4029,23 +4030,23 @@ impl<'a> FunctionCodegenContext<'a> {
                 self.emit_debuglog(out, value)?;
 
                 // Destroy the value if it's non-copy to prevent leaks.
-                let ty = self.operand_type(value).clone();
+                let ty = self.operand_type(value).C();
                 if !ty.is_copy() {
                     let addr = self.operand_addr(value);
                     let tydesc = self.tydesc_name(&ty);
-                    writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, tydesc).unwrap();
+                    writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, tydesc).X();
                 }
 
-                writeln!(out, "    return;").unwrap();
+                writeln!(out, "    return;").X();
             }
             Terminator::Switch { discriminant, cases, default } => {
                 let disc_addr = self.operand_addr(discriminant);
-                writeln!(out, "    switch (*(uint32_t*){}) {{", disc_addr).unwrap();
+                writeln!(out, "    switch (*(uint32_t*){}) {{", disc_addr).X();
                 for (val, target) in cases {
-                    writeln!(out, "    case {}: goto __block_{};", val, target.0).unwrap();
+                    writeln!(out, "    case {}: goto __block_{};", val, target.0).X();
                 }
-                writeln!(out, "    default: goto __block_{};", default.0).unwrap();
-                writeln!(out, "    }}").unwrap();
+                writeln!(out, "    default: goto __block_{};", default.0).X();
+                writeln!(out, "    }}").X();
             }
         }
         Ok(())
@@ -4066,15 +4067,15 @@ impl<'a> FunctionCodegenContext<'a> {
 
             match repr {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
+                    writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").X();
                 }
                 CRepr::Aggregate(_) => {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
+                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).X();
                 }
             }
         }
 
-        writeln!(out, "    goto __block_{};", target.0).unwrap();
+        writeln!(out, "    goto __block_{};", target.0).X();
         Ok(())
     }
 
@@ -4090,7 +4091,7 @@ impl<'a> FunctionCodegenContext<'a> {
     ) -> Result<(), CAotError> {
         let cond_addr = self.operand_addr(cond);
 
-        writeln!(out, "    if (*(bool_t*){}) {{", cond_addr).unwrap();
+        writeln!(out, "    if (*(bool_t*){}) {{", cond_addr).X();
 
         // Copy then args.
         let then_blk = self.unit.blocks.iter()
@@ -4105,16 +4106,16 @@ impl<'a> FunctionCodegenContext<'a> {
 
             match repr {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
+                    writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").X();
                 }
                 CRepr::Aggregate(_) => {
-                    writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
+                    writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).X();
                 }
             }
         }
 
-        writeln!(out, "        goto __block_{};", then_block.0).unwrap();
-        writeln!(out, "    }} else {{").unwrap();
+        writeln!(out, "        goto __block_{};", then_block.0).X();
+        writeln!(out, "    }} else {{").X();
 
         // Copy else args.
         let else_blk = self.unit.blocks.iter()
@@ -4129,40 +4130,40 @@ impl<'a> FunctionCodegenContext<'a> {
 
             match repr {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
+                    writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").X();
                 }
                 CRepr::Aggregate(_) => {
-                    writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
+                    writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).X();
                 }
             }
         }
 
-        writeln!(out, "        goto __block_{};", else_block.0).unwrap();
-        writeln!(out, "    }}").unwrap();
+        writeln!(out, "        goto __block_{};", else_block.0).X();
+        writeln!(out, "    }}").X();
         Ok(())
     }
 
     /// Emit return.
     fn emit_return(&mut self, out: &mut String, value: Option<&Operand>) -> Result<(), CAotError> {
         if let Some(val) = value {
-            let func_ctx = self.unit.function_context().unwrap();
+            let func_ctx = self.unit.function_context().X();
             let ret_ty = &func_ctx.return_type;
 
             if self.uses_sret {
                 // Copy to sret pointer.
                 let src_addr = self.operand_addr(val);
-                writeln!(out, "    memcpy(__sret, {}, {});", src_addr, self.size_expr(ret_ty)).unwrap();
+                writeln!(out, "    memcpy(__sret, {}, {});", src_addr, self.size_expr(ret_ty)).X();
                 self.emit_give_back_shadow(out);
-                writeln!(out, "    return;").unwrap();
+                writeln!(out, "    return;").X();
             } else {
                 let src_addr = self.operand_addr(val);
                 let c_ty = types::ir_type_to_c(ret_ty);
                 self.emit_give_back_shadow(out);
-                writeln!(out, "    return *({c_ty}*){src_addr};").unwrap();
+                writeln!(out, "    return *({c_ty}*){src_addr};").X();
             }
         } else {
             self.emit_give_back_shadow(out);
-            writeln!(out, "    return;").unwrap();
+            writeln!(out, "    return;").X();
         }
         Ok(())
     }
@@ -4170,15 +4171,15 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Give back the shadow stack space the prologue took, before a return.
     fn emit_give_back_shadow(&self, out: &mut String) {
         if self.takes_shadow {
-            writeln!(out, "    ((dtlv_rt_header_t*)rt)->shadow_top = __shadow_top;").unwrap();
-            writeln!(out, "    ((dtlv_rt_header_t*)rt)->shadow_limit = __shadow_limit;").unwrap();
+            writeln!(out, "    ((dtlv_rt_header_t*)rt)->shadow_top = __shadow_top;").X();
+            writeln!(out, "    ((dtlv_rt_header_t*)rt)->shadow_limit = __shadow_limit;").X();
         }
     }
 
     /// Emit unit end.
     fn emit_unit_end(&mut self, out: &mut String, _result: Option<&Operand>) -> Result<(), CAotError> {
         // Script ends here.
-        writeln!(out, "    return;").unwrap();
+        writeln!(out, "    return;").X();
         Ok(())
     }
 
@@ -4200,8 +4201,8 @@ impl<'a> FunctionCodegenContext<'a> {
         let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape);
 
         // shape_ptr = tensor.shape; dim0 = *shape_ptr; valid = index < dim0
-        writeln!(out, "    {{ index_t* __shape = *(index_t**)({} + {});", tensor_addr, shape_offset).unwrap();
-        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *__shape); }}", is_valid_addr, index_addr).unwrap();
+        writeln!(out, "    {{ index_t* __shape = *(index_t**)({} + {});", tensor_addr, shape_offset).X();
+        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *__shape); }}", is_valid_addr, index_addr).X();
         Ok(())
     }
 
@@ -4219,9 +4220,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let tensor_addr = self.operand_addr(tensor);
         let index_addr = self.operand_addr(index);
 
-        let tensor_ty = self.operand_type(tensor).clone();
+        let tensor_ty = self.operand_type(tensor).C();
         let (elem_ty, rank) = match &tensor_ty {
-            IrType::Tensor(e, r) => (e.as_ref().clone(), *r),
+            IrType::Tensor(e, r) => (e.as_ref().C(), *r),
             _ => return Err(CAotError::Codegen(format!(
                 "TensorGet on non-tensor type: {:?}", tensor_ty
             ))),
@@ -4230,9 +4231,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape);
 
         // Bounds check.
-        writeln!(out, "    {{ index_t* __shape = *(index_t**)({} + {});", tensor_addr, shape_offset).unwrap();
-        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *__shape);", is_valid_addr, index_addr).unwrap();
-        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).unwrap();
+        writeln!(out, "    {{ index_t* __shape = *(index_t**)({} + {});", tensor_addr, shape_offset).X();
+        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *__shape);", is_valid_addr, index_addr).X();
+        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).X();
 
         if rank == 1 {
             let elem_repr = types::ir_type_to_crepr(&elem_ty);
@@ -4245,17 +4246,17 @@ impl<'a> FunctionCodegenContext<'a> {
             // elem_addr = ptr_base + (offset + index * strides[0]) * elem_size
             writeln!(out, "        void* __elem = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
                 t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
-                idx = index_addr, st = strides_offset, es = elem_size).unwrap();
+                idx = index_addr, st = strides_offset, es = elem_size).X();
 
             match &elem_repr {
                 CRepr::Scalar(c_ty) => {
-                    writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").unwrap();
+                    writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").X();
                 }
                 CRepr::Aggregate(layout) => {
                     if layout.size > 0 {
                         let tydesc = self.tydesc_name(&elem_ty);
                         writeln!(out, "        dtlv_rti_clone_local(rt, __elem, &{}, {}, &{});",
-                            tydesc, dest_addr, tydesc).unwrap();
+                            tydesc, dest_addr, tydesc).X();
                     }
                 }
             }
@@ -4263,15 +4264,15 @@ impl<'a> FunctionCodegenContext<'a> {
             // Rank > 1: call hyperplane_clone.
             let tensor_tydesc = self.tydesc_name(&tensor_ty);
             writeln!(out, "        dtlv_rti_tensor_hyperplane_clone_local(rt, {}, &{}, *(index_t*){}, {});",
-                tensor_addr, tensor_tydesc, index_addr, dest_addr).unwrap();
+                tensor_addr, tensor_tydesc, index_addr, dest_addr).X();
         }
 
-        writeln!(out, "    }} }}").unwrap();
+        writeln!(out, "    }} }}").X();
 
         // Conditional tracking byte.
         if let Some(track_offset) = self.layout.value_tracking_byte(dest.0) {
             writeln!(out, "    __frame[{}] = *(bool_t*){} ? TRACK_LIVE : TRACK_UNINIT;",
-                track_offset, is_valid_addr).unwrap();
+                track_offset, is_valid_addr).X();
         }
 
         Ok(())
@@ -4296,7 +4297,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let tensor_tydesc = self.operand_tydesc(tensor);
         let value_tydesc = self.operand_tydesc(value);
         writeln!(out, "    *(bool_t*){} = dtlv_rti_tensor_set_local(rt, {}, {}, (const index_t*){}, {}, {}) == 1;",
-            self.value_addr(is_valid), tensor_addr, tensor_tydesc, index_addr, value_addr, value_tydesc).unwrap();
+            self.value_addr(is_valid), tensor_addr, tensor_tydesc, index_addr, value_addr, value_tydesc).X();
         Ok(())
     }
 
@@ -4312,9 +4313,9 @@ impl<'a> FunctionCodegenContext<'a> {
         let tensor_addr = self.operand_addr(tensor);
         let index_addr = self.operand_addr(index);
 
-        let tensor_ty = self.operand_type(tensor).clone();
+        let tensor_ty = self.operand_type(tensor).C();
         let (elem_ty, rank) = match &tensor_ty {
-            IrType::Tensor(e, r) => (e.as_ref().clone(), *r),
+            IrType::Tensor(e, r) => (e.as_ref().C(), *r),
             _ => return Err(CAotError::Codegen(format!(
                 "TensorIndexRef on non-tensor type: {:?}", tensor_ty
             ))),
@@ -4331,7 +4332,7 @@ impl<'a> FunctionCodegenContext<'a> {
             writeln!(out, "    *(void**){} = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
                 dest_addr,
                 t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
-                idx = index_addr, st = strides_offset, es = elem_size).unwrap();
+                idx = index_addr, st = strides_offset, es = elem_size).X();
         } else {
             // Rank > 1: build a view tensor in this instruction's buffer, which
             // `emit_view_buffers` declared, and point dest at it.
@@ -4342,22 +4343,22 @@ impl<'a> FunctionCodegenContext<'a> {
 
             // Copy ptr_base.
             writeln!(out, "    *(void**)({} + {}) = *(void**)({} + {});",
-                view, ptr_base_offset, tensor_addr, ptr_base_offset).unwrap();
+                view, ptr_base_offset, tensor_addr, ptr_base_offset).X();
             // Set capacity_elems = 0.
-            writeln!(out, "    *(index_t*)({} + {}) = 0;", view, capacity_offset).unwrap();
+            writeln!(out, "    *(index_t*)({} + {}) = 0;", view, capacity_offset).X();
             // new_offset = offset + idx * strides[0].
             writeln!(out, "    *(index_t*)({v} + {oe}) = *(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st});",
-                v = view, oe = offset_elems_offset, t = tensor_addr, idx = index_addr, st = strides_offset).unwrap();
+                v = view, oe = offset_elems_offset, t = tensor_addr, idx = index_addr, st = strides_offset).X();
             // shape = parent.shape + 1. Pointer arithmetic on index_t* handles the element size.
             writeln!(out, "    *(void**)({} + {}) = (void*)(*(index_t**)({} + {}) + 1);",
-                view, shape_offset, tensor_addr, shape_offset).unwrap();
+                view, shape_offset, tensor_addr, shape_offset).X();
             // strides = parent.strides + 1.
             writeln!(out, "    *(void**)({} + {}) = (void*)(*(index_t**)({} + {}) + 1);",
-                view, strides_offset, tensor_addr, strides_offset).unwrap();
+                view, strides_offset, tensor_addr, strides_offset).X();
             // layout = parent.layout.
             writeln!(out, "    *(uint8_t*)({} + {}) = *(uint8_t*)({} + {});",
-                view, layout_offset, tensor_addr, layout_offset).unwrap();
-            writeln!(out, "    *(void**){} = {};", dest_addr, view).unwrap();
+                view, layout_offset, tensor_addr, layout_offset).X();
+            writeln!(out, "    *(void**){} = {};", dest_addr, view).X();
         }
 
         Ok(())

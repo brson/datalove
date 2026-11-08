@@ -34,7 +34,7 @@ fn one(modules: &[(String, String)], riders: &[(String, String)], mode: Parallel
     let (graph, rr) = world.build_graph(&db, deps, &Roots::All);
     d[0] = t.elapsed();
     let riders: Vec<_> = riders.iter()
-        .map(|(n, s)| (n.clone(), bct::input::Source::new(&db, s.clone())))
+        .map(|(n, s)| (n.C(), bct::input::Source::new(&db, s.C())))
         .collect();
     let module_ids = ModuleIdTable::numbering(&db, riders.iter().map(|(n, _)| n), graph);
     let t = Instant::now();
@@ -61,15 +61,15 @@ fn main() {
     let iters: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(30);
     let sys = datalove_sys_packages::system_library();
     let descriptor = WorkspaceDescriptor::from_system_library(&sys);
-    let library = descriptor.system_library.as_ref().unwrap();
+    let library = descriptor.system_library.as_ref().X();
     let mut modules = Vec::new();
     let mut riders = Vec::new();
     for (pn, p) in &library.packages {
         for (mn, m) in &p.modules {
-            modules.push((format!("sys/{}/{}", pn, mn), m.source.to_string()));
+            modules.push((format!("sys/{}/{}", pn, mn), m.source.S()));
         }
         if let Some(r) = &p.rider {
-            riders.push((pn.C(), r.interface_source.to_string()));
+            riders.push((pn.C(), r.interface_source.S()));
         }
     }
     println!("{} modules, rayon threads {}", modules.len(), rmx::rayon::current_num_threads());

@@ -1,5 +1,6 @@
 //! Slot instruction compilation (SlotStore, SlotLoad).
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -48,7 +49,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // A dynamic slot is its storage on the shadow stack, and is copied as
         // many bytes as its descriptor says.
         if let Some(&dest_addr) = self.dyn_slot_storage.get(&slot_id) {
-            let slot_ty = slot_ty.clone();
+            let slot_ty = slot_ty.C();
             let src_ptr = self.get_operand_ptr(builder, value)?;
             let size = self.value_size(builder, &slot_ty)?;
             builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
@@ -105,7 +106,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Copied out of a dynamic slot's storage into the value's, for the
         // reason the aggregate case below gives.
         if let Some(&src) = self.dyn_slot_storage.get(&slot) {
-            let slot_ty = slot_ty.clone();
+            let slot_ty = slot_ty.C();
             let dst = self.dest_addr(builder, dest)?;
             self.copy_value_bytes(builder, dst, src, &slot_ty)?;
             self.values.insert(dest, dst);
@@ -160,7 +161,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let param_ptr = self.param_values.get(&param).copied().ok_or_else(|| {
             CraneliftError::Codegen(format!("undefined param: {:?}", param))
         })?;
-        let param_ty = self.func_ctx.param_types[param.0 as usize].clone();
+        let param_ty = self.func_ctx.param_types[param.0 as usize].C();
         self.store_at(builder, param_ptr, &param_ty, value)
     }
 
@@ -269,8 +270,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let mut ty = self.get_operand_type(base)?;
         for &field_idx in field_path {
             let field_types: Vec<_> = match &ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                IrType::Tuple(tys) => tys.C(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.C()).collect(),
                 _ => return Err(CraneliftError::Codegen(format!(
                     "field path through non-aggregate type: {:?}", ty))),
             };
@@ -278,7 +279,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 return Err(CraneliftError::Codegen(format!("field index {} out of bounds", field_idx)));
             }
             addr = self.field_addr(builder, addr, &ty, field_idx)?;
-            ty = field_types[field_idx as usize].clone();
+            ty = field_types[field_idx as usize].C();
         }
         Ok((addr, ty))
     }

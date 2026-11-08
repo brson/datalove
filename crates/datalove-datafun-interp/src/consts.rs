@@ -1,6 +1,7 @@
 //! Constants: written into a value's place, and kept once in a pool for a
 //! static const read by reference.
 
+use rmx::prelude::*;
 use super::*;
 use datalove_rtdt::{AnyMut, AnyOut, AnyOwned};
 
@@ -267,7 +268,7 @@ impl IrInterpreter {
                         self.write_const(element_value, element_dest);
                     }
 
-                    let shape_values: Vec<u32> = shape.clone();
+                    let shape_values: Vec<u32> = shape.C();
                     datalove_rt::c::dtlv_rti_tensor_init_local(
                         self.runtime.handle(),
                         elements_buffer.as_mut_ptr(),
@@ -411,7 +412,7 @@ impl IrInterpreter {
                     // The type the value was read back as, rather than one
                     // worked out from the value: an empty collection cannot say
                     // what it holds.
-                    let inner_ir_type = (**payload_type).clone();
+                    let inner_ir_type = (**payload_type).C();
                     let inner_tydesc = self.tydesc_table.get_or_create(&inner_ir_type);
                     let inner_size = (*inner_tydesc).size as usize;
                     let inner_align = (*inner_tydesc).align as usize;
@@ -444,7 +445,7 @@ impl IrInterpreter {
                     // The type the value was read back as, rather than one
                     // worked out from the value: an empty collection cannot say
                     // what it holds.
-                    let inner_ir_type = (**payload_type).clone();
+                    let inner_ir_type = (**payload_type).C();
                     let inner_tydesc = self.tydesc_table.get_or_create(&inner_ir_type);
                     let inner_size = (*inner_tydesc).size as usize;
                     let inner_align = (*inner_tydesc).align as usize;

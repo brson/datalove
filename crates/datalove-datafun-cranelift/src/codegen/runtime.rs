@@ -1,5 +1,6 @@
 //! Runtime call instruction compilation (DebugLog, Drop).
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -36,7 +37,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let (actual_ty, value_ptr) = if let IrType::Ref(inner) = &ty {
             // For Ref types, get_operand_ptr returns the contained pointer value.
             let actual_ptr = self.get_operand_ptr(builder, operand)?;
-            (inner.as_ref().clone(), actual_ptr)
+            (inner.as_ref().C(), actual_ptr)
         } else {
             // Non-ref: get pointer to the value directly.
             let value_ptr = self.get_operand_ptr(builder, operand)?;
@@ -257,7 +258,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let ref_ptr = self.value(builder, ref_value)?;
 
         // Get tydesc for inner type.
-        let inner_ty = inner_ty.clone();
+        let inner_ty = inner_ty.C();
         let tydesc_addr = self.static_tydesc(builder, &inner_ty)?;
 
         // Declare destroy function and call it.

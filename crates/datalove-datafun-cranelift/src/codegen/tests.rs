@@ -1,3 +1,4 @@
+use rmx::prelude::*;
 use super::*;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use datalove_datafun_ir::{BinOp, IrBlock, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext, ConstValue, Terminator, SymbolTable};
@@ -8,13 +9,13 @@ fn create_test_isa() -> std::sync::Arc<dyn TargetIsa> {
     use target_lexicon::Triple;
 
     let mut settings_builder = settings::builder();
-    settings_builder.set("opt_level", "speed").unwrap();
+    settings_builder.set("opt_level", "speed").X();
     let flags = settings::Flags::new(settings_builder);
 
     isa::lookup(Triple::host())
-        .unwrap()
+        .X()
         .finish(flags)
-        .unwrap()
+        .X()
 }
 
 fn create_test_module(isa: std::sync::Arc<dyn TargetIsa>) -> ObjectModule {
@@ -22,7 +23,7 @@ fn create_test_module(isa: std::sync::Arc<dyn TargetIsa>) -> ObjectModule {
         isa,
         "test",
         cranelift_module::default_libcall_names(),
-    ).unwrap();
+    ).X();
     ObjectModule::new(obj_builder)
 }
 
@@ -61,7 +62,7 @@ fn make_func_unit(
 #[test]
 fn test_compile_const_i32() {
     let isa = create_test_isa();
-    let mut module = create_test_module(isa.clone());
+    let mut module = create_test_module(isa.C());
 
     // Create a function: fn foo() -> i32 { 42 }
     let code_unit = make_func_unit(
@@ -95,7 +96,7 @@ fn test_compile_const_i32() {
 #[test]
 fn test_compile_comparison() {
     let isa = create_test_isa();
-    let mut module = create_test_module(isa.clone());
+    let mut module = create_test_module(isa.C());
 
     // Create a function: fn foo() -> bool { 10 < 32 }
     let code_unit = make_func_unit(
@@ -136,7 +137,7 @@ fn test_compile_comparison() {
 #[test]
 fn test_compile_unary_neg() {
     let isa = create_test_isa();
-    let mut module = create_test_module(isa.clone());
+    let mut module = create_test_module(isa.C());
 
     // Create a function: fn foo() -> i32 { -42 }
     let code_unit = make_func_unit(
@@ -172,7 +173,7 @@ fn test_compile_unary_neg() {
 #[test]
 fn test_compile_branch() {
     let isa = create_test_isa();
-    let mut module = create_test_module(isa.clone());
+    let mut module = create_test_module(isa.C());
 
     // Create a function with a branch:
     // fn foo() -> i32 {

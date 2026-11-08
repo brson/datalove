@@ -4,6 +4,7 @@
 //! so they can produce interleavings a real session only hits when the user
 //! submits input while an evaluation is still running.
 
+use rmx::prelude::*;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -44,7 +45,7 @@ impl ReplExecutor for MockExecutor {
             return;
         }
         state.evals.push(id);
-        state.commands.push(command.clone());
+        state.commands.push(command.C());
         state.submitted.insert(id, command);
     }
 
@@ -71,14 +72,14 @@ impl ReplExecutor for MockExecutor {
                     let number = state.next_number.max(1);
                     state.next_number = number + 1;
                     state.session.push(repl::NumberedUnit { number, unit });
-                    state.step = vec![repl::UnitStep { unit: number, compiled: true, eval: Some(result.clone()) }];
+                    state.step = vec![repl::UnitStep { unit: number, compiled: true, eval: Some(result.C()) }];
                 }
-                *session = state.session.clone();
-                *step = state.step.clone();
+                *session = state.session.C();
+                *step = state.step.C();
             } else {
                 state.next_number = session.iter().map(|unit| unit.number + 1).max().unwrap_or(1);
-                state.session = session.clone();
-                state.step = step.clone();
+                state.session = session.C();
+                state.step = step.C();
             }
         }
         Some(response)
@@ -99,32 +100,32 @@ impl MockExecutor {
     }
 
     fn evals(&self) -> Vec<u64> {
-        self.state.borrow().evals.clone()
+        self.state.borrow().evals.C()
     }
 
     /// What each eval submission was, in order.
     fn commands(&self) -> Vec<repl::Command> {
-        self.state.borrow().commands.clone()
+        self.state.borrow().commands.C()
     }
 
     /// Each time the app asked for a unit's detail, with the id and the unit.
     fn described(&self) -> Vec<(u64, u32)> {
-        self.state.borrow().described.clone()
+        self.state.borrow().described.C()
     }
 
 }
 
 fn binding(name: &str, ty: &str, value: &str) -> repl::script::EnvBinding {
-    repl::script::EnvBinding { name: name.to_string(), ty: ty.to_string(), value: Some(value.to_string()) }
+    repl::script::EnvBinding { name: name.S(), ty: ty.S(), value: Some(value.S()) }
 }
 
 fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
         eval: repl::Outcome::Unit(repl::script::Eval::Ran(vec![repl::script::EvalBinding::Value {
-            name: name.to_string(),
-            ty: "int".to_string(),
-            value: Some("1".to_string()),
+            name: name.S(),
+            ty: "int".S(),
+            value: Some("1".S()),
         }])),
         environment: vec![binding(name, "int", "1")],
         session: Vec::new(),
@@ -137,11 +138,11 @@ fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
 #[test]
 fn results_land_on_their_own_entry() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     // The user submits a second line while the first is still being handled.
-    app.submit_input("let x = 1".to_string());
-    app.submit_input("let y = 2".to_string());
+    app.submit_input("let x = 1".S());
+    app.submit_input("let y = 2".S());
     assert_eq!(executor.evals(), vec![0, 1], "each goes to the engine as it is submitted");
 
     executor.queue(evaluated_let(0, "x"));
@@ -162,9 +163,9 @@ fn results_land_on_their_own_entry() {
 #[test]
 fn read_multiline_loads_every_line_it_was_given() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    let action = app.submit_input("fun double(x: int): int\n  ret x + x".to_string());
+    let action = app.submit_input("fun double(x: int): int\n  ret x + x".S());
 
     assert!(app.multiline_mode());
     assert!(matches!(&action, UiAction::SetMultilineInput { lines } if lines == &["fun double(x: int): int", "  ret x + x", ""]));
@@ -176,12 +177,12 @@ fn read_multiline_loads_every_line_it_was_given() {
 #[test]
 fn multiline_mode_spans_one_submission() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("fun f(): int".to_string());
+    app.submit_input("fun f(): int".S());
     assert!(app.multiline_mode());
 
-    app.submit_input("fun f(): int\n  ret 1\nend fun".to_string());
+    app.submit_input("fun f(): int\n  ret 1\nend fun".S());
     assert!(!app.multiline_mode());
     assert!(matches!(
         &executor.commands()[..],
@@ -191,7 +192,7 @@ fn multiline_mode_spans_one_submission() {
     executor.queue(WorkerResponse::EvalResult {
         id: 0,
         eval: repl::Outcome::Unit(repl::script::Eval::Ran(vec![repl::script::EvalBinding::Function {
-            name: "f".to_string(),
+            name: "f".S(),
         }])),
         environment: vec![binding("f", "fun(): int", "-")],
         session: Vec::new(),
@@ -207,7 +208,7 @@ fn multiline_mode_spans_one_submission() {
 #[test]
 fn empty_input_is_not_submitted() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     let action = app.submit_input(String::new());
 
@@ -221,10 +222,10 @@ fn empty_input_is_not_submitted() {
 #[test]
 fn exit_waits_for_what_came_before() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let a = 1".to_string());
-    app.submit_input("/exit".to_string());
+    app.submit_input("let a = 1".S());
+    app.submit_input("/exit".S());
     assert!(!app.should_exit());
     assert_eq!(app.queued().collect::<Vec<_>>(), vec!["/exit"]);
 
@@ -238,7 +239,7 @@ fn exit_waits_for_what_came_before() {
 #[test]
 fn exit_with_nothing_before_it_exits_at_once() {
     let mut app = ReplApp::with_executor(MockExecutor::default());
-    app.submit_input("/exit".to_string());
+    app.submit_input("/exit".S());
     assert!(app.should_exit());
 }
 
@@ -248,11 +249,11 @@ fn exit_with_nothing_before_it_exits_at_once() {
 #[test]
 fn what_follows_an_app_command_waits_for_it() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let x = 1".to_string());
-    app.submit_input("/undo".to_string());
-    app.submit_input("let y = 2".to_string());
+    app.submit_input("let x = 1".S());
+    app.submit_input("/undo".S());
+    app.submit_input("let y = 2".S());
     assert_eq!(executor.evals(), vec![0], "the undo waits for `let x`, and `let y` for the undo");
     assert_eq!(app.queued().collect::<Vec<_>>(), vec!["/undo", "let y = 2"]);
 
@@ -299,15 +300,15 @@ fn focus_cycles_through_the_panels() {
 #[test]
 fn reset_command_clears_history_and_environment() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let a = 1".to_string());
+    app.submit_input("let a = 1".S());
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.environment().len(), 1);
 
-    app.submit_input("/reset".to_string());
-    app.submit_input("let b = 1".to_string());
+    app.submit_input("/reset".S());
+    app.submit_input("let b = 1".S());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Outcome::Reset,
@@ -332,14 +333,14 @@ fn reset_command_clears_history_and_environment() {
 #[test]
 fn a_replayed_session_is_evaluated_without_parsing() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    let fun = "fun f(): int\n    ret 1\nend fun".to_string();
+    let fun = "fun f(): int\n    ret 1\nend fun".S();
     app.replay(vec![
-        repl::SavedInput { input: fun.clone(), command: repl::Command::Unit(repl::script::Unit::Fragment(fun)) },
+        repl::SavedInput { input: fun.C(), command: repl::Command::Unit(repl::script::Unit::Fragment(fun)) },
         repl::SavedInput {
-            input: "f()".to_string(),
-            command: repl::Command::Unit(repl::script::Unit::Expression("f()".to_string())),
+            input: "f()".S(),
+            command: repl::Command::Unit(repl::script::Unit::Expression("f()".S())),
         },
     ]);
 
@@ -359,7 +360,7 @@ fn a_replayed_session_is_evaluated_without_parsing() {
     app.poll_results();
     assert!(matches!(app.history()[0].status, EntryStatus::Success));
 
-    app.submit_input("let b = 1".to_string());
+    app.submit_input("let b = 1".S());
     assert_eq!(app.history()[2].id, 2);
 }
 
@@ -371,21 +372,21 @@ fn save_writes_the_history_up_to_itself() {
     let fs: datalove_vio::DynFs = std::sync::Arc::new(datalove_vio::MemFs::new());
     let path = std::path::PathBuf::from("/session.world");
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
-    app.set_session_path(fs.clone(), path.clone());
+    let mut app = ReplApp::with_executor(executor.C());
+    app.set_session_path(fs.C(), path.C());
 
-    app.submit_input("fun f(): int".to_string());
+    app.submit_input("fun f(): int".S());
     let fun = "fun f(): int\n    ret 1\nend fun";
-    app.submit_input(fun.to_string());
-    app.submit_input("nope".to_string());
-    app.submit_input("/save".to_string());
+    app.submit_input(fun.S());
+    app.submit_input("nope".S());
+    app.submit_input("/save".S());
     // Typed while the save waited, and not saved.
-    app.submit_input("let late = 1".to_string());
+    app.submit_input("let late = 1".S());
 
     executor.queue(evaluated_let(0, "f"));
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Outcome::Unit(repl::script::Eval::NotCompiled("no such name".to_string())),
+        eval: repl::Outcome::Unit(repl::script::Eval::NotCompiled("no such name".S())),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -396,7 +397,7 @@ fn save_writes_the_history_up_to_itself() {
         app.history()[2].eval_result,
         Some(repl::Outcome::Saved { inputs: 3, .. }),
     ), "{:?}", app.history()[2]);
-    assert_eq!(fs.read_to_string(&path).unwrap(), "\
+    assert_eq!(fs.read_to_string(&path).X(), "\
 ----------
 scriptunit-fragment
 ----------
@@ -424,9 +425,9 @@ repl-command
 #[test]
 fn save_without_a_path_is_an_error() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("/save".to_string());
+    app.submit_input("/save".S());
 
     assert!(matches!(app.history()[0].status, EntryStatus::Error));
     assert!(matches!(app.history()[0].eval_result, Some(repl::Outcome::CommandError(_))));
@@ -438,14 +439,14 @@ fn save_without_a_path_is_an_error() {
 #[test]
 fn input_after_a_crash_runs_in_the_new_session() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let x = 1".to_string());
-    app.submit_input("let y = 2".to_string());
+    app.submit_input("let x = 1".S());
+    app.submit_input("let y = 2".S());
 
     executor.queue(WorkerResponse::EvalResult {
         id: 0,
-        eval: repl::Outcome::Unit(repl::script::Eval::Crashed("boom".to_string())),
+        eval: repl::Outcome::Unit(repl::script::Eval::Crashed("boom".S())),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -471,17 +472,17 @@ fn input_after_a_crash_runs_in_the_new_session() {
 #[test]
 fn a_runtime_error_reset_clears_the_session() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let x = 1".to_string());
+    app.submit_input("let x = 1".S());
     executor.queue(evaluated_let(0, "x"));
     app.poll_results();
     assert_eq!(app.environment().len(), 1);
 
-    app.submit_input("let y = f()".to_string());
+    app.submit_input("let y = f()".S());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
-        eval: repl::Outcome::Unit(repl::script::Eval::RuntimeError("Error: stack overflow".to_string())),
+        eval: repl::Outcome::Unit(repl::script::Eval::RuntimeError("Error: stack overflow".S())),
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
@@ -498,7 +499,7 @@ fn a_runtime_error_reset_clears_the_session() {
 #[test]
 fn engine_readiness_is_reported() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     assert!(!app.engine_is_ready());
 
@@ -514,12 +515,12 @@ fn engine_readiness_is_reported() {
 #[test]
 fn a_dead_engine_is_reported() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let x = 1".to_string());
+    app.submit_input("let x = 1".S());
 
     executor.queue(WorkerResponse::EngineDead {
-        message: "cargo is not installed".to_string(),
+        message: "cargo is not installed".S(),
     });
     app.poll_results();
 
@@ -532,7 +533,7 @@ fn a_dead_engine_is_reported() {
 #[test]
 fn history_scrolls_by_the_page_within_its_bounds() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     // Nothing has been rendered, so there is nowhere to scroll yet.
     app.scroll_history(Scroll::PageUp);
@@ -612,7 +613,7 @@ fn environment_scrolls_from_the_top_within_its_bounds() {
 #[test]
 fn scroll_keys_go_to_the_focused_pane_and_ctrl_to_its_opposite() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     assert_eq!(app.scroll_target(false), Panel::Code);
     assert_eq!(app.scroll_target(true), Panel::Bottom);
@@ -629,7 +630,7 @@ fn scroll_keys_go_to_the_focused_pane_and_ctrl_to_its_opposite() {
 
     // Into multiline mode, with the input focused again.
     app.focus_next();
-    app.submit_input("fun f() {".to_string());
+    app.submit_input("fun f() {".S());
     assert!(app.multiline_mode());
 
     assert_eq!(app.scroll_target(false), Panel::Input);
@@ -640,7 +641,7 @@ fn scroll_keys_go_to_the_focused_pane_and_ctrl_to_its_opposite() {
 #[test]
 fn a_short_history_does_not_scroll() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     app.record_history_view(10, 0);
     app.scroll_history(Scroll::PageUp);
@@ -654,13 +655,13 @@ fn a_short_history_does_not_scroll() {
 #[test]
 fn submitting_returns_to_the_newest_entry() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     app.record_history_view(10, 20);
     app.scroll_history(Scroll::PageUp);
     assert_eq!(app.history_scroll_back(), 9);
 
-    app.submit_input("let x = 1".to_string());
+    app.submit_input("let x = 1".S());
 
     assert_eq!(app.history_scroll_back(), 0);
 }
@@ -675,10 +676,10 @@ fn evaluated(id: u64, eval: repl::script::Eval) -> WorkerResponse {
 #[test]
 fn code_units_are_the_units_and_their_statuses() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
     for input in ["let a = 1", "/help", "let b = c", "a"] {
-        app.submit_input(input.to_string());
+        app.submit_input(input.S());
     }
     app.poll_results();
 
@@ -693,7 +694,7 @@ fn code_units_are_the_units_and_their_statuses() {
         CodeUnit { number: None, source: "a", status: UnitStatus::Waiting, compiled: false, ran: false },
     ]);
 
-    executor.queue(evaluated(2, repl::script::Eval::NotCompiled("no `c`".to_string())));
+    executor.queue(evaluated(2, repl::script::Eval::NotCompiled("no `c`".S())));
     app.poll_results();
     let statuses: Vec<UnitStatus> = app.code_units().iter().map(|unit| unit.status).collect();
     assert_eq!(statuses, vec![UnitStatus::Ran, UnitStatus::NotCompiled, UnitStatus::Waiting]);
@@ -709,12 +710,12 @@ fn code_units_are_the_units_and_their_statuses() {
 #[test]
 fn a_runtime_error_clears_the_code() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let a = 1".to_string());
+    app.submit_input("let a = 1".S());
     executor.queue(evaluated_let(0, "a"));
-    app.submit_input("let b = f()".to_string());
-    executor.queue(evaluated(1, repl::script::Eval::RuntimeError("Error: stack overflow".to_string())));
+    app.submit_input("let b = f()".S());
+    executor.queue(evaluated(1, repl::script::Eval::RuntimeError("Error: stack overflow".S())));
     app.poll_results();
 
     assert!(app.code_units().is_empty());
@@ -725,14 +726,14 @@ fn a_runtime_error_clears_the_code() {
 #[test]
 fn input_selects_the_tab_it_changes() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
     assert_eq!(app.tab(), Tab::Environment);
 
-    app.submit_input("/bogus".to_string());
+    app.submit_input("/bogus".S());
     app.poll_results();
     assert_eq!(app.tab(), Tab::History);
 
-    app.submit_input("let a = 1".to_string());
+    app.submit_input("let a = 1".S());
     app.poll_results();
     assert_eq!(app.tab(), Tab::Environment);
 
@@ -745,7 +746,7 @@ fn input_selects_the_tab_it_changes() {
 
     // A replayed session ends on the tab its last input selects.
     app.replay(vec![repl::SavedInput {
-        input: "/bogus".to_string(),
+        input: "/bogus".S(),
         command: repl::Command::ReplCommand(repl::ReplCommand::Unknown),
     }]);
     assert_eq!(app.tab(), Tab::History);
@@ -761,7 +762,7 @@ fn asking_for_help_adds_its_tab() {
     app.select_tab(Tab::Help);
     assert_eq!(app.tab(), Tab::Environment, "no tab to select yet");
 
-    app.submit_input("/help".to_string());
+    app.submit_input("/help".S());
     assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History, Tab::Help]);
     assert_eq!(app.tab(), Tab::Help);
     assert_eq!(app.focus(), Panel::Bottom);
@@ -811,7 +812,7 @@ fn code_scrolls_back_from_the_newest_unit() {
     app.scroll_code(Scroll::LineDown);
     assert_eq!(app.code_scroll_back(), 11);
 
-    app.submit_input("let x = 1".to_string());
+    app.submit_input("let x = 1".S());
     assert_eq!(app.code_scroll_back(), 0);
 }
 
@@ -824,13 +825,13 @@ fn app_with_units(sources: &[&str]) -> ReplApp<MockExecutor> {
 /// number of units.
 fn app_and_executor_with_units(sources: &[&str]) -> (ReplApp<MockExecutor>, MockExecutor) {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
     for (id, source) in sources.iter().enumerate() {
         // Whole, as a definition over several lines is submitted.
-        let repl::InputParse::Command(command) = repl::parse_input(repl::Input::Multiline(source.to_string())) else {
+        let repl::InputParse::Command(command) = repl::parse_input(repl::Input::Multiline(source.S())) else {
             panic!("{source:?} is a unit");
         };
-        app.replay(vec![repl::SavedInput { input: source.to_string(), command }]);
+        app.replay(vec![repl::SavedInput { input: source.S(), command }]);
         executor.queue(evaluated_let(id as u64, "x"));
     }
     app.poll_results();
@@ -868,15 +869,15 @@ fn the_arrows_move_between_code_units() {
 #[test]
 fn a_reset_loses_the_selection() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
-    app.submit_input("let a = 1".to_string());
+    let mut app = ReplApp::with_executor(executor.C());
+    app.submit_input("let a = 1".S());
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     app.focus_prev();
     assert_eq!(app.selected_unit(), Some(1));
 
-    app.submit_input("/reset".to_string());
-    app.submit_input("let b = 1".to_string());
+    app.submit_input("/reset".S());
+    app.submit_input("let b = 1".S());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Outcome::Reset,
@@ -941,15 +942,15 @@ repl-command
 ----------
 
 /load
-").unwrap();
+").X();
 
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
-    app.set_session_path(fs.clone(), path);
+    let mut app = ReplApp::with_executor(executor.C());
+    app.set_session_path(fs.C(), path);
 
-    app.submit_input("let old = 1".to_string());
+    app.submit_input("let old = 1".S());
     executor.queue(evaluated_let(0, "old"));
-    app.submit_input("/load".to_string());
+    app.submit_input("/load".S());
     app.poll_results();
 
     // The `/load` is the app's, and the saved one is not replayed, or it
@@ -983,10 +984,10 @@ repl-command
 fn load_without_a_saved_session_is_an_error() {
     let fs: datalove_vio::DynFs = std::sync::Arc::new(datalove_vio::MemFs::new());
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
-    app.set_session_path(fs.clone(), std::path::PathBuf::from("/missing.world"));
+    let mut app = ReplApp::with_executor(executor.C());
+    app.set_session_path(fs.C(), std::path::PathBuf::from("/missing.world"));
 
-    app.submit_input("/load".to_string());
+    app.submit_input("/load".S());
 
     assert!(executor.evals().is_empty(), "nothing is sent the engine");
     assert!(matches!(app.history()[0].status, EntryStatus::Error));
@@ -999,13 +1000,13 @@ fn load_without_a_saved_session_is_an_error() {
 #[test]
 fn a_pending_reset_takes_the_code_before_it() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let a = 1".to_string());
+    app.submit_input("let a = 1".S());
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
-    app.submit_input("/reset".to_string());
-    app.submit_input("let b = 2".to_string());
+    app.submit_input("/reset".S());
+    app.submit_input("let b = 2".S());
 
     let units = app.code_units();
     assert_eq!(units, vec![CodeUnit { number: None, source: "let b = 2", status: UnitStatus::Waiting, compiled: false, ran: false }]);
@@ -1019,10 +1020,10 @@ fn a_pending_reset_takes_the_code_before_it() {
 #[test]
 fn a_session_the_history_does_not_hold_is_reported() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
 
-    app.submit_input("let a = 1".to_string());
-    app.submit_input("let b = 2".to_string());
+    app.submit_input("let a = 1".S());
+    app.submit_input("let b = 2".S());
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.session_mismatch_message(), None);
@@ -1032,7 +1033,7 @@ fn a_session_the_history_does_not_hold_is_reported() {
     let WorkerResponse::EvalResult { eval, environment, .. } = evaluated_let(1, "b") else {
         unreachable!();
     };
-    let b = repl::NumberedUnit { number: 2, unit: repl::script::Unit::Fragment("let b = 2".to_string()) };
+    let b = repl::NumberedUnit { number: 2, unit: repl::script::Unit::Fragment("let b = 2".S()) };
     executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![b], step: Vec::new() });
     app.poll_results();
 
@@ -1046,7 +1047,7 @@ fn a_session_the_history_does_not_hold_is_reported() {
 }
 
 fn numbered(number: u32, source: &str) -> repl::NumberedUnit {
-    repl::NumberedUnit { number, unit: repl::script::Unit::Fragment(source.to_string()) }
+    repl::NumberedUnit { number, unit: repl::script::Unit::Fragment(source.S()) }
 }
 
 fn edited(id: u64, reports: Vec<(u32, repl::script::Eval)>, session: Vec<repl::NumberedUnit>) -> WorkerResponse {
@@ -1073,7 +1074,7 @@ fn edits_change_the_code_when_answered() {
     let ran = || repl::script::Eval::Ran(Vec::new());
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a", "let c = 3"]);
 
-    app.submit_input("/edit 1 let a = 2".to_string());
+    app.submit_input("/edit 1 let a = 2".S());
     app.poll_results();
     // Not answered yet, so not shown.
     assert_eq!(statuses(&app)[0], (Some(1), "let a = 1", UnitStatus::Ran));
@@ -1088,11 +1089,11 @@ fn edits_change_the_code_when_answered() {
     ]);
     assert_eq!(app.tab(), Tab::History);
 
-    app.submit_input("/insert before 2 let d = 4".to_string());
+    app.submit_input("/insert before 2 let d = 4".S());
     executor.queue_raw(edited(4, vec![(4, ran()), (2, ran()), (3, ran())],
         vec![numbered(1, "let a = 2"), numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
-    app.submit_input("/delete 1".to_string());
-    executor.queue_raw(edited(5, vec![(2, repl::script::Eval::NotCompiled("no `a`".to_string()))],
+    app.submit_input("/delete 1".S());
+    executor.queue_raw(edited(5, vec![(2, repl::script::Eval::NotCompiled("no `a`".S()))],
         vec![numbered(4, "let d = 4"), numbered(2, "let b = a"), numbered(3, "let c = 3")]));
     app.poll_results();
 
@@ -1104,7 +1105,7 @@ fn edits_change_the_code_when_answered() {
     assert_eq!(app.session_mismatch_message(), None);
 
     // The next unit appended is numbered after the inserted one.
-    app.submit_input("let e = 5".to_string());
+    app.submit_input("let e = 5".S());
     executor.queue(evaluated_let(6, "e"));
     app.poll_results();
     assert_eq!(statuses(&app).last(), Some(&(Some(5), "let e = 5", UnitStatus::Ran)));
@@ -1117,8 +1118,8 @@ fn edits_change_the_code_when_answered() {
 fn an_edit_that_resets_the_session_clears_the_code() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a"]);
 
-    app.submit_input("/edit 1 let a = f()".to_string());
-    executor.queue_raw(edited(2, vec![(1, repl::script::Eval::RuntimeError("Error: stack overflow".to_string()))], Vec::new()));
+    app.submit_input("/edit 1 let a = f()".S());
+    executor.queue_raw(edited(2, vec![(1, repl::script::Eval::RuntimeError("Error: stack overflow".S()))], Vec::new()));
     app.poll_results();
 
     assert!(app.code_units().is_empty());
@@ -1134,7 +1135,7 @@ fn an_edit_that_resets_the_session_clears_the_code() {
 fn a_session_with_different_source_is_reported() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1"]);
 
-    app.submit_input("/edit 1 let a = 2".to_string());
+    app.submit_input("/edit 1 let a = 2".S());
     executor.queue_raw(edited(1, vec![(1, repl::script::Eval::Ran(Vec::new()))], vec![numbered(1, "let a = 3")]));
     app.poll_results();
 
@@ -1202,7 +1203,7 @@ fn the_code_shows_what_the_last_step_did() {
     let (mut app, executor) = app_and_executor_with_units(&["let a = 1", "let b = a", "let c = 3"]);
     assert_eq!(marks(&app), vec![(Some(1), false, false), (Some(2), false, false), (Some(3), true, true)]);
 
-    app.submit_input("/edit 1 let a = 2".to_string());
+    app.submit_input("/edit 1 let a = 2".S());
     let WorkerResponse::EvalResult { id, eval, environment, session, .. } = edited(
         3, vec![(1, repl::script::Eval::Ran(Vec::new())), (2, repl::script::Eval::Ran(Vec::new()))],
         vec![numbered(1, "let a = 2"), numbered(2, "let b = a"), numbered(3, "let c = 3")],
@@ -1217,7 +1218,7 @@ fn the_code_shows_what_the_last_step_did() {
     app.poll_results();
     assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
 
-    app.submit_input("/help".to_string());
+    app.submit_input("/help".S());
     app.poll_results();
     assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
 }
@@ -1228,8 +1229,8 @@ fn the_code_shows_what_the_last_step_did() {
 #[test]
 fn cancelling_multiline_input_takes_two() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
-    app.submit_input("fun f(): int".to_string());
+    let mut app = ReplApp::with_executor(executor.C());
+    app.submit_input("fun f(): int".S());
     app.poll_results();
     assert!(app.multiline_mode());
 
@@ -1251,9 +1252,9 @@ fn cancelling_multiline_input_takes_two() {
 #[test]
 fn an_answer_does_not_end_multiline_input() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
-    app.submit_input("let a = 1".to_string());
-    app.submit_input("fun f(): int".to_string());
+    let mut app = ReplApp::with_executor(executor.C());
+    app.submit_input("let a = 1".S());
+    app.submit_input("fun f(): int".S());
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
 
@@ -1343,14 +1344,14 @@ fn editing_the_selected_unit() {
     app.focus_prev();
     app.move_in_code(Scroll::LineUp);
 
-    let action = app.begin_edit("half typed".to_string());
+    let action = app.begin_edit("half typed".S());
     assert!(matches!(action, UiAction::SetInput { text } if text == "let a = 1"));
     assert_eq!(app.editing(), Some(Editing::Unit(1)));
     assert_eq!(app.focus(), Panel::Input);
     assert!(!app.multiline_mode());
     assert!(app.input_cancels(), "Ctrl+C cancels an edit, single-line too");
 
-    let action = app.submit_input("let a = 5".to_string());
+    let action = app.submit_input("let a = 5".S());
     assert!(matches!(action, UiAction::SetInput { text } if text == "half typed"));
     assert!(matches!(
         last_command(&executor),
@@ -1376,7 +1377,7 @@ fn editing_goes_multiline_as_needed() {
     assert!(matches!(&action, UiAction::SetMultilineInput { lines } if lines.join("\n") == fun));
     assert!(app.multiline_mode());
     let edited = "fun f(): int\n  ret 2\nend fun";
-    assert!(matches!(app.submit_input(edited.to_string()), UiAction::ClearInput));
+    assert!(matches!(app.submit_input(edited.S()), UiAction::ClearInput));
     assert!(matches!(
         last_command(&executor),
         repl::Command::ReplCommand(repl::ReplCommand::Edit { unit: 1, source }) if source.source() == edited
@@ -1387,7 +1388,7 @@ fn editing_goes_multiline_as_needed() {
     assert_eq!(app.focus(), Panel::Code);
     app.move_in_code(Scroll::LineDown);
     app.begin_edit(String::new());
-    let action = app.submit_input("fun g(): int".to_string());
+    let action = app.submit_input("fun g(): int".S());
     assert!(matches!(action, UiAction::SetMultilineInput { .. }));
     assert!(app.multiline_mode());
     assert_eq!(app.editing(), Some(Editing::Unit(2)), "still editing, now over several lines");
@@ -1401,7 +1402,7 @@ fn cancelling_an_edit() {
     app.focus_prev();
     let evals = executor.evals().len();
 
-    app.begin_edit("half typed".to_string());
+    app.begin_edit("half typed".S());
     assert!(matches!(app.cancel_input(), UiAction::None));
     assert!(matches!(app.cancel_input(), UiAction::SetInput { text } if text == "half typed"));
     assert_eq!(app.editing(), None);
@@ -1419,11 +1420,11 @@ fn inserting_before_the_selected_unit() {
     app.focus_prev();
     assert_eq!(app.selected_unit(), Some(2));
 
-    assert!(matches!(app.begin_insert("half typed".to_string()), UiAction::ClearInput));
+    assert!(matches!(app.begin_insert("half typed".S()), UiAction::ClearInput));
     assert_eq!(app.editing(), Some(Editing::Before(2)));
     assert_eq!(app.focus(), Panel::Input);
 
-    let action = app.submit_input("x".to_string());
+    let action = app.submit_input("x".S());
     assert!(matches!(action, UiAction::SetInput { text } if text == "half typed"));
     assert!(matches!(
         last_command(&executor),
@@ -1445,13 +1446,13 @@ fn undo_and_redo_show_the_history() {
     assert_eq!(app.tab(), Tab::Environment);
     let entries = app.history().len();
 
-    app.submit_input("/undo".to_string());
+    app.submit_input("/undo".S());
     assert_eq!(app.tab(), Tab::History);
     assert_eq!(app.history().len(), entries);
     assert!(app.history()[0].undone);
 
     app.select_tab(Tab::Environment);
-    app.submit_input("/redo".to_string());
+    app.submit_input("/redo".S());
     assert_eq!(app.tab(), Tab::History);
 }
 
@@ -1459,8 +1460,8 @@ fn detail_of(unit: u32) -> repl::UnitDetail {
     repl::UnitDetail {
         unit,
         diagnostics: String::new(),
-        bindings: vec![("x".to_string(), Some("1".to_string()))],
-        provides: vec!["x".to_string()],
+        bindings: vec![("x".S(), Some("1".S()))],
+        provides: vec!["x".S()],
         reads: Vec::new(),
         takes: Vec::new(),
         overwrites: Vec::new(),
@@ -1484,16 +1485,16 @@ fn described(id: u64, unit: u32) -> WorkerResponse {
 #[test]
 fn the_detail_tab_is_there_while_there_are_units() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
+    let mut app = ReplApp::with_executor(executor.C());
     assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History]);
 
-    app.submit_input("let a = 1".to_string());
+    app.submit_input("let a = 1".S());
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History, Tab::Detail]);
     app.select_tab(Tab::Detail);
 
-    app.submit_input("/reset".to_string());
+    app.submit_input("/reset".S());
     executor.queue(WorkerResponse::EvalResult {
         id: 1,
         eval: repl::Outcome::Reset,
@@ -1511,19 +1512,19 @@ fn the_detail_tab_is_there_while_there_are_units() {
 #[test]
 fn a_broken_unit_shows_its_detail() {
     let executor = MockExecutor::default();
-    let mut app = ReplApp::with_executor(executor.clone());
-    app.submit_input("let a = 1".to_string());
+    let mut app = ReplApp::with_executor(executor.C());
+    app.submit_input("let a = 1".S());
     executor.queue(evaluated_let(0, "a"));
     app.poll_results();
     assert_eq!(app.tab(), Tab::Environment);
 
     for (id, eval) in [
-        (1, repl::script::Eval::NotCompiled("no `c`".to_string())),
-        (2, repl::script::Eval::ReturnedEarly("none".to_string())),
+        (1, repl::script::Eval::NotCompiled("no `c`".S())),
+        (2, repl::script::Eval::ReturnedEarly("none".S())),
         (3, repl::script::Eval::Blocked { on: vec![2] }),
     ] {
         app.select_tab(Tab::History);
-        app.submit_input("let b = c".to_string());
+        app.submit_input("let b = c".S());
         executor.queue(evaluated(id, eval));
         app.poll_results();
         assert_eq!(app.tab(), Tab::Detail, "entry {id}");
@@ -1553,6 +1554,6 @@ fn the_detail_is_of_the_selected_unit() {
     app.poll_results();
     assert_eq!(executor.described().last().map(|(_, unit)| *unit), Some(1));
     // Asking takes none of the entries' ids.
-    app.submit_input("let c = 3".to_string());
+    app.submit_input("let c = 3".S());
     assert_eq!(executor.evals(), vec![0, 1, 2]);
 }

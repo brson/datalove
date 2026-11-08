@@ -1,5 +1,6 @@
 //! Map indexing instruction compilation.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, BlockArg, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -38,7 +39,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<MapSetup, CraneliftError> {
         let map_ty = self.get_operand_type(map)?;
         let (key_ty, value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            IrType::Map(k, v) => (k.as_ref().C(), v.as_ref().C()),
             _ => return Err(CraneliftError::Codegen(format!(
                 "{} on non-map type: {:?}", op_name, map_ty
             ))),

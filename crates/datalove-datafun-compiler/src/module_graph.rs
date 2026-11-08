@@ -115,8 +115,8 @@ fn generic_natives<'db>(
             .map(|(i, _)| i as u32)
             .collect();
         found.push((native.name, NativeGenerics {
-            type_params: native.type_params.clone(),
-            type_bounds: native.type_bounds.clone(),
+            type_params: native.type_params.C(),
+            type_bounds: native.type_bounds.C(),
             undetermined,
         }));
     }
@@ -156,7 +156,7 @@ fn build_resolved_riders_from_sources<'db>(
             if let Some(interface) = rider_interfaces.get(require.name.as_str(db)) {
                 result.entry(module_id)
                     .or_default()
-                    .push((require.name, interface.clone()));
+                    .push((require.name, interface.C()));
             }
         }
     }
@@ -194,7 +194,7 @@ fn rider_interfaces<'db>(
     for (name, source) in rider_sources.sources(db) {
         let parse_result = datalove_datafun_parser::parse_rider_interface(db, *source);
         let collected = check_rider_interface(db, *source);
-        let rider_name = InternedText::new(db, name.clone());
+        let rider_name = InternedText::new(db, name.C());
         let rider_path = datalove_datafun_common::rider_module_path(name);
         let module_id = ModuleId::new(db, rider_path);
         let generic_functions = generic_natives(
@@ -210,7 +210,7 @@ fn rider_interfaces<'db>(
                 (*func_name, native_stub(db, module_id, *func_name, *func_type, &generic_functions))
             })
             .collect();
-        interfaces.insert(name.clone(), RiderInterface {
+        interfaces.insert(name.C(), RiderInterface {
             name: rider_name,
             module_id,
             functions: collected.functions,
@@ -282,7 +282,7 @@ fn native_stub<'db>(
 
     let (type_params, type_bounds) = generic_functions.iter()
         .find(|(n, _)| *n == name)
-        .map(|(_, g)| (g.type_params.clone(), g.type_bounds.clone()))
+        .map(|(_, g)| (g.type_params.C(), g.type_bounds.C()))
         .unwrap_or_default();
 
     FunHead {
@@ -317,8 +317,8 @@ mod tests {
             // callback lives on that shared `Zalsa`, so a clone's queries are
             // logged to the same vec, whichever thread runs them.
             Self {
-                storage: self.storage.clone(),
-                events: self.events.clone(),
+                storage: self.storage.C(),
+                events: self.events.C(),
             }
         }
     }
@@ -326,10 +326,10 @@ mod tests {
     impl LoggingDatabase {
         fn new() -> Self {
             let events = Arc::new(Mutex::new(Vec::new()));
-            let events_clone = events.clone();
+            let events_clone = events.C();
             Self {
                 storage: salsa::Storage::new(Some(Box::new(move |event| {
-                    events_clone.lock().unwrap().push(event);
+                    events_clone.lock().X().push(event);
                 }))),
                 events,
             }
@@ -339,7 +339,7 @@ mod tests {
         fn executed_queries(&self) -> Vec<String> {
             self.events
                 .lock()
-                .unwrap()
+                .X()
                 .iter()
                 .filter_map(|event| {
                     if let salsa::EventKind::WillExecute { database_key } = &event.kind {
@@ -353,13 +353,13 @@ mod tests {
 
         /// Clear logged events.
         fn clear_events(&self) {
-            self.events.lock().unwrap().clear();
+            self.events.lock().X().clear();
         }
     }
 
     impl DbClone for LoggingDatabase {
         fn dyn_clone(&self) -> Box<dyn DbClone + Send> {
-            Box::new(self.clone())
+            Box::new(self.C())
         }
 
         fn as_salsa_db(&self) -> &dyn salsa::Database {
@@ -374,8 +374,8 @@ mod tests {
         let mut builder = ModuleGraphBuilder::new(db);
         let mut ids = Vec::new();
         for (path, source) in sources {
-            let source = bct::input::Source::new(db, (*source).to_string());
-            let id = builder.add_module((*path).to_string(), source);
+            let source = bct::input::Source::new(db, (*source).S());
+            let id = builder.add_module((*path).S(), source);
             ids.push(id);
         }
         (builder.build(), ids)
@@ -390,8 +390,8 @@ mod tests {
         let mut builder = ModuleGraphBuilder::new(db);
         let mut ids = Vec::new();
         for (path, source) in sources {
-            let source = bct::input::Source::new(db, (*source).to_string());
-            let id = builder.add_module((*path).to_string(), source);
+            let source = bct::input::Source::new(db, (*source).S());
+            let id = builder.add_module((*path).S(), source);
             ids.push(id);
         }
         (builder.build(), ids)
@@ -403,7 +403,7 @@ mod tests {
 
         // First parse.
         let (graph, _ids) = build_graph_logging(&db, &[("a", "let x = 1")]);
-        let _parsed1 = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
+        let _parsed1 = parse_module_graph(&db, graph.C(), LookupMap::new(), Vec::new());
 
         let first_run_queries = db.executed_queries();
         assert!(!first_run_queries.is_empty(), "first run should execute queries");
@@ -472,8 +472,8 @@ mod tests {
             ("a", "require module /test/b\nlet x = b.mid()"),
         ]);
         let mut requires = LookupMap::new();
-        requires.insert(ids[1], vec![("c".to_string(), ids[0])]);
-        requires.insert(ids[2], vec![("b".to_string(), ids[1])]);
+        requires.insert(ids[1], vec![("c".S(), ids[0])]);
+        requires.insert(ids[2], vec![("b".S(), ids[1])]);
 
         enable_query_logging();
         let _parsed = parse_module_graph(&db, graph, requires, Vec::new());
@@ -483,9 +483,9 @@ mod tests {
         // All 3 modules should have been parsed.
         let parsed_modules = get_executed_modules(&log, "parse");
         assert_eq!(parsed_modules.len(), 3, "should parse 3 modules");
-        assert!(parsed_modules.contains(&"c".to_string()), "should parse c");
-        assert!(parsed_modules.contains(&"b".to_string()), "should parse b");
-        assert!(parsed_modules.contains(&"a".to_string()), "should parse a");
+        assert!(parsed_modules.contains(&"c".S()), "should parse c");
+        assert!(parsed_modules.contains(&"b".S()), "should parse b");
+        assert!(parsed_modules.contains(&"a".S()), "should parse a");
     }
 
     #[test]
@@ -496,7 +496,7 @@ mod tests {
         let (graph, _ids) = build_graph(&db, &[("a", "let x = 1")]);
 
         enable_query_logging();
-        let _parsed1 = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
+        let _parsed1 = parse_module_graph(&db, graph.C(), LookupMap::new(), Vec::new());
         parse_every_module(&db, graph);
         let log1 = disable_query_logging();
 
@@ -520,8 +520,8 @@ mod tests {
         let mut db = Database::default();
 
         // Build A -> B chain: create modules ONCE, keep Source objects for mutation.
-        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
-        let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".S());
+        let source_a = bct::input::Source::new(&db, "let x = 1".S());
 
         // The graph is interned, so building it again from the same sources
         // gives back the same graph. Building it per phase rather than holding
@@ -530,17 +530,17 @@ mod tests {
             -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
-            let id_b = builder.add_module("b".to_string(), source_b);
-            let id_a = builder.add_module("a".to_string(), source_a);
+            let id_b = builder.add_module("b".S(), source_b);
+            let id_a = builder.add_module("a".S(), source_a);
             let mut requires = LookupMap::new();
-            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            requires.insert(id_a, vec![("b".S(), id_b)]);
             (builder.build(), id_a, id_b, requires)
         }
 
         // First run: both modules should be parsed.
         let (graph, _, _, requires) = build(&db, source_a, source_b);
         enable_query_logging();
-        parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        parse_module_graph(&db, graph.C(), requires.C(), Vec::new());
         parse_every_module(&db, graph);
         let log1 = disable_query_logging();
 
@@ -549,7 +549,7 @@ mod tests {
         assert_eq!(first_parsed.len(), 2, "first run should parse both modules");
 
         // Mutate only B's source text.
-        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
+        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".S());
 
         // Second run: only B should be re-parsed, A should be cached.
         let (graph, _, _, requires) = build(&db, source_a, source_b);
@@ -562,8 +562,8 @@ mod tests {
         eprintln!("Second run parsed: {:?}", second_parsed);
         // Per-module caching works! Only B should re-parse.
         assert_eq!(second_parsed.len(), 1, "only changed module should re-parse");
-        assert!(second_parsed.contains(&"b".to_string()), "b should re-parse");
-        assert!(!second_parsed.contains(&"a".to_string()), "a should be cached");
+        assert!(second_parsed.contains(&"b".S()), "b should re-parse");
+        assert!(!second_parsed.contains(&"a".S()), "a should be cached");
     }
 
     #[test]
@@ -572,13 +572,13 @@ mod tests {
         let mut db = Database::default();
 
         // Create a single module.
-        let source = bct::input::Source::new(&db, "let x = 1".to_string());
+        let source = bct::input::Source::new(&db, "let x = 1".S());
         // Interned, so this gives the same module every time it is called.
         fn module<'db>(db: &'db Database, source: bct::input::Source)
             -> bct::module_graph::Module<'db>
         {
             bct::module_graph::Module::new(
-                db, bct::module_graph::ModuleId::new(db, "test".to_string()), source,
+                db, bct::module_graph::ModuleId::new(db, "test".S()), source,
             )
         }
 
@@ -599,7 +599,7 @@ mod tests {
         assert_eq!(second_parsed.len(), 0, "second call should be cached");
 
         // Change source text.
-        source.set_text(&mut db).to("let x = 2".to_string());
+        source.set_text(&mut db).to("let x = 2".S());
 
         // Third call: should re-execute because source changed.
         enable_query_logging();
@@ -616,14 +616,14 @@ mod tests {
         let mut db = Database::default();
 
         // Create two modules.
-        let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
-        let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
+        let source_a = bct::input::Source::new(&db, "let x = 1".S());
+        let source_b = bct::input::Source::new(&db, "let y = 2".S());
         // Interned, so these give the same modules however often they run.
         fn module<'db>(db: &'db Database, path: &str, source: bct::input::Source)
             -> bct::module_graph::Module<'db>
         {
             bct::module_graph::Module::new(
-                db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+                db, bct::module_graph::ModuleId::new(db, path.S()), source,
             )
         }
 
@@ -637,7 +637,7 @@ mod tests {
         assert_eq!(first_parsed.len(), 2);
 
         // Change only B.
-        source_b.set_text(&mut db).to("let y = 999".to_string());
+        source_b.set_text(&mut db).to("let y = 999".S());
 
         // Parse both again.
         enable_query_logging();
@@ -648,7 +648,7 @@ mod tests {
         eprintln!("Two modules after B change: {:?}", second_parsed);
         // Per-module caching works! Only B re-parses.
         assert_eq!(second_parsed.len(), 1, "only B should re-parse");
-        assert!(second_parsed.contains(&"b".to_string()), "b should re-parse");
+        assert!(second_parsed.contains(&"b".S()), "b should re-parse");
     }
 
     #[test]
@@ -656,14 +656,14 @@ mod tests {
         // Verify that calling parse_module twice with no changes is cached.
         let db = Database::default();
 
-        let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
-        let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
+        let source_a = bct::input::Source::new(&db, "let x = 1".S());
+        let source_b = bct::input::Source::new(&db, "let y = 2".S());
         // Interned, so these give the same modules however often they run.
         fn module<'db>(db: &'db Database, path: &str, source: bct::input::Source)
             -> bct::module_graph::Module<'db>
         {
             bct::module_graph::Module::new(
-                db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+                db, bct::module_graph::ModuleId::new(db, path.S()), source,
             )
         }
 
@@ -686,14 +686,14 @@ mod tests {
         // Use LoggingDatabase to see what Salsa events fire when one input changes.
         let mut db = LoggingDatabase::new();
 
-        let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
-        let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
+        let source_a = bct::input::Source::new(&db, "let x = 1".S());
+        let source_b = bct::input::Source::new(&db, "let y = 2".S());
         // Interned, so these give the same modules however often they run.
         fn module<'db>(db: &'db LoggingDatabase, path: &str, source: bct::input::Source)
             -> bct::module_graph::Module<'db>
         {
             bct::module_graph::Module::new(
-                db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+                db, bct::module_graph::ModuleId::new(db, path.S()), source,
             )
         }
 
@@ -704,7 +704,7 @@ mod tests {
         db.clear_events();
 
         // Change only B.
-        source_b.set_text(&mut db).to("let y = 999".to_string());
+        source_b.set_text(&mut db).to("let y = 999".S());
 
         // Parse both again.
         enable_query_logging();
@@ -725,15 +725,15 @@ mod tests {
         // DatafunSpans is now a plain struct (not salsa interned/tracked).
         let mut db = Database::default();
 
-        let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
-        let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
+        let source_a = bct::input::Source::new(&db, "let x = 1".S());
+        let source_b = bct::input::Source::new(&db, "let y = 2".S());
 
         // Take the keys as owned data: an ExprKey borrows the database, so it
         // cannot be carried across the edit below, which is the point of it.
         let owned_keys = |spans: &datalove_datafun_ast::spans::DatafunSpans<'_>, db: &Database| {
             spans.entries.iter()
                 .map(|e| (
-                    e.expr_key.fn_name.map(|n| n.as_str(db).to_string()),
+                    e.expr_key.fn_name.map(|n| n.as_str(db).S()),
                     e.expr_key.local_index,
                 ))
                 .collect::<Vec<_>>()
@@ -746,7 +746,7 @@ mod tests {
         };
 
         // Change only B.
-        source_b.set_text(&mut db).to("let y = 999".to_string());
+        source_b.set_text(&mut db).to("let y = 999".S());
 
         let entries_a2 = {
             let spans_a2 = datalove_datafun_parser::datafun_spans(&db, source_a);
@@ -788,7 +788,7 @@ mod tests {
             ("a", "fun main(): i32\n  ret 2\nend fun"),
         ]);
         let mut requires = LookupMap::new();
-        requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
+        requires.insert(ids[1], vec![("b".S(), ids[0])]);
 
         let parsed = parse_module_graph(&db, graph, requires, Vec::new());
 
@@ -799,8 +799,8 @@ mod tests {
         let typechecked = get_executed_modules(&log, "typecheck");
         eprintln!("Typechecked modules: {:?}", typechecked);
         assert_eq!(typechecked.len(), 2, "should typecheck both modules");
-        assert!(typechecked.contains(&"a".to_string()), "should typecheck a");
-        assert!(typechecked.contains(&"b".to_string()), "should typecheck b");
+        assert!(typechecked.contains(&"a".S()), "should typecheck a");
+        assert!(typechecked.contains(&"b".S()), "should typecheck b");
     }
 
     #[test]
@@ -809,8 +809,8 @@ mod tests {
         let mut db = Database::default();
 
         // Create modules with Sources we can mutate.
-        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
-        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".S());
+        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".S());
 
         // The graph is interned, so building it again from the same sources
         // gives back the same graph, which is what lets each phase build its
@@ -819,16 +819,16 @@ mod tests {
             -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
-            let id_b = builder.add_module("b".to_string(), source_b);
-            let id_a = builder.add_module("a".to_string(), source_a);
+            let id_b = builder.add_module("b".S(), source_b);
+            let id_a = builder.add_module("a".S(), source_a);
             let mut requires = LookupMap::new();
-            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            requires.insert(id_a, vec![("b".S(), id_b)]);
             (builder.build(), id_a, id_b, requires)
         }
 
         // First run: both modules should typecheck.
         let (graph, _, _, requires) = build(&db, source_a, source_b);
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        let parsed1 = parse_module_graph(&db, graph.C(), requires.C(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
@@ -838,7 +838,7 @@ mod tests {
         assert_eq!(first_tc.len(), 2, "first run should typecheck both modules");
 
         // Mutate only B's source.
-        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
+        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".S());
 
         // Second run: only B should re-typecheck.
         let (graph, _, _, requires) = build(&db, source_a, source_b);
@@ -852,8 +852,8 @@ mod tests {
 
         // Per-module caching: only B should re-typecheck.
         assert_eq!(second_tc.len(), 1, "only changed module should re-typecheck");
-        assert!(second_tc.contains(&"b".to_string()), "b should re-typecheck");
-        assert!(!second_tc.contains(&"a".to_string()), "a should be cached");
+        assert!(second_tc.contains(&"b".S()), "b should re-typecheck");
+        assert!(!second_tc.contains(&"a".S()), "a should be cached");
     }
 
     #[test]
@@ -861,13 +861,13 @@ mod tests {
         // Verify no re-typecheck when nothing changes.
         let db = Database::default();
 
-        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 1\nend fun".S());
         let mut builder = ModuleGraphBuilder::new(&db);
-        let _ = builder.add_module("a".to_string(), source_a);
+        let _ = builder.add_module("a".S(), source_a);
         let graph = builder.build();
 
         // First run.
-        let parsed1 = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
+        let parsed1 = parse_module_graph(&db, graph.C(), LookupMap::new(), Vec::new());
         let _result1 = resolve_and_typecheck(&db, parsed1);
 
         // Second run with no changes.
@@ -887,9 +887,9 @@ mod tests {
         let mut db = Database::default();
 
         // B exports a function, A imports it.
-        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".S());
         let source_a = bct::input::Source::new(&db,
-            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun".to_string());
+            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun".S());
 
         // Interned, so each phase can build its own rather than one being held
         // across the edit; they are the same graph.
@@ -897,16 +897,16 @@ mod tests {
             -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
-            let id_b = builder.add_module("test/b".to_string(), source_b);
-            let id_a = builder.add_module("test/a".to_string(), source_a);
+            let id_b = builder.add_module("test/b".S(), source_b);
+            let id_a = builder.add_module("test/a".S(), source_a);
             let mut requires = LookupMap::new();
-            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            requires.insert(id_a, vec![("b".S(), id_b)]);
             (builder.build(), id_a, id_b, requires)
         }
 
         // First run.
         let (graph, _, _, requires) = build(&db, source_a, source_b);
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        let parsed1 = parse_module_graph(&db, graph.C(), requires.C(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
@@ -917,7 +917,7 @@ mod tests {
 
         // Change only A (the importing module).
         source_a.set_text(&mut db).to(
-            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret 42\nend fun".to_string());
+            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret 42\nend fun".S());
 
         // Second run: only A should re-typecheck.
         let (graph, _, _, requires) = build(&db, source_a, source_b);
@@ -929,7 +929,7 @@ mod tests {
         let second_tc = get_executed_modules(&log2, "typecheck");
         eprintln!("With imports, second run after A change: {:?}", second_tc);
         assert_eq!(second_tc.len(), 1, "only A should re-typecheck");
-        assert!(second_tc.contains(&"test/a".to_string()), "a should re-typecheck");
+        assert!(second_tc.contains(&"test/a".S()), "a should re-typecheck");
     }
 
     #[test]
@@ -938,20 +938,20 @@ mod tests {
         let db = Database::default();
 
         // B exports a function, A imports it.
-        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".S());
         let source_a = bct::input::Source::new(&db,
-            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun".to_string());
+            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun".S());
 
         let mut builder = ModuleGraphBuilder::new(&db);
-        let id_b = builder.add_module("test/b".to_string(), source_b);
-        let id_a = builder.add_module("test/a".to_string(), source_a);
+        let id_b = builder.add_module("test/b".S(), source_b);
+        let id_a = builder.add_module("test/a".S(), source_a);
         let graph = builder.build();
 
         let mut requires = LookupMap::new();
-        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+        requires.insert(id_a, vec![("b".S(), id_b)]);
 
         // First run: both modules should have imports resolved.
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        let parsed1 = parse_module_graph(&db, graph.C(), requires.C(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
@@ -985,10 +985,10 @@ mod tests {
             ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
         let mut requires = LookupMap::new();
-        requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
+        requires.insert(ids[1], vec![("b".S(), ids[0])]);
 
         // First: parallel typecheck populates cache (including import resolution).
-        let parsed = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        let parsed = parse_module_graph(&db, graph.C(), requires.C(), Vec::new());
         let _result1 = resolve_and_typecheck_parallel(&db, parsed);
 
         // Clear events after parallel phase.
@@ -1025,8 +1025,8 @@ mod tests {
 
         // Parse on a clone, with the original's log watching.
         db.clear_events();
-        let db_clone = db.clone();
-        let _parsed = parse_module_graph(&db_clone, graph.clone(), LookupMap::new(), Vec::new());
+        let db_clone = db.C();
+        let _parsed = parse_module_graph(&db_clone, graph.C(), LookupMap::new(), Vec::new());
         assert!(
             !db.executed_queries().is_empty(),
             "a clone's queries have to reach the log the original reads",
@@ -1056,7 +1056,7 @@ mod tests {
         // Create clones and use them in parallel.
         let modules: Vec<_> = graph.iter_modules(&db).collect();
         let work: Vec<_> = modules.iter()
-            .map(|&module| (db.clone(), module))
+            .map(|&module| (db.C(), module))
             .collect();
 
         work.into_par_iter()
@@ -1083,7 +1083,7 @@ mod tests {
         ]);
 
         // First parallel parse populates cache.
-        let _parsed1 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph.clone()));
+        let _parsed1 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.C(), LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph.C()));
 
         // Record which queries executed during first parse.
         let first_executed = db.executed_queries();
@@ -1097,7 +1097,7 @@ mod tests {
         db.clear_events();
 
         // Second parse should be fully memoized.
-        let _parsed2 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph.clone()));
+        let _parsed2 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.C(), LookupMap::new(), Vec::new(), ModuleIdTable::numbering(&db, Vec::<String>::new(), graph.C()));
 
         let second_executed = db.executed_queries();
         // Filter to just parse_module_full queries (not input lookups).
@@ -1153,7 +1153,7 @@ mod tests {
         ]);
 
         // First: parallel typecheck populates cache.
-        let parsed = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
+        let parsed = parse_module_graph(&db, graph.C(), LookupMap::new(), Vec::new());
         let _result1 = resolve_and_typecheck_parallel(&db, parsed);
 
         // Clear events after parallel phase.
@@ -1189,7 +1189,7 @@ mod tests {
             ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
         let mut requires = LookupMap::new();
-        requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
+        requires.insert(ids[1], vec![("b".S(), ids[0])]);
 
         let parsed = parse_module_graph(&db, graph, requires, Vec::new());
 
@@ -1203,7 +1203,7 @@ mod tests {
             ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
         let mut requires2 = LookupMap::new();
-        requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
+        requires2.insert(ids2[1], vec![("b".S(), ids2[0])]);
         let parsed2 = parse_module_graph(&db2, graph2, requires2, Vec::new());
         let result_par = resolve_and_typecheck_with_mode(&db2, parsed2, TypecheckParallelMode::Parallel);
 
@@ -1229,7 +1229,7 @@ mod tests {
                         .map(|e| format!("{:?}", e))
                         .collect();
                     (
-                        module_id.path(db).clone(),
+                        module_id.path(db).C(),
                         exports,
                         single.expr_types(db).len(),
                         errors,
@@ -1273,8 +1273,8 @@ mod tests {
         let mut db = Database::recording(&recorder);
 
         // Create modules with mutable sources.
-        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
-        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".S());
+        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".S());
 
         // Interned, so each phase builds the same graph rather than one being
         // held across the edit.
@@ -1282,17 +1282,17 @@ mod tests {
             -> (ModuleGraph<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
-            let id_b = builder.add_module("b".to_string(), source_b);
-            let id_a = builder.add_module("a".to_string(), source_a);
+            let id_b = builder.add_module("b".S(), source_b);
+            let id_a = builder.add_module("a".S(), source_a);
             let mut requires = LookupMap::new();
-            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            requires.insert(id_a, vec![("b".S(), id_b)]);
             (builder.build(), requires)
         }
 
         // First run: both modules are cold, so both typecheck. Without this the
         // assertion below would pass on a run that typechecked nothing.
         let (graph, requires) = build(&db, source_a, source_b);
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        let parsed1 = parse_module_graph(&db, graph.C(), requires.C(), Vec::new());
         recorder.clear();
         let _result1 = resolve_and_typecheck_parallel(&db, parsed1);
         assert_eq!(
@@ -1301,7 +1301,7 @@ mod tests {
         );
 
         // Mutate only B's source.
-        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
+        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".S());
 
         let (graph, requires) = build(&db, source_a, source_b);
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());

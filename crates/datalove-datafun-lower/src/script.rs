@@ -10,6 +10,7 @@
 //! When a script contains function definitions, they are lowered via
 //! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
+use rmx::prelude::*;
 use std::sync::Arc;
 use bct::lookup::{LookupMap, LookupSet};
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
@@ -122,7 +123,7 @@ pub fn lower_script_fragment_raw<'db>(
         // This must happen before lowering any function bodies.
         for stmt in stmts {
             if let Statement::Fun(fun_stmt) = stmt {
-                let func_name = fun_stmt.name().text(db).to_string();
+                let func_name = fun_stmt.name().text(db).S();
                 let param_count = fun_stmt.params().len();
                 ctx.pre_register_func(&func_name, param_count);
             }
@@ -232,13 +233,13 @@ pub fn lower_script_functions<'db>(
     // scope for later units. Seeded before any body is lowered so that the
     // first one may name a const declared after it.
     for (name, (ir_type, value)) in script_consts.iter_unordered() {
-        ctx.add_const(name.clone(), ir_type.clone(), value.clone());
+        ctx.add_const(name.C(), ir_type.C(), value.C());
     }
 
     // Pre-register all functions to enable forward references (mutual recursion).
     for stmt in stmts {
         if let Statement::Fun(fun_stmt) = stmt {
-            let func_name = fun_stmt.name().text(db).to_string();
+            let func_name = fun_stmt.name().text(db).S();
             let param_count = fun_stmt.params().len();
             ctx.pre_register_func(&func_name, param_count);
         }
@@ -255,13 +256,13 @@ pub fn lower_script_functions<'db>(
             // Look up pre-computed analysis.
             let analysis = func_analyses.get(&fun_stmt.key())
                 .expect("function analysis not found")
-                .clone();
+                .C();
 
-            let func_name = fun_stmt.name().text(db).to_string();
+            let func_name = fun_stmt.name().text(db).S();
             let param_count = fun_stmt.params().len();
             let func_id = ctx.define_func(&func_name, param_count);
 
-            func_name_to_id.insert(func_name.clone(), func_id);
+            func_name_to_id.insert(func_name.C(), func_id);
             if only.is_some_and(|only| !only.contains(&func_name)) {
                 continue;
             }
@@ -369,7 +370,7 @@ fn shown_binding<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<String>
     }
     let name = place.root.text(ctx.db);
     match ctx.lookup_var(name) {
-        Some(Operand::ExternalValue { .. }) | Some(Operand::ExternalSlot { .. }) => Some(name.to_string()),
+        Some(Operand::ExternalValue { .. }) | Some(Operand::ExternalSlot { .. }) => Some(name.S()),
         _ => None,
     }
 }
@@ -426,7 +427,7 @@ fn lower_statement_for_script<'db>(
         Statement::Set(set_stmt) => {
             // No export needed for assignment.
             let place = &set_stmt.target;
-            let root_name_str = place.root.text(ctx.db).to_string();
+            let root_name_str = place.root.text(ctx.db).S();
 
             if place.steps.is_empty() {
                 // Simple name assignment.
@@ -502,7 +503,7 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Fun(fun_stmt) => {
-            let func_name = fun_stmt.name().text(ctx.db).to_string();
+            let func_name = fun_stmt.name().text(ctx.db).S();
 
             // If this function was already lowered, just export it (body already in ctx.functions).
             if already_lowered_funcs.contains(&func_name) {
@@ -519,7 +520,7 @@ fn lower_statement_for_script<'db>(
             // Look up pre-computed analysis.
             let analysis = func_analyses.get(&fun_stmt.key())
                 .expect("function analysis not found - caller must run analyze_script_functions first")
-                .clone();
+                .C();
 
             // Define the function in the symbol table first (allows recursion).
             let param_count = fun_stmt.params().len();
@@ -613,13 +614,13 @@ fn lower_statement_for_script<'db>(
         Statement::Const(const_stmt) => {
             // Const bindings are lowered as let bindings.
             // The const inlining pass runs later to replace with literal values.
-            let name = const_stmt.name.text(ctx.db).to_string();
+            let name = const_stmt.name.text(ctx.db).S();
             let init_expr = const_stmt.value;
             let value_id = lower_expression(ctx, ctx.expr(init_expr))?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
             ctx.record_binding_operand(operand);
-            ctx.exports.push((name.clone(), ExportBinding::Value(value_id)));
+            ctx.exports.push((name.C(), ExportBinding::Value(value_id)));
             ctx.body.const_values.push((name, value_id));
             Ok(())
         }

@@ -12,6 +12,7 @@
 //!
 //! This separation allows lowering to be independent of const evaluation.
 
+use rmx::prelude::*;
 use bct::lookup::LookupMap;
 use std::sync::Arc;
 use datalove_datafun_ir::{
@@ -39,7 +40,7 @@ pub fn inline_script_consts(
     let mut value_to_const: LookupMap<ValueId, Arc<ConstValue>> = LookupMap::default();
     for (name, value_id) in &unit.const_values {
         if let Some(const_value) = const_values.get(name) {
-            value_to_const.insert(*value_id, const_value.clone());
+            value_to_const.insert(*value_id, const_value.C());
         }
     }
 
@@ -78,7 +79,7 @@ pub fn inline_function_consts(
     let mut value_to_const: LookupMap<ValueId, Arc<ConstValue>> = LookupMap::default();
     for (name, value_id) in &func.const_values {
         if let Some(const_value) = const_values.get(name) {
-            value_to_const.insert(*value_id, const_value.clone());
+            value_to_const.insert(*value_id, const_value.C());
         }
     }
 
@@ -122,7 +123,7 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &LookupMap<ValueId, 
                 // Build replacement instructions.
                 let mut new_instrs = vec![Instruction::Const {
                     dest,
-                    value: (**const_value).clone(),
+                    value: (**const_value).C(),
                 }];
 
                 // Special handling for UnwrapOption: also define is_some = true.
@@ -187,12 +188,12 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &LookupMap<ValueId, 
                 block.terminator = if cond_value {
                     Terminator::Goto {
                         target: *then_block,
-                        args: then_args.clone(),
+                        args: then_args.C(),
                     }
                 } else {
                     Terminator::Goto {
                         target: *else_block,
-                        args: else_args.clone(),
+                        args: else_args.C(),
                     }
                 };
             }
@@ -240,7 +241,7 @@ pub fn inline_module_functions(
         // inlined or not, and skipping them leaves instructions behind that
         // every lowering fixture expects to be gone.
         let func = std::sync::Arc::make_mut(func);
-        let func_name = func.name.clone();
+        let func_name = func.name.C();
         inline_module_function_consts(func, const_values, &func_name);
     }
 }
@@ -260,7 +261,7 @@ fn inline_module_function_consts(
         // Look up with qualified name: "func_name::const_name"
         let qualified_name = format!("{}::{}", func_name, name);
         if let Some(const_value) = const_values.get(&qualified_name) {
-            value_to_const.insert(*value_id, const_value.clone());
+            value_to_const.insert(*value_id, const_value.C());
         }
     }
 
@@ -316,21 +317,21 @@ mod tests {
             value_types: vec![IrType::I32, IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-            const_values: vec![("X".to_string(), ValueId(2))],
+            const_values: vec![("X".S(), ValueId(2))],
             symbols: datalove_datafun_ir::SymbolTable::new(),
             context: CodeUnitContext::Script(ScriptContext {
                 unit_end_values: vec![],
                 unit_end_slots: vec![],
                 result: None,
                 result_name: None,
-                exports: vec![("X".to_string(), ExportBinding::Value(ValueId(2)))],
+                exports: vec![("X".S(), ExportBinding::Value(ValueId(2)))],
                 unit: None,
             }),
             nested_units: vec![],
         };
 
         let mut const_values = LookupMap::default();
-        const_values.insert("X".to_string(), Arc::new(ConstValue::I32(3)));
+        const_values.insert("X".S(), Arc::new(ConstValue::I32(3)));
 
         let result = inline_script_consts(unit, &const_values, &LookupMap::default());
 
@@ -376,21 +377,21 @@ mod tests {
             value_types: vec![IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-            const_values: vec![("X".to_string(), ValueId(0))],
+            const_values: vec![("X".S(), ValueId(0))],
             symbols: datalove_datafun_ir::SymbolTable::new(),
             context: CodeUnitContext::Script(ScriptContext {
                 unit_end_values: vec![],
                 unit_end_slots: vec![],
                 result: None,
                 result_name: None,
-                exports: vec![("X".to_string(), ExportBinding::Value(ValueId(0)))],
+                exports: vec![("X".S(), ExportBinding::Value(ValueId(0)))],
                 unit: None,
             }),
             nested_units: vec![],
         };
 
         let mut const_values = LookupMap::default();
-        const_values.insert("X".to_string(), Arc::new(ConstValue::I32(100)));
+        const_values.insert("X".S(), Arc::new(ConstValue::I32(100)));
 
         let result = inline_script_consts(unit, &const_values, &LookupMap::default());
 
@@ -452,21 +453,21 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             // v1 (the unwrapped value) is tracked as a const.
-            const_values: vec![("X".to_string(), ValueId(1))],
+            const_values: vec![("X".S(), ValueId(1))],
             symbols: datalove_datafun_ir::SymbolTable::new(),
             context: CodeUnitContext::Script(ScriptContext {
                 unit_end_values: vec![],
                 unit_end_slots: vec![],
                 result: None,
                 result_name: None,
-                exports: vec![("X".to_string(), ExportBinding::Value(ValueId(1)))],
+                exports: vec![("X".S(), ExportBinding::Value(ValueId(1)))],
                 unit: None,
             }),
             nested_units: vec![],
         };
 
         let mut const_values = LookupMap::default();
-        const_values.insert("X".to_string(), Arc::new(ConstValue::I32(42)));
+        const_values.insert("X".S(), Arc::new(ConstValue::I32(42)));
 
         let result = inline_script_consts(unit, &const_values, &LookupMap::default());
 

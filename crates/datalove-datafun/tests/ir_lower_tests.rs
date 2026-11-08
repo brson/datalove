@@ -30,7 +30,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Verify local/test/main module exists.
     if !module_compiler.contains_module("local", "test", "main") {
-        return Err("No local/test/main module found".to_string());
+        return Err("No local/test/main module found".S());
     }
 
     // Compile modules (typecheck, drop analysis, lower).
@@ -70,7 +70,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .join("\n");
 
     if output.is_empty() {
-        Ok("(no functions)\n".to_string())
+        Ok("(no functions)\n".S())
     } else {
         Ok(output + "\n")
     }

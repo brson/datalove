@@ -3,6 +3,7 @@
 //! Provides infrastructure to log which queries execute for which modules,
 //! enabling tests to verify Salsa memoization behavior.
 
+use rmx::prelude::*;
 use rmx::std::cell::RefCell;
 
 thread_local! {
@@ -49,7 +50,7 @@ pub fn log_query(query: &'static str, module_path: &str, phase: QueryPhase) {
         if let Some(ref mut entries) = *log.borrow_mut() {
             entries.push(QueryLogEntry {
                 query,
-                module_path: module_path.to_string(),
+                module_path: module_path.S(),
                 phase,
             });
         }
@@ -61,6 +62,6 @@ pub fn get_executed_modules(entries: &[QueryLogEntry], query: &str) -> Vec<Strin
     entries
         .iter()
         .filter(|e| e.query == query && e.phase == QueryPhase::Start)
-        .map(|e| e.module_path.clone())
+        .map(|e| e.module_path.C())
         .collect()
 }

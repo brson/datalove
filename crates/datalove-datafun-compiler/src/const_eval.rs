@@ -7,6 +7,7 @@
 //! straight off when it is a literal or names a const already evaluated, and
 //! the unit is run by the CTFE evaluator. Both compilers do it through here.
 
+use rmx::prelude::*;
 use std::collections::BTreeSet;
 use bct::lookup::LookupMap;
 use std::fmt;
@@ -94,7 +95,7 @@ pub fn data_consts<'db>(
             let ty = IrType::from_tycheck(db, ty);
             let value = lower::try_extract_literal(db, value, &ty, data_files)
                 .expect("a data file is a literal");
-            Some((binding.name.text(db).to_owned(), (ty, value)))
+            Some((binding.name.text(db).O(), (ty, value)))
         })
         .collect()
 }
@@ -167,15 +168,15 @@ pub fn evaluate_body_consts<'db>(
     let body = func_stmt.body();
     for stmt in &body.statements {
         let Statement::Const(const_stmt) = stmt else { continue };
-        let name = const_stmt.name.text(db).to_string();
+        let name = const_stmt.name.text(db).S();
         let value = body.arena.get(const_stmt.value);
         let evaluated = const_type(env, value).and_then(|ty| {
-            evaluate_const(env, value, &ty, &scope, func_return_type.clone(), &deferred)
+            evaluate_const(env, value, &ty, &scope, func_return_type.C(), &deferred)
                 .map(|value| value.map(|value| (ty, value)))
         });
         match evaluated {
             Ok(Some((ty, value))) => {
-                scope.insert(name.clone(), (ty.clone(), value.clone()));
+                scope.insert(name.C(), (ty.C(), value.C()));
                 consts.push((name, ty, value));
             }
             Ok(None) => {
@@ -211,8 +212,8 @@ pub fn evaluate_instantiation_consts<'db>(
     let params = func_stmt.params();
     for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
         scope.insert(
-            params[param_idx].name.text(db).to_string(),
-            (datalove_datafun_ir::ir_type_of_const_value(value), Arc::new(value.clone())),
+            params[param_idx].name.text(db).S(),
+            (datalove_datafun_ir::ir_type_of_const_value(value), Arc::new(value.C())),
         );
     }
     let (consts, errors) = evaluate_body_consts(env, func_stmt, scope, BTreeSet::new());

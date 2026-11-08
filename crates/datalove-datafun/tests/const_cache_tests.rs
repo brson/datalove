@@ -31,12 +31,12 @@ struct World {
 /// Which modules a compile evaluated consts for, by name within `local/pkg`.
 fn names(paths: &BTreeSet<String>) -> BTreeSet<String> {
     paths.iter()
-        .map(|path| path.strip_prefix("local/pkg/").unwrap_or_else(|| panic!("{} is not local/pkg", path)).to_string())
+        .map(|path| path.strip_prefix("local/pkg/").unwrap_or_else(|| panic!("{} is not local/pkg", path)).S())
         .collect()
 }
 
 fn set<'a>(names: &[&'a str]) -> BTreeSet<String> {
-    names.iter().map(|name| name.to_string()).collect()
+    names.iter().map(|name| name.S()).collect()
 }
 
 impl World {
@@ -62,7 +62,7 @@ impl World {
         } else {
             self.module_compiler.add_module(&self.db, "local", "pkg", name, source);
         }
-        self.modules.insert(name.to_string(), source.to_string());
+        self.modules.insert(name.S(), source.S());
     }
 
     /// Add or replace a data file.
@@ -72,7 +72,7 @@ impl World {
         } else {
             self.module_compiler.add_data(&self.db, "local", "pkg", name, text);
         }
-        self.data.insert(name.to_string(), text.to_string());
+        self.data.insert(name.S(), text.S());
     }
 
     /// Compile, then evaluate each of `probes` in a script requiring every module.
@@ -199,11 +199,11 @@ fn an_edit_leaves_the_modules_it_does_not_reach_alone() {
 
     // Not required by anything with a const.
     world.module("u", &leaf(6));
-    assert_eq!(world.compile(&["a.get()"]), (set(&["u"]), vec!["11".to_string()]));
+    assert_eq!(world.compile(&["a.get()"]), (set(&["u"]), vec!["11".S()]));
 
     // Required by `b`'s requirer, not by `b`.
     world.module("a", &format!("{}fun extra(): int\n  ret 1\nend fun\n", caller("b")));
-    assert_eq!(world.compile(&["a.get()"]), (set(&["a"]), vec!["11".to_string()]));
+    assert_eq!(world.compile(&["a.get()"]), (set(&["a"]), vec!["11".S()]));
 }
 
 #[test]
@@ -268,7 +268,7 @@ end fun
     }
 
     world.module("a", &source(4));
-    assert_eq!(world.compile(&["a.get()!"]), (set(&["a"]), vec!["25".to_string()]));
+    assert_eq!(world.compile(&["a.get()!"]), (set(&["a"]), vec!["25".S()]));
     assert_eq!(world.compile(&["a.get()!"]).0, set(&[]));
 }
 
@@ -280,10 +280,10 @@ fn changing_the_riders_empties_the_cache() {
     world.compile(&[]);
 
     world.module_compiler.set_rider_sources(vec![(
-        "extra".to_string(),
-        "native fun twice(x: u32): u32\n".to_string(),
+        "extra".S(),
+        "native fun twice(x: u32): u32\n".S(),
     )]);
-    assert_eq!(world.compile(&["a.get()"]), (set(&["a", "b"]), vec!["11".to_string()]));
+    assert_eq!(world.compile(&["a.get()"]), (set(&["a", "b"]), vec!["11".S()]));
     assert_eq!(world.compile(&["a.get()"]).0, set(&[]));
 }
 
@@ -339,7 +339,7 @@ fn random_edits_match_a_world_that_caches_nothing() {
         loop {
             let more: BTreeSet<String> = MODULES.iter()
                 .filter(|(_, requires)| requires.iter().any(|dep| reached.contains(*dep)))
-                .map(|(name, _)| name.to_string())
+                .map(|(name, _)| name.S())
                 .collect();
             if more.is_subset(&reached) {
                 return reached;

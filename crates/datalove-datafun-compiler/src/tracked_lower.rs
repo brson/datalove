@@ -159,7 +159,7 @@ fn func_ids_by_module<'db>(
         by_module.entry(*module_id)
             .or_insert_with(|| (*ir_module_id, Vec::new()))
             .1
-            .push((name.clone(), *func_id));
+            .push((name.C(), *func_id));
     }
     let mut modules: Vec<_> = by_module.into_iter_unordered()
         .map(|(module_id, (ir_module_id, mut functions))| {
@@ -346,7 +346,7 @@ impl<'db> ModulePreResolvedConsts<'db> {
     pub fn to_hashmap(&self) -> LookupMap<String, (IrType, Arc<ConstValue>)> {
         self.consts
             .iter()
-            .map(|(name, ty, val)| (name.clone(), (ty.clone(), Arc::clone(val))))
+            .map(|(name, ty, val)| (name.C(), (ty.C(), Arc::clone(val))))
             .collect()
     }
 }
@@ -439,7 +439,7 @@ impl<'db> ModuleGraphLoweringResult<'db> {
             .into_iter()
             .flat_map(|(_, r)| {
                 let ir_mod = r.ir_module_id(db);
-                r.functions(db).iter().map(move |f| (ir_mod, FuncId(f.id.0), (**f).clone()))
+                r.functions(db).iter().map(move |f| (ir_mod, FuncId(f.id.0), (**f).C()))
             })
             .collect()
     }
@@ -517,14 +517,14 @@ pub fn lower_module<'db>(
         .as_ref()
         .map(|c| c.consts.iter()
             .filter(|(name, _, _)| !name.contains("::"))
-            .map(|(name, ty, value)| (name.clone(), (ty.clone(), Arc::clone(value))))
+            .map(|(name, ty, value)| (name.C(), (ty.C(), Arc::clone(value))))
             .collect())
         .unwrap_or_default();
 
     // If lowered functions are provided, use them directly.
     let from_scratch = lowered.is_none();
     if let Some(lowered) = lowered {
-        functions = lowered.functions(db).functions.clone();
+        functions = lowered.functions(db).functions.C();
         // func_ids was already computed above, and should match lf.func_name_to_id.
     } else {
         // Lower functions from scratch.
@@ -549,7 +549,7 @@ pub fn lower_module<'db>(
                 };
 
                 // Skip functions that had ownership analysis errors.
-                let Some(analysis) = single_analysis.analysis(db).clone() else {
+                let Some(analysis) = single_analysis.analysis(db).C() else {
                     // Drop analysis errors are already captured separately.
                     continue;
                 };
@@ -594,7 +594,7 @@ pub fn lower_module<'db>(
             // Pre-resolved consts have qualified names like "func_name::const_name".
             let const_values: LookupMap<String, Arc<ConstValue>> = pre_resolved.consts
                 .iter()
-                .map(|(name, _ir_type, value)| (name.clone(), Arc::clone(value)))
+                .map(|(name, _ir_type, value)| (name.C(), Arc::clone(value)))
                 .collect();
             // Inline const values directly into the functions.
             if from_scratch {
@@ -771,7 +771,7 @@ fn native_rider_units<'db>(
                 let name = func_name.text(db).S();
 
                 // Look up the assigned IrModuleId and FuncId.
-                let Some(&(ir_module_id, func_id)) = func_id_map.get(&(synthetic_module_id, name.clone())) else {
+                let Some(&(ir_module_id, func_id)) = func_id_map.get(&(synthetic_module_id, name.C())) else {
                     continue;
                 };
 
@@ -799,7 +799,7 @@ fn native_rider_units<'db>(
                     .collect();
                 let return_type = ir_type(&func_type.return_type(db));
                 let undetermined_type_params = generics
-                    .map(|g| g.undetermined.clone())
+                    .map(|g| g.undetermined.C())
                     .unwrap_or_default();
                 // The parser refused an intrinsic native the compiler does
                 // not know.
@@ -942,7 +942,7 @@ pub fn lower_module_functions<'db>(
             let func_id = FuncId(next_func_id);
             next_func_id += 1;
 
-            func_name_to_id.push((func_name.clone(), func_id));
+            func_name_to_id.push((func_name.C(), func_id));
 
             // A batch lowers only the functions named. Their FuncIds still
             // come from statement position, so the numbering matches whichever
@@ -967,7 +967,7 @@ pub fn lower_module_functions<'db>(
             };
 
             // Skip functions that had ownership analysis errors.
-            let Some(analysis) = single_analysis.analysis(db).clone() else {
+            let Some(analysis) = single_analysis.analysis(db).C() else {
                 continue;
             };
 
@@ -1052,7 +1052,7 @@ pub fn lower_all_module_functions<'db>(
             // to hash the same way for the same consts.
             let consts: Vec<(String, (IrType, SharedConst))> = module_consts
                 .get(module_id)
-                .map(|m| m.sorted().into_iter().map(|(k, (ty, v))| (k.clone(), (ty.clone(), SharedConst(Arc::clone(v))))).collect())
+                .map(|m| m.sorted().into_iter().map(|(k, (ty, v))| (k.C(), (ty.C(), SharedConst(Arc::clone(v))))).collect())
                 .unwrap_or_default();
 
             Some((
@@ -1137,7 +1137,7 @@ pub fn evaluate_all_module_consts<'db>(
         // function-level const can name one.
         let module_level = module_consts.get(module_id).cloned().unwrap_or_default();
         for (name, (ir_type, value)) in module_level.iter_unordered() {
-            consts.push((name.clone(), ir_type.clone(), SharedConst(Arc::clone(value))));
+            consts.push((name.C(), ir_type.C(), SharedConst(Arc::clone(value))));
         }
 
         let cached = cache.as_deref().and_then(|c| c.body(path)).cloned();
@@ -1180,7 +1180,7 @@ pub fn evaluate_all_module_consts<'db>(
                     .map(|p| p.name.text(db).S())
                     .collect();
                 let (body_consts, body_errors) =
-                    evaluate_body_consts(&mut env, func_stmt, module_level.clone(), const_params);
+                    evaluate_body_consts(&mut env, func_stmt, module_level.C(), const_params);
                 for (name, ir_type, value) in body_consts {
                     // Stored under a qualified name: func_name::const_name.
                     body.push((format!("{}::{}", func_name, name), ir_type, SharedConst(value)));
@@ -1199,7 +1199,7 @@ pub fn evaluate_all_module_consts<'db>(
                 None => {
                     cache.note_evaluated(path);
                     if errors.is_empty() && !module_level_errors.contains_key(module_id) {
-                        cache.store_body(path, body.clone());
+                        cache.store_body(path, body.C());
                     }
                 }
             }
@@ -1305,9 +1305,9 @@ fn evaluate_module_consts_in_order<'db>(
     let ownership_results = ownership_analysis.module_results(db);
     let ir_ids = ir_module_ids(db, parsed_graph);
     let func_ids = func_id_lookup(db, func_id_map);
-    let mut registry = ctfe_module_registry(db, parsed_graph, lowered_modules.clone(), func_id_map)
-        .as_ref().clone();
-    evaluator.set_module_registry(Arc::new(registry.clone()));
+    let mut registry = ctfe_module_registry(db, parsed_graph, lowered_modules.C(), func_id_map)
+        .as_ref().C();
+    evaluator.set_module_registry(Arc::new(registry.C()));
     let mut result = LookupMap::new();
 
     for module in graph.iter_modules(db) {
@@ -1362,7 +1362,7 @@ fn evaluate_module_consts_in_order<'db>(
             if let Some(reused) = reuse {
                 // A module whose consts all evaluated is the only kind cached.
                 let value = reused.get(&name).expect("a cached module has every const");
-                consts.insert(name, value.clone());
+                consts.insert(name, value.C());
                 let ready: Vec<String> = waiting.iter()
                     .filter(|name| needs.get(*name) == Some(&index))
                     .cloned()
@@ -1403,7 +1403,7 @@ fn evaluate_module_consts_in_order<'db>(
                 Err(error) => {
                     failed = true;
                     errors_out.entry(module_id).or_default()
-                        .push(NamedConstError { name, error }.to_string());
+                        .push(NamedConstError { name, error }.S());
                 }
             }
             let ready: Vec<String> = waiting.iter()
@@ -1430,7 +1430,7 @@ fn evaluate_module_consts_in_order<'db>(
                 None => {
                     cache.note_evaluated(path);
                     if !failed {
-                        cache.store_module_level(path, consts.clone());
+                        cache.store_module_level(path, consts.C());
                     }
                 }
             }
@@ -1475,7 +1475,7 @@ impl<'db> WaitingBatches<'db> {
         // Sorted, because the memo key has to hash the same way for the same
         // consts.
         let keyed: Vec<(String, (IrType, SharedConst))> = consts.sorted().into_iter()
-            .map(|(name, (ty, value))| (name.clone(), (ty.clone(), SharedConst(Arc::clone(value)))))
+            .map(|(name, (ty, value))| (name.C(), (ty.C(), SharedConst(Arc::clone(value)))))
             .collect();
         let outcome = lower_module_functions(
             db, self.module, self.single_typecheck, self.single_ownership, self.func_ids,
@@ -1495,7 +1495,7 @@ impl<'db> WaitingBatches<'db> {
             }
         };
         registry.set_module_code_units(self.ir_module_id, Arc::clone(ctfe_module_units(db, merged)));
-        evaluator.set_module_registry(Arc::new(registry.clone()));
+        evaluator.set_module_registry(Arc::new(registry.C()));
     }
 }
 
@@ -1629,7 +1629,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
         warm_ctfe_module_units(db, mode, &lowered_modules);
-        let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
+        let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.C(), func_id_map);
         evaluator.set_module_registry(Arc::clone(module_registry));
 
         evaluate_all_module_consts(
@@ -1647,18 +1647,18 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // branches and code that leaves dead removed, before specialization reads
     // const arguments out of the `Const` instructions this makes. What CTFE
     // calls stays as lowered, so specialization's registry is the one 5b built.
-    let callable_modules = lowered_modules.clone();
+    let callable_modules = lowered_modules.C();
     let lowered_modules: LoweredModules<'db> = if skip_const_inlining {
         lowered_modules
     } else {
         warm(db, mode, || lowered_modules.iter().filter_map(|(module_id, lowered)| {
-            resolved_consts.get(module_id).map(|consts| (*lowered, consts.clone()))
+            resolved_consts.get(module_id).map(|consts| (*lowered, consts.C()))
         }), |db, (lowered, consts)| {
             let _ = const_inlined_module(db, lowered, consts);
         });
         lowered_modules.into_iter()
             .map(|(module_id, lowered)| match resolved_consts.get(&module_id) {
-                Some(consts) => (module_id, const_inlined_module(db_salsa, lowered, consts.clone())),
+                Some(consts) => (module_id, const_inlined_module(db_salsa, lowered, consts.C())),
                 None => (module_id, lowered),
             })
             .collect()
@@ -1736,7 +1736,7 @@ fn merge_lowered<'db>(
     first: ModuleLowered<'db>,
     second: ModuleLowered<'db>,
 ) -> ModuleLowered<'db> {
-    let mut merged = first.functions(db).as_ref().clone();
+    let mut merged = first.functions(db).as_ref().C();
     merged.functions.extend(second.functions(db).functions.iter().cloned());
     // Keep the IR in the order the ids were assigned, so the batch a
     // function landed in does not show in the output.
@@ -1805,9 +1805,9 @@ fn const_inlined_module<'db>(
     consts: ModulePreResolvedConsts<'db>,
 ) -> ModuleLowered<'db> {
     let const_values: LookupMap<String, Arc<ConstValue>> = consts.consts.iter()
-        .map(|(name, _ir_type, value)| (name.clone(), Arc::clone(value)))
+        .map(|(name, _ir_type, value)| (name.C(), Arc::clone(value)))
         .collect();
-    let mut functions = lowered.functions(db).as_ref().clone();
+    let mut functions = lowered.functions(db).as_ref().C();
     inline_module_functions(&mut functions.functions, &const_values);
     ModuleLowered::new(db, lowered.module_id(db), Arc::new(functions))
 }
@@ -1896,7 +1896,7 @@ fn instantiate_generics<'db>(
     }
     let module_ids = ir_module_ids(db, parsed_graph);
     let mut ir: Vec<(ModuleId<'db>, IrModuleId, ModuleLoweredFunctions)> = modules.iter()
-        .map(|(module_id, lowered)| (*module_id, module_ids[module_id], lowered.ir(db).as_ref().clone()))
+        .map(|(module_id, lowered)| (*module_id, module_ids[module_id], lowered.ir(db).as_ref().C()))
         .collect();
     let before: LookupMap<ModuleId<'db>, usize> = ir.iter()
         .map(|(module_id, _, funcs)| (*module_id, funcs.functions.iter().map(|f| f.id.0 as usize + 1).max().unwrap_or(0)))
@@ -1910,7 +1910,7 @@ fn instantiate_generics<'db>(
             // The instances, numbered after everything that was there.
             let added: Vec<(String, FuncId)> = funcs.functions.iter()
                 .filter(|f| f.id.0 as usize >= before[&module_id])
-                .map(|f| (f.name.clone(), FuncId(f.id.0)))
+                .map(|f| (f.name.C(), FuncId(f.id.0)))
                 .collect();
             funcs.func_name_to_id.extend(added);
             funcs.func_name_to_id.sort_by(|a, b| a.0.cmp(&b.0));
@@ -2032,7 +2032,7 @@ fn specialize_comptime_functions<'db>(
                     // Now that the parameters have values, the body's consts
                     // have one each, so they are evaluated and written in.
                     if let (Some(func_stmt), Some(single_typecheck)) = (
-                        func_asts.get(&(*module_id, original.name.clone())),
+                        func_asts.get(&(*module_id, original.name.C())),
                         typecheck_module_results.get(module_id),
                     ) {
                         let func_name_to_id = module_funcs.func_name_to_id.iter().cloned().collect();
@@ -2064,7 +2064,7 @@ fn specialize_comptime_functions<'db>(
 
             made_any |= !copies.is_empty();
             for copy in copies {
-                module_funcs.func_name_to_id.push((copy.name.clone(), FuncId(copy.id.0)));
+                module_funcs.func_name_to_id.push((copy.name.C(), FuncId(copy.id.0)));
                 module_funcs.functions.push(Arc::new(copy));
             }
             module_funcs.functions.sort_by_key(|f| f.id.0);
@@ -2204,11 +2204,11 @@ mod reachable_func_ids_tests {
         let mut entries = Vec::new();
         for (index, module) in graph.iter_modules(db).enumerate() {
             let id = module.id(db);
-            let name = id.path(db).rsplit('/').next().X().to_string();
+            let name = id.path(db).rsplit('/').next().X().S();
             entries.push(((id, name), (IrModuleId(index as u32), FuncId(0))));
         }
-        let rider = ModuleId::new(db, "@rider/std".to_string());
-        entries.push(((rider, "rider_fn".to_string()), (IrModuleId(99), FuncId(0))));
+        let rider = ModuleId::new(db, "@rider/std".S());
+        entries.push(((rider, "rider_fn".S()), (IrModuleId(99), FuncId(0))));
         FuncIdMap::new(db, entries)
     }
 
@@ -2218,7 +2218,7 @@ mod reachable_func_ids_tests {
             .modules(db)
             .0
             .iter()
-            .flat_map(|(_, funcs)| funcs.functions(db).iter().map(|(name, _)| name.clone()))
+            .flat_map(|(_, funcs)| funcs.functions(db).iter().map(|(name, _)| name.C()))
             .collect();
         names.sort();
         names
@@ -2229,7 +2229,7 @@ mod reachable_func_ids_tests {
     #[test]
     fn reaches_dependencies_but_not_strangers() {
         let db = Database::default();
-        let source = |text: &str| bct::input::Source::new(&db, text.to_string());
+        let source = |text: &str| bct::input::Source::new(&db, text.S());
 
         // base <- mid <- top, plus a module nobody requires.
         let mut builder = ModuleGraphBuilder::new(&db);
@@ -2258,14 +2258,14 @@ mod reachable_func_ids_tests {
     #[test]
     fn unrelated_module_does_not_change_the_entries() {
         let db = Database::default();
-        let source = |text: &str| bct::input::Source::new(&db, text.to_string());
+        let source = |text: &str| bct::input::Source::new(&db, text.S());
 
         let mut builder = ModuleGraphBuilder::new(&db);
         let a = builder.add_module("local/test/a", source("// a"));
         let graph_before = builder.build();
         let before = reachable_func_ids(
             &db, graph_before, test_func_id_map(&db, graph_before), a,
-        ).modules(&db).clone();
+        ).modules(&db).C();
 
         // The same graph plus an unrelated module, which lands after `a` and
         // so does not disturb its IR module index either.
@@ -2275,7 +2275,7 @@ mod reachable_func_ids_tests {
         let graph_after = builder.build();
         let after = reachable_func_ids(
             &db, graph_after, test_func_id_map(&db, graph_after), a2,
-        ).modules(&db).clone();
+        ).modules(&db).C();
 
         assert_eq!(a, a2, "the path is the identity, so these are one module");
         assert_eq!(

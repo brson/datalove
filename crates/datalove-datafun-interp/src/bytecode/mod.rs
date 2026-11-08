@@ -65,6 +65,7 @@
 //! See `botdocs/plan-bytecode.md`, and "Performance Notes" in
 //! `botdocs/compiler-guide.md`.
 
+use rmx::prelude::*;
 use datalove_datafun_ir::layout::{layout_of, option_payload_offset, result_payload_offset};
 use datalove_datafun_ir::{
     BinOp, BlockId, UnaryOp, CodeRef, CodeUnitContext, ConstValue, CursorKind, Instruction, IrCodeUnit, IrType, Operand,
@@ -582,7 +583,7 @@ pub(crate) struct CallCache {
 /// since a running frame may be borrowing from a call site's plan.
 pub(crate) fn release_layouts<'a>(layouts: impl IntoIterator<Item = &'a IrLayout>, retired: &[CallCache]) {
     let mut bodies: Vec<_> = layouts.into_iter()
-        .filter_map(|layout| layout.bytecode.get().map(|(_, bc)| bc.clone()))
+        .filter_map(|layout| layout.bytecode.get().map(|(_, bc)| bc.C()))
         .collect();
     for cache in retired {
         cache.bodies(&mut bodies);
@@ -609,11 +610,11 @@ fn release_bodies(roots: Vec<std::rc::Rc<BcFunction>>) {
 impl CallCache {
     /// The bodies this cache keeps alive, directly or through a layout.
     pub(crate) fn bodies(&self, out: &mut Vec<std::rc::Rc<BcFunction>>) {
-        let lowered = |layout: &IrLayout| layout.bytecode.get().map(|(_, bc)| bc.clone());
+        let lowered = |layout: &IrLayout| layout.bytecode.get().map(|(_, bc)| bc.C());
         out.extend(self.layout.as_deref().and_then(lowered));
-        out.extend(self.forward.clone());
+        out.extend(self.forward.C());
         if let Some(Plan::Body(plan)) = &self.plan {
-            out.push(plan.bc.clone());
+            out.push(plan.bc.C());
             out.extend(lowered(&plan.layout));
         }
     }
@@ -925,7 +926,7 @@ impl BcStats {
 /// An instruction's variant name.
 fn variant(instr: &Instruction) -> String {
     let text = format!("{instr:?}");
-    text.split([' ', '{', '(']).next().unwrap_or("").to_string()
+    text.split([' ', '{', '(']).next().unwrap_or("").S()
 }
 
 /// What the optimization pass may do with an op; see `Op::shape`.

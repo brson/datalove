@@ -3,6 +3,7 @@
 //! Contains types used by both name resolution and typechecking phases:
 //! Type, TypeFunction, TypeError, ParsedModuleGraph, and related utilities.
 
+use rmx::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 use bct::lookup::LookupMap;
@@ -247,7 +248,7 @@ pub fn number_modules<'db>(
 ) {
     let riders: BTreeSet<String> =
         rider_names.into_iter().map(|name| rider_module_path(name.as_ref())).collect();
-    let modules = graph.iter_modules(db).map(|module| module.id(db).path(db).clone());
+    let modules = graph.iter_modules(db).map(|module| module.id(db).path(db).C());
     for path in riders.into_iter().chain(modules) {
         let next = u32::try_from(ids.len()).expect("fewer than 2^32 modules");
         ids.entry(path).or_insert(next);
@@ -798,7 +799,7 @@ impl<'db> datalit::tycheck::TypeNames<'db, TypeError> for AliasNames<'_, 'db> {
             Some(Type::Datalit(ty)) => Ok(ty),
             Some(Type::Function(_)) => unreachable!("an alias names no function type"),
             None => Err(TypeError::UnresolvedTypeAlias {
-                name: alias.name.as_str(self.db).to_string(),
+                name: alias.name.as_str(self.db).S(),
                 local_index: alias.local_index,
             }),
         }
@@ -816,7 +817,7 @@ impl<'db> datalit::tycheck::TypeNames<'db, TypeError> for AliasNames<'_, 'db> {
 /// A type as datalove writes it, for error messages and anything else a
 /// reader sees.
 pub fn type_to_string<'db>(db: &'db dyn Db, ty: &Type<'db>) -> String {
-    ty.syntax(db).to_string()
+    ty.syntax(db).S()
 }
 
 impl<'db> Type<'db> {
@@ -907,12 +908,12 @@ pub fn unwrap_wrapper_types<'db>(
 ) -> Type<'db> {
     match ty {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            Type::Datalit(*opt.inner_type.clone())
+            Type::Datalit(*opt.inner_type.C())
         }
         Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            Type::Datalit(*res.inner_type.clone())
+            Type::Datalit(*res.inner_type.C())
         }
-        _ => ty.clone(),
+        _ => ty.C(),
     }
 }
 
@@ -926,7 +927,7 @@ pub fn to_datalit_type<'db>(
     ty: Type<'db>,
 ) -> Result<Type<'db>, TypeError> {
     match ty {
-        Type::Datalit(dt) => Ok(Type::Datalit(dt.clone())),
+        Type::Datalit(dt) => Ok(Type::Datalit(dt.C())),
         Type::Function(_) => Err(TypeError::CannotSynthesize),
     }
 }

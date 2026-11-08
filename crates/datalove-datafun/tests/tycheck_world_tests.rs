@@ -5,14 +5,14 @@ use std::collections::BTreeMap;
 use datalove_datafun_resolve::resolve_all_names;
 
 fn diagnostic_to_json(db: &dyn datalove_datafun::Db, diag: &bct::diagnostic::Diagnostic) -> rmx::serde_json::Value {
-    let code = diag.code.map(|c| c.as_str(db).to_string());
+    let code = diag.code.map(|c| c.as_str(db).S());
     let labels: Vec<_> = diag.labels.iter().map(|label| {
         let source_text = label.source.text(db);
-        let text_slice = source_text.get(label.span.clone()).unwrap_or("");
+        let text_slice = source_text.get(label.span.C()).unwrap_or("");
         json!({
             "span": [label.span.start, label.span.end],
             "text": text_slice,
-            "message": label.message.map(|m| m.as_str(db).to_string())
+            "message": label.message.map(|m| m.as_str(db).S())
         })
     }).collect();
     json!({
@@ -358,12 +358,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Get all modules from the graph and sort by path for consistent ordering.
     let mut module_ids: Vec<_> = graph.module_by_id(&db).keys_unordered().copied().collect();
-    module_ids.sort_by_key(|id: &datalove_datafun::module_graph::ModuleId| id.path(&db).clone());
+    module_ids.sort_by_key(|id: &datalove_datafun::module_graph::ModuleId| id.path(&db).C());
 
     for module_id in module_ids {
         // Extract just the module name from the path (e.g., "sys/std/u32" -> "u32").
         let path = module_id.path(&db);
-        let module_name = path.split('/').last().unwrap_or(&path).to_string();
+        let module_name = path.split('/').last().unwrap_or(&path).S();
 
         // Get function exports.
         let mut functions = Vec::new();

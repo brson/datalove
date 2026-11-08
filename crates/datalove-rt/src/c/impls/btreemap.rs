@@ -2,6 +2,7 @@
 //!
 //! Uses a B+tree structure with fixed-capacity nodes aligned to allocator size classes.
 
+use rmx::prelude::*;
 use crate::c::impls::rt_local::RtLocal;
 use datalove_rtdt as rtdt;
 use datalove_rtdt::*;
@@ -2464,8 +2465,8 @@ pub unsafe fn btreemap_clone_from_slice_impl(
         }
 
         let mut fields = tuple_ty.iter_tuple_fields();
-        let key_field = fields.next().unwrap();
-        let value_field = fields.next().unwrap();
+        let key_field = fields.next().X();
+        let value_field = fields.next().X();
         let element_size = tuple_ty.size() as usize;
 
 

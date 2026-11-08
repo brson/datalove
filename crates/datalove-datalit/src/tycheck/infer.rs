@@ -14,6 +14,7 @@
 //! disagreement, at the later expression, with the diagnostics checking
 //! already has.
 
+use rmx::prelude::*;
 use datalove_diagnostic_codes::TCode;
 use bct::diagnostic::DiagnosticBuilder;
 use bct::text::InternedText;
@@ -182,7 +183,7 @@ impl<'db> Unifier<'db> {
             PType::Var(var) => {
                 let root = self.find(*var);
                 match &self.vars[root as usize] {
-                    VarState::Bound(bound) => Cow::Owned(bound.clone()),
+                    VarState::Bound(bound) => Cow::Owned(bound.C()),
                     _ => Cow::Owned(PType::Var(root)),
                 }
             }
@@ -219,7 +220,7 @@ impl<'db> Unifier<'db> {
             (PType::Known(known @ Type::Rec(rec)), other) | (other, PType::Known(known @ Type::Rec(rec))) => {
                 let holder = if matches!(&*a, PType::Known(_)) { b_root } else { a_root };
                 if let Some(holder) = holder {
-                    self.vars[holder as usize] = VarState::Bound(PType::Known(known.clone()));
+                    self.vars[holder as usize] = VarState::Bound(PType::Known(known.C()));
                 }
                 if let Some(expanded) = expand(&rec.unfold()) {
                     self.unify_parts(&expanded, other);
@@ -280,7 +281,7 @@ impl<'db> Unifier<'db> {
             _ => unreachable!("a pruned variable is free"),
         };
         let class_of = |state: &VarState<'db>| match state {
-            VarState::Free { class, .. } => class.clone(),
+            VarState::Free { class, .. } => class.C(),
             _ => unreachable!("a pruned variable is free"),
         };
         // Two variables whose classes no one type could satisfy stay apart.
@@ -313,7 +314,7 @@ impl<'db> Unifier<'db> {
         if !class.admits(self.db, &ty) {
             return;
         }
-        let state = std::mem::replace(&mut self.vars[var as usize], VarState::Bound(ty.clone()));
+        let state = std::mem::replace(&mut self.vars[var as usize], VarState::Bound(ty.C()));
         let VarState::Free { class, .. } = state else { unreachable!("a pruned variable is free") };
         // `@` converts between types with parts only by cloning, but for an
         // atom or term becoming an enum. So a value adapted to a type whose
@@ -323,27 +324,27 @@ impl<'db> Unifier<'db> {
                 (_, PType::Known(_)) => {}
                 (Type::Atom(_), PType::Enum(_)) => {}
                 (Type::Term(term), PType::Enum(variants)) => {
-                    let given = variants.iter().find(|(n, _)| *n == term.name).and_then(|(_, p)| p.clone());
+                    let given = variants.iter().find(|(n, _)| *n == term.name).and_then(|(_, p)| p.C());
                     if let Some(given) = given {
-                        self.unify(&PType::Known((*term.payload).clone()), &given);
+                        self.unify(&PType::Known((*term.payload).C()), &given);
                     }
                 }
-                _ => self.unify(&PType::Known(from.clone()), &ty),
+                _ => self.unify(&PType::Known(from.C()), &ty),
             }
         }
         // A term literal's payload goes along with the payload the type gives
         // its variant.
         if let Class::Variant { name, payload: Some(payload) } = class {
             let given = match &ty {
-                PType::Term(term_name, given) if *term_name == name => Some((**given).clone()),
-                PType::Known(Type::Term(term)) if term.name == name => Some(PType::Known((*term.payload).clone())),
+                PType::Term(term_name, given) if *term_name == name => Some((**given).C()),
+                PType::Known(Type::Term(term)) if term.name == name => Some(PType::Known((*term.payload).C())),
                 PType::Known(Type::Enum(en)) => en.variants.iter()
                     .find(|v| v.name == name)
                     .and_then(|v| v.payload.as_deref())
-                    .map(|p| PType::Known(p.clone())),
+                    .map(|p| PType::Known(p.C())),
                 PType::Enum(variants) => variants.iter()
                     .find(|(n, _)| *n == name)
-                    .and_then(|(_, p)| p.clone()),
+                    .and_then(|(_, p)| p.C()),
                 _ => None,
             };
             if let Some(given) = given {
@@ -370,7 +371,7 @@ impl<'db> Unifier<'db> {
             PType::Known(known) => known,
             PType::Var(var) => {
                 let VarState::Free { class, origin, .. } = &self.vars[var as usize] else { unreachable!("a pruned variable is free") };
-                match class.clone() {
+                match class.C() {
                     Class::Literal(kind) => kind.default_type(),
                     Class::Adapt(from) => from,
                     Class::Variant { name, payload: None } => Type::Atom(TypeAtom { name }),
@@ -378,7 +379,7 @@ impl<'db> Unifier<'db> {
                         name,
                         payload: Box::new(self.resolve(&payload)?),
                     }),
-                    Class::Open => return Err(Unresolved { origin: origin.clone() }),
+                    Class::Open => return Err(Unresolved { origin: origin.C() }),
                 }
             }
             PType::AnonTuple(fields) => Type::AnonTuple(TypeAnonTuple {
@@ -426,7 +427,7 @@ impl<'db> Unifier<'db> {
     /// The type as far as it is known, for an error message: `_` for a type
     /// nothing decides.
     pub fn describe(&mut self, db: &'db dyn crate::Db, ty: &PType<'db>) -> String {
-        self.syntax(db, ty).to_string()
+        self.syntax(db, ty).S()
     }
 
     /// The type as far as it is known, shaped as datalove writes it.
@@ -489,14 +490,14 @@ fn merge_classes<'db>(
             Class::Variant { name: b_name, payload: b },
         ) => match (a_name == b_name, a, b) {
             (true, None, None) => (Class::Variant { name: a_name, payload: None }, None),
-            (true, Some(a), Some(b)) => (Class::Variant { name: a_name, payload: Some(a.clone()) }, Some((*a, *b))),
+            (true, Some(a), Some(b)) => (Class::Variant { name: a_name, payload: Some(a.C()) }, Some((*a, *b))),
             _ => return None,
         },
         // An adapted value is of the type it was taken from unless something
         // asks for another, so the two meet at that type, if the other class
         // admits it.
         (Class::Adapt(from), other) | (other, Class::Adapt(from)) => {
-            if other.admits(db, &PType::Known(from.clone())) {
+            if other.admits(db, &PType::Known(from.C())) {
                 (Class::Adapt(from), None)
             } else {
                 return None;
@@ -509,7 +510,7 @@ fn merge_classes<'db>(
 /// One level of a known type as a variable-holding type, so that it can be
 /// unified part by part. `None` for a type with no parts to unify.
 fn expand<'db>(ty: &Type<'db>) -> Option<PType<'db>> {
-    let known = |t: &Type<'db>| PType::Known(t.clone());
+    let known = |t: &Type<'db>| PType::Known(t.C());
     let fields = |fs: &[TypeNamedField<'db>]| fs.iter().map(|f| (f.name, known(&f.ty))).collect();
     Some(match ty {
         Type::AnonTuple(t) => PType::AnonTuple(t.fields.iter().map(known).collect()),
@@ -553,7 +554,7 @@ pub fn infer_unhinted<'db>(
     // A collection's shared type is open until its elements say what it is.
     // An empty one leaves it open, so it is the collection that needs a hint.
     let shared = |uni: &mut Unifier<'db>, empty: bool| {
-        let origin = if empty { Origin::Expr(expr.clone()) } else { Origin::None };
+        let origin = if empty { Origin::Expr(expr.C()) } else { Origin::None };
         uni.fresh(Class::Open, origin)
     };
     Ok(match expr.expr() {
@@ -618,7 +619,7 @@ pub fn infer_unhinted<'db>(
         Expr::Ok(o) => PType::Result(Box::new(infer(ctx, uni, &o.payload)?)),
         // Rule: Inf-None, Inf-Er
         Expr::None | Expr::Er(_) => {
-            let inner = uni.fresh(Class::Open, Origin::Expr(expr.clone()));
+            let inner = uni.fresh(Class::Open, Origin::Expr(expr.C()));
             match expr.expr() {
                 Expr::None => PType::Option(Box::new(inner)),
                 _ => PType::Result(Box::new(inner)),
@@ -637,7 +638,7 @@ pub fn infer_unhinted<'db>(
             uni.fresh(Class::Variant { name: t.name, payload: Some(Box::new(payload)) }, Origin::None)
         }
         // Rule: Inf-Enum
-        Expr::Enum(_) => uni.fresh(Class::Open, Origin::Expr(expr.clone())),
+        Expr::Enum(_) => uni.fresh(Class::Open, Origin::Expr(expr.C())),
         Expr::ParseError(_) => {
             if let Some(ts) = ctx.get_span(expr) {
                 DiagnosticBuilder::error(ctx.db, "cannot type-check expression with parse errors")

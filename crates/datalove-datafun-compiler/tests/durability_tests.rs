@@ -38,10 +38,10 @@ impl salsa::Database for LoggingDatabase {}
 impl LoggingDatabase {
     fn new() -> Self {
         let events = Arc::new(Mutex::new(Vec::new()));
-        let events_clone = events.clone();
+        let events_clone = events.C();
         Self {
             storage: salsa::Storage::new(Some(Box::new(move |event| {
-                events_clone.lock().unwrap().push(event);
+                events_clone.lock().X().push(event);
             }))),
             events,
         }
@@ -88,10 +88,10 @@ fn low_durability_edit_does_not_walk_high_durability_work() {
     fn revalidations_after_local_edit(system_durability: Durability) -> usize {
         let mut db = LoggingDatabase::new();
 
-        let system = Source::builder("fun a fun b fun c".to_string())
+        let system = Source::builder("fun a fun b fun c".S())
             .text_durability(system_durability)
             .new(&db);
-        let local = Source::builder("let x = 1".to_string())
+        let local = Source::builder("let x = 1".S())
             .text_durability(Durability::LOW)
             .new(&db);
 
@@ -101,7 +101,7 @@ fn low_durability_edit_does_not_walk_high_durability_work() {
         // Edit the local module only.
         local.set_text(&mut db)
             .with_durability(Durability::LOW)
-            .to("let x = 2".to_string());
+            .to("let x = 2".S());
 
         db.clear();
         assert_eq!(doubled_word_count(&db, system), 12);
@@ -124,7 +124,7 @@ fn low_durability_edit_does_not_walk_high_durability_work() {
 fn high_durability_edit_still_revalidates() {
     let mut db = LoggingDatabase::new();
 
-    let system = Source::builder("fun a fun b fun c".to_string())
+    let system = Source::builder("fun a fun b fun c".S())
         .text_durability(Durability::HIGH)
         .new(&db);
     assert_eq!(word_count(&db, system), 6);
@@ -132,7 +132,7 @@ fn high_durability_edit_still_revalidates() {
     db.clear();
     system.set_text(&mut db)
         .with_durability(Durability::HIGH)
-        .to("fun a fun b".to_string());
+        .to("fun a fun b".S());
 
     assert_eq!(word_count(&db, system), 4);
     assert!(db.executed() > 0, "editing the durable source has to re-run its analysis");

@@ -5,6 +5,7 @@
 //! - [`LowerCtx`]: Main context combining shared state (db, types) with `FrameState`.
 //! - [`ScriptLowerContext`]: Tracks bindings exported from previous script units.
 
+use rmx::prelude::*;
 use std::sync::Arc;
 use std::collections::BTreeMap;
 use bct::lookup::LookupMap;
@@ -214,24 +215,24 @@ impl ScriptLowerContext {
                     // Remove any slot with the same name to properly shadow.
                     self.slots.remove(name);
                     self.slot_types.remove(name);
-                    self.values.insert(name.clone(), (unit, *v));
+                    self.values.insert(name.C(), (unit, *v));
                     // Store the value's type.
                     if let Some(ty) = unit_value_types.get(v.0 as usize) {
-                        self.value_types.insert(name.clone(), ty.clone());
+                        self.value_types.insert(name.C(), ty.C());
                     }
                 }
                 ExportBinding::Slot(s) => {
                     // Remove any value with the same name to properly shadow.
                     self.values.remove(name);
                     self.value_types.remove(name);
-                    self.slots.insert(name.clone(), (unit, *s));
+                    self.slots.insert(name.C(), (unit, *s));
                     // Store the slot's type for drop emission in later units.
                     if let Some(ty) = unit_slot_types.get(s.0 as usize) {
-                        self.slot_types.insert(name.clone(), ty.clone());
+                        self.slot_types.insert(name.C(), ty.C());
                     }
                 }
                 ExportBinding::Function(unit_id) => {
-                    self.functions.insert(name.clone(), (unit, FuncId(unit_id.0)));
+                    self.functions.insert(name.C(), (unit, FuncId(unit_id.0)));
                 }
             }
         }
@@ -371,13 +372,13 @@ impl<'db> LowerCtx<'db> {
         // Seed variables with external bindings from previous units.
         let mut variables = bct::lookup::LookupMap::default();
         for (name, (unit, value)) in script_ctx.values.iter_unordered() {
-            variables.insert(name.clone(), Operand::ExternalValue {
+            variables.insert(name.C(), Operand::ExternalValue {
                 unit: *unit,
                 value: *value,
             });
         }
         for (name, (unit, slot)) in script_ctx.slots.iter_unordered() {
-            variables.insert(name.clone(), Operand::ExternalSlot {
+            variables.insert(name.C(), Operand::ExternalSlot {
                 unit: *unit,
                 slot: *slot,
             });
@@ -386,7 +387,7 @@ impl<'db> LowerCtx<'db> {
         // Seed function scope with external functions from previous units.
         let mut func_scope = LookupMap::default();
         for (name, (unit, func_id)) in script_ctx.functions.iter_unordered() {
-            func_scope.insert(name.clone(), CodeRef::External {
+            func_scope.insert(name.C(), CodeRef::External {
                 unit: *unit,
                 id: CodeUnitId(func_id.0),
             });
@@ -428,8 +429,8 @@ impl<'db> LowerCtx<'db> {
     /// forward references (mutual recursion). The function can then be
     /// looked up via `lookup_func` when lowering calls to it.
     pub fn pre_register_func(&mut self, name: &str, param_count: usize) {
-        let func_id = self.symbols.define_func(name.to_string(), param_count);
-        self.func_scope.insert(name.to_string(), CodeRef::Local(CodeUnitId(func_id.0)));
+        let func_id = self.symbols.define_func(name.S(), param_count);
+        self.func_scope.insert(name.S(), CodeRef::Local(CodeUnitId(func_id.0)));
     }
 
     /// Register a function with a specific FuncId.
@@ -437,7 +438,7 @@ impl<'db> LowerCtx<'db> {
     /// Used for CTFE to register functions with the same IDs as pre-lowered functions,
     /// so that call resolution produces matching CodeRefs.
     pub fn register_func_with_id(&mut self, name: &str, _param_count: usize, func_id: FuncId) {
-        self.func_scope.insert(name.to_string(), CodeRef::Local(CodeUnitId(func_id.0)));
+        self.func_scope.insert(name.S(), CodeRef::Local(CodeUnitId(func_id.0)));
     }
 
     /// Define a function in the current scope.
@@ -449,8 +450,8 @@ impl<'db> LowerCtx<'db> {
         if let Some(CodeRef::Local(id)) = self.func_scope.get(name) {
             return FuncId(id.0);
         }
-        let func_id = self.symbols.define_func(name.to_string(), param_count);
-        self.func_scope.insert(name.to_string(), CodeRef::Local(CodeUnitId(func_id.0)));
+        let func_id = self.symbols.define_func(name.S(), param_count);
+        self.func_scope.insert(name.S(), CodeRef::Local(CodeUnitId(func_id.0)));
         func_id
     }
 
@@ -469,7 +470,7 @@ impl<'db> LowerCtx<'db> {
     /// For local functions (module_id = None), uses `func_scope` lookup.
     pub fn resolve_call(&self, expr: ExprFun<'db>, call: &ExprFunctionCall<'db>) -> CodeRef {
         let key = ExprKey::of_call(expr, call);
-        let func_name = call.name.text(self.db).to_string();
+        let func_name = call.name.text(self.db).S();
 
         // Get the resolved call target from typechecking.
         let target = self.call_targets.and_then(|t| t.get_call(expr, call))
@@ -481,7 +482,7 @@ impl<'db> LowerCtx<'db> {
         match target.module_id() {
             Some(module_id) => {
                 // Module function - look up by (ModuleId<'db>, func_name).
-                let resolved_func_name = target.func().name.text(self.db).to_string();
+                let resolved_func_name = target.func().name.text(self.db).S();
                 let (ir_mod, func_id) = self.func_id_map
                     .and_then(|m| m.func_id(self.db, module_id, &resolved_func_name))
                     .unwrap_or_else(|| panic!(
@@ -492,7 +493,7 @@ impl<'db> LowerCtx<'db> {
             }
             None => {
                 // Local function resolved by typechecker - use func_scope lookup.
-                let resolved_func_name = target.func().name.text(self.db).to_string();
+                let resolved_func_name = target.func().name.text(self.db).S();
                 self.lookup_func(&resolved_func_name)
                     .unwrap_or_else(|| panic!(
                         "local function '{}' not found - typechecker should catch this",
@@ -601,11 +602,11 @@ impl<'db> LowerCtx<'db> {
     pub fn bind_var(&mut self, name: &str, operand: Operand) {
         if let Some(scope) = self.body.variable_scopes.last_mut() {
             scope.push(ShadowedBinding {
-                name: name.to_string(),
+                name: name.S(),
                 operand: self.body.variables.get(name).copied(),
             });
         }
-        self.body.variables.insert(name.to_string(), operand);
+        self.body.variables.insert(name.S(), operand);
     }
 
     /// Open a name scope for a block body.
@@ -625,7 +626,7 @@ impl<'db> LowerCtx<'db> {
         for shadowed in scope.into_iter().rev() {
             match shadowed.operand {
                 Some(operand) => {
-                    self.body.variables.insert(shadowed.name.clone(), operand);
+                    self.body.variables.insert(shadowed.name.C(), operand);
                 }
                 None => {
                     self.body.variables.remove(&shadowed.name);
@@ -689,8 +690,8 @@ impl<'db> LowerCtx<'db> {
         for binding in &graph.bindings {
             if let Some(value) = resolved.get(binding.stmt_id) {
                 self.const_bindings.insert(
-                    binding.name.clone(),
-                    (binding.ir_type.clone(), value.clone()),
+                    binding.name.C(),
+                    (binding.ir_type.C(), value.C()),
                 );
             }
         }
@@ -706,7 +707,7 @@ impl<'db> LowerCtx<'db> {
     /// Emit a Drop instruction for a single operand if its type requires it.
     pub fn emit_drop_for_type(&mut self, operand: &Operand, ty: &IrType) {
         if !ty.is_copy() {
-            self.emit(Instruction::Drop { operand: operand.clone() });
+            self.emit(Instruction::Drop { operand: operand.C() });
         }
     }
 
@@ -718,10 +719,10 @@ impl<'db> LowerCtx<'db> {
         if ty.is_copy() {
             return;
         }
-        if self.is_operand_tracked(operand.clone()) {
-            self.emit(Instruction::DropTracked { operand: operand.clone() });
+        if self.is_operand_tracked(operand.C()) {
+            self.emit(Instruction::DropTracked { operand: operand.C() });
         } else {
-            self.emit(Instruction::Drop { operand: operand.clone() });
+            self.emit(Instruction::Drop { operand: operand.C() });
         }
     }
 
@@ -755,7 +756,7 @@ impl<'db> LowerCtx<'db> {
     /// operations unfinished, so what they had made is let go of here or not
     /// at all.
     fn emit_exit_expr_temp_drops(&mut self) {
-        for (value, _ty) in self.body.expr_temps.clone() {
+        for (value, _ty) in self.body.expr_temps.C() {
             self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
     }
@@ -1172,19 +1173,19 @@ impl<'db> LowerCtx<'db> {
     /// For a parameter or a field, or through a reference. A slot's own drop
     /// is `store_slot`'s, which knows whether the slot is tracked.
     fn emit_drop_before_store(&mut self, place: &Operand, field_path: &[u32], value: &Operand) {
-        let ty = self.operand_type(value.clone()).expect("a stored value has a type");
+        let ty = self.operand_type(value.C()).expect("a stored value has a type");
         if ty.is_copy() {
             return;
         }
         let drop = match place {
             _ if !field_path.is_empty() => {
-                Instruction::DropField { base: place.clone(), field_path: field_path.to_vec() }
+                Instruction::DropField { base: place.C(), field_path: field_path.to_vec() }
             }
             // An out parameter holds something only once it has been written.
             Operand::Param(p) if self.param_mode(*p) == Some(ParamMode::Out) => {
-                Instruction::DropTracked { operand: place.clone() }
+                Instruction::DropTracked { operand: place.C() }
             }
-            Operand::Param(_) => Instruction::Drop { operand: place.clone() },
+            Operand::Param(_) => Instruction::Drop { operand: place.C() },
             Operand::Value(r) | Operand::ValueRef(r) => Instruction::DropViaRef { ref_value: *r },
             other => unreachable!("a store over {other:?}, whose drop its own store emits"),
         };
@@ -1372,7 +1373,7 @@ impl<'db> LowerCtx<'db> {
     /// The counterpart of `emit_before_return_drops` for a function that runs
     /// off the end rather than returning. Empty when every path returned.
     pub fn emit_function_exit_drops(&mut self) {
-        let binding_ids = self.body.drop_schedule.at_function_exit.clone();
+        let binding_ids = self.body.drop_schedule.at_function_exit.C();
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
@@ -1435,7 +1436,7 @@ impl<'db> LowerCtx<'db> {
     /// `set_target_drops` says the return is a `set` failing to reach its
     /// place, which drops by that schedule rather than an expression's.
     pub fn emit_early_return_none(&mut self, set_target_drops: bool) {
-        let return_type = self.return_type.clone()
+        let return_type = self.return_type.C()
             .expect("early return requires function context");
         let none_value = self.fresh_value(return_type);
         self.emit_wrap_none(none_value);
@@ -1459,7 +1460,7 @@ impl<'db> LowerCtx<'db> {
     /// Caller must have already called `start_block` on the early-return block.
     pub fn emit_early_return_err_message(&mut self, message: &str, set_target_drops: bool) {
         let err_msg = self.fresh_value(IrType::String);
-        self.emit_const(err_msg, ConstValue::String(message.to_string()));
+        self.emit_const(err_msg, ConstValue::String(message.S()));
         let err_value = self.fresh_value(IrType::Error);
         self.emit_error_from(err_value, Operand::Value(err_msg));
         self.emit_early_return_err(Operand::Value(err_value), set_target_drops);
@@ -1469,7 +1470,7 @@ impl<'db> LowerCtx<'db> {
     ///
     /// Caller must have already called `start_block` on the early-return block.
     pub fn emit_early_return_err(&mut self, err_operand: Operand, set_target_drops: bool) {
-        let return_type = self.return_type.clone()
+        let return_type = self.return_type.C()
             .expect("early return requires function context");
         let wrapped = self.fresh_value(return_type);
         self.emit_wrap_err(wrapped, err_operand);
@@ -1607,7 +1608,7 @@ impl<'db> FuncIds<'db> for crate::FuncIdTable<'db> {
         module: ModuleId<'db>,
         name: &str,
     ) -> Option<(IrModuleId, FuncId)> {
-        self.get(&(module, name.to_string())).copied()
+        self.get(&(module, name.S())).copied()
     }
 }
 

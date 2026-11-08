@@ -331,7 +331,7 @@ drop the return type.")
         }
         PendingDiagnostic::Rec { local_index, module_id: _, error } => {
             let (code, label, note) = error.kind.diagnostic();
-            DiagnosticBuilder::error(db, &error.to_string())
+            DiagnosticBuilder::error(db, &error.S())
                 .code(code.as_str())
                 .primary_label(spans.lookup_alias(db, *local_index)?, label)
                 .note(note)

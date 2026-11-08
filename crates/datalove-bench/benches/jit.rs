@@ -19,6 +19,7 @@
 //! the source had a type error, and so both of its benchmarks measured an
 //! empty execution for as long as the file existed.
 
+use rmx::prelude::*;
 use divan::Bencher;
 
 use datalove_datafun as datafun;
@@ -119,7 +120,7 @@ fn prepare(source: &str, config: Config) -> Prepared {
     let unit = compiler.compile_fragment(source);
     let unit = unit
         .ir_unit
-        .clone()
+        .C()
         .expect("benchmark source must compile");
 
     Prepared { executor, unit }

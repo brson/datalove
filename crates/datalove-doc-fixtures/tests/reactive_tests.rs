@@ -100,7 +100,7 @@ fn parse_fixture(path: &Path) -> Fixture {
     // The id the next unit entered takes, by fragment or by insert.
     let mut next = 1;
     let mut take_id = |id: Option<&str>| {
-        let unit = next.to_string();
+        let unit = next.S();
         if let Some(id) = id {
             assert_eq!(id, unit, "{name}: a new unit takes the next id");
         }
@@ -213,7 +213,7 @@ fn sources_by_step(fixture: &Fixture) -> Vec<Vec<(String, String)>> {
             Change::Insert { entry, .. } => set(&mut sources, &entry.unit, &entry.source),
             Change::Delete { .. } | Change::Move { .. } | Change::EditData { .. } | Change::EditModule { .. } => {}
         }
-        by_step.push(sources.clone());
+        by_step.push(sources.C());
     }
     by_step
 }

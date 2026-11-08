@@ -68,7 +68,7 @@ fn read_blocks<'a>(node: Node<'a>, indent: &str, blocks: &mut Vec<Block>) {
 }
 
 fn read_block<'a>(node: Node<'a>, indent: &str, blocks: &mut Vec<Block>) {
-    let value = node.data.borrow().value.clone();
+    let value = node.data.borrow().value.C();
     match value {
         NodeValue::Heading(heading) => {
             let style = match heading.level {
@@ -121,9 +121,9 @@ fn read_block<'a>(node: Node<'a>, indent: &str, blocks: &mut Vec<Block>) {
 fn runs<'a>(node: Node<'a>, style: Style) -> Vec<Run> {
     let mut runs = Vec::new();
     for child in node.children() {
-        let value = child.data.borrow().value.clone();
+        let value = child.data.borrow().value.C();
         match value {
-            NodeValue::Text(text) => runs.push(Run { text: text.to_string(), style }),
+            NodeValue::Text(text) => runs.push(Run { text: text.S(), style }),
             NodeValue::Code(code) => runs.push(Run { text: code.literal, style: style.fg(Color::Green) }),
             NodeValue::SoftBreak => runs.push(Run { text: " ".S(), style }),
             NodeValue::LineBreak => runs.push(Run { text: "\n".S(), style }),

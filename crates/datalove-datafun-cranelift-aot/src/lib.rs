@@ -24,6 +24,7 @@
 //! - `main()`: Entry point that initializes runtime, runs body, cleans up.
 
 // Re-export shared codegen infrastructure.
+use rmx::prelude::*;
 pub use datalove_datafun_cranelift::{
     codegen, index_types, runtime, tydesc_emit, types,
     CraneliftError,
@@ -134,7 +135,7 @@ impl AotCompiler {
         registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
         let obj_builder = ObjectBuilder::new(
-            self.isa.clone(),
+            self.isa.C(),
             "script",
             cranelift_module::default_libcall_names(),
         ).map_err(|e| AotError::Module(format!("object builder error: {}", e)))?;
@@ -168,7 +169,7 @@ impl AotCompiler {
                         let IrType::Ref(ty) = &code_unit.value_types[dest.0 as usize] else {
                             panic!("a static ref's destination is a reference");
                         };
-                        let key = ((**ty).clone(), std::sync::Arc::clone(value));
+                        let key = ((**ty).C(), std::sync::Arc::clone(value));
                         let data_id = match by_value.get(&key) {
                             Some(id) => *id,
                             None => {
@@ -181,7 +182,7 @@ impl AotCompiler {
                                 data.set_align(layout.align.max(1) as u64);
                                 obj_module.define_data(id, &data)
                                     .map_err(|e| AotError::Module(format!("define {}: {}", name, e)))?;
-                                statics.push((id, key.0.clone(), key.1.clone()));
+                                statics.push((id, key.0.C(), key.1.C()));
                                 by_value.insert(key, id);
                                 id
                             }
@@ -238,13 +239,13 @@ impl AotCompiler {
                 func,
                 self.isa.as_ref(),
                 &mut obj_module,
-                runtime_imports.clone(),
+                runtime_imports.C(),
                 &mut tydesc_emitter,
                 Some(registry),
             );
-            compiler.set_local_funcs(local_funcs.clone());
+            compiler.set_local_funcs(local_funcs.C());
             compiler.set_module_funcs(module_funcs.iter().map(|(k, v)| (*k, *v)).collect());
-            compiler.set_static_consts(static_consts.clone());
+            compiler.set_static_consts(static_consts.C());
             compiler.compile_predeclared(cl_func_id)?;
         }
 
@@ -261,13 +262,13 @@ impl AotCompiler {
                 ir_unit,
                 self.isa.as_ref(),
                 &mut obj_module,
-                runtime_imports.clone(),
+                runtime_imports.C(),
                 &mut tydesc_emitter,
                 Some(registry),
             );
-            compiler.set_local_funcs(local_funcs.clone());
+            compiler.set_local_funcs(local_funcs.C());
             compiler.set_module_funcs(module_funcs.iter().map(|(k, v)| (*k, *v)).collect());
-            compiler.set_static_consts(static_consts.clone());
+            compiler.set_static_consts(static_consts.C());
             compiler.compile_predeclared(cl_func_id)?;
         }
 
@@ -284,11 +285,11 @@ impl AotCompiler {
             let fini_id = declare("__dtlv_statics_fini")?;
             codegen::FunctionCompiler::new(
                 &empty, self.isa.as_ref(), &mut obj_module,
-                runtime_imports.clone(), &mut tydesc_emitter, Some(registry),
+                runtime_imports.C(), &mut tydesc_emitter, Some(registry),
             ).compile_static_init(init_id, &statics)?;
             codegen::FunctionCompiler::new(
                 &empty, self.isa.as_ref(), &mut obj_module,
-                runtime_imports.clone(), &mut tydesc_emitter, Some(registry),
+                runtime_imports.C(), &mut tydesc_emitter, Some(registry),
             ).compile_static_fini(fini_id, &statics)?;
             Some((init_id, fini_id))
         };
@@ -321,15 +322,15 @@ impl AotCompiler {
         // Note: rt_handle is implicit - codegen adds it to all function signatures.
         IrCodeUnit {
             id: datalove_datafun_ir::CodeUnitId(0),
-            name: "__script_body".to_string(),
-            blocks: unit.blocks.clone(),
+            name: "__script_body".S(),
+            blocks: unit.blocks.C(),
             value_count: unit.value_count,
             slot_count: unit.slot_count,
-            value_types: unit.value_types.clone(),
-            slot_types: unit.slot_types.clone(),
-            tracked_slots: unit.tracked_slots.clone(),
-            const_values: unit.const_values.clone(),
-            symbols: unit.symbols.clone(),
+            value_types: unit.value_types.C(),
+            slot_types: unit.slot_types.C(),
+            tracked_slots: unit.tracked_slots.C(),
+            const_values: unit.const_values.C(),
+            symbols: unit.symbols.C(),
             context: datalove_datafun_ir::CodeUnitContext::Function(
                 datalove_datafun_ir::FunctionContext {
                     params: vec![],

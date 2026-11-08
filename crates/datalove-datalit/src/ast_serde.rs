@@ -297,7 +297,7 @@ impl ExprFull {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFull<'db>) -> Self {
         ExprFull {
             type_hint: ast.type_hint().map(|th| TypeHint::from_ast(db, th)),
-            expr: Expr::from_ast(db, ast.expr().clone()),
+            expr: Expr::from_ast(db, ast.expr().C()),
         }
     }
 }
@@ -332,21 +332,21 @@ impl TypeHint {
             crate::ast::TypeHint::Table(t) => TypeHint::Table(TypeHintTable::from_ast(db, t)),
             crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
-            crate::ast::TypeHint::Alias(alias) => TypeHint::Alias(alias.name.as_str(db).to_string()),
-            crate::ast::TypeHint::Atom(a) => TypeHint::Atom(TypeHintAtom { name: a.name.as_str(db).to_string() }),
+            crate::ast::TypeHint::Alias(alias) => TypeHint::Alias(alias.name.as_str(db).S()),
+            crate::ast::TypeHint::Atom(a) => TypeHint::Atom(TypeHintAtom { name: a.name.as_str(db).S() }),
             crate::ast::TypeHint::Term(t) => TypeHint::Term(TypeHintTerm {
-                name: t.name.as_str(db).to_string(),
-                payload: Box::new(TypeHint::from_ast(db, *t.payload.clone())),
+                name: t.name.as_str(db).S(),
+                payload: Box::new(TypeHint::from_ast(db, *t.payload.C())),
             }),
             crate::ast::TypeHint::Enum(e) => TypeHint::Enum(TypeHintEnum {
                 variants: e.variants.iter().map(|v| TypeHintEnumVariant {
-                    name: v.name.as_str(db).to_string(),
-                    payload: v.payload.as_ref().map(|p| Box::new(TypeHint::from_ast(db, *p.clone()))),
+                    name: v.name.as_str(db).S(),
+                    payload: v.payload.as_ref().map(|p| Box::new(TypeHint::from_ast(db, *p.C()))),
                 }).collect(),
             }),
             crate::ast::TypeHint::Rec(r) => TypeHint::Rec(TypeHintRec {
-                name: r.name.as_str(db).to_string(),
-                body: Box::new(TypeHint::from_ast(db, *r.body.clone())),
+                name: r.name.as_str(db).S(),
+                body: Box::new(TypeHint::from_ast(db, *r.body.C())),
             }),
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
         }
@@ -356,7 +356,7 @@ impl TypeHint {
 impl TypeHintAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonTuple<'db>) -> Self {
         TypeHintAnonTuple {
-            fields: ast.fields.iter().map(|f| TypeHint::from_ast(db, f.clone())).collect(),
+            fields: ast.fields.iter().map(|f| TypeHint::from_ast(db, f.C())).collect(),
         }
     }
 }
@@ -364,7 +364,7 @@ impl TypeHintAnonTuple {
 impl TypeHintAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonStruct<'db>) -> Self {
         TypeHintAnonStruct {
-            fields: ast.fields.iter().map(|f| TypeHintNamedField::from_ast(db, f.clone())).collect(),
+            fields: ast.fields.iter().map(|f| TypeHintNamedField::from_ast(db, f.C())).collect(),
         }
     }
 }
@@ -373,7 +373,7 @@ impl TypeHintNamedField {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintNamedField<'db>) -> Self {
         TypeHintNamedField {
             name: ast.name.text(db).S(),
-            type_hint: TypeHint::from_ast(db, *ast.type_hint.clone()),
+            type_hint: TypeHint::from_ast(db, *ast.type_hint.C()),
         }
     }
 }
@@ -382,7 +382,7 @@ impl TypeHintNamedField {
 impl TypeHintList {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintList<'db>) -> Self {
         TypeHintList {
-            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.clone())),
+            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.C())),
         }
     }
 }
@@ -390,8 +390,8 @@ impl TypeHintList {
 impl TypeHintMap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintMap<'db>) -> Self {
         TypeHintMap {
-            key_type: Box::new(TypeHint::from_ast(db, *ast.key_type.clone())),
-            value_type: Box::new(TypeHint::from_ast(db, *ast.value_type.clone())),
+            key_type: Box::new(TypeHint::from_ast(db, *ast.key_type.C())),
+            value_type: Box::new(TypeHint::from_ast(db, *ast.value_type.C())),
         }
     }
 }
@@ -399,7 +399,7 @@ impl TypeHintMap {
 impl TypeHintSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintSet<'db>) -> Self {
         TypeHintSet {
-            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.clone())),
+            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.C())),
         }
     }
 }
@@ -407,7 +407,7 @@ impl TypeHintSet {
 impl TypeHintOption {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintOption<'db>) -> Self {
         TypeHintOption {
-            inner_type: Box::new(TypeHint::from_ast(db, *ast.inner_type.clone())),
+            inner_type: Box::new(TypeHint::from_ast(db, *ast.inner_type.C())),
         }
     }
 }
@@ -415,7 +415,7 @@ impl TypeHintOption {
 impl TypeHintResult {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintResult<'db>) -> Self {
         TypeHintResult {
-            inner_type: Box::new(TypeHint::from_ast(db, *ast.inner_type.clone())),
+            inner_type: Box::new(TypeHint::from_ast(db, *ast.inner_type.C())),
         }
     }
 }
@@ -423,7 +423,7 @@ impl TypeHintResult {
 impl TypeHintTensor {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintTensor<'db>) -> Self {
         TypeHintTensor {
-            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.clone())),
+            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.C())),
             rank: ast.rank,
         }
     }
@@ -432,7 +432,7 @@ impl TypeHintTensor {
 impl TypeHintTable {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintTable<'db>) -> Self {
         TypeHintTable {
-            columns: ast.columns.iter().map(|f| TypeHintNamedField::from_ast(db, f.clone())).collect(),
+            columns: ast.columns.iter().map(|f| TypeHintNamedField::from_ast(db, f.C())).collect(),
         }
     }
 }
@@ -512,7 +512,7 @@ impl ExprString {
 impl ExprAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonTuple<'db>) -> Self {
         ExprAnonTuple {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.C())).collect(),
         }
     }
 }
@@ -520,7 +520,7 @@ impl ExprAnonTuple {
 impl ExprAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonStruct<'db>) -> Self {
         ExprAnonStruct {
-            fields: ast.fields.iter().map(|f| ExprStructField::from_ast(db, f.clone())).collect(),
+            fields: ast.fields.iter().map(|f| ExprStructField::from_ast(db, f.C())).collect(),
         }
     }
 }
@@ -538,7 +538,7 @@ impl ExprStructField {
 impl ExprList {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprList<'db>) -> Self {
         ExprList {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.C())).collect(),
         }
     }
 }
@@ -546,7 +546,7 @@ impl ExprList {
 impl ExprMap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprMap<'db>) -> Self {
         ExprMap {
-            entries: ast.entries.iter().map(|e| ExprMapEntry::from_ast(db, e.clone())).collect(),
+            entries: ast.entries.iter().map(|e| ExprMapEntry::from_ast(db, e.C())).collect(),
         }
     }
 }
@@ -563,7 +563,7 @@ impl ExprMapEntry {
 impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.C())).collect(),
         }
     }
 }
@@ -571,8 +571,8 @@ impl ExprSet {
 impl ExprTensor {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTensor<'db>) -> Self {
         ExprTensor {
-            shape: ast.shape.clone(),
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
+            shape: ast.shape.C(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.C())).collect(),
             header: ast.header,
         }
     }
@@ -582,7 +582,7 @@ impl ExprTable {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTable<'db>) -> Self {
         ExprTable {
             header: ast.header.iter().map(|n| n.as_str(db).S()).collect(),
-            rows: ast.rows.iter().map(|r| ExprTableRow::from_ast(db, r.clone())).collect(),
+            rows: ast.rows.iter().map(|r| ExprTableRow::from_ast(db, r.C())).collect(),
         }
     }
 }
@@ -590,7 +590,7 @@ impl ExprTable {
 impl ExprTableRow {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTableRow<'db>) -> Self {
         ExprTableRow {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.C())).collect(),
         }
     }
 }
@@ -638,7 +638,7 @@ impl ExprError {
 impl TypeHintParseError {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintParseError<'db>) -> Self {
         TypeHintParseError {
-            message: ast.message.as_str(db).to_string(),
+            message: ast.message.as_str(db).S(),
         }
     }
 }
@@ -646,7 +646,7 @@ impl TypeHintParseError {
 impl ExprParseError {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprParseError<'db>) -> Self {
         ExprParseError {
-            message: ast.message.as_str(db).to_string(),
+            message: ast.message.as_str(db).S(),
         }
     }
 }

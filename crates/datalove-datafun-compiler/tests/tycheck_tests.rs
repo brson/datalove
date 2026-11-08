@@ -7,21 +7,21 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::a
 
     // Format type for display.
     match type_hint {
-        TypeHint::Bool => "bool".to_string(),
-        TypeHint::U8 => "u8".to_string(),
-        TypeHint::I8 => "i8".to_string(),
-        TypeHint::U16 => "u16".to_string(),
-        TypeHint::I16 => "i16".to_string(),
-        TypeHint::U32 => "u32".to_string(),
-        TypeHint::I32 => "i32".to_string(),
-        TypeHint::U64 => "u64".to_string(),
-        TypeHint::I64 => "i64".to_string(),
-        TypeHint::Index => "index".to_string(),
-        TypeHint::Offset => "offset".to_string(),
-        TypeHint::F32 => "f32".to_string(),
-        TypeHint::F64 => "f64".to_string(),
-        TypeHint::String => "string".to_string(),
-        TypeHint::Int => "int".to_string(),
+        TypeHint::Bool => "bool".S(),
+        TypeHint::U8 => "u8".S(),
+        TypeHint::I8 => "i8".S(),
+        TypeHint::U16 => "u16".S(),
+        TypeHint::I16 => "i16".S(),
+        TypeHint::U32 => "u32".S(),
+        TypeHint::I32 => "i32".S(),
+        TypeHint::U64 => "u64".S(),
+        TypeHint::I64 => "i64".S(),
+        TypeHint::Index => "index".S(),
+        TypeHint::Offset => "offset".S(),
+        TypeHint::F32 => "f32".S(),
+        TypeHint::F64 => "f64".S(),
+        TypeHint::String => "string".S(),
+        TypeHint::Int => "int".S(),
         TypeHint::Result(inner) => {
             let inner_str = type_hint_to_string(db, &inner.inner_type);
             format!("!{}", inner_str)
@@ -60,12 +60,12 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::a
             let elem_str = type_hint_to_string(db, &t.element_type);
             format!("[|{}, {}|]", elem_str, t.rank)
         }
-        TypeHint::Data => "data".to_string(),
-        TypeHint::Error => "error".to_string(),
-        TypeHint::ParseError(_) => "?".to_string(),
+        TypeHint::Data => "data".S(),
+        TypeHint::Error => "error".S(),
+        TypeHint::ParseError(_) => "?".S(),
         TypeHint::Rec(r) => format!("rec {} {}", r.name.as_str(db), type_hint_to_string(db, &r.body)),
-        TypeHint::Table(_) => "table".to_string(),
-        TypeHint::Alias(alias) => alias.name.as_str(db).to_string(),
+        TypeHint::Table(_) => "table".S(),
+        TypeHint::Alias(alias) => alias.name.as_str(db).S(),
         TypeHint::Atom(a) => format!("atom {}", a.name.as_str(db)),
         TypeHint::Term(t) => format!("term {} {}", t.name.as_str(db), type_hint_to_string(db, &t.payload)),
         TypeHint::Enum(e) => {
@@ -373,15 +373,15 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .iter()
         .map(|d| {
             let diag = d.to_diagnostic(&db);
-            let code = diag.code.map(|c| c.as_str(&db).to_string());
+            let code = diag.code.map(|c| c.as_str(&db).S());
             let labels: Vec<_> = diag.labels.iter().map(|label| {
                 json!({
                     "span": [label.span.start, label.span.end],
-                    "text": source_text[label.span.clone()].to_string(),
-                    "message": label.message.map(|m| m.as_str(&db).to_string())
+                    "text": source_text[label.span.C()].S(),
+                    "message": label.message.map(|m| m.as_str(&db).S())
                 })
             }).collect();
-            let notes: Vec<_> = diag.notes.iter().map(|n| n.as_str(&db).to_string()).collect();
+            let notes: Vec<_> = diag.notes.iter().map(|n| n.as_str(&db).S()).collect();
             let mut obj = json!({
                 "code": code,
                 "message": diag.message.as_str(&db),
@@ -430,7 +430,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let ret_ty_str = if let Some(ref rt) = return_type {
                     type_hint_to_string(&db, rt)
                 } else {
-                    "?".to_string()
+                    "?".S()
                 };
 
                 judgements.push(json!({

@@ -39,7 +39,7 @@ fn fixtures() -> Vec<PathBuf> {
 /// object bytes.
 fn compile_once(source: &Path, seed: u32, out: &Path) -> Vec<u8> {
     let status = Command::new(env!("CARGO_BIN_EXE_datalove"))
-        .env(bct::lookup::SEED_VAR, seed.to_string())
+        .env(bct::lookup::SEED_VAR, seed.S())
         .arg("aot-compile")
         .arg(source)
         .arg("-o")

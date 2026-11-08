@@ -1,6 +1,7 @@
 //! Lowering a function body's IR to ops: one instruction at a time, then the
 //! optimization pass (`opt`) over the blocks, then laying them out.
 
+use rmx::prelude::*;
 use super::*;
 
 // =============================================================================
@@ -19,7 +20,7 @@ fn static_field(ty: &IrType, index: u32) -> Option<(u32, &IrType)> {
         IrType::Struct(fields) => fields.iter().map(|(_, t)| t).collect(),
         _ => return None,
     };
-    let owned: Vec<IrType> = types.iter().map(|t| (*t).clone()).collect();
+    let owned: Vec<IrType> = types.iter().map(|t| (*t).C()).collect();
     let offset = *datalove_datafun_ir::layout::aggregate_field_offsets(&owned).get(index as usize)?;
     Some((offset, types[index as usize]))
 }
@@ -327,7 +328,7 @@ impl<'a> Lowering<'a> {
         for pair in order.windows(2) {
             next[pair[0] as usize] = Some(pair[1]);
         }
-        let mut in_loop = self.in_loop.clone();
+        let mut in_loop = self.in_loop.C();
         in_loop.resize(self.blocks.len(), false);
         opt::Facts { values, in_loop, next }
     }
@@ -1217,7 +1218,7 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::Jump { to: target.0 });
             }
             None => {
-                self.escapes.push("edge".to_string());
+                self.escapes.push("edge".S());
                 self.emit(Op::EdgeIr { block: block as u32, edge, to: target.0 });
             }
         }
@@ -1257,7 +1258,7 @@ impl<'a> Lowering<'a> {
                         self.emit(Op::Return { src, len });
                     }
                     _ => {
-                        self.escapes.push("return".to_string());
+                        self.escapes.push("return".S());
                         self.emit(Op::ReturnIr { block: block as u32 });
                     }
                 }

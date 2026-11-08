@@ -148,16 +148,16 @@ impl<'db> Diagnostic<'db> {
     pub fn to_stored(&self, db: &'db dyn crate::Db) -> StoredDiagnostic {
         StoredDiagnostic {
             severity: self.severity,
-            code: self.code.map(|c| c.as_str(db).to_string()),
-            message: self.message.as_str(db).to_string(),
+            code: self.code.map(|c| c.as_str(db).S()),
+            message: self.message.as_str(db).S(),
             labels: self.labels.iter().map(|l| StoredLabel {
                 source: l.source,
                 span: l.span.C(),
-                message: l.message.map(|m| m.as_str(db).to_string()),
+                message: l.message.map(|m| m.as_str(db).S()),
                 style: l.style,
             }).collect(),
-            notes: self.notes.iter().map(|n| n.as_str(db).to_string()).collect(),
-            helps: self.helps.iter().map(|h| h.as_str(db).to_string()).collect(),
+            notes: self.notes.iter().map(|n| n.as_str(db).S()).collect(),
+            helps: self.helps.iter().map(|h| h.as_str(db).S()).collect(),
         }
     }
 }

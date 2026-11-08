@@ -3,6 +3,7 @@
 //! Lowers statements (let, var, set, return) and control flow (if, loop, break,
 //! continue). Called from both script and function body lowering.
 
+use rmx::prelude::*;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{CursorKind, IrType, Operand, ValueId, SlotId, Instruction, Terminator, SlotDest, ParamMode};
@@ -51,26 +52,26 @@ pub(super) fn lower_destructure<'db>(
     let ty = ctx.expr_type(init_expr);
     let db = ctx.db;
     match Destructure::of(db, binding, &ty) {
-        Destructure::Whole(name) => vec![(name.text(db).to_string(), value_id, ty)],
+        Destructure::Whole(name) => vec![(name.text(db).S(), value_id, ty)],
         Destructure::Fields { names, field_count } => {
             // A pattern names every field, so every field has a name to go to.
             let mut dests = vec![None; field_count];
             for (_, index, field_ty) in &names {
-                dests[*index as usize] = Some(ctx.fresh_value(field_ty.clone()));
+                dests[*index as usize] = Some(ctx.fresh_value(field_ty.C()));
             }
             let dests: Vec<ValueId> = dests.into_iter()
                 .map(|d| d.expect("a destructure names every field"))
                 .collect();
-            ctx.emit_unpack(dests.clone(), Operand::Value(value_id));
+            ctx.emit_unpack(dests.C(), Operand::Value(value_id));
             names.into_iter()
-                .map(|(name, index, field_ty)| (name.text(db).to_string(), dests[index as usize], field_ty))
+                .map(|(name, index, field_ty)| (name.text(db).S(), dests[index as usize], field_ty))
                 .collect()
         }
         Destructure::Payload(name, payload_ty) => {
             // A term is laid out as its payload, so taking it out is a move.
-            let dest = ctx.fresh_value(payload_ty.clone());
+            let dest = ctx.fresh_value(payload_ty.C());
             ctx.emit(Instruction::Move { dest, src: Operand::Value(value_id) });
-            vec![(name.text(db).to_string(), dest, payload_ty)]
+            vec![(name.text(db).S(), dest, payload_ty)]
         }
         Destructure::Nothing => vec![],
     }
@@ -87,7 +88,7 @@ pub(super) fn lower_var<'db>(
         // Uninitialized var - get type from type hint.
         let name = var_stmt.binding.as_name()
             .expect("the parser requires a plain name without a value")
-            .text(ctx.db).to_string();
+            .text(ctx.db).S();
         let type_hint = var_stmt.type_hint.as_ref()
             .expect("uninitialized var must have type hint");
         let slot = ctx.fresh_slot(ctx.var_hint_type(type_hint));
@@ -276,7 +277,7 @@ fn lower_statement_with_id<'db>(
         Statement::Const(const_stmt) => {
             // Const bindings in function bodies are lowered as let bindings.
             // The const inlining pass runs later to replace with literal values.
-            let name = const_stmt.name.text(ctx.db).to_string();
+            let name = const_stmt.name.text(ctx.db).S();
             let init_expr = const_stmt.value;
             let value_id = lower_expression(ctx, ctx.expr(init_expr))?;
             let operand = Operand::Value(value_id);
@@ -427,7 +428,7 @@ fn lower_if_option<'db>(
     // Emit UnwrapOption instruction.
     // dest: receives inner value (only valid when is_some=true).
     // is_some: boolean flag for branching.
-    let inner_dest = ctx.fresh_value(inner_type.clone());
+    let inner_dest = ctx.fresh_value(inner_type.C());
     let is_some = ctx.fresh_value(IrType::Bool);
 
     ctx.emit(Instruction::UnwrapOption {
@@ -520,7 +521,7 @@ fn lower_if_result<'db>(
     // ok_dest: receives Ok payload (only valid when is_ok=true).
     // err_dest: receives Error (only valid when is_ok=false).
     // is_ok: boolean flag for branching.
-    let ok_dest = ctx.fresh_value(ok_type.clone());
+    let ok_dest = ctx.fresh_value(ok_type.C());
     let err_dest = ctx.fresh_value(IrType::Error);
     let is_ok = ctx.fresh_value(IrType::Bool);
 
@@ -696,7 +697,7 @@ fn lower_set<'db>(
     let value_expr = set_stmt.value;
 
     if set_stmt.op.is_none() && place.steps.is_empty() {
-        let root_name_str = place.root.text(ctx.db).to_string();
+        let root_name_str = place.root.text(ctx.db).S();
         if is_self_assignment(ctx, &root_name_str, ctx.expr(value_expr)) {
             return Ok(());
         }
@@ -748,7 +749,7 @@ fn lower_set_simple<'db>(
     place: &ast::Place<'db>,
     value: Operand,
 ) -> Result<(), LowerError> {
-    let root_name_str = place.root.text(ctx.db).to_string();
+    let root_name_str = place.root.text(ctx.db).S();
     let value = take_value(ctx, value);
     let Operand::Value(value_id) = value else { unreachable!() };
     match ctx.lookup_var(&root_name_str) {
@@ -845,7 +846,7 @@ fn lower_set_compound<'db>(
     if !ty.is_dynamic() && !(aliased && !ty.is_copy()) {
         return crate::expr::lower_op_assign(ctx, op, target, rhs, &ty, expr_temp_mark);
     }
-    let result = crate::expr::lower_binop_operands(ctx, op, target, rhs, ty.clone(), expr_temp_mark)?;
+    let result = crate::expr::lower_binop_operands(ctx, op, target, rhs, ty.C(), expr_temp_mark)?;
     match target {
         Operand::Slot(slot) => store_slot(ctx, slot, result),
         Operand::Param(param) => ctx.emit_param_store(param, Operand::Value(result)),
@@ -872,7 +873,7 @@ fn lower_set_indexed<'db>(
     keys: &[Operand],
     value: Operand,
 ) -> Result<(), LowerError> {
-    let last_step = place.steps.last().unwrap();
+    let last_step = place.steps.last().X();
     if let ast::PlaceStep::Index(idx) = last_step {
         let base_op = navigate_place(ctx, place, keys, place.steps.len() - 1)?;
         let key_op = *keys.last().expect("an index step has a key");
@@ -885,7 +886,7 @@ fn lower_set_indexed<'db>(
             // Fallible index: set a[i]? = v / set a[i]! = v. The write checks
             // the index itself and takes the value whether or not it lands, so
             // the early return has nothing of the value's to drop.
-            let error_mode = idx.error_mode.unwrap();
+            let error_mode = idx.error_mode.X();
             let base_type = super::expr::operand_type(ctx, &base_op);
             let value = take_value(ctx, value);
             let is_valid = ctx.fresh_value(IrType::Bool);
@@ -917,7 +918,7 @@ fn lower_set_field_path<'db>(
     place: &ast::Place<'db>,
     value: Operand,
 ) -> Result<(), LowerError> {
-    let root_name_str = place.root.text(ctx.db).to_string();
+    let root_name_str = place.root.text(ctx.db).S();
     let field_path = collect_field_path_from_place(ctx, place)?;
     let value = take_value(ctx, value);
     match ctx.lookup_var(&root_name_str) {
@@ -1027,7 +1028,7 @@ pub(crate) fn emit_collection_element_ref(
 ) -> ValueId {
     match collection_type {
         IrType::Map(_, v) => {
-            let value_type = v.as_ref().clone();
+            let value_type = v.as_ref().C();
             let dest = ctx.fresh_value(IrType::Ref(Box::new(value_type)));
             ctx.emit(Instruction::MapValueRef {
                 dest,
@@ -1038,9 +1039,9 @@ pub(crate) fn emit_collection_element_ref(
         }
         IrType::Tensor(elem, rank) => {
             let inner_type = if *rank > 1 {
-                IrType::Tensor(elem.clone(), rank - 1)
+                IrType::Tensor(elem.C(), rank - 1)
             } else {
-                elem.as_ref().clone()
+                elem.as_ref().C()
             };
             let dest = ctx.fresh_value(IrType::Ref(Box::new(inner_type)));
             ctx.emit(Instruction::TensorIndexRef {
@@ -1052,7 +1053,7 @@ pub(crate) fn emit_collection_element_ref(
         }
         _ => {
             let elem_type = match collection_type {
-                IrType::List(e) => e.as_ref().clone(),
+                IrType::List(e) => e.as_ref().C(),
                 _ => panic!("index on non-list/map/tensor type {:?}", collection_type),
             };
             let dest = ctx.fresh_value(IrType::Ref(Box::new(elem_type)));
@@ -1103,7 +1104,7 @@ fn navigate_place<'db>(
     keys: &[Operand],
     step_count: usize,
 ) -> Result<Operand, LowerError> {
-    let root_name_str = place.root.text(ctx.db).to_string();
+    let root_name_str = place.root.text(ctx.db).S();
     let mut current_op = ctx.lookup_var(&root_name_str)
         .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
@@ -1159,12 +1160,12 @@ pub(super) fn collect_field_path_from_place<'db>(
     ctx: &LowerCtx<'db>,
     place: &ast::Place<'db>,
 ) -> Result<Vec<u32>, LowerError> {
-    let root_name_str = place.root.text(ctx.db).to_string();
+    let root_name_str = place.root.text(ctx.db).S();
     let root_type = ctx.var_type_by_name(&root_name_str)
         .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
     let mut path = Vec::new();
-    let mut current_type = root_type.clone();
+    let mut current_type = root_type.C();
 
     for step in &place.steps {
         let ast::PlaceStep::Field(selector) = step else {
@@ -1178,7 +1179,7 @@ pub(super) fn collect_field_path_from_place<'db>(
                 if (*idx as usize) >= fields.len() {
                     panic!("tuple index {} out of bounds (tuple has {} fields) - typechecker should catch this", idx, fields.len());
                 }
-                current_type = fields[*idx as usize].clone();
+                current_type = fields[*idx as usize].C();
                 path.push(*idx);
             }
             ast::FieldSelector::Name(name) => {
@@ -1189,7 +1190,7 @@ pub(super) fn collect_field_path_from_place<'db>(
                 let field_idx = fields.iter()
                     .position(|(n, _)| n == name_str)
                     .unwrap_or_else(|| panic!("field '{}' not found in struct - typechecker should catch this", name_str));
-                current_type = fields[field_idx].1.clone();
+                current_type = fields[field_idx].1.C();
                 path.push(field_idx as u32);
             }
         }
@@ -1285,7 +1286,7 @@ pub fn lower_match<'db>(
         if let ast::MatchCaseKind::Term { name: _, binding } = &case.kind {
             let payload_type = variants[variant_index as usize].1.as_ref()
                 .unwrap_or_else(|| panic!("term case but variant has no payload type"))
-                .clone();
+                .C();
             let payload_dest = ctx.fresh_value(payload_type);
             ctx.emit(Instruction::EnumPayload {
                 dest: payload_dest,
@@ -1320,7 +1321,7 @@ pub fn lower_match<'db>(
 
     // Handle default arm.
     if let Some(default_body) = &match_stmt.default_body {
-        ctx.start_block(default_block.unwrap());
+        ctx.start_block(default_block.X());
 
         // Drop the input in default arm.
         ctx.emit(Instruction::Drop {
@@ -1412,7 +1413,7 @@ pub fn lower_for<'db>(
     let kind = CursorKind::of(&coll_ty).expect("the typechecker admits only collections to `for`");
     let elem_ty = CursorKind::elem_type(&coll_ty);
     let value_ty = match &coll_ty {
-        IrType::Map(_, value) => Some((**value).clone()),
+        IrType::Map(_, value) => Some((**value).C()),
         _ => None,
     };
     let indexed = stmt.bindings.len() == 2 && value_ty.is_none();

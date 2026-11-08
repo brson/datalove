@@ -273,11 +273,11 @@ impl Sink<'_> {
     fn emit<S: ariadne::Span, C: Cache<S::SourceId>>(self, report: Report<'_, S>, cache: C) {
         match self {
             Sink::Stderr => {
-                let _ = report.eprint(cache);
+                report.eprint(cache).I();
             }
             Sink::Text(out, _) => {
                 let mut bytes = Vec::new();
-                let _ = report.write(cache, &mut bytes);
+                report.write(cache, &mut bytes).I();
                 out.push_str(&String::from_utf8_lossy(&bytes));
             }
         }
@@ -429,7 +429,7 @@ fn render_one_multi_source<'db>(
         builder = builder.with_help(help.as_str(db));
     }
 
-    let _ = builder.finish().eprint(MultiSourceCache { sources, names });
+    builder.finish().eprint(MultiSourceCache { sources, names }).I();
 }
 
 /// A source's text as ariadne is given it: after `lines` empty lines.

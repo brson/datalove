@@ -40,37 +40,37 @@ pub fn datafun_expr_to_datalit_serde<'db>(
     // Get type_hint and expr_serde from the expression kind.
     let (type_hint, expr_serde) = match kind {
         ast::ExprFunKind::True(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::True,
         ),
         ast::ExprFunKind::False(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::False,
         ),
         ast::ExprFunKind::None(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::None,
         ),
         ast::ExprFunKind::Int(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Float(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::Float(datalit::ast_serde::ExprFloat {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Hex(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::Hex(datalit::ast_serde::ExprHex {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::String(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::String(datalit::ast_serde::ExprString {
                 value: e.value.as_str(db).S(),
             }),
@@ -80,7 +80,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::List(datalit::ast_serde::ExprList { elements }),
             )
         }
@@ -89,7 +89,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Set(datalit::ast_serde::ExprSet { elements }),
             )
         }
@@ -102,7 +102,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Map(datalit::ast_serde::ExprMap { entries }),
             )
         }
@@ -111,7 +111,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Tensor(datalit::ast_serde::ExprTensor {
                     shape: e.shape.C(),
                     elements,
@@ -124,7 +124,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::AnonTuple(datalit::ast_serde::ExprAnonTuple { elements }),
             )
         }
@@ -139,7 +139,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::AnonStruct(datalit::ast_serde::ExprAnonStruct { fields }),
             )
         }
@@ -147,7 +147,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Some(e) => {
             let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Some(datalit::ast_serde::ExprSome {
                     payload: Box::new(payload),
                 }),
@@ -156,7 +156,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Ok(e) => {
             let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Ok(datalit::ast_serde::ExprOk {
                     payload: Box::new(payload),
                 }),
@@ -165,7 +165,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Er(e) => {
             let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Er(datalit::ast_serde::ExprEr {
                     payload: Box::new(payload),
                 }),
@@ -174,7 +174,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Data(e) => {
             let value = datafun_expr_to_datalit_serde(db, expr.at(e.value))?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Data(datalit::ast_serde::ExprData {
                     value: Box::new(value),
                 }),
@@ -183,14 +183,14 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Error(e) => {
             let value = datafun_expr_to_datalit_serde(db, expr.at(e.value))?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Error(datalit::ast_serde::ExprError {
                     value: Box::new(value),
                 }),
             )
         }
         ast::ExprFunKind::Atom(e) => (
-            e.type_hint.clone(),
+            e.type_hint.C(),
             datalit::ast_serde::Expr::Atom(datalit::ast_serde::ExprAtom {
                 name: e.name.as_str(db).S(),
             }),
@@ -198,7 +198,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Term(e) => {
             let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Term(datalit::ast_serde::ExprTerm {
                     name: e.name.as_str(db).S(),
                     payload: Box::new(payload),
@@ -208,7 +208,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::EnumLiteral(e) => {
             let variant = datafun_expr_to_datalit_serde(db, expr.at(e.variant))?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Enum(datalit::ast_serde::ExprEnum {
                     variant: Box::new(variant),
                 }),
@@ -216,7 +216,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         }
         ast::ExprFunKind::Table(e) => {
             let header = e.header.iter()
-                .map(|h| h.as_str(db).to_string())
+                .map(|h| h.as_str(db).S())
                 .collect();
             let rows = e.rows.iter()
                 .map(|row| {
@@ -227,18 +227,18 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.type_hint.clone(),
+                e.type_hint.C(),
                 datalit::ast_serde::Expr::Table(datalit::ast_serde::ExprTable { header, rows }),
             )
         }
         ast::ExprFunKind::DataFile(_) => {
-            return Err(ConversionError::NotPureDatalit("DataFile".to_string()));
+            return Err(ConversionError::NotPureDatalit("DataFile".S()));
         }
         ast::ExprFunKind::ParseError(e) => {
             (
                 None,
                 datalit::ast_serde::Expr::ParseError(datalit::ast_serde::ExprParseError {
-                    message: e.message.as_str(db).to_string(),
+                    message: e.message.as_str(db).S(),
                 }),
             )
         }
@@ -265,44 +265,44 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                             let value_str = int_expr.value.as_str(db);
                             let neg_value = format!("-{}", value_str);
                             (
-                                int_expr.type_hint.clone(),
+                                int_expr.type_hint.C(),
                                 datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
                                     value: neg_value,
                                 }),
                             )
                         }
                         _ => {
-                            return Err(ConversionError::NotPureDatalit("UnaryOp(Neg) on non-int".to_string()));
+                            return Err(ConversionError::NotPureDatalit("UnaryOp(Neg) on non-int".S()));
                         }
                     }
                 }
                 _ => {
-                    return Err(ConversionError::NotPureDatalit("UnaryOp (non-Neg)".to_string()));
+                    return Err(ConversionError::NotPureDatalit("UnaryOp (non-Neg)".S()));
                 }
             }
         }
 
         // Datafun-only constructs - return error.
         ast::ExprFunKind::BinOp(_) => {
-            return Err(ConversionError::NotPureDatalit("BinOp".to_string()));
+            return Err(ConversionError::NotPureDatalit("BinOp".S()));
         }
         ast::ExprFunKind::FunctionCall(_) => {
-            return Err(ConversionError::NotPureDatalit("FunctionCall".to_string()));
+            return Err(ConversionError::NotPureDatalit("FunctionCall".S()));
         }
         ast::ExprFunKind::TryOption(_) => {
-            return Err(ConversionError::NotPureDatalit("TryOption".to_string()));
+            return Err(ConversionError::NotPureDatalit("TryOption".S()));
         }
         ast::ExprFunKind::TryResult(_) => {
-            return Err(ConversionError::NotPureDatalit("TryResult".to_string()));
+            return Err(ConversionError::NotPureDatalit("TryResult".S()));
         }
         ast::ExprFunKind::CloneCoerce(_) => {
-            return Err(ConversionError::NotPureDatalit("CloneCoerce".to_string()));
+            return Err(ConversionError::NotPureDatalit("CloneCoerce".S()));
         }
         ast::ExprFunKind::FieldProj(_) => {
-            return Err(ConversionError::NotPureDatalit("FieldProj".to_string()));
+            return Err(ConversionError::NotPureDatalit("FieldProj".S()));
         }
         ast::ExprFunKind::IntrinsicCall(_) => {
-            return Err(ConversionError::NotPureDatalit("IntrinsicCall".to_string()));
+            return Err(ConversionError::NotPureDatalit("IntrinsicCall".S()));
         }
         // A hint over parentheses. Datalit keeps the parentheses only where
         // what they hold has a hint of its own, and otherwise reads them as
@@ -315,13 +315,13 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 }),
                 None => inner.expr,
             };
-            (Some(e.type_hint.clone()), expr_serde)
+            (Some(e.type_hint.C()), expr_serde)
         }
         ast::ExprFunKind::Index(_) => {
-            return Err(ConversionError::NotPureDatalit("Index".to_string()));
+            return Err(ConversionError::NotPureDatalit("Index".S()));
         }
         ast::ExprFunKind::Place(_) => {
-            return Err(ConversionError::NotPureDatalit("Place".to_string()));
+            return Err(ConversionError::NotPureDatalit("Place".S()));
         }
     };
 
@@ -385,7 +385,7 @@ pub fn datalit_typecheck_to_serde<'db>(
     db: &'db dyn salsa::Database,
     result: datalit::tycheck::TypecheckResult<'db>,
 ) -> TypecheckResultSerde {
-    let root_type = result.root_type(db).clone().map(|t| datalit_type_to_serde(db, t));
+    let root_type = result.root_type(db).C().map(|t| datalit_type_to_serde(db, t));
     let errors = result.errors(db).iter()
         .map(|e| datalit_error_to_serde(&e.error(db)))
         .collect();
@@ -440,53 +440,53 @@ fn datalit_type_to_serde<'db>(
         Type::Int => TypeSerde::Int,
         Type::String => TypeSerde::String,
         Type::AnonTuple(t) => TypeSerde::AnonTuple {
-            fields: t.fields.iter().map(|f| datalit_type_to_serde(db, f.clone())).collect(),
+            fields: t.fields.iter().map(|f| datalit_type_to_serde(db, f.C())).collect(),
         },
         Type::AnonStruct(t) => TypeSerde::AnonStruct {
             fields: t.fields.iter()
-                .map(|f| (f.name.as_str(db).to_string(), datalit_type_to_serde(db, (*f.ty).clone())))
+                .map(|f| (f.name.as_str(db).S(), datalit_type_to_serde(db, (*f.ty).C())))
                 .collect(),
         },
 
         Type::List(t) => TypeSerde::List {
-            element: Box::new(datalit_type_to_serde(db, (*t.element_type).clone())),
+            element: Box::new(datalit_type_to_serde(db, (*t.element_type).C())),
         },
         Type::Map(t) => TypeSerde::Map {
-            key: Box::new(datalit_type_to_serde(db, (*t.key_type).clone())),
-            value: Box::new(datalit_type_to_serde(db, (*t.value_type).clone())),
+            key: Box::new(datalit_type_to_serde(db, (*t.key_type).C())),
+            value: Box::new(datalit_type_to_serde(db, (*t.value_type).C())),
         },
         Type::Set(t) => TypeSerde::Set {
-            element: Box::new(datalit_type_to_serde(db, (*t.element_type).clone())),
+            element: Box::new(datalit_type_to_serde(db, (*t.element_type).C())),
         },
         Type::Option(t) => TypeSerde::Option {
-            inner: Box::new(datalit_type_to_serde(db, (*t.inner_type).clone())),
+            inner: Box::new(datalit_type_to_serde(db, (*t.inner_type).C())),
         },
         Type::Result(t) => TypeSerde::Result {
-            inner: Box::new(datalit_type_to_serde(db, (*t.inner_type).clone())),
+            inner: Box::new(datalit_type_to_serde(db, (*t.inner_type).C())),
         },
         Type::Tensor(t) => TypeSerde::Tensor {
-            element: Box::new(datalit_type_to_serde(db, (*t.element_type).clone())),
+            element: Box::new(datalit_type_to_serde(db, (*t.element_type).C())),
             rank: t.rank,
         },
         Type::Data => TypeSerde::Data,
         Type::Error => TypeSerde::Error,
         Type::Table(t) => TypeSerde::Table {
             columns: t.columns.iter().map(|c| (
-                c.name.as_str(db).to_string(),
-                datalit_type_to_serde(db, (*c.ty).clone()),
+                c.name.as_str(db).S(),
+                datalit_type_to_serde(db, (*c.ty).C()),
             )).collect(),
         },
         Type::Atom(a) => TypeSerde::Atom {
-            name: a.name.as_str(db).to_string(),
+            name: a.name.as_str(db).S(),
         },
         Type::Term(t) => TypeSerde::Term {
-            name: t.name.as_str(db).to_string(),
-            payload: Box::new(datalit_type_to_serde(db, (*t.payload).clone())),
+            name: t.name.as_str(db).S(),
+            payload: Box::new(datalit_type_to_serde(db, (*t.payload).C())),
         },
         Type::Enum(e) => TypeSerde::Enum {
             variants: e.variants.iter().map(|v| (
-                v.name.as_str(db).to_string(),
-                v.payload.as_ref().map(|p| datalit_type_to_serde(db, (**p).clone())),
+                v.name.as_str(db).S(),
+                v.payload.as_ref().map(|p| datalit_type_to_serde(db, (**p).C())),
             )).collect(),
         },
     }
@@ -498,7 +498,7 @@ fn datafun_type_to_serde<'db>(
 ) -> TypeSerde {
     use datalove_datafun_tycheck::Type;
     match ty {
-        Type::Datalit(inner) => datalit_type_to_serde(db, inner.clone()),
+        Type::Datalit(inner) => datalit_type_to_serde(db, inner.C()),
         Type::Function(_) => panic!("Unexpected Function type in funlit_equiv"),
     }
 }
@@ -508,8 +508,8 @@ fn datalit_error_to_serde(err: &datalit::tycheck::TypeError) -> TypeErrorSerde {
     match err {
         TypeError::TypeMismatch { expected, actual } => {
             TypeErrorSerde::TypeMismatch {
-                expected: expected.clone(),
-                actual: actual.clone(),
+                expected: expected.C(),
+                actual: actual.C(),
             }
         }
         TypeError::CannotSynthesize => TypeErrorSerde::CannotSynthesize,
@@ -525,12 +525,12 @@ fn datafun_error_to_serde(err: &datalove_datafun_tycheck::TypeError) -> TypeErro
     match err {
         TypeError::TypeMismatch { expected, actual } => {
             TypeErrorSerde::TypeMismatch {
-                expected: expected.clone(),
-                actual: actual.clone(),
+                expected: expected.C(),
+                actual: actual.C(),
             }
         }
         TypeError::CannotSynthesize => TypeErrorSerde::CannotSynthesize,
-        TypeError::UnresolvedName(name) => TypeErrorSerde::UnresolvedName(name.clone()),
+        TypeError::UnresolvedName(name) => TypeErrorSerde::UnresolvedName(name.C()),
         TypeError::ArityMismatch { expected, actual } => {
             TypeErrorSerde::ArityMismatch { expected: *expected, actual: *actual }
         }

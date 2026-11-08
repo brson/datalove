@@ -294,7 +294,7 @@ impl Session {
             assert!(!output.starts_with("Error:"), "running unit {index}: {output}");
         }
 
-        let mut sorted = order.clone();
+        let mut sorted = order.C();
         sorted.sort();
         assert_eq!(order, sorted, "units must be re-derived in index order");
         order.into_iter().collect()
@@ -335,7 +335,7 @@ impl Session {
             compiled.is_successful(),
             "the edited module should compile: {:?}", compiled.all_errors(),
         );
-        self.executor.set_module_registry(compiled.shared.module_registry.clone());
+        self.executor.set_module_registry(compiled.shared.module_registry.C());
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -364,7 +364,7 @@ impl Session {
             order.push(index);
         }
 
-        let mut sorted = order.clone();
+        let mut sorted = order.C();
         sorted.sort();
         assert_eq!(order, sorted, "units must be re-derived in index order");
         order.into_iter().collect()
@@ -540,13 +540,13 @@ impl Graph {
             provides: join(&self.provides, &other.provides),
             // The binding behind a name is whatever it is *now*, since the
             // question a signature answers is what a unit would see today.
-            signatures: other.signatures.clone(),
+            signatures: other.signatures.C(),
             uses: join(&self.uses, &other.uses),
             imports: join(&self.imports, &other.imports),
             // What the running session went through, which is the graph from
             // before the edit.
-            changed: self.changed.clone(),
-            failed: other.failed.clone(),
+            changed: self.changed.C(),
+            failed: other.failed.C(),
         }
     }
 

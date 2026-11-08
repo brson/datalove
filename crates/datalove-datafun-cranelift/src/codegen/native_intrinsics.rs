@@ -6,6 +6,7 @@
 //! few loads and stores. The native stays the definition, and is called where
 //! a type is dynamic.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -90,7 +91,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             NativeIntrinsic::MemReplace if matches!(&args[0], Operand::ValueRef(r) if self.field_places.contains_key(r)) => {
                 let Operand::ValueRef(r) = &args[0] else { unreachable!("matched") };
-                let place = self.field_places[r].clone();
+                let place = self.field_places[r].C();
                 let old = self.field_place_words(builder, &place);
                 let new = self.operand_words(builder, &args[1], &place.ty)?;
                 self.set_field_place_words(builder, &place, &new);
@@ -128,7 +129,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     fn field_place_among<'o>(&self, args: &'o [Operand]) -> Option<(super::slot_vars::FieldPlace, &'o Operand)> {
         let i = args.iter().position(|a| matches!(a, Operand::ValueRef(r) if self.field_places.contains_key(r)))?;
         let Operand::ValueRef(r) = &args[i] else { unreachable!("found") };
-        Some((self.field_places[r].clone(), &args[1 - i]))
+        Some((self.field_places[r].C(), &args[1 - i]))
     }
 
     /// `list_push`: the element stored after the last if there is room, and
@@ -205,7 +206,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             panic!("list_pop's parameter is a list, not {list_ty}");
         };
         let elem_size = types::ir_type_size(elem_ty) as i64;
-        let option_ty = self.func.value_types[dest.0 as usize].clone();
+        let option_ty = self.func.value_types[dest.0 as usize].C();
         let list = self.get_operand_ptr(builder, &args[0])?;
         let flags = MemFlagsData::new();
         let counts = Counts::load(builder, list);

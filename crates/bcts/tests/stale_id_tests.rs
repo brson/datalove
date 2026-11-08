@@ -22,7 +22,7 @@ use bcts::text::{InternedText, TextSpan};
 #[test]
 fn span_entry_survives_a_source_edit() {
     let mut db = bcts::Database::default();
-    let source = Source::new(&db, "first version".to_string());
+    let source = Source::new(&db, "first version".S());
 
     // Record a span, the way a parser fills a span table.
     let entry = TextSpan::new(source, 0..5);
@@ -30,7 +30,7 @@ fn span_entry_survives_a_source_edit() {
 
     // Edit the source. Spans once named a `Text`, a tracked struct that the
     // edit deleted; holding its id here panicked on the next read.
-    source.set_text(&mut db).to("second version".to_string());
+    source.set_text(&mut db).to("second version".S());
 
     assert_eq!(
         &entry.source.as_str(&db)[entry.span.C()],
@@ -43,10 +43,10 @@ fn span_entry_survives_a_source_edit() {
 #[test]
 fn span_entry_survives_interning_churn() {
     let mut db = bcts::Database::default();
-    let source = Source::new(&db, "the quick brown fox".to_string());
+    let source = Source::new(&db, "the quick brown fox".S());
     let entry = TextSpan::new(source, 4..9);
 
-    let churn = Source::new(&db, "churn-0".to_string());
+    let churn = Source::new(&db, "churn-0".S());
     for revision in 1..12 {
         churn.set_text(&mut db).to(format!("churn-{}", revision));
         for extra in 0..64 {
@@ -61,7 +61,7 @@ fn span_entry_survives_interning_churn() {
 #[test]
 fn stored_diagnostic_survives_interning_churn() {
     let mut db = bcts::Database::default();
-    let source = Source::new(&db, "let x = nope".to_string());
+    let source = Source::new(&db, "let x = nope".S());
 
     let stored = DiagnosticBuilder::error(&db, "undefined variable: nope")
         .code("F001")
@@ -71,7 +71,7 @@ fn stored_diagnostic_survives_interning_churn() {
 
     // Churn enough interning to make any slot the diagnostic had referred to a
     // candidate for reuse.
-    let churn = Source::new(&db, "churn-0".to_string());
+    let churn = Source::new(&db, "churn-0".S());
     for revision in 1..12 {
         churn.set_text(&mut db).to(format!("churn-{}", revision));
         for extra in 0..64 {
@@ -94,13 +94,13 @@ fn stored_diagnostic_survives_interning_churn() {
 #[test]
 fn stored_diagnostic_survives_a_source_edit() {
     let mut db = bcts::Database::default();
-    let source = Source::new(&db, "let x = nope".to_string());
+    let source = Source::new(&db, "let x = nope".S());
 
     let stored = DiagnosticBuilder::error(&db, "undefined variable: nope")
         .primary_label(TextSpan::new(source, 8..12), "not found in this scope")
         .build_stored();
 
-    source.set_text(&mut db).to("let x = also".to_string());
+    source.set_text(&mut db).to("let x = also".S());
 
     // The words the diagnostic carries are its own and do not move.
     let diagnostic = stored.to_diagnostic(&db);
@@ -128,12 +128,12 @@ use bcts::package2::{Package, PackageModule, PackageWorld};
 fn building_the_same_module_twice_gives_one_module() {
     let db = bcts::Database::default();
 
-    let id = ModuleId::new(&db, "local/test/a".to_string());
-    let source = Source::new(&db, "let x = 1".to_string());
+    let id = ModuleId::new(&db, "local/test/a".S());
+    let source = Source::new(&db, "let x = 1".S());
 
     assert_eq!(Module::new(&db, id, source), Module::new(&db, id, source));
 
-    let other = Source::new(&db, "let x = 2".to_string());
+    let other = Source::new(&db, "let x = 2".S());
     assert_ne!(
         Module::new(&db, id, source),
         Module::new(&db, id, other),
@@ -153,15 +153,15 @@ fn building_the_same_module_twice_gives_one_module() {
 fn a_module_still_names_its_source_after_an_edit() {
     let mut db = bcts::Database::default();
 
-    let source = Source::new(&db, "let x = 1".to_string());
+    let source = Source::new(&db, "let x = 1".S());
     {
-        let module = Module::new(&db, ModuleId::new(&db, "local/test/a".to_string()), source);
+        let module = Module::new(&db, ModuleId::new(&db, "local/test/a".S()), source);
         assert_eq!(module.source(&db), source);
     }
 
-    source.set_text(&mut db).to("let x = 2".to_string());
+    source.set_text(&mut db).to("let x = 2".S());
 
-    let module = Module::new(&db, ModuleId::new(&db, "local/test/a".to_string()), source);
+    let module = Module::new(&db, ModuleId::new(&db, "local/test/a".S()), source);
     assert_eq!(module.source(&db), source, "still the same source");
     assert_eq!(module.id(&db).path(&db), "local/test/a", "still the same path");
     assert_eq!(source.text(&db), "let x = 2", "whose text is the edited one");
@@ -179,22 +179,22 @@ fn building_the_same_package_world_twice_gives_one_world() {
     use rmx::std::collections::BTreeMap;
 
     let db = bcts::Database::default();
-    let source = Source::new(&db, "let x = 1".to_string());
+    let source = Source::new(&db, "let x = 1".S());
 
     let build = |source| {
-        let module = PackageModule::new(&db, "main".to_string(), source);
+        let module = PackageModule::new(&db, "main".S(), source);
         let mut modules = BTreeMap::new();
-        modules.insert("main".to_string(), module);
-        let package = Package::new(&db, "test".to_string(), modules);
+        modules.insert("main".S(), module);
+        let package = Package::new(&db, "test".S(), modules);
         let mut library = BTreeMap::new();
-        library.insert("test".to_string(), package);
+        library.insert("test".S(), package);
         PackageWorld::new(&db, BTreeMap::new(), library)
     };
 
     assert_eq!(build(source), build(source), "one world, described twice");
 
     // A world over a different source is a different world.
-    let other = Source::new(&db, "let x = 2".to_string());
+    let other = Source::new(&db, "let x = 2".S());
     assert_ne!(build(source), build(other));
 }
 
@@ -207,7 +207,7 @@ fn building_the_same_package_world_twice_gives_one_world() {
 fn equal_text_does_not_make_one_source() {
     let db = bcts::Database::default();
     assert_ne!(
-        Source::new(&db, "let x = 1".to_string()),
-        Source::new(&db, "let x = 1".to_string()),
+        Source::new(&db, "let x = 1".S()),
+        Source::new(&db, "let x = 1".S()),
     );
 }

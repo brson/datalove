@@ -500,7 +500,7 @@ impl<'db> Parser<'db> {
     pub(super) fn report_spaced_postfix(&mut self) {
         self.had_error = true;
         let ts = self.peek_text_span();
-        let text = self.text()[ts.span.clone()].to_string();
+        let text = self.text()[ts.span.C()].S();
         DiagnosticBuilder::error(self.db, &fmt!("this `{text}` is written apart from what it applies to"))
             .code(PCode::SpacedPostfix.as_str())
             .primary_label(ts, "a postfix operator is written against the expression before it")

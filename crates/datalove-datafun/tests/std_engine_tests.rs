@@ -53,13 +53,13 @@ impl Worker {
 /// tree rather than the copy embedded in the datalove binary.
 fn describe_sys() -> WorkspaceDescriptor {
     let repo_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()
-        .parent().unwrap()
+        .parent().X()
+        .parent().X()
         .to_path_buf();
     // The work dir is unique to this suite so a concurrently running suite
     // builds its own component rather than rebuilding over this one's.
     let work_dir = repo_root.join("target").join("datalove-work").join("std_engine_tests");
-    WorkspaceDescriptor::load_sys_dir(&datalove_vio::HostFs::new().unwrap(), repo_root.join("sys"))
+    WorkspaceDescriptor::load_sys_dir(&datalove_vio::HostFs::new().X(), repo_root.join("sys"))
         .expect("the standard library's sources must load")
         .with_work_dir(work_dir)
 }
@@ -132,7 +132,7 @@ fn run_with_executor(
     // The addresses go into generated code, so the jit holds the library
     // they lead into as well.
     for rider in &loaded_riders {
-        executor.natives_registered(&rider.native_fn_ptrs, rider.library.clone());
+        executor.natives_registered(&rider.native_fn_ptrs, rider.library.C());
     }
 
     // Compile and execute the fragment.
@@ -224,7 +224,7 @@ fn run_aot(
         .map_err(|e| format!("AOT execution error: {}", e))?;
 
     // Debuglog appends a newline; trim to match execute_expr format.
-    Ok(exec_output.stderr.trim_end().to_string())
+    Ok(exec_output.stderr.trim_end().S())
 }
 
 /// Run through the C backend, returning the debuglog output.
@@ -265,7 +265,7 @@ fn run_c_aot(
     let exec_output = driver_aot::run_executable(&exe_path)
         .map_err(|e| format!("C AOT execution error: {}", e))?;
 
-    Ok(exec_output.stderr.trim_end().to_string())
+    Ok(exec_output.stderr.trim_end().S())
 }
 
 /// Analyze a single .dfs file on every engine.
@@ -372,11 +372,11 @@ fn compare_backends(
         })
         .unwrap_or_else(|panic| {
             let msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                s.to_string()
+                s.S()
             } else if let Some(s) = panic.downcast_ref::<String>() {
-                s.clone()
+                s.C()
             } else {
-                "unknown panic".to_string()
+                "unknown panic".S()
             };
             Err(format!("{name} panicked: {}", msg))
         })

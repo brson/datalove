@@ -12,6 +12,7 @@
 //! Each timing includes roughly 1.3ms of compiling the fragment, so treat the
 //! numbers as relative rather than as pure execution cost.
 
+use rmx::prelude::*;
 use datalove_datafun as datafun;
 use datafun::driver::ModuleCompiler;
 
@@ -138,10 +139,10 @@ fn run(source: &str) {
     let mut module_compiler = ModuleCompiler::default();
     let compiled = module_compiler.compile(&db);
 
-    let mut compiler = compiled.script_compiler_default(&db).unwrap();
+    let mut compiler = compiled.script_compiler_default(&db).X();
     let mut executor = compiled
         .script_executor(datafun::DebugOutputMode::Disabled, None)
-        .unwrap();
+        .X();
 
     let unit = compiler.compile_fragment(source);
     let ir_unit = unit.ir_unit.as_ref().expect("benchmark source must compile");

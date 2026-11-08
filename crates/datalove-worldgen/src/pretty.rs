@@ -1,5 +1,6 @@
 //! Pretty printing for type hints and expressions in worldfile generation.
 
+use rmx::prelude::*;
 use datalove_datalit::ast::{Expr, ExprFull, TypeHint};
 
 /// Pretty print a TypeHint to a string.
@@ -130,7 +131,7 @@ fn write_expr<'db>(
             if t.header {
                 // Under a header the body goes flat, which every shape allows.
                 for extent in &t.shape {
-                    out.push_str(&extent.to_string());
+                    out.push_str(&extent.S());
                     out.push(' ');
                 }
                 out.push('|');
@@ -224,7 +225,7 @@ fn write_type_hint<'db>(
     th: &TypeHint<'db>,
     out: &mut String,
 ) {
-    out.push_str(&th.syntax(db).to_string());
+    out.push_str(&th.syntax(db).S());
 }
 
 /// Write tensor elements with multi-comma layout.
@@ -431,11 +432,11 @@ mod tests {
         use bct::text::InternedText;
 
         let f1 = TypeHintNamedField {
-            name: InternedText::new(db, "x".to_string()),
+            name: InternedText::new(db, "x".S()),
             type_hint: Box::new(TypeHint::I32),
         };
         let f2 = TypeHintNamedField {
-            name: InternedText::new(db, "y".to_string()),
+            name: InternedText::new(db, "y".S()),
             type_hint: Box::new(TypeHint::I32),
         };
 

@@ -68,7 +68,7 @@ fn fixtures(filters: &[String]) -> Vec<String> {
 /// Compile the library and each fixture, and write what they compiled to.
 fn prepare(names: &[String]) {
     let work_dir = repo_root().join("target/datalove-work/ir_replay_tests");
-    let descriptor = WorkspaceDescriptor::load_sys_dir(&datalove_vio::HostFs::new().unwrap(), repo_root().join("sys"))
+    let descriptor = WorkspaceDescriptor::load_sys_dir(&datalove_vio::HostFs::new().X(), repo_root().join("sys"))
         .expect("the standard library's sources must load")
         .with_work_dir(work_dir);
     let mut world = datafun::driver::CompiledWorld::new(&descriptor);
@@ -83,7 +83,7 @@ fn prepare(names: &[String]) {
         for name in names {
             let source = std::fs::read_to_string(fixtures_dir().join(format!("{name}.dfs"))).X();
             let path = out.join(format!("{name}.ron"));
-            let _ = std::fs::remove_file(&path);
+            std::fs::remove_file(&path).I();
             let mut compiler = compiled.script_compiler_default(db).expect("the library compiles");
             let Some(fragment) = compiled_unit(compiler.compile_fragment(&source)) else {
                 println!("  skip  {name}: does not compile");
@@ -132,7 +132,7 @@ fn reachable(registry: &ModuleFunctionRegistry, roots: &[&IrCodeUnit]) -> Module
         let unit = registry.get_module_function(module, id)
             .unwrap_or_else(|| panic!("a call to {module:?} {id:?}, which the registry lacks"));
         calls(unit, Some(module), &mut pending);
-        pruned.add_module_code_unit(module, id, unit.clone());
+        pruned.add_module_code_unit(module, id, unit.C());
     }
     pruned
 }
@@ -149,7 +149,7 @@ fn compiled_unit(result: datafun::driver::ScriptCompilationResult) -> Option<IrC
 fn replay(names: &[String]) -> Vec<String> {
     let out = out_dir();
     let natives: Vec<(String, *const ())> = datalove_rider_sys_std::symbols().into_iter()
-        .map(|(symbol, addr)| (symbol.to_string(), addr))
+        .map(|(symbol, addr)| (symbol.S(), addr))
         .collect();
 
     let mut failures = Vec::new();
@@ -160,19 +160,19 @@ fn replay(names: &[String]) -> Vec<String> {
         let prepared: Prepared = ron::from_str(&text).X();
         let registry = Arc::new(prepared.registry);
         let wanted: Vec<String> = registry.iter_module_code_units()
-            .filter_map(|unit| unit.native_context().map(|ctx| ctx.symbol().to_string()))
+            .filter_map(|unit| unit.native_context().map(|ctx| ctx.symbol().S()))
             .collect();
         let expected = std::fs::read_to_string(fixtures_dir().join(format!("{name}.out.expected")))
             .unwrap_or_default();
         for engine in ENGINES {
             let mut executor = ScriptExecutor::new(
-                registry.clone(), datalove_rt::c::DebugOutputMode::Disabled, None);
+                registry.C(), datalove_rt::c::DebugOutputMode::Disabled, None);
             executor.set_engine(engine);
             let table = executor.native_table_mut();
             for symbol in &wanted {
                 let (_, addr) = natives.iter().find(|(s, _)| s == symbol)
                     .unwrap_or_else(|| panic!("{symbol} is not a std native"));
-                table.register_c(symbol.clone(), *addr);
+                table.register_c(symbol.C(), *addr);
             }
             // Run twice, the second time in place of the first, the way an
             // edit reruns a unit: that forgets the compiled bodies and

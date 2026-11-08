@@ -187,7 +187,7 @@ fn module_content_hashes(
         if let Some(requires) = resolved_requires.get(&module_id) {
             let mut dep_hashes: Vec<_> = requires.iter()
                 .filter_map(|(alias, target_id)| {
-                    hashes.get(target_id).map(|h| (alias.text(db).to_string(), *h))
+                    hashes.get(target_id).map(|h| (alias.text(db).S(), *h))
                 })
                 .collect();
             dep_hashes.sort_by(|a, b| a.0.cmp(&b.0));
@@ -195,7 +195,7 @@ fn module_content_hashes(
         }
         hashes.insert(module_id, hasher.finish());
     }
-    hashes.into_iter_unordered().map(|(id, hash)| (id.path(db).clone(), hash)).collect()
+    hashes.into_iter_unordered().map(|(id, hash)| (id.path(db).C(), hash)).collect()
 }
 
 /// Hash a string using DefaultHasher.
@@ -332,7 +332,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
     for section in sections {
         let source_hash_str = section.source.as_ref()
             .map(|s| format!("{:016x}", hash_string(s)))
-            .unwrap_or_else(|| "removed".to_string());
+            .unwrap_or_else(|| "removed".S());
 
         // Capture dependents BEFORE applying the action (important for remove).
         let path_deps_before = extract_dependencies(&world, &db, &crate::incremental::Roots::All);
@@ -413,7 +413,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         let module_errors: BTreeMap<String, Vec<String>> = typecheck_result.module_errors(&db)
             .iter_unordered()
             .map(|(id, errors)| {
-                let path = id.path(&db).clone();
+                let path = id.path(&db).C();
                 let error_strings: Vec<String> = errors.iter()
                     .map(|e| format!("{:?}", e))
                     .collect();
@@ -424,8 +424,8 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         let lowering_errors: BTreeMap<String, Vec<String>> = lowering_result.module_results(&db)
             .iter_unordered()
             .map(|(id, result)| {
-                let path = id.path(&db).clone();
-                (path, result.errors(&db).clone())
+                let path = id.path(&db).C();
+                (path, result.errors(&db).C())
             })
             .collect();
 
@@ -435,7 +435,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         // Handle removed module specially.
         if section.action == Action::ModuleRemove {
             let expected = expected_behavior(section.action, true, false);
-            results.insert(section.path.clone(), ModuleResult {
+            results.insert(section.path.C(), ModuleResult {
                 is_direct: true,
                 is_dependent: false,
                 parsed: true,
@@ -491,7 +491,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
                 all_correct = false;
             }
 
-            results.insert(path.clone(), ModuleResult {
+            results.insert(path.C(), ModuleResult {
                 is_direct,
                 is_dependent,
                 parsed,
@@ -506,11 +506,11 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
                 correct,
             });
 
-            prev_hashes.insert(path.clone(), current_hash);
+            prev_hashes.insert(path.C(), current_hash);
         }
 
         steps.push(StepResult {
-            action: section.action.as_str().to_string(),
+            action: section.action.as_str().S(),
             module: section.path,
             source_hash: source_hash_str,
             results,

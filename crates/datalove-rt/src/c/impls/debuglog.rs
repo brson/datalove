@@ -1,5 +1,6 @@
 //! Debug log implementation.
 
+use rmx::prelude::*;
 use datalove_rtdt as rtdt;
 use crate::c::RtStatus;
 use crate::c::impls::rt_local::{RtLocal, DebugOutputMode};
@@ -61,7 +62,7 @@ pub unsafe fn debuglog_local(
         // Extract the UTF-8 bytes, read through `string_ptr`: reading
         // `temp_string` itself would end the pointer's write access, which
         // the destroy below needs.
-        let result = (*(string_ptr as *const rtdt::String)).as_str().to_owned();
+        let result = (*(string_ptr as *const rtdt::String)).as_str().O();
 
         // Output based on mode.
         match mode {

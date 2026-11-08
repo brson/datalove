@@ -36,8 +36,8 @@ pub fn data_file_type<'db>(
 ) -> Result<datalit::tycheck::Type<'db>, Vec<String>> {
     let source = *query.source(db);
     let expr = datalit::parser::parse(db, source).expr(db);
-    let resolved = datalit::resolve::resolve_names(db, source, expr.clone());
-    let result = datalit::tycheck::type_check_with_expected(db, expr, resolved, query.expected(db).clone());
+    let resolved = datalit::resolve::resolve_names(db, source, expr.C());
+    let result = datalit::tycheck::type_check_with_expected(db, expr, resolved, query.expected(db).C());
     let errors: Vec<String> = result.errors(db).iter()
         .map(|entry| describe(&entry.error(db)))
         .collect();
@@ -60,7 +60,7 @@ fn describe(error: &DatalitTypeError) -> String {
         DatalitTypeError::ArityMismatch { expected, actual } => {
             fmt!("expected {expected} elements, found {actual}")
         }
-        DatalitTypeError::Rec(rec) => rec.to_string(),
+        DatalitTypeError::Rec(rec) => rec.S(),
     }
 }
 

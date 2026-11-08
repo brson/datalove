@@ -4,6 +4,7 @@
 //! respecting alignment requirements from type descriptors, and for what only
 //! the interpreter keeps in a frame.
 
+use rmx::prelude::*;
 use std::rc::Rc;
 
 use bct::lookup::LookupMap;
@@ -324,7 +325,7 @@ impl IrLayout {
                 IrType::Cursor(kind) => Some(*kind),
                 _ => None,
             }).collect(),
-            param_tracking: frame.param_tracking.clone(),
+            param_tracking: frame.param_tracking.C(),
             param_offsets,
             param_copies,
             type_param_offset,

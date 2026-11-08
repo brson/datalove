@@ -69,17 +69,17 @@ pub struct Cursor<'db> {
 impl<'db> Cursor<'db> {
     /// Whether there is nothing left to hand out.
     pub fn is_empty(&self) -> bool {
-        self.clone().next_index().is_none()
+        self.C().next_index().is_none()
     }
 
     /// The token at the cursor, without moving it.
     pub fn first(&self) -> Option<TreeToken<'db>> {
-        self.clone().next()
+        self.C().next()
     }
 
     /// The `n`th token from the cursor, without moving it.
     pub fn peek_nth(&self, n: usize) -> Option<TreeToken<'db>> {
-        self.clone().nth(n)
+        self.C().nth(n)
     }
 
     /// The index of the next token handed out, and the cursor moved past it.
@@ -106,7 +106,7 @@ impl<'db> Cursor<'db> {
     pub fn token_at(&self, index: u32) -> TreeToken<'db> {
         let token = &self.tokens[index as usize];
         match self.layout[index as usize] {
-            PLAIN => TreeToken::Token(token.clone()),
+            PLAIN => TreeToken::Token(token.C()),
             HIDDEN => bug!(),
             resume => {
                 let TokenKind::Sigil(sigil) = token.kind else { bug!() };
@@ -114,13 +114,13 @@ impl<'db> Cursor<'db> {
                 // there is one, so the last token says whether there is.
                 let last = &self.tokens[resume as usize - 1];
                 let (close, end_byte) = if last.kind == TokenKind::Sigil(sigil.close_sigil()) {
-                    (Some(last.clone()), last.span().end)
+                    (Some(last.C()), last.span().end)
                 } else {
                     (None, last.span().end)
                 };
                 TreeToken::Branch {
                     sigil,
-                    open: token.clone(),
+                    open: token.C(),
                     close,
                     end_byte,
                     inner: Cursor { tokens: self.tokens, layout: self.layout, pos: index + 1, end: resume },

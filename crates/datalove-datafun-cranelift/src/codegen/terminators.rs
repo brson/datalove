@@ -1,5 +1,6 @@
 //! Terminator instruction compilation.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{BlockArg, InstBuilder};
 use cranelift_frontend::{FunctionBuilder, Switch};
 use cranelift_module::Module;
@@ -56,7 +57,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().brif(cond_val, then_blk, &cl_then_args, else_blk, &cl_else_args);
             }
             Terminator::Return { value: Some(val_op) } if matches!(self.ret, crate::codegen::RetPass::Value(_)) => {
-                let ret_ty = self.func_ctx.return_type.clone();
+                let ret_ty = self.func_ctx.return_type.C();
                 let regs = match types::ir_type_to_cranelift(&ret_ty) {
                     types::CraneliftRepr::Scalar(_) => vec![self.get_operand_value(builder, val_op)?],
                     types::CraneliftRepr::Aggregate(_) => self.operand_words(builder, val_op, &ret_ty)?,
@@ -77,7 +78,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, sret_ptr, 0);
                         }
                         types::CraneliftRepr::Aggregate(_) if self.words_of(val_op).is_some() => {
-                            let words = self.words_of(val_op).expect("checked").clone();
+                            let words = self.words_of(val_op).expect("checked").C();
                             super::words::store_words_at(builder, sret_ptr, ret_ty, &words);
                         }
                         types::CraneliftRepr::Aggregate(_) => {
@@ -85,7 +86,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             // pointer, unless it was built there.
                             let src_ptr = self.get_operand_value(builder, val_op)?;
                             if src_ptr != sret_ptr {
-                                let ret_ty = ret_ty.clone();
+                                let ret_ty = ret_ty.C();
                                 self.copy_value_bytes(builder, sret_ptr, src_ptr, &ret_ty)?;
                             }
                         }

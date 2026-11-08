@@ -155,9 +155,9 @@ impl UnitExports {
         let script_ctx = ir_unit.script_context()
             .expect("only a script code unit is executed as a unit");
         UnitExports {
-            bindings: script_ctx.exports.clone(),
-            value_types: ir_unit.value_types.clone(),
-            slot_types: ir_unit.slot_types.clone(),
+            bindings: script_ctx.exports.C(),
+            value_types: ir_unit.value_types.C(),
+            slot_types: ir_unit.slot_types.C(),
         }
     }
 }
@@ -234,7 +234,7 @@ impl ScriptExecutor {
             .expect("execute_expr requires a script code unit");
         let result_ty = script_ctx.result
             .map(|id| format!("{}", &ir_unit.value_types[id.0 as usize]));
-        let shown_binding = script_ctx.result_name.clone();
+        let shown_binding = script_ctx.result_name.C();
 
         let output = if let Some(result_id) = script_ctx.result {
             let ret_type = IrType::Result(Box::new(IrType::Unit));
@@ -555,7 +555,7 @@ impl ScriptExecutor {
         let script_ctx = ir_unit.script_context()
             .expect("rerun_unit requires a script code unit");
         let result_id = script_ctx.result;
-        let shown_binding = script_ctx.result_name.clone();
+        let shown_binding = script_ctx.result_name.C();
         let result_ty = result_id
             .map(|id| format!("{}", &ir_unit.value_types[id.0 as usize]));
 

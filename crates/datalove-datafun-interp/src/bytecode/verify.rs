@@ -1,5 +1,6 @@
 //! The debug-build check of everything the run loop takes on trust.
 
+use rmx::prelude::*;
 use super::*;
 
 impl BcFunction {
@@ -28,7 +29,7 @@ impl BcFunction {
         assert!(self.entry < n, "{}: the entry {} is past the last op", func.name, self.entry);
         for (at, op) in self.ops.iter().enumerate() {
             op.places(&mut |loc, len| place(at, loc, len));
-            op.clone().targets_mut(&mut |to| target(at, *to));
+            op.C().targets_mut(&mut |to| target(at, *to));
             let in_table = |i: u32, len: usize, what: &str| {
                 assert!((i as usize) < len, "{}: op {} ({:?}) names {} {} of {}", func.name, at, op, what, i, len);
             };

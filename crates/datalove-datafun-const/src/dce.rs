@@ -6,6 +6,7 @@
 //!
 //! These passes are used after const inlining to clean up orphaned code.
 
+use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 use datalove_datafun_ir::dense::ValueSet;
 use datalove_datafun_ir::{
@@ -107,22 +108,22 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
     func.blocks.retain(|block| reachable.contains(&block.id));
     for block in &mut func.blocks {
         // Update this block's ID.
-        block.id = *old_to_new.get(&block.id).unwrap();
+        block.id = *old_to_new.get(&block.id).X();
 
         // Update terminator targets.
         match &mut block.terminator {
             Terminator::Goto { target, .. } => {
-                *target = *old_to_new.get(target).unwrap();
+                *target = *old_to_new.get(target).X();
             }
             Terminator::Branch { then_block, else_block, .. } => {
-                *then_block = *old_to_new.get(then_block).unwrap();
-                *else_block = *old_to_new.get(else_block).unwrap();
+                *then_block = *old_to_new.get(then_block).X();
+                *else_block = *old_to_new.get(else_block).X();
             }
             Terminator::Switch { cases, default, .. } => {
                 for (_, target) in cases.iter_mut() {
-                    *target = *old_to_new.get(target).unwrap();
+                    *target = *old_to_new.get(target).X();
                 }
-                *default = *old_to_new.get(default).unwrap();
+                *default = *old_to_new.get(default).X();
             }
             Terminator::Return { .. }
             | Terminator::UnitEnd { .. }
@@ -450,7 +451,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut ValueSet) {
 /// Returns true if any instructions were removed.
 fn remove_dead_instructions(unit: &mut IrCodeUnit, used: &ValueSet) -> bool {
     let mut changed = false;
-    let param_types = unit.function_context().map(|c| c.param_types.clone());
+    let param_types = unit.function_context().map(|c| c.param_types.C());
     let pure_defined: ValueSet = unit.blocks.iter()
         .flat_map(|b| &b.instructions)
         .filter(|i| !has_side_effects(i))

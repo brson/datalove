@@ -1,5 +1,6 @@
 //! What lowering did, for `DATALOVE_BC_STATS`.
 
+use rmx::prelude::*;
 use super::*;
 
 impl BcStats {
@@ -10,7 +11,7 @@ impl BcStats {
         self.escaped_kinds.extend(escapes);
         for op in &bc.ops {
             let text = format!("{op:?}");
-            self.op_kinds.insert(text.split([' ', '{', '(']).next().unwrap_or("").to_string());
+            self.op_kinds.insert(text.split([' ', '{', '(']).next().unwrap_or("").S());
         }
     }
 }

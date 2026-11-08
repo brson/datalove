@@ -3,6 +3,7 @@
 //! Contains the runtime state for single-threaded local execution,
 //! including the allocator and any other runtime-specific state.
 
+use rmx::prelude::*;
 use datalove_rti::{LocalRtHandle, RtHeader};
 
 use crate::c::impls::alloc::AllocLocal;
@@ -169,6 +170,6 @@ mod tests {
             let limit = native_stack_limit();
             assert!(limit < here, "the limit {limit:#x} is above the stack in use {here:#x}");
             assert!(limit - bottom <= size / 4, "the margin takes more than a quarter");
-        }).unwrap().join().unwrap();
+        }).X().join().unwrap();
     }
 }

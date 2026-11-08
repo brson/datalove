@@ -1,5 +1,6 @@
 //! Option and Result type instruction compilation.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -33,11 +34,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        let (dest_ty, inner_ty) = (dest_ty.clone(), inner_ty.clone());
+        let (dest_ty, inner_ty) = (dest_ty.C(), inner_ty.C());
         if self.holds_words(dest) {
             let tag = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
             let at = super::dynamic::static_payload_offset(&dest_ty, 0)?;
-            if self.build_words(builder, dest, vec![(0, tag)], &[(inner, inner_ty.clone(), at)])? {
+            if self.build_words(builder, dest, vec![(0, tag)], &[(inner, inner_ty.C(), at)])? {
                 return Ok(());
             }
         }
@@ -97,11 +98,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        let (dest_ty, ok_ty) = (dest_ty.clone(), ok_ty.clone());
+        let (dest_ty, ok_ty) = (dest_ty.C(), ok_ty.C());
         if self.holds_words(dest) {
             let tag = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
             let at = super::dynamic::static_payload_offset(&dest_ty, 0)?;
-            if self.build_words(builder, dest, vec![(0, tag)], &[(inner, ok_ty.clone(), at)])? {
+            if self.build_words(builder, dest, vec![(0, tag)], &[(inner, ok_ty.C(), at)])? {
                 return Ok(());
             }
         }
@@ -136,7 +137,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             )));
         }
         let error_size = std::mem::size_of::<RtError>() as u32;
-        let dest_ty = dest_ty.clone();
+        let dest_ty = dest_ty.C();
         if self.holds_words(dest) {
             let tag = builder.ins().iconst(cl_types::I8, ResultTag::Err as i64);
             let at = super::dynamic::static_payload_offset(&dest_ty, 0)?;
@@ -183,7 +184,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        let inner_ty = inner_ty.clone();
+        let inner_ty = inner_ty.C();
         let some_tag = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
 
         // Held as words, the tag and the payload are shifted out of them.
@@ -255,13 +256,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
 
-        let payload_ty = variants[variant_index as usize].1.clone();
-        let dest_ty = dest_ty.clone();
+        let payload_ty = variants[variant_index as usize].1.C();
+        let dest_ty = dest_ty.C();
         if matches!(dest_ty, IrType::Enum(_)) && self.holds_words(dest) {
             let disc = builder.ins().iconst(cl_types::I32, variant_index as i64);
             let at = super::dynamic::static_payload_offset(&dest_ty, variant_index)?;
             let rest: Vec<(&Operand, IrType, u32)> = match (payload, &payload_ty) {
-                (Some(op), Some(ty)) => vec![(op, ty.clone(), at)],
+                (Some(op), Some(ty)) => vec![(op, ty.C(), at)],
                 _ => Vec::new(),
             };
             if self.build_words(builder, dest, vec![(0, disc)], &rest)? {
@@ -331,7 +332,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
 
-        let payload_ty = variants[variant_index as usize].1.clone()
+        let payload_ty = variants[variant_index as usize].1.C()
             .ok_or_else(|| CraneliftError::Codegen("EnumPayload variant has no payload type".into()))?;
 
         if let Some(words) = self.words_of(src).cloned() {
@@ -388,8 +389,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        let ok_ty = ok_ty.clone();
-        let err_ty = self.func.value_types[err_dest.0 as usize].clone();
+        let ok_ty = ok_ty.C();
+        let err_ty = self.func.value_types[err_dest.0 as usize].C();
         let ok_tag = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
 
         // Held as words, the tag and the payloads are shifted out of them.

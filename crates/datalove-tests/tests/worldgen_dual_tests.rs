@@ -16,6 +16,7 @@
 //! takes a worldfile rather than a seed and cuts statements out of it for as
 //! long as it keeps failing the same way, leaving the least that still does.
 
+use rmx::prelude::*;
 use std::process::Command;
 
 use rand::Rng;
@@ -95,7 +96,7 @@ fn run_with_chaos_interp(
             compiled: true,
             debuglog: String::new(),
             success: false,
-            error: Some("Module compilation failed".to_string()),
+            error: Some("Module compilation failed".S()),
         };
     };
 
@@ -107,7 +108,7 @@ fn run_with_chaos_interp(
             compiled: true,
             debuglog: String::new(),
             success: false,
-            error: Some("Module compilation failed".to_string()),
+            error: Some("Module compilation failed".S()),
         };
     };
 
@@ -187,7 +188,7 @@ fn run_with_aot(
                 compiled: false,
                 debuglog: String::new(),
                 success: false,
-                error: Some("No script fragment found".to_string()),
+                error: Some("No script fragment found".S()),
             };
         }
     };
@@ -198,7 +199,7 @@ fn run_with_aot(
             compiled: true,
             debuglog: String::new(),
             success: false,
-            error: Some("Module compilation failed".to_string()),
+            error: Some("Module compilation failed".S()),
         };
     };
     let compiled_unit = compiler.compile_fragment(fragment_source);
@@ -228,7 +229,7 @@ fn run_with_aot(
                 compiled: false,
                 debuglog: String::new(),
                 success: false,
-                error: Some("No IR unit produced".to_string()),
+                error: Some("No IR unit produced".S()),
             };
         }
     };
@@ -318,7 +319,7 @@ fn aot_compile_link_run(
         }
     };
 
-    let debuglog = String::from_utf8_lossy(&run_output.stderr).to_string();
+    let debuglog = String::from_utf8_lossy(&run_output.stderr).S();
 
     if !run_output.status.success() {
         let exit_code = run_output.status.code().unwrap_or(-1);

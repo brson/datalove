@@ -1,5 +1,6 @@
 //! Constant instruction compilation.
 
+use rmx::prelude::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use cranelift_codegen::ir::{types as cl_types, InstBuilder};
@@ -439,7 +440,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let base = self.const_dest_addr(builder, dest, "Option")?;
         let ty = self.value_type_of(dest)?;
-        let value = ConstValue::OptionSome(Box::new(inner.clone()));
+        let value = ConstValue::OptionSome(Box::new(inner.C()));
         self.write_const_value_to_addr(builder, base, &ty, &value)?;
         self.values.insert(dest, base);
         Ok(())
@@ -507,7 +508,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::Term(_, payload_ty) => {
                 // A term is laid out as its payload, so what goes at the
                 // address is that payload, as the type the term names.
-                let payload_ty = (**payload_ty).clone();
+                let payload_ty = (**payload_ty).C();
                 let base = self.const_dest_addr(builder, dest, "Term")?;
                 if let Some(payload_value) = payload {
                     self.write_const_value_to_addr(builder, base, &payload_ty, payload_value)?;
@@ -519,8 +520,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let base = self.const_dest_addr(builder, dest, "Enum")?;
                 let ty = self.value_type_of(dest)?;
                 let value = ConstValue::Enum {
-                    variant: variant.to_string(),
-                    payload: payload.map(|p| Box::new(p.clone())),
+                    variant: variant.S(),
+                    payload: payload.map(|p| Box::new(p.C())),
                 };
                 self.write_const_value_to_addr(builder, base, &ty, &value)?;
                 self.values.insert(dest, base);
@@ -542,7 +543,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let base = self.const_dest_addr(builder, dest, "Result")?;
         let ty = self.value_type_of(dest)?;
-        let value = ConstValue::ResultOk(Box::new(inner.clone()));
+        let value = ConstValue::ResultOk(Box::new(inner.C()));
         self.write_const_value_to_addr(builder, base, &ty, &value)?;
         self.values.insert(dest, base);
         Ok(())
@@ -561,7 +562,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let base = self.const_dest_addr(builder, dest, "Result")?;
         let ty = self.value_type_of(dest)?;
-        let value = ConstValue::ResultErr(Box::new(inner.clone()));
+        let value = ConstValue::ResultErr(Box::new(inner.C()));
         self.write_const_value_to_addr(builder, base, &ty, &value)?;
         self.values.insert(dest, base);
         Ok(())
@@ -589,7 +590,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // The type the value was read back as, rather than one worked out
         // from the value: an empty collection cannot say what it holds, and
         // the descriptor a `data` carries has to be one this unit emitted.
-        let inner_ir_type = payload_type.clone();
+        let inner_ir_type = payload_type.C();
         let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
         // Get inner size and alignment.
@@ -637,7 +638,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // The type the value was read back as, rather than one worked out
         // from the value: an empty collection cannot say what it holds, and
         // the descriptor a `data` carries has to be one this unit emitted.
-        let inner_ir_type = payload_type.clone();
+        let inner_ir_type = payload_type.C();
         let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
         // Get inner size and alignment.
@@ -695,7 +696,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let base = self.const_dest_addr(builder, dest, "List")?;
         let element_type = match self.value_type_of(dest)? {
-            IrType::List(elem) => (*elem).clone(),
+            IrType::List(elem) => (*elem).C(),
             other => return Err(CraneliftError::Codegen(format!(
                 "a list constant wants a list type, not {:?}", other))),
         };
@@ -716,7 +717,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         element_type: &IrType,
         elements: &[ConstValue],
     ) -> Result<(), CraneliftError> {
-        let element_type = element_type.clone();
+        let element_type = element_type.C();
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("List constant requires runtime handle".into())
@@ -765,7 +766,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let base = self.const_dest_addr(builder, dest, "Set")?;
         let element_type = match self.value_type_of(dest)? {
-            IrType::Set(elem) => (*elem).clone(),
+            IrType::Set(elem) => (*elem).C(),
             other => return Err(CraneliftError::Codegen(format!(
                 "a set constant wants a set type, not {:?}", other))),
         };
@@ -792,14 +793,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Err(CraneliftError::Codegen(format!(
                 "a tensor constant wants a tensor type, not {:?}", ty)));
         };
-        let element_type = (**element_type).clone();
+        let element_type = (**element_type).C();
         let rank = *rank;
         if shape.len() as u32 != rank {
             return Err(CraneliftError::Codegen(format!(
                 "a tensor constant of rank {} was given a shape of {}",
                 rank, shape.len())));
         }
-        let tensor_type = ty.clone();
+        let tensor_type = ty.C();
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Tensor constant requires runtime handle".into())
@@ -856,7 +857,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         element_type: &IrType,
         elements: &[ConstValue],
     ) -> Result<(), CraneliftError> {
-        let element_type = element_type.clone();
+        let element_type = element_type.C();
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Set constant requires runtime handle".into())
@@ -870,7 +871,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Inserted one at a time, as a set literal is, so that the elements
         // need not arrive sorted or once each. One scratch slot holds each
         // element on its way in; the insert takes it or lets it go.
-        let set_tydesc_ptr = self.tydesc_value(builder, &IrType::Set(Box::new(element_type.clone())))?;
+        let set_tydesc_ptr = self.tydesc_value(builder, &IrType::Set(Box::new(element_type.C())))?;
         let create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, base, set_tydesc_ptr]);
 
@@ -899,7 +900,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let base = self.const_dest_addr(builder, dest, "Map")?;
         let (key_type, value_type) = match self.value_type_of(dest)? {
-            IrType::Map(k, v) => ((*k).clone(), (*v).clone()),
+            IrType::Map(k, v) => ((*k).C(), (*v).C()),
             other => return Err(CraneliftError::Codegen(format!(
                 "a map constant wants a map type, not {:?}", other))),
         };
@@ -918,8 +919,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         value_type: &IrType,
         entries: &[(ConstValue, ConstValue)],
     ) -> Result<(), CraneliftError> {
-        let key_type = key_type.clone();
-        let value_type = value_type.clone();
+        let key_type = key_type.C();
+        let value_type = value_type.C();
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Map constant requires runtime handle".into())
@@ -934,7 +935,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Inserted one at a time, as a map literal is; see
         // `build_set_const_at`. A later entry for a key replaces an earlier.
-        let map_tydesc_ptr = self.tydesc_value(builder, &IrType::Map(Box::new(key_type.clone()), Box::new(value_type.clone())))?;
+        let map_tydesc_ptr = self.tydesc_value(builder, &IrType::Map(Box::new(key_type.C()), Box::new(value_type.C())))?;
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, base, map_tydesc_ptr]);
 
@@ -978,7 +979,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Err(CraneliftError::Codegen(format!(
                 "a table constant wants a table type, not {:?}", ty)));
         };
-        let columns = columns.clone();
+        let columns = columns.C();
 
         // Get Table TyDesc.
         let table_tydesc_ptr = self.tydesc_value(builder, ty)?;
@@ -990,10 +991,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // wrote was 7, which was what `Tuple` was numbered once and has not
         // been for a long time, so the runtime asserted on the tag and every
         // table constant died where it was built.
-        let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).clone()).collect());
+        let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).C()).collect());
         let row_tydesc_ptr = self.tydesc_value(builder, &row_ty)?;
 
-        let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).clone()).collect();
+        let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).C()).collect();
         let field_offsets = ir_layout::aggregate_field_offsets(&col_types);
         let row_layout = crate::types::ir_type_to_cranelift(&row_ty).layout();
         let row_max_align = row_layout.align;
@@ -1177,7 +1178,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 let payload_offset = ir_layout::option_payload_offset(inner_ty);
                 let payload_addr = builder.ins().iadd_imm_s(addr, payload_offset as i64);
-                let inner_ty = (**inner_ty).clone();
+                let inner_ty = (**inner_ty).C();
                 self.write_const_value_to_addr(builder, payload_addr, &inner_ty, inner)?;
             }
             ConstValue::Tuple(fields) => {
@@ -1185,7 +1186,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     return Err(CraneliftError::Codegen(format!(
                         "a tuple constant wants a tuple type, not {:?}", ty)));
                 };
-                let field_types = field_types.clone();
+                let field_types = field_types.C();
                 let field_offsets = ir_layout::aggregate_field_offsets(&field_types);
                 for (i, field_value) in fields.iter().enumerate() {
                     let field_addr = builder.ins().iadd_imm_s(addr, field_offsets[i] as i64);
@@ -1201,9 +1202,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // The type's fields are in the order the layout uses, which is
                 // what the offsets are computed from; the value's are matched
                 // to them by name.
-                let field_types = field_types.clone();
+                let field_types = field_types.C();
                 let ordered: Vec<IrType> =
-                    field_types.iter().map(|(_, ty)| ty.clone()).collect();
+                    field_types.iter().map(|(_, ty)| ty.C()).collect();
                 let field_offsets = ir_layout::aggregate_field_offsets(&ordered);
                 for (name, field_value) in fields {
                     let index = field_types.iter().position(|(n, _)| n == name)
@@ -1226,7 +1227,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 let payload_offset = ir_layout::result_payload_offset(ok_ty);
                 let payload_addr = builder.ins().iadd_imm_s(addr, payload_offset as i64);
-                let ok_ty = (**ok_ty).clone();
+                let ok_ty = (**ok_ty).C();
                 self.write_const_value_to_addr(builder, payload_addr, &ok_ty, inner)?;
             }
             ConstValue::ResultErr(inner) => {
@@ -1254,7 +1255,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let runtime = self.runtime;
 
                 // Infer inner type and get TyDesc.
-                let inner_ir_type = (**payload_type).clone();
+                let inner_ir_type = (**payload_type).C();
                 let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
                 // Get inner size and alignment.
@@ -1281,7 +1282,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let runtime = self.runtime;
 
                 // Infer inner type and get TyDesc.
-                let inner_ir_type = (**payload_type).clone();
+                let inner_ir_type = (**payload_type).C();
                 let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
                 // Get inner size and alignment.
@@ -1316,7 +1317,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     return Err(CraneliftError::Codegen(format!(
                         "an enum constant wants an enum type, not {:?}", ty)));
                 };
-                let variants = variants.clone();
+                let variants = variants.C();
                 let index = variants.iter().position(|(name, _)| name == variant)
                     .ok_or_else(|| CraneliftError::Codegen(format!(
                         "enum constant names variant '{}', which {:?} does not have",
@@ -1325,7 +1326,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(mem_flags, discriminant, addr, 0);
 
                 if let Some(payload) = payload {
-                    let payload_ty = variants[index].1.clone()
+                    let payload_ty = variants[index].1.C()
                         .ok_or_else(|| CraneliftError::Codegen(format!(
                             "enum constant gives variant '{}' a payload it does not take",
                             variant)))?;
@@ -1348,7 +1349,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     return Err(CraneliftError::Codegen(format!(
                         "a list constant wants a list type, not {:?}", ty)));
                 };
-                let element_type = (**element_type).clone();
+                let element_type = (**element_type).C();
                 self.build_list_const_at(builder, addr, &element_type, elements)?;
             }
             ConstValue::Set(elements) => {
@@ -1356,7 +1357,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     return Err(CraneliftError::Codegen(format!(
                         "a set constant wants a set type, not {:?}", ty)));
                 };
-                let element_type = (**element_type).clone();
+                let element_type = (**element_type).C();
                 self.build_set_const_at(builder, addr, &element_type, elements)?;
             }
             ConstValue::Map(entries) => {
@@ -1364,8 +1365,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     return Err(CraneliftError::Codegen(format!(
                         "a map constant wants a map type, not {:?}", ty)));
                 };
-                let key_type = (**key_type).clone();
-                let value_type = (**value_type).clone();
+                let key_type = (**key_type).C();
+                let value_type = (**value_type).C();
                 self.build_map_const_at(builder, addr, &key_type, &value_type, entries)?;
             }
 

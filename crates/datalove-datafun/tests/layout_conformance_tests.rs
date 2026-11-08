@@ -11,6 +11,7 @@
 //! Every type below is checked in both directions: overall size and
 //! alignment, and the offset of each field, variant payload and tag payload.
 
+use rmx::prelude::*;
 use datalove_datafun_interp::IrTyDescTable;
 use datalove_datafun_ir::IrType;
 use datalove_datafun_ir::layout as ir_layout;
@@ -30,14 +31,14 @@ fn corpus() -> Vec<IrType> {
         IrType::Unit,
     ];
 
-    let mut types = scalars.clone();
+    let mut types = scalars.C();
 
     // Collections, whose own layout is fixed but whose element type varies.
     for elem in [IrType::U8, IrType::U64, IrType::String] {
-        types.push(IrType::List(Box::new(elem.clone())));
-        types.push(IrType::Set(Box::new(elem.clone())));
-        types.push(IrType::Map(Box::new(IrType::U32), Box::new(elem.clone())));
-        types.push(IrType::Tensor(Box::new(elem.clone()), 2));
+        types.push(IrType::List(Box::new(elem.C())));
+        types.push(IrType::Set(Box::new(elem.C())));
+        types.push(IrType::Map(Box::new(IrType::U32), Box::new(elem.C())));
+        types.push(IrType::Tensor(Box::new(elem.C()), 2));
     }
 
     // Tuples and structs, including alignment-mixing orders both ways.
@@ -51,9 +52,9 @@ fn corpus() -> Vec<IrType> {
         vec![IrType::Unit, IrType::U32],
     ];
     for fields in &field_sets {
-        types.push(IrType::Tuple(fields.clone()));
+        types.push(IrType::Tuple(fields.C()));
         let named: Vec<(String, IrType)> = fields.iter().enumerate()
-            .map(|(i, ty)| (format!("f{}", i), ty.clone()))
+            .map(|(i, ty)| (format!("f{}", i), ty.C()))
             .collect();
         types.push(IrType::Struct(named));
     }
@@ -78,7 +79,7 @@ fn corpus() -> Vec<IrType> {
         vec![("Nested".into(), Some(IrType::Tuple(vec![IrType::U8, IrType::U64])))],
     ];
     for variants in &variant_sets {
-        types.push(IrType::Enum(variants.clone()));
+        types.push(IrType::Enum(variants.C()));
     }
 
     // Atoms and terms.
@@ -95,8 +96,8 @@ fn corpus() -> Vec<IrType> {
         ])
         .collect();
     for inner in &inners {
-        types.push(IrType::Option(Box::new(inner.clone())));
-        types.push(IrType::Result(Box::new(inner.clone())));
+        types.push(IrType::Option(Box::new(inner.C())));
+        types.push(IrType::Result(Box::new(inner.C())));
     }
 
     // Options of options, and results of options.
@@ -132,8 +133,8 @@ fn aggregate_field_offsets_agree() {
     let mut table = IrTyDescTable::new();
     for ty in corpus() {
         let fields: Vec<IrType> = match &ty {
-            IrType::Tuple(fields) => fields.clone(),
-            IrType::Struct(fields) => fields.iter().map(|(_, t)| t.clone()).collect(),
+            IrType::Tuple(fields) => fields.C(),
+            IrType::Struct(fields) => fields.iter().map(|(_, t)| t.C()).collect(),
             _ => continue,
         };
         if fields.is_empty() {
@@ -213,8 +214,8 @@ fn map_and_set_node_layouts_agree() {
     for ty in corpus() {
         let ir = ir_layout::layout_of(&ty);
 
-        let set = IrType::Set(Box::new(ty.clone()));
-        let map = IrType::Map(Box::new(ty.clone()), Box::new(IrType::U8));
+        let set = IrType::Set(Box::new(ty.C()));
+        let map = IrType::Map(Box::new(ty.C()), Box::new(IrType::U8));
         unsafe {
             let set_td = TyDescRef::from_ptr(table.get_or_create(&set));
             assert_eq!(*set_td.set_leaf_layout(), rtdt::layout::set_leaf_node_layout(ir.size, ir.align),

@@ -19,15 +19,15 @@ fn get_datalit_errors<'db>(
     db: &'db datalove_datafun_compiler::Database,
     source: &str,
 ) -> (Vec<String>, bool) {
-    let src = bct::input::Source::new(db, source.to_string());
+    let src = bct::input::Source::new(db, source.S());
     let parsed = datalove_datalit::parser::parse_integration_test(db, src);
 
     // Check for parse errors first.
-    if has_parse_error(db, parsed.clone()) {
-        return (vec!["PARSE_ERROR".to_string()], true);
+    if has_parse_error(db, parsed.C()) {
+        return (vec!["PARSE_ERROR".S()], true);
     }
 
-    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed.clone());
+    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed.C());
     let result = datalove_datalit::tycheck::type_check(db, parsed, resolved);
 
     let errors: Vec<String> = result
@@ -79,20 +79,20 @@ fn has_parse_error<'db>(
 
     match expr.expr() {
         Expr::ParseError(_) => true,
-        Expr::List(l) => l.elements.iter().any(|e| has_parse_error(db, e.clone())),
-        Expr::Set(s) => s.elements.iter().any(|e| has_parse_error(db, e.clone())),
+        Expr::List(l) => l.elements.iter().any(|e| has_parse_error(db, e.C())),
+        Expr::Set(s) => s.elements.iter().any(|e| has_parse_error(db, e.C())),
         Expr::Map(m) => m.entries.iter().any(|e| {
-            has_parse_error(db, e.key.clone()) || has_parse_error(db, e.value.clone())
+            has_parse_error(db, e.key.C()) || has_parse_error(db, e.value.C())
         }),
-        Expr::AnonTuple(t) => t.elements.iter().any(|e| has_parse_error(db, e.clone())),
-        Expr::AnonStruct(s) => s.fields.iter().any(|f| has_parse_error(db, f.value.clone())),
+        Expr::AnonTuple(t) => t.elements.iter().any(|e| has_parse_error(db, e.C())),
+        Expr::AnonStruct(s) => s.fields.iter().any(|f| has_parse_error(db, f.value.C())),
 
-        Expr::Data(d) => has_parse_error(db, d.value.clone()),
-        Expr::Error(e) => has_parse_error(db, e.value.clone()),
-        Expr::Tensor(t) => t.elements.iter().any(|e| has_parse_error(db, e.clone())),
-        Expr::Some(s) => has_parse_error(db, s.payload.clone()),
-        Expr::Ok(o) => has_parse_error(db, o.payload.clone()),
-        Expr::Er(e) => has_parse_error(db, e.payload.clone()),
+        Expr::Data(d) => has_parse_error(db, d.value.C()),
+        Expr::Error(e) => has_parse_error(db, e.value.C()),
+        Expr::Tensor(t) => t.elements.iter().any(|e| has_parse_error(db, e.C())),
+        Expr::Some(s) => has_parse_error(db, s.payload.C()),
+        Expr::Ok(o) => has_parse_error(db, o.payload.C()),
+        Expr::Er(e) => has_parse_error(db, e.payload.C()),
         _ => false,
     }
 }
@@ -104,23 +104,23 @@ fn get_datafun_errors<'db>(
 ) -> (Vec<String>, bool) {
     // Wrap in "let _x = " for datafun parsing.
     let datafun_text = format!("let _x = {}", source);
-    let src = bct::input::Source::new(db, datafun_text.clone());
+    let src = bct::input::Source::new(db, datafun_text.C());
     let script = datalove_datafun_parser::parse_integration_test(db, src);
 
     // Check for parse errors.
     if script.statements(db).is_empty() {
-        return (vec!["PARSE_ERROR".to_string()], true);
+        return (vec!["PARSE_ERROR".S()], true);
     }
 
     // Extract the let statement value.
     let expr = match &script.statements(db)[0] {
         datalove_datafun_ast::ast::Statement::Let(stmt) => script.body(db).arena.get(stmt.value),
-        _ => return (vec!["PARSE_ERROR".to_string()], true),
+        _ => return (vec!["PARSE_ERROR".S()], true),
     };
 
     // Check for parse errors in the expression.
     if has_datafun_parse_error(db, expr) {
-        return (vec!["PARSE_ERROR".to_string()], true);
+        return (vec!["PARSE_ERROR".S()], true);
     }
 
     let result = datalove_datafun_tycheck::type_check_single_script(db, src);
@@ -365,7 +365,7 @@ fn run_single_mutation_test(
 ) -> Option<bool> {
     // Create fresh database for each test to avoid salsa state issues.
     let db = datalove_datafun_compiler::Database::default();
-    let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+    let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
     let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
     if let Some(result) = mutation.apply(&db, expr, &mut rng) {
@@ -387,7 +387,7 @@ fn run_mutation_tests(
 
     for seed in 0..num_seeds {
         // Run in a separate thread to isolate panics.
-        let config_clone = config.clone();
+        let config_clone = config.C();
         let result = std::thread::spawn(move || {
             // Set up a panic hook to suppress output.
             let prev_hook = std::panic::take_hook();
@@ -497,7 +497,7 @@ fn test_error_equiv_out_of_range_int_detailed() {
     let mut failures = vec![];
 
     for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
         let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
         if let Some(result) = Mutation::OutOfRangeInt.apply(&db, expr, &mut rng) {
@@ -529,7 +529,7 @@ fn test_error_equiv_wrong_element_type_detailed() {
     let mut failures = vec![];
 
     for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
         let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
         if let Some(result) = Mutation::WrongElementType.apply(&db, expr, &mut rng) {
@@ -559,7 +559,7 @@ fn test_error_equiv_arity_mismatch_detailed() {
     let mut failures = vec![];
 
     for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
         let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
         if let Some(result) = Mutation::ArityMismatch.apply(&db, expr, &mut rng) {
@@ -589,7 +589,7 @@ fn test_error_equiv_remove_type_hint_detailed() {
     let mut failures = vec![];
 
     for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
 
         if let Some(result) = Mutation::RemoveTypeHint.apply(&db, expr, &mut StdRng::seed_from_u64(0)) {
             if let Err(e) = test_error_equiv(&db, &result) {
@@ -618,7 +618,7 @@ fn test_error_equiv_duplicate_field_detailed() {
     let mut failures = vec![];
 
     for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
         let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
         if let Some(result) = Mutation::DuplicateField.apply(&db, expr, &mut rng) {
@@ -648,7 +648,7 @@ fn test_error_equiv_wrong_field_name_detailed() {
     let mut failures = vec![];
 
     for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
         let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
         if let Some(result) = Mutation::WrongFieldName.apply(&db, expr, &mut rng) {
@@ -678,7 +678,7 @@ fn test_error_equiv_swap_map_key_value_detailed() {
     let mut failures = vec![];
 
     for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
         let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
         if let Some(result) = Mutation::SwapMapKeyValue.apply(&db, expr, &mut rng) {
@@ -721,7 +721,7 @@ fn test_error_equiv_source_mutations_detailed() {
         let mut failures = vec![];
 
         for seed in 0..100 {
-            let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+            let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
             if let Some(result) = mutation.apply(&db, expr, &mut rng) {
@@ -764,7 +764,7 @@ fn test_debug_bracket_mutations() {
         eprintln!("\n=== {:?} ===\n", mutation);
 
         for seed in 0..50 {
-            let config_clone = config.clone();
+            let config_clone = config.C();
             let result = std::thread::spawn(move || {
                 let db = datalove_datafun_compiler::Database::default();
                 let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
@@ -825,10 +825,10 @@ fn test_debug_specific_bracket_cases() {
     eprintln!("");
 
     // Parse with datalit
-    let src1 = bct::input::Source::new(&db, source1.to_string());
+    let src1 = bct::input::Source::new(&db, source1.S());
     let datalit_parsed = datalove_datalit::parser::parse_integration_test(&db, src1);
     eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, &datalit_parsed));
-    eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed.clone()));
+    eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed.C()));
 
     // Check the type hint
     if let Some(_th) = datalit_parsed.type_hint() {
@@ -866,7 +866,7 @@ fn test_debug_specific_bracket_cases() {
     eprintln!("Source: {}", source2);
 
     // Parse with datalit
-    let src2 = bct::input::Source::new(&db, source2.to_string());
+    let src2 = bct::input::Source::new(&db, source2.S());
     let datalit_parsed2 = datalove_datalit::parser::parse_integration_test(&db, src2);
     eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, &datalit_parsed2));
     eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed2));
@@ -886,7 +886,7 @@ fn test_debug_arity_mismatch() {
 
     let mut applied_count = 0;
     for seed in 0..200 {
-        let config_clone = config.clone();
+        let config_clone = config.C();
         let result = std::thread::spawn(move || {
             let db = datalove_datafun_compiler::Database::default();
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
@@ -935,7 +935,7 @@ fn test_debug_delete_comma() {
     let mut failures = Vec::new();
     let mut successes = 0;
     for seed in 0..200 {
-        let config_clone = config.clone();
+        let config_clone = config.C();
         let result = std::thread::spawn(move || {
             let db = datalove_datafun_compiler::Database::default();
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);

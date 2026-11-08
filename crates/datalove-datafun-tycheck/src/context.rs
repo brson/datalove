@@ -343,13 +343,13 @@ impl<'db> TypeContext<'db> {
             reported.extend(cycle.iter().copied());
             let names: Vec<String> = cycle.iter()
                 .chain(std::iter::once(&start))
-                .map(|f| f.name.as_str(self.db).to_string())
+                .map(|f| f.name.as_str(self.db).S())
                 .collect();
             let error = TypeError::InlineCycle { names };
             self.push_coded(
                 crate::ErrorSite::Fun(start.local_index),
                 FCode::InlineCycle,
-                error.to_string(),
+                error.S(),
                 S("an inline function cannot be"),
                 Some(S("every call to an inline function is replaced by its body, so a cycle of them \
 would be replaced for ever. Drop `inline` from one function of the cycle.")),
@@ -399,7 +399,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
             name,
         });
         self.add_error(TypeError::MissingReturn {
-            name: name.as_str(self.db).to_string(),
+            name: name.as_str(self.db).S(),
             fun_local_index: local_index,
         });
     }
@@ -416,7 +416,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
             name,
         });
         self.add_error(TypeError::NativeFunOutsideRider {
-            name: name.as_str(self.db).to_string(),
+            name: name.as_str(self.db).S(),
             fun_local_index: local_index,
         });
     }
@@ -651,39 +651,39 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         let (code, message, label, note) = match &error {
             TypeError::FieldNotFound { .. } => (
                 FCode::NoSuchField,
-                error.to_string(),
+                error.S(),
                 S("no such field"),
                 None,
             ),
             TypeError::ProjectionOnNonAggregate { .. } => (
                 FCode::NoFields,
-                error.to_string(),
+                error.S(),
                 S("only a struct or a tuple has fields"),
                 None,
             ),
             TypeError::FieldIndexOutOfBounds { .. } => (
                 FCode::TupleIndexOutOfRange,
-                error.to_string(),
+                error.S(),
                 S("no such element"),
                 None,
             ),
             TypeError::NonCopyFieldProjection { .. } => (
                 FCode::NonCopyFieldRead,
-                error.to_string(),
+                error.S(),
                 S("this would move the field out"),
                 Some(S("the field's type is not a copy type, so reading it would move it while the \
 aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
             TypeError::NonCopyIndexProjection { .. } => (
                 FCode::NonCopyElementRead,
-                error.to_string(),
+                error.S(),
                 S("this would move the element out"),
                 Some(S("the element's type is not a copy type, so reading it would move it while the \
 collection still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
             TypeError::ViewTypeMutBinding { .. } => (
                 FCode::TensorViewMutated,
-                error.to_string(),
+                error.S(),
                 S("indexing a tensor of rank above one gives a view into it"),
                 Some(S("a view shows part of the tensor it indexes, and writing it whole would \
 replace the view rather than the elements it shows. Index down to single elements and write those.")),
@@ -806,7 +806,7 @@ replace the view rather than the elements it shows. Index down to single element
             ));
         }
         if let Some(found) = self.qualified.functions.iter().find(|f| f.alias == alias && f.name == name) {
-            return Ok(found.clone());
+            return Ok(found.C());
         }
         if self.qualified.aliases.contains(&alias) {
             self.push_coded(site, FCode::UndefinedFunction, fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
@@ -1130,7 +1130,7 @@ replace the view rather than the elements it shows. Index down to single element
                 if let (Some(index), Some(fun)) = (binding.top_const, self.enclosing_fun) {
                     self.const_deps.borrow_mut().fun_consts.entry(fun).or_default().push(index);
                 }
-                Some(binding.ty.clone())
+                Some(binding.ty.C())
             }
             None => self.inherited_variable(name).map(|(ty, _)| ty),
         }
@@ -1215,7 +1215,7 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(FunHead<'db>, Option<ModuleId<'db>>)> {
         self.note_asked(name);
         match self.function_asts.get(&name) {
-            Some(found) => Some(found.clone()),
+            Some(found) => Some(found.C()),
             None => self.inherited(name).and_then(|binding| binding.func_ast),
         }
     }
@@ -1251,7 +1251,7 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Store the type for an expression.
     pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: &Type<'db>) {
-        self.expr_types.insert(expr, ty.clone());
+        self.expr_types.insert(expr, ty.C());
     }
 
     /// Synthesize the type of an expression.
@@ -1308,7 +1308,7 @@ replace the view rather than the elements it shows. Index down to single element
         module_id: Option<ModuleId<'db>>,
     ) {
         for (name, ty) in name_resolution.type_aliases(self.db) {
-            self.type_aliases.insert(*name, ty.clone());
+            self.type_aliases.insert(*name, ty.C());
         }
         self.record_resolution_errors(name_resolution.errors(self.db), module_id);
 
@@ -1316,7 +1316,7 @@ replace the view rather than the elements it shows. Index down to single element
         // First build a map of ASTs for lookup.
         let ast_map: bct::lookup::LookupMap<bct::text::InternedText<'db>, FunHead<'db>> = name_resolution.function_asts(self.db)
             .iter()
-            .map(|(name, ast)| (*name, ast.clone()))
+            .map(|(name, ast)| (*name, ast.C()))
             .collect();
 
         for (name, func_type) in name_resolution.functions(self.db) {
@@ -1385,7 +1385,7 @@ replace the view rather than the elements it shows. Index down to single element
                     });
                 }
             }
-            self.add_error(error.clone());
+            self.add_error(error.C());
         }
     }
 
@@ -1397,14 +1397,14 @@ replace the view rather than the elements it shows. Index down to single element
         module_id: Option<ModuleId<'db>>,
     ) {
         for (name, ty) in &collected.type_aliases {
-            self.type_aliases.insert(*name, ty.clone());
+            self.type_aliases.insert(*name, ty.C());
         }
         self.record_resolution_errors(&collected.errors, module_id);
 
         // Add function signatures with ASTs.
         let ast_map: bct::lookup::LookupMap<bct::text::InternedText<'db>, FunHead<'db>> = collected.function_asts
             .iter()
-            .map(|(name, ast)| (*name, ast.clone()))
+            .map(|(name, ast)| (*name, ast.C()))
             .collect();
 
         for (name, func_type) in &collected.functions {
@@ -1655,7 +1655,7 @@ fn format_adapt_description<'db>(
     use datalove_datafun_common::{type_to_string, types_equivalent_at_head};
 
     if types_equivalent_at_head(db, from, to) {
-        "clone the value".to_string()
+        "clone the value".S()
     } else {
         format!("convert from `{}` to `{}`", type_to_string(db, from), type_to_string(db, to))
     }

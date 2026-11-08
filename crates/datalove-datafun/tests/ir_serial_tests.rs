@@ -112,7 +112,7 @@ fn execute_ir_interp(ir_unit: &IrCodeUnit, registry: &FunctionRegistry) -> Strin
 
     // Copy module code units from registry to env.
     for ((module_id, func_id), unit) in registry.iter_module_code_units_with_ids() {
-        env.add_module_code_unit(module_id, func_id, std::sync::Arc::new(unit.clone()));
+        env.add_module_code_unit(module_id, func_id, std::sync::Arc::new(unit.C()));
     }
 
     // Set up return destination.
@@ -125,7 +125,7 @@ fn execute_ir_interp(ir_unit: &IrCodeUnit, registry: &FunctionRegistry) -> Strin
         tydesc: ret_tydesc,
     };
 
-    let _ = interp.execute_script_unit_in_env(ir_unit, &mut env, ret_dest, None);
+    interp.execute_script_unit_in_env(ir_unit, &mut env, ret_dest, None).I();
 
     let output = interp.get_debug_buffer();
     env.destroy_live_values(interp.runtime_handle());
@@ -146,10 +146,10 @@ fn execute_ir_aot(
                 String::new(),
                 AotCompileResult::Error { message: msg },
                 LinkResult::Skipped {
-                    reason: "AOT compile failed".to_string(),
+                    reason: "AOT compile failed".S(),
                 },
                 ExecutionResult::Skipped {
-                    reason: "AOT compile failed".to_string(),
+                    reason: "AOT compile failed".S(),
                 },
             );
         }
@@ -168,10 +168,10 @@ fn execute_ir_aot(
                     message: format!("{}", e),
                 },
                 LinkResult::Skipped {
-                    reason: "AOT compile failed".to_string(),
+                    reason: "AOT compile failed".S(),
                 },
                 ExecutionResult::Skipped {
-                    reason: "AOT compile failed".to_string(),
+                    reason: "AOT compile failed".S(),
                 },
             );
         }
@@ -186,10 +186,10 @@ fn execute_ir_aot(
                     message: format!("Failed to emit: {}", e),
                 },
                 LinkResult::Skipped {
-                    reason: "AOT compile failed".to_string(),
+                    reason: "AOT compile failed".S(),
                 },
                 ExecutionResult::Skipped {
-                    reason: "AOT compile failed".to_string(),
+                    reason: "AOT compile failed".S(),
                 },
             );
         }
@@ -206,7 +206,7 @@ fn execute_ir_aot(
                     message: format!("tempdir: {}", e),
                 },
                 ExecutionResult::Skipped {
-                    reason: "Link failed".to_string(),
+                    reason: "Link failed".S(),
                 },
             );
         }
@@ -221,7 +221,7 @@ fn execute_ir_aot(
                 message: format!("{}", e),
             },
             ExecutionResult::Skipped {
-                reason: "Link failed".to_string(),
+                reason: "Link failed".S(),
             },
         );
     }
@@ -243,11 +243,11 @@ fn execute_ir_aot(
     };
 
     let exit_code = run_output.status.code().unwrap_or(-1);
-    let stderr = String::from_utf8_lossy(&run_output.stderr).to_string();
+    let stderr = String::from_utf8_lossy(&run_output.stderr).S();
 
     if !run_output.status.success() {
         return (
-            stderr.clone(),
+            stderr.C(),
             AotCompileResult::Success,
             LinkResult::Success,
             ExecutionResult::Error {
@@ -289,7 +289,7 @@ fn analyze_worldfile_ir_serial(
 
     if fragment_count != 1 {
         results.push(IrSerialSectionResult {
-            section_type: "validation".to_string(),
+            section_type: "validation".S(),
             name: None,
             typecheck: datafun::driver::TypecheckResult::Error {
                 errors: vec![format!(
@@ -317,7 +317,7 @@ fn analyze_worldfile_ir_serial(
 
     if expr_count > 0 {
         results.push(IrSerialSectionResult {
-            section_type: "validation".to_string(),
+            section_type: "validation".S(),
             name: None,
             typecheck: datafun::driver::TypecheckResult::Error {
                 errors: vec![format!(
@@ -351,7 +351,7 @@ fn analyze_worldfile_ir_serial(
             WorldfileSection::ScriptFragment { source } => Some(source.as_str()),
             _ => None,
         })
-        .unwrap();
+        .X();
 
     // Build the module compiler and compile.
     let mut module_compiler =
@@ -361,10 +361,10 @@ fn analyze_worldfile_ir_serial(
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
         results.push(IrSerialSectionResult {
-            section_type: "resolution".to_string(),
+            section_type: "resolution".S(),
             name: None,
             typecheck: datafun::driver::TypecheckResult::Error {
-                errors: vec![err.clone()],
+                errors: vec![err.C()],
             },
             lowering: datafun::driver::LoweringResult::Skipped,
             direct_interp_output: String::new(),
@@ -388,7 +388,7 @@ fn analyze_worldfile_ir_serial(
     let Some(mut compiler) = compiled.script_compiler_default(&db) else {
         // Module compilation failed (typecheck or ownership errors).
         results.push(IrSerialSectionResult {
-            section_type: "scriptunit-fragment".to_string(),
+            section_type: "scriptunit-fragment".S(),
             name: None,
             typecheck: datafun::driver::TypecheckResult::Skipped,
             lowering: datafun::driver::LoweringResult::Skipped,
@@ -419,7 +419,7 @@ fn analyze_worldfile_ir_serial(
         datafun::driver::TypecheckResult::Success
     ) {
         results.push(IrSerialSectionResult {
-            section_type: "scriptunit-fragment".to_string(),
+            section_type: "scriptunit-fragment".S(),
             name: None,
             typecheck: compiled_unit.typecheck,
             lowering: compiled_unit.lowering,
@@ -445,7 +445,7 @@ fn analyze_worldfile_ir_serial(
         datafun::driver::LoweringResult::Success { .. }
     ) {
         results.push(IrSerialSectionResult {
-            section_type: "scriptunit-fragment".to_string(),
+            section_type: "scriptunit-fragment".S(),
             name: None,
             typecheck: compiled_unit.typecheck,
             lowering: compiled_unit.lowering,
@@ -470,11 +470,11 @@ fn analyze_worldfile_ir_serial(
         Some(unit) => unit,
         None => {
             results.push(IrSerialSectionResult {
-                section_type: "scriptunit-fragment".to_string(),
+                section_type: "scriptunit-fragment".S(),
                 name: None,
                 typecheck: compiled_unit.typecheck,
                 lowering: datafun::driver::LoweringResult::Error {
-                    message: "No IR unit produced".to_string(),
+                    message: "No IR unit produced".S(),
                 },
                 direct_interp_output: String::new(),
                 direct_aot_output: String::new(),
@@ -503,7 +503,7 @@ fn analyze_worldfile_ir_serial(
         Ok(s) => s,
         Err(e) => {
             results.push(IrSerialSectionResult {
-                section_type: "scriptunit-fragment".to_string(),
+                section_type: "scriptunit-fragment".S(),
                 name: None,
                 typecheck: compiled_unit.typecheck,
                 lowering: compiled_unit.lowering,
@@ -532,7 +532,7 @@ fn analyze_worldfile_ir_serial(
         Ok(s) => s,
         Err(e) => {
             results.push(IrSerialSectionResult {
-                section_type: "scriptunit-fragment".to_string(),
+                section_type: "scriptunit-fragment".S(),
                 name: None,
                 typecheck: compiled_unit.typecheck,
                 lowering: compiled_unit.lowering,
@@ -561,7 +561,7 @@ fn analyze_worldfile_ir_serial(
         Ok(unit) => unit,
         Err(e) => {
             results.push(IrSerialSectionResult {
-                section_type: "scriptunit-fragment".to_string(),
+                section_type: "scriptunit-fragment".S(),
                 name: None,
                 typecheck: compiled_unit.typecheck,
                 lowering: compiled_unit.lowering,
@@ -588,7 +588,7 @@ fn analyze_worldfile_ir_serial(
         Ok(reg) => reg,
         Err(e) => {
             results.push(IrSerialSectionResult {
-                section_type: "scriptunit-fragment".to_string(),
+                section_type: "scriptunit-fragment".S(),
                 name: None,
                 typecheck: compiled_unit.typecheck,
                 lowering: compiled_unit.lowering,
@@ -620,7 +620,7 @@ fn analyze_worldfile_ir_serial(
     let aot_output_match = direct_aot_output == deser_aot_output;
 
     results.push(IrSerialSectionResult {
-        section_type: "scriptunit-fragment".to_string(),
+        section_type: "scriptunit-fragment".S(),
         name: None,
         typecheck: compiled_unit.typecheck,
         lowering: compiled_unit.lowering,

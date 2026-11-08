@@ -46,6 +46,7 @@
 //! instruction, so the values the rewrite will look for are the values the plan
 //! is built from, and the two cannot disagree.
 
+use rmx::prelude::*;
 use std::collections::BTreeMap;
 use bct::lookup::LookupMap;
 
@@ -148,14 +149,14 @@ pub fn collect_instantiations_into(
             };
 
             let entry = plan.funcs.entry(callee).or_insert_with(|| FuncMonomorphization {
-                comptime_param_indices: comptime_param_indices.clone(),
+                comptime_param_indices: comptime_param_indices.C(),
                 instantiations: Vec::new(),
                 value_to_index: LookupMap::default(),
                 copies: Vec::new(),
             });
 
             if !entry.value_to_index.contains_key(&values) {
-                entry.value_to_index.insert(values.clone(), entry.instantiations.len());
+                entry.value_to_index.insert(values.C(), entry.instantiations.len());
                 entry.instantiations.push(values);
             }
         }
@@ -213,7 +214,7 @@ pub fn monomorphize_function(
         let new_idx = new_param_types.len() as u32;
         param_remap.insert(old_idx as u32, new_idx);
         substitutions.insert(ParamId(old_idx as u32), Operand::Param(ParamId(new_idx)));
-        new_param_types.push(ty.clone());
+        new_param_types.push(ty.C());
         new_param_modes.push(*mode);
     }
 
@@ -221,32 +222,32 @@ pub fn monomorphize_function(
     // parameter is borrowed, so the body never drops it, and what stands for
     // it is borrowed too: a static of a non-copy type, read through the
     // reference as the parameter was, or a `Const` of a copy type.
-    let mut value_types = original.value_types.clone();
+    let mut value_types = original.value_types.C();
     let mut next_value = original.value_count;
     let mut entry_consts = Vec::new();
     for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
         let dest = ValueId(next_value);
         next_value += 1;
-        let ty = func_ctx.param_types[param_idx].clone();
+        let ty = func_ctx.param_types[param_idx].C();
         if ty.is_copy() {
             value_types.push(ty);
-            entry_consts.push(Instruction::Const { dest, value: value.clone() });
+            entry_consts.push(Instruction::Const { dest, value: value.C() });
             substitutions.insert(ParamId(param_idx as u32), Operand::Value(dest));
         } else {
             value_types.push(IrType::Ref(Box::new(ty)));
-            entry_consts.push(Instruction::StaticRef { dest, value: datalove_datafun_ir::SharedConst(std::sync::Arc::new(value.clone())) });
+            entry_consts.push(Instruction::StaticRef { dest, value: datalove_datafun_ir::SharedConst(std::sync::Arc::new(value.C())) });
             substitutions.insert(ParamId(param_idx as u32), Operand::ValueRef(dest));
         }
     }
 
     let blocks: Vec<IrBlock> = original.blocks.iter().enumerate()
         .map(|(block_idx, block)| {
-            let mut instructions = if block_idx == 0 { entry_consts.clone() } else { Vec::new() };
+            let mut instructions = if block_idx == 0 { entry_consts.C() } else { Vec::new() };
             instructions.extend(block.instructions.iter()
                 .map(|instr| replace_params_in_instruction(instr, &substitutions)));
             IrBlock {
                 id: block.id,
-                params: block.params.clone(),
+                params: block.params.C(),
                 instructions,
                 terminator: replace_params_in_terminator(&block.terminator, &substitutions),
             }
@@ -260,15 +261,15 @@ pub fn monomorphize_function(
         value_count: next_value,
         slot_count: original.slot_count,
         value_types,
-        slot_types: original.slot_types.clone(),
-        tracked_slots: original.tracked_slots.clone(),
-        const_values: original.const_values.clone(),
-        symbols: original.symbols.clone(),
+        slot_types: original.slot_types.C(),
+        tracked_slots: original.tracked_slots.C(),
+        const_values: original.const_values.C(),
+        symbols: original.symbols.C(),
         context: CodeUnitContext::Function(FunctionContext {
             params: (0..new_param_types.len() as u32).map(ParamId).collect(),
             param_modes: new_param_modes,
             param_types: new_param_types,
-            return_type: func_ctx.return_type.clone(),
+            return_type: func_ctx.return_type.C(),
             tracked_params: remap_params(&func_ctx.tracked_params, &param_remap),
             // Const parameters are not type parameters, and the values this
             // adds are consts, so neither the hidden descriptors nor the
@@ -276,10 +277,10 @@ pub fn monomorphize_function(
             // ordinary parameters, so they move up as const ones go, with
             // nothing to rewrite.
             type_param_count: func_ctx.type_param_count,
-            descriptor_table: func_ctx.descriptor_table.clone(),
+            descriptor_table: func_ctx.descriptor_table.C(),
             inline: func_ctx.inline,
         }),
-        nested_units: original.nested_units.clone(),
+        nested_units: original.nested_units.C(),
     }
 }
 
@@ -305,7 +306,7 @@ pub fn rewrite_comptime_calls(
                 dest, func, args, comptime_param_indices, bindings,
             } = instr
             else {
-                instructions.push(instr.clone());
+                instructions.push(instr.C());
                 continue;
             };
 
@@ -316,7 +317,7 @@ pub fn rewrite_comptime_calls(
                     mono.copy_for(&values)
                 });
             let Some(copy_ref) = copy else {
-                instructions.push(instr.clone());
+                instructions.push(instr.C());
                 continue;
             };
 
@@ -324,7 +325,7 @@ pub fn rewrite_comptime_calls(
             // so there is nothing to give back.
             let kept_args = args.iter().enumerate()
                 .filter(|(i, _)| !comptime_param_indices.contains(i))
-                .map(|(_, arg)| arg.clone())
+                .map(|(_, arg)| arg.C())
                 .collect();
 
             rewrote = true;
@@ -334,21 +335,21 @@ pub fn rewrite_comptime_calls(
                 args: kept_args,
                 // The copy is as generic as the original, so what this site
                 // was going to hand the original is what the copy wants.
-                bindings: bindings.clone(),
+                bindings: bindings.C(),
             });
         }
 
         blocks.push(IrBlock {
             id: block.id,
-            params: block.params.clone(),
+            params: block.params.C(),
             instructions,
-            terminator: block.terminator.clone(),
+            terminator: block.terminator.C(),
         });
     }
 
     let mut rewritten = IrCodeUnit {
         blocks,
-        ..unit.clone()
+        ..unit.C()
     };
     if rewrote {
         eliminate_dead_code_unit(&mut rewritten);
@@ -371,7 +372,7 @@ pub fn specialize_script_unit(
     module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
     instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (LookupMap<String, std::sync::Arc<ConstValue>>, Vec<String>),
 ) -> (IrCodeUnit, Vec<String>) {
-    let mut unit = unit.clone();
+    let mut unit = unit.C();
     let mut plan = MonomorphizationPlan::default();
     let mut errors = Vec::new();
 
@@ -467,7 +468,7 @@ fn comptime_values(
         .map(|&idx| match args.get(idx)? {
             // A const argument is passed by reference: the binding itself, or
             // a static one.
-            Operand::Value(value) | Operand::ValueRef(value) => consts.get(value).map(|v| (*v).clone()),
+            Operand::Value(value) | Operand::ValueRef(value) => consts.get(value).map(|v| (*v).C()),
             _ => None,
         })
         .collect()
@@ -523,7 +524,7 @@ mod tests {
 
     fn mono(instantiations: Vec<Vec<ConstValue>>, copies: Vec<CodeRef>) -> FuncMonomorphization {
         let value_to_index = instantiations.iter().enumerate()
-            .map(|(i, v)| (v.clone(), i))
+            .map(|(i, v)| (v.C(), i))
             .collect();
         FuncMonomorphization {
             comptime_param_indices: vec![0],

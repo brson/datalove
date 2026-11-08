@@ -138,15 +138,15 @@ impl<'db> Items<'db> {
     pub fn of(db: &'db dyn salsa::Database, parsed: &ParsedStatements<'db>) -> Self {
         let items = parsed.statements(db).iter()
             .filter_map(|statement| match statement {
-                Statement::Require(s) => Some(Item::Require(s.clone())),
-                Statement::Import(s) => Some(Item::Import(s.clone())),
-                Statement::TypeAlias(s) => Some(Item::TypeAlias(s.clone())),
+                Statement::Require(s) => Some(Item::Require(s.C())),
+                Statement::Import(s) => Some(Item::Import(s.C())),
+                Statement::TypeAlias(s) => Some(Item::TypeAlias(s.C())),
                 Statement::Fun(s) => Some(Item::Fun(s.head())),
-                Statement::NativeFun(s) => Some(Item::NativeFun(s.clone())),
+                Statement::NativeFun(s) => Some(Item::NativeFun(s.C())),
                 _ => None,
             })
             .collect();
-        Items { items, qualified_calls: parsed.qualified_calls.clone() }
+        Items { items, qualified_calls: parsed.qualified_calls.C() }
     }
 }
 
@@ -389,7 +389,7 @@ impl<'db> Binding<'db> {
     pub fn names(&self) -> Vec<InternedText<'db>> {
         match self {
             Binding::Name(name) => vec![*name],
-            Binding::Tuple(names) => names.clone(),
+            Binding::Tuple(names) => names.C(),
             Binding::Struct(fields) => fields.iter().map(|f| f.binding).collect(),
             Binding::Atom(_) => vec![],
             Binding::Term { binding, .. } => vec![*binding],
@@ -571,7 +571,7 @@ impl<'db> StmtFun<'db> {
     }
 
     pub fn return_type(&self) -> Option<datalit::ast::TypeHint<'db>> {
-        self.signature.return_type.clone()
+        self.signature.return_type.C()
     }
 
     pub fn key(&self) -> FunKey<'db> {
@@ -584,7 +584,7 @@ impl<'db> StmtFun<'db> {
             module_id: self.module_id,
             name: self.name,
             local_index: self.local_index,
-            signature: self.signature.clone(),
+            signature: self.signature.C(),
         }
     }
 }
@@ -636,7 +636,7 @@ impl<'db> FunHead<'db> {
     }
 
     pub fn return_type(&self) -> Option<datalit::ast::TypeHint<'db>> {
-        self.signature.return_type.clone()
+        self.signature.return_type.C()
     }
 
     pub fn inline(&self) -> bool {

@@ -373,7 +373,7 @@ pub fn eat_number<'db, S: TokenStreamExt<'db>>(stream: &mut S) -> Option<Number>
 
     // Decided before anything is consumed, so that a `-` that turns out not
     // to be a sign is left where the caller can read it as an operator.
-    let word_token = if negative { stream.peek_next() } else { stream.peek() }?.clone();
+    let word_token = if negative { stream.peek_next() } else { stream.peek() }?.C();
     let word = number_word(&word_token, text)?.S();
     let start = stream.peek()?.span().start;
 

@@ -7,6 +7,7 @@
 //!
 //! Scratch tool. `cargo run --release -p datalove-bench --example query_census`.
 
+use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use datalove_ct::query_events::QueryRecorder;
@@ -49,7 +50,7 @@ fn report(label: &str, by_query: BTreeMap<String, usize>) {
 fn report_granularity(db: &mut datafun::Database) {
     let usage = <dyn salsa::Database>::memory_usage(db);
     let mut rows: Vec<(usize, String, usize)> = usage.queries.iter()
-        .map(|(name, info)| (info.count(), name.to_string(),
+        .map(|(name, info)| (info.count(), name.S(),
                              info.size_of_fields() + info.size_of_metadata()))
         .filter(|(count, _, _)| *count > 0)
         .collect();
@@ -94,7 +95,7 @@ fn main() {
 
     // A body edit deep in the system library, which everything depends on.
     let (package, module, text) = sys.library.packages.iter()
-        .flat_map(|(p, pkg)| pkg.modules.iter().map(move |(m, d)| (p.clone(), m.clone(), d.source.to_string())))
+        .flat_map(|(p, pkg)| pkg.modules.iter().map(move |(m, d)| (p.C(), m.C(), d.source.S())))
         .next()
         .expect("the system library has modules");
     let probe = |salt: usize| format!("{}\nfun probe_edit(): int\n  ret {}\nend fun\n", text, salt);

@@ -249,7 +249,7 @@ pub fn gen_type_hint<'db, R: Rng>(
         if config.type_weights.string_type == 0 { leaf.string_type = 0; }
         leaf
     } else {
-        config.type_weights.clone()
+        config.type_weights.C()
     };
 
     // Build weighted choices.
@@ -351,7 +351,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                     // Generate unique field name.
                     let name = loop {
                         let candidate = gen_field_name(rng);
-                        if used_names.insert(candidate.clone()) {
+                        if used_names.insert(candidate.C()) {
                             break InternedText::new(db, &candidate);
                         }
                     };
@@ -370,7 +370,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .map(|_| {
                     let name = loop {
                         let candidate = gen_variant_name(rng);
-                        if used_names.insert(candidate.clone()) {
+                        if used_names.insert(candidate.C()) {
                             break InternedText::new(db, &candidate);
                         }
                     };
@@ -395,7 +395,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .map(|_| {
                     let name = loop {
                         let candidate = gen_field_name(rng);
-                        if used_names.insert(candidate.clone()) {
+                        if used_names.insert(candidate.C()) {
                             break InternedText::new(db, &candidate);
                         }
                     };
@@ -445,7 +445,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .fields
                 .iter()
                 .map(|field_type| {
-                    gen_expr_full_inner(db, rng, field_type.clone(), config, depth + 1)
+                    gen_expr_full_inner(db, rng, field_type.C(), config, depth + 1)
                 })
                 .collect();
             Expr::AnonTuple(ExprAnonTuple { elements })
@@ -456,7 +456,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .iter()
                 .map(|field| {
                     let name = field.name;
-                    let value = gen_expr_full_inner(db, rng, *field.type_hint.clone(), config, depth + 1);
+                    let value = gen_expr_full_inner(db, rng, *field.type_hint.C(), config, depth + 1);
                     ExprStructField { name, value }
                 })
                 .collect();
@@ -464,36 +464,36 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         }
 
         TypeHint::List(th) => {
-            let element_type = *th.element_type.clone();
+            let element_type = *th.element_type.C();
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
-                .map(|_| gen_expr_full_inner(db, rng, element_type.clone(), config, depth + 1))
+                .map(|_| gen_expr_full_inner(db, rng, element_type.C(), config, depth + 1))
                 .collect();
             Expr::List(ExprList { elements })
         }
         TypeHint::Map(th) => {
-            let key_type = *th.key_type.clone();
-            let value_type = *th.value_type.clone();
+            let key_type = *th.key_type.C();
+            let value_type = *th.value_type.C();
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let entries: Vec<_> = (0..count)
                 .map(|_| {
-                    let key = gen_expr_full_inner(db, rng, key_type.clone(), config, depth + 1);
-                    let value = gen_expr_full_inner(db, rng, value_type.clone(), config, depth + 1);
+                    let key = gen_expr_full_inner(db, rng, key_type.C(), config, depth + 1);
+                    let value = gen_expr_full_inner(db, rng, value_type.C(), config, depth + 1);
                     ExprMapEntry { key, value }
                 })
                 .collect();
             Expr::Map(ExprMap { entries })
         }
         TypeHint::Set(th) => {
-            let element_type = *th.element_type.clone();
+            let element_type = *th.element_type.C();
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
-                .map(|_| gen_expr_full_inner(db, rng, element_type.clone(), config, depth + 1))
+                .map(|_| gen_expr_full_inner(db, rng, element_type.C(), config, depth + 1))
                 .collect();
             Expr::Set(ExprSet { elements })
         }
         TypeHint::Option(th) => {
-            let inner_type = *th.inner_type.clone();
+            let inner_type = *th.inner_type.C();
             if rng.gen_bool(0.5) {
                 Expr::None
             } else {
@@ -502,7 +502,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
         }
         TypeHint::Result(th) => {
-            let inner_type = *th.inner_type.clone();
+            let inner_type = *th.inner_type.C();
             if rng.gen_bool(0.5) {
                 let payload = gen_expr_full_inner(db, rng, inner_type, config, depth + 1);
                 Expr::Ok(ExprOk { payload })
@@ -516,7 +516,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
         }
         TypeHint::Tensor(th) => {
-            let element_type = *th.element_type.clone();
+            let element_type = *th.element_type.C();
             let rank = th.rank;
             // Generate shape ensuring total elements don't exceed max_collection_size.
             let mut shape: Vec<u32> = Vec::with_capacity(rank as usize);
@@ -541,7 +541,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
             // Generate exactly the number of elements dictated by the shape.
             let elements: Vec<_> = (0..total_elements)
-                .map(|_| gen_expr_full_inner(db, rng, element_type.clone(), config, depth + 1))
+                .map(|_| gen_expr_full_inner(db, rng, element_type.C(), config, depth + 1))
                 .collect();
             // A header where the body cannot show the shape, and now and then
             // where it could.
@@ -573,7 +573,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                             gen_expr_full_inner(
                                 db,
                                 rng,
-                                (*c.type_hint).clone(),
+                                (*c.type_hint).C(),
                                 config,
                                 depth + 1,
                             )
@@ -588,7 +588,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         TypeHint::Rec(_) => todo!("gen_type_hint writes no recursive types"),
         TypeHint::Atom(th) => Expr::Atom(ExprAtom { name: th.name }),
         TypeHint::Term(th) => {
-            let payload = gen_expr_full_inner(db, rng, *th.payload.clone(), config, depth + 1);
+            let payload = gen_expr_full_inner(db, rng, *th.payload.C(), config, depth + 1);
             Expr::Term(ExprTerm { name: th.name, payload })
         }
         TypeHint::Enum(th) => {
@@ -596,7 +596,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let variant_expr = match &variant.payload {
                 None => Expr::Atom(ExprAtom { name: variant.name }),
                 Some(payload_ty) => {
-                    let payload = gen_expr_full_inner(db, rng, *payload_ty.clone(), config, depth + 1);
+                    let payload = gen_expr_full_inner(db, rng, *payload_ty.C(), config, depth + 1);
                     Expr::Term(ExprTerm { name: variant.name, payload })
                 }
             };
@@ -624,34 +624,34 @@ where
     let value_str = match &config.numeric_strategy {
         NumericStrategy::CornerCases => {
             let choices = vec![
-                min.to_string(),
-                T::one().to_string(),
-                (max - T::one()).to_string(),
-                max.to_string(),
+                min.S(),
+                T::one().S(),
+                (max - T::one()).S(),
+                max.S(),
             ];
-            choices[rng.gen_range(0..choices.len())].clone()
+            choices[rng.gen_range(0..choices.len())].C()
         }
         NumericStrategy::Random => {
-            rng.gen_range(min..=max).to_string()
+            rng.gen_range(min..=max).S()
         }
         NumericStrategy::Mixed => {
             if rng.gen_bool(0.2) {
                 let choices = vec![
-                    min.to_string(),
-                    T::one().to_string(),
-                    (max - T::one()).to_string(),
-                    max.to_string(),
+                    min.S(),
+                    T::one().S(),
+                    (max - T::one()).S(),
+                    max.S(),
                 ];
-                choices[rng.gen_range(0..choices.len())].clone()
+                choices[rng.gen_range(0..choices.len())].C()
             } else {
-                rng.gen_range(min..=max).to_string()
+                rng.gen_range(min..=max).S()
             }
         }
         NumericStrategy::SmallNonNegative => {
             // Clamp to 0..=255 range.
             let small_max = T::try_from(255u8).unwrap_or(max);
             let effective_max = if small_max < max { small_max } else { max };
-            rng.gen_range(min..=effective_max).to_string()
+            rng.gen_range(min..=effective_max).S()
         }
     };
 
@@ -672,36 +672,36 @@ where
     let value_str = match &config.numeric_strategy {
         NumericStrategy::CornerCases => {
             let choices = vec![
-                min.to_string(),
-                (min + T::one()).to_string(),
-                T::zero().to_string(),
-                (max - T::one()).to_string(),
-                max.to_string(),
+                min.S(),
+                (min + T::one()).S(),
+                T::zero().S(),
+                (max - T::one()).S(),
+                max.S(),
             ];
-            choices[rng.gen_range(0..choices.len())].clone()
+            choices[rng.gen_range(0..choices.len())].C()
         }
         NumericStrategy::Random => {
-            rng.gen_range(min..=max).to_string()
+            rng.gen_range(min..=max).S()
         }
         NumericStrategy::Mixed => {
             if rng.gen_bool(0.2) {
                 let choices = vec![
-                    min.to_string(),
-                    (min + T::one()).to_string(),
-                    T::zero().to_string(),
-                    (max - T::one()).to_string(),
-                    max.to_string(),
+                    min.S(),
+                    (min + T::one()).S(),
+                    T::zero().S(),
+                    (max - T::one()).S(),
+                    max.S(),
                 ];
-                choices[rng.gen_range(0..choices.len())].clone()
+                choices[rng.gen_range(0..choices.len())].C()
             } else {
-                rng.gen_range(min..=max).to_string()
+                rng.gen_range(min..=max).S()
             }
         }
         NumericStrategy::SmallNonNegative => {
             // Generate 0..=127 to fit in all signed types without negation.
             let small_max = T::try_from(127u8).unwrap_or(max);
             let effective_max = if small_max < max { small_max } else { max };
-            rng.gen_range(T::zero()..=effective_max).to_string()
+            rng.gen_range(T::zero()..=effective_max).S()
         }
     };
 
@@ -736,12 +736,12 @@ fn gen_f32_expr<'db, R: Rng>(
         NumericStrategy::CornerCases => {
             // Mix of decimal floats and hex for special values.
             let decimal_choices = vec![
-                "0.0".to_string(),
-                "-0.0".to_string(),
-                "1.0".to_string(),
-                "-1.0".to_string(),
-                "123.456".to_string(),
-                "-123.456".to_string(),
+                "0.0".S(),
+                "-0.0".S(),
+                "1.0".S(),
+                "-1.0".S(),
+                "123.456".S(),
+                "-123.456".S(),
             ];
 
             // 50% chance of hex special value, 50% decimal.
@@ -763,7 +763,7 @@ fn gen_f32_expr<'db, R: Rng>(
                 loop {
                     let val = rng.r#gen::<f32>();
                     if val.is_finite() {
-                        let value_str = val.to_string();
+                        let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
@@ -773,9 +773,9 @@ fn gen_f32_expr<'db, R: Rng>(
             if rng.gen_bool(0.3) {
                 // 30% corner cases: mix of decimal and hex special values.
                 let decimal_choices = vec![
-                    "0.0".to_string(),
-                    "1.0".to_string(),
-                    "-1.0".to_string(),
+                    "0.0".S(),
+                    "1.0".S(),
+                    "-1.0".S(),
                 ];
 
                 if rng.gen_bool(0.5) {
@@ -790,7 +790,7 @@ fn gen_f32_expr<'db, R: Rng>(
                 loop {
                     let val = rng.r#gen::<f32>();
                     if val.is_finite() {
-                        let value_str = val.to_string();
+                        let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
@@ -835,12 +835,12 @@ fn gen_f64_expr<'db, R: Rng>(
         NumericStrategy::CornerCases => {
             // Mix of decimal floats and hex for special values.
             let decimal_choices = vec![
-                "0.0".to_string(),
-                "-0.0".to_string(),
-                "1.0".to_string(),
-                "-1.0".to_string(),
-                "123.456789012345".to_string(),
-                "-123.456789012345".to_string(),
+                "0.0".S(),
+                "-0.0".S(),
+                "1.0".S(),
+                "-1.0".S(),
+                "123.456789012345".S(),
+                "-123.456789012345".S(),
             ];
 
             // 50% chance of hex special value, 50% decimal.
@@ -862,7 +862,7 @@ fn gen_f64_expr<'db, R: Rng>(
                 loop {
                     let val = rng.r#gen::<f64>();
                     if val.is_finite() {
-                        let value_str = val.to_string();
+                        let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
@@ -872,9 +872,9 @@ fn gen_f64_expr<'db, R: Rng>(
             if rng.gen_bool(0.3) {
                 // 30% corner cases: mix of decimal and hex special values.
                 let decimal_choices = vec![
-                    "0.0".to_string(),
-                    "1.0".to_string(),
-                    "-1.0".to_string(),
+                    "0.0".S(),
+                    "1.0".S(),
+                    "-1.0".S(),
                 ];
 
                 if rng.gen_bool(0.5) {
@@ -889,7 +889,7 @@ fn gen_f64_expr<'db, R: Rng>(
                 loop {
                     let val = rng.r#gen::<f64>();
                     if val.is_finite() {
-                        let value_str = val.to_string();
+                        let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
@@ -933,7 +933,7 @@ fn gen_expr_full_inner<'db, R: Rng>(
     config: &AstGenConfig,
     depth: usize,
 ) -> ExprFull<'db> {
-    let expr = gen_expr_matching_type(db, rng, type_hint.clone(), config, depth);
+    let expr = gen_expr_matching_type(db, rng, type_hint.C(), config, depth);
 
     // Always include type hints for types that cannot be synthesized.
     // Option::None, Result values, and anonymous enums require type hints
@@ -974,7 +974,7 @@ pub fn gen_expr_full_seeded<'db>(
     config: AstGenConfig,
 ) -> ExprFull<'db> {
     // Disable named types since they require external type definitions for name resolution.
-    let mut adjusted_config = config.clone();
+    let mut adjusted_config = config.C();
     adjusted_config.type_weights.named_tuple_type = 0;
     adjusted_config.type_weights.named_struct_type = 0;
     adjusted_config.type_weights.named_enum_type = 0;

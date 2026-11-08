@@ -1,5 +1,6 @@
 //! Type hint generation using datalit's type system.
 
+use rmx::prelude::*;
 use rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use datalove_datalit::ast_gen;
@@ -41,10 +42,10 @@ pub fn gen_type_hint_and_spelling<'db, R: Rng>(
 ) -> (TypeHint<'db>, String) {
     if !aliases.is_empty() && config.check_probability(rng, config.type_alias_usage_probability) {
         let alias = &aliases[rng.gen_range(0..aliases.len())];
-        return (alias.type_hint.clone(), alias.name.clone());
+        return (alias.type_hint.C(), alias.name.C());
     }
     let type_hint = gen_type_hint(db, rng, config);
-    let spelling = pretty_type_hint(db, type_hint.clone());
+    let spelling = pretty_type_hint(db, type_hint.C());
     (type_hint, spelling)
 }
 
@@ -59,7 +60,7 @@ pub fn gen_type_alias<'db, R: Rng>(
 ) -> (String, TypeHint<'db>) {
     let type_config = ast_gen::AstGenConfig::default();
     let type_hint = ast_gen::gen_type_hint(db, rng, &type_config, 0);
-    (name.to_string(), type_hint)
+    (name.S(), type_hint)
 }
 
 /// Format a type alias definition for output.

@@ -1,5 +1,6 @@
 //! Collection type instruction compilation (List, Set, Map, Tensor, Table).
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -28,9 +29,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get list type from dest.
-        let list_ty = self.func.value_types[dest.0 as usize].clone();
+        let list_ty = self.func.value_types[dest.0 as usize].C();
         let elem_ty = match &list_ty {
-            IrType::List(elem) => elem.as_ref().clone(),
+            IrType::List(elem) => elem.as_ref().C(),
             _ => return Err(CraneliftError::Codegen(format!(
                 "ListNew dest has non-list type: {:?}", list_ty
             ))),
@@ -79,9 +80,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get set type from dest.
-        let set_ty = self.func.value_types[dest.0 as usize].clone();
+        let set_ty = self.func.value_types[dest.0 as usize].C();
         let elem_ty = match &set_ty {
-            IrType::Set(elem) => elem.as_ref().clone(),
+            IrType::Set(elem) => elem.as_ref().C(),
             _ => return Err(CraneliftError::Codegen(format!(
                 "SetNew dest has non-set type: {:?}", set_ty
             ))),
@@ -139,9 +140,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get map type from dest.
-        let map_ty = self.func.value_types[dest.0 as usize].clone();
+        let map_ty = self.func.value_types[dest.0 as usize].C();
         let (key_ty, val_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            IrType::Map(k, v) => (k.as_ref().C(), v.as_ref().C()),
             _ => return Err(CraneliftError::Codegen(format!(
                 "MapNew dest has non-map type: {:?}", map_ty
             ))),
@@ -197,9 +198,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get tensor type from dest.
-        let tensor_ty = self.func.value_types[dest.0 as usize].clone();
+        let tensor_ty = self.func.value_types[dest.0 as usize].C();
         let elem_ty = match &tensor_ty {
-            IrType::Tensor(elem, _rank) => elem.as_ref().clone(),
+            IrType::Tensor(elem, _rank) => elem.as_ref().C(),
             _ => return Err(CraneliftError::Codegen(format!(
                 "TensorNew dest has non-tensor type: {:?}", tensor_ty
             ))),
@@ -310,7 +311,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get table type from dest.
-        let table_ty = self.func.value_types[dest.0 as usize].clone();
+        let table_ty = self.func.value_types[dest.0 as usize].C();
         if !matches!(table_ty, IrType::Table(_)) {
             return Err(CraneliftError::Codegen(format!(
                 "TableNew dest has non-table type: {:?}", table_ty

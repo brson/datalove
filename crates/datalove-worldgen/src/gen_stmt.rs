@@ -1,5 +1,6 @@
 //! Statement generation.
 
+use rmx::prelude::*;
 use rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
@@ -27,7 +28,7 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
     if ctx.generic_functions.is_empty() {
         return None;
     }
-    let sig = ctx.generic_functions[rng.gen_range(0..ctx.generic_functions.len())].clone();
+    let sig = ctx.generic_functions[rng.gen_range(0..ctx.generic_functions.len())].C();
     let (prelude, call, result) =
         crate::gen_generic::gen_generic_call(db, rng, &sig, config, ctx, var_counter);
 
@@ -42,9 +43,9 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
         Some(result_type) => {
             let name = format!("v{}", *var_counter);
             *var_counter += 1;
-            let type_str = pretty_type_hint(db, result_type.clone());
+            let type_str = pretty_type_hint(db, result_type.C());
             ctx.variables.push(Variable {
-                name: name.clone(),
+                name: name.C(),
                 type_hint: result_type,
                 is_mutable: false,
             });
@@ -77,8 +78,8 @@ fn gen_unwrap_let<'db, R: Rng>(
         .iter()
         .filter(|v| !ctx.is_consumed(&v.name) && !ctx.is_loop_protected(&v.name))
         .filter_map(|v| match (&v.type_hint, mark) {
-            (TypeHint::Option(o), "?") => Some((v.name.clone(), (*o.inner_type).clone())),
-            (TypeHint::Result(r), "!") => Some((v.name.clone(), (*r.inner_type).clone())),
+            (TypeHint::Option(o), "?") => Some((v.name.C(), (*o.inner_type).C())),
+            (TypeHint::Result(r), "!") => Some((v.name.C(), (*r.inner_type).C())),
             _ => Option::None,
         })
         .collect();
@@ -86,14 +87,14 @@ fn gen_unwrap_let<'db, R: Rng>(
         return Option::None;
     }
 
-    let (scrutinee, inner) = candidates[rng.gen_range(0..candidates.len())].clone();
+    let (scrutinee, inner) = candidates[rng.gen_range(0..candidates.len())].C();
     ctx.consume_variable(&scrutinee);
 
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
-    let written = pretty_type_hint(db, inner.clone());
+    let written = pretty_type_hint(db, inner.C());
     ctx.variables.push(Variable {
-        name: name.clone(),
+        name: name.C(),
         type_hint: inner,
         is_mutable: false,
     });
@@ -119,7 +120,7 @@ fn gen_enum_let<'db, R: Rng>(
     if ctx.enums.is_empty() {
         return Option::None;
     }
-    let def = ctx.enums[rng.gen_range(0..ctx.enums.len())].clone();
+    let def = ctx.enums[rng.gen_range(0..ctx.enums.len())].C();
 
     // Sometimes the variant on its own rather than widened. What is bound is
     // then of the atom's or the term's own type, which nothing matches over
@@ -140,9 +141,9 @@ fn gen_enum_let<'db, R: Rng>(
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
     ctx.variables.push(Variable {
-        name: name.clone(),
+        name: name.C(),
         type_hint: TypeHint::Alias(datalove_datalit::ast::TypeHintAlias {
-            name: bct::text::InternedText::new(db, def.name.clone()),
+            name: bct::text::InternedText::new(db, def.name.C()),
             local_index: None,
         }),
         is_mutable: false,
@@ -173,18 +174,18 @@ pub fn gen_let<'db, R: Rng>(
     // or a `!` to unwrap. Left to chance, a binding of the right shape and a
     // function of the right kind hardly ever met.
     let (type_hint, type_str) =
-        match crate::gen_expr::wrapper_worth_binding(&ctx.return_type, type_hint.clone()) {
+        match crate::gen_expr::wrapper_worth_binding(&ctx.return_type, type_hint.C()) {
             Some(wrapped) if config.check_probability(rng, config.projection_probability) => {
-                let written = pretty_type_hint(db, wrapped.clone());
+                let written = pretty_type_hint(db, wrapped.C());
                 (wrapped, written)
             }
             _ => (type_hint, type_str),
         };
 
-    let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
+    let value = gen_expr(db, rng, type_hint.C(), config, ctx);
 
     ctx.variables.push(Variable {
-        name: name.clone(),
+        name: name.C(),
         type_hint,
         is_mutable: false,
     });
@@ -206,10 +207,10 @@ pub fn gen_var<'db, R: Rng>(
 
     let (type_hint, type_str) =
         gen_type_hint_and_spelling(db, rng, config, &ctx.type_aliases);
-    let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
+    let value = gen_expr(db, rng, type_hint.C(), config, ctx);
 
     ctx.variables.push(Variable {
-        name: name.clone(),
+        name: name.C(),
         type_hint,
         is_mutable: true,
     });
@@ -231,8 +232,8 @@ pub fn gen_set<'db, R: Rng>(
     }
 
     let var_idx = rng.gen_range(0..mutable_vars.len());
-    let var_name = mutable_vars[var_idx].name.clone();
-    let var_type = mutable_vars[var_idx].type_hint.clone();
+    let var_name = mutable_vars[var_idx].name.C();
+    let var_type = mutable_vars[var_idx].type_hint.C();
     let value = gen_expr(db, rng, var_type, config, ctx);
 
     Some(format!("{}set {} = {}", indent, var_name, value))
@@ -269,7 +270,7 @@ pub fn gen_ret<'db, R: Rng>(
 ) -> String {
     match &ctx.return_type {
         Some(return_type) => {
-            let value = gen_expr(db, rng, return_type.clone(), config, ctx);
+            let value = gen_expr(db, rng, return_type.C(), config, ctx);
             format!("{}ret {}", indent, value)
         }
         None => format!("{}ret", indent),
@@ -313,9 +314,9 @@ pub fn gen_if<'db, R: Rng>(
     ctx.control_flow_depth += 1;
 
     // Save variables and consumed state before entering then branch.
-    let saved_variables = ctx.variables.clone();
-    let saved_consumed = ctx.consumed_variables.clone();
-    let saved_protected = ctx.loop_protected_variables.clone();
+    let saved_variables = ctx.variables.C();
+    let saved_consumed = ctx.consumed_variables.C();
+    let saved_protected = ctx.loop_protected_variables.C();
 
     // A branch may not move what was declared outside it. Moving in one branch
     // and not the other is refused, and the generator has no way to promise
@@ -324,7 +325,7 @@ pub fn gen_if<'db, R: Rng>(
     let outer_linear: Vec<String> = ctx.variables
         .iter()
         .filter(|v| is_linear_type(&v.type_hint))
-        .map(|v| v.name.clone())
+        .map(|v| v.name.C())
         .collect();
     for name in &outer_linear {
         ctx.loop_protect_variable(name);
@@ -334,8 +335,8 @@ pub fn gen_if<'db, R: Rng>(
     // restore below is what takes it back out again.
     if let Some(b) = &binding {
         ctx.variables.push(Variable {
-            name: b.name.clone(),
-            type_hint: b.payload_type.clone(),
+            name: b.name.C(),
+            type_hint: b.payload_type.C(),
             is_mutable: false,
         });
     }
@@ -353,7 +354,7 @@ pub fn gen_if<'db, R: Rng>(
 
     // Maybe generate else-body. A result destructured above has to have one,
     // and it has to bind what went wrong.
-    let error_binding = binding.as_ref().and_then(|b| b.error_binding.clone());
+    let error_binding = binding.as_ref().and_then(|b| b.error_binding.C());
     if error_binding.is_some() || rng.gen_bool(0.5) {
         match &error_binding {
             Some(err) => result.push_str(&format!("{}else |{}|\n", indent, err)),
@@ -361,12 +362,12 @@ pub fn gen_if<'db, R: Rng>(
         }
 
         // Save variables and consumed state before entering else branch.
-        let saved_variables = ctx.variables.clone();
-        let saved_consumed = ctx.consumed_variables.clone();
+        let saved_variables = ctx.variables.C();
+        let saved_consumed = ctx.consumed_variables.C();
 
         if let Some(err) = &error_binding {
             ctx.variables.push(Variable {
-                name: err.clone(),
+                name: err.C(),
                 type_hint: TypeHint::Error,
                 is_mutable: false,
             });
@@ -408,10 +409,10 @@ fn gen_const_let<'db, R: Rng>(
     *var_counter += 1;
 
     let type_hint = crate::gen_const::gen_const_type(db, rng, config);
-    let written = pretty_type_hint(db, type_hint.clone());
-    let value = crate::gen_const::gen_const_value(db, rng, type_hint.clone(), config);
+    let written = pretty_type_hint(db, type_hint.C());
+    let value = crate::gen_const::gen_const_value(db, rng, type_hint.C(), config);
 
-    ctx.consts.push(crate::context::ConstDef { name: name.clone(), type_hint });
+    ctx.consts.push(crate::context::ConstDef { name: name.C(), type_hint });
     format!("{}const {}: {} = {}", indent, name, written, value)
 }
 
@@ -438,14 +439,14 @@ fn gen_call_projection_let<'db, R: Rng>(
 
     let mark = crate::gen_expr::early_return_mark(&ctx.return_type);
     for func in ctx.callable_functions().filter(|f| crate::gen_expr::can_call(db, f, ctx)) {
-        let Some(returns) = func.return_type.clone() else { continue };
+        let Some(returns) = func.return_type.C() else { continue };
 
         // A field, which the typechecker allows only where it is a copy type.
         match &returns {
             TypeHint::AnonTuple(t) => {
                 for (i, field) in t.fields.iter().enumerate() {
                     if !is_linear_type(field) {
-                        candidates.push((func.clone(), format!(".{}", i), field.clone()));
+                        candidates.push((func.C(), format!(".{}", i), field.C()));
                     }
                 }
             }
@@ -453,9 +454,9 @@ fn gen_call_projection_let<'db, R: Rng>(
                 for field in t.fields.iter() {
                     if !is_linear_type(&field.type_hint) {
                         candidates.push((
-                            func.clone(),
+                            func.C(),
                             format!(".{}", field.name.text(db)),
-                            (*field.type_hint).clone(),
+                            (*field.type_hint).C(),
                         ));
                     }
                 }
@@ -472,25 +473,25 @@ fn gen_call_projection_let<'db, R: Rng>(
         // and indexes what was inside it. Both marks have to be the one the
         // enclosing function takes -- mixing them is a type error.
         let (returns, unwrap) = match &returns {
-            TypeHint::Option(o) if mark == "?" => ((*o.inner_type).clone(), mark),
-            TypeHint::Result(r) if mark == "!" => ((*r.inner_type).clone(), mark),
+            TypeHint::Option(o) if mark == "?" => ((*o.inner_type).C(), mark),
+            TypeHint::Result(r) if mark == "!" => ((*r.inner_type).C(), mark),
             TypeHint::Option(_) | TypeHint::Result(_) => continue,
-            other => (other.clone(), ""),
+            other => (other.C(), ""),
         };
 
         let (element, key) = match &returns {
-            TypeHint::List(t) => ((*t.element_type).clone(), ": index / 0".to_string()),
+            TypeHint::List(t) => ((*t.element_type).C(), ": index / 0".S()),
             TypeHint::Tensor(t) if t.rank == 1 => {
-                ((*t.element_type).clone(), ": index / 0".to_string())
+                ((*t.element_type).C(), ": index / 0".S())
             }
             TypeHint::Map(t) if crate::gen_expr::is_integer_type(&t.key_type) => {
-                let written = pretty_type_hint(db, (*t.key_type).clone());
-                ((*t.value_type).clone(), format!(": {} / 0", written))
+                let written = pretty_type_hint(db, (*t.key_type).C());
+                ((*t.value_type).C(), format!(": {} / 0", written))
             }
             _ => continue,
         };
         if !is_linear_type(&element) {
-            candidates.push((func.clone(), format!("{}[{}]{}", unwrap, key, mark), element));
+            candidates.push((func.C(), format!("{}[{}]{}", unwrap, key, mark), element));
         }
     }
 
@@ -515,14 +516,14 @@ fn gen_call_projection_let<'db, R: Rng>(
         rng.gen_range(0..candidates.len())
     };
 
-    let (func, step, result_type) = candidates[chosen].clone();
+    let (func, step, result_type) = candidates[chosen].C();
     let call = crate::gen_expr::gen_function_call(db, rng, &func, config, ctx);
 
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
-    let written = pretty_type_hint(db, result_type.clone());
+    let written = pretty_type_hint(db, result_type.C());
     ctx.variables.push(Variable {
-        name: name.clone(),
+        name: name.C(),
         type_hint: result_type,
         is_mutable: false,
     });
@@ -573,8 +574,8 @@ fn gen_if_binding<'db, R: Rng>(
         .iter()
         .filter(|v| !ctx.is_consumed(&v.name) && !ctx.is_loop_protected(&v.name))
         .filter_map(|v| match &v.type_hint {
-            TypeHint::Option(o) => Some((v.name.clone(), (*o.inner_type).clone(), false)),
-            TypeHint::Result(r) => Some((v.name.clone(), (*r.inner_type).clone(), true)),
+            TypeHint::Option(o) => Some((v.name.C(), (*o.inner_type).C(), false)),
+            TypeHint::Result(r) => Some((v.name.C(), (*r.inner_type).C(), true)),
             _ => Option::None,
         })
         .collect();
@@ -584,7 +585,7 @@ fn gen_if_binding<'db, R: Rng>(
     }
 
     let (scrutinee, payload_type, wants_error) =
-        candidates[rng.gen_range(0..candidates.len())].clone();
+        candidates[rng.gen_range(0..candidates.len())].C();
     ctx.consume_variable(&scrutinee);
 
     let name = format!("v{}", *var_counter);
@@ -622,7 +623,7 @@ pub fn gen_loop<'db, R: Rng>(
         let name = format!("v{}", *var_counter);
         *var_counter += 1;
         ctx.variables.push(Variable {
-            name: name.clone(),
+            name: name.C(),
             type_hint: TypeHint::Bool,
             is_mutable: true,
         });
@@ -648,16 +649,16 @@ pub fn gen_loop<'db, R: Rng>(
     ctx.loop_depth += 1;
 
     // Save variables, consumed, and loop-protected state before entering loop body.
-    let saved_variables = ctx.variables.clone();
-    let saved_consumed = ctx.consumed_variables.clone();
-    let saved_loop_protected = ctx.loop_protected_variables.clone();
+    let saved_variables = ctx.variables.C();
+    let saved_consumed = ctx.consumed_variables.C();
+    let saved_loop_protected = ctx.loop_protected_variables.C();
 
     // Mark all outer-scoped linear variables as loop-protected to prevent MoveInLoop errors.
     // They can still be borrowed (used in operators) but not moved directly.
     let linear_vars: Vec<String> = ctx.variables
         .iter()
         .filter(|v| is_linear_type(&v.type_hint))
-        .map(|v| v.name.clone())
+        .map(|v| v.name.C())
         .collect();
     for name in linear_vars {
         ctx.loop_protect_variable(&name);
@@ -733,26 +734,26 @@ pub fn gen_for<'db, R: Rng>(
     if walkable.is_empty() {
         return Option::None;
     }
-    let walked = ctx.variables[walkable[rng.gen_range(0..walkable.len())]].clone();
+    let walked = ctx.variables[walkable[rng.gen_range(0..walkable.len())]].C();
 
     let elem_type = |rank_one: TypeHint<'db>, t: &datalove_datalit::ast::TypeHintTensor<'db>| {
         if t.rank == 1 {
             rank_one
         } else {
             TypeHint::Tensor(datalove_datalit::ast::TypeHintTensor {
-                element_type: t.element_type.clone(),
+                element_type: t.element_type.C(),
                 rank: t.rank - 1,
             })
         }
     };
     let index_too = rng.gen_bool(0.4);
     let bound: Vec<TypeHint<'db>> = match &walked.type_hint {
-        TypeHint::List(l) if index_too => vec![TypeHint::Index, (*l.element_type).clone()],
-        TypeHint::List(l) => vec![(*l.element_type).clone()],
-        TypeHint::Tensor(t) if index_too => vec![TypeHint::Index, elem_type((*t.element_type).clone(), t)],
-        TypeHint::Tensor(t) => vec![elem_type((*t.element_type).clone(), t)],
-        TypeHint::Set(s) => vec![(*s.element_type).clone()],
-        TypeHint::Map(m) => vec![(*m.key_type).clone(), (*m.value_type).clone()],
+        TypeHint::List(l) if index_too => vec![TypeHint::Index, (*l.element_type).C()],
+        TypeHint::List(l) => vec![(*l.element_type).C()],
+        TypeHint::Tensor(t) if index_too => vec![TypeHint::Index, elem_type((*t.element_type).C(), t)],
+        TypeHint::Tensor(t) => vec![elem_type((*t.element_type).C(), t)],
+        TypeHint::Set(s) => vec![(*s.element_type).C()],
+        TypeHint::Map(m) => vec![(*m.key_type).C(), (*m.value_type).C()],
         _ => unreachable!("only collections are walkable"),
     };
     let names: Vec<String> = bound.iter().map(|_| {
@@ -766,13 +767,13 @@ pub fn gen_for<'db, R: Rng>(
     ctx.control_flow_depth += 1;
     ctx.loop_depth += 1;
 
-    let saved_variables = ctx.variables.clone();
-    let saved_consumed = ctx.consumed_variables.clone();
-    let saved_loop_protected = ctx.loop_protected_variables.clone();
+    let saved_variables = ctx.variables.C();
+    let saved_consumed = ctx.consumed_variables.C();
+    let saved_loop_protected = ctx.loop_protected_variables.C();
 
     let linear_vars: Vec<String> = ctx.variables.iter()
         .filter(|v| is_linear_type(&v.type_hint))
-        .map(|v| v.name.clone())
+        .map(|v| v.name.C())
         .collect();
     for name in linear_vars {
         ctx.loop_protect_variable(&name);
@@ -782,7 +783,7 @@ pub fn gen_for<'db, R: Rng>(
         v.is_mutable = false;
     }
     for (name, type_hint) in names.iter().zip(bound) {
-        ctx.variables.push(Variable { name: name.clone(), type_hint, is_mutable: false });
+        ctx.variables.push(Variable { name: name.C(), type_hint, is_mutable: false });
         ctx.loop_protect_variable(name);
     }
 

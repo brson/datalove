@@ -177,7 +177,7 @@ mod tests {
         assert!(graph.get_module(&db, math).is_some());
 
         // Verify dependencies.
-        let math_deps = graph.dependencies(&db).get(&math).unwrap();
+        let math_deps = graph.dependencies(&db).get(&math).X();
         assert!(math_deps.contains(&base));
     }
 
@@ -191,12 +191,12 @@ mod tests {
     fn module_id_is_the_path() {
         let db = crate::Database::default();
 
-        let a = ModuleId::new(&db, "sys/std/u32".to_string());
-        let b = ModuleId::new(&db, "sys/std/u32".to_string());
+        let a = ModuleId::new(&db, "sys/std/u32".S());
+        let b = ModuleId::new(&db, "sys/std/u32".S());
         assert_eq!(a, b, "the same path has to give the same id");
         assert_eq!(a.path(&db), "sys/std/u32");
 
-        let other = ModuleId::new(&db, "sys/std/i32".to_string());
+        let other = ModuleId::new(&db, "sys/std/i32".S());
         assert_ne!(a, other, "different paths stay different ids");
     }
 
@@ -206,13 +206,13 @@ mod tests {
         let db = crate::Database::default();
 
         let mut builder = ModuleGraphBuilder::new(&db);
-        let source = Source::new(&db, "let x = 1".to_string());
+        let source = Source::new(&db, "let x = 1".S());
         let in_graph = builder.add_module("local/test/a", source);
         let graph = builder.build();
 
         // Rebuild the id from the path alone, as a caller holding only a path
         // would have to.
-        let from_path = ModuleId::new(&db, "local/test/a".to_string());
+        let from_path = ModuleId::new(&db, "local/test/a".S());
         assert_eq!(in_graph, from_path);
         assert!(
             graph.get_module(&db, from_path).is_some(),
@@ -225,12 +225,12 @@ mod tests {
     fn module_id_is_usable_as_a_map_key() {
         let db = crate::Database::default();
         let mut map = LookupMap::new();
-        map.insert(ModuleId::new(&db, "b".to_string()), 2);
-        map.insert(ModuleId::new(&db, "a".to_string()), 1);
+        map.insert(ModuleId::new(&db, "b".S()), 2);
+        map.insert(ModuleId::new(&db, "a".S()), 1);
 
         // Re-derived keys find their entries.
-        assert_eq!(map.get(&ModuleId::new(&db, "a".to_string())), Some(&1));
-        assert_eq!(map.get(&ModuleId::new(&db, "b".to_string())), Some(&2));
+        assert_eq!(map.get(&ModuleId::new(&db, "a".S())), Some(&1));
+        assert_eq!(map.get(&ModuleId::new(&db, "b".S())), Some(&2));
         assert_eq!(map.len(), 2, "the same path must not insert twice");
     }
 }

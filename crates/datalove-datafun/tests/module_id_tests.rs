@@ -51,7 +51,7 @@ fn require_and_import(module: &Module<'_>) -> String {
 fn recompile(session: &mut Session) {
     let compiled = session.module_compiler.compile(&session.db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
-    session.executor.set_module_registry(compiled.shared.module_registry.clone());
+    session.executor.set_module_registry(compiled.shared.module_registry.C());
 }
 
 /// `g` is lowered against `first`, `second` comes in, and `g` still calls

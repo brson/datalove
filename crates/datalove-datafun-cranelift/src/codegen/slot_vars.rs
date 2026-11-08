@@ -31,6 +31,7 @@
 //! the interpreter made to a slot before the entry is one the IR made, and
 //! the analysis, which reads the whole function, has ruled that slot out.
 
+use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 
 use cranelift_codegen::ir as cl_ir;
@@ -139,11 +140,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     fn slot_field_place(&self, s: SlotId, index: u32) -> Option<FieldPlace> {
         let slot_ty = &self.func.slot_types[s.0 as usize];
         let fields: Vec<IrType> = match slot_ty {
-            IrType::Tuple(tys) => tys.clone(),
-            IrType::Struct(flds) => flds.iter().map(|(_, t)| t.clone()).collect(),
+            IrType::Tuple(tys) => tys.C(),
+            IrType::Struct(flds) => flds.iter().map(|(_, t)| t.C()).collect(),
             _ => return None,
         };
-        let ty = fields.get(index as usize)?.clone();
+        let ty = fields.get(index as usize)?.C();
         let at = types::compute_tuple_field_offsets(&fields)[index as usize];
         let slot_cut = word_pieces(slot_ty)?;
         let field_cut = word_pieces(&ty)?;
@@ -253,7 +254,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Store to slot `s`, held in registers: its variables given `value`.
     pub(super) fn store_slot_regs(&mut self, builder: &mut FunctionBuilder, s: SlotId, value: &Operand) -> Result<(), CraneliftError> {
-        let ty = self.func.slot_types[s.0 as usize].clone();
+        let ty = self.func.slot_types[s.0 as usize].C();
         let regs = match types::ir_type_to_cranelift(&ty) {
             CraneliftRepr::Scalar(_) => vec![self.get_operand_value(builder, value)?],
             CraneliftRepr::Aggregate(_) => self.operand_words(builder, value, &ty)?,
@@ -276,7 +277,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// The words of the field `place` names, out of its slot's registers.
     pub(super) fn field_place_words(&self, builder: &mut FunctionBuilder, place: &FieldPlace) -> Vec<cl_ir::Value> {
-        let slot_ty = self.func.slot_types[place.slot.0 as usize].clone();
+        let slot_ty = self.func.slot_types[place.slot.0 as usize].C();
         let regs = self.slot_regs(builder, place.slot).expect("held in registers");
         match Self::extract_part(builder, &slot_ty, &regs, place.at, &place.ty).expect("a field of whole words") {
             Err(words) => words,

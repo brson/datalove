@@ -127,7 +127,7 @@ impl Modules {
     /// `units` are every open session's units, as they will stand once the
     /// step in hand is done.
     fn settle(&mut self, db: &datafun::Database, units: &[Source]) {
-        let previous = self.module_compiler.roots().clone();
+        let previous = self.module_compiler.roots().C();
         self.errors = settle_roots(db, &mut self.module_compiler, units, &self.also_roots)
             .expect("errors no root reaches are a rider's, and the riders compiled at startup");
         if *self.module_compiler.roots() != previous {
@@ -258,7 +258,7 @@ impl SessionState {
             self.taken = changes;
         }
         let mut compiler = compiled
-            .script_compiler_resumed(db, self.session.clone())
+            .script_compiler_resumed(db, self.session.C())
             .expect("the roots were settled on modules that compile");
         let result = work(&mut compiler);
         self.session = compiler.into_session();
@@ -332,7 +332,7 @@ fn take_modules(
     natives: &mut RegisteredNatives,
     compiled: &datafun::driver::CompiledModules<'_>,
 ) {
-    executor.set_module_registry(compiled.shared.module_registry.clone());
+    executor.set_module_registry(compiled.shared.module_registry.C());
     *natives = register_natives(&natives.natives, compiled, executor)
         .expect("the natives of modules that compiled are found");
 }
@@ -361,7 +361,7 @@ fn settle_roots(
         if !compiled.has_errors() {
             return Ok(found);
         }
-        let Roots::From(roots) = module_compiler.roots().clone() else {
+        let Roots::From(roots) = module_compiler.roots().C() else {
             unreachable!("the engine always narrows");
         };
 
@@ -1394,7 +1394,7 @@ impl Compiling<'_> {
         let exports = ir_unit.script_context()
             .expect("a compiled fragment is a script unit")
             .exports
-            .clone();
+            .C();
         Eval::Ran(exports.iter().map(|(name, binding)| self.eval_binding(name, binding)).collect())
     }
 

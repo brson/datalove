@@ -10,8 +10,8 @@ pub fn run_script_world(path: &Path) -> Result<String, String> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let manifest_path = std::path::PathBuf::from(manifest_dir);
     let workspace_dir = manifest_path
-        .parent().unwrap()
-        .parent().unwrap();
+        .parent().X()
+        .parent().X();
 
     let target_dir = workspace_dir.join("target");
     let profile = if cfg!(debug_assertions) { "debug" } else { "release" };

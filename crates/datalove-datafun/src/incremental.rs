@@ -221,7 +221,7 @@ impl IncrementalModuleWorld {
             dependencies.entry(module.id(db)).or_default();
         }
 
-        let graph = ModuleGraph::new(db, modules, module_by_id, dependencies, self.data.clone());
+        let graph = ModuleGraph::new(db, modules, module_by_id, dependencies, self.data.C());
         (graph, self.build_resolved_requires(db, path_deps, &paths))
     }
 
@@ -303,7 +303,7 @@ impl IncrementalModuleWorld {
                     .filter_map(|p| {
                         self.module(db, p).map(|m| {
                             // Use the last component of path as alias.
-                            let alias = p.split('/').last().unwrap_or(p).to_string();
+                            let alias = p.split('/').last().unwrap_or(p).S();
                             (alias, m.id(db))
                         })
                     })
@@ -468,7 +468,7 @@ fn warm_import_demands(world: &IncrementalModuleWorld, db: &dyn DbClone, roots: 
             let module = world.module(db_salsa, path).expect("the frontier only holds paths the world has");
             for (space, package, module) in crate::import_demands::module_import_demands(db_salsa, module) {
                 let target = format!("{}/{}/{}", space, package, module);
-                if reachable(&target) && seen.insert(target.clone()) {
+                if reachable(&target) && seen.insert(target.C()) {
                     next.push(target);
                 }
             }
@@ -522,7 +522,7 @@ fn dependencies_from_roots<'db>(
                 record.import_space, record.package_name, record.package_module.name(db),
             );
             let module = Module::new(
-                db, ModuleId::new(db, path.clone()), record.package_module.text(db));
+                db, ModuleId::new(db, path.C()), record.package_module.text(db));
             (path, module)
         })
         .collect();

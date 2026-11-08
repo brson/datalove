@@ -252,7 +252,7 @@ impl WorldfileSection {
             | WorldfileSection::ModuleChangeWs { library, package, module, .. }
             | WorldfileSection::ModuleChangeAst { library, package, module, .. }
             | WorldfileSection::ModuleChangeTy { library, package, module, .. } => {
-                Some(ModulePath::new(library.clone(), package.clone(), module.clone()))
+                Some(ModulePath::new(library.C(), package.C(), module.C()))
             }
             WorldfileSection::Data { .. }
             | WorldfileSection::ScriptFragment { .. }
@@ -624,7 +624,7 @@ impl<'a> Parser<'a> {
     /// Give the next script unit its id, checking the one its header names.
     fn take_unit_id(&mut self, header: &str, id: Option<&str>) -> AnyResult<()> {
         if let Some(id) = id {
-            if id != self.next_unit.to_string() {
+            if id != self.next_unit.S() {
                 bail!("section '{header}' at line {} names unit {id}, but it is unit {}", self.line_num(), self.next_unit);
             }
         }
@@ -660,7 +660,7 @@ impl<'a> Parser<'a> {
 
         // Rider sections.
         if let Some(name) = header.strip_prefix("rider ") {
-            let name = name.trim().to_string();
+            let name = name.trim().S();
             let source = self.read_content();
             return Ok(WorldfileSection::Rider { name, source });
         }
@@ -954,7 +954,7 @@ let output = add(@5, @10)
 
         // Check script.
         assert!(result.script.is_some());
-        let script = result.script.unwrap();
+        let script = result.script.X();
         assert!(script.contains("require module sys/std/u32"));
         assert!(script.contains("import u32.add"));
         assert!(script.contains("let output = add(@5, @10)"));

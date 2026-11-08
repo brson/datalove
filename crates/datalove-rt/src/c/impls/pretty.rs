@@ -2,6 +2,7 @@
 //!
 //! Produces valid datalit syntax that can be parsed back.
 
+use rmx::prelude::*;
 use datalove_rtdt as rtdt;
 use crate::c::RtStatus;
 use crate::c::impls::rt_local::RtLocal;
@@ -110,7 +111,7 @@ unsafe fn pretty_u8(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U8);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -123,7 +124,7 @@ unsafe fn pretty_i8(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I8);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -136,7 +137,7 @@ unsafe fn pretty_u16(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U16);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -149,7 +150,7 @@ unsafe fn pretty_i16(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I16);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -162,7 +163,7 @@ unsafe fn pretty_u32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U32);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -175,7 +176,7 @@ unsafe fn pretty_i32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I32);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -188,7 +189,7 @@ unsafe fn pretty_u64(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U64);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -201,7 +202,7 @@ unsafe fn pretty_i64(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I64);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -214,7 +215,7 @@ unsafe fn pretty_usize(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Index);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -227,7 +228,7 @@ unsafe fn pretty_isize(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Offset);
-        let s = n.0.to_string();
+        let s = n.0.S();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
@@ -266,15 +267,15 @@ unsafe fn pretty_f32(
     unsafe {
         let f = &*(value_ref as *const rtdt::F32);
         let s = if f.0.is_nan() {
-            "nan".to_string()
+            "nan".S()
         } else if f.0.is_infinite() {
             if f.0.is_sign_positive() {
-                "inf".to_string()
+                "inf".S()
             } else {
-                "-inf".to_string()
+                "-inf".S()
             }
         } else if POSITIONAL.contains(&(f.0.abs() as f64)) || f.0 == 0.0 {
-            float_text(f.0.to_string())
+            float_text(f.0.S())
         } else {
             float_text(format!("{:e}", f.0))
         };
@@ -291,15 +292,15 @@ unsafe fn pretty_f64(
     unsafe {
         let f = &*(value_ref as *const rtdt::F64);
         let s = if f.0.is_nan() {
-            "nan".to_string()
+            "nan".S()
         } else if f.0.is_infinite() {
             if f.0.is_sign_positive() {
-                "inf".to_string()
+                "inf".S()
             } else {
-                "-inf".to_string()
+                "-inf".S()
             }
         } else if POSITIONAL.contains(&f.0.abs()) || f.0 == 0.0 {
-            float_text(f.0.to_string())
+            float_text(f.0.S())
         } else {
             float_text(format!("{:e}", f.0))
         };
@@ -757,7 +758,7 @@ unsafe fn pretty_tensor(
         if rank > 1 && (shape[0] == 1 || shape.contains(&0)) {
             push_str(rt, string_mut, string_tydesc, b"[| ")?;
             for extent in &shape {
-                push_str(rt, string_mut, string_tydesc, extent.to_string().as_bytes())?;
+                push_str(rt, string_mut, string_tydesc, extent.S().as_bytes())?;
                 push_str(rt, string_mut, string_tydesc, b" ")?;
             }
             push_str(rt, string_mut, string_tydesc, b"|")?;
@@ -969,7 +970,7 @@ mod tests {
                 return String::new();
             }
             let bytes = std::slice::from_raw_parts(string.data(), string.size().as_usize());
-            String::from_utf8_lossy(bytes).to_string()
+            String::from_utf8_lossy(bytes).S()
         }
     }
 

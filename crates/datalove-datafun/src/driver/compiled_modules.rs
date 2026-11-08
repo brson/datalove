@@ -4,6 +4,7 @@
 //! - [`SharedModuleContext`]: Shared data across script compilers/executors.
 //! - [`CompiledModules`]: Result of compiling a module graph, with error info.
 
+use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use bct::lookup::LookupMap;
 use std::sync::Arc;
@@ -74,7 +75,7 @@ impl<'db> CompiledModules<'db> {
     pub fn module_paths(&self, db: &'db dyn salsa::Database) -> LookupMap<IrModuleId, String> {
         datalove_datafun_compiler::tracked_lower::ir_module_ids(db, self.shared.parsed_graph)
             .iter_unordered()
-            .map(|(module, ir_id)| (*ir_id, module.path(db).clone()))
+            .map(|(module, ir_id)| (*ir_id, module.path(db).C()))
             .collect()
     }
 
@@ -145,7 +146,7 @@ impl<'db> CompiledModules<'db> {
         let mut symbols = Vec::new();
         for unit in self.shared.module_registry.iter_module_code_units() {
             if let Some(ctx) = unit.native_context() {
-                symbols.push(ctx.symbol().to_string());
+                symbols.push(ctx.symbol().S());
             }
         }
         symbols

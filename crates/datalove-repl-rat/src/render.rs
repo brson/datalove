@@ -282,7 +282,7 @@ fn render_code<E: ReplExecutor>(
     let number_width = units.iter()
         .filter_map(|unit| unit.number)
         .max()
-        .map_or(1, |number| number.to_string().len());
+        .map_or(1, |number| number.S().len());
     let mut unit_lines = Vec::new();
     for (index, unit) in units.iter().enumerate() {
         if index > 0 {

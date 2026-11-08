@@ -13,6 +13,7 @@
 //! An edit appends a function to `local/store/<module>`, a different one each
 //! time, so it is a real change to that module and to nothing else.
 
+use rmx::prelude::*;
 use std::time::{Duration, Instant};
 
 use datalove_datafun as datafun;
@@ -24,7 +25,7 @@ fn main() {
     args.retain(|a| a != "--no-cache");
     let mut args = args.into_iter();
     let iterations: usize = args.next().and_then(|a| a.parse().ok()).unwrap_or(20);
-    let mode = args.next().unwrap_or_else(|| "noop".to_string());
+    let mode = args.next().unwrap_or_else(|| "noop".S());
     let dir = args.next().unwrap_or_else(|| {
         format!("{}/../../demos/store/local", env!("CARGO_MANIFEST_DIR"))
     });

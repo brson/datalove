@@ -172,7 +172,7 @@ fn unordered_binding_error<'db>(
     at: Option<ExprFun<'db>>,
 ) -> Option<TypeError> {
     let Type::Datalit(dt) = ty else { return None };
-    let bounds = ctx.type_param_bounds.clone();
+    let bounds = ctx.type_param_bounds.C();
     let ordered = |name: bct::text::InternedText<'db>| -> bool {
         bounds.get(&name).is_some_and(|bound| bound.implies_ord())
     };
@@ -209,17 +209,17 @@ pub fn check_statement<'db>(
 
     match statement {
         Statement::Let(stmt) => {
-            check_variable_decl(ctx, &stmt.binding, ctx.expr(stmt.value), stmt.type_hint.clone(), false);
+            check_variable_decl(ctx, &stmt.binding, ctx.expr(stmt.value), stmt.type_hint.C(), false);
         }
 
         Statement::Var(stmt) => {
             match stmt.value {
                 Some(value) => {
-                    check_variable_decl(ctx, &stmt.binding, ctx.expr(value), stmt.type_hint.clone(), true);
+                    check_variable_decl(ctx, &stmt.binding, ctx.expr(value), stmt.type_hint.C(), true);
                 }
                 None => {
                     // Uninitialized var - type hint is required (parser enforces this).
-                    if let Some(hint) = stmt.type_hint.clone() {
+                    if let Some(hint) = stmt.type_hint.C() {
                         match ctx.convert_hint(hint.C()) {
                             Ok(ty) => {
                                 if let Some(err) = unordered_binding_error(ctx, &ty, None) {
@@ -310,13 +310,13 @@ pub fn check_statement<'db>(
                             if datalove_datafun_common::generics::contains_type_param(ty));
                     if generic {
                         let error = TypeError::ComptimeParamOfGenericType {
-                            func_name: name.as_str(db).to_string(),
-                            param_name: param.name.as_str(db).to_string(),
+                            func_name: name.as_str(db).S(),
+                            param_name: param.name.as_str(db).S(),
                         };
                         ctx.push_coded(
                             crate::ErrorSite::Fun(stmt.local_index()),
                             FCode::ConstParamGeneric,
-                            error.to_string(),
+                            error.S(),
                             S("a const parameter's type must be known before the function is specialized"),
                             Some(S("specialization makes one copy per const value, and the copy is still \
 generic, so a const whose type is a type parameter has nowhere to go. Give the const parameter a concrete type.")),
@@ -369,14 +369,14 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     ctx.type_param_bounds.insert(*name, *bound);
                 }
             }
-            let saved_return_type = ctx.expected_return_type.clone();
+            let saved_return_type = ctx.expected_return_type.C();
             let saved_is_void = ctx.is_void_function;
 
             // Add parameters to context.
             // Mut and Out params are mutable and can be assigned with `set`.
             for (param, param_ty) in params.iter().zip(param_types.iter()) {
                 let is_mutable = matches!(param.mode, datalove_datafun_ast::ast::ParamMode::Mut | datalove_datafun_ast::ast::ParamMode::Out);
-                ctx.add_variable(param.name, param_ty.clone(), is_mutable);
+                ctx.add_variable(param.name, param_ty.C(), is_mutable);
                 // A const parameter is a compile-time constant, so a const
                 // expression in the body may name it like any other const.
                 if param.is_comptime {
@@ -420,7 +420,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
 
         Statement::Ret(stmt) => {
             let ret_value = stmt.value;
-            let expected_ty = ctx.expected_return_type.clone();
+            let expected_ty = ctx.expected_return_type.C();
 
             match (ret_value, expected_ty) {
                 (Some(value), Some(expected_ret_ty)) => {
@@ -484,7 +484,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 let condition_ty = condition_ty.exposed().into_owned();
                 let inner_ty = match condition_ty {
                     Type::Datalit(datalit::tycheck::Type::Option(ref opt)) => {
-                        opt.inner_type.clone()
+                        opt.inner_type.C()
                     }
                     Type::Datalit(datalit::tycheck::Type::Result(ref res)) => {
                         // F046: Result destructuring requires error-binding else branch.
@@ -493,7 +493,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                             ctx.add_error(err);
                             return;
                         }
-                        res.inner_type.clone()
+                        res.inner_type.C()
                     }
                     _ => {
                         // F093: only an option or a result has a value to bind.
@@ -510,7 +510,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 };
 
                 // Convert datalit Type to datafun Type.
-                let inner_type = Type::Datalit((*inner_ty).clone());
+                let inner_type = Type::Datalit((*inner_ty).C());
                 let binding_ty = inner_type;
 
                 ctx.with_scope(|ctx| {
@@ -643,7 +643,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // during lowering.
             let saved_in_const_expr = ctx.in_const_expr;
             ctx.in_const_expr = true;
-            check_variable_decl(ctx, &Binding::Name(stmt.name), ctx.expr(stmt.value), stmt.type_hint.clone(), false);
+            check_variable_decl(ctx, &Binding::Name(stmt.name), ctx.expr(stmt.value), stmt.type_hint.C(), false);
             ctx.in_const_expr = saved_in_const_expr;
             ctx.mark_top_const(stmt.name);
             // A const is evaluated once, when its function is compiled, and
@@ -678,7 +678,7 @@ Give the const a concrete type, or make it a `let`.")),
             };
 
             let enum_ty = match input_ty.exposed().as_ref() {
-                Type::Datalit(datalit::tycheck::Type::Enum(e)) => e.clone(),
+                Type::Datalit(datalit::tycheck::Type::Enum(e)) => e.C(),
                 _ => {
                     let actual_str = type_to_string(db, &input_ty);
                     let err = ctx.error_worded(
@@ -734,7 +734,7 @@ Give the const a concrete type, or make it a `let`.")),
                     (MatchCaseKind::Term { name, binding }, Some(v)) => {
                         match &v.payload {
                             Some(payload_ty) => {
-                                let binding_type = Type::Datalit(*payload_ty.clone());
+                                let binding_type = Type::Datalit(*payload_ty.C());
                                 ctx.with_scope(|ctx| {
                                     ctx.add_variable(*binding, binding_type, false);
                                     for body_stmt in &case.body {
@@ -789,7 +789,7 @@ Give the const a concrete type, or make it a `let`.")),
             if stmt.default_body.is_none() {
                 let uncovered: Vec<_> = enum_ty.variants.iter()
                     .filter(|v| !covered.iter().any(|c| *c == v.name))
-                    .map(|v| v.name.as_str(db).to_string())
+                    .map(|v| v.name.as_str(db).S())
                     .collect();
                 if !uncovered.is_empty() {
                     let missing: Vec<String> = uncovered.iter().map(|name| fmt!("`{name}`")).collect();
@@ -1001,8 +1001,8 @@ Write `[k]?` or `[k]!` to update an element that is already there."),
             // Bare index (upsert): only valid for maps.
             match base_ty.exposed().as_ref() {
                 Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-                    let key_type = Type::Datalit(*map.key_type.clone());
-                    let value_type = Type::Datalit(*map.value_type.clone());
+                    let key_type = Type::Datalit(*map.key_type.C());
+                    let value_type = Type::Datalit(*map.value_type.C());
                     if let Err(e) = check_expr(ctx, ctx.expr(idx_step.index), &key_type) {
                         ctx.add_error(e);
                     }
@@ -1074,7 +1074,7 @@ fn require_return_type_for<'db>(
     what: &str,
     label: &str,
 ) -> Result<(), TypeError> {
-    let expected_return = ctx.expected_return_type.clone()
+    let expected_return = ctx.expected_return_type.C()
         .expect("a set statement is always inside a function or a script, which returns `!()`");
     let (fits, expected) = match (&error_mode, &expected_return) {
         (IndexErrorMode::Option, Type::Datalit(datalit::tycheck::Type::Option(_))) => (true, Wrapper::Option),
@@ -1143,15 +1143,15 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
     let n = stmt.bindings.len();
     let binding_types: Vec<Type<'db>> = match iteratee_ty.exposed().as_ref() {
         Type::Datalit(T::List(list)) => {
-            let elem = Type::Datalit((*list.element_type).clone());
+            let elem = Type::Datalit((*list.element_type).C());
             if n == 2 { vec![index, elem] } else { vec![elem] }
         }
         Type::Datalit(T::Tensor(tensor)) => {
             let elem = if tensor.rank == 1 {
-                Type::Datalit((*tensor.element_type).clone())
+                Type::Datalit((*tensor.element_type).C())
             } else {
                 Type::Datalit(T::Tensor(datalit::tycheck::TypeTensor {
-                    element_type: tensor.element_type.clone(),
+                    element_type: tensor.element_type.C(),
                     rank: tensor.rank - 1,
                 }))
             };
@@ -1163,7 +1163,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
                     "a set's elements have no index");
                 return;
             }
-            vec![Type::Datalit((*set.element_type).clone())]
+            vec![Type::Datalit((*set.element_type).C())]
         }
         Type::Datalit(T::Map(map)) => {
             if n == 1 {
@@ -1171,7 +1171,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
                     "write `for key, value`");
                 return;
             }
-            vec![Type::Datalit((*map.key_type).clone()), Type::Datalit((*map.value_type).clone())]
+            vec![Type::Datalit((*map.key_type).C()), Type::Datalit((*map.value_type).C())]
         }
         other => {
             let actual = type_to_string(db, other);

@@ -51,7 +51,7 @@ pub fn instantiate_value<'db, 't>(
     tydesc_table: &'t mut TyDescTable<'db>,
     typechecked: TypecheckResult<'db>,
 ) -> AnyResult<InstantiatedValue<'t>> {
-    let root_type = typechecked.root_type(db).clone()
+    let root_type = typechecked.root_type(db).C()
         .ok_or_else(|| anyhow!("No root type"))?;
     let root_expr = typechecked.root_expr(db);
     let resolved = typechecked.resolved(db);
@@ -158,27 +158,27 @@ fn instantiate_expr_into<'db>(
 
         (Expr::List(list_expr), Type::List(list_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_list(db, rt, &list_expr.elements, *list_ty.element_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_list(db, rt, &list_expr.elements, *list_ty.element_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::None, Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, false, None, *opt.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_option(db, rt, false, None, *opt.inner_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Some(some_expr), Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, true, Some(&some_expr.payload), *opt.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_option(db, rt, true, Some(&some_expr.payload), *opt.inner_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Er(er_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, false, None, Some(&er_expr.payload), *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, false, None, Some(&er_expr.payload), *res.inner_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Ok(ok_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, true, Some(&ok_expr.payload), None, *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, true, Some(&ok_expr.payload), None, *res.inner_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Data(data_expr), Type::Data) => {
@@ -193,17 +193,17 @@ fn instantiate_expr_into<'db>(
 
         (Expr::Map(map_expr), Type::Map(map_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_map(db, rt, map_expr.clone(), *map_ty.key_type.clone(), *map_ty.value_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_map(db, rt, map_expr.C(), *map_ty.key_type.C(), *map_ty.value_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Set(set_expr), Type::Set(set_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_set(db, rt, set_expr.clone(), *set_ty.element_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_set(db, rt, set_expr.C(), *set_ty.element_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Tensor(tensor_expr), Type::Tensor(tensor_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tensor(db, rt, &tensor_expr.shape, &tensor_expr.elements, *tensor_ty.element_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_tensor(db, rt, &tensor_expr.shape, &tensor_expr.elements, *tensor_ty.element_type.C(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Table(table_expr), Type::Table(table_ty)) => {
@@ -946,9 +946,9 @@ fn instantiate_data<'db>(
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     // Typechecked again for the type it has, which is what the value carries.
-    let typechecked = crate::tycheck::type_check(db, inner_expr.clone(), resolved);
+    let typechecked = crate::tycheck::type_check(db, inner_expr.C(), resolved);
 
-    let inner_type = typechecked.root_type(db).clone()
+    let inner_type = typechecked.root_type(db).C()
         .expect("the typechecker checked the payload");
 
     let inner_tydesc = tydesc_table.get_or_create(&inner_type);
@@ -977,9 +977,9 @@ fn instantiate_error<'db>(
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     // Typechecked again for the type it has, which is what the value carries.
-    let typechecked = crate::tycheck::type_check(db, inner_expr.clone(), resolved);
+    let typechecked = crate::tycheck::type_check(db, inner_expr.C(), resolved);
 
-    let inner_type = typechecked.root_type(db).clone()
+    let inner_type = typechecked.root_type(db).C()
         .expect("the typechecker checked the payload");
 
     let inner_tydesc = tydesc_table.get_or_create(&inner_type);
@@ -1498,9 +1498,9 @@ mod tests {
     }
 
     fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<TypecheckResult<'db>> {
-        let source = bct::input::Source::new(db, source_text.to_string());
+        let source = bct::input::Source::new(db, source_text.S());
         let parsed = crate::parser::parse_for_test(db, source);
-        let resolved = crate::resolve::resolve_names(db, source, parsed.clone());
+        let resolved = crate::resolve::resolve_names(db, source, parsed.C());
         let typechecked = crate::tycheck::type_check(db, parsed, resolved);
         Ok(typechecked)
     }

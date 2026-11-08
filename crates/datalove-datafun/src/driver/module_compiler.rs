@@ -128,7 +128,7 @@ impl ModuleCompiler {
     /// The evaluator to run consts with when the caller does not give one.
     fn ctfe_evaluator(&self) -> InterpCtfeEvaluator {
         match &self.natives {
-            Some(natives) => InterpCtfeEvaluator::new().with_native_resolver(natives.clone()),
+            Some(natives) => InterpCtfeEvaluator::new().with_native_resolver(natives.C()),
             None => InterpCtfeEvaluator::new(),
         }
     }
@@ -217,7 +217,7 @@ impl ModuleCompiler {
                     self.add_data(db, library, package, name, source);
                 }
                 WorldfileSection::Rider { name, source } => {
-                    self.rider_sources.push((name.clone(), source.clone()));
+                    self.rider_sources.push((name.C(), source.C()));
                 }
                 _ => {}
             }
@@ -242,10 +242,10 @@ impl ModuleCompiler {
         let riders = self.rider_sources.iter().map(|(name, text)| {
             let source = match self.rider_inputs.get(name) {
                 Some(source) if source.text(db) == text => *source,
-                _ => bct::input::Source::new(db, text.clone()),
+                _ => bct::input::Source::new(db, text.C()),
             };
-            inputs.insert(name.clone(), source);
-            (name.clone(), source)
+            inputs.insert(name.C(), source);
+            (name.C(), source)
         }).collect();
         self.rider_inputs = inputs;
         riders
@@ -450,7 +450,7 @@ impl ModuleCompiler {
             self.world.build_graph(db.as_salsa_db(), &path_deps, &self.roots);
         let rider_names = self.rider_sources.iter().map(|(name, _)| name.as_str());
         number_modules(db.as_salsa_db(), &mut self.module_ids, rider_names, module_graph);
-        let module_ids = ModuleIdTable::new(db.as_salsa_db(), self.module_ids.clone());
+        let module_ids = ModuleIdTable::new(db.as_salsa_db(), self.module_ids.C());
         self.compile_impl(db, module_graph, resolved_requires, module_ids, mode, evaluator)
     }
 
@@ -535,19 +535,19 @@ impl ModuleCompiler {
                 let mut module_consts = LookupMap::default();
 
                 for (module_id, result) in lowering.module_results(db_salsa).iter_unordered() {
-                    let module_path = module_id.path(db_salsa).clone();
+                    let module_path = module_id.path(db_salsa).C();
 
                     let consts = result.consts(db_salsa);
                     if !consts.is_empty() {
                         module_consts.insert(result.ir_module_id(db_salsa), consts.iter()
-                            .map(|(name, ty, value)| (name.clone(), (ty.clone(), std::sync::Arc::clone(value))))
+                            .map(|(name, ty, value)| (name.C(), (ty.C(), std::sync::Arc::clone(value))))
                             .collect());
                     }
 
                     // Collect lowering errors.
                     let errors = result.errors(db_salsa);
                     if !errors.is_empty() {
-                        lowering_errors.insert(module_path.clone(), errors.clone());
+                        lowering_errors.insert(module_path.C(), errors.C());
                     }
 
                     // Collect IR dumps, when someone has asked for them. Printing
@@ -595,7 +595,7 @@ impl ModuleCompiler {
             ownership_errors: output.ownership_errors,
             lowering_errors,
             module_ir_dumps,
-            natives: self.natives.clone(),
+            natives: self.natives.C(),
             rider_sources: output.rider_sources,
         }
     }

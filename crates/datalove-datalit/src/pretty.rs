@@ -104,7 +104,7 @@ fn pretty_type<'db>(
     ty: &Type<'db>,
     out: &mut String,
 ) {
-    out.push_str(&ty.syntax(db).to_string());
+    out.push_str(&ty.syntax(db).S());
 }
 
 fn pretty_expr_full<'db>(
@@ -116,7 +116,7 @@ fn pretty_expr_full<'db>(
     // Print type hint if present.
     if let Some(type_hint) = expr.type_hint() {
         out.push_str(": ");
-        pretty_type_hint(db, type_hint.clone(), out);
+        pretty_type_hint(db, type_hint.C(), out);
         out.push_str(" / ");
     }
 
@@ -130,7 +130,7 @@ fn pretty_type_hint<'db>(
     th: TypeHint<'db>,
     out: &mut String,
 ) {
-    out.push_str(&th.syntax(db).to_string());
+    out.push_str(&th.syntax(db).S());
 }
 
 fn pretty_expr<'db>(

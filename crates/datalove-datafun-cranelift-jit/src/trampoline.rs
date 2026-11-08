@@ -16,6 +16,7 @@
 //! Since we're single-threaded, we use a thread-local to store the dispatch
 //! context (interpreter, JIT engine, function registry) during execution.
 
+use rmx::prelude::*;
 use std::cell::RefCell;
 use std::ptr::NonNull;
 
@@ -269,7 +270,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // after the call.
             let result = ctx.interp.call_in_context_with_type_params(
                 ir_unit,
-                Some(code_ref.clone()),
+                Some(code_ref.C()),
                 arg_ptrs,
                 type_params,
                 dest,

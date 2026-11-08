@@ -261,7 +261,7 @@ statements that run belong in a function or a script")
                         return ast::StructBinding { field: error, binding: error };
                     }
                 };
-                let fresh_field = seen_fields.take(p.db, field, field_ts.clone(), "field");
+                let fresh_field = seen_fields.take(p.db, field, field_ts.C(), "field");
                 if !fresh_field {
                     p.had_error = true;
                 }
@@ -272,7 +272,7 @@ statements that run belong in a function or a script")
                     if fresh_field {
                         // The shorthand binds the field's name, so that name
                         // is declared, and is held to what a value's name is.
-                        p.report_reserved_name(field, field_ts.clone(), NameKind::Value);
+                        p.report_reserved_name(field, field_ts.C(), NameKind::Value);
                         p.declare_pattern_name(field, field_ts, &mut seen);
                     }
                     field
@@ -1430,7 +1430,7 @@ statements that run belong in a function or a script")
         // Recorded in the same table a `fun` uses, so a diagnostic about the
         // declaration has somewhere to point.
         let native_span = self.peek_text_span();
-        let local_index = self.record_fun_span(native_span.clone());
+        let local_index = self.record_fun_span(native_span.C());
         let intrinsic = self.peek_word() == Some("intrinsic");
         if intrinsic {
             self.eat_word("intrinsic");

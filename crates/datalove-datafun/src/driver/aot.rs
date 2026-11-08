@@ -104,7 +104,7 @@ pub fn use_lld() -> bool {
 /// one way a program acquires the runtime rather than two.
 pub fn runtime_only_component() -> Result<PathBuf, LinkError> {
     rider_build::build_component_staticlib(&rider_build::default_work_dir(), &[])
-        .map_err(|e| LinkError::Component(e.to_string()))
+        .map_err(|e| LinkError::Component(e.S()))
 }
 
 /// Compile a script unit to object bytes.
@@ -168,22 +168,22 @@ pub fn link_object_to_path_with_libs(
     if use_lld() {
         cmd.arg("-fuse-ld=lld");
     }
-    cmd.arg(obj_path.to_str().unwrap());
+    cmd.arg(obj_path.to_str().X());
 
     if extra_libs.is_empty() {
         cmd.arg(runtime_only_component()?);
     } else {
         for lib in extra_libs {
-            cmd.arg(lib.to_str().unwrap());
+            cmd.arg(lib.to_str().X());
         }
     }
 
-    cmd.args(["-ldl", "-lpthread", "-lm", "-o", output_path.to_str().unwrap()]);
+    cmd.args(["-ldl", "-lpthread", "-lm", "-o", output_path.to_str().X()]);
 
     let output = cmd.output().map_err(LinkError::LinkerExec)?;
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).S();
         return Err(LinkError::LinkerFailed(stderr));
     }
 
@@ -196,8 +196,8 @@ pub fn run_executable(exe_path: &Path) -> Result<ExecOutput, ExecError> {
         .output()
         .map_err(ExecError::Exec)?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).S();
+    let stderr = String::from_utf8_lossy(&output.stderr).S();
     let exit_code = output.status.code().unwrap_or(-1);
 
     if !output.status.success() {

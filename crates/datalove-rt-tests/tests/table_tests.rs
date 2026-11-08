@@ -1,5 +1,6 @@
 //! Tests for table runtime functions.
 
+use rmx::prelude::*;
 use datalove_rtdt as rtdt;
 use std::cell::RefCell;
 use std::ptr;
@@ -36,7 +37,7 @@ impl TyDescArena {
     }
 
     fn alloc_col_name(&self, name: &str) -> (*const u8, u32) {
-        let s = name.to_string();
+        let s = name.S();
         let ptr = s.as_ptr();
         let len = s.len() as u32;
         self.col_names.borrow_mut().push(s);

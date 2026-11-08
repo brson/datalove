@@ -111,7 +111,7 @@ pub fn link_sources_to_path(
 
     if extra_libs.is_empty() {
         cmd.arg(super::aot::runtime_only_component()
-            .map_err(|e| CAotBuildError::Component(e.to_string()))?);
+            .map_err(|e| CAotBuildError::Component(e.S()))?);
     } else {
         for lib in extra_libs {
             cmd.arg(lib);

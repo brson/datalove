@@ -1,6 +1,7 @@
 //! Calls out of the bytecode: frames switched to in place, planned calls into
 //! natives and compiled code, the general path, and a loop handed to OSR.
 
+use rmx::prelude::*;
 use super::*;
 
 impl IrInterpreter {
@@ -485,10 +486,10 @@ impl IrInterpreter {
             let mut site = call.site.borrow_mut();
             let found = &mut site.native;
             match &*found {
-                Some((at, seen, target)) if *at == address && *seen == generation => target.clone(),
+                Some((at, seen, target)) if *at == address && *seen == generation => target.C(),
                 _ => {
                     let target = self.native_table.lookup(native.symbol())?;
-                    *found = Some((address, generation, target.clone()));
+                    *found = Some((address, generation, target.C()));
                     target
                 }
             }
@@ -664,7 +665,7 @@ impl IrInterpreter {
                 && c.generation == self.native_table.generation()
                 && !(dispatched && c.needs_policy(dispatcher_epoch)) =>
             {
-                Some((c.layout.clone(), c.suits, c.forward.clone(), c.descriptors.clone()))
+                Some((c.layout.C(), c.suits, c.forward.C(), c.descriptors.C()))
             }
             _ => None,
         };
@@ -694,7 +695,7 @@ impl IrInterpreter {
                     };
                     let native_body = Self::resolve_callee(&bc.calls[0], inner_ref, &callee_ctx, registry);
                     match &native_body.context {
-                        CodeUnitContext::Native(native) => native.undetermined_type_params.clone(),
+                        CodeUnitContext::Native(native) => native.undetermined_type_params.C(),
                         _ => unreachable!("a forwarder calls a native"),
                     }
                 });
@@ -718,8 +719,8 @@ impl IrInterpreter {
                 };
                 let fresh = CallCache {
                     address, epoch: self.code_epoch, generation: self.native_table.generation(),
-                    layout: layout.clone(), suits, forward: forward.clone(), plan,
-                    descriptors: descriptors.clone(),
+                    layout: layout.C(), suits, forward: forward.C(), plan,
+                    descriptors: descriptors.C(),
                     dispatcher: dispatched.then_some(dispatcher_epoch),
                 };
                 // A planned call's frame borrows its layout and bytecode

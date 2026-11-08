@@ -6,24 +6,25 @@
 //! pass now and has no such cases, and these stay to say so, with every level
 //! of every input read to the end and random bracket soup besides.
 
+use rmx::prelude::*;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 /// Returns Ok(token_count) on success, Err(panic_message) on panic.
 fn dbglex(s: &str) -> Result<usize, String> {
     let result = catch_unwind(AssertUnwindSafe(|| {
         let db = bcts::Database::default();
-        let source = bcts::input::Source::new(&db, s.to_string());
+        let source = bcts::input::Source::new(&db, s.S());
         let bracer = bcts::bracer::bracer(&db, bcts::lexer::lex(&db, source));
         count(bracer.iter(&db))
     }));
 
     result.map_err(|e| {
         if let Some(s) = e.downcast_ref::<&str>() {
-            s.to_string()
+            s.S()
         } else if let Some(s) = e.downcast_ref::<String>() {
-            s.clone()
+            s.C()
         } else {
-            "unknown panic".to_string()
+            "unknown panic".S()
         }
     })
 }

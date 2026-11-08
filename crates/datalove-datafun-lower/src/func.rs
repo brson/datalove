@@ -6,6 +6,7 @@
 //! - [`lower_function_body`]: Shared implementation used by both module and script
 //!   function lowering. For script functions, called after `swap_body_state`.
 
+use rmx::prelude::*;
 use std::sync::Arc;
 use bct::lookup::LookupMap;
 use datalove_datafun_ast::ast;
@@ -52,7 +53,7 @@ pub fn lower_function_for_module<'db>(
     // so a reference emits a fresh Const and is dropped as an expression
     // temporary, with no separate substitution step.
     for (name, (ir_type, value)) in module_consts.iter_unordered() {
-        ctx.add_const(name.clone(), ir_type.clone(), value.clone());
+        ctx.add_const(name.C(), ir_type.C(), value.C());
     }
     lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types, resolved_return_type)
 }
@@ -79,7 +80,7 @@ pub fn lower_function_body<'db>(
         analysis.errors
     );
 
-    let name = func.name().text(ctx.db).to_string();
+    let name = func.name().text(ctx.db).S();
 
     // Set drop schedule and tracking for this function.
     ctx.body.drop_schedule = analysis.schedule;
@@ -98,7 +99,7 @@ pub fn lower_function_body<'db>(
     let saved_is_script_unit = ctx.is_script_unit;
     ctx.is_script_unit = false;
 
-    let type_params = func.type_params().clone();
+    let type_params = func.type_params().C();
 
     // The signature's types are written over the function's own type
     // parameters, which the call site binds.
@@ -114,7 +115,7 @@ pub fn lower_function_body<'db>(
     let mut param_modes = Vec::new();
     let func_params = func.params();
     for (i, p) in func_params.iter().enumerate() {
-        let param_name = p.name.text(ctx.db).to_string();
+        let param_name = p.name.text(ctx.db).S();
         // A const parameter is passed by reference: like any const it is
         // borrowed wherever it is named, so the call has nothing to hand over
         // and the body nothing to drop. Specialization removes it anyway, and
@@ -141,7 +142,7 @@ pub fn lower_function_body<'db>(
 
     // A type in the body names a type parameter by name, and its descriptor
     // arrives by position, so the names have to be here.
-    ctx.body.type_params = type_params.clone();
+    ctx.body.type_params = type_params.C();
 
     // Lower the function body with statement indices.
     let body = func.body();
@@ -156,7 +157,7 @@ pub fn lower_function_body<'db>(
     // the body still owns on the way out. A `ret` does that for itself against
     // its own statement index; there is no statement here to hang it on.
     let needs_return = ctx.body.blocks.is_empty()
-        || !matches!(ctx.body.blocks.last().unwrap().terminator, Terminator::Return { .. });
+        || !matches!(ctx.body.blocks.last().X().terminator, Terminator::Return { .. });
     if needs_return {
         ctx.emit_function_exit_drops();
         ctx.finish_block(Terminator::Return { value: None });
@@ -166,7 +167,7 @@ pub fn lower_function_body<'db>(
     ctx.renumber_blocks();
 
     // Get return type from context (set from function signature) before restoring.
-    let return_type = ctx.return_type.clone().unwrap_or(IrType::Unit);
+    let return_type = ctx.return_type.C().unwrap_or(IrType::Unit);
 
     // Restore saved context.
     ctx.return_type = saved_return_type;

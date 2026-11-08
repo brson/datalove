@@ -1,5 +1,6 @@
 //! Function generation.
 
+use rmx::prelude::*;
 use rand::Rng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use crate::config::WorldGenConfig;
@@ -66,7 +67,7 @@ pub fn gen_function_signature<'db, R: Rng>(
     };
 
     FunctionSig {
-        name: name.to_string(),
+        name: name.S(),
         params,
         return_type,
     }
@@ -86,27 +87,27 @@ pub fn gen_function<'db, R: Rng>(
     let params_str = sig
         .params
         .iter()
-        .map(|p| format!("{}{}: {}", p.mode.marker(), p.name, pretty_type_hint(db, p.type_hint.clone())))
+        .map(|p| format!("{}{}: {}", p.mode.marker(), p.name, pretty_type_hint(db, p.type_hint.C())))
         .collect::<Vec<_>>()
         .join(", ");
 
     let sig_line = match &sig.return_type {
-        Some(ret_ty) => format!("fun {}({}): {}", sig.name, params_str, pretty_type_hint(db, ret_ty.clone())),
+        Some(ret_ty) => format!("fun {}({}): {}", sig.name, params_str, pretty_type_hint(db, ret_ty.C())),
         None => format!("fun {}({})", sig.name, params_str),
     };
     lines.push(sig_line);
 
     // Create function context with parameters.
     let mut ctx = GenContext::new();
-    ctx.return_type = sig.return_type.clone();
-    ctx.type_aliases = module_ctx.type_aliases.clone();
-    ctx.enums = module_ctx.enums.clone();
-    ctx.consts = module_ctx.consts.clone();
-    ctx.functions = module_ctx.functions.clone();
-    ctx.imported_functions = module_ctx.imported_functions.clone();
-    ctx.generic_functions = module_ctx.generic_functions.clone();
+    ctx.return_type = sig.return_type.C();
+    ctx.type_aliases = module_ctx.type_aliases.C();
+    ctx.enums = module_ctx.enums.C();
+    ctx.consts = module_ctx.consts.C();
+    ctx.functions = module_ctx.functions.C();
+    ctx.imported_functions = module_ctx.imported_functions.C();
+    ctx.generic_functions = module_ctx.generic_functions.C();
     // Set current function name to prevent self-recursive calls.
-    ctx.current_function_name = Some(sig.name.clone());
+    ctx.current_function_name = Some(sig.name.C());
     // And how far down the module the body may call, which is what stops two
     // functions calling each other. The module works this out; the body is
     // where it has to hold, and this context is a fresh one.
@@ -127,13 +128,13 @@ pub fn gen_function<'db, R: Rng>(
             // and the ones after it unwritten (`OutParamNotInitialized`): with
             // no return type in force, `gen_expr` offers no `?` or `!` form.
             let return_type = ctx.return_type.take();
-            let value = gen_expr(db, rng, param.type_hint.clone(), config, &mut ctx);
+            let value = gen_expr(db, rng, param.type_hint.C(), config, &mut ctx);
             ctx.return_type = return_type;
             lead_statements.push(format!("  set {} = {}", param.name, value));
         }
         ctx.variables.push(Variable {
-            name: param.name.clone(),
-            type_hint: param.type_hint.clone(),
+            name: param.name.C(),
+            type_hint: param.type_hint.C(),
             is_mutable: matches!(param.mode, ParamMode::Mut | ParamMode::Out),
         });
         if param.mode != ParamMode::In {
@@ -162,6 +163,6 @@ pub fn gen_function<'db, R: Rng>(
         lines.push(ret_stmt);
     }
 
-    lines.push("end fun".to_string());
+    lines.push("end fun".S());
     lines.join("\n")
 }

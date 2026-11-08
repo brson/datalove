@@ -6,6 +6,7 @@
 //! mode spends its overhead. Calls from compiled code to compiled code go
 //! through their stubs directly and are never seen here.
 
+use rmx::prelude::*;
 use std::fmt::Write as _;
 use std::time::Duration;
 
@@ -83,7 +84,7 @@ impl JitStats {
     /// The entry for `key`, made with `name` if there is none yet.
     pub(crate) fn function(&mut self, key: FuncIdentity, name: &str) -> &mut FunctionStats {
         self.functions.entry(key).or_insert_with(|| FunctionStats {
-            name: name.to_owned(),
+            name: name.O(),
             ..FunctionStats::default()
         })
     }
@@ -137,13 +138,13 @@ impl JitStats {
             .collect();
         by_calls.sort_by_key(|(key, f)| (std::cmp::Reverse(f.interpreted + f.entered + f.exited), name(key, f)));
         if !by_calls.is_empty() {
-            let _ = writeln!(out, "\njit: most calls through the dispatcher");
+            writeln!(out, "\njit: most calls through the dispatcher").I();
             let _ = writeln!(out, "{:>12} {:>12} {:>12} {:>9}  function",
                 "interpreted", "interp->jit", "jit->interp", "codegen");
             for (key, f) in by_calls.iter().take(top) {
                 let codegen = match f.compile_time {
                     Some(t) => format!("{:.2}ms", t.as_secs_f64() * 1e3),
-                    None => "-".to_owned(),
+                    None => "-".O(),
                 };
                 let _ = writeln!(out, "{:>12} {:>12} {:>12} {:>9}  {}",
                     f.interpreted, f.entered, f.exited, codegen, name(key, f));
@@ -153,7 +154,7 @@ impl JitStats {
         // Compiled whole, at a loop, or both; ordered by the time for both.
         let ms = |t: Option<Duration>| match t {
             Some(t) => format!("{:.2}ms", t.as_secs_f64() * 1e3),
-            None => "-".to_owned(),
+            None => "-".O(),
         };
         let mut by_codegen: Vec<_> = self.functions.iter_unordered()
             .filter(|(_, f)| f.compile_time.is_some() || f.osr_compile_time.is_some())
@@ -161,8 +162,8 @@ impl JitStats {
             .collect();
         by_codegen.sort_by_key(|(t, key, f)| (std::cmp::Reverse(*t), name(key, f)));
         if !by_codegen.is_empty() {
-            let _ = writeln!(out, "\njit: longest to compile");
-            let _ = writeln!(out, "{:>9} {:>8} {:>9} {:>8}  function", "codegen", "bytes", "loops", "entered");
+            writeln!(out, "\njit: longest to compile").I();
+            writeln!(out, "{:>9} {:>8} {:>9} {:>8}  function", "codegen", "bytes", "loops", "entered").I();
             for (_, key, f) in by_codegen.iter().take(top) {
                 let _ = writeln!(out, "{:>9} {:>8} {:>9} {:>8}  {}",
                     ms(f.compile_time), f.code_size, ms(f.osr_compile_time), f.loops_entered, name(key, f));
@@ -173,9 +174,9 @@ impl JitStats {
             .collect();
         refused_functions.sort();
         if !refused_functions.is_empty() {
-            let _ = writeln!(out, "\njit: functions refused");
+            writeln!(out, "\njit: functions refused").I();
             for (function, why) in refused_functions {
-                let _ = writeln!(out, "  {function}: {why}");
+                writeln!(out, "  {function}: {why}").I();
             }
         }
         let mut refused: Vec<_> = self.functions.iter_unordered()
@@ -183,9 +184,9 @@ impl JitStats {
             .collect();
         refused.sort_by(|a, b| (&a.0, a.1.0).cmp(&(&b.0, b.1.0)));
         if !refused.is_empty() {
-            let _ = writeln!(out, "\njit: loop entries refused");
+            writeln!(out, "\njit: loop entries refused").I();
             for (function, header, why) in refused {
-                let _ = writeln!(out, "  {function} at block{}: {why}", header.0);
+                writeln!(out, "  {function} at block{}: {why}", header.0).I();
             }
         }
         out

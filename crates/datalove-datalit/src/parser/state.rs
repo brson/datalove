@@ -167,7 +167,7 @@ impl<'db> Parser<'db> {
         sub.expr_counter = self.expr_counter;
         sub.interned = Rc::clone(&self.interned);
         sub.plan = self.plan;
-        sub.sink = self.sink.clone();
+        sub.sink = self.sink.C();
         sub
     }
 
@@ -177,7 +177,7 @@ impl<'db> Parser<'db> {
         sub.expr_counter = self.expr_counter;
         sub.interned = Rc::clone(&self.interned);
         sub.plan = self.plan;
-        sub.sink = self.sink.clone();
+        sub.sink = self.sink.C();
         sub
     }
 
@@ -214,7 +214,7 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code.as_str())
-            .primary_label(ts.clone(), label)
+            .primary_label(ts.C(), label)
             .emit_to(&self.sink);
         ast::Expr::ParseError(ast::ExprParseError { source: ts.source, span: ts.span, message: message_text })
     }
@@ -231,7 +231,7 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code.as_str())
-            .primary_label(ts.clone(), label)
+            .primary_label(ts.C(), label)
             .emit_to(&self.sink);
         ast::TypeHint::ParseError(ast::TypeHintParseError { source: ts.source, span: ts.span, message: message_text })
     }

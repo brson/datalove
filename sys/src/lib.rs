@@ -69,7 +69,7 @@ mod tests {
         let db = datalove_datafun::Database::default();
         for package in system_library().library.packages.values() {
             let Some(rider) = &package.rider else { continue };
-            let source = bct::input::Source::new(&db, rider.interface_source.to_string());
+            let source = bct::input::Source::new(&db, rider.interface_source.S());
             let (parse, types) = datalove_datafun::module_graph::rider_interface_diagnostics(&db, source);
             let messages: Vec<String> = parse.iter().map(|d| d.to_diagnostic(&db).message)
                 .chain(types.iter().map(|d| d.to_diagnostic(&db).message))

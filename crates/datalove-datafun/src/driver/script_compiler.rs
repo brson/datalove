@@ -250,7 +250,7 @@ impl<'db> CompiledModules<'db> {
             skip_const_inlining: false,
             skip_specialization: false,
             generics: GenericsPolicy::Off,
-            shared_context: self.shared.clone(),
+            shared_context: self.shared.C(),
         })
     }
 
@@ -265,9 +265,9 @@ impl<'db> CompiledModules<'db> {
         db: &'db dyn salsa::Database,
     ) -> Option<ScriptCompiler<'db>> {
         // Use CTFE evaluator with module registry for cross-module const function calls.
-        let evaluator = InterpCtfeEvaluator::with_module_registry(self.shared.module_registry.clone());
+        let evaluator = InterpCtfeEvaluator::with_module_registry(self.shared.module_registry.C());
         let evaluator = match &self.natives {
-            Some(natives) => evaluator.with_native_resolver(natives.clone()),
+            Some(natives) => evaluator.with_native_resolver(natives.C()),
             None => evaluator,
         };
         self.script_compiler(db, Box::new(evaluator))
@@ -506,13 +506,13 @@ impl ScriptSession {
             .cloned()
             .collect();
         UnitAccesses {
-            provides: record.provides.clone(),
-            uses: record.uses.clone(),
+            provides: record.provides.C(),
+            uses: record.uses.C(),
             reads,
-            takes: record.takes.clone(),
-            overwrites: record.overwrites.clone(),
+            takes: record.takes.C(),
+            overwrites: record.overwrites.C(),
             updates,
-            revives: record.revives.clone(),
+            revives: record.revives.C(),
         }
     }
 }
@@ -765,7 +765,7 @@ impl<'db> ScriptCompiler<'db> {
     pub fn relower_moved(&mut self, from: usize, to: usize) -> Vec<(usize, ScriptCompilationResult)> {
         let count = self.units.len();
         assert!(from < count && to < count, "unit moved from {from} to {to} in a script of {count} units");
-        let record = self.unit_records[to].clone();
+        let record = self.unit_records[to].C();
         let (now_provides, _) = self.graph_now();
         let provided: BTreeSet<String> = record.provides.iter().chain(&now_provides[to]).cloned().collect();
         let others: Vec<usize> = (0..count).filter(|unit| *unit != to).collect();
@@ -891,10 +891,10 @@ impl<'db> ScriptCompiler<'db> {
         restore: BTreeSet<usize>,
     ) -> Vec<(usize, ScriptCompilationResult)> {
         let held = self.held_graph();
-        let mut changed = held.changed.clone();
+        let mut changed = held.changed.C();
         for _ in 0..=self.unit_records.len() {
             let units = self.reach_from(&seeds, &restore, &held, &changed);
-            let results = self.rederive(units.clone());
+            let results = self.rederive(units.C());
             for (unit, record) in self.unit_records.iter().enumerate() {
                 for name in record.takes.iter().chain(&record.writes) {
                     changed[unit].insert(name.C());
@@ -1035,7 +1035,7 @@ impl<'db> ScriptCompiler<'db> {
             held.shapes[provider].get(name) != binding_shape(&self.unit_records[provider], name).as_ref()
         };
 
-        let mut rerun_starts = restore.clone();
+        let mut rerun_starts = restore.C();
         loop {
             let mut rederived = vec![false; count];
             let mut restoring = vec![false; count];
@@ -1456,7 +1456,7 @@ impl<'db> ScriptCompiler<'db> {
             ScriptUnitKind::Fragment(parsed) => {
                 ParsedUnit::Fragment { top: parsed.top, body: parsed.body(self.db) }
             }
-            ScriptUnitKind::Expr(parsed) => ParsedUnit::Expr(parsed.clone()),
+            ScriptUnitKind::Expr(parsed) => ParsedUnit::Expr(parsed.C()),
         }
     }
 
@@ -1610,7 +1610,7 @@ impl<'db> ScriptCompiler<'db> {
 
         // Check for errors.
         let errors: Vec<_> = result.errors(self.db).into_iter()
-            .map(|e| e.error(self.db).to_string())
+            .map(|e| e.error(self.db).S())
             .collect();
         if !errors.is_empty() {
             return Err(ScriptCompilationResult {
@@ -1682,15 +1682,15 @@ impl<'db> ScriptCompiler<'db> {
                     });
                 }
                 let func_analyses = ownership_result.to_function_analyses_map(self.db, &body.statements);
-                let script_analysis = ownership_result.script_analysis(self.db).clone();
+                let script_analysis = ownership_result.script_analysis(self.db).C();
                 Ok(OwnershipOutput {
                     func_analyses,
                     script_analysis,
-                    dead_exports: ownership_result.dead_exports(self.db).clone(),
-                    revives: ownership_result.revived_exports(self.db).clone(),
-                    takes: ownership_result.taken_externals(self.db).clone(),
-                    writes: ownership_result.written_externals(self.db).clone(),
-                    overwrites: ownership_result.overwritten_externals(self.db).clone(),
+                    dead_exports: ownership_result.dead_exports(self.db).C(),
+                    revives: ownership_result.revived_exports(self.db).C(),
+                    takes: ownership_result.taken_externals(self.db).C(),
+                    writes: ownership_result.written_externals(self.db).C(),
+                    overwrites: ownership_result.overwritten_externals(self.db).C(),
                 })
             }
             ParsedUnit::Expr(parsed) => {
@@ -1698,7 +1698,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     source,
                     typecheck.result,
-                    parsed.clone(),
+                    parsed.C(),
                     externals,
                     external_consts,
                 );
@@ -1716,9 +1716,9 @@ impl<'db> ScriptCompiler<'db> {
                     script_analysis: None,
                     dead_exports: Vec::new(),
                     revives: Vec::new(),
-                    takes: ownership_result.taken_externals(self.db).clone(),
-                    writes: ownership_result.written_externals(self.db).clone(),
-                    overwrites: ownership_result.overwritten_externals(self.db).clone(),
+                    takes: ownership_result.taken_externals(self.db).C(),
+                    writes: ownership_result.written_externals(self.db).C(),
+                    overwrites: ownership_result.overwritten_externals(self.db).C(),
                 })
             }
         }
@@ -1767,7 +1767,7 @@ impl<'db> ScriptCompiler<'db> {
         let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = LookupMap::default();
         let mut func_return_types: LookupMap<String, datalove_datafun_tycheck::Type<'db>> = LookupMap::default();
         for (name, func_type) in typecheck.result.function_types(self.db) {
-            let param_types = func_type.param_types(self.db).clone();
+            let param_types = func_type.param_types(self.db).C();
             func_param_types.insert(name.text(self.db).S(), param_types);
 
             let return_type = func_type.return_type(self.db);
@@ -1871,10 +1871,10 @@ impl<'db> ScriptCompiler<'db> {
         for (name, value) in resolved_consts.iter() {
             let ir_type = const_graph.bindings.iter()
                 .find(|b| &b.name == name)
-                .map(|b| b.ir_type.clone())
+                .map(|b| b.ir_type.C())
                 .expect("every resolved const is a binding of the graph it came from");
-            script_consts.insert(name.to_string(), (ir_type.clone(), value.clone()));
-            declared_consts.push((name.to_string(), ir_type, value.clone()));
+            script_consts.insert(name.S(), (ir_type.C(), value.C()));
+            declared_consts.push((name.S(), ir_type, value.C()));
         }
 
         // Evaluate function-level consts.
@@ -1938,7 +1938,7 @@ impl<'db> ScriptCompiler<'db> {
         // statement order, so a redeclaration shadows the earlier value rather
         // than the other way about.
         let mut resolved_consts_map: LookupMap<String, (IrType, Arc<ConstValue>)> =
-            earlier_consts.clone();
+            earlier_consts.C();
 
         // A binding's id is its position among the const statements, so the
         // expressions only have to be gathered once.
@@ -1966,15 +1966,15 @@ impl<'db> ScriptCompiler<'db> {
                 Some(IrType::Result(Box::new(IrType::Unit))), &Default::default(),
             ).map_err(|e| match e {
                 ConstError::Lowering(e) => ConstEvalError::LoweringFailed {
-                    binding_name: binding.name.clone(),
-                    message: e.to_string(),
+                    binding_name: binding.name.C(),
+                    message: e.S(),
                 },
                 ConstError::Ctfe(e) => self.ctfe_error_to_const_eval_error(e, &binding.name),
                 ConstError::MissingType => unreachable!("a script const's type comes from the graph"),
             })?.expect("nothing is deferred at a script's top level");
 
-            resolved.insert(binding.stmt_id, binding.name.clone(), value.clone());
-            resolved_consts_map.insert(binding.name.clone(), (binding.ir_type.clone(), value));
+            resolved.insert(binding.stmt_id, binding.name.C(), value.C());
+            resolved_consts_map.insert(binding.name.C(), (binding.ir_type.C(), value));
 
             let ready: Vec<String> = lowered_funcs.deferred.iter()
                 .filter(|name| needs.get(*name) == Some(&binding.stmt_id.0))
@@ -2015,10 +2015,10 @@ impl<'db> ScriptCompiler<'db> {
             // rather than one, so the consts naming them wait for the copies.
             let const_params = func_stmt.params().iter()
                 .filter(|p| p.is_comptime)
-                .map(|p| p.name.text(self.db).to_string())
+                .map(|p| p.name.text(self.db).S())
                 .collect();
             let (body_consts, body_errors) =
-                evaluate_body_consts(&mut env, func_stmt, script_level_consts.clone(), const_params);
+                evaluate_body_consts(&mut env, func_stmt, script_level_consts.C(), const_params);
             for (name, ir_type, value) in body_consts {
                 // Stored under a qualified name: func_name::const_name.
                 consts.insert(format!("{}::{}", func_name, name), (ir_type, value));
@@ -2034,19 +2034,19 @@ impl<'db> ScriptCompiler<'db> {
         match e {
             CtfeError::InterpError(msg) => {
                 ConstEvalError::LoweringFailed {
-                    binding_name: binding_name.to_string(),
+                    binding_name: binding_name.S(),
                     message: msg,
                 }
             }
             CtfeError::EarlyReturn(msg) => {
                 ConstEvalError::EarlyReturn {
-                    binding_name: binding_name.to_string(),
+                    binding_name: binding_name.S(),
                     message: msg,
                 }
             }
             CtfeError::UnsupportedType(ty) => {
                 ConstEvalError::UnsupportedType {
-                    binding_name: binding_name.to_string(),
+                    binding_name: binding_name.S(),
                     type_name: ty,
                 }
             }
@@ -2079,14 +2079,14 @@ impl<'db> ScriptCompiler<'db> {
                 let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = LookupMap::default();
                 let mut func_return_types: LookupMap<String, datalove_datafun_tycheck::Type<'db>> = LookupMap::default();
                 for (name, func_type) in typecheck.result.function_types(self.db) {
-                    let param_types = func_type.param_types(self.db).clone();
+                    let param_types = func_type.param_types(self.db).C();
                     func_param_types.insert(name.text(self.db).S(), param_types);
 
                     let return_type = func_type.return_type(self.db);
                     func_return_types.insert(name.text(self.db).S(), return_type);
                 }
 
-                let script_analysis = ownership.script_analysis.clone()
+                let script_analysis = ownership.script_analysis.C()
                     .expect("script_analysis required for fragment units");
 
                 // Const bindings are lowered as let bindings.
@@ -2096,8 +2096,8 @@ impl<'db> ScriptCompiler<'db> {
                     None
                 } else {
                     Some((
-                        lowered_funcs.functions.iter().map(|f| (**f).clone()).collect(),
-                        lowered_funcs.func_name_to_id.clone(),
+                        lowered_funcs.functions.iter().map(|f| (**f).C()).collect(),
+                        lowered_funcs.func_name_to_id.C(),
                     ))
                 };
 
@@ -2109,7 +2109,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.env.data(self.db),
                     script_ctx,
                     body,
-                    ownership.func_analyses.clone(),
+                    ownership.func_analyses.C(),
                     script_analysis,
                     Some(&func_param_types),
                     Some(&func_return_types),
@@ -2229,7 +2229,7 @@ impl<'db> ScriptCompiler<'db> {
             return Ok(ir_unit);
         }
 
-        let registry = self.shared_context.module_registry.clone();
+        let registry = self.shared_context.module_registry.C();
         let module_unit = |module, id| registry.get_module_function_as_unit(module, id).cloned();
 
         // A copy's const bindings are evaluated here, where the parameters
@@ -2244,14 +2244,14 @@ impl<'db> ScriptCompiler<'db> {
                 CalleeKey::Local(id) => {
                     let Some(name) = lowered_funcs.func_name_to_id.iter_unordered()
                         .find(|(_, func_id)| func_id.0 == id.0)
-                        .map(|(name, _)| name.clone())
+                        .map(|(name, _)| name.C())
                     else {
                         return (LookupMap::default(), Vec::new());
                     };
                     // A script function's consts may name the script's.
                     self.instantiation_consts_from(
                         script_stmts, &name, typecheck.expr_types, typecheck.call_targets,
-                        consts.script_consts.clone(), indices, values,
+                        consts.script_consts.C(), indices, values,
                         &lowered_funcs.functions, &lowered_funcs.func_name_to_id,
                     )
                 }
@@ -2259,7 +2259,7 @@ impl<'db> ScriptCompiler<'db> {
                     let Some(original) = registry.get_module_function_as_unit(module, id) else {
                         return (LookupMap::default(), Vec::new());
                     };
-                    let name = original.name.clone();
+                    let name = original.name.C();
                     // The module's own expressions were typechecked with the
                     // module graph, not with this script.
                     let parsed_graph = self.shared_context.parsed_graph;
@@ -2280,10 +2280,10 @@ impl<'db> ScriptCompiler<'db> {
                     };
                     let funcs: Vec<std::sync::Arc<IrCodeUnit>> = registry.iter_module_code_units_with_ids()
                         .filter(|((m, _), _)| *m == module)
-                        .map(|(_, u)| std::sync::Arc::new(u.clone()))
+                        .map(|(_, u)| std::sync::Arc::new(u.C()))
                         .collect();
                     let names: LookupMap<String, datalove_datafun_ir::FuncId> = funcs.iter()
-                        .map(|u| (u.name.clone(), datalove_datafun_ir::FuncId(u.id.0)))
+                        .map(|u| (u.name.C(), datalove_datafun_ir::FuncId(u.id.0)))
                         .collect();
                     // A module function's consts may name its module's.
                     self.instantiation_consts_from(
@@ -2327,7 +2327,7 @@ impl<'db> ScriptCompiler<'db> {
         let registry = &self.shared_context.module_registry;
         let local: LookupMap<datalove_datafun_ir::CodeUnitId, Arc<IrCodeUnit>> = ir_unit.nested_units.iter()
             .filter(|unit| is_inline(unit))
-            .map(|unit| (unit.id, Arc::new(unit.clone())))
+            .map(|unit| (unit.id, Arc::new(unit.C())))
             .collect();
         let resolve = |func: &CodeRef| -> Option<Arc<IrCodeUnit>> {
             match func {
@@ -2372,7 +2372,7 @@ impl<'db> ScriptCompiler<'db> {
 
         let mut const_values: LookupMap<String, Arc<ConstValue>> = LookupMap::default();
         for (name, value) in consts.resolved_consts.iter() {
-            const_values.insert(name.to_string(), value.clone());
+            const_values.insert(name.S(), value.C());
         }
 
         // Function-level consts are keyed "func_name::const_name", and kept
@@ -2381,8 +2381,8 @@ impl<'db> ScriptCompiler<'db> {
         for (qualified_name, (_, value)) in consts.func_consts.iter_unordered() {
             let (func_name, const_name) = qualified_name.split_once("::")
                 .expect("a function-level const is keyed by function and name");
-            function_consts.entry(func_name.to_string()).or_default()
-                .insert(const_name.to_string(), value.clone());
+            function_consts.entry(func_name.S()).or_default()
+                .insert(const_name.S(), value.C());
         }
 
         inline_script_consts(ir_unit, &const_values, &function_consts)
@@ -2407,15 +2407,15 @@ impl<'db> ScriptCompiler<'db> {
     ) {
         let script_ctx = ir_unit.script_context();
         self.unit_records[index] = Arc::new(UnitLowerRecord {
-            exports: script_ctx.map(|ctx| ctx.exports.clone()).unwrap_or_default(),
-            value_types: ir_unit.value_types.clone(),
-            slot_types: ir_unit.slot_types.clone(),
-            consts: consts.declared_consts.clone(),
-            dead_exports: ownership.dead_exports.clone(),
-            revives: ownership.revives.clone(),
-            takes: ownership.takes.clone(),
-            writes: ownership.writes.clone(),
-            overwrites: ownership.overwrites.clone(),
+            exports: script_ctx.map(|ctx| ctx.exports.C()).unwrap_or_default(),
+            value_types: ir_unit.value_types.C(),
+            slot_types: ir_unit.slot_types.C(),
+            consts: consts.declared_consts.C(),
+            dead_exports: ownership.dead_exports.C(),
+            revives: ownership.revives.C(),
+            takes: ownership.takes.C(),
+            writes: ownership.writes.C(),
+            overwrites: ownership.overwrites.C(),
             provides: self.unit_provides_names(typecheck.output),
             uses: self.unit_used_names(index, typecheck.output),
             imports: typecheck.output.imported_modules(self.db).C(),

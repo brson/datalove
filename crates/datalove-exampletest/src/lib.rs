@@ -213,7 +213,7 @@ where
 
     /// Skip tests whose stem matches any of the given names.
     pub fn skip_names(mut self, names: &[&str]) -> Self {
-        self.skip_names = names.iter().map(|s| s.to_string()).collect();
+        self.skip_names = names.iter().map(|s| s.S()).collect();
         self
     }
 
@@ -238,7 +238,7 @@ where
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if let Some(stem) = name.strip_suffix(&suffix) {
-                fixtures.push((stem.to_string(), entry.path()));
+                fixtures.push((stem.S(), entry.path()));
             }
         }
 
@@ -269,7 +269,7 @@ where
             Err(error) => {
                 if self.allow_errors {
                     // Write error to actual file for debugging.
-                    let _ = std::fs::write(&actual_path, &error);
+                    std::fs::write(&actual_path, &error).I();
                     return TestResult::Error(error);
                 } else {
                     // Treat errors as test output.
@@ -378,7 +378,7 @@ where
                     .unwrap_or_else(|| (self.init)());
                 let result = self.run_test_case(&mut ctx, fixture);
                 pool.lock().unwrap_or_else(|e| e.into_inner()).push(ctx);
-                (fixture.clone(), result)
+                (fixture.C(), result)
             })
             .collect();
 

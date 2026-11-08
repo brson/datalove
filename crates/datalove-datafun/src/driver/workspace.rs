@@ -286,7 +286,7 @@ impl WorkspaceDescriptor {
     /// Build a workspace around the system library the driver carries.
     pub fn from_system_library(sys: &SystemLibrary) -> Self {
         Self {
-            system_library: Some(sys.library.clone()),
+            system_library: Some(sys.library.C()),
             user_libraries: Vec::new(),
             options: CompilerOptions::default(),
             work_dir: None,
@@ -338,25 +338,25 @@ impl WorkspaceDescriptor {
         for section in sections {
             match section {
                 WorldfileSection::Module { library, package, module, source } => {
-                    let lib = libraries.entry(library.clone()).or_default();
-                    let pkg = lib.entry(package.clone()).or_insert_with(|| PackageDescriptor::empty(package));
-                    pkg.modules.insert(module.clone(), ModuleDescriptor {
-                        name: module.clone(),
+                    let lib = libraries.entry(library.C()).or_default();
+                    let pkg = lib.entry(package.C()).or_insert_with(|| PackageDescriptor::empty(package));
+                    pkg.modules.insert(module.C(), ModuleDescriptor {
+                        name: module.C(),
                         source: Arc::from(source.as_str()),
                         origin: None,
                     });
                 }
                 WorldfileSection::Data { library, package, name, source } => {
-                    let lib = libraries.entry(library.clone()).or_default();
-                    let pkg = lib.entry(package.clone()).or_insert_with(|| PackageDescriptor::empty(package));
-                    pkg.data.insert(name.clone(), ModuleDescriptor {
-                        name: name.clone(),
+                    let lib = libraries.entry(library.C()).or_default();
+                    let pkg = lib.entry(package.C()).or_insert_with(|| PackageDescriptor::empty(package));
+                    pkg.data.insert(name.C(), ModuleDescriptor {
+                        name: name.C(),
                         source: Arc::from(source.as_str()),
                         origin: None,
                     });
                 }
                 WorldfileSection::Rider { name, source } => {
-                    riders.push((name.clone(), RiderDescriptor {
+                    riders.push((name.C(), RiderDescriptor {
                         interface_source: Arc::from(source.as_str()),
                         origin: None,
                         crate_spec: None,
@@ -392,26 +392,26 @@ impl WorkspaceDescriptor {
     /// User libraries from both are concatenated (`self` first, then `other`).
     /// Options come from `other` (the newer descriptor wins).
     pub fn merge(&self, other: &WorkspaceDescriptor) -> WorkspaceDescriptor {
-        let system_library = self.system_library.clone()
-            .or_else(|| other.system_library.clone());
+        let system_library = self.system_library.C()
+            .or_else(|| other.system_library.C());
 
-        let mut user_libraries = self.user_libraries.clone();
+        let mut user_libraries = self.user_libraries.C();
         for other_lib in &other.user_libraries {
             // Merge into existing library with same name, or append.
             if let Some(existing) = user_libraries.iter_mut().find(|l| l.name == other_lib.name) {
                 for (pkg_name, pkg) in &other_lib.packages {
-                    existing.packages.insert(pkg_name.clone(), pkg.clone());
+                    existing.packages.insert(pkg_name.C(), pkg.C());
                 }
             } else {
-                user_libraries.push(other_lib.clone());
+                user_libraries.push(other_lib.C());
             }
         }
 
         WorkspaceDescriptor {
             system_library,
             user_libraries,
-            options: other.options.clone(),
-            work_dir: other.work_dir.clone().or_else(|| self.work_dir.clone()),
+            options: other.options.C(),
+            work_dir: other.work_dir.C().or_else(|| self.work_dir.C()),
         }
     }
 
@@ -548,7 +548,7 @@ impl WorkspaceDescriptor {
         let other = WorkspaceDescriptor {
             system_library: None,
             user_libraries: vec![library],
-            options: self.options.clone(),
+            options: self.options.C(),
             work_dir: None,
         };
         Ok(self.merge(&other))
@@ -561,7 +561,7 @@ impl WorkspaceDescriptor {
     pub fn module_files(&self) -> BTreeMap<ModulePath, PathBuf> {
         self.all_modules()
             .map(|(path, module)| {
-                let file = module.origin.clone()
+                let file = module.origin.C()
                     .unwrap_or_else(|| PathBuf::from(fmt!("{path}.dfm")));
                 (path, file)
             })
@@ -577,10 +577,10 @@ impl WorkspaceDescriptor {
         self.libraries()
             .flat_map(|lib| lib.packages.values().filter_map(move |pkg| {
                 let rider = pkg.rider.as_ref()?;
-                let file = rider.origin.clone().unwrap_or_else(|| {
+                let file = rider.origin.C().unwrap_or_else(|| {
                     PathBuf::from(fmt!("{}/{}/rider/rider.dli", lib.name, pkg.name))
                 });
-                Some((pkg.name.clone(), file))
+                Some((pkg.name.C(), file))
             }))
             .collect()
     }
@@ -592,7 +592,7 @@ impl WorkspaceDescriptor {
     pub fn data_files(&self) -> BTreeMap<ModulePath, PathBuf> {
         self.all_data()
             .map(|(path, file)| {
-                let origin = file.origin.clone()
+                let origin = file.origin.C()
                     .unwrap_or_else(|| PathBuf::from(fmt!("{path}.dlt")));
                 (path, origin)
             })
@@ -633,7 +633,7 @@ impl WorkspaceDescriptor {
         for lib in self.libraries() {
             for pkg in lib.packages.values() {
                 if let Some(ref rider) = pkg.rider {
-                    sources.push((pkg.name.clone(), rider.interface_source.to_string()));
+                    sources.push((pkg.name.C(), rider.interface_source.S()));
                 }
             }
         }
@@ -662,10 +662,10 @@ fn rider_crates_of<'a>(libraries: impl Iterator<Item = &'a PackageLibrary>) -> V
             // rider a module reaches has a name and a version here.
             let Some((crate_name, version)) = &rider.crate_spec else { continue };
             riders.push(RiderCrate {
-                rider_name: pkg.name.clone(),
-                crate_name: crate_name.clone(),
-                version: version.clone(),
-                dir: rider.crate_dir.clone(),
+                rider_name: pkg.name.C(),
+                crate_name: crate_name.C(),
+                version: version.C(),
+                dir: rider.crate_dir.C(),
             });
         }
     }
@@ -689,10 +689,10 @@ impl WorkspaceDescriptor {
         // Added and changed modules.
         for (path, new_mod) in &new_modules {
             match old_modules.get(path) {
-                None => delta.modules_added.push((path.clone(), (*new_mod).clone())),
+                None => delta.modules_added.push((path.C(), (*new_mod).C())),
                 Some(old_mod) => {
                     if old_mod.source != new_mod.source {
-                        delta.modules_changed.push((path.clone(), (*new_mod).clone()));
+                        delta.modules_changed.push((path.C(), (*new_mod).C()));
                     }
                 }
             }
@@ -701,7 +701,7 @@ impl WorkspaceDescriptor {
         // Removed modules.
         for path in old_modules.keys() {
             if !new_modules.contains_key(path) {
-                delta.modules_removed.push(path.clone());
+                delta.modules_removed.push(path.C());
             }
         }
 
@@ -710,16 +710,16 @@ impl WorkspaceDescriptor {
         let new_data: BTreeMap<ModulePath, &ModuleDescriptor> = newer.all_data().collect();
         for (path, new_file) in &new_data {
             match old_data.get(path) {
-                None => delta.data_added.push((path.clone(), (*new_file).clone())),
+                None => delta.data_added.push((path.C(), (*new_file).C())),
                 Some(old_file) if old_file.source != new_file.source => {
-                    delta.data_changed.push((path.clone(), (*new_file).clone()));
+                    delta.data_changed.push((path.C(), (*new_file).C()));
                 }
                 Some(_) => {}
             }
         }
         for path in old_data.keys() {
             if !new_data.contains_key(path) {
-                delta.data_removed.push(path.clone());
+                delta.data_removed.push(path.C());
             }
         }
 
@@ -729,23 +729,23 @@ impl WorkspaceDescriptor {
 
         for (name, new_rider) in &new_riders {
             match old_riders.get(name) {
-                None => delta.riders_added.push((name.clone(), (*new_rider).clone())),
+                None => delta.riders_added.push((name.C(), (*new_rider).C())),
                 Some(old_rider) => {
                     if *old_rider != *new_rider {
-                        delta.riders_changed.push((name.clone(), (*new_rider).clone()));
+                        delta.riders_changed.push((name.C(), (*new_rider).C()));
                     }
                 }
             }
         }
         for name in old_riders.keys() {
             if !new_riders.contains_key(name) {
-                delta.riders_removed.push(name.clone());
+                delta.riders_removed.push(name.C());
             }
         }
 
         // Options.
         if self.options != newer.options {
-            delta.options_changed = Some(newer.options.clone());
+            delta.options_changed = Some(newer.options.C());
         }
 
         delta
@@ -755,7 +755,7 @@ impl WorkspaceDescriptor {
     fn all_riders(&self) -> impl Iterator<Item = (String, &RiderDescriptor)> {
         self.libraries().flat_map(|lib| {
             lib.packages.values().filter_map(|pkg| {
-                pkg.rider.as_ref().map(|r| (pkg.name.clone(), r))
+                pkg.rider.as_ref().map(|r| (pkg.name.C(), r))
             })
         })
     }
@@ -772,42 +772,42 @@ fn package_library_from_map(
     let mut pkg_map = BTreeMap::new();
     for (pkg_name, pkg) in packages {
         let modules = pkg.modules.iter().map(|(mod_name, pkg_mod)| {
-            (mod_name.clone(), ModuleDescriptor {
-                name: mod_name.clone(),
+            (mod_name.C(), ModuleDescriptor {
+                name: mod_name.C(),
                 source: Arc::from(pkg_mod.text.as_str()),
-                origin: Some(pkg_mod.path.clone()),
+                origin: Some(pkg_mod.path.C()),
             })
         }).collect();
 
         let crate_spec = pkg.rider_crate.as_ref()
-            .map(|rider| (rider.name.clone(), rider.version.clone()));
+            .map(|rider| (rider.name.C(), rider.version.C()));
 
         let rider = match (&pkg.rider_source, &pkg.rider_crate_dir) {
             (Some(source), crate_dir) => Some(RiderDescriptor {
                 interface_source: Arc::from(source.as_str()),
-                origin: pkg.rider_path.clone(),
+                origin: pkg.rider_path.C(),
                 crate_spec,
-                crate_dir: crate_dir.clone(),
+                crate_dir: crate_dir.C(),
             }),
             (None, Some(crate_dir)) => Some(RiderDescriptor {
                 interface_source: Arc::from(""),
                 origin: None,
                 crate_spec,
-                crate_dir: Some(crate_dir.clone()),
+                crate_dir: Some(crate_dir.C()),
             }),
             (None, None) => None,
         };
 
         let data = pkg.data.iter().map(|(name, file)| {
-            (name.clone(), ModuleDescriptor {
-                name: name.clone(),
+            (name.C(), ModuleDescriptor {
+                name: name.C(),
                 source: Arc::from(file.text.as_str()),
-                origin: Some(file.path.clone()),
+                origin: Some(file.path.C()),
             })
         }).collect();
 
-        pkg_map.insert(pkg_name.clone(), PackageDescriptor {
-            name: pkg_name.clone(),
+        pkg_map.insert(pkg_name.C(), PackageDescriptor {
+            name: pkg_name.C(),
             modules,
             data,
             rider,
@@ -851,7 +851,7 @@ impl WorkspaceDescriptor {
 
     /// Create a fresh module compiler from this descriptor.
     pub fn to_compiler(&self, db: &dyn salsa::Database) -> ModuleCompiler {
-        let mut module_compiler = ModuleCompiler::new(self.options.clone());
+        let mut module_compiler = ModuleCompiler::new(self.options.C());
         self.apply_to_compiler(&mut module_compiler, db);
         module_compiler
     }
@@ -872,7 +872,7 @@ impl WorkspaceDescriptor {
     ) -> (ModuleCompiler, Arc<RiderNatives>) {
         let mut module_compiler = self.to_compiler(db);
         let natives = Arc::new(RiderNatives::for_workspace(self, linked));
-        module_compiler.set_natives(natives.clone());
+        module_compiler.set_natives(natives.C());
         (module_compiler, natives)
     }
 
@@ -956,11 +956,11 @@ mod tests {
         options: CompilerOptions,
     ) -> WorkspaceDescriptor {
         let package = PackageDescriptor {
-            name: "pkg".to_string(),
+            name: "pkg".S(),
             modules: BTreeMap::from([(
-                "main".to_string(),
+                "main".S(),
                 ModuleDescriptor {
-                    name: "main".to_string(),
+                    name: "main".S(),
                     source: Arc::from(source),
                     origin: None,
                 },
@@ -976,8 +976,8 @@ mod tests {
         WorkspaceDescriptor {
             system_library: None,
             user_libraries: vec![PackageLibrary {
-                name: "local".to_string(),
-                packages: BTreeMap::from([("pkg".to_string(), package)]),
+                name: "local".S(),
+                packages: BTreeMap::from([("pkg".S(), package)]),
             }],
             options,
             work_dir: None,
@@ -1045,9 +1045,9 @@ mod local_library_tests {
     /// inside `/ws`.
     fn layout_at(cwd: &str, dirs: &[&str]) -> MemFs {
         let fs = MemFs::with_current_dir(cwd);
-        fs.create_dir_all(Path::new("/ws")).unwrap();
+        fs.create_dir_all(Path::new("/ws")).X();
         for dir in dirs {
-            fs.create_dir_all(&Path::new("/ws").join(dir)).unwrap();
+            fs.create_dir_all(&Path::new("/ws").join(dir)).X();
         }
         fs
     }
@@ -1126,7 +1126,7 @@ mod local_library_tests {
         let module = ws("local/app/greet.dfm");
         fs.add_file(&module, "fun answer(): int\n  ret 42\nend fun\n");
 
-        let library = load_local_library(&fs, &ws("local")).unwrap();
+        let library = load_local_library(&fs, &ws("local")).X();
         assert_eq!(library.name, "local");
         let greet = &library.packages["app"].modules["greet"];
         assert_eq!(greet.origin.as_deref(), Some(module.as_path()));
@@ -1142,9 +1142,9 @@ mod local_library_tests {
             "[rider]\nname = \"app-rider\"\nversion = \"0.1.0\"\n",
         );
 
-        let library = load_local_library(&fs, &ws("local")).unwrap();
+        let library = load_local_library(&fs, &ws("local")).X();
         assert!(library.packages["app"].rider.is_some());
-        let workspace = WorkspaceDescriptor::empty().with_user_library(library).unwrap();
+        let workspace = WorkspaceDescriptor::empty().with_user_library(library).X();
         assert_eq!(workspace.user_rider_crates().len(), 1);
     }
 
@@ -1164,7 +1164,7 @@ mod local_library_tests {
                 }),
             })]),
         };
-        let workspace = WorkspaceDescriptor::empty().with_user_library(with_rider("sys")).unwrap();
+        let workspace = WorkspaceDescriptor::empty().with_user_library(with_rider("sys")).X();
         let error = workspace.with_user_library(with_rider("local")).unwrap_err();
         assert!(fmt!("{error}").contains("two cannot share a name"), "{error}");
     }

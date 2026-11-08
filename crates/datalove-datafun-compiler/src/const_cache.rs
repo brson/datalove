@@ -23,6 +23,7 @@
 //! the two compared; a difference is a panic, which is how the test suite
 //! checks that the key is not missing anything.
 
+use rmx::prelude::*;
 use std::collections::BTreeSet;
 use bct::lookup::LookupMap;
 use std::sync::Arc;
@@ -114,7 +115,7 @@ impl ConstCache {
                 let mut hasher = rmx::blake3::Hasher::new();
                 hasher.update(&closure_fingerprint(db, graph, module.id(db)));
                 hasher.update(&data);
-                (module.id(db).path(db).clone(), *hasher.finalize().as_bytes())
+                (module.id(db).path(db).C(), *hasher.finalize().as_bytes())
             })
             .collect();
         let keys = &self.keys;
@@ -156,19 +157,19 @@ impl ConstCache {
     /// Record that a phase evaluated `path` rather than reusing it.
     pub(crate) fn note_evaluated(&mut self, path: &str) {
         self.report.reused.remove(path);
-        self.report.evaluated.insert(path.to_owned());
+        self.report.evaluated.insert(path.O());
     }
 
     /// Record that a phase reused `path`.
     pub(crate) fn note_reused(&mut self, path: &str) {
         if !self.report.evaluated.contains(path) {
-            self.report.reused.insert(path.to_owned());
+            self.report.reused.insert(path.O());
         }
     }
 
     fn entry(&mut self, path: &str) -> &mut CachedModule {
         let fingerprint = *self.keys.get(path).expect("every module evaluated was keyed by `begin`");
-        let cached = self.modules.entry(path.to_owned()).or_insert_with(|| CachedModule {
+        let cached = self.modules.entry(path.O()).or_insert_with(|| CachedModule {
             fingerprint,
             module_level: None,
             body: None,

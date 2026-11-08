@@ -1,5 +1,6 @@
 //! Tensor indexing instruction compilation.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, BlockArg, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -120,7 +121,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let tensor_ty = self.get_operand_type(tensor)?;
         let (elem_ty, rank) = match &tensor_ty {
-            IrType::Tensor(e, r) => (e.as_ref().clone(), *r),
+            IrType::Tensor(e, r) => (e.as_ref().C(), *r),
             _ => return Err(CraneliftError::Codegen(format!(
                 "TensorGet on non-tensor type: {:?}", tensor_ty
             ))),
@@ -272,7 +273,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let tensor_ty = self.get_operand_type(tensor)?;
         let (elem_ty, rank) = match &tensor_ty {
-            IrType::Tensor(e, r) => (e.as_ref().clone(), *r),
+            IrType::Tensor(e, r) => (e.as_ref().C(), *r),
             _ => return Err(CraneliftError::Codegen(format!(
                 "TensorIndexRef on non-tensor type: {:?}", tensor_ty
             ))),

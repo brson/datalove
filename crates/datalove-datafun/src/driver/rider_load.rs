@@ -68,7 +68,7 @@ impl RiderNatives {
     pub fn built(descriptor: &WorkspaceDescriptor) -> Self {
         Self {
             linked: None,
-            built: Some(BuiltNatives::new(descriptor.work_dir.clone(), descriptor.rider_crates())),
+            built: Some(BuiltNatives::new(descriptor.work_dir.C(), descriptor.rider_crates())),
         }
     }
 
@@ -90,7 +90,7 @@ impl RiderNatives {
         let own = descriptor.user_rider_crates();
         Self {
             linked: Some(LinkedNatives(linked.to_vec())),
-            built: (!own.is_empty()).then(|| BuiltNatives::new(descriptor.work_dir.clone(), own)),
+            built: (!own.is_empty()).then(|| BuiltNatives::new(descriptor.work_dir.C(), own)),
         }
     }
 
@@ -173,15 +173,15 @@ pub fn register_natives(
 
     for symbol in compiled.native_symbols() {
         let fn_ptr = natives.address(&symbol)?;
-        native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
-        table.register_c(symbol.clone(), fn_ptr);
+        native_fn_ptrs.push((symbol.C(), fn_ptr as *const u8));
+        table.register_c(symbol.C(), fn_ptr);
     }
 
     // The table now holds pointers into whatever the natives loaded.
-    table.hold_code_owner(natives.clone());
-    executor.natives_registered(&native_fn_ptrs, natives.clone());
+    table.hold_code_owner(natives.C());
+    executor.natives_registered(&native_fn_ptrs, natives.C());
 
-    Ok(RegisteredNatives { native_fn_ptrs, natives: natives.clone() })
+    Ok(RegisteredNatives { native_fn_ptrs, natives: natives.C() })
 }
 
 /// Refuse a library built against a different runtime interface.
@@ -326,18 +326,18 @@ pub fn load_rider_library(
             .context(fmt!("rider '{}'", rider_name))?;
 
         // Save raw pointer for JIT registration.
-        native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
+        native_fn_ptrs.push((symbol.C(), fn_ptr as *const u8));
 
-        native_table.register_c(symbol.clone(), fn_ptr);
+        native_table.register_c(symbol.C(), fn_ptr);
     }
 
     // The table now holds pointers into this library, so it holds the library.
     // Nothing the caller does with the returned rider can take the code out
     // from under a table that could still be called through.
-    native_table.hold_code_owner(library.clone());
+    native_table.hold_code_owner(library.C());
 
     Ok(LoadedRider {
-        rider_name: rider_name.to_string(),
+        rider_name: rider_name.S(),
         native_fn_ptrs,
         library,
     })

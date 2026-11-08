@@ -1,6 +1,7 @@
 //! Static consts: where a `StaticRef` finds one, and the passes that build
 //! and destroy them in an object file.
 
+use rmx::prelude::*;
 use super::*;
 
 /// Where a const a `StaticRef` names lives.
@@ -31,7 +32,7 @@ pub fn static_const_key(value: &std::sync::Arc<ConstValue>) -> usize {
 pub fn empty_function_unit(name: &str) -> IrCodeUnit {
     IrCodeUnit {
         id: datalove_datafun_ir::CodeUnitId(0),
-        name: name.to_string(),
+        name: name.S(),
         blocks: Vec::new(),
         value_count: 0,
         slot_count: 0,

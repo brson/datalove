@@ -205,7 +205,7 @@ fn run_main(worldfile: &str, natives: Option<Arc<dyn NativeResolver>>) -> Result
     let main_code_unit = compiled.shared.module_registry
         .get_module_function_as_unit(*main_ir_module_id, datalove_datafun_ir::CodeUnitId(main_func_id.0))
         .expect("main function not in registry")
-        .clone();
+        .C();
 
     // Create interpreter with native function table.
     let mut interp = IrInterpreter::new();

@@ -1,17 +1,18 @@
 //! How inputs naming REPL commands are read.
 
+use rmx::prelude::*;
 use datalove_repl::script::Unit;
 use datalove_repl::{Command, Input, InputParse, Place, ReplCommand, parse_input};
 
 fn command(input: &str) -> ReplCommand {
-    match parse_input(Input::Multiline(input.to_string())) {
+    match parse_input(Input::Multiline(input.S())) {
         InputParse::Command(Command::ReplCommand(command)) => command,
         other => panic!("{input:?} is not a REPL command: {other:?}"),
     }
 }
 
 fn fragment(source: &str) -> Unit {
-    Unit::Fragment(source.to_string())
+    Unit::Fragment(source.S())
 }
 
 #[test]
@@ -90,7 +91,7 @@ fn malformed_commands_say_how_they_are_used() {
 }
 
 fn unit(input: &str) -> Unit {
-    match parse_input(Input::Input(input.to_string())) {
+    match parse_input(Input::Input(input.S())) {
         InputParse::Command(Command::Unit(unit)) => unit,
         other => panic!("{input:?} is not a unit: {other:?}"),
     }
@@ -105,13 +106,13 @@ fn a_name_starting_with_a_keyword_is_not_the_keyword() {
     assert!(matches!(unit("let_x"), Unit::Expression(_)));
     assert!(matches!(unit("let x = 1"), Unit::Fragment(_)));
     assert!(matches!(
-        parse_input(Input::Input("for x in xs".to_string())),
+        parse_input(Input::Input("for x in xs".S())),
         InputParse::ReadMultiline(_),
     ));
 }
 
 fn reads_on(input: &str) -> bool {
-    matches!(parse_input(Input::Input(input.to_string())), InputParse::ReadMultiline(_))
+    matches!(parse_input(Input::Input(input.S())), InputParse::ReadMultiline(_))
 }
 
 /// A line that leaves a bracket open reads on to where it closes, whatever
@@ -142,7 +143,7 @@ fn a_bracket_in_a_string_or_comment_does_not_read_on() {
 #[test]
 fn an_open_bracket_in_multiline_input_is_a_unit() {
     assert!(matches!(
-        parse_input(Input::Multiline("let xs = [".to_string())),
+        parse_input(Input::Multiline("let xs = [".S())),
         InputParse::Command(Command::Unit(Unit::Fragment(_))),
     ));
 }

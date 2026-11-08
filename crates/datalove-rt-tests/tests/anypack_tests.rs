@@ -1,6 +1,9 @@
 //! Tests for anypack bitpacking (Data/Error types).
 
+use rmx::prelude::*;
 use datalove_rtdt::*;
+// The runtime types shadow the std names the prelude brings in.
+use datalove_rtdt::{Option, Result, String};
 
 // Helper to create a TyDesc for testing.
 fn make_tydesc(type_tag: TyTag) -> TyDesc {
@@ -237,7 +240,7 @@ fn test_from_f32() {
     let data = Data::from_f32(3.14, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::InlineWithTyDesc);
     assert_eq!(data.tytag(), TyTag::F32);
-    let f = data.as_f32().unwrap();
+    let f = data.as_f32().X();
     assert!((f - 3.14).abs() < 0.01);
 }
 
@@ -713,7 +716,7 @@ fn test_from_option_some() {
     let data = Data::from_option(&option_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::Option);
-    let extracted = data.as_option().unwrap();
+    let extracted = data.as_option().X();
     unsafe {
         assert_eq!((*extracted).tag, OptionTag::Some);
     }
@@ -728,7 +731,7 @@ fn test_from_result_err() {
     let data = Data::from_result(&result_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::Result);
-    let extracted = data.as_result().unwrap();
+    let extracted = data.as_result().X();
     unsafe {
         assert_eq!((*extracted).tag, ResultTag::Err);
     }

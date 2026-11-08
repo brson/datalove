@@ -129,7 +129,7 @@ mod tests {
     use super::*;
 
     fn runs(line: &Line<'_>) -> Vec<(String, Style)> {
-        line.spans.iter().map(|span| (span.content.to_string(), span.style)).collect()
+        line.spans.iter().map(|span| (span.content.S(), span.style)).collect()
     }
 
     /// Each run is in the style the escapes before it set, a reset goes back

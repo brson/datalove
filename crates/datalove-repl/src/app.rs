@@ -1247,7 +1247,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         fs.write(path, write_worldfile(&sections)?.as_bytes())
             .with_context(|| fmt!("failed to write {}", path.display()))?;
-        Ok(repl::Outcome::Saved { path: path.display().to_string(), inputs: sections.len() })
+        Ok(repl::Outcome::Saved { path: path.display().S(), inputs: sections.len() })
     }
 
     /// Move focus to the next panel down.

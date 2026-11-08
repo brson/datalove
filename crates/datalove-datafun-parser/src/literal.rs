@@ -382,7 +382,7 @@ impl<'db> Parser<'db> {
             let inner = elements.pop().X();
             return match type_hint {
                 Some(type_hint) => ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner }),
-                None => self.expr_kind(inner).clone(),
+                None => self.expr_kind(inner).C(),
             };
         }
         ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple { type_hint, elements })

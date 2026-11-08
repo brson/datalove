@@ -152,7 +152,7 @@ pub fn analyze_worldfile_with_hooks(
         results.push(SectionResult {
             section_type: "resolution".S(),
             name: None,
-            typecheck: TypecheckResult::Error { errors: vec![err.clone()] },
+            typecheck: TypecheckResult::Error { errors: vec![err.C()] },
             ownership: OwnershipResult::Skipped,
             lowering: LoweringResult::Skipped,
             output: String::new(),
@@ -224,11 +224,11 @@ fn collect_module_results(
             // diagnostic is not a typecheck error and used to go unread here.
             let typecheck = match compiled.parse_errors.get(&module_path) {
                 Some(errors) if !errors.is_empty() => {
-                    TypecheckResult::ParseError { errors: errors.clone() }
+                    TypecheckResult::ParseError { errors: errors.C() }
                 }
                 _ => match compiled.path_to_errors.get(&module_path) {
                     Some(errors) if !errors.is_empty() => {
-                        TypecheckResult::Error { errors: errors.clone() }
+                        TypecheckResult::Error { errors: errors.C() }
                     }
                     _ => TypecheckResult::Success,
                 },

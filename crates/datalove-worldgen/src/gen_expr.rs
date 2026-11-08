@@ -1,5 +1,6 @@
 //! Expression generation using datalit's type-directed generation.
 
+use rmx::prelude::*;
 use rand::Rng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use datalove_datalit::ast_gen;
@@ -96,15 +97,15 @@ pub fn gen_expr<'db, R: Rng>(
     ctx: &mut GenContext<'db>,
 ) -> String {
     // What could stand here, each rolled for on its own.
-    let has_matching_vars = !ctx.variables_of_type(db, type_hint.clone()).is_empty();
+    let has_matching_vars = !ctx.variables_of_type(db, type_hint.C()).is_empty();
     let can_use_var = has_matching_vars && rng.gen_bool(0.4);
 
     // Clone the matching functions to avoid borrow issues.
-    let type_hint_for_filter = type_hint.clone();
+    let type_hint_for_filter = type_hint.C();
     let matching_fns: Vec<FunctionSig<'db>> = ctx.callable_functions()
         .filter(|f| {
             if let Some(ret_type) = &f.return_type {
-                types_match(db, ret_type.clone(), type_hint_for_filter.clone())
+                types_match(db, ret_type.C(), type_hint_for_filter.C())
             } else {
                 false
             }
@@ -117,7 +118,7 @@ pub fn gen_expr<'db, R: Rng>(
     let can_call_fn = !matching_fns.is_empty()
         && config.check_probability(rng, config.function_call_probability);
 
-    let can_arith = supports_bare_arithmetic(type_hint.clone())
+    let can_arith = supports_bare_arithmetic(type_hint.C())
         && config.check_probability(rng, config.arithmetic_probability);
 
     // A fixed integer has no bare arithmetic. What it has is the checked kind
@@ -156,7 +157,7 @@ pub fn gen_expr<'db, R: Rng>(
             .filter(|f| can_call(db, f, ctx))
             .filter_map(|f| {
                 let fields = fields_of(db, f.return_type.as_ref()?, &type_hint);
-                fields.first().map(|field| (f.clone(), field.clone()))
+                fields.first().map(|field| (f.C(), field.C()))
             })
             .collect()
     };
@@ -188,8 +189,8 @@ pub fn gen_expr<'db, R: Rng>(
     let consts: Vec<String> = ctx
         .consts
         .iter()
-        .filter(|c| types_match(db, c.type_hint.clone(), type_hint.clone()))
-        .map(|c| c.name.clone())
+        .filter(|c| types_match(db, c.type_hint.C(), type_hint.C()))
+        .map(|c| c.name.C())
         .collect();
 
     enum Choice {
@@ -231,11 +232,11 @@ pub fn gen_expr<'db, R: Rng>(
 
     match choices.remove(rng.gen_range(0..choices.len())) {
         Choice::Variable => {
-            let matching_vars = ctx.variables_of_type(db, type_hint.clone());
+            let matching_vars = ctx.variables_of_type(db, type_hint.C());
             if matching_vars.is_empty() {
                 return gen_literal(db, rng, type_hint, config);
             }
-            let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
+            let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.C();
             ctx.consume_variable(&var_name);
             var_name
         }
@@ -250,26 +251,26 @@ pub fn gen_expr<'db, R: Rng>(
         }
         Choice::Const => {
             let name = &consts[rng.gen_range(0..consts.len())];
-            if is_linear_type(&type_hint) { format!("{}@", name) } else { name.clone() }
+            if is_linear_type(&type_hint) { format!("{}@", name) } else { name.C() }
         }
         Choice::Projection => {
-            projections[rng.gen_range(0..projections.len())].clone()
+            projections[rng.gen_range(0..projections.len())].C()
         }
         Choice::CallProjection => {
             let (func, field) =
-                call_projections[rng.gen_range(0..call_projections.len())].clone();
+                call_projections[rng.gen_range(0..call_projections.len())].C();
             let call = gen_function_call(db, rng, &func, config, ctx);
             format!("{}.{}", call, field)
         }
         Choice::Index => {
             let mark = early_return_mark.expect("a choice only offered when there is a mark");
             let (container, key) =
-                index_candidates[rng.gen_range(0..index_candidates.len())].clone();
+                index_candidates[rng.gen_range(0..index_candidates.len())].C();
             format!("{}[{}]{}", container, key, mark)
         }
         Choice::Unwrap => {
             let mark = early_return_mark.expect("a choice only offered when there is a mark");
-            let name = unwrappable[rng.gen_range(0..unwrappable.len())].clone();
+            let name = unwrappable[rng.gen_range(0..unwrappable.len())].C();
             ctx.consume_variable(&name);
             format!("{}{}", name, mark)
         }
@@ -291,11 +292,11 @@ fn unwrap_candidates<'db>(
         .iter()
         .filter(|v| !ctx.is_consumed(&v.name) && !ctx.is_loop_protected(&v.name))
         .filter_map(|v| match (&v.type_hint, mark) {
-            (TypeHint::Option(o), "?") => Some((v.name.clone(), (*o.inner_type).clone())),
-            (TypeHint::Result(r), "!") => Some((v.name.clone(), (*r.inner_type).clone())),
+            (TypeHint::Option(o), "?") => Some((v.name.C(), (*o.inner_type).C())),
+            (TypeHint::Result(r), "!") => Some((v.name.C(), (*r.inner_type).C())),
             _ => Option::None,
         })
-        .filter(|(_, inner)| types_match(db, inner.clone(), wanted.clone()))
+        .filter(|(_, inner)| types_match(db, inner.C(), wanted.C()))
         .map(|(name, _)| name)
         .collect()
 }
@@ -317,14 +318,14 @@ fn projection_candidates<'db>(
         match &var.type_hint {
             TypeHint::AnonTuple(t) => {
                 for (i, field) in t.fields.iter().enumerate() {
-                    if types_match(db, field.clone(), wanted.clone()) {
+                    if types_match(db, field.C(), wanted.C()) {
                         found.push(format!("{}.{}", var.name, i));
                     }
                 }
             }
             TypeHint::AnonStruct(t) => {
                 for field in t.fields.iter() {
-                    if types_match(db, (*field.type_hint).clone(), wanted.clone()) {
+                    if types_match(db, (*field.type_hint).C(), wanted.C()) {
                         found.push(format!("{}.{}", var.name, field.name.text(db)));
                     }
                 }
@@ -346,14 +347,14 @@ pub fn fields_of<'db>(
             .fields
             .iter()
             .enumerate()
-            .filter(|(_, field)| types_match(db, (*field).clone(), wanted.clone()))
-            .map(|(i, _)| i.to_string())
+            .filter(|(_, field)| types_match(db, (*field).C(), wanted.C()))
+            .map(|(i, _)| i.S())
             .collect(),
         TypeHint::AnonStruct(t) => t
             .fields
             .iter()
-            .filter(|field| types_match(db, (*field.type_hint).clone(), wanted.clone()))
-            .map(|field| field.name.text(db).to_string())
+            .filter(|field| types_match(db, (*field.type_hint).C(), wanted.C()))
+            .map(|field| field.name.text(db).S())
             .collect(),
         _ => Vec::new(),
     }
@@ -377,23 +378,23 @@ fn index_candidates<'db>(
     let mut found = Vec::new();
     for var in ctx.variables.iter().filter(|v| !ctx.is_consumed(&v.name)) {
         let (element, key) = match &var.type_hint {
-            TypeHint::List(t) => ((*t.element_type).clone(), Option::None),
+            TypeHint::List(t) => ((*t.element_type).C(), Option::None),
             // Only a rank-1 tensor, whose index gives an element. Indexing a
             // tensor of higher rank gives a sub-tensor view of one rank less,
             // which is not the element type and is not a copy type either.
-            TypeHint::Tensor(t) if t.rank == 1 => ((*t.element_type).clone(), Option::None),
-            TypeHint::Map(t) => ((*t.value_type).clone(), Some((*t.key_type).clone())),
+            TypeHint::Tensor(t) if t.rank == 1 => ((*t.element_type).C(), Option::None),
+            TypeHint::Map(t) => ((*t.value_type).C(), Some((*t.key_type).C())),
             _ => continue,
         };
-        if !types_match(db, element, wanted.clone()) {
+        if !types_match(db, element, wanted.C()) {
             continue;
         }
         match key {
             // An index past the end is as interesting as one inside it.
-            Option::None => found.push((var.name.clone(), ": index / 0".to_string())),
+            Option::None => found.push((var.name.C(), ": index / 0".S())),
             Some(key_ty) if is_integer_type(&key_ty) => {
-                let written = pretty_type_hint(db, key_ty.clone());
-                found.push((var.name.clone(), format!(": {} / 0", written)));
+                let written = pretty_type_hint(db, key_ty.C());
+                found.push((var.name.C(), format!(": {} / 0", written)));
             }
             Some(_) => {}
         }
@@ -433,13 +434,13 @@ fn gen_arithmetic_expr<'db, R: Rng>(
     let op = ops[rng.gen_range(0..ops.len())];
 
     // Generate operands - for bigints, may use variables (operators borrow).
-    let lhs = gen_arith_operand(db, rng, type_hint.clone(), config, ctx, is_bigint);
-    let rhs = gen_arith_operand(db, rng, type_hint.clone(), config, ctx, is_bigint);
+    let lhs = gen_arith_operand(db, rng, type_hint.C(), config, ctx, is_bigint);
+    let rhs = gen_arith_operand(db, rng, type_hint.C(), config, ctx, is_bigint);
 
     if is_float || is_bigint {
         // Float and bigint literals need type hints to avoid inference issues.
         // Variables already have known types, so no hint needed.
-        let type_str = pretty_type_hint(db, type_hint.clone());
+        let type_str = pretty_type_hint(db, type_hint.C());
         let lhs_str = match lhs {
             ArithOperand::Literal(s) => format!("(: {} / {})", type_str, s),
             ArithOperand::Variable(s) => s,
@@ -480,7 +481,7 @@ fn gen_overflow_arith_expr<'db, R: Rng>(
     }
 
     let op = ["+", "-", "*", "/"][rng.gen_range(0..4)];
-    let lhs = gen_overflow_operand(db, rng, type_hint.clone(), config, ctx);
+    let lhs = gen_overflow_operand(db, rng, type_hint.C(), config, ctx);
     let rhs = gen_overflow_operand(db, rng, type_hint, config, ctx);
     format!("{} {}{} {}", lhs, op, mark, rhs)
 }
@@ -496,11 +497,11 @@ fn gen_overflow_operand<'db, R: Rng>(
     config: &WorldGenConfig,
     ctx: &GenContext<'db>,
 ) -> String {
-    let borrowable = ctx.variables_of_type_for_borrow(db, type_hint.clone());
+    let borrowable = ctx.variables_of_type_for_borrow(db, type_hint.C());
     if !borrowable.is_empty() && rng.gen_bool(0.4) {
-        return borrowable[rng.gen_range(0..borrowable.len())].name.clone();
+        return borrowable[rng.gen_range(0..borrowable.len())].name.C();
     }
-    let type_str = pretty_type_hint(db, type_hint.clone());
+    let type_str = pretty_type_hint(db, type_hint.C());
     let value = ast_gen::gen_expr_matching_type(db, rng, type_hint, &config.type_config, 0);
     format!("(: {} / {})", type_str, pretty_expr(db, value))
 }
@@ -525,10 +526,10 @@ fn gen_arith_operand<'db, R: Rng>(
 ) -> ArithOperand {
     if allow_variables {
         // For bigints, 40% chance to use an existing variable if available.
-        let borrowable_vars = ctx.variables_of_type_for_borrow(db, type_hint.clone());
+        let borrowable_vars = ctx.variables_of_type_for_borrow(db, type_hint.C());
         if !borrowable_vars.is_empty() && rng.gen_bool(0.4) {
             let var = borrowable_vars[rng.gen_range(0..borrowable_vars.len())];
-            return ArithOperand::Variable(var.name.clone());
+            return ArithOperand::Variable(var.name.C());
         }
     }
     ArithOperand::Literal(gen_literal(db, rng, type_hint, config))
@@ -546,7 +547,7 @@ fn gen_unary_negation<'db, R: Rng>(
     ctx: &GenContext<'db>,
 ) -> String {
     let is_bigint = matches!(type_hint, TypeHint::Int);
-    let operand = gen_arith_operand(db, rng, type_hint.clone(), config, ctx, is_bigint);
+    let operand = gen_arith_operand(db, rng, type_hint.C(), config, ctx, is_bigint);
 
     // Literals need type hints for unary negation.
     // Variables already have known types, so no hint needed.
@@ -583,7 +584,7 @@ fn gen_literal<'db, R: Rng>(
     let expr = ast_gen::gen_expr_matching_type(
         db,
         rng,
-        type_hint.clone(),
+        type_hint.C(),
         &config.type_config,
         0,
     );
@@ -638,8 +639,8 @@ fn argument_candidates<'db>(
         .iter()
         .filter(|v| !ctx.is_consumed(&v.name))
         .filter(|v| !param.mode.wants_a_mutable_binding() || v.is_mutable)
-        .filter(|v| types_match(db, v.type_hint.clone(), param.type_hint.clone()))
-        .map(|v| v.name.clone())
+        .filter(|v| types_match(db, v.type_hint.C(), param.type_hint.C()))
+        .map(|v| v.name.C())
         .collect()
 }
 
@@ -658,12 +659,12 @@ pub fn gen_function_call<'db, R: Rng>(
         if param.mode == ParamMode::In {
             continue;
         }
-        let taken: Vec<String> = spoken_for.iter().map(|(_, n)| n.clone()).collect();
+        let taken: Vec<String> = spoken_for.iter().map(|(_, n)| n.C()).collect();
         let candidates: Vec<String> = argument_candidates(db, param, ctx)
             .into_iter()
             .filter(|name| !taken.contains(name))
             .collect();
-        let name = candidates[rng.gen_range(0..candidates.len())].clone();
+        let name = candidates[rng.gen_range(0..candidates.len())].C();
         spoken_for.push((i, name));
     }
 
@@ -673,7 +674,7 @@ pub fn gen_function_call<'db, R: Rng>(
         .enumerate()
         .map(|(i, param)| match spoken_for.iter().find(|(j, _)| *j == i) {
             Some((_, name)) => format!("{}{}", param.mode.marker(), name),
-            Option::None => gen_expr(db, rng, param.type_hint.clone(), config, ctx),
+            Option::None => gen_expr(db, rng, param.type_hint.C(), config, ctx),
         })
         .collect();
 
@@ -696,10 +697,10 @@ fn gen_bool_atom<'db, R: Rng>(
     if !bool_vars.is_empty() && _rng.gen_bool(0.3) {
         // Variable reference. Bool is local heap, no consume needed.
         let var = bool_vars[_rng.gen_range(0..bool_vars.len())];
-        var.name.clone()
+        var.name.C()
     } else {
         // Literal.
-        if _rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
+        if _rng.gen_bool(0.5) { "true".S() } else { "false".S() }
     }
 }
 
@@ -713,29 +714,29 @@ fn gen_simple_bool_expr<'db, R: Rng>(
     ctx: &mut GenContext<'db>,
 ) -> String {
     let bool_type = gen_bool_type(db);
-    let bool_vars = ctx.variables_of_type(db, bool_type.clone());
+    let bool_vars = ctx.variables_of_type(db, bool_type.C());
     let has_bool_var = !bool_vars.is_empty();
 
     let choice = rng.gen_range(0..10);
     match choice {
         0..=4 => {
             // Simple literal.
-            if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
+            if rng.gen_bool(0.5) { "true".S() } else { "false".S() }
         }
         5..=6 if has_bool_var => {
             // Variable reference.
-            let bool_vars = ctx.variables_of_type(db, bool_type.clone());
+            let bool_vars = ctx.variables_of_type(db, bool_type.C());
             if bool_vars.is_empty() {
-                if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
+                if rng.gen_bool(0.5) { "true".S() } else { "false".S() }
             } else {
                 let var = bool_vars[rng.gen_range(0..bool_vars.len())];
-                var.name.clone()
+                var.name.C()
             }
         }
         7..=9 => {
             // Comparison expression.
             let ty = gen_u32_type(db);
-            let lhs = gen_expr(db, rng, ty.clone(), config, ctx);
+            let lhs = gen_expr(db, rng, ty.C(), config, ctx);
             let rhs = gen_expr(db, rng, ty, config, ctx);
             let ops = [".<", ".>", "<=", ">=", "==", "!="];
             let op = ops[rng.gen_range(0..ops.len())];
@@ -743,7 +744,7 @@ fn gen_simple_bool_expr<'db, R: Rng>(
         }
         _ => {
             // Simple literal fallback.
-            if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
+            if rng.gen_bool(0.5) { "true".S() } else { "false".S() }
         }
     }
 }
@@ -868,8 +869,8 @@ mod tests {
 
         let mut ctx = GenContext::new();
         ctx.variables.push(Variable {
-            name: "my_var".to_string(),
-            type_hint: ty.clone(),
+            name: "my_var".S(),
+            type_hint: ty.C(),
             is_mutable: false,
         });
 
@@ -877,7 +878,7 @@ mod tests {
         let mut used_var = false;
         for seed in 0..100 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            let expr = gen_expr(db, &mut rng, ty.clone(), &config, &mut ctx);
+            let expr = gen_expr(db, &mut rng, ty.C(), &config, &mut ctx);
             if expr == "my_var" {
                 used_var = true;
                 break;
@@ -903,9 +904,9 @@ mod tests {
 
         let mut ctx = GenContext::new();
         ctx.functions.push(FunctionSig {
-            name: "get_value".to_string(),
-            params: vec![Param { name: "flag".to_string(), type_hint: param_ty, mode: ParamMode::In }],
-            return_type: Some(ret_ty.clone()),
+            name: "get_value".S(),
+            params: vec![Param { name: "flag".S(), type_hint: param_ty, mode: ParamMode::In }],
+            return_type: Some(ret_ty.C()),
         });
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
@@ -1086,7 +1087,7 @@ mod tests {
         let mut rng1 = rand::rngs::StdRng::seed_from_u64(42);
         let mut rng2 = rand::rngs::StdRng::seed_from_u64(42);
 
-        let expr1 = gen_expr(db, &mut rng1, ty.clone(), &config, &mut ctx);
+        let expr1 = gen_expr(db, &mut rng1, ty.C(), &config, &mut ctx);
         let expr2 = gen_expr(db, &mut rng2, ty, &config, &mut ctx);
 
         assert_eq!(expr1, expr2, "Same seed should produce same expression");

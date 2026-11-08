@@ -2,6 +2,7 @@
 //!
 //! These tests verify that generated worldfiles parse and typecheck successfully.
 
+use rmx::prelude::*;
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun::{Database, package, package_resolve, package_load_worldfile, to_module_graph, module_graph};
 use datalove_datafun_tycheck::typecheck_module_graph;
@@ -26,7 +27,7 @@ fn typecheck_worldfile(source: &str) -> Vec<String> {
         return vec![format!("Resolution error: {:?}", e)];
     }
 
-    let pkg_graph = result.ok().unwrap();
+    let pkg_graph = result.ok().X();
 
     // Convert to ModuleGraph, parse, and typecheck.
     let graph_with_requires = to_module_graph(&db, package_world, pkg_graph);
@@ -73,7 +74,7 @@ fn test_multiple_seeds_typecheck() {
     let mut failed_seeds = Vec::new();
 
     for seed in 0..50 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
         let errors = typecheck_worldfile(&wf);
 
         if !errors.is_empty() {
@@ -85,7 +86,7 @@ fn test_multiple_seeds_typecheck() {
         eprintln!("Failed seeds:");
         for (seed, errors) in &failed_seeds {
             eprintln!("\nSeed {}:", seed);
-            let wf = gen_worldfile_seeded(*seed, config.clone());
+            let wf = gen_worldfile_seeded(*seed, config.C());
             eprintln!("{}", wf);
             eprintln!("\nErrors:");
             for err in errors {
@@ -110,7 +111,7 @@ fn test_minimal_config_typechecks() {
     config.function_call_probability = 0;
 
     for seed in 0..20 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
         let errors = typecheck_worldfile(&wf);
 
         if !errors.is_empty() {
@@ -162,7 +163,7 @@ fn test_1000_seeds_typecheck() {
     let mut failed_seeds = Vec::new();
 
     for seed in 0..1000 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
         let errors = typecheck_worldfile(&wf);
 
         if !errors.is_empty() {
@@ -198,7 +199,7 @@ fn test_types_in_output() {
     let mut found_types = false;
 
     for seed in 0..100 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         if wf.contains("u32") || wf.contains("i32") || wf.contains("bool")
             || wf.contains("u64") || wf.contains("string")
@@ -217,7 +218,7 @@ fn test_type_consistency() {
     let config = WorldGenConfig::default();
 
     for seed in 0..20 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
         let errors = typecheck_worldfile(&wf);
 
         if !errors.is_empty() {
@@ -262,8 +263,8 @@ fn test_function_signature_types() {
         if trimmed.starts_with("fun ") {
             // Parameters should have type annotations.
             if trimmed.contains("(") && trimmed.contains(")") {
-                let params_start = trimmed.find('(').unwrap();
-                let params_end = trimmed.find(')').unwrap();
+                let params_start = trimmed.find('(').X();
+                let params_end = trimmed.find(')').X();
                 let params = &trimmed[params_start + 1..params_end];
 
                 if !params.is_empty() {
@@ -323,7 +324,7 @@ fn test_primitive_type_variety() {
 
     // Use more seeds to ensure less common types appear.
     for seed in 0..200 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         // Count occurrences of each primitive type (no sigils).
         for ty in ["bool", "u8", "i8", "u16", "i16", "u32", "i32",
@@ -365,7 +366,7 @@ fn test_comparison_operators() {
     let mut found_ops = bct::lookup::LookupSet::default();
 
     for seed in 0..100 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         // Check for comparison operators.
         if wf.contains(".<") { found_ops.insert(".<"); }
@@ -394,9 +395,9 @@ fn test_salsa_type_determinism() {
 
     // Generate the same seed multiple times and verify identical output.
     for seed in [42, 123, 456] {
-        let wf1 = gen_worldfile_seeded(seed, config.clone());
-        let wf2 = gen_worldfile_seeded(seed, config.clone());
-        let wf3 = gen_worldfile_seeded(seed, config.clone());
+        let wf1 = gen_worldfile_seeded(seed, config.C());
+        let wf2 = gen_worldfile_seeded(seed, config.C());
+        let wf3 = gen_worldfile_seeded(seed, config.C());
 
         assert_eq!(wf1, wf2, "Seed {} should be deterministic", seed);
         assert_eq!(wf2, wf3, "Seed {} should be deterministic", seed);
@@ -420,7 +421,7 @@ fn test_arithmetic_expressions() {
     let mut float_div = false;
 
     for seed in 0..300 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         for line in wf.lines() {
             // Check for bigint arithmetic (simple format: 123 + 456).
@@ -468,7 +469,7 @@ fn test_logical_operators() {
     let mut found_xor = false;
 
     for seed in 0..300 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         if wf.contains("not ") { found_not = true; }
         if wf.contains(" and ") { found_and = true; }
@@ -508,7 +509,7 @@ fn test_unary_negation() {
     let mut found_float_neg = false;
 
     for seed in 0..300 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         // Look for unary negation patterns: -(: type / value)
         if wf.contains("-(: int /") { found_int_neg = true; }
@@ -547,7 +548,7 @@ fn test_void_functions() {
     let mut found_void_without_ret = false;
 
     for seed in 0..200 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         // Look for void function patterns.
         let lines: Vec<&str> = wf.lines().collect();
@@ -606,7 +607,7 @@ fn test_bare_loops() {
     let mut found_while_loop = false;
 
     for seed in 0..200 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         for line in wf.lines() {
             let trimmed = line.trim();
@@ -647,7 +648,7 @@ fn test_cross_module_calls_typecheck() {
     let mut found_cross_module_call = false;
 
     for seed in 0..500 {
-        let wf = gen_worldfile_seeded(seed, config.clone());
+        let wf = gen_worldfile_seeded(seed, config.C());
 
         // Check if this worldfile has a cross-module call.
         let has_cross_call = has_cross_module_call(&wf);
@@ -691,7 +692,7 @@ fn has_cross_module_call(wf: &str) -> bool {
             for line in content.lines() {
                 if line.starts_with("import ") {
                     if let Some(name) = line.split('.').last() {
-                        imported.push(name.trim().to_string());
+                        imported.push(name.trim().S());
                     }
                 }
             }

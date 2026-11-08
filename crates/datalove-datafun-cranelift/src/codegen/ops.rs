@@ -1,5 +1,6 @@
 //! Binary and unary operation instruction compilation.
 
+use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -501,7 +502,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
         let rhs_td = self.operand_tydesc(builder, rhs)?;
 
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ty = self.func.value_types[dest.0 as usize].C();
         let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
 
@@ -885,7 +886,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
         let rhs_td = self.operand_tydesc(builder, rhs)?;
 
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ty = self.func.value_types[dest.0 as usize].C();
         let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
         let overflow_ptr = self.frame_addr(builder, overflow_dest, "a checked dynamic binop")?;
@@ -918,7 +919,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_ptr = self.get_operand_ptr(builder, operand)?;
         let value_td = self.operand_tydesc(builder, operand)?;
 
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ty = self.func.value_types[dest.0 as usize].C();
         let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
 
@@ -944,7 +945,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_ptr = self.get_operand_ptr(builder, operand)?;
         let value_td = self.operand_tydesc(builder, operand)?;
 
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ty = self.func.value_types[dest.0 as usize].C();
         let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
         let overflow_ptr =
@@ -1121,7 +1122,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let src_ptr = self.get_operand_ptr(builder, src)?;
         let src_tydesc_ptr = self.operand_tydesc(builder, src)?;
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ty = self.func.value_types[dest.0 as usize].C();
         let dest_tydesc_ptr = self.static_tydesc(builder, &dest_ty)?;
 
         // The destination's own storage for the cloned result.

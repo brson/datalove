@@ -1,5 +1,6 @@
 //! Re-export parser utilities from bcts.
 
+use rmx::prelude::*;
 use datalove_diagnostic_codes::DCode;
 pub use bct::parser_util::{
     eat_number, is_decimal_run, is_hex_word, is_identifier, is_numeric_literal, is_number_word,
@@ -37,11 +38,11 @@ pub fn escape_complaint(error: &bct::escapes::EscapeError) -> (String, String) {
     use bct::escapes::EscapeError;
     let label = match error {
         EscapeError::InvalidEscape { escape, .. } => rmx::std::format!("`\\{escape}` is not an escape"),
-        EscapeError::InvalidUnicodeEscape { reason, .. } => reason.clone(),
-        EscapeError::UnterminatedUnicodeEscape { .. } => "a `\\u{` escape is closed with `}`".to_string(),
+        EscapeError::InvalidUnicodeEscape { reason, .. } => reason.C(),
+        EscapeError::UnterminatedUnicodeEscape { .. } => "a `\\u{` escape is closed with `}`".S(),
     };
     (
-        "invalid escape in string literal".to_string(),
+        "invalid escape in string literal".S(),
         rmx::std::format!("{label}; the escapes are \\\" \\\\ \\n \\r \\t \\0 and \\u{{...}}"),
     )
 }
@@ -194,7 +195,7 @@ pub fn tensor_body_complaint(
     element_count: usize,
 ) -> Option<(String, String)> {
     let spelled = |shape: &[u32]| {
-        shape.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ")
+        shape.iter().map(|e| e.S()).collect::<Vec<_>>().join(" ")
     };
     if body_rank == 1 {
         let holds: u64 = extents.iter().map(|&e| e as u64).product();
@@ -203,7 +204,7 @@ pub fn tensor_body_complaint(
         }
         return Some((
             rmx::std::format!("a tensor of shape `{}` holds {holds} elements, and {element_count} are written", spelled(extents)),
-            "the shape".to_string(),
+            "the shape".S(),
         ));
     }
     if body_shape == extents {
@@ -214,7 +215,7 @@ pub fn tensor_body_complaint(
             "the shape says `{}`, and the body is shaped `{}`",
             spelled(extents), spelled(body_shape),
         ),
-        "a body under a shape is written flat, or shaped as it says".to_string(),
+        "a body under a shape is written flat, or shaped as it says".S(),
     ))
 }
 

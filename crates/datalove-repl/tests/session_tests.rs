@@ -15,7 +15,7 @@ type App = ReplApp<ThreadedExecutor>;
 fn app(fs: &DynFs, save_path: &Path) -> App {
     let executor = ThreadedExecutor::spawn(datalove_sys_packages::system_library, None);
     let mut app = ReplApp::with_executor(executor);
-    app.set_session_path(fs.clone(), save_path.to_path_buf());
+    app.set_session_path(fs.C(), save_path.to_path_buf());
     app
 }
 
@@ -368,12 +368,12 @@ fn undo_and_redo_go_back_and_forth() {
     let before = (code(&app), bindings(&app));
 
     let changes = ["/edit 1 let a = 10", "/help", "/delete 3", "/insert before 2 let d = a * 2"];
-    let mut states = vec![before.clone()];
+    let mut states = vec![before.C()];
     for change in changes {
         submit(&mut app, change);
         states.push((code(&app), bindings(&app)));
     }
-    let after = states.last().X().clone();
+    let after = states.last().X().C();
 
     // Each undo goes back one change; the `/help` between made none, and goes
     // back with the change before it.
@@ -451,7 +451,7 @@ fn detail(app: &mut App) -> datalove_repl::UnitDetail {
     loop {
         app.poll_results();
         if let Some(detail) = app.detail() {
-            return detail.clone();
+            return detail.C();
         }
         assert!(std::time::Instant::now() < deadline, "the engine never described the unit");
         std::thread::sleep(std::time::Duration::from_millis(5));
