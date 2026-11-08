@@ -1,5 +1,6 @@
 ## Blog topic pipeline
 
+- Generative testing for programming languages
 - Testing programming languages by example
 - solving deep-value stack-smashing generally
 - blog-driven development and dogfooding
