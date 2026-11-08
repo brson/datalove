@@ -1,7 +1,7 @@
 //! Function generation.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, Param, ParamMode, Variable};
@@ -16,7 +16,7 @@ use crate::pretty::pretty_type_hint;
 /// satisfy. The other three ask something of the call site -- a `ref` wants a
 /// binding rather than an expression, and a `mut` or an `out` wants a `var` --
 /// so a function that takes one can only be called from somewhere that has it.
-fn gen_param_mode<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> ParamMode {
+fn gen_param_mode(rng: &mut SeededRng, config: &WorldGenConfig) -> ParamMode {
     if !config.check_probability(rng, config.param_mode_probability) {
         return ParamMode::In;
     }
@@ -28,9 +28,9 @@ fn gen_param_mode<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> ParamMode {
 }
 
 /// Generate a function signature.
-pub fn gen_function_signature<'db, R: Rng>(
+pub fn gen_function_signature<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     name: &str,
     config: &WorldGenConfig,
 ) -> FunctionSig<'db> {
@@ -74,9 +74,9 @@ pub fn gen_function_signature<'db, R: Rng>(
 }
 
 /// Generate a complete function definition.
-pub fn gen_function<'db, R: Rng>(
+pub fn gen_function<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     sig: &FunctionSig<'db>,
     config: &WorldGenConfig,
     module_ctx: &GenContext<'db>,

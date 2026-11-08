@@ -8,9 +8,8 @@
 //! Known discrepancies are documented in the test output.
 
 use rmx::prelude::*;
-use rmx::rand::SeedableRng;
-use rmx::rand::rngs::StdRng;
 
+use bct::random::SeededRng;
 use datalove_datalit::ast_gen::AstGenConfig;
 use datalove_datalit::mutation_gen::{Mutation, MutationResult};
 
@@ -366,7 +365,7 @@ fn run_single_mutation_test(
     // Create fresh database for each test to avoid salsa state issues.
     let db = datalove_datafun_compiler::Database::default();
     let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-    let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+    let mut rng = SeededRng::derive(seed, "mutation");
 
     if let Some(result) = mutation.apply(&db, expr, &mut rng) {
         Some(test_error_equiv(&db, &result).is_ok())
@@ -498,7 +497,7 @@ fn test_error_equiv_out_of_range_int_detailed() {
 
     for seed in 0..200 {
         let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+        let mut rng = SeededRng::derive(seed, "mutation");
 
         if let Some(result) = Mutation::OutOfRangeInt.apply(&db, expr, &mut rng) {
             if let Err(e) = test_error_equiv(&db, &result) {
@@ -530,7 +529,7 @@ fn test_error_equiv_wrong_element_type_detailed() {
 
     for seed in 0..200 {
         let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+        let mut rng = SeededRng::derive(seed, "mutation");
 
         if let Some(result) = Mutation::WrongElementType.apply(&db, expr, &mut rng) {
             if let Err(e) = test_error_equiv(&db, &result) {
@@ -560,7 +559,7 @@ fn test_error_equiv_arity_mismatch_detailed() {
 
     for seed in 0..200 {
         let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+        let mut rng = SeededRng::derive(seed, "mutation");
 
         if let Some(result) = Mutation::ArityMismatch.apply(&db, expr, &mut rng) {
             if let Err(e) = test_error_equiv(&db, &result) {
@@ -591,7 +590,7 @@ fn test_error_equiv_remove_type_hint_detailed() {
     for seed in 0..200 {
         let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
 
-        if let Some(result) = Mutation::RemoveTypeHint.apply(&db, expr, &mut StdRng::seed_from_u64(0)) {
+        if let Some(result) = Mutation::RemoveTypeHint.apply(&db, expr, &mut SeededRng::derive(seed, "mutation")) {
             if let Err(e) = test_error_equiv(&db, &result) {
                 failures.push((seed, e));
             }
@@ -619,7 +618,7 @@ fn test_error_equiv_duplicate_field_detailed() {
 
     for seed in 0..200 {
         let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+        let mut rng = SeededRng::derive(seed, "mutation");
 
         if let Some(result) = Mutation::DuplicateField.apply(&db, expr, &mut rng) {
             if let Err(e) = test_error_equiv(&db, &result) {
@@ -649,7 +648,7 @@ fn test_error_equiv_wrong_field_name_detailed() {
 
     for seed in 0..200 {
         let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+        let mut rng = SeededRng::derive(seed, "mutation");
 
         if let Some(result) = Mutation::WrongFieldName.apply(&db, expr, &mut rng) {
             if let Err(e) = test_error_equiv(&db, &result) {
@@ -679,7 +678,7 @@ fn test_error_equiv_swap_map_key_value_detailed() {
 
     for seed in 0..200 {
         let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+        let mut rng = SeededRng::derive(seed, "mutation");
 
         if let Some(result) = Mutation::SwapMapKeyValue.apply(&db, expr, &mut rng) {
             if let Err(e) = test_error_equiv(&db, &result) {
@@ -722,7 +721,7 @@ fn test_error_equiv_source_mutations_detailed() {
 
         for seed in 0..100 {
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.C());
-            let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+            let mut rng = SeededRng::derive(seed, "mutation");
 
             if let Some(result) = mutation.apply(&db, expr, &mut rng) {
                 // Skip edge cases where `er` keyword + malformed input creates
@@ -768,7 +767,7 @@ fn test_debug_bracket_mutations() {
             let result = std::thread::spawn(move || {
                 let db = datalove_datafun_compiler::Database::default();
                 let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
-                let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+                let mut rng = SeededRng::derive(seed, "mutation");
 
                 let original = datalove_datalit::pretty::pretty_print(&db, &expr);
 
@@ -890,7 +889,7 @@ fn test_debug_arity_mismatch() {
         let result = std::thread::spawn(move || {
             let db = datalove_datafun_compiler::Database::default();
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
-            let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+            let mut rng = SeededRng::derive(seed, "mutation");
 
             // For debugging, also print what type of expr was generated.
             let original = datalove_datalit::pretty::pretty_print(&db, &expr);
@@ -939,7 +938,7 @@ fn test_debug_delete_comma() {
         let result = std::thread::spawn(move || {
             let db = datalove_datafun_compiler::Database::default();
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
-            let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+            let mut rng = SeededRng::derive(seed, "mutation");
 
             let original = datalove_datalit::pretty::pretty_print(&db, &expr);
 

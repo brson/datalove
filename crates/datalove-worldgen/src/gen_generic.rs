@@ -15,7 +15,7 @@
 //! elaborate; it depends on the type the call chose.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 
 use datalove_datalit::ast::{
     TypeHint, TypeHintAnonTuple, TypeHintList, TypeHintMap, TypeHintOption, TypeHintSet,
@@ -51,10 +51,10 @@ impl Bound {
     }
 
     /// A type this bound admits.
-    fn pick<'db, R: Rng>(
+    fn pick<'db>(
         &self,
         db: &'db dyn salsa::Database,
-        rng: &mut R,
+        rng: &mut SeededRng,
         config: &WorldGenConfig,
     ) -> TypeHint<'db> {
         match self {
@@ -240,9 +240,9 @@ pub fn gen_generic_function(name: &str, shape: Shape) -> String {
 /// Returns the lines to put before the call, the call itself, and the type of
 /// what comes back -- `None` when nothing does, which makes the call a
 /// statement on its own.
-pub fn gen_generic_call<'db, R: Rng>(
+pub fn gen_generic_call<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     sig: &GenericSig,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
@@ -258,7 +258,7 @@ pub fn gen_generic_call<'db, R: Rng>(
     let list_of = |ty: TypeHint<'db>| TypeHint::List(TypeHintList { element_type: Box::new(ty) });
 
     let mut prelude: Vec<String> = Vec::new();
-    let mut bind = |rng: &mut R,
+    let mut bind = |rng: &mut SeededRng,
                     ctx: &mut GenContext<'db>,
                     prelude: &mut Vec<String>,
                     ty: TypeHint<'db>| -> String {

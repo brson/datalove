@@ -63,8 +63,7 @@ use std::cell::RefCell;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
-use rmx::rand::SeedableRng;
-use rmx::rand_pcg::Pcg64;
+use bct::random::SeededRng;
 
 use datalove_repl::Place;
 use datalove_script_steps::{Change, Entry, Ran, Session, Workspace, read_changes, write_changes};
@@ -75,7 +74,7 @@ use datalove_worldgen::{WorldGenConfig, gen_session_seeded};
 /// The floors are not met by every run of [`DEFAULT_COUNT`] seeds, revives
 /// and blocked units being rare, so this is a start that meets them. It
 /// moves when the generator or its random numbers change.
-const DEFAULT_SEED: u64 = 20;
+const DEFAULT_SEED: u64 = 60;
 const DEFAULT_COUNT: u64 = 20;
 
 /// How many changes a session gets after its units are entered.
@@ -268,7 +267,7 @@ fn generate(seed: u64) -> Case {
     config.binding_access_probability = 50;
     config.expression_unit_probability = 15;
     let session = gen_session_seeded(seed, config);
-    let mut rng = Pcg64::seed_from_u64(seed);
+    let mut rng = SeededRng::derive(seed, "changes");
 
     let entries: Vec<Entry> = session.units.iter().enumerate()
         .map(|(index, unit)| Entry { unit: (index + 1).S(), source: unit.source.C(), expression: unit.expression })
@@ -377,7 +376,7 @@ fn generate(seed: u64) -> Case {
 /// A generated module's source edited: a number changed, as generated, a
 /// function renamed, which its importers then do not find, or a function
 /// that does not compile added, which fails the module.
-fn edit_module(rng: &mut Pcg64, original: &str) -> String {
+fn edit_module(rng: &mut SeededRng, original: &str) -> String {
     match rng.random_range(0..6) {
         0..=1 => perturb(rng, original),
         2 => original.S(),
@@ -396,7 +395,7 @@ fn edit_module(rng: &mut Pcg64, original: &str) -> String {
 
 /// A generated data file's text edited: a number changed, as generated,
 /// text of another type, or text that does not parse.
-fn edit_data(rng: &mut Pcg64, original: &str) -> String {
+fn edit_data(rng: &mut SeededRng, original: &str) -> String {
     match rng.random_range(0..5) {
         0..=1 => perturb(rng, original),
         2 => original.S(),
@@ -447,7 +446,7 @@ fn block(live: &mut Vec<(String, String)>, next: &mut usize) -> Option<Vec<Chang
 /// `live` is the units in session order, with the source each was
 /// generated with, and `next` the number the next unit takes.
 fn aim(
-    rng: &mut Pcg64,
+    rng: &mut SeededRng,
     live: &mut Vec<(String, String)>,
     next: &mut usize,
     shadows: &[(String, String)],
@@ -513,7 +512,7 @@ fn aim(
 
 /// `source` with each integer literal, by chance, replaced by a small other
 /// one, so that an edit changes values and keeps types.
-fn perturb(rng: &mut Pcg64, source: &str) -> String {
+fn perturb(rng: &mut SeededRng, source: &str) -> String {
     let chars: Vec<char> = source.chars().collect();
     let mut out = String::new();
     let mut i = 0;

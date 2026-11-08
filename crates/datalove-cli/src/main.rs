@@ -888,11 +888,7 @@ impl WorldgenCommand {
     fn run(&self) -> AnyResult<()> {
         use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 
-        let seed = self.seed.unwrap_or_else(|| {
-            let seed: u64 = rmx::rand::rng().random();
-            eprintln!("seed: {}", seed);
-            seed
-        });
+        let seed = self.seed.unwrap_or_else(|| bct::random::fresh_seed("seed"));
 
         let config = WorldGenConfig::default();
         let worldfile = gen_worldfile_seeded(seed, config);

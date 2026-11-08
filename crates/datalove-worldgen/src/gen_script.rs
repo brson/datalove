@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 use crate::context::{ConstDef, FunctionSig, GenContext, ModuleInfo, Variable, is_linear_type};
@@ -40,9 +40,9 @@ pub struct GenScript<'db> {
 /// stand among the statements rather than all at the top. Cut into script
 /// units, a `require`, its imports and their callers then fall into units of
 /// their own as often as not.
-pub fn gen_script_items<'db, R: Rng>(
+pub fn gen_script_items<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     modules: &[ModuleInfo<'db>],
 ) -> GenScript<'db> {
@@ -76,7 +76,7 @@ pub fn gen_script_items<'db, R: Rng>(
     let mut items: Vec<ScriptItem> = Vec::new();
     let mut imported: LookupSet<String> = LookupSet::default();
     let fragment = |text: String| ScriptItem { text, expression: false };
-    let mut push = |rng: &mut R, items: &mut Vec<ScriptItem>, ctx: &mut GenContext<'db>, item: ScriptItem| {
+    let mut push = |rng: &mut SeededRng, items: &mut Vec<ScriptItem>, ctx: &mut GenContext<'db>, item: ScriptItem| {
         // A module's function, not yet imported; a function the script
         // declares is called by name.
         let mut called: Vec<String> = ctx.called.drain_unordered()
@@ -156,9 +156,9 @@ pub fn gen_script_items<'db, R: Rng>(
 /// of a function the script declared, which an expression unit, a unit of
 /// its own, always makes from another unit, or an expression of a simple
 /// type, which may read some.
-fn gen_expression_unit<'db, R: Rng>(
+fn gen_expression_unit<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
 ) -> String {
@@ -214,9 +214,9 @@ fn gen_expression_unit<'db, R: Rng>(
 ///   compiles against;
 /// - a data require, `require data local/gen/xN: <type>` of a simple type,
 ///   whose file, a literal of the type, goes in `data`, for a test to edit.
-fn gen_binding_access<'db, R: Rng>(
+fn gen_binding_access<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -272,7 +272,7 @@ fn gen_binding_access<'db, R: Rng>(
     if !callable.is_empty() {
         kinds.extend([11, 11, 11]);
     }
-    let pick = |rng: &mut R, from: &[Variable<'db>]| from[rng.random_range(0..from.len())].C();
+    let pick = |rng: &mut SeededRng, from: &[Variable<'db>]| from[rng.random_range(0..from.len())].C();
 
     match kinds[rng.random_range(0..kinds.len())] {
         0 => {

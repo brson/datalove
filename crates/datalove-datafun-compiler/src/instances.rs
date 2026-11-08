@@ -19,7 +19,8 @@
 
 use rmx::prelude::*;
 use bct::lookup::LookupMap;
-use std::hash::{Hash, Hasher};
+use bct::random::SeededRng;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use datalove_datafun_ir::instantiate::{clean_copy_types, instantiate};
@@ -64,13 +65,10 @@ impl GenericsPolicy {
         match self {
             GenericsPolicy::Off => false,
             GenericsPolicy::All => true,
-            GenericsPolicy::Chaos { seed } => {
-                // `DefaultHasher::new` is keyed the same every time, so the
-                // choices are reproducible from the seed.
-                let mut hasher = std::hash::DefaultHasher::new();
-                (seed, site, callee, bindings).hash(&mut hasher);
-                hasher.finish() & 1 == 1
-            }
+            // A generator of the site's own rather than a draw from one
+            // stream, so that the choice does not depend on the order sites
+            // are rewritten in.
+            GenericsPolicy::Chaos { seed } => SeededRng::derive(seed, (site, callee, bindings)).random_bool(0.5),
         }
     }
 }

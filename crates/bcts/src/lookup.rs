@@ -402,7 +402,7 @@ fn unordered_hash<T: Hash, H: Hasher>(items: impl ExactSizeIterator<Item = T>, s
 }
 
 /// The splitmix64 finalizer.
-fn mix(mut x: u64) -> u64 {
+pub(crate) fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
     x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
     x ^ (x >> 31)

@@ -9,6 +9,8 @@
 use rmx::prelude::*;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+use bcts::random::SeededRng;
+
 /// Returns Ok(token_count) on success, Err(panic_message) on panic.
 fn dbglex(s: &str) -> Result<usize, String> {
     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -49,14 +51,11 @@ fn test_stray_closes_inside_an_unclosed_bracket() {
 fn test_random_bracket_soup() {
     let pieces = ["(", ")", "{", "}", "[", "]", "<", ">", "(|", "|)", "{|", "|}", "[|", "|]",
         "<|", "|>", "%{", "#{", "a", "\n"];
-    let mut seed: u64 = 0x9e3779b97f4a7c15;
+    let mut rng = SeededRng::new(0);
     for case in 0..20_000 {
         let mut text = String::new();
         for _ in 0..case % 13 + 1 {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            text.push_str(pieces[(seed % pieces.len() as u64) as usize]);
+            text.push_str(pieces[rng.random_range(0..pieces.len())]);
             text.push(' ');
         }
         assert!(dbglex(&text).is_ok(), "panicked on {text:?}");

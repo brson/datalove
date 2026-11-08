@@ -1,7 +1,7 @@
 //! Worldfile assembly and entry point.
 
 use rmx::prelude::*;
-use rmx::rand::{Rng, SeedableRng};
+use bct::random::SeededRng;
 use datalove_datalit::Database;
 use crate::config::WorldGenConfig;
 use crate::gen_module::{plan_module_graph, gen_module_type_aliases, gen_module_function_sigs, gen_module_generic_sigs, gen_module};
@@ -55,7 +55,7 @@ fn gen_session_tracked<'db>(
     seed: u64,
     config: WorldGenConfig,
 ) -> GenSession {
-    let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = SeededRng::new(seed);
     let (infos, modules) = gen_modules(db, &mut rng, &config);
     let script = gen_script_items(db, &mut rng, &config, &infos);
     let library = library_sections(&modules, &script.data).join("\n\n");
@@ -100,14 +100,14 @@ fn gen_worldfile_tracked<'db>(
     seed: u64,
     config: WorldGenConfig,
 ) -> String {
-    let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = SeededRng::new(seed);
     gen_worldfile_inner(db, &mut rng, &config)
 }
 
 /// Generate a complete worldfile.
-fn gen_worldfile_inner<'db, R: Rng>(
+fn gen_worldfile_inner<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> String {
     let (infos, modules) = gen_modules(db, rng, config);
@@ -134,9 +134,9 @@ fn library_sections(modules: &[(String, String)], data: &[(String, String)]) -> 
 }
 
 /// Generate the modules, and each one's path and source.
-fn gen_modules<'db, R: Rng>(
+fn gen_modules<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> (Vec<crate::context::ModuleInfo<'db>>, Vec<(String, String)>) {
     let mut sections = Vec::new();

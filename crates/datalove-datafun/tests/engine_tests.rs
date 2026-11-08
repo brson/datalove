@@ -47,13 +47,13 @@
 //!   and was refused at none.
 
 use datalove_datafun_compiler::instances::GenericsPolicy;
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use rmx::prelude::*;
 
+use bct::random::{SeededRng, derive_seed, seed_of};
 use datalove_datafun as datafun;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_cranelift_jit::{DispatcherConfig, JitEngine, OptimizingDispatcher};
@@ -414,9 +414,7 @@ fn check(path: &Path) -> Result<String, String> {
 
     let (reference, rendered) = analyze(&parsed, AnalysisOptions::default(), Setup { engine: Engine::IrWalker, dispatcher: None, differential: None })?;
 
-    let mut seed = DefaultHasher::new();
-    source.hash(&mut seed);
-    let seed = seed.finish();
+    let seed = seed_of(&source);
 
     for (i, engine) in Differential::ALL.into_iter().enumerate() {
         if skip.contains(&engine) || !datalove_exampletest::engine_enabled(engine.name()) {
@@ -429,7 +427,7 @@ fn check(path: &Path) -> Result<String, String> {
             Differential::NoConst => Some(AnalysisOptions { skip_const_inlining: true, ..AnalysisOptions::default() }),
             Differential::NoSpec => Some(AnalysisOptions { skip_specialization: true, ..AnalysisOptions::default() }),
             Differential::Spec => Some(AnalysisOptions { generics: GenericsPolicy::All, ..AnalysisOptions::default() }),
-            Differential::SpecChaos => Some(AnalysisOptions { generics: GenericsPolicy::Chaos { seed }, ..AnalysisOptions::default() }),
+            Differential::SpecChaos => Some(AnalysisOptions { generics: GenericsPolicy::Chaos { seed: derive_seed(seed, "generics") }, ..AnalysisOptions::default() }),
             _ => None,
         };
         if let Some(options) = variant {
@@ -462,7 +460,7 @@ fn check(path: &Path) -> Result<String, String> {
                 differential: Some(engine),
                 engine: Engine::Bytecode,
                 dispatcher: Some(Box::new(
-                    OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.S())?,
+                    OptimizingDispatcher::with_config(DispatcherConfig::chaos(derive_seed(seed, "dispatcher"))).map_err(|e| e.S())?,
                 )),
             }),
             Differential::Osr => Some(Setup {
@@ -470,7 +468,7 @@ fn check(path: &Path) -> Result<String, String> {
                 engine: Engine::Bytecode,
                 dispatcher: Some({
                     let mut jit = JitEngine::new(u32::MAX).map_err(|e| e.S())?;
-                    jit.set_osr_threshold(1 + (seed % 3) as u32);
+                    jit.set_osr_threshold(SeededRng::derive(seed, "osr").random_range(1..=3));
                     Box::new(jit)
                 }),
             }),

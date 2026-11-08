@@ -34,11 +34,11 @@ fn build_module() -> PathBuf {
 /// The module, instantiated with no host functions it can usefully call.
 ///
 /// What it imports is wasm-bindgen's, there because rustmax's portable profile
-/// turns on `getrandom/js` and chrono's `wasmbind` for every wasm target, and
-/// `datalove-datalit` asks for `getrandom/js` itself. Nothing here processes
-/// the module with wasm-bindgen, so those imports are bound to functions that
-/// trap: the compile and the run have to get by without them. Anything else
-/// imported is a host the module needs, and fails the test.
+/// turns on `getrandom/js` and chrono's `wasmbind` for every wasm target.
+/// Nothing here processes the module with wasm-bindgen, so those imports are
+/// bound to functions that trap: the compile and the run have to get by
+/// without them. Anything else imported is a host the module needs, and fails
+/// the test.
 fn instantiate(path: &PathBuf) -> (Store<()>, Instance) {
     let engine = Engine::default();
     let bytes = std::fs::read(path).expect("the module was built");

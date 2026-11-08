@@ -1,6 +1,8 @@
 //! Tests for btreemap runtime functions.
 
 use rmx::prelude::*;
+
+use datalove_rt_tests::shuffled;
 use datalove_rtdt as rtdt;
 use std::cell::RefCell;
 use std::ptr;
@@ -3173,18 +3175,6 @@ fn test_btreemap_full_index_refuses_insert() -> AnyResult<()> {
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     Ok(())
-}
-
-/// A fixed shuffle of `0..n`, so a failure reproduces.
-fn shuffled(n: u32, seed: u64) -> Vec<u32> {
-    let mut xs: Vec<u32> = (0..n).collect();
-    let mut state = seed;
-    for i in (1..xs.len()).rev() {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        let j = (state >> 33) as usize % (i + 1);
-        xs.swap(i, j);
-    }
-    xs
 }
 
 /// A map built in bulk from sorted slices finds every key, including those

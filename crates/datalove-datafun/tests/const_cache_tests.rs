@@ -17,6 +17,7 @@
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, BTreeSet};
 
+use bct::random::SeededRng;
 use datalove_datafun as datafun;
 use datafun::driver::{CompilerOptions, ModuleCompiler};
 
@@ -360,16 +361,11 @@ fn random_edits_match_a_world_that_caches_nothing() {
     let (_, values) = world.compile(&probes);
     assert_eq!(values, world.uncached(&probes));
 
-    // A small LCG, so the sequence is the same every run.
-    let mut seed: u64 = 0x5eed;
-    let mut next = |bound: u64| {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        (seed >> 33) % bound
-    };
+    let mut rng = SeededRng::new(0x5eed);
     for step in 0..24 {
-        let (name, requires) = MODULES[next(MODULES.len() as u64) as usize];
+        let (name, requires) = MODULES[rng.random_range(0..MODULES.len())];
         let (add, padding) = state[name];
-        let edited = if next(3) == 0 { (add, padding + 1) } else { (add + 1 + next(5) as u32, padding) };
+        let edited = if rng.random_range(0..3) == 0 { (add, padding + 1) } else { (add + 1 + rng.random_range(0..5), padding) };
         state.insert(name, edited);
         world.module(name, &source(name, requires, edited.0, edited.1));
 

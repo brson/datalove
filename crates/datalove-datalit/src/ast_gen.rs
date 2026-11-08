@@ -1,6 +1,6 @@
 use rmx::prelude::*;
 use bct::text::InternedText;
-use rmx::rand::{Rng, SeedableRng};
+use bct::random::SeededRng;
 
 use crate::ast::*;
 
@@ -189,7 +189,7 @@ impl Default for TensorConfig {
 }
 
 /// Generate a random identifier (for type names).
-pub fn gen_identifier<R: Rng>(rng: &mut R) -> String {
+pub fn gen_identifier(rng: &mut SeededRng) -> String {
     let prefixes = ["My", "Test", "Gen", "Data", "Value", "Item", "Element"];
     let suffixes = ["Type", "Data", "Value", "Struct", "Enum", ""];
 
@@ -206,7 +206,7 @@ const FIELD_NAME_BASES: &[&str] = &["x", "y", "z", "name", "value", "data", "fie
 const MAX_UNIQUE_FIELD_NAMES: usize = FIELD_NAME_BASES.len() * 10;
 
 /// Generate a random field name.
-pub fn gen_field_name<R: Rng>(rng: &mut R) -> String {
+pub fn gen_field_name(rng: &mut SeededRng) -> String {
     let name = FIELD_NAME_BASES[rng.random_range(0..FIELD_NAME_BASES.len())];
     let num = rng.random_range(0..10);
 
@@ -214,7 +214,7 @@ pub fn gen_field_name<R: Rng>(rng: &mut R) -> String {
 }
 
 /// Generate a variant name: a field name, capitalized as variants are.
-pub fn gen_variant_name<R: Rng>(rng: &mut R) -> String {
+pub fn gen_variant_name(rng: &mut SeededRng) -> String {
     let name = gen_field_name(rng);
     let mut chars = name.chars();
     let first = chars.next().X();
@@ -222,9 +222,9 @@ pub fn gen_variant_name<R: Rng>(rng: &mut R) -> String {
 }
 
 /// Generate a random TypeHint based on configuration.
-pub fn gen_type_hint<'db, R: Rng>(
+pub fn gen_type_hint<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &AstGenConfig,
     depth: usize,
 ) -> TypeHint<'db> {
@@ -410,9 +410,9 @@ pub fn gen_type_hint<'db, R: Rng>(
 }
 
 /// Generate a value matching the given type hint.
-pub fn gen_expr_matching_type<'db, R: Rng>(
+pub fn gen_expr_matching_type<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &AstGenConfig,
     depth: usize,
@@ -611,9 +611,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
 }
 
 /// Generate an unsigned integer expression.
-fn gen_uint_expr<'db, R: Rng, T>(
+fn gen_uint_expr<'db, T>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &AstGenConfig,
     min: T,
     max: T,
@@ -659,9 +659,9 @@ where
 }
 
 /// Generate a signed integer expression.
-fn gen_int_expr<'db, R: Rng, T>(
+fn gen_int_expr<'db, T>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &AstGenConfig,
     min: T,
     max: T,
@@ -727,9 +727,9 @@ const F32_HEX_SPECIAL: &[(&str, &str)] = &[
 /// Uses hex literals for special values (infinity, MIN, MAX, subnormals) that
 /// cannot be represented via decimal float syntax. NaN is excluded because
 /// NaN != NaN breaks property tests.
-fn gen_f32_expr<'db, R: Rng>(
+fn gen_f32_expr<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &AstGenConfig,
 ) -> Expr<'db> {
     match &config.numeric_strategy {
@@ -826,9 +826,9 @@ const F64_HEX_SPECIAL: &[(&str, &str)] = &[
 /// Uses hex literals for special values (infinity, MIN, MAX, subnormals) that
 /// cannot be represented via decimal float syntax. NaN is excluded because
 /// NaN != NaN breaks property tests.
-fn gen_f64_expr<'db, R: Rng>(
+fn gen_f64_expr<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &AstGenConfig,
 ) -> Expr<'db> {
     match &config.numeric_strategy {
@@ -905,7 +905,7 @@ fn gen_f64_expr<'db, R: Rng>(
 }
 
 /// Generate a string expression.
-fn gen_string_expr<'db, R: Rng>(db: &'db dyn salsa::Database, rng: &mut R) -> Expr<'db> {
+fn gen_string_expr<'db>(db: &'db dyn salsa::Database, rng: &mut SeededRng) -> Expr<'db> {
     let strings = vec!["", "a", "test", "hello", "data", "value", "with\"quote", "newline\nhere"];
     let s = strings[rng.random_range(0..strings.len())];
     // String literals in the AST include the surrounding quotes and escaped content.
@@ -926,9 +926,9 @@ fn gen_string_expr<'db, R: Rng>(db: &'db dyn salsa::Database, rng: &mut R) -> Ex
 }
 
 /// Generate an ExprFull matching the given type hint.
-fn gen_expr_full_inner<'db, R: Rng>(
+fn gen_expr_full_inner<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &AstGenConfig,
     depth: usize,
@@ -953,9 +953,9 @@ fn gen_expr_full_inner<'db, R: Rng>(
 }
 
 /// Generate an ExprFull for the entire expression tree.
-fn gen_expr_full_random_type<'db, R: Rng>(
+fn gen_expr_full_random_type<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &AstGenConfig,
 ) -> ExprFull<'db> {
     let type_hint = gen_type_hint(db, rng, config, 0);
@@ -979,6 +979,6 @@ pub fn gen_expr_full_seeded<'db>(
     adjusted_config.type_weights.named_struct_type = 0;
     adjusted_config.type_weights.named_enum_type = 0;
 
-    let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = SeededRng::new(seed);
     gen_expr_full_random_type(db, &mut rng, &adjusted_config)
 }

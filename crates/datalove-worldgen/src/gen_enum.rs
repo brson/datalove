@@ -10,7 +10,7 @@
 //! payload it names, not how elaborate the payload is.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 
 use datalove_datalit::ast::TypeHint;
 
@@ -25,9 +25,9 @@ use crate::pretty::pretty_type_hint;
 /// Named by module as well as by index, under the same rule as the generics:
 /// a module may import one and define its own, and two of a name is an error
 /// rather than a shadowing.
-pub fn gen_module_enums<'db, R: Rng>(
+pub fn gen_module_enums<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     module_index: usize,
 ) -> Vec<EnumDef<'db>> {
@@ -80,9 +80,9 @@ pub fn format_enum<'db>(db: &'db dyn salsa::Database, def: &EnumDef<'db>) -> Str
 /// the variant declares, and an expression left to say its own type often says
 /// a different one. An unadorned `1.5` is an `f64` where the variant wanted an
 /// `f32`, and an empty `%{}` says nothing about what it holds at all.
-pub fn gen_enum_value<'db, R: Rng>(
+pub fn gen_enum_value<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     def: &EnumDef<'db>,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
@@ -131,9 +131,9 @@ pub fn gen_enum_value<'db, R: Rng>(
 /// neither needs an enum to be written. Two atoms of the same name are the
 /// same type, so the variant names are reused here -- what is bound is the
 /// variant standing on its own.
-pub fn gen_bare_variant_let<'db, R: Rng>(
+pub fn gen_bare_variant_let<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     def: &EnumDef<'db>,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
@@ -167,9 +167,9 @@ pub fn gen_bare_variant_let<'db, R: Rng>(
 /// `None` when there is nothing to match on. The input is moved by the match,
 /// so it has to be something this body is allowed to move, and it is consumed
 /// before the arms are written.
-pub fn gen_match<'db, R: Rng>(
+pub fn gen_match<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -266,9 +266,9 @@ pub fn gen_match<'db, R: Rng>(
 }
 
 /// One or two statements for an arm, which must not be empty.
-fn gen_arm_body<'db, R: Rng>(
+fn gen_arm_body<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,

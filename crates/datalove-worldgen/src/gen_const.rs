@@ -13,7 +13,7 @@
 //! that.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 
 use datalove_datalit::ast::TypeHint;
 use datalove_datalit::ast_gen;
@@ -35,9 +35,9 @@ pub fn a_const_can_hold(_ty: &TypeHint<'_>) -> bool {
 }
 
 /// A type a const can hold, asked for until one comes back.
-pub fn gen_const_type<'db, R: Rng>(
+pub fn gen_const_type<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> TypeHint<'db> {
     for _ in 0..8 {
@@ -55,9 +55,9 @@ pub fn gen_const_type<'db, R: Rng>(
 /// A module-level const is in scope for every function in the module, wherever
 /// it is written, which is a different resolution path from a const written
 /// inside a body.
-pub fn gen_module_consts<'db, R: Rng>(
+pub fn gen_module_consts<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     module_index: usize,
 ) -> Vec<ConstDef<'db>> {
@@ -71,9 +71,9 @@ pub fn gen_module_consts<'db, R: Rng>(
 }
 
 /// Write a const's declaration, with a literal for its value.
-pub fn format_const<'db, R: Rng>(
+pub fn format_const<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     def: &ConstDef<'db>,
     config: &WorldGenConfig,
 ) -> String {
@@ -86,9 +86,9 @@ pub fn format_const<'db, R: Rng>(
 }
 
 /// A value a const can be bound to: a literal, naming nothing.
-pub fn gen_const_value<'db, R: Rng>(
+pub fn gen_const_value<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {

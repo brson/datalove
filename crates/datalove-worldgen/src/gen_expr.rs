@@ -1,7 +1,7 @@
 //! Expression generation using datalit's type-directed generation.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
@@ -89,9 +89,9 @@ fn supports_unary_negation(type_hint: &TypeHint<'_>) -> bool {
 /// May be a literal, variable reference, function call, or arithmetic expression.
 /// When a variable is used it gets marked as consumed because ownership
 /// is transferred (moved).
-pub fn gen_expr<'db, R: Rng>(
+pub fn gen_expr<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
@@ -410,9 +410,9 @@ fn index_candidates<'db>(
 ///
 /// For bigints, may use existing variables as operands since operators
 /// use ref semantics (borrow, not move).
-fn gen_arithmetic_expr<'db, R: Rng>(
+fn gen_arithmetic_expr<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
     ctx: &GenContext<'db>,
@@ -466,9 +466,9 @@ fn gen_arithmetic_expr<'db, R: Rng>(
 /// `mark` is `!` or `?`. Both forms have the type of their operands -- the
 /// overflow leaves through the function's return rather than through the
 /// expression -- so this answers for the type it was asked for.
-fn gen_overflow_arith_expr<'db, R: Rng>(
+fn gen_overflow_arith_expr<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     mark: &str,
     config: &WorldGenConfig,
@@ -490,9 +490,9 @@ fn gen_overflow_arith_expr<'db, R: Rng>(
 ///
 /// A variable where there is one of the right type, since a fixed integer is
 /// copied rather than moved and using one costs nothing.
-fn gen_overflow_operand<'db, R: Rng>(
+fn gen_overflow_operand<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
     ctx: &GenContext<'db>,
@@ -516,9 +516,9 @@ enum ArithOperand {
 ///
 /// For bigints, may use an existing variable (operators use ref semantics).
 /// Returns whether the operand is a variable (which already has a known type).
-fn gen_arith_operand<'db, R: Rng>(
+fn gen_arith_operand<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
     ctx: &GenContext<'db>,
@@ -539,9 +539,9 @@ fn gen_arith_operand<'db, R: Rng>(
 ///
 /// Only works for floats and bigints.
 /// For bigints, may use an existing variable as operand.
-fn gen_unary_negation<'db, R: Rng>(
+fn gen_unary_negation<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
     ctx: &GenContext<'db>,
@@ -575,9 +575,9 @@ fn needs_integer_type_hint(type_hint: &TypeHint<'_>) -> bool {
 }
 
 /// Generate a literal expression matching the given type using datalit.
-pub fn gen_literal<'db, R: Rng>(
+pub fn gen_literal<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {
@@ -644,9 +644,9 @@ fn argument_candidates<'db>(
         .collect()
 }
 
-pub fn gen_function_call<'db, R: Rng>(
+pub fn gen_function_call<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     func: &FunctionSig<'db>,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
@@ -698,9 +698,9 @@ pub fn gen_function_call<'db, R: Rng>(
 ///
 /// Used as operand for `not` to avoid precedence issues.
 /// Note: bool is a local heap type, so no ownership tracking needed.
-fn gen_bool_atom<'db, R: Rng>(
+fn gen_bool_atom<'db>(
     db: &'db dyn salsa::Database,
-    _rng: &mut R,
+    _rng: &mut SeededRng,
     _config: &WorldGenConfig,
     ctx: &GenContext<'db>,
 ) -> String {
@@ -720,9 +720,9 @@ fn gen_bool_atom<'db, R: Rng>(
 /// Generate a simple boolean expression (no logical operators).
 ///
 /// Used as operands for logical operators to avoid deep recursion.
-fn gen_simple_bool_expr<'db, R: Rng>(
+fn gen_simple_bool_expr<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
 ) -> String {
@@ -765,9 +765,9 @@ fn gen_simple_bool_expr<'db, R: Rng>(
 /// Generate a boolean expression.
 ///
 /// May include logical operators (not, and, or, xor).
-pub fn gen_bool_expr<'db, R: Rng>(
+pub fn gen_bool_expr<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
 ) -> String {
@@ -805,7 +805,7 @@ mod tests {
     use datalove_datalit::ast::TypeHint;
     use datalove_datalit::Database;
     use crate::context::Variable;
-    use rmx::rand::SeedableRng;
+    use bct::random::SeededRng;
 
     #[test]
     fn test_gen_expr_literal_u32() {
@@ -817,7 +817,7 @@ mod tests {
     fn test_gen_expr_literal_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
 
         let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -836,7 +836,7 @@ mod tests {
     fn test_gen_expr_literal_bool_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
 
         let ty = TypeHint::Bool;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -859,7 +859,7 @@ mod tests {
     fn test_gen_expr_literal_string_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
 
         let ty = TypeHint::String;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -890,7 +890,7 @@ mod tests {
         // Generate many expressions - some should use the variable.
         let mut used_var = false;
         for seed in 0..100 {
-            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = SeededRng::new(seed);
             let expr = gen_expr(db, &mut rng, ty.C(), &config, &mut ctx);
             if expr == "my_var" {
                 used_var = true;
@@ -922,7 +922,7 @@ mod tests {
             return_type: Some(ret_ty.C()),
         });
 
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
         let expr = gen_expr(db, &mut rng, ret_ty, &config, &mut ctx);
 
         // Should generate function call.
@@ -948,7 +948,7 @@ mod tests {
         let mut found_false = false;
 
         for seed in 0..100 {
-            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = SeededRng::new(seed);
             let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr == "true" {
                 found_true = true;
@@ -976,7 +976,7 @@ mod tests {
         let mut found_comparison = false;
 
         for seed in 0..100 {
-            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = SeededRng::new(seed);
             let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr.contains(".<") || expr.contains(".>")
                 || expr.contains("<=") || expr.contains(">=")
@@ -1007,7 +1007,7 @@ mod tests {
         let mut found_xor = false;
 
         for seed in 0..200 {
-            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = SeededRng::new(seed);
             let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr.starts_with("not ") {
                 found_not = true;
@@ -1039,7 +1039,7 @@ mod tests {
     fn test_gen_expr_type_variety_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
 
         // Test various primitive types.
         let types = [
@@ -1074,7 +1074,7 @@ mod tests {
     fn test_gen_expr_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
 
         let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -1097,8 +1097,8 @@ mod tests {
         let ty = TypeHint::U32;
 
         // Same seed should produce same expression.
-        let mut rng1 = rmx::rand::rngs::StdRng::seed_from_u64(42);
-        let mut rng2 = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng1 = SeededRng::new(42);
+        let mut rng2 = SeededRng::new(42);
 
         let expr1 = gen_expr(db, &mut rng1, ty.C(), &config, &mut ctx);
         let expr2 = gen_expr(db, &mut rng2, ty, &config, &mut ctx);

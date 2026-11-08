@@ -1,7 +1,7 @@
 //! Type hint generation using datalit's type system.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 use datalove_datalit::ast::TypeHint;
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
@@ -10,9 +10,9 @@ use crate::pretty::pretty_type_hint;
 /// Generate a type hint.
 ///
 /// Uses datalit's type generation with a config suitable for worldgen.
-pub fn gen_type_hint<'db, R: Rng>(
+pub fn gen_type_hint<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> TypeHint<'db> {
     // Whatever the config asks for. This forced leaf-only types once, to work
@@ -34,9 +34,9 @@ pub fn gen_type_hint<'db, R: Rng>(
 /// The type that comes back is the structural one, because that is what the
 /// value has to be built from and what later statements match against. Only
 /// the way it is written changes.
-pub fn gen_type_hint_and_spelling<'db, R: Rng>(
+pub fn gen_type_hint_and_spelling<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     aliases: &[crate::context::TypeAlias<'db>],
 ) -> (TypeHint<'db>, String) {
@@ -52,9 +52,9 @@ pub fn gen_type_hint_and_spelling<'db, R: Rng>(
 /// Generate a type alias definition.
 ///
 /// Returns the TypeAlias name and its underlying type.
-pub fn gen_type_alias<'db, R: Rng>(
+pub fn gen_type_alias<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     name: &str,
     _config: &WorldGenConfig,
 ) -> (String, TypeHint<'db>) {
@@ -86,7 +86,7 @@ pub fn gen_u32_type<'db>(_db: &'db dyn salsa::Database) -> TypeHint<'db> {
 mod tests {
     use super::*;
     use datalove_datalit::Database;
-    use rmx::rand::SeedableRng;
+    use bct::random::SeededRng;
 
     #[test]
     fn test_gen_bool_type() {
@@ -141,14 +141,14 @@ mod tests {
         let mut leaf_config = WorldGenConfig::default();
         leaf_config.type_config.type_weights =
             datalove_datalit::ast_gen::TypeWeights::leaf_only();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
         for _ in 0..100 {
             let type_hint = gen_type_hint(db, &mut rng, &leaf_config);
             assert!(is_leaf(&type_hint), "leaf-only weights gave a compound type");
         }
 
         let config = WorldGenConfig::default();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
         let compound = (0..100)
             .filter(|_| !is_leaf(&gen_type_hint(db, &mut rng, &config)))
             .count();
@@ -164,27 +164,14 @@ mod tests {
     #[salsa::tracked(returns(copy))]
     fn test_gen_type_alias_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = SeededRng::new(42);
 
         let (name, type_hint) = gen_type_alias(db, &mut rng, "MyType", &config);
         assert_eq!(name, "MyType");
-        // Type should be a leaf type.
-        assert!(matches!(
-            type_hint,
-            TypeHint::Bool
-                | TypeHint::U8
-                | TypeHint::I8
-                | TypeHint::U16
-                | TypeHint::I16
-                | TypeHint::U32
-                | TypeHint::I32
-                | TypeHint::U64
-                | TypeHint::I64
-                | TypeHint::F32
-                | TypeHint::F64
-                | TypeHint::Int
-                | TypeHint::String
-        ));
+        // The type is any the default ast config makes, not one the world's
+        // config would.
+        let expected = ast_gen::gen_type_hint(db, &mut SeededRng::new(42), &ast_gen::AstGenConfig::default(), 0);
+        assert!(type_hint == expected);
     }
 
     #[test]
@@ -211,8 +198,8 @@ mod tests {
         let config = WorldGenConfig::default();
 
         // Same seed should produce structurally identical types.
-        let mut rng1 = rmx::rand::rngs::StdRng::seed_from_u64(42);
-        let mut rng2 = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng1 = SeededRng::new(42);
+        let mut rng2 = SeededRng::new(42);
 
         for _ in 0..10 {
             let ty1 = gen_type_hint(db, &mut rng1, &config);

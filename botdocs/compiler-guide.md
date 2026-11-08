@@ -84,7 +84,7 @@ Reference for the datalove-datafun compiler architecture.
 
 | Crate | Responsibility |
 |-------|----------------|
-| `bcts` (imported as `bct`) | Base compiler toolkit: `ModuleGraph`, `Module`, `ModuleId`, source maps, text interning, `LookupMap` and `LookupSet`, the only hash containers (see [salsa-patterns.md](salsa-patterns.md)) |
+| `bcts` (imported as `bct`) | Base compiler toolkit: `ModuleGraph`, `Module`, `ModuleId`, source maps, text interning, `LookupMap` and `LookupSet`, the only hash containers (see [salsa-patterns.md](salsa-patterns.md)), and `random::SeededRng`, the only random number generator (see `crates/bcts/src/random.rs`) |
 | `datalove-datafun-pkg` | Package loading, `PackageWorld`, worldfile parsing, module resolution |
 | `datalove-pkg-manifest` | A package's `manifest.toml`, read by `package_load` and by `sys/build.rs` |
 | `datalove-rti` | The runtime's call table as riders see it, and `ABI_VERSION` |
@@ -2035,7 +2035,8 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 - `BLESS=1 cargo test` updates expected output. Unset `RUST_BACKTRACE` first.
 - Filter: `cargo test -- filter_name`
 - `just test` runs the whole suite, after clippy's ban on hash containers
-  other than `LookupMap` and `LookupSet`; `just test-64` uses 64-bit collection
+  other than `LookupMap` and `LookupSet` and on random number generators
+  other than `SeededRng`; `just test-64` uses 64-bit collection
   indexes, `just test-sequential` sets `DATALOVE_PARALLEL=0`, `just test-cut`
   parses every collection literal in chunks as well (see
   [plan-parallel-collections.md](plan-parallel-collections.md)), and `just

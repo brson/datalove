@@ -3,6 +3,12 @@
 # hash containers are `bct::lookup::LookupMap` and `LookupSet`, which make each
 # walk say whether it is unordered or sorted. See the determinism section of
 # botdocs/salsa-patterns.md.
+
+# Random numbers pick test programs, edits and JIT decisions, and must be the
+# same from a seed on every run, machine and toolchain, so that a failure can
+# be repeated. So the only generator is `bct::random::SeededRng`, and seeds
+# drawn from the OS come only from `bct::random::fresh_seed`, which prints
+# them. See bcts/src/random.rs.
 disallowed-types = [
     { path = "std::collections::HashMap", reason = "use bct::lookup::LookupMap" },
     { path = "std::collections::HashSet", reason = "use bct::lookup::LookupSet" },
@@ -10,4 +16,25 @@ disallowed-types = [
     { path = "rustc_hash::FxHashSet", reason = "use bct::lookup::LookupSet" },
     { path = "ahash::AHashMap", reason = "use bct::lookup::LookupMap" },
     { path = "ahash::AHashSet", reason = "use bct::lookup::LookupSet" },
+    { path = "rand::rngs::StdRng", reason = "use bct::random::SeededRng" },
+    { path = "rand::rngs::SmallRng", reason = "use bct::random::SeededRng" },
+    { path = "rand::rngs::ThreadRng", reason = "use bct::random::SeededRng" },
+    { path = "rand::rngs::SysRng", reason = "use bct::random::fresh_seed" },
+    { path = "rand_chacha::ChaCha8Rng", reason = "use bct::random::SeededRng" },
+    { path = "rand_chacha::ChaCha12Rng", reason = "use bct::random::SeededRng" },
+    { path = "rand_chacha::ChaCha20Rng", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Lcg64Xsh32", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Lcg128Xsl64", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Mcg128Xsl64", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Lcg128CmDxsm64", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Pcg32", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Pcg64", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Pcg64Mcg", reason = "use bct::random::SeededRng" },
+    { path = "rand_pcg::Pcg64Dxsm", reason = "use bct::random::SeededRng" },
+]
+disallowed-methods = [
+    { path = "rand::rng", reason = "use bct::random::fresh_seed" },
+    { path = "rand::random", reason = "use bct::random::SeededRng" },
+    { path = "rand::random_range", reason = "use bct::random::SeededRng" },
+    { path = "rand::random_bool", reason = "use bct::random::SeededRng" },
 ]

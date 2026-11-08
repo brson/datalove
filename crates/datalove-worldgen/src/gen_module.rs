@@ -1,7 +1,7 @@
 //! Module generation.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 use bct::lookup::LookupSet;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, ModuleInfo, TypeAlias, FunctionSig};
@@ -10,15 +10,15 @@ use crate::gen_function::{gen_function_signature, gen_function};
 use crate::gen_generic::{GenericSig, Shape, gen_generic_function};
 
 /// Generate a module name.
-fn gen_module_name<R: Rng>(rng: &mut R, index: usize) -> String {
+fn gen_module_name(rng: &mut SeededRng, index: usize) -> String {
     let prefixes = ["util", "core", "data", "math", "str", "io"];
     let prefix = prefixes[rng.random_range(0..prefixes.len())];
     format!("{}_{}", prefix, index)
 }
 
 /// Plan the module graph (DAG of dependencies).
-pub fn plan_module_graph<'db, R: Rng>(
-    rng: &mut R,
+pub fn plan_module_graph<'db>(
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> Vec<ModuleInfo<'db>> {
     let module_count = rng.random_range(config.module_count.0..=config.module_count.1);
@@ -42,9 +42,9 @@ pub fn plan_module_graph<'db, R: Rng>(
 }
 
 /// Generate type alias definitions for a module.
-pub fn gen_module_type_aliases<'db, R: Rng>(
+pub fn gen_module_type_aliases<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> Vec<TypeAlias<'db>> {
     let count = rng.random_range(config.type_aliases_per_module.0..=config.type_aliases_per_module.1);
@@ -63,9 +63,9 @@ pub fn gen_module_type_aliases<'db, R: Rng>(
 }
 
 /// Generate function signatures for a module (first pass).
-pub fn gen_module_function_sigs<'db, R: Rng>(
+pub fn gen_module_function_sigs<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> Vec<FunctionSig<'db>> {
     let count = rng.random_range(config.functions_per_module.0..=config.functions_per_module.1);
@@ -85,8 +85,8 @@ pub fn gen_module_function_sigs<'db, R: Rng>(
 /// Named apart from the ordinary ones so that a call site can tell them apart
 /// without looking at a signature: a generic is called by picking types for
 /// its parameters first, which is not how the others are reached.
-pub fn gen_module_generic_sigs<R: Rng>(
-    rng: &mut R,
+pub fn gen_module_generic_sigs(
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     module_index: usize,
 ) -> Vec<GenericSig> {
@@ -103,9 +103,9 @@ pub fn gen_module_generic_sigs<R: Rng>(
 }
 
 /// Generate a complete module.
-pub fn gen_module<'db, R: Rng>(
+pub fn gen_module<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     info: &ModuleInfo<'db>,
     config: &WorldGenConfig,
     prior_modules: &[ModuleInfo<'db>],

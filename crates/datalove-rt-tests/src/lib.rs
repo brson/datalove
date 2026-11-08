@@ -6,6 +6,11 @@
 //!
 //! Put tests in the tests directory.
 
+use rmx::prelude::*;
+use rmx::rand::seq::SliceRandom;
+
+use bct::random::SeededRng;
+
 /// The collection sizes a test runs, without the largest under Miri.
 ///
 /// Miri takes most of an hour over a tree of a thousand elements. Sizes up to
@@ -18,4 +23,11 @@ pub fn sizes<const N: usize>(all: [u32; N]) -> impl Iterator<Item = u32> {
 /// A collection size, held to 300 under Miri; see [`sizes`].
 pub const fn size(n: u32) -> u32 {
     if cfg!(miri) && n > 300 { 300 } else { n }
+}
+
+/// A fixed shuffle of `0..n`, so a failure reproduces.
+pub fn shuffled(n: u32, seed: u64) -> Vec<u32> {
+    let mut xs: Vec<u32> = (0..n).collect();
+    xs.shuffle(&mut SeededRng::new(seed));
+    xs
 }

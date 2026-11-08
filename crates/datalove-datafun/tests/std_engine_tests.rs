@@ -308,9 +308,7 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
     // script's calls: the library's modules are compiled once per worker, and
     // make no call to a generic at a concrete binding to toss one for.
     if datalove_exampletest::engine_enabled("specchaos") {
-        let mut seed = std::hash::DefaultHasher::new();
-        std::hash::Hash::hash(&script_text, &mut seed);
-        let seed = std::hash::Hasher::finish(&seed);
+        let seed = bct::random::seed_of(&script_text);
         world.with_compiled(|db, compiled| {
             specialized(db, compiled, descriptor, &script_text, &interp_value, GenericsPolicy::Chaos { seed })
         })?;

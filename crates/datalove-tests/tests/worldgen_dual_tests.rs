@@ -19,7 +19,7 @@
 use rmx::prelude::*;
 use std::process::Command;
 
-
+use bct::random::{derive_seed, env_seed};
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
@@ -42,15 +42,6 @@ struct RunResult {
     success: bool,
     /// Error message if any.
     error: Option<String>,
-}
-
-/// Get the test seed from environment or generate random.
-fn get_seed() -> u64 {
-    if let Ok(seed_str) = std::env::var("WORLDGEN_DUAL_SEED") {
-        seed_str.parse().expect("WORLDGEN_DUAL_SEED must be a valid u64")
-    } else {
-        rmx::rand::rng().random()
-    }
 }
 
 /// Run worldfile with interpreter using chaos JIT dispatcher.
@@ -77,7 +68,7 @@ fn run_with_chaos_interp(
     // offered, and use the compiled code for 1% of calls from interpreted code.
     // Most compiled code is then reached from other compiled code, through the
     // stubs, with the interpreter in between wherever a callee is not compiled.
-    let config = DispatcherConfig::chaos_with_probabilities(seed, 75, 1);
+    let config = DispatcherConfig::chaos_with_probabilities(derive_seed(seed, "dispatcher"), 75, 1);
     let chaos = match OptimizingDispatcher::with_config(config) {
         Ok(c) => c,
         Err(e) => {
@@ -449,7 +440,7 @@ fn main() {
         return;
     }
 
-    let base_seed = get_seed();
+    let base_seed = env_seed("WORLDGEN_DUAL_SEED");
     println!("Worldgen dual test seed: {}", base_seed);
     println!("(Set WORLDGEN_DUAL_SEED={} to reproduce)", base_seed);
     println!();

@@ -1,7 +1,7 @@
 //! Statement generation.
 
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 use crate::context::{FunctionSig, GenContext, Variable, is_linear_type};
@@ -17,9 +17,9 @@ use crate::pretty::pretty_type_hint;
 /// to. See `gen_generic`.
 ///
 /// `None` when there is no generic in reach.
-pub fn gen_generic_call_stmt<'db, R: Rng>(
+pub fn gen_generic_call_stmt<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -65,9 +65,9 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
 /// `None` unless the enclosing function returns the matching kind -- a `?`
 /// leaves through a `none` and a `!` through an error -- and there is
 /// something of that shape to take apart. The binding is moved out of.
-fn gen_unwrap_let<'db, R: Rng>(
+fn gen_unwrap_let<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
@@ -109,9 +109,9 @@ fn gen_unwrap_let<'db, R: Rng>(
 ///
 /// `None` when the body has no enum in reach, which is every body outside a
 /// module: an enum is declared in the module that defines it.
-fn gen_enum_let<'db, R: Rng>(
+fn gen_enum_let<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -155,9 +155,9 @@ fn gen_enum_let<'db, R: Rng>(
 }
 
 /// Generate a let statement.
-pub fn gen_let<'db, R: Rng>(
+pub fn gen_let<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -194,9 +194,9 @@ pub fn gen_let<'db, R: Rng>(
 }
 
 /// Generate a var statement.
-pub fn gen_var<'db, R: Rng>(
+pub fn gen_var<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -219,9 +219,9 @@ pub fn gen_var<'db, R: Rng>(
 }
 
 /// Generate a set statement.
-pub fn gen_set<'db, R: Rng>(
+pub fn gen_set<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     indent: &str,
@@ -242,9 +242,9 @@ pub fn gen_set<'db, R: Rng>(
 /// Generate a debuglog statement.
 ///
 /// Prints an existing variable's value for interpreter output comparison.
-pub fn gen_debuglog<'db, R: Rng>(
+pub fn gen_debuglog<'db>(
     _db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     ctx: &GenContext<'db>,
     indent: &str,
 ) -> Option<String> {
@@ -261,9 +261,9 @@ pub fn gen_debuglog<'db, R: Rng>(
 }
 
 /// Generate a return statement.
-pub fn gen_ret<'db, R: Rng>(
+pub fn gen_ret<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     indent: &str,
@@ -278,9 +278,9 @@ pub fn gen_ret<'db, R: Rng>(
 }
 
 /// Generate an if statement.
-pub fn gen_if<'db, R: Rng>(
+pub fn gen_if<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -397,9 +397,9 @@ pub fn gen_if<'db, R: Rng>(
 /// that a const and a binding are told apart on sight. Bound to a literal:
 /// the expression may name only other consts, and naming a parameter or a
 /// `let` is an error even where a const of that name is in scope.
-fn gen_const_let<'db, R: Rng>(
+fn gen_const_let<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -426,9 +426,9 @@ fn gen_const_let<'db, R: Rng>(
 /// Driven by what can be called rather than by a type wanted somewhere, for
 /// the reason the unwrapping is: waiting for the coincidence wrote one of
 /// these in three hundred worldfiles.
-fn gen_call_projection_let<'db, R: Rng>(
+fn gen_call_projection_let<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -563,8 +563,8 @@ pub struct IfBinding<'db> {
 /// A variable the body is only borrowing -- one declared outside a loop, say
 /// -- cannot be destructured, since that would be a move. Those are the ones
 /// already marked loop-protected, and they are left out.
-fn gen_if_binding<'db, R: Rng>(
-    rng: &mut R,
+fn gen_if_binding<'db>(
+    rng: &mut SeededRng,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
 ) -> Option<IfBinding<'db>> {
@@ -606,9 +606,9 @@ fn gen_if_binding<'db, R: Rng>(
 /// Generates either:
 /// - `loop while condition` - conditional loop
 /// - `loop` - bare infinite loop (must have break)
-pub fn gen_loop<'db, R: Rng>(
+pub fn gen_loop<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -717,9 +717,9 @@ pub fn gen_loop<'db, R: Rng>(
 /// assigns to it or passes it `mut`, and loop-protected, so nothing moves it.
 /// Each binding is a reference into it, which may be borrowed and cloned but
 /// not moved, so it is loop-protected too.
-pub fn gen_for<'db, R: Rng>(
+pub fn gen_for<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -803,9 +803,9 @@ pub fn gen_for<'db, R: Rng>(
 }
 
 /// Generate a simple statement (let, var, set).
-pub(crate) fn gen_simple_statement<'db, R: Rng>(
+pub(crate) fn gen_simple_statement<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -825,9 +825,9 @@ pub(crate) fn gen_simple_statement<'db, R: Rng>(
 ///
 /// Does NOT generate `continue` statements because they would skip the
 /// final `break` that `gen_loop` adds to prevent infinite loops.
-fn gen_loop_body_statement<'db, R: Rng>(
+fn gen_loop_body_statement<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
@@ -847,9 +847,9 @@ fn gen_loop_body_statement<'db, R: Rng>(
 }
 
 /// Generate a function body statement.
-pub fn gen_body_statement<'db, R: Rng>(
+pub fn gen_body_statement<'db>(
     db: &'db dyn salsa::Database,
-    rng: &mut R,
+    rng: &mut SeededRng,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,

@@ -7,9 +7,8 @@
 
 use rmx::prelude::*;
 use std::any::Any;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
+use bct::random::SeededRng;
 use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, Destination, FuncIdentity,
@@ -88,13 +87,6 @@ impl DispatcherConfig {
         }
     }
 
-    /// Derive seed from hashable value (for test reproducibility).
-    pub fn chaos_from_hashable<H: Hash>(value: H) -> Self {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        Self::chaos(hasher.finish())
-    }
-
     /// Pure interpreter: JIT disabled.
     pub fn interpreter_only() -> Self {
         Self {
@@ -146,12 +138,7 @@ pub struct OptimizingDispatcher {
 /// Its own type so that a decision can be drawn while the JIT engine beside
 /// it is borrowed: whether to use compiled code is decided after the call has
 /// been recorded and the code compiled.
-struct ChaosRng {
-    /// xorshift64 state.
-    state: u64,
-    /// Mixed into each draw so that a zero state still moves.
-    call_counter: u64,
-}
+struct ChaosRng(SeededRng);
 
 /// The probabilities, in percent, of chaos mode's two decisions.
 struct ChaosProbabilities {
@@ -162,13 +149,7 @@ struct ChaosProbabilities {
 impl ChaosRng {
     /// A pseudo-random number in [0, 100).
     fn percent(&mut self) -> u32 {
-        self.call_counter += 1;
-        let mut x = self.state.wrapping_add(self.call_counter);
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.state = x;
-        (x % 100) as u32
+        self.0.random_range(0..100)
     }
 
     /// Whether to go ahead, given a probability in percent; always, given none.
@@ -188,7 +169,7 @@ impl OptimizingDispatcher {
 
     /// Create a new optimizing dispatcher with custom configuration.
     pub fn with_config(config: DispatcherConfig) -> Result<Self, JitError> {
-        let (jit_threshold, rng_state) = match &config.mode {
+        let (jit_threshold, seed) = match &config.mode {
             DispatcherMode::Tuned { jit_threshold } => (*jit_threshold, 0),
             DispatcherMode::Chaos { seed, .. } => {
                 // In chaos mode, use threshold=1 so compilation is always possible.
@@ -217,7 +198,7 @@ impl OptimizingDispatcher {
             jit,
             chaos,
             config,
-            rng: ChaosRng { state: rng_state, call_counter: 0 },
+            rng: ChaosRng(SeededRng::new(seed)),
         })
     }
 
@@ -400,35 +381,6 @@ mod tests {
     fn test_dispatcher_config_interpreter_only() {
         let config = DispatcherConfig::interpreter_only();
         assert!(!config.jit_enabled);
-    }
-
-    #[test]
-    fn test_dispatcher_config_chaos_from_hashable() {
-        let config1 = DispatcherConfig::chaos_from_hashable("test_input");
-        let config2 = DispatcherConfig::chaos_from_hashable("test_input");
-        let config3 = DispatcherConfig::chaos_from_hashable("other_input");
-
-        // Same input should produce same seed.
-        match (&config1.mode, &config2.mode) {
-            (
-                DispatcherMode::Chaos { seed: s1, .. },
-                DispatcherMode::Chaos { seed: s2, .. },
-            ) => {
-                assert_eq!(s1, s2);
-            }
-            _ => panic!("Expected Chaos modes"),
-        }
-
-        // Different input should produce different seed.
-        match (&config1.mode, &config3.mode) {
-            (
-                DispatcherMode::Chaos { seed: s1, .. },
-                DispatcherMode::Chaos { seed: s3, .. },
-            ) => {
-                assert_ne!(s1, s3);
-            }
-            _ => panic!("Expected Chaos modes"),
-        }
     }
 
     #[test]

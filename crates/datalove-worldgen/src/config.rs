@@ -1,6 +1,8 @@
 //! Configuration for worldfile generation.
 
 use rmx::prelude::*;
+
+use bct::random::SeededRng;
 use datalove_datalit::ast_gen::AstGenConfig;
 
 /// Configuration for worldfile generation.
@@ -105,7 +107,7 @@ pub struct WorldGenConfig {
 
 impl WorldGenConfig {
     /// Check probability as bool using rng.
-    pub fn check_probability<R: rmx::rand::Rng>(&self, rng: &mut R, pct: u32) -> bool {
+    pub fn check_probability(&self, rng: &mut SeededRng, pct: u32) -> bool {
         rng.random_range(0..100) < pct
     }
 }

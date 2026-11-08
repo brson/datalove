@@ -5,7 +5,7 @@
 
 use datalove_diagnostic_codes::{DCode, TCode};
 use rmx::prelude::*;
-use rmx::rand::Rng;
+use bct::random::SeededRng;
 
 use crate::ast::*;
 use crate::pretty::pretty_print;
@@ -137,7 +137,7 @@ impl Mutation {
         &self,
         db: &'db dyn salsa::Database,
         expr: ExprFull<'db>,
-        rng: &mut impl Rng,
+        rng: &mut SeededRng,
     ) -> Option<MutationResult> {
         let source = pretty_print(db, &expr);
 
@@ -163,7 +163,7 @@ impl Mutation {
 // ============================================================================
 
 /// Delete an opening bracket from the source.
-fn apply_delete_opening_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
+fn apply_delete_opening_bracket(source: &str, rng: &mut SeededRng) -> Option<MutationResult> {
     let bracket_positions: Vec<(usize, char)> = source
         .char_indices()
         .filter(|(_, c)| *c == '(' || *c == '[' || *c == '{' || *c == '<')
@@ -185,7 +185,7 @@ fn apply_delete_opening_bracket(source: &str, rng: &mut impl Rng) -> Option<Muta
 }
 
 /// Truncate source mid-expression.
-fn apply_truncate_source(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
+fn apply_truncate_source(source: &str, rng: &mut SeededRng) -> Option<MutationResult> {
     if source.len() <= 3 {
         return None;
     }
@@ -216,7 +216,7 @@ fn apply_truncate_source(source: &str, rng: &mut impl Rng) -> Option<MutationRes
 }
 
 /// Delete a comma between collection elements.
-fn apply_delete_comma(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
+fn apply_delete_comma(source: &str, rng: &mut SeededRng) -> Option<MutationResult> {
     let comma_positions: Vec<usize> = source
         .char_indices()
         .filter(|(_, c)| *c == ',')
@@ -239,7 +239,7 @@ fn apply_delete_comma(source: &str, rng: &mut impl Rng) -> Option<MutationResult
 }
 
 /// Add extra closing bracket.
-fn apply_extra_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
+fn apply_extra_closing_bracket(source: &str, rng: &mut SeededRng) -> Option<MutationResult> {
     let brackets = [')', ']', '}', '>'];
     let bracket = brackets[rng.random_range(0..brackets.len())];
 
@@ -264,7 +264,7 @@ fn apply_extra_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<Mutat
 fn apply_out_of_range_int<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
-    _rng: &mut impl Rng,
+    _rng: &mut SeededRng,
 ) -> Option<MutationResult> {
     // Check if the expression has a type hint for a fixed-width integer type.
     let th = expr.type_hint()?;
@@ -309,7 +309,7 @@ fn apply_out_of_range_int<'db>(
 fn apply_wrong_element_type<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
-    _rng: &mut impl Rng,
+    _rng: &mut SeededRng,
 ) -> Option<MutationResult> {
     let inner_expr = expr.expr();
     
@@ -381,7 +381,7 @@ fn apply_wrong_element_type<'db>(
 fn apply_arity_mismatch<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
-    _rng: &mut impl Rng,
+    _rng: &mut SeededRng,
 ) -> Option<MutationResult> {
     let type_hint = expr.type_hint()?;
     let inner_expr = expr.expr();
@@ -492,7 +492,7 @@ fn apply_remove_type_hint<'db>(
 
 
 /// Delete a closing bracket from the source.
-fn apply_delete_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
+fn apply_delete_closing_bracket(source: &str, rng: &mut SeededRng) -> Option<MutationResult> {
     let bracket_positions: Vec<(usize, char)> = source
         .char_indices()
         .filter(|(_, c)| *c == ')' || *c == ']' || *c == '}' || *c == '>')

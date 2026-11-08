@@ -5,6 +5,8 @@
 //! collection holds, read some other way.
 
 use rmx::prelude::*;
+
+use datalove_rt_tests::shuffled;
 use datalove_rt::c::{self, LocalRtHandle, RtStatus};
 use datalove_rtdt as rtdt;
 use std::cell::RefCell;
@@ -370,18 +372,6 @@ unsafe fn map_of<V: Copy>(
 
 unsafe fn destroy_map(rt: &Rt, map: &mut rtdt::Map, map_td: *const rtdt::TyDesc) {
     unsafe { assert_eq!(c::dtlv_rti_btreemap_destroy_local(rt.0, rtdt::AnyOwned::new(map as *mut rtdt::Map as *mut u8), &*map_td), RtStatus::Ok) };
-}
-
-/// A fixed shuffle of `0..n`, so a failure reproduces.
-fn shuffled(n: u32, seed: u64) -> Vec<u32> {
-    let mut xs: Vec<u32> = (0..n).collect();
-    let mut state = seed;
-    for i in (1..xs.len()).rev() {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        let j = (state >> 33) as usize % (i + 1);
-        xs.swap(i, j);
-    }
-    xs
 }
 
 // ==================== Lists ====================

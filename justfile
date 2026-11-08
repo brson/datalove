@@ -19,7 +19,7 @@ LEAK_CHECK := "panic"
 # but `LookupMap` and `LookupSet`; see clippy.toml.
 test:
     uv run --no-project scripts/gen-rti.py --check
-    cargo clippy --all --all-targets -- -A clippy::all -D clippy::disallowed_types
+    cargo clippy --all --all-targets -- -A clippy::all -D clippy::disallowed_types -D clippy::disallowed_methods
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Smoke test the sys riders built and loaded rather than linked in.

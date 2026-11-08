@@ -1,6 +1,8 @@
 //! Tests for btreeset runtime functions.
 
 use rmx::prelude::*;
+
+use datalove_rt_tests::shuffled;
 use datalove_rtdt as rtdt;
 use std::cell::RefCell;
 use std::ptr;
@@ -980,7 +982,7 @@ fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
     Ok(())
 }
 
-/// Test inserting 1000 elements in random order (using hash-based pseudo-random).
+/// Test inserting 1000 elements in a shuffled order.
 #[test]
 fn test_btreeset_insert_1000_random() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -1005,8 +1007,7 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let mut unique_count: rtdt::IndexRepr = 0;
-    for i in 0u32..1000 {
-        let mut element = (i.wrapping_mul(2654435761)) % 1000;
+    for mut element in shuffled(1000, 7) {
         let mut was_inserted = 0u8;
 
         let status = unsafe {
@@ -3698,18 +3699,6 @@ unsafe fn check_set_shape<K: Ord + std::fmt::Debug>(
         assert_eq!(rtdt::Index(elements.len() as rtdt::IndexRepr), set.len);
         elements
     }
-}
-
-/// A fixed shuffle of `0..n`, so a failure reproduces.
-fn shuffled(n: u32, seed: u64) -> Vec<u32> {
-    let mut xs: Vec<u32> = (0..n).collect();
-    let mut state = seed;
-    for i in (1..xs.len()).rev() {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        let j = (state >> 33) as usize % (i + 1);
-        xs.swap(i, j);
-    }
-    xs
 }
 
 unsafe fn insert_u32(rt: datalove_rt::c::LocalRtHandle, set: &mut rtdt::Set, set_td: *const rtdt::TyDesc, elem_td: *const rtdt::TyDesc, x: u32) -> u8 {
