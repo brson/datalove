@@ -58,9 +58,9 @@ test-worldgen SEED='2000':
 
 # Generated script sessions, changed at random a step at a time, each step held
 # to a fresh run of the session's code. `just test` runs seeds 0 to 19; this
-# runs the next 200. A failing seed is shrunk and written out; see the test's
-# docs.
-test-generative SEED='20' COUNT='200':
+# runs the next 1000, about 12 minutes in a debug build. A failing seed is
+# shrunk and written out; see the test's docs.
+test-generative SEED='20' COUNT='1000':
     GENERATIVE_REACTIVE_SEED={{SEED}} GENERATIVE_REACTIVE_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test generative_reactive_tests
 
 # The programs outside the test suite, in release: the benchvs benches built
