@@ -647,32 +647,7 @@ units that compile differently); a rerun unit reporting a later unit's binding
 of a shadowed name; and a unit's export marked given away when the unit had
 bound the name again. Most were found only once worldgen made sessions that
 overwrite, update, take, revive and shadow bindings across units
-(`WorldGenConfig::binding_access_probability`). Planting faults in seeds 0 to
-49: without those statements, with them, and with changes aimed at the units
-they make as well, a shadow put between a provider and a unit that takes or
-writes its binding, or the writer reordered above its provider. The last
-column is the 20 seeds `just test` runs.
-
-| fault | without | with | aimed | aimed, of 20 |
-|---|---|---|---|---|
-| no backward rule | 6 | 22 | 16 | 7 |
-| the forward rule reaches only the seeds | 31 | 27 | 20 | 5 |
-| a rerun reruns no one after it | 7 | 35 | 39 | 16 |
-| no restore of a shadowed binding | 0 | 2 | 24 | 10 |
-| a reorder's restore in the new order | 0 | 0 | 15 | 5 |
-| no Fix or Break as a seed | 0 | 0 | 0 | 0 |
-| a departure's restore by the typecheck | 0 | 0 | 0 | 0 |
-| a rerun reports the nearest binding | 0 | 1 | 2 | 0 |
-| an export given away by a shadowed binding | 0 | 0 | 0 | 0 |
-
-Aiming is what finds the shadows. Of the faults the 20 seeds still miss, the
-first two are caught by a session kept in
-`crates/datalove-tests/tests/generative_reactive/`, the shrunk session that
-found it, and the third by one of those and by `engine_edit_tests`'s
-`a_unit_rerun_before_a_shadow_reports_its_own_binding`. The last no fresh run
-can catch: it fails a unit in the session and in the fresh run alike, so the
-two agree. It is a compile bug that a shadow made reachable, and
-`a_name_given_away_and_bound_again_is_there_for_a_later_unit` is its test.
+(`WorldGenConfig::binding_access_probability`).
 
 Once worldgen also divided by a divisor a change could set to 0, units
 returned early and blocked others, and the generated sessions found that a
@@ -707,6 +682,60 @@ and call the functions before them, and calls of them from later units and
 expression units; and a revive aimed after a take of a `var`, which the
 generated units rarely made. A call of a function declared by a unit that
 failed ownership panicked in lowering, as the `set` had.
+
+Planting a fault in each rule, as the sessions stood once they had
+functions in them: how many of the 20 seeds `just test` runs fail, how many
+of seeds 0 to 199, how many kept sessions in
+`crates/datalove-tests/tests/generative_reactive/`, and which hand-written
+tests -- the datafun script suites and engine fixtures, `engine_edit_tests`
+and the step tables.
+
+| fault | of 20 | of 200 | kept | hand-written |
+|---|---|---|---|---|
+| no backward rule | 5 | 47 | 4 | 11 tests |
+| the forward rule reaches only the seeds | 12 | 130 | 9 | 22 tests |
+| a rerun reruns no one after it | 9 | 91 | 7 | 14 tests |
+| no restore of a shadowed binding | 5 | 56 | 2 | the step tables |
+| a reorder's restore in the new order | 3 | 28 | 4 | none |
+| no Fix or Break as a seed | 0 | 0 | 0 | none |
+| a departure's restore by the typecheck | 0 | 0 | 0 | none |
+| a rerun reports the nearest binding | 0 | 0 | 0 | `a_unit_rerun_before_a_shadow_reports_its_own_binding` |
+| an export given away by a shadowed binding | 0 | 0 | 0 | `a_name_given_away_and_bound_again_is_there_for_a_later_unit` |
+| no unit may be blocked | 0 | 0 | 1 | the step tables |
+| may be blocked only by the graph now | 0 | 0 | 0 | none |
+| an overwrite's provider not compared | 0 | 0 | 0 | the step tables |
+| still taken by a unit that may be blocked | 0 | 0 | 1 | none |
+| still taken whatever the reader found before | 0 | 0 | 2 | none |
+| a unit that failed to compile provides | 0 | 0 | 1 | none |
+| an import's check is no use | 0 | 0 | 1 | none |
+| no typecheck edge | 0 | 0 | 1 | none |
+| no block on a slot a blocked unit left empty | 0 | 0 | 1 | the step tables |
+| a rerun expression unit looks its name up last | 0 | 2 | 2 | none |
+| a `set` of a failed unit's binding panics | 0 | 0 | 1 | engine fixture `var_003` |
+| a call of a failed unit's function panics | 0 | 1 | 1 | engine fixture `var_004` |
+
+**The first five are found by seeds; every rule since, by its kept session.**
+The rules a seed found after the first rounds were found at a few seeds in a
+thousand, in ranges of three thousand, and a run of 200 fails on none of
+them. So a kept session, or a step table, is what holds each of those, and
+the 20 seeds stand watch for the rules every session exercises.
+
+Three faults fail nothing:
+
+- **A departure's restore by the typecheck** cannot show any more. The
+  departure reads the post-edit graph, which no longer counts a unit that
+  failed to compile as a provider, and that unit is the one the fault would
+  pick wrongly.
+- **No Fix or Break as a seed** and **may be blocked only by the graph now**
+  each had a kept session that failed without the rule when it was written,
+  and passes without it now. A rule added since -- the provider comparison
+  or the post-edit graph's corrections -- covers the arrangement they were
+  for. Whether either rule still holds anything up is not known: no test can
+  tell it from a missing one.
+
+An export given away by a shadowed binding no fresh run can catch: it fails
+a unit in the session and in the fresh run alike. It is a compile bug that a
+shadow made reachable, and its test is the one named.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit
