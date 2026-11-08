@@ -22,6 +22,7 @@ is the narrative version. How the engine does it is
 - [Edits that add or remove a write](#user-content-edits-that-add-or-remove-a-write)
 - [Revivals](#user-content-revivals)
 - [Reruns that need reruns](#user-content-reruns-that-need-reruns)
+- [Shadowing](#user-content-shadowing)
 - [Values through intermediate bindings](#user-content-values-through-intermediate-bindings)
 - [Writes through function parameters](#user-content-writes-through-function-parameters)
 - [Modules and data](#user-content-modules-and-data)
@@ -127,7 +128,8 @@ the same unit, taken as one step: the REPL's `/move`.
 A modification of a unit `T` calls for more of them.
 
 - **Retract.** Restore every earlier binding the old code took, overwrote,
-  updated or revived.
+  updated or revived. These are the bindings it found when it last ran, which
+  are not always the ones its names find now.
 - **Apply.** Restore every earlier binding the new code reads, takes or
   updates that a unit after `T` took or wrote when it last ran.
 - **Overwrites.** Don't restore a binding the new code overwrites or revives.
@@ -1445,6 +1447,81 @@ let e = d + 1
 
 The cost of all this: editing the last link of a chain of takes reruns the
 chain from its head, however expensive the head is.
+
+## Shadowing
+
+A unit that binds a name an earlier unit binds shadows it, and the units after
+it find the new binding. So an edit that adds a shadow moves a later write from
+one binding to another. In unit 3, `set b = 500` overwrote unit 1's `b`. Once
+unit 2 binds `b` too, it overwrites unit 2's, and unit 1's `b` holds 500
+although nothing in the session writes it now. Unit 3 reruns for the changed
+value, and retracting its old code restores the binding that code wrote, unit
+1's, by rerunning unit 1. The binding is the one the code found when it ran,
+not the one its name finds now.
+
+<!-- world shadow code -->
+```datalove
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+let x = 0
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = 500
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b + 1
+```
+<!-- end world -->
+
+<!-- world shadow step 1 -->
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | compiles, runs | new | `b` = 500 |
+| 2 | `let x = 0` | - | compiles, runs | new | `x` = 0 |
+| 3 | `set b = 500` | overwrites `b` (1) | compiles, runs | new | - |
+| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
+<!-- end world -->
+
+<!-- world shadow step 2 -->
+**Step 2: unit 2 shadows `b`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 overwrote unit 1's `b` when it last ran, and now overwrites unit 2's | `b` = 125 |
+| 2 | `var b = 7` | - | recompiles, runs | edited | `b` = 500 |
+| 3 | `set b = 500` | overwrites `b` (2) | reruns | its `b` is unit 2's now, of the same type | - |
+| 4 | `let c = b + 1` | reads `b` (2) | reruns | its `b` is unit 2's now, of the same type | `c` = 501 |
+<!-- end world -->
+
+<!-- world shadow step 3 -->
+**Step 3: unit 2 stops shadowing `b`.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | untouched | unit 3 overwrites `b` and needs nothing it held | `b` = 500 |
+| 2 | `let x = 0` | - | recompiles, runs | edited | `x` = 0 |
+| 3 | `set b = 500` | overwrites `b` (1) | reruns | its `b` is unit 1's again, of the same type | - |
+| 4 | `let c = b + 1` | reads `b` (1) | reruns | its `b` is unit 1's again, of the same type | `c` = 501 |
+<!-- end world -->
+
+Taking the shadow away moves the write back, and restores nothing: unit 3
+overwrites unit 1's `b`, and needs nothing it held.
 
 ## Values through intermediate bindings
 

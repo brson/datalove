@@ -1,0 +1,68 @@
+----------
+scriptunit-fragment 1
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment 2
+----------
+
+let x = 0
+
+----------
+scriptunit-fragment 3
+----------
+
+set b = 500
+
+----------
+scriptunit-fragment 4
+----------
+
+let c = b + 1
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 500 |
+| 2 | - | compiles, runs | new | `x` = 0 |
+| 3 | overwrites `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 501 |
+
+----------
+scriptunit-edit 2
+----------
+
+var b = 7
+
+----------
+expect unit 2 shadows `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 overwrote unit 1's `b` when it last ran, and now overwrites unit 2's | `b` = 125 |
+| 2 | - | recompiles, runs | edited | `b` = 500 |
+| 3 | overwrites `b` (2) | reruns | its `b` is unit 2's now, of the same type | - |
+| 4 | reads `b` (2) | reruns | its `b` is unit 2's now, of the same type | `c` = 501 |
+
+----------
+scriptunit-edit 2
+----------
+
+let x = 0
+
+----------
+expect unit 2 stops shadowing `b`
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 3 overwrites `b` and needs nothing it held | `b` = 500 |
+| 2 | - | recompiles, runs | edited | `x` = 0 |
+| 3 | overwrites `b` (1) | reruns | its `b` is unit 1's again, of the same type | - |
+| 4 | reads `b` (1) | reruns | its `b` is unit 1's again, of the same type | `c` = 501 |

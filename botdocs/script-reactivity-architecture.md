@@ -291,6 +291,16 @@ makes B take `a` reaches the later units that use `a`, but that is only known
 once B is compiled. So `rederive_reach` takes the reach, compiles it, and takes
 it again with the new records, until it stops growing.
 
+**But a record holds names, and a binding is a provider's.** A name finds the
+nearest unit that provides it, and an edit that makes a unit between the
+provider and a writer provide the name too -- a shadow -- leaves the writer
+writing the new binding, and the old one as the writer left it. Nothing on the
+graph as it is now points at the old binding. So the backward rule also looks
+up each name a reached unit took or wrote on the held graph, and where that
+finds another provider than the name finds now, reruns the nearest unit that
+sets the old binding without reading it, among the units that still find it.
+Inserting a unit that shadows a name is the same edit, and goes the same way.
+
 **Overwrites and revivals narrow it.** `UnitLowerRecord::overwrites` is the
 part of `writes` the unit writes on every way through it, early returns
 included, before reading what the binding held. Ownership analysis decides it

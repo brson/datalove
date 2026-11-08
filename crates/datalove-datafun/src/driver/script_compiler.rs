@@ -1098,6 +1098,30 @@ impl<'db> ScriptCompiler<'db> {
                         added |= rerun_starts.insert(setter);
                     }
                 }
+                // What the unit took or wrote when it last ran is a binding,
+                // not a name, and the name may find another binding now: a
+                // unit between them provides it since the edit, and shadows
+                // it. The unit runs against the new binding, and nothing
+                // gives back the old one what the unit took or wrote of it,
+                // so what built the old one runs again. That is the nearest
+                // unit that sets it without reading it, among the units that
+                // still find it.
+                for name in &held.changed[unit] {
+                    let Some(old) = (0..unit).rev().find(|earlier| held.provides[*earlier].contains(name)) else {
+                        continue;
+                    };
+                    if provider(unit, name) == Some(old) {
+                        continue;
+                    }
+                    let shadow = (old + 1..unit).find(|later| provides[*later].contains(name))
+                        .expect("a nearer provider than the held one");
+                    let setter = (old..shadow).rev()
+                        .find(|earlier| provides[*earlier].contains(name) || writes_without_reading(*earlier, name))
+                        .expect("the held provider provides the name");
+                    if !reached(setter) {
+                        added |= rerun_starts.insert(setter);
+                    }
+                }
             }
             if !added {
                 return (0..count).filter(|unit| reached(*unit)).collect();
