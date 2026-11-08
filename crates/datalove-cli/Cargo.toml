@@ -17,7 +17,6 @@ datalove.workspace = true
 datalove-repl-rat.workspace = true
 datalove-worldgen.workspace = true
 pulldown-cmark = "0.12"
-rand = "0.8"
 
 [[bin]]
 name = "datalove"

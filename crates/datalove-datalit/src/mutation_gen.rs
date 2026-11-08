@@ -5,7 +5,7 @@
 
 use datalove_diagnostic_codes::{DCode, TCode};
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 
 use crate::ast::*;
 use crate::pretty::pretty_print;
@@ -173,7 +173,7 @@ fn apply_delete_opening_bracket(source: &str, rng: &mut impl Rng) -> Option<Muta
         return None;
     }
 
-    let (pos, bracket) = bracket_positions[rng.gen_range(0..bracket_positions.len())];
+    let (pos, bracket) = bracket_positions[rng.random_range(0..bracket_positions.len())];
     let mut result = source.S();
     result.remove(pos);
 
@@ -197,7 +197,7 @@ fn apply_truncate_source(source: &str, rng: &mut impl Rng) -> Option<MutationRes
         return None;
     }
 
-    let pos = rng.gen_range(min_pos..max_pos);
+    let pos = rng.random_range(min_pos..max_pos);
 
     // Find a valid UTF-8 boundary.
     let truncate_pos = source[..pos]
@@ -227,7 +227,7 @@ fn apply_delete_comma(source: &str, rng: &mut impl Rng) -> Option<MutationResult
         return None;
     }
 
-    let pos = comma_positions[rng.gen_range(0..comma_positions.len())];
+    let pos = comma_positions[rng.random_range(0..comma_positions.len())];
     let mut result = source.S();
     result.remove(pos);
 
@@ -241,10 +241,10 @@ fn apply_delete_comma(source: &str, rng: &mut impl Rng) -> Option<MutationResult
 /// Add extra closing bracket.
 fn apply_extra_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
     let brackets = [')', ']', '}', '>'];
-    let bracket = brackets[rng.gen_range(0..brackets.len())];
+    let bracket = brackets[rng.random_range(0..brackets.len())];
 
     // Insert at a random position (preferring middle of source).
-    let pos = rng.gen_range(source.len() / 4..3 * source.len() / 4).min(source.len());
+    let pos = rng.random_range(source.len() / 4..3 * source.len() / 4).min(source.len());
 
     let mut result = source.S();
     result.insert(pos, bracket);
@@ -502,7 +502,7 @@ fn apply_delete_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<Muta
         return None;
     }
 
-    let (pos, bracket) = bracket_positions[rng.gen_range(0..bracket_positions.len())];
+    let (pos, bracket) = bracket_positions[rng.random_range(0..bracket_positions.len())];
     let mut result = source.S();
     result.remove(pos);
 

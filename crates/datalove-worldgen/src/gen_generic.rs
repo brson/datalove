@@ -15,7 +15,7 @@
 //! elaborate; it depends on the type the call chose.
 
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 
 use datalove_datalit::ast::{
     TypeHint, TypeHintAnonTuple, TypeHintList, TypeHintMap, TypeHintOption, TypeHintSet,
@@ -60,7 +60,7 @@ impl Bound {
         match self {
             // Every type is ordered, so neither of these narrows anything.
             Bound::None | Bound::Ord => gen_type_hint(db, rng, config),
-            Bound::FixedInt => match rng.gen_range(0..10) {
+            Bound::FixedInt => match rng.random_range(0..10) {
                 0 => TypeHint::U8,
                 1 => TypeHint::I8,
                 2 => TypeHint::U16,
@@ -73,7 +73,7 @@ impl Bound {
                 _ => TypeHint::Offset,
             },
             Bound::Float => {
-                if rng.gen_bool(0.5) { TypeHint::F32 } else { TypeHint::F64 }
+                if rng.random_bool(0.5) { TypeHint::F32 } else { TypeHint::F64 }
             }
         }
     }

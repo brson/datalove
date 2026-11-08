@@ -886,11 +886,10 @@ impl ScriptWorldCommand {
 
 impl WorldgenCommand {
     fn run(&self) -> AnyResult<()> {
-        use rand::Rng;
         use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 
         let seed = self.seed.unwrap_or_else(|| {
-            let seed: u64 = rand::thread_rng().r#gen();
+            let seed: u64 = rmx::rand::rng().random();
             eprintln!("seed: {}", seed);
             seed
         });

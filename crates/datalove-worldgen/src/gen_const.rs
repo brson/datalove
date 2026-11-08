@@ -13,7 +13,7 @@
 //! that.
 
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 
 use datalove_datalit::ast::TypeHint;
 use datalove_datalit::ast_gen;
@@ -61,7 +61,7 @@ pub fn gen_module_consts<'db, R: Rng>(
     config: &WorldGenConfig,
     module_index: usize,
 ) -> Vec<ConstDef<'db>> {
-    let count = rng.gen_range(config.consts_per_module.0..=config.consts_per_module.1);
+    let count = rng.random_range(config.consts_per_module.0..=config.consts_per_module.1);
     (0..count)
         .map(|i| ConstDef {
             name: format!("CONST{}_{}", module_index, i),

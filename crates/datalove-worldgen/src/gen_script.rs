@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 
-use rand::Rng;
+use rmx::rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 use crate::context::{ConstDef, GenContext, ModuleInfo, Variable, is_linear_type};
@@ -89,12 +89,12 @@ pub fn gen_script_items<'db, R: Rng>(
             let required = match items.iter().position(|item| item.text == require) {
                 Some(at) => at,
                 None => {
-                    let at = rng.gen_range(0..=items.len());
+                    let at = rng.random_range(0..=items.len());
                     items.insert(at, fragment(require));
                     at
                 }
             };
-            let at = rng.gen_range(required + 1..=items.len());
+            let at = rng.random_range(required + 1..=items.len());
             items.insert(at, fragment(format!("import {}.{}", module.alias(), name)));
         }
         items.push(item);
@@ -102,7 +102,7 @@ pub fn gen_script_items<'db, R: Rng>(
 
     // Generate script statements.
     let mut var_counter = 0;
-    let stmt_count = rng.gen_range(config.script_statements.0..=config.script_statements.1);
+    let stmt_count = rng.random_range(config.script_statements.0..=config.script_statements.1);
 
     for _ in 0..stmt_count {
         if config.expression_unit_probability > 0
@@ -126,13 +126,13 @@ pub fn gen_script_items<'db, R: Rng>(
     let live_vars: Vec<_> = ctx.variables.iter()
         .filter(|v| !ctx.is_consumed(&v.name))
         .collect();
-    if !live_vars.is_empty() && rng.gen_bool(0.7) {
-        let var = live_vars[rng.gen_range(0..live_vars.len())];
+    if !live_vars.is_empty() && rng.random_bool(0.7) {
+        let var = live_vars[rng.random_range(0..live_vars.len())];
         // Use debuglog to output the value.
         let stmt = format!("debuglog {}", var.name);
         push(rng, &mut items, &mut ctx, fragment(stmt));
     } else if !ctx.imported_functions.is_empty() {
-        let func = ctx.imported_functions[rng.gen_range(0..ctx.imported_functions.len())].C();
+        let func = ctx.imported_functions[rng.random_range(0..ctx.imported_functions.len())].C();
         if let Some(ret_ty) = func.return_type {
             // Bound to a name carrying the type before it is printed. Some
             // expressions cannot say their own type -- `er error 100` does not
@@ -162,10 +162,10 @@ fn gen_expression_unit<'db, R: Rng>(
         .map(|v| v.name.C())
         .chain(ctx.consts.iter().map(|c| format!("{}@", c.name)))
         .collect();
-    if !named.is_empty() && rng.gen_bool(0.5) {
-        return named[rng.gen_range(0..named.len())].C();
+    if !named.is_empty() && rng.random_bool(0.5) {
+        return named[rng.random_range(0..named.len())].C();
     }
-    let type_hint = match rng.gen_range(0..3) {
+    let type_hint = match rng.random_range(0..3) {
         0 => TypeHint::Int,
         1 => TypeHint::I64,
         _ => TypeHint::Bool,
@@ -247,9 +247,9 @@ fn gen_binding_access<'db, R: Rng>(
     if !ctx.variables.is_empty() {
         kinds.push(4);
     }
-    let pick = |rng: &mut R, from: &[Variable<'db>]| from[rng.gen_range(0..from.len())].C();
+    let pick = |rng: &mut R, from: &[Variable<'db>]| from[rng.random_range(0..from.len())].C();
 
-    match kinds[rng.gen_range(0..kinds.len())] {
+    match kinds[rng.random_range(0..kinds.len())] {
         0 => {
             let v = pick(rng, &writable);
             format!("set {} = {}", v.name, gen_literal(db, rng, v.type_hint, config))
@@ -278,7 +278,7 @@ fn gen_binding_access<'db, R: Rng>(
             let name = format!("d{}", *var_counter);
             *var_counter += 1;
             ctx.variables.push(Variable { name: name.C(), type_hint: TypeHint::Int, is_mutable: true });
-            format!("var {}: int = {}", name, rng.gen_range(1..10))
+            format!("var {}: int = {}", name, rng.random_range(1..10))
         }
         7 => {
             let d = pick(rng, &divisors);
@@ -286,19 +286,19 @@ fn gen_binding_access<'db, R: Rng>(
             *var_counter += 1;
             ctx.variables.push(Variable { name: name.C(), type_hint: TypeHint::Int, is_mutable: false });
             quotients.push(name.C());
-            format!("let {}: int = {} /! {}", name, rng.gen_range(0..200), d.name)
+            format!("let {}: int = {} /! {}", name, rng.random_range(0..200), d.name)
         }
         9 => {
-            let q = live_quotients[rng.gen_range(0..live_quotients.len())].C();
+            let q = live_quotients[rng.random_range(0..live_quotients.len())].C();
             let name = format!("v{}", *var_counter);
             *var_counter += 1;
             ctx.variables.push(Variable { name: name.C(), type_hint: TypeHint::Int, is_mutable: false });
-            format!("let {}: int = {} + {}", name, q, rng.gen_range(0..10))
+            format!("let {}: int = {} + {}", name, q, rng.random_range(0..10))
         }
         8 => {
             let name = format!("x{}", *var_counter);
             *var_counter += 1;
-            let type_hint = match rng.gen_range(0..4) {
+            let type_hint = match rng.random_range(0..4) {
                 0 => TypeHint::Int,
                 1 => TypeHint::I64,
                 2 => TypeHint::Bool,

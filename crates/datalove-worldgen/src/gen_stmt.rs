@@ -1,7 +1,7 @@
 //! Statement generation.
 
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 use crate::context::{FunctionSig, GenContext, Variable, is_linear_type};
@@ -28,7 +28,7 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
     if ctx.generic_functions.is_empty() {
         return None;
     }
-    let sig = ctx.generic_functions[rng.gen_range(0..ctx.generic_functions.len())].C();
+    let sig = ctx.generic_functions[rng.random_range(0..ctx.generic_functions.len())].C();
     let (prelude, call, result) =
         crate::gen_generic::gen_generic_call(db, rng, &sig, config, ctx, var_counter);
 
@@ -87,7 +87,7 @@ fn gen_unwrap_let<'db, R: Rng>(
         return Option::None;
     }
 
-    let (scrutinee, inner) = candidates[rng.gen_range(0..candidates.len())].C();
+    let (scrutinee, inner) = candidates[rng.random_range(0..candidates.len())].C();
     ctx.consume_variable(&scrutinee);
 
     let name = format!("v{}", *var_counter);
@@ -120,12 +120,12 @@ fn gen_enum_let<'db, R: Rng>(
     if ctx.enums.is_empty() {
         return Option::None;
     }
-    let def = ctx.enums[rng.gen_range(0..ctx.enums.len())].C();
+    let def = ctx.enums[rng.random_range(0..ctx.enums.len())].C();
 
     // Sometimes the variant on its own rather than widened. What is bound is
     // then of the atom's or the term's own type, which nothing matches over
     // and nothing else reaches for -- it is written to be written.
-    if rng.gen_bool(0.3) {
+    if rng.random_bool(0.3) {
         let (prelude, written_type, value) = crate::gen_enum::gen_bare_variant_let(
             db, rng, &def, config, ctx, var_counter, indent);
         let name = format!("v{}", *var_counter);
@@ -231,7 +231,7 @@ pub fn gen_set<'db, R: Rng>(
         return None;
     }
 
-    let var_idx = rng.gen_range(0..mutable_vars.len());
+    let var_idx = rng.random_range(0..mutable_vars.len());
     let var_name = mutable_vars[var_idx].name.C();
     let var_type = mutable_vars[var_idx].type_hint.C();
     let value = gen_expr(db, rng, var_type, config, ctx);
@@ -256,7 +256,7 @@ pub fn gen_debuglog<'db, R: Rng>(
     if available.is_empty() {
         return None;
     }
-    let var = available[rng.gen_range(0..available.len())];
+    let var = available[rng.random_range(0..available.len())];
     Some(format!("{}debuglog {}", indent, var.name))
 }
 
@@ -341,7 +341,7 @@ pub fn gen_if<'db, R: Rng>(
         });
     }
 
-    let then_stmt_count = rng.gen_range(1..=2);
+    let then_stmt_count = rng.random_range(1..=2);
     for _ in 0..then_stmt_count {
         let stmt = gen_simple_statement(db, rng, config, ctx, var_counter, &inner_indent);
         result.push_str(&stmt);
@@ -355,7 +355,7 @@ pub fn gen_if<'db, R: Rng>(
     // Maybe generate else-body. A result destructured above has to have one,
     // and it has to bind what went wrong.
     let error_binding = binding.as_ref().and_then(|b| b.error_binding.C());
-    if error_binding.is_some() || rng.gen_bool(0.5) {
+    if error_binding.is_some() || rng.random_bool(0.5) {
         match &error_binding {
             Some(err) => result.push_str(&format!("{}else |{}|\n", indent, err)),
             Option::None => result.push_str(&format!("{}else\n", indent)),
@@ -373,7 +373,7 @@ pub fn gen_if<'db, R: Rng>(
             });
         }
 
-        let else_stmt_count = rng.gen_range(1..=2);
+        let else_stmt_count = rng.random_range(1..=2);
         for _ in 0..else_stmt_count {
             let stmt = gen_simple_statement(db, rng, config, ctx, var_counter, &inner_indent);
             result.push_str(&stmt);
@@ -511,9 +511,9 @@ fn gen_call_projection_let<'db, R: Rng>(
         .map(|(i, _)| i)
         .collect();
     let chosen = if !indexes.is_empty() {
-        indexes[rng.gen_range(0..indexes.len())]
+        indexes[rng.random_range(0..indexes.len())]
     } else {
-        rng.gen_range(0..candidates.len())
+        rng.random_range(0..candidates.len())
     };
 
     let (func, step, result_type) = candidates[chosen].C();
@@ -585,7 +585,7 @@ fn gen_if_binding<'db, R: Rng>(
     }
 
     let (scrutinee, payload_type, wants_error) =
-        candidates[rng.gen_range(0..candidates.len())].C();
+        candidates[rng.random_range(0..candidates.len())].C();
     ctx.consume_variable(&scrutinee);
 
     let name = format!("v{}", *var_counter);
@@ -615,7 +615,7 @@ pub fn gen_loop<'db, R: Rng>(
     indent: &str,
 ) -> String {
     // 30% chance to generate bare loop, 70% loop while.
-    let is_bare_loop = rng.gen_bool(0.3);
+    let is_bare_loop = rng.random_bool(0.3);
 
     // The flag a `continue` is guarded by, declared before the loop so the
     // body can put it out. See where it is used, below.
@@ -685,7 +685,7 @@ pub fn gen_loop<'db, R: Rng>(
         result.push_str(&format!("{}end if\n", inner_indent));
     }
 
-    let body_stmt_count = rng.gen_range(1..=3);
+    let body_stmt_count = rng.random_range(1..=3);
     for i in 0..body_stmt_count {
         // Always end with break to prevent infinite loops.
         // Even `loop while` conditions can be always-true (e.g., `not false`).
@@ -734,7 +734,7 @@ pub fn gen_for<'db, R: Rng>(
     if walkable.is_empty() {
         return Option::None;
     }
-    let walked = ctx.variables[walkable[rng.gen_range(0..walkable.len())]].C();
+    let walked = ctx.variables[walkable[rng.random_range(0..walkable.len())]].C();
 
     let elem_type = |rank_one: TypeHint<'db>, t: &datalove_datalit::ast::TypeHintTensor<'db>| {
         if t.rank == 1 {
@@ -746,7 +746,7 @@ pub fn gen_for<'db, R: Rng>(
             })
         }
     };
-    let index_too = rng.gen_bool(0.4);
+    let index_too = rng.random_bool(0.4);
     let bound: Vec<TypeHint<'db>> = match &walked.type_hint {
         TypeHint::List(l) if index_too => vec![TypeHint::Index, (*l.element_type).C()],
         TypeHint::List(l) => vec![(*l.element_type).C()],
@@ -787,7 +787,7 @@ pub fn gen_for<'db, R: Rng>(
         ctx.loop_protect_variable(name);
     }
 
-    for _ in 0..rng.gen_range(1..=3) {
+    for _ in 0..rng.random_range(1..=3) {
         let stmt = gen_loop_body_statement(db, rng, config, ctx, var_counter, &inner_indent);
         result.push_str(&stmt);
         result.push('\n');
@@ -811,7 +811,7 @@ pub(crate) fn gen_simple_statement<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    let choice = rng.gen_range(0..10);
+    let choice = rng.random_range(0..10);
     match choice {
         0..=3 => gen_let(db, rng, config, ctx, var_counter, indent),
         4..=6 => gen_var(db, rng, config, ctx, var_counter, indent),
@@ -833,7 +833,7 @@ fn gen_loop_body_statement<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    let choice = rng.gen_range(0..14);
+    let choice = rng.random_range(0..14);
     match choice {
         0..=4 => gen_let(db, rng, config, ctx, var_counter, indent),
         5..=8 => gen_var(db, rng, config, ctx, var_counter, indent),
@@ -916,7 +916,7 @@ pub fn gen_body_statement<'db, R: Rng>(
         }
     }
 
-    let choice = rng.gen_range(0..13);
+    let choice = rng.random_range(0..13);
     match choice {
         0..=3 => gen_let(db, rng, config, ctx, var_counter, indent),
         4..=5 => gen_var(db, rng, config, ctx, var_counter, indent),

@@ -1,6 +1,6 @@
 use rmx::prelude::*;
 use bct::text::InternedText;
-use rand::{Rng, SeedableRng};
+use rmx::rand::{Rng, SeedableRng};
 
 use crate::ast::*;
 
@@ -193,9 +193,9 @@ pub fn gen_identifier<R: Rng>(rng: &mut R) -> String {
     let prefixes = ["My", "Test", "Gen", "Data", "Value", "Item", "Element"];
     let suffixes = ["Type", "Data", "Value", "Struct", "Enum", ""];
 
-    let prefix = prefixes[rng.gen_range(0..prefixes.len())];
-    let suffix = suffixes[rng.gen_range(0..suffixes.len())];
-    let num = rng.gen_range(0..100);
+    let prefix = prefixes[rng.random_range(0..prefixes.len())];
+    let suffix = suffixes[rng.random_range(0..suffixes.len())];
+    let num = rng.random_range(0..100);
 
     format!("{}{}{}", prefix, suffix, num)
 }
@@ -207,8 +207,8 @@ const MAX_UNIQUE_FIELD_NAMES: usize = FIELD_NAME_BASES.len() * 10;
 
 /// Generate a random field name.
 pub fn gen_field_name<R: Rng>(rng: &mut R) -> String {
-    let name = FIELD_NAME_BASES[rng.gen_range(0..FIELD_NAME_BASES.len())];
-    let num = rng.gen_range(0..10);
+    let name = FIELD_NAME_BASES[rng.random_range(0..FIELD_NAME_BASES.len())];
+    let num = rng.random_range(0..10);
 
     format!("{}{}", name, num)
 }
@@ -292,7 +292,7 @@ pub fn gen_type_hint<'db, R: Rng>(
         return TypeHint::Bool;
     }
 
-    let choice = choices[rng.gen_range(0..choices.len())];
+    let choice = choices[rng.random_range(0..choices.len())];
 
     match choice {
         0 => TypeHint::Bool,
@@ -331,11 +331,11 @@ pub fn gen_type_hint<'db, R: Rng>(
         }
         18 => {
             let element_type = gen_type_hint(db, rng, config, depth + 1);
-            let rank = rng.gen_range(1..=config.tensor_config.max_rank);
+            let rank = rng.random_range(1..=config.tensor_config.max_rank);
             TypeHint::Tensor(TypeHintTensor { element_type: Box::new(element_type), rank })
         }
         19 => {
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| gen_type_hint(db, rng, config, depth + 1))
                 .collect();
@@ -344,7 +344,7 @@ pub fn gen_type_hint<'db, R: Rng>(
         20 => {
             // Cap count to available unique field names to prevent infinite loops.
             let max_count = config.max_collection_size.min(MAX_UNIQUE_FIELD_NAMES);
-            let count = rng.gen_range(config.min_collection_size..=max_count);
+            let count = rng.random_range(config.min_collection_size..=max_count);
             let mut used_names = bct::lookup::LookupSet::default();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
@@ -364,7 +364,7 @@ pub fn gen_type_hint<'db, R: Rng>(
         21 => {
             // At least one variant, since an enum of none has no values.
             let max_count = config.max_collection_size.max(1).min(MAX_UNIQUE_FIELD_NAMES);
-            let count = rng.gen_range(1..=max_count);
+            let count = rng.random_range(1..=max_count);
             let mut used_names = bct::lookup::LookupSet::default();
             let variants: Vec<_> = (0..count)
                 .map(|_| {
@@ -374,7 +374,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                             break InternedText::new(db, &candidate);
                         }
                     };
-                    let payload = rng.gen_bool(0.5)
+                    let payload = rng.random_bool(0.5)
                         .then(|| Box::new(gen_type_hint(db, rng, config, depth + 1)));
                     TypeHintEnumVariant { name, payload }
                 })
@@ -389,7 +389,7 @@ pub fn gen_type_hint<'db, R: Rng>(
             // At least one column, since a table of none has no rows either
             // and is the same table whatever is written into it.
             let max_count = config.max_collection_size.max(1).min(MAX_UNIQUE_FIELD_NAMES);
-            let count = rng.gen_range(1..=max_count);
+            let count = rng.random_range(1..=max_count);
             let mut used_names = bct::lookup::LookupSet::default();
             let columns: Vec<_> = (0..count)
                 .map(|_| {
@@ -419,7 +419,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
 ) -> Expr<'db> {
     match type_hint {
         TypeHint::Bool => {
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 Expr::True
             } else {
                 Expr::False
@@ -465,7 +465,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
 
         TypeHint::List(th) => {
             let element_type = *th.element_type.C();
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_inner(db, rng, element_type.C(), config, depth + 1))
                 .collect();
@@ -474,7 +474,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         TypeHint::Map(th) => {
             let key_type = *th.key_type.C();
             let value_type = *th.value_type.C();
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
             let entries: Vec<_> = (0..count)
                 .map(|_| {
                     let key = gen_expr_full_inner(db, rng, key_type.C(), config, depth + 1);
@@ -486,7 +486,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         }
         TypeHint::Set(th) => {
             let element_type = *th.element_type.C();
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_inner(db, rng, element_type.C(), config, depth + 1))
                 .collect();
@@ -494,7 +494,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         }
         TypeHint::Option(th) => {
             let inner_type = *th.inner_type.C();
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 Expr::None
             } else {
                 let payload = gen_expr_full_inner(db, rng, inner_type, config, depth + 1);
@@ -503,7 +503,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         }
         TypeHint::Result(th) => {
             let inner_type = *th.inner_type.C();
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 let payload = gen_expr_full_inner(db, rng, inner_type, config, depth + 1);
                 Expr::Ok(ExprOk { payload })
             } else {
@@ -527,7 +527,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 let max_dim = budget_dim.min(config.tensor_config.max_dim_size as usize);
                 // Now and then an axis with nothing along it, which leaves the
                 // tensor empty and its shape to be said in a header.
-                let dim_size = if rng.gen_bool(0.05) { 0 } else { rng.gen_range(1..=max_dim.max(1)) as u32 };
+                let dim_size = if rng.random_bool(0.05) { 0 } else { rng.random_range(1..=max_dim.max(1)) as u32 };
                 shape.push(dim_size);
                 total_elements *= dim_size as usize;
                 // If we've hit the limit, make remaining dimensions size 1.
@@ -545,7 +545,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .collect();
             // A header where the body cannot show the shape, and now and then
             // where it could.
-            let header = crate::parser_util::tensor_needs_header(&shape) || rng.gen_bool(0.2);
+            let header = crate::parser_util::tensor_needs_header(&shape) || rng.random_bool(0.2);
             Expr::Tensor(ExprTensor { shape, elements, header })
         }
         TypeHint::Data => {
@@ -563,7 +563,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             // The header is the type's columns in the type's order, which is
             // the only order a table literal may be written in.
             let header: Vec<_> = th.columns.iter().map(|c| c.name).collect();
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
             let rows: Vec<_> = (0..count)
                 .map(|_| {
                     let elements = th
@@ -592,7 +592,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             Expr::Term(ExprTerm { name: th.name, payload })
         }
         TypeHint::Enum(th) => {
-            let variant = &th.variants[rng.gen_range(0..th.variants.len())];
+            let variant = &th.variants[rng.random_range(0..th.variants.len())];
             let variant_expr = match &variant.payload {
                 None => Expr::Atom(ExprAtom { name: variant.name }),
                 Some(payload_ty) => {
@@ -601,7 +601,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 }
             };
             // A variant checks against the enum written bare or wrapped.
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 variant_expr
             } else {
                 Expr::Enum(ExprEnum { variant: ExprFull::new(None, None, variant_expr) })
@@ -619,7 +619,7 @@ fn gen_uint_expr<'db, R: Rng, T>(
     max: T,
 ) -> Expr<'db>
 where
-    T: std::fmt::Display + num_traits::Bounded + num_traits::One + std::ops::Sub<Output = T> + Copy + rand::distributions::uniform::SampleUniform + PartialOrd + TryFrom<u8>,
+    T: std::fmt::Display + num_traits::Bounded + num_traits::One + std::ops::Sub<Output = T> + Copy + rmx::rand::distr::uniform::SampleUniform + PartialOrd + TryFrom<u8>,
 {
     let value_str = match &config.numeric_strategy {
         NumericStrategy::CornerCases => {
@@ -629,29 +629,29 @@ where
                 (max - T::one()).S(),
                 max.S(),
             ];
-            choices[rng.gen_range(0..choices.len())].C()
+            choices[rng.random_range(0..choices.len())].C()
         }
         NumericStrategy::Random => {
-            rng.gen_range(min..=max).S()
+            rng.random_range(min..=max).S()
         }
         NumericStrategy::Mixed => {
-            if rng.gen_bool(0.2) {
+            if rng.random_bool(0.2) {
                 let choices = vec![
                     min.S(),
                     T::one().S(),
                     (max - T::one()).S(),
                     max.S(),
                 ];
-                choices[rng.gen_range(0..choices.len())].C()
+                choices[rng.random_range(0..choices.len())].C()
             } else {
-                rng.gen_range(min..=max).S()
+                rng.random_range(min..=max).S()
             }
         }
         NumericStrategy::SmallNonNegative => {
             // Clamp to 0..=255 range.
             let small_max = T::try_from(255u8).unwrap_or(max);
             let effective_max = if small_max < max { small_max } else { max };
-            rng.gen_range(min..=effective_max).S()
+            rng.random_range(min..=effective_max).S()
         }
     };
 
@@ -667,7 +667,7 @@ fn gen_int_expr<'db, R: Rng, T>(
     max: T,
 ) -> Expr<'db>
 where
-    T: std::fmt::Display + num_traits::Bounded + num_traits::Zero + num_traits::One + std::ops::Sub<Output = T> + std::ops::Add<Output = T> + Copy + rand::distributions::uniform::SampleUniform + PartialOrd + TryFrom<u8>,
+    T: std::fmt::Display + num_traits::Bounded + num_traits::Zero + num_traits::One + std::ops::Sub<Output = T> + std::ops::Add<Output = T> + Copy + rmx::rand::distr::uniform::SampleUniform + PartialOrd + TryFrom<u8>,
 {
     let value_str = match &config.numeric_strategy {
         NumericStrategy::CornerCases => {
@@ -678,13 +678,13 @@ where
                 (max - T::one()).S(),
                 max.S(),
             ];
-            choices[rng.gen_range(0..choices.len())].C()
+            choices[rng.random_range(0..choices.len())].C()
         }
         NumericStrategy::Random => {
-            rng.gen_range(min..=max).S()
+            rng.random_range(min..=max).S()
         }
         NumericStrategy::Mixed => {
-            if rng.gen_bool(0.2) {
+            if rng.random_bool(0.2) {
                 let choices = vec![
                     min.S(),
                     (min + T::one()).S(),
@@ -692,16 +692,16 @@ where
                     (max - T::one()).S(),
                     max.S(),
                 ];
-                choices[rng.gen_range(0..choices.len())].C()
+                choices[rng.random_range(0..choices.len())].C()
             } else {
-                rng.gen_range(min..=max).S()
+                rng.random_range(min..=max).S()
             }
         }
         NumericStrategy::SmallNonNegative => {
             // Generate 0..=127 to fit in all signed types without negation.
             let small_max = T::try_from(127u8).unwrap_or(max);
             let effective_max = if small_max < max { small_max } else { max };
-            rng.gen_range(T::zero()..=effective_max).S()
+            rng.random_range(T::zero()..=effective_max).S()
         }
     };
 
@@ -745,23 +745,23 @@ fn gen_f32_expr<'db, R: Rng>(
             ];
 
             // 50% chance of hex special value, 50% decimal.
-            if rng.gen_bool(0.5) {
-                let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
+            if rng.random_bool(0.5) {
+                let (hex, _desc) = F32_HEX_SPECIAL[rng.random_range(0..F32_HEX_SPECIAL.len())];
                 Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
-                let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                let value_str = &decimal_choices[rng.random_range(0..decimal_choices.len())];
                 Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
             }
         }
         NumericStrategy::Random => {
             // 20% chance of special values via hex.
-            if rng.gen_bool(0.2) {
-                let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
+            if rng.random_bool(0.2) {
+                let (hex, _desc) = F32_HEX_SPECIAL[rng.random_range(0..F32_HEX_SPECIAL.len())];
                 Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
                 // Random finite floats.
                 loop {
-                    let val = rng.r#gen::<f32>();
+                    let val = rng.random::<f32>();
                     if val.is_finite() {
                         let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
@@ -770,7 +770,7 @@ fn gen_f32_expr<'db, R: Rng>(
             }
         }
         NumericStrategy::Mixed => {
-            if rng.gen_bool(0.3) {
+            if rng.random_bool(0.3) {
                 // 30% corner cases: mix of decimal and hex special values.
                 let decimal_choices = vec![
                     "0.0".S(),
@@ -778,17 +778,17 @@ fn gen_f32_expr<'db, R: Rng>(
                     "-1.0".S(),
                 ];
 
-                if rng.gen_bool(0.5) {
-                    let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
+                if rng.random_bool(0.5) {
+                    let (hex, _desc) = F32_HEX_SPECIAL[rng.random_range(0..F32_HEX_SPECIAL.len())];
                     Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
                 } else {
-                    let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                    let value_str = &decimal_choices[rng.random_range(0..decimal_choices.len())];
                     Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
                 }
             } else {
                 // 70% random finite floats.
                 loop {
-                    let val = rng.r#gen::<f32>();
+                    let val = rng.random::<f32>();
                     if val.is_finite() {
                         let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
@@ -798,7 +798,7 @@ fn gen_f32_expr<'db, R: Rng>(
         }
         NumericStrategy::SmallNonNegative => {
             // Small positive floats 0.0..255.0.
-            let val = rng.gen_range(0.0f32..=255.0);
+            let val = rng.random_range(0.0f32..=255.0);
             let value_str = format!("{:.1}", val);
             Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) })
         }
@@ -844,23 +844,23 @@ fn gen_f64_expr<'db, R: Rng>(
             ];
 
             // 50% chance of hex special value, 50% decimal.
-            if rng.gen_bool(0.5) {
-                let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
+            if rng.random_bool(0.5) {
+                let (hex, _desc) = F64_HEX_SPECIAL[rng.random_range(0..F64_HEX_SPECIAL.len())];
                 Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
-                let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                let value_str = &decimal_choices[rng.random_range(0..decimal_choices.len())];
                 Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
             }
         }
         NumericStrategy::Random => {
             // 20% chance of special values via hex.
-            if rng.gen_bool(0.2) {
-                let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
+            if rng.random_bool(0.2) {
+                let (hex, _desc) = F64_HEX_SPECIAL[rng.random_range(0..F64_HEX_SPECIAL.len())];
                 Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
                 // Random finite floats.
                 loop {
-                    let val = rng.r#gen::<f64>();
+                    let val = rng.random::<f64>();
                     if val.is_finite() {
                         let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
@@ -869,7 +869,7 @@ fn gen_f64_expr<'db, R: Rng>(
             }
         }
         NumericStrategy::Mixed => {
-            if rng.gen_bool(0.3) {
+            if rng.random_bool(0.3) {
                 // 30% corner cases: mix of decimal and hex special values.
                 let decimal_choices = vec![
                     "0.0".S(),
@@ -877,17 +877,17 @@ fn gen_f64_expr<'db, R: Rng>(
                     "-1.0".S(),
                 ];
 
-                if rng.gen_bool(0.5) {
-                    let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
+                if rng.random_bool(0.5) {
+                    let (hex, _desc) = F64_HEX_SPECIAL[rng.random_range(0..F64_HEX_SPECIAL.len())];
                     Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
                 } else {
-                    let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                    let value_str = &decimal_choices[rng.random_range(0..decimal_choices.len())];
                     Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
                 }
             } else {
                 // 70% random finite floats.
                 loop {
-                    let val = rng.r#gen::<f64>();
+                    let val = rng.random::<f64>();
                     if val.is_finite() {
                         let value_str = val.S();
                         break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
@@ -897,7 +897,7 @@ fn gen_f64_expr<'db, R: Rng>(
         }
         NumericStrategy::SmallNonNegative => {
             // Small positive floats 0.0..255.0.
-            let val = rng.gen_range(0.0f64..=255.0);
+            let val = rng.random_range(0.0f64..=255.0);
             let value_str = format!("{:.1}", val);
             Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) })
         }
@@ -907,7 +907,7 @@ fn gen_f64_expr<'db, R: Rng>(
 /// Generate a string expression.
 fn gen_string_expr<'db, R: Rng>(db: &'db dyn salsa::Database, rng: &mut R) -> Expr<'db> {
     let strings = vec!["", "a", "test", "hello", "data", "value", "with\"quote", "newline\nhere"];
-    let s = strings[rng.gen_range(0..strings.len())];
+    let s = strings[rng.random_range(0..strings.len())];
     // String literals in the AST include the surrounding quotes and escaped content.
     let mut escaped = String::new();
     escaped.push('"');
@@ -979,6 +979,6 @@ pub fn gen_expr_full_seeded<'db>(
     adjusted_config.type_weights.named_struct_type = 0;
     adjusted_config.type_weights.named_enum_type = 0;
 
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
     gen_expr_full_random_type(db, &mut rng, &adjusted_config)
 }

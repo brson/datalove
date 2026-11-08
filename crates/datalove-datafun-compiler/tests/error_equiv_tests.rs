@@ -8,8 +8,8 @@
 //! Known discrepancies are documented in the test output.
 
 use rmx::prelude::*;
-use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rmx::rand::SeedableRng;
+use rmx::rand::rngs::StdRng;
 
 use datalove_datalit::ast_gen::AstGenConfig;
 use datalove_datalit::mutation_gen::{Mutation, MutationResult};

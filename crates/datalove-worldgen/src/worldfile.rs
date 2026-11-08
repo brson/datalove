@@ -1,7 +1,7 @@
 //! Worldfile assembly and entry point.
 
 use rmx::prelude::*;
-use rand::{Rng, SeedableRng};
+use rmx::rand::{Rng, SeedableRng};
 use datalove_datalit::Database;
 use crate::config::WorldGenConfig;
 use crate::gen_module::{plan_module_graph, gen_module_type_aliases, gen_module_function_sigs, gen_module_generic_sigs, gen_module};
@@ -55,7 +55,7 @@ fn gen_session_tracked<'db>(
     seed: u64,
     config: WorldGenConfig,
 ) -> GenSession {
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
     let (infos, modules) = gen_modules(db, &mut rng, &config);
     let script = gen_script_items(db, &mut rng, &config, &infos);
     let library = library_sections(&modules, &script.data).join("\n\n");
@@ -70,7 +70,7 @@ fn gen_session_tracked<'db>(
             continue;
         }
         let mut lines = vec![item.text];
-        let count = rng.gen_range(1..=3);
+        let count = rng.random_range(1..=3);
         while lines.len() < count && items.peek().is_some_and(|next| !next.expression) {
             lines.push(items.next().X().text);
         }
@@ -100,7 +100,7 @@ fn gen_worldfile_tracked<'db>(
     seed: u64,
     config: WorldGenConfig,
 ) -> String {
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
     gen_worldfile_inner(db, &mut rng, &config)
 }
 

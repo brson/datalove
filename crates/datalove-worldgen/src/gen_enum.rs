@@ -10,7 +10,7 @@
 //! payload it names, not how elaborate the payload is.
 
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 
 use datalove_datalit::ast::TypeHint;
 
@@ -31,17 +31,17 @@ pub fn gen_module_enums<'db, R: Rng>(
     config: &WorldGenConfig,
     module_index: usize,
 ) -> Vec<EnumDef<'db>> {
-    let count = rng.gen_range(config.enums_per_module.0..=config.enums_per_module.1);
+    let count = rng.random_range(config.enums_per_module.0..=config.enums_per_module.1);
     (0..count)
         .map(|i| {
             let name = format!("Enum{}_{}", module_index, i);
-            let variant_count = rng.gen_range(2..=4);
+            let variant_count = rng.random_range(2..=4);
             let variants = (0..variant_count)
                 .map(|v| {
                     let variant_name = format!("{}V{}", name, v);
                     // A term as often as not, so both arms of a match are
                     // written and both ways of laying a variant out are built.
-                    let payload = if rng.gen_bool(0.5) {
+                    let payload = if rng.random_bool(0.5) {
                         Some(gen_type_hint(db, rng, config))
                     } else {
                         Option::None
@@ -89,8 +89,8 @@ pub fn gen_enum_value<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> (Vec<String>, String) {
-    let variant = &def.variants[rng.gen_range(0..def.variants.len())];
-    let as_literal = rng.gen_bool(0.5);
+    let variant = &def.variants[rng.random_range(0..def.variants.len())];
+    let as_literal = rng.random_bool(0.5);
 
     match &variant.payload {
         Some(ty) => {
@@ -140,7 +140,7 @@ pub fn gen_bare_variant_let<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> (Vec<String>, String, String) {
-    let variant = &def.variants[rng.gen_range(0..def.variants.len())];
+    let variant = &def.variants[rng.random_range(0..def.variants.len())];
     match &variant.payload {
         Some(ty) => {
             let written = pretty_type_hint(db, ty.C());
@@ -193,7 +193,7 @@ pub fn gen_match<'db, R: Rng>(
         return Option::None;
     }
 
-    let (scrutinee, def) = candidates[rng.gen_range(0..candidates.len())].C();
+    let (scrutinee, def) = candidates[rng.random_range(0..candidates.len())].C();
     ctx.consume_variable(&scrutinee);
 
     let mut lines = vec![format!("{}match {}", indent, scrutinee)];
@@ -220,9 +220,9 @@ pub fn gen_match<'db, R: Rng>(
     // Either every variant, or some of them and a default. Without a default
     // the match has to be exhaustive, and a default with every variant already
     // written is refused as unreachable.
-    let with_default = rng.gen_bool(0.3) && def.variants.len() > 1;
+    let with_default = rng.random_bool(0.3) && def.variants.len() > 1;
     let covered = if with_default {
-        rng.gen_range(1..def.variants.len())
+        rng.random_range(1..def.variants.len())
     } else {
         def.variants.len()
     };
@@ -274,7 +274,7 @@ fn gen_arm_body<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    let count = rng.gen_range(1..=2);
+    let count = rng.random_range(1..=2);
     (0..count)
         .map(|_| crate::gen_stmt::gen_simple_statement(db, rng, config, ctx, var_counter, indent))
         .collect::<Vec<_>>()

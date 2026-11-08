@@ -1,7 +1,7 @@
 //! Expression generation using datalit's type-directed generation.
 
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
@@ -98,7 +98,7 @@ pub fn gen_expr<'db, R: Rng>(
 ) -> String {
     // What could stand here, each rolled for on its own.
     let has_matching_vars = !ctx.variables_of_type(db, type_hint.C()).is_empty();
-    let can_use_var = has_matching_vars && rng.gen_bool(0.4);
+    let can_use_var = has_matching_vars && rng.random_bool(0.4);
 
     // Clone the matching functions to avoid borrow issues.
     let type_hint_for_filter = type_hint.C();
@@ -230,18 +230,18 @@ pub fn gen_expr<'db, R: Rng>(
         return gen_literal(db, rng, type_hint, config);
     }
 
-    match choices.remove(rng.gen_range(0..choices.len())) {
+    match choices.remove(rng.random_range(0..choices.len())) {
         Choice::Variable => {
             let matching_vars = ctx.variables_of_type(db, type_hint.C());
             if matching_vars.is_empty() {
                 return gen_literal(db, rng, type_hint, config);
             }
-            let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.C();
+            let var_name = matching_vars[rng.random_range(0..matching_vars.len())].name.C();
             ctx.consume_variable(&var_name);
             var_name
         }
         Choice::Call => {
-            let func = &matching_fns[rng.gen_range(0..matching_fns.len())];
+            let func = &matching_fns[rng.random_range(0..matching_fns.len())];
             gen_function_call(db, rng, func, config, ctx)
         }
         Choice::Arithmetic => gen_arithmetic_expr(db, rng, type_hint, config, ctx),
@@ -250,27 +250,27 @@ pub fn gen_expr<'db, R: Rng>(
             gen_overflow_arith_expr(db, rng, type_hint, mark, config, ctx)
         }
         Choice::Const => {
-            let name = &consts[rng.gen_range(0..consts.len())];
+            let name = &consts[rng.random_range(0..consts.len())];
             if is_linear_type(&type_hint) { format!("{}@", name) } else { name.C() }
         }
         Choice::Projection => {
-            projections[rng.gen_range(0..projections.len())].C()
+            projections[rng.random_range(0..projections.len())].C()
         }
         Choice::CallProjection => {
             let (func, field) =
-                call_projections[rng.gen_range(0..call_projections.len())].C();
+                call_projections[rng.random_range(0..call_projections.len())].C();
             let call = gen_function_call(db, rng, &func, config, ctx);
             format!("{}.{}", call, field)
         }
         Choice::Index => {
             let mark = early_return_mark.expect("a choice only offered when there is a mark");
             let (container, key) =
-                index_candidates[rng.gen_range(0..index_candidates.len())].C();
+                index_candidates[rng.random_range(0..index_candidates.len())].C();
             format!("{}[{}]{}", container, key, mark)
         }
         Choice::Unwrap => {
             let mark = early_return_mark.expect("a choice only offered when there is a mark");
-            let name = unwrappable[rng.gen_range(0..unwrappable.len())].C();
+            let name = unwrappable[rng.random_range(0..unwrappable.len())].C();
             ctx.consume_variable(&name);
             format!("{}{}", name, mark)
         }
@@ -421,7 +421,7 @@ fn gen_arithmetic_expr<'db, R: Rng>(
     let is_bigint = matches!(type_hint, TypeHint::Int);
 
     // 20% chance to generate unary negation instead of binary op.
-    if supports_unary_negation(&type_hint) && rng.gen_bool(0.2) {
+    if supports_unary_negation(&type_hint) && rng.random_bool(0.2) {
         return gen_unary_negation(db, rng, type_hint, config, ctx);
     }
 
@@ -431,7 +431,7 @@ fn gen_arithmetic_expr<'db, R: Rng>(
     } else {
         &["+", "-", "*"]
     };
-    let op = ops[rng.gen_range(0..ops.len())];
+    let op = ops[rng.random_range(0..ops.len())];
 
     // Generate operands - for bigints, may use variables (operators borrow).
     let lhs = gen_arith_operand(db, rng, type_hint.C(), config, ctx, is_bigint);
@@ -475,12 +475,12 @@ fn gen_overflow_arith_expr<'db, R: Rng>(
     ctx: &GenContext<'db>,
 ) -> String {
     // Unary negation is for the signed ones only.
-    if is_signed_fixed_int(&type_hint) && rng.gen_bool(0.35) {
+    if is_signed_fixed_int(&type_hint) && rng.random_bool(0.35) {
         let operand = gen_overflow_operand(db, rng, type_hint, config, ctx);
         return format!("-{}{}", mark, operand);
     }
 
-    let op = ["+", "-", "*", "/"][rng.gen_range(0..4)];
+    let op = ["+", "-", "*", "/"][rng.random_range(0..4)];
     let lhs = gen_overflow_operand(db, rng, type_hint.C(), config, ctx);
     let rhs = gen_overflow_operand(db, rng, type_hint, config, ctx);
     format!("{} {}{} {}", lhs, op, mark, rhs)
@@ -498,8 +498,8 @@ fn gen_overflow_operand<'db, R: Rng>(
     ctx: &GenContext<'db>,
 ) -> String {
     let borrowable = ctx.variables_of_type_for_borrow(db, type_hint.C());
-    if !borrowable.is_empty() && rng.gen_bool(0.4) {
-        return borrowable[rng.gen_range(0..borrowable.len())].name.C();
+    if !borrowable.is_empty() && rng.random_bool(0.4) {
+        return borrowable[rng.random_range(0..borrowable.len())].name.C();
     }
     let type_str = pretty_type_hint(db, type_hint.C());
     let value = ast_gen::gen_expr_matching_type(db, rng, type_hint, &config.type_config, 0);
@@ -527,8 +527,8 @@ fn gen_arith_operand<'db, R: Rng>(
     if allow_variables {
         // For bigints, 40% chance to use an existing variable if available.
         let borrowable_vars = ctx.variables_of_type_for_borrow(db, type_hint.C());
-        if !borrowable_vars.is_empty() && rng.gen_bool(0.4) {
-            let var = borrowable_vars[rng.gen_range(0..borrowable_vars.len())];
+        if !borrowable_vars.is_empty() && rng.random_bool(0.4) {
+            let var = borrowable_vars[rng.random_range(0..borrowable_vars.len())];
             return ArithOperand::Variable(var.name.C());
         }
     }
@@ -664,7 +664,7 @@ pub fn gen_function_call<'db, R: Rng>(
             .into_iter()
             .filter(|name| !taken.contains(name))
             .collect();
-        let name = candidates[rng.gen_range(0..candidates.len())].C();
+        let name = candidates[rng.random_range(0..candidates.len())].C();
         spoken_for.push((i, name));
     }
 
@@ -695,13 +695,13 @@ fn gen_bool_atom<'db, R: Rng>(
     let bool_type = gen_bool_type(db);
     let bool_vars = ctx.variables_of_type(db, bool_type);
 
-    if !bool_vars.is_empty() && _rng.gen_bool(0.3) {
+    if !bool_vars.is_empty() && _rng.random_bool(0.3) {
         // Variable reference. Bool is local heap, no consume needed.
-        let var = bool_vars[_rng.gen_range(0..bool_vars.len())];
+        let var = bool_vars[_rng.random_range(0..bool_vars.len())];
         var.name.C()
     } else {
         // Literal.
-        if _rng.gen_bool(0.5) { "true".S() } else { "false".S() }
+        if _rng.random_bool(0.5) { "true".S() } else { "false".S() }
     }
 }
 
@@ -718,19 +718,19 @@ fn gen_simple_bool_expr<'db, R: Rng>(
     let bool_vars = ctx.variables_of_type(db, bool_type.C());
     let has_bool_var = !bool_vars.is_empty();
 
-    let choice = rng.gen_range(0..10);
+    let choice = rng.random_range(0..10);
     match choice {
         0..=4 => {
             // Simple literal.
-            if rng.gen_bool(0.5) { "true".S() } else { "false".S() }
+            if rng.random_bool(0.5) { "true".S() } else { "false".S() }
         }
         5..=6 if has_bool_var => {
             // Variable reference.
             let bool_vars = ctx.variables_of_type(db, bool_type.C());
             if bool_vars.is_empty() {
-                if rng.gen_bool(0.5) { "true".S() } else { "false".S() }
+                if rng.random_bool(0.5) { "true".S() } else { "false".S() }
             } else {
-                let var = bool_vars[rng.gen_range(0..bool_vars.len())];
+                let var = bool_vars[rng.random_range(0..bool_vars.len())];
                 var.name.C()
             }
         }
@@ -740,12 +740,12 @@ fn gen_simple_bool_expr<'db, R: Rng>(
             let lhs = gen_expr(db, rng, ty.C(), config, ctx);
             let rhs = gen_expr(db, rng, ty, config, ctx);
             let ops = [".<", ".>", "<=", ">=", "==", "!="];
-            let op = ops[rng.gen_range(0..ops.len())];
+            let op = ops[rng.random_range(0..ops.len())];
             format!("{} {} {}", lhs, op, rhs)
         }
         _ => {
             // Simple literal fallback.
-            if rng.gen_bool(0.5) { "true".S() } else { "false".S() }
+            if rng.random_bool(0.5) { "true".S() } else { "false".S() }
         }
     }
 }
@@ -759,7 +759,7 @@ pub fn gen_bool_expr<'db, R: Rng>(
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
 ) -> String {
-    let choice = rng.gen_range(0..15);
+    let choice = rng.random_range(0..15);
     match choice {
         0..=7 => {
             // Simple expression (literal, variable, comparison).
@@ -777,7 +777,7 @@ pub fn gen_bool_expr<'db, R: Rng>(
             let lhs = gen_simple_bool_expr(db, rng, config, ctx);
             let rhs = gen_simple_bool_expr(db, rng, config, ctx);
             let ops = ["and", "or", "xor"];
-            let op = ops[rng.gen_range(0..ops.len())];
+            let op = ops[rng.random_range(0..ops.len())];
             format!("{} {} {}", lhs, op, rhs)
         }
         _ => {
@@ -793,7 +793,7 @@ mod tests {
     use datalove_datalit::ast::TypeHint;
     use datalove_datalit::Database;
     use crate::context::Variable;
-    use rand::SeedableRng;
+    use rmx::rand::SeedableRng;
 
     #[test]
     fn test_gen_expr_literal_u32() {
@@ -805,7 +805,7 @@ mod tests {
     fn test_gen_expr_literal_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -824,7 +824,7 @@ mod tests {
     fn test_gen_expr_literal_bool_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHint::Bool;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -847,7 +847,7 @@ mod tests {
     fn test_gen_expr_literal_string_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHint::String;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -878,7 +878,7 @@ mod tests {
         // Generate many expressions - some should use the variable.
         let mut used_var = false;
         for seed in 0..100 {
-            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
             let expr = gen_expr(db, &mut rng, ty.C(), &config, &mut ctx);
             if expr == "my_var" {
                 used_var = true;
@@ -910,7 +910,7 @@ mod tests {
             return_type: Some(ret_ty.C()),
         });
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
         let expr = gen_expr(db, &mut rng, ret_ty, &config, &mut ctx);
 
         // Should generate function call.
@@ -936,7 +936,7 @@ mod tests {
         let mut found_false = false;
 
         for seed in 0..100 {
-            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
             let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr == "true" {
                 found_true = true;
@@ -964,7 +964,7 @@ mod tests {
         let mut found_comparison = false;
 
         for seed in 0..100 {
-            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
             let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr.contains(".<") || expr.contains(".>")
                 || expr.contains("<=") || expr.contains(">=")
@@ -995,7 +995,7 @@ mod tests {
         let mut found_xor = false;
 
         for seed in 0..200 {
-            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(seed);
             let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr.starts_with("not ") {
                 found_not = true;
@@ -1027,7 +1027,7 @@ mod tests {
     fn test_gen_expr_type_variety_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
 
         // Test various primitive types.
         let types = [
@@ -1062,7 +1062,7 @@ mod tests {
     fn test_gen_expr_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng = rmx::rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
@@ -1085,8 +1085,8 @@ mod tests {
         let ty = TypeHint::U32;
 
         // Same seed should produce same expression.
-        let mut rng1 = rand::rngs::StdRng::seed_from_u64(42);
-        let mut rng2 = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng1 = rmx::rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng2 = rmx::rand::rngs::StdRng::seed_from_u64(42);
 
         let expr1 = gen_expr(db, &mut rng1, ty.C(), &config, &mut ctx);
         let expr2 = gen_expr(db, &mut rng2, ty, &config, &mut ctx);

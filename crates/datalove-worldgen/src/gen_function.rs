@@ -1,7 +1,7 @@
 //! Function generation.
 
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, Param, ParamMode, Variable};
@@ -20,7 +20,7 @@ fn gen_param_mode<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> ParamMode {
     if !config.check_probability(rng, config.param_mode_probability) {
         return ParamMode::In;
     }
-    match rng.gen_range(0..3) {
+    match rng.random_range(0..3) {
         0 => ParamMode::Ref,
         1 => ParamMode::Mut,
         _ => ParamMode::Out,
@@ -35,7 +35,7 @@ pub fn gen_function_signature<'db, R: Rng>(
     config: &WorldGenConfig,
 ) -> FunctionSig<'db> {
     // Generate 0-3 parameters.
-    let param_count = rng.gen_range(0..=3);
+    let param_count = rng.random_range(0..=3);
     let params: Vec<_> = (0..param_count)
         .map(|i| Param {
             name: format!("p{}", i),
@@ -51,10 +51,10 @@ pub fn gen_function_signature<'db, R: Rng>(
     // `?`, `!`, checked arithmetic, a fallible index -- and with plain types
     // only, seventeen expressions in four hundred and sixty were written
     // anywhere that could.
-    let return_type = if rng.gen_bool(0.8) {
+    let return_type = if rng.random_bool(0.8) {
         let inner = gen_type_hint(db, rng, config);
         Some(if config.check_probability(rng, config.fallible_return_probability) {
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 TypeHint::Option(TypeHintOption { inner_type: Box::new(inner) })
             } else {
                 TypeHint::Result(TypeHintResult { inner_type: Box::new(inner) })
@@ -144,7 +144,7 @@ pub fn gen_function<'db, R: Rng>(
     lines.extend(lead_statements);
 
     // Generate body statements.
-    let stmt_count = rng.gen_range(config.statements_per_function.0..=config.statements_per_function.1);
+    let stmt_count = rng.random_range(config.statements_per_function.0..=config.statements_per_function.1);
 
     for _ in 0..stmt_count {
         let stmt = gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, "  ");
@@ -155,7 +155,7 @@ pub fn gen_function<'db, R: Rng>(
     // Void functions can optionally omit the ret statement entirely.
     let include_ret = match sig.return_type {
         Some(_) => true,  // Non-void functions must return a value.
-        None => rng.gen_bool(0.5),  // Void functions: 50% include bare ret.
+        None => rng.random_bool(0.5),  // Void functions: 50% include bare ret.
     };
 
     if include_ret {

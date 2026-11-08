@@ -19,7 +19,6 @@
 use rmx::prelude::*;
 use std::process::Command;
 
-use rand::Rng;
 
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun as datafun;
@@ -50,7 +49,7 @@ fn get_seed() -> u64 {
     if let Ok(seed_str) = std::env::var("WORLDGEN_DUAL_SEED") {
         seed_str.parse().expect("WORLDGEN_DUAL_SEED must be a valid u64")
     } else {
-        rand::thread_rng().r#gen()
+        rmx::rand::rng().random()
     }
 }
 

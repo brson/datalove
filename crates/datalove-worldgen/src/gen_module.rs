@@ -1,7 +1,7 @@
 //! Module generation.
 
 use rmx::prelude::*;
-use rand::Rng;
+use rmx::rand::Rng;
 use bct::lookup::LookupSet;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, ModuleInfo, TypeAlias, FunctionSig};
@@ -12,7 +12,7 @@ use crate::gen_generic::{GenericSig, Shape, gen_generic_function};
 /// Generate a module name.
 fn gen_module_name<R: Rng>(rng: &mut R, index: usize) -> String {
     let prefixes = ["util", "core", "data", "math", "str", "io"];
-    let prefix = prefixes[rng.gen_range(0..prefixes.len())];
+    let prefix = prefixes[rng.random_range(0..prefixes.len())];
     format!("{}_{}", prefix, index)
 }
 
@@ -21,7 +21,7 @@ pub fn plan_module_graph<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
 ) -> Vec<ModuleInfo<'db>> {
-    let module_count = rng.gen_range(config.module_count.0..=config.module_count.1);
+    let module_count = rng.random_range(config.module_count.0..=config.module_count.1);
     let mut modules = Vec::new();
 
     for i in 0..module_count {
@@ -47,7 +47,7 @@ pub fn gen_module_type_aliases<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
 ) -> Vec<TypeAlias<'db>> {
-    let count = rng.gen_range(config.type_aliases_per_module.0..=config.type_aliases_per_module.1);
+    let count = rng.random_range(config.type_aliases_per_module.0..=config.type_aliases_per_module.1);
     let mut aliases = Vec::new();
 
     for i in 0..count {
@@ -68,7 +68,7 @@ pub fn gen_module_function_sigs<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
 ) -> Vec<FunctionSig<'db>> {
-    let count = rng.gen_range(config.functions_per_module.0..=config.functions_per_module.1);
+    let count = rng.random_range(config.functions_per_module.0..=config.functions_per_module.1);
     let mut sigs = Vec::new();
 
     for i in 0..count {
@@ -90,14 +90,14 @@ pub fn gen_module_generic_sigs<R: Rng>(
     config: &WorldGenConfig,
     module_index: usize,
 ) -> Vec<GenericSig> {
-    let count = rng.gen_range(config.generics_per_module.0..=config.generics_per_module.1);
+    let count = rng.random_range(config.generics_per_module.0..=config.generics_per_module.1);
     (0..count)
         .map(|i| GenericSig {
             // Named by module as well as by index. A module may import one of
             // these and define its own, and two of the same name is an error
             // rather than a shadowing.
             name: format!("gen{}_{}", module_index, i),
-            shape: Shape::all()[rng.gen_range(0..Shape::all().len())],
+            shape: Shape::all()[rng.random_range(0..Shape::all().len())],
         })
         .collect()
 }
@@ -124,17 +124,17 @@ pub fn gen_module<'db, R: Rng>(
         .collect();
     let mut imported_generics: Vec<GenericSig> = Vec::new();
     for prior in prior_modules {
-        if !prior.functions.is_empty() && rng.gen_bool(0.5) {
+        if !prior.functions.is_empty() && rng.random_bool(0.5) {
             lines.push(format!("require module {}", prior.path()));
 
             // Import some functions.
             for func in &prior.functions {
-                if rng.gen_bool(0.7) && imported_names.insert(func.name.C()) {
+                if rng.random_bool(0.7) && imported_names.insert(func.name.C()) {
                     lines.push(format!("import {}.{}", prior.alias(), func.name));
                 }
             }
             for sig in &prior.generics {
-                if rng.gen_bool(0.7) && imported_names.insert(sig.name.C()) {
+                if rng.random_bool(0.7) && imported_names.insert(sig.name.C()) {
                     lines.push(format!("import {}.{}", prior.alias(), sig.name));
                     imported_generics.push(sig.C());
                 }
