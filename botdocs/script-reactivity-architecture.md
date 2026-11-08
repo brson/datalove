@@ -352,8 +352,9 @@ the same. The reach uses them three ways:
 
 Nor is a unit re-derived because a unit before it that takes a binding was. If
 the take is there before the edit and after it, the binding holds nothing after
-the edit either way. Unless a reorder put the take before the unit: it ran
-first and read the binding, which now holds nothing when it runs.
+the edit either way. Unless the unit did not find the binding as the take left
+it when it last ran: a reorder put the take before it, or put it before a unit
+that revives or writes the binding, which the unit found as that one left it.
 
 The records the reach reads are the units' current ones, so an edit that makes
 a unit overwrite what it used to update shrinks the reach once the unit is
@@ -692,6 +693,13 @@ nothing; a `set` of a name bound by a unit that failed ownership, which
 panicked in lowering; and a call to a function imported by such a unit, left
 running when a reorder made that unit fail to typecheck too, which the
 typecheck edge above now reaches.
+
+Expression units came next: a binding's name, a const's name cloned, or an
+int or bool expression, each a unit of its own. A rerun expression unit that
+showed a binding looked the name up as the whole session has it, not as the
+unit finds it where it sits, and panicked when a later shadow of the name had
+been taken or had not run. And a reorder that moved a take past a revive was
+taken for a take the readers after it had already seen.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit

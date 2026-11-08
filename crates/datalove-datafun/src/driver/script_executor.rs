@@ -625,8 +625,9 @@ impl ScriptExecutor {
                     printed
                 }
                 (None, Some(name)) => {
-                    let name = name.C();
-                    let (ty, value) = self.get_binding(&name)
+                    // As the unit finds it where it sits: a later unit may
+                    // bind the name again.
+                    let (ty, value) = self.binding_before(self.position(id), name)
                         .expect("the unit named a binding the executor registered");
                     return (Some(ty), value.expect("an expression unit's value is its own, and held"));
                 }
@@ -707,6 +708,26 @@ impl ScriptExecutor {
     ///
     /// `None` when the nearest unit binding it did not run to its end, as when
     /// nothing binds it: what that unit bound is not on offer.
+    /// The binding `name` as a unit at position `at` finds it, its type and
+    /// its value printed; the value is `None` if it was given away.
+    fn binding_before(&mut self, at: usize, name: &str) -> Option<(String, Option<String>)> {
+        let unit = self.provider_before(at, name)?;
+        let exports = &self.unit(unit).exports;
+        let (_, binding) = exports.bindings.iter().rev().find(|(bound, _)| bound == name).X();
+        let (ty, value) = match binding {
+            ExportBinding::Value(id) => (
+                format!("{}", exports.value_types[id.0 as usize]),
+                self.env.frames.external_value(unit, *id),
+            ),
+            ExportBinding::Slot(id) => (
+                format!("{}", exports.slot_types[id.0 as usize]),
+                self.env.frames.external_slot(unit, *id),
+            ),
+            ExportBinding::Function(_) => unreachable!("`provider_before` finds values and slots"),
+        };
+        Some((ty, value.map(|v| printed(&mut self.interp, &v))))
+    }
+
     pub fn get_binding(&mut self, name: &str) -> Option<(String, Option<String>)> {
         let provider = self.script_ctx.values.get(name).map(|(unit, _)| *unit)
             .or_else(|| self.script_ctx.slots.get(name).map(|(unit, _)| *unit));

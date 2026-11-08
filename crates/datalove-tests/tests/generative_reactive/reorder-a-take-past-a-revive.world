@@ -1,0 +1,30 @@
+----------
+scriptunit-fragment 1
+----------
+
+var d0: int = 4
+
+----------
+scriptunit-fragment 2
+----------
+
+let v7: int = d0
+
+----------
+scriptunit-fragment 3
+----------
+
+set d0 = 12
+
+----------
+scriptunit-expr 4
+----------
+
+d0
+
+----------
+scriptunit-move 2 after 3
+----------
+
+
+

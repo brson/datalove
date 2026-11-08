@@ -47,6 +47,12 @@ pub struct WorldGenConfig {
     /// draws nothing, so it leaves the rest of what a seed makes alone.
     pub binding_access_probability: u32,
 
+    /// Probability that a script item is an expression unit rather than a
+    /// statement: a live binding's name, or an expression of a simple type.
+    /// Only a session cuts one into a unit of its own; a worldfile's single
+    /// fragment leaves them out. Zero draws nothing.
+    pub expression_unit_probability: u32,
+
     /// Maximum nesting depth for control flow.
     pub max_control_flow_depth: usize,
 
@@ -126,6 +132,7 @@ impl Default for WorldGenConfig {
             match_probability: 40,
             script_statements: (1, 5),
             binding_access_probability: 0,
+            expression_unit_probability: 0,
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,

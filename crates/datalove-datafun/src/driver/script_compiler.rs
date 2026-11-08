@@ -1111,10 +1111,13 @@ impl<'db> ScriptCompiler<'db> {
             None => held_provider(unit, name).is_some(),
         };
 
-        // Whether `earlier` ran before `later` when they last ran.
-        let ran_before = |earlier: usize, later: usize| {
-            let at = |unit: usize| held.ran.iter().position(|ran| *ran == unit).X();
-            at(earlier) < at(later)
+        // The unit `unit` found the binding `name` as when it last ran: the
+        // nearest one before it, in the order they ran in, that provided,
+        // took or wrote it.
+        let held_source = |unit: usize, name: &String| {
+            let at = held.ran.iter().position(|ran| *ran == unit).X();
+            held.ran[..at].iter().rev().copied()
+                .find(|earlier| held.provides[*earlier].contains(name) || held.changed[*earlier].contains(name))
         };
 
         let mut rerun_starts = restore.C();
@@ -1134,8 +1137,9 @@ impl<'db> ScriptCompiler<'db> {
                 // Nor does a unit after a take that is still there: the
                 // binding holds nothing after it, as it did before. Unless
                 // the take is by a unit that may be blocked, which then may
-                // not happen, or the unit came after the take only by a
-                // reorder, and read the binding before it was taken.
+                // not happen, or the unit did not find the binding as the
+                // take left it before: a reorder put the take before it, or
+                // after a unit that revived or wrote the binding since.
                 rederived[unit] = seeds.contains(&unit)
                     || uses[unit].iter().any(|name| {
                         typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])
@@ -1146,7 +1150,7 @@ impl<'db> ScriptCompiler<'db> {
                                 && !may_block[source]
                                 && held.takes[source].contains(name)
                                 && self.unit_records[source].takes.contains(name)
-                                && ran_before(source, unit);
+                                && held_source(unit, name) == Some(source);
                             rederived[source]
                                 && !still_taken
                                 && (!writes_without_reading(unit, name) || provider_moved(unit, name))

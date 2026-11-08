@@ -2,7 +2,7 @@
 //! run.
 //!
 //! A seed makes a session with worldgen: modules, and a script cut into
-//! units, and data files some of them require. The units are entered, then changed a dozen times -- edited,
+//! units, some of them expressions, and data files some of them require. The units are entered, then changed a dozen times -- edited,
 //! deleted, reordered, or put back after a delete -- and after every change the
 //! session must be what a new engine running its current code from the top
 //! leaves: each unit come to the same end and hold the same bindings. That is
@@ -253,17 +253,20 @@ fn generate(seed: u64) -> Case {
     let mut config = WorldGenConfig::default();
     config.script_statements = (6, 14);
     config.binding_access_probability = 50;
+    config.expression_unit_probability = 15;
     let session = gen_session_seeded(seed, config);
     let mut rng = Pcg64::seed_from_u64(seed);
 
     let entries: Vec<Entry> = session.units.iter().enumerate()
-        .map(|(index, source)| Entry { unit: (index + 1).S(), source: source.C(), expression: false })
+        .map(|(index, unit)| Entry { unit: (index + 1).S(), source: unit.source.C(), expression: unit.expression })
         .collect();
     // The units in session order, each with the source it was generated
     // with, which an edit starts from; and the deleted ones, for an insert
-    // to put back.
+    // to put back, as entries. The expression units, by name, keep their
+    // kind through all of it.
     let mut live: Vec<(String, String)> = entries.iter().map(|entry| (entry.unit.C(), entry.source.C())).collect();
-    let mut deleted: Vec<String> = Vec::new();
+    let mut expressions: Vec<String> = entries.iter().filter(|entry| entry.expression).map(|entry| entry.unit.C()).collect();
+    let mut deleted: Vec<Entry> = Vec::new();
     let mut next = entries.len() + 1;
 
     let aims = accesses(&session.library, &entries);
@@ -306,10 +309,17 @@ fn generate(seed: u64) -> Case {
         let change = match rng.random_range(0..10) {
             0..=3 => Change::Edit { unit, source: perturb(&mut rng, &original) },
             4 => Change::Edit { unit, source: original },
-            5 => Change::Edit { unit, source: live[rng.random_range(0..count)].1.C() },
+            // Another unit's source, of the same kind.
+            5 => {
+                let kind = expressions.contains(&unit);
+                let alike: Vec<&(String, String)> = live.iter()
+                    .filter(|(other, _)| expressions.contains(other) == kind)
+                    .collect();
+                Change::Edit { unit, source: alike[rng.random_range(0..alike.len())].1.C() }
+            }
             6 if count > 1 => {
                 live.remove(pick);
-                deleted.push(original);
+                deleted.push(Entry { unit: unit.C(), source: original, expression: expressions.contains(&unit) });
                 Change::Delete { unit }
             }
             7 if count > 1 => {
@@ -325,12 +335,15 @@ fn generate(seed: u64) -> Case {
                 Change::Move { unit, place, beside }
             }
             8 | 9 if !deleted.is_empty() => {
-                let source = deleted.remove(rng.random_range(0..deleted.len()));
+                let gone = deleted.remove(rng.random_range(0..deleted.len()));
                 let name = next.S();
                 next += 1;
-                live.insert(pick + 1, (name.C(), source.C()));
+                live.insert(pick + 1, (name.C(), gone.source.C()));
+                if gone.expression {
+                    expressions.push(name.C());
+                }
                 Change::Insert {
-                    entry: Entry { unit: name, source, expression: false },
+                    entry: Entry { unit: name, source: gone.source, expression: gone.expression },
                     place: Place::After,
                     beside: unit,
                 }
@@ -512,6 +525,9 @@ struct Tally {
     /// edits.
     rerun_by_module: usize,
     rerun_by_data: usize,
+    /// Expression units entered, and how often one ran again after.
+    expressions_entered: usize,
+    expressions_rerun: usize,
     /// Of those, the aimed ones, by kind; see [`AIMED_KINDS`].
     aimed: [usize; 5],
     /// Units that had returned early, and that were blocked, when a step
@@ -537,6 +553,8 @@ impl Tally {
         self.blocked += other.blocked;
         self.rerun_by_module += other.rerun_by_module;
         self.rerun_by_data += other.rerun_by_data;
+        self.expressions_entered += other.expressions_entered;
+        self.expressions_rerun += other.expressions_rerun;
         for (sum, count) in self.changes.iter_mut().zip(other.changes) {
             *sum += count;
         }
@@ -562,6 +580,12 @@ impl Tally {
             if count == 0 {
                 shortfalls.push(fmt!("{kind}: none"));
             }
+        }
+        if self.expressions_entered == 0 {
+            shortfalls.push("no expression unit was entered".S());
+        }
+        if self.expressions_rerun == 0 {
+            shortfalls.push("no expression unit ran again".S());
         }
         if self.rerun_by_module == 0 {
             shortfalls.push("no module edit ran a unit again".S());
@@ -594,10 +618,12 @@ impl Tally {
             .map(|(verb, count)| fmt!("{count} {verb}"))
             .collect();
         fmt!(
-            "{} units entered, {} still run of {} after {} ({}), {} sessions reset; \
+            "{} units entered, {} of them expressions, {} still run of {} after {} ({}), {} sessions reset; \
+             expression units ran again {} times; \
              module edits ran {} units again and data edits {}; after a step, {} units had returned early and {} were blocked; \
              as entered, units use earlier units' bindings: {}",
-            self.entered, self.still_running, self.remaining, changes.join(", "), aimed.join(", "), self.resets,
+            self.entered, self.expressions_entered, self.still_running, self.remaining, changes.join(", "),
+            aimed.join(", "), self.resets, self.expressions_rerun,
             self.rerun_by_module, self.rerun_by_data, self.returned_early, self.blocked, uses.join(", "),
         )
     }
@@ -667,10 +693,18 @@ fn run(case: &Case) -> Verdict {
     let mut session = Session::start(workspace.sys, workspace.descriptor, workspace.also_roots);
     let mut tally = Tally { aimed: case.aimed, ..Tally::default() };
     let mut failures = Vec::new();
+    let mut expressions: Vec<&str> = Vec::new();
     for (number, change) in case.changes.iter().enumerate() {
         let touched = session.apply(change);
+        if !matches!(change, Change::Enter(_)) {
+            tally.expressions_rerun += touched.iter()
+                .filter(|(unit, outcome)| outcome.ran != Ran::No && expressions.contains(&unit.as_str()))
+                .count();
+        }
         match change {
-            Change::Enter(_) => {
+            Change::Enter(entries) => {
+                expressions.extend(entries.iter().filter(|entry| entry.expression).map(|entry| entry.unit.as_str()));
+                tally.expressions_entered += entries.iter().filter(|entry| entry.expression).count();
                 tally.entered += touched.len();
                 tally.failed_on_entry.extend(touched.iter()
                     .filter(|(_, outcome)| outcome.ran == Ran::Fails)
@@ -687,7 +721,12 @@ fn run(case: &Case) -> Verdict {
             Change::Edit { .. } => tally.changes[0] += 1,
             Change::Delete { .. } => tally.changes[1] += 1,
             Change::Move { .. } => tally.changes[2] += 1,
-            Change::Insert { .. } => tally.changes[3] += 1,
+            Change::Insert { entry, .. } => {
+                tally.changes[3] += 1;
+                if entry.expression {
+                    expressions.push(&entry.unit);
+                }
+            }
             Change::EditModule { .. } => {
                 tally.changes[4] += 1;
                 tally.rerun_by_module += touched.iter().filter(|(_, outcome)| outcome.ran != Ran::No).count();

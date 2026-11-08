@@ -12,10 +12,17 @@ use crate::gen_expr::{gen_bool_expr, gen_expr, gen_literal};
 use crate::gen_type::gen_type_hint_and_spelling;
 use crate::pretty::pretty_type_hint;
 
+/// A top-level item of a generated script.
+pub struct ScriptItem {
+    pub text: String,
+    /// Whether it is an expression, which only a unit of its own can be.
+    pub expression: bool,
+}
+
 /// A generated script.
 pub struct GenScript<'db> {
     /// Its top-level items, in order.
-    pub items: Vec<String>,
+    pub items: Vec<ScriptItem>,
     /// The bindings its top level makes.
     pub variables: Vec<Variable<'db>>,
     /// The data files it requires, as `library/package/name` paths and
@@ -25,7 +32,8 @@ pub struct GenScript<'db> {
 
 /// Generate a script as its top-level items.
 ///
-/// An item is a statement, a `require` or an `import`. Each function a
+/// An item is a statement, a `require`, an `import`, or an expression for a
+/// unit of its own. Each function a
 /// statement calls is imported somewhere before that statement and after the
 /// `require` of its module, which goes somewhere before the import, so they
 /// stand among the statements rather than all at the top. Cut into script
@@ -39,6 +47,7 @@ pub fn gen_script_items<'db, R: Rng>(
 ) -> GenScript<'db> {
     let mut ctx = GenContext::new();
     let mut data = Vec::new();
+    let mut quotients = Vec::new();
 
     // What may be imported, and from where.
     //
@@ -63,9 +72,10 @@ pub fn gen_script_items<'db, R: Rng>(
         }
     }
 
-    let mut items: Vec<String> = Vec::new();
+    let mut items: Vec<ScriptItem> = Vec::new();
     let mut imported: LookupSet<String> = LookupSet::default();
-    let mut push = |rng: &mut R, items: &mut Vec<String>, ctx: &mut GenContext<'db>, stmt: String| {
+    let fragment = |text: String| ScriptItem { text, expression: false };
+    let mut push = |rng: &mut R, items: &mut Vec<ScriptItem>, ctx: &mut GenContext<'db>, item: ScriptItem| {
         let mut called: Vec<String> = ctx.called.drain_unordered()
             .filter(|name| !imported.contains(name))
             .collect();
@@ -76,18 +86,18 @@ pub fn gen_script_items<'db, R: Rng>(
             imported.insert(name.C());
             let module = sources[&name];
             let require = format!("require module {}", module.path());
-            let required = match items.iter().position(|item| *item == require) {
+            let required = match items.iter().position(|item| item.text == require) {
                 Some(at) => at,
                 None => {
                     let at = rng.gen_range(0..=items.len());
-                    items.insert(at, require);
+                    items.insert(at, fragment(require));
                     at
                 }
             };
             let at = rng.gen_range(required + 1..=items.len());
-            items.insert(at, format!("import {}.{}", module.alias(), name));
+            items.insert(at, fragment(format!("import {}.{}", module.alias(), name)));
         }
-        items.push(stmt);
+        items.push(item);
     };
 
     // Generate script statements.
@@ -95,13 +105,20 @@ pub fn gen_script_items<'db, R: Rng>(
     let stmt_count = rng.gen_range(config.script_statements.0..=config.script_statements.1);
 
     for _ in 0..stmt_count {
+        if config.expression_unit_probability > 0
+            && config.check_probability(rng, config.expression_unit_probability)
+        {
+            let text = gen_expression_unit(db, rng, config, &mut ctx);
+            push(rng, &mut items, &mut ctx, ScriptItem { text, expression: true });
+            continue;
+        }
         let access = config.binding_access_probability > 0
             && config.check_probability(rng, config.binding_access_probability);
         let stmt = match access {
-            true => gen_binding_access(db, rng, config, &mut ctx, &mut var_counter, &mut data),
+            true => gen_binding_access(db, rng, config, &mut ctx, &mut var_counter, &mut data, &mut quotients),
             false => gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, ""),
         };
-        push(rng, &mut items, &mut ctx, stmt);
+        push(rng, &mut items, &mut ctx, fragment(stmt));
     }
 
     // Generate a final expression using a variable or function call.
@@ -113,7 +130,7 @@ pub fn gen_script_items<'db, R: Rng>(
         let var = live_vars[rng.gen_range(0..live_vars.len())];
         // Use debuglog to output the value.
         let stmt = format!("debuglog {}", var.name);
-        push(rng, &mut items, &mut ctx, stmt);
+        push(rng, &mut items, &mut ctx, fragment(stmt));
     } else if !ctx.imported_functions.is_empty() {
         let func = ctx.imported_functions[rng.gen_range(0..ctx.imported_functions.len())].C();
         if let Some(ret_ty) = func.return_type {
@@ -123,11 +140,37 @@ pub fn gen_script_items<'db, R: Rng>(
             let call = gen_expr(db, rng, ret_ty.C(), config, &mut ctx);
             let name = format!("v{}", var_counter);
             let stmt = format!("let {}: {} = {}\ndebuglog {}", name, pretty_type_hint(db, ret_ty), call, name);
-            push(rng, &mut items, &mut ctx, stmt);
+            push(rng, &mut items, &mut ctx, fragment(stmt));
         }
     }
 
     GenScript { items, variables: ctx.variables, data }
+}
+
+/// An expression unit's code: the name of a live binding, which the unit
+/// shows, read outside its code, a const's name cloned, since a const is
+/// borrowed wherever it is named and the unit's value is moved out, or an
+/// expression of a simple type, which may read some.
+fn gen_expression_unit<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+) -> String {
+    let named: Vec<String> = ctx.variables.iter()
+        .filter(|v| !ctx.is_consumed(&v.name))
+        .map(|v| v.name.C())
+        .chain(ctx.consts.iter().map(|c| format!("{}@", c.name)))
+        .collect();
+    if !named.is_empty() && rng.gen_bool(0.5) {
+        return named[rng.gen_range(0..named.len())].C();
+    }
+    let type_hint = match rng.gen_range(0..3) {
+        0 => TypeHint::Int,
+        1 => TypeHint::I64,
+        _ => TypeHint::Bool,
+    };
+    gen_expr(db, rng, type_hint, config, ctx)
 }
 
 /// A statement that makes a binding for later statements to act on, or acts
@@ -151,6 +194,8 @@ pub fn gen_script_items<'db, R: Rng>(
 /// - a quotient by one, `let v: int = <literal> /! dN`, which returns early
 ///   from its unit when the divisor is 0, and blocks the units that read
 ///   what it binds;
+/// - a read of such a quotient, `let v: int = q + <literal>`, which a unit
+///   of its own is blocked by when the quotient's unit returns early;
 /// - a data require, `require data local/gen/xN: <type>` of a simple type,
 ///   whose file, a literal of the type, goes in `data`, for a test to edit.
 fn gen_binding_access<'db, R: Rng>(
@@ -160,6 +205,7 @@ fn gen_binding_access<'db, R: Rng>(
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     data: &mut Vec<(String, String)>,
+    quotients: &mut Vec<String>,
 ) -> String {
     let live = |ctx: &GenContext<'db>, v: &Variable<'db>| !ctx.is_consumed(&v.name);
     let writable: Vec<Variable<'db>> = ctx.variables.iter()
@@ -182,6 +228,10 @@ fn gen_binding_access<'db, R: Rng>(
     let mut kinds: Vec<u8> = vec![5, 6, 8];
     if !divisors.is_empty() {
         kinds.extend([7, 7]);
+    }
+    let live_quotients: Vec<String> = quotients.iter().filter(|name| !ctx.is_consumed(name)).map(|name| name.C()).collect();
+    if !live_quotients.is_empty() {
+        kinds.extend([9, 9]);
     }
     if !writable.is_empty() {
         kinds.extend([0, 1]);
@@ -235,7 +285,15 @@ fn gen_binding_access<'db, R: Rng>(
             let name = format!("v{}", *var_counter);
             *var_counter += 1;
             ctx.variables.push(Variable { name: name.C(), type_hint: TypeHint::Int, is_mutable: false });
+            quotients.push(name.C());
             format!("let {}: int = {} /! {}", name, rng.gen_range(0..200), d.name)
+        }
+        9 => {
+            let q = live_quotients[rng.gen_range(0..live_quotients.len())].C();
+            let name = format!("v{}", *var_counter);
+            *var_counter += 1;
+            ctx.variables.push(Variable { name: name.C(), type_hint: TypeHint::Int, is_mutable: false });
+            format!("let {}: int = {} + {}", name, q, rng.gen_range(0..10))
         }
         8 => {
             let name = format!("x{}", *var_counter);

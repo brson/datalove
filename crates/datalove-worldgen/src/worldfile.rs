@@ -28,11 +28,19 @@ pub struct GenSession {
     /// Each data file's `library/package/name` path and text.
     pub data: Vec<(String, String)>,
     /// The script units, in order.
-    pub units: Vec<String>,
+    pub units: Vec<GenUnit>,
     /// For each name the script's top level binds, a statement that binds
     /// it again, as `let` or `var` as it was and with a literal of its type:
     /// a shadow of it, wherever it is in scope.
     pub shadows: Vec<(String, String)>,
+}
+
+/// A unit of a generated session.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GenUnit {
+    pub source: String,
+    /// Whether it is an expression unit rather than a fragment.
+    pub expression: bool,
 }
 
 /// Generate a session from a seed: a worldfile's script cut into units.
@@ -52,11 +60,21 @@ fn gen_session_tracked<'db>(
     let script = gen_script_items(db, &mut rng, &config, &infos);
     let library = library_sections(&modules, &script.data).join("\n\n");
     let (items, variables) = (script.items, script.variables);
+    // Runs of one to three items to a fragment, and an expression to a unit
+    // of its own.
     let mut units = Vec::new();
     let mut items = items.into_iter().peekable();
-    while items.peek().is_some() {
+    while let Some(item) = items.next() {
+        if item.expression {
+            units.push(GenUnit { source: item.text, expression: true });
+            continue;
+        }
+        let mut lines = vec![item.text];
         let count = rng.gen_range(1..=3);
-        units.push(items.by_ref().take(count).collect::<Vec<_>>().join("\n"));
+        while lines.len() < count && items.peek().is_some_and(|next| !next.expression) {
+            lines.push(items.next().X().text);
+        }
+        units.push(GenUnit { source: lines.join("\n"), expression: false });
     }
 
     // Drawn after the units, so asking for them changes none.
@@ -95,9 +113,14 @@ fn gen_worldfile_inner<'db, R: Rng>(
     let (infos, modules) = gen_modules(db, rng, config);
     let script = gen_script_items(db, rng, config, &infos);
     let mut sections = library_sections(&modules, &script.data);
+    // A worldfile is one fragment, which an expression cannot stand in.
+    let statements: Vec<&str> = script.items.iter()
+        .filter(|item| !item.expression)
+        .map(|item| item.text.as_str())
+        .collect();
     sections.push(format!(
         "----------\nscriptunit-fragment\n----------\n\n{}",
-        script.items.join("\n")
+        statements.join("\n")
     ));
 
     sections.join("\n\n")

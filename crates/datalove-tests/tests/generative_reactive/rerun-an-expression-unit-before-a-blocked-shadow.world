@@ -1,0 +1,42 @@
+----------
+scriptunit-fragment 1
+----------
+
+
+
+----------
+scriptunit-fragment 2
+----------
+
+let v3: int = 49 /! d2
+
+----------
+scriptunit-expr 3
+----------
+
+v3
+
+----------
+scriptunit-fragment 4
+----------
+
+
+
+----------
+scriptunit-edit 1
+----------
+
+var d2: int = 0
+
+----------
+scriptunit-edit 4
+----------
+
+let v3: int = 49 /! d2
+
+----------
+scriptunit-edit 1
+----------
+
+var d2: int = 5
+

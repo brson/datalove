@@ -18,13 +18,15 @@
 //! | `scriptunit-edit <unit>` | The unit's new source |
 //! | `scriptunit-delete <unit>` | Nothing |
 //! | `scriptunit-insert <unit> after <unit>` | The new unit's source |
+//! | `scriptunit-insert-expr <unit> after <unit>` | The new expression unit's source |
 //! | `scriptunit-move <unit> before\|after <unit>` | Nothing |
 //! | `module-edit <library/package/module>` | The module's new source |
 //! | `data-edit <library/package/name>` | The data's new text |
+//! | `scriptunit-fragment [<unit>]` | A unit appended, after the first step |
+//! | `scriptunit-expr [<unit>]` | An expression unit appended, after the first step |
 //!
 //! `module` and `data` sections before the first step make the workspace
 //! the session runs in, as they do in any worldfile.
-//! | `scriptunit-fragment [<unit>]` | A unit appended, after the first step |
 //!
 //! Units are named by the number they were entered as, whether appended or
 //! inserted, and a delete renumbers nothing. A unit's header may name the id

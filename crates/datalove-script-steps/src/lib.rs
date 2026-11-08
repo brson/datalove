@@ -610,9 +610,9 @@ impl SessionReader {
                 self.library.push_str(&fmt!("{SEPARATOR}\n{}\n{SEPARATOR}\n\n{content}\n\n", section.header));
                 return Read::Library;
             }
-            "scriptunit-fragment" => {
+            "scriptunit-fragment" | "scriptunit-expr" => {
                 let unit = self.take_id(args.first().copied());
-                return Read::Entry(Entry { unit, source: content, expression: false });
+                return Read::Entry(Entry { unit, source: content, expression: kind == "scriptunit-expr" });
             }
             "module-edit" => Change::EditModule { path: args[0].S(), source: content },
             "data-edit" => Change::EditData { path: args[0].S(), text: content },
@@ -626,9 +626,10 @@ impl SessionReader {
                 };
                 Change::Move { unit: args[0].S(), place, beside: args[2].S() }
             }
-            "scriptunit-insert" => {
-                assert_eq!(args.get(1), Some(&"after"), "{name}: `scriptunit-insert <unit> after <unit>`");
-                let entry = Entry { unit: self.take_id(Some(args[0])), source: content, expression: false };
+            "scriptunit-insert" | "scriptunit-insert-expr" => {
+                assert_eq!(args.get(1), Some(&"after"), "{name}: `{kind} <unit> after <unit>`");
+                let expression = kind == "scriptunit-insert-expr";
+                let entry = Entry { unit: self.take_id(Some(args[0])), source: content, expression };
                 Change::Insert { entry, place: Place::After, beside: args[2].S() }
             }
             _ => return Read::Other,
@@ -701,8 +702,8 @@ pub fn write_changes(library: &str, changes: &[Change]) -> String {
         let written = match change {
             Change::Enter(entries) => entries.iter()
                 .map(|entry| {
-                    assert!(!entry.expression, "an expression unit has no section");
-                    section(fmt!("scriptunit-fragment {}", id(&entry.unit)), &entry.source)
+                    let kind = if entry.expression { "scriptunit-expr" } else { "scriptunit-fragment" };
+                    section(fmt!("{kind} {}", id(&entry.unit)), &entry.source)
                 })
                 .collect(),
             Change::Edit { unit, source } => section(fmt!("scriptunit-edit {}", id(unit)), source),
@@ -711,7 +712,8 @@ pub fn write_changes(library: &str, changes: &[Change]) -> String {
             Change::Delete { unit } => section(fmt!("scriptunit-delete {}", id(unit)), ""),
             Change::Insert { entry, place, beside } => {
                 assert!(matches!(place, Place::After), "a worldfile inserts after a unit");
-                section(fmt!("scriptunit-insert {} after {}", id(&entry.unit), id(beside)), &entry.source)
+                let kind = if entry.expression { "scriptunit-insert-expr" } else { "scriptunit-insert" };
+                section(fmt!("{kind} {} after {}", id(&entry.unit), id(beside)), &entry.source)
             }
             Change::Move { unit, place, beside } => {
                 let place = match place {
