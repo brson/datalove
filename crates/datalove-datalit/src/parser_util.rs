@@ -35,15 +35,9 @@ pub fn string_literal_value(raw: &str) -> Result<String, bct::escapes::EscapeErr
 
 /// What to say about an escape a string literal cannot hold.
 pub fn escape_complaint(error: &bct::escapes::EscapeError) -> (String, String) {
-    use bct::escapes::EscapeError;
-    let label = match error {
-        EscapeError::InvalidEscape { escape, .. } => rmx::std::format!("`\\{escape}` is not an escape"),
-        EscapeError::InvalidUnicodeEscape { reason, .. } => reason.C(),
-        EscapeError::UnterminatedUnicodeEscape { .. } => "a `\\u{` escape is closed with `}`".S(),
-    };
     (
         "invalid escape in string literal".S(),
-        rmx::std::format!("{label}; the escapes are \\\" \\\\ \\n \\r \\t \\0 and \\u{{...}}"),
+        rmx::std::format!("{error}; the escapes are \\\" \\\\ \\n \\r \\t \\0 and \\u{{...}}"),
     )
 }
 

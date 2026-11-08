@@ -7,6 +7,21 @@ pub enum EscapeError {
     UnterminatedUnicodeEscape { position: usize },
 }
 
+/// The complaint about the escape alone.
+///
+/// The position is left out: a caller reporting this has a span to point at.
+impl std::fmt::Display for EscapeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EscapeError::InvalidEscape { escape, .. } => write!(f, "`\\{escape}` is not an escape"),
+            EscapeError::InvalidUnicodeEscape { reason, .. } => f.write_str(reason),
+            EscapeError::UnterminatedUnicodeEscape { .. } => f.write_str("a `\\u{` escape is closed with `}`"),
+        }
+    }
+}
+
+impl std::error::Error for EscapeError {}
+
 /// Process escape sequences in a string literal.
 ///
 /// The input should be the content between the quotes (not including the quotes).
@@ -102,20 +117,20 @@ mod tests {
 
     #[test]
     fn test_basic_escapes() {
-        assert_eq!(process_escape_sequences(r#"foo"#).unwrap(), "foo");
-        assert_eq!(process_escape_sequences(r#"foo\"bar"#).unwrap(), "foo\"bar");
-        assert_eq!(process_escape_sequences(r#"foo\\bar"#).unwrap(), "foo\\bar");
-        assert_eq!(process_escape_sequences(r#"foo\nbar"#).unwrap(), "foo\nbar");
-        assert_eq!(process_escape_sequences(r#"foo\rbar"#).unwrap(), "foo\rbar");
-        assert_eq!(process_escape_sequences(r#"foo\tbar"#).unwrap(), "foo\tbar");
-        assert_eq!(process_escape_sequences(r#"foo\0bar"#).unwrap(), "foo\0bar");
+        assert_eq!(process_escape_sequences(r#"foo"#).X(), "foo");
+        assert_eq!(process_escape_sequences(r#"foo\"bar"#).X(), "foo\"bar");
+        assert_eq!(process_escape_sequences(r#"foo\\bar"#).X(), "foo\\bar");
+        assert_eq!(process_escape_sequences(r#"foo\nbar"#).X(), "foo\nbar");
+        assert_eq!(process_escape_sequences(r#"foo\rbar"#).X(), "foo\rbar");
+        assert_eq!(process_escape_sequences(r#"foo\tbar"#).X(), "foo\tbar");
+        assert_eq!(process_escape_sequences(r#"foo\0bar"#).X(), "foo\0bar");
     }
 
     #[test]
     fn test_unicode_escapes() {
-        assert_eq!(process_escape_sequences(r#"\u{41}"#).unwrap(), "A");
-        assert_eq!(process_escape_sequences(r#"\u{1F4A9}"#).unwrap(), "\u{1F4A9}");
-        assert_eq!(process_escape_sequences(r#"foo\u{42}ar"#).unwrap(), "fooBar");
+        assert_eq!(process_escape_sequences(r#"\u{41}"#).X(), "A");
+        assert_eq!(process_escape_sequences(r#"\u{1F4A9}"#).X(), "\u{1F4A9}");
+        assert_eq!(process_escape_sequences(r#"foo\u{42}ar"#).X(), "fooBar");
     }
 
     #[test]
@@ -160,9 +175,9 @@ mod tests {
 
     #[test]
     fn test_edge_cases() {
-        assert_eq!(process_escape_sequences("").unwrap(), "");
-        assert_eq!(process_escape_sequences(r#"\n\r\t\0"#).unwrap(), "\n\r\t\0");
-        assert_eq!(process_escape_sequences(r#"\\\\"#).unwrap(), "\\\\");
+        assert_eq!(process_escape_sequences("").X(), "");
+        assert_eq!(process_escape_sequences(r#"\n\r\t\0"#).X(), "\n\r\t\0");
+        assert_eq!(process_escape_sequences(r#"\\\\"#).X(), "\\\\");
     }
 
     #[test]
