@@ -1,0 +1,88 @@
+----------
+module local/gen/math_0
+----------
+
+type Type0: i32
+
+const CONST0_0: u32 = : u32 / 239
+
+type Enum0_0: enum { term Enum0_0V0 f32, atom Enum0_0V1, term Enum0_0V2 u32 }
+
+type Enum0_1: enum { atom Enum0_1V0, term Enum0_1V1 string }
+
+fun gen0_0<T>(a: T, b: T): T where { T is float, }
+  ret a * b
+end fun
+
+fun gen0_1<T>(a: T, b: T): bool where { T is fixedint, }
+  ret a .< b
+end fun
+
+fun gen0_2<T>(x: T): (T, T)
+  ret (x@, x)
+end fun
+
+fun fn0(p0: ?i8, p1: ?(bool,)): !!string
+  if p1 |v0|
+    let v1: u64 = : u64 / 143
+  end if
+  let a2: bool = false
+  let v3: (bool, bool) = gen0_2(a2)
+  let a4: i32 = (: i32 / 2) +! (: i32 / 46)
+  let a5: i32 = : i32 / 26
+  let v6: bool = gen0_1(a4, a5)
+  let v7: ![|{| name8: f64, field1: i8, y5: u32 |}, 1|] = er error : bool / false
+  ret er error : [|i64, 1|] / [| : i64 / 119 |]
+end fun
+
+fun fn1(): error
+  let a0: u64 = : u64 / 168
+  let a1: u64 = : u64 / 246
+  let v2: bool = gen0_1(a0, a1)
+  ret error : string / "value"
+end fun
+
+----------
+scriptunit-fragment 1
+----------
+
+require module local/gen/math_0
+
+----------
+scriptunit-fragment 2
+----------
+
+import math_0.gen0_1
+
+----------
+scriptunit-fragment 3
+----------
+
+
+
+----------
+scriptunit-fragment 4
+----------
+
+let a7: i32 = : i32 / 17
+let a8: i32 = v6.1
+let v9: bool = gen0_1(a7, a8)
+
+----------
+scriptunit-edit 3
+----------
+
+import math_0.gen0_1
+
+----------
+scriptunit-edit 2
+----------
+
+let v6: (i32, i32) = (: i32 / 86, : i32 / 111)
+
+----------
+scriptunit-delete 1
+----------
+
+
+

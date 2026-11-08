@@ -1233,12 +1233,23 @@ impl<'db> ScriptCompiler<'db> {
     /// typechecker resolves through a different query and so does not put in
     /// `uses`: a `require` in one unit provides an alias that an
     /// `import` in a later unit names.
+    ///
+    /// **A unit that failed to compile when it last compiled provides
+    /// nothing**, though it typechecks: it fails later, in ownership or
+    /// lowering, and a later unit naming one of its bindings reads an
+    /// earlier unit's, as it would in a fresh run. A unit about to compile
+    /// for the first time, or differently, is reached anyway, and the reach
+    /// is taken again with what its new record provides.
     fn graph_now(&self) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
         let outputs = self.unit_typecheck_outputs();
         let mut provides = Vec::with_capacity(outputs.len());
         let mut uses = Vec::with_capacity(outputs.len());
         for (index, output) in outputs.iter().enumerate() {
             match output {
+                Some(output) if !self.unit_records[index].compiled => {
+                    provides.push(Vec::new());
+                    uses.push(self.unit_used_names(index, *output));
+                }
                 Some(output) => {
                     provides.push(self.unit_provides_names(*output));
                     uses.push(self.unit_used_names(index, *output));

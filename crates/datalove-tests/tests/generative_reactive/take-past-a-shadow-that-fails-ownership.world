@@ -1,0 +1,42 @@
+----------
+scriptunit-fragment 1
+----------
+
+
+
+----------
+scriptunit-fragment 2
+----------
+
+let v5: int = d3
+
+----------
+scriptunit-fragment 3
+----------
+
+let v6: int = v5
+
+----------
+scriptunit-insert 4 after 2
+----------
+
+
+
+----------
+scriptunit-insert 5 after 1
+----------
+
+var d3: int = 89
+
+----------
+scriptunit-edit 4
+----------
+
+let v5: int = d3
+
+----------
+scriptunit-edit 5
+----------
+
+var d3: int = 89
+

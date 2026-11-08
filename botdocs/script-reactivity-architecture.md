@@ -215,6 +215,17 @@ from the old. The alias edge, from a `require` to an `import` that uses its
 alias, is added by hand: aliases resolve through `module_alias_before`, which
 `uses` does not record.
 
+The post-edit graph is the typecheck's, with two corrections. **A unit that
+failed to compile when it last compiled provides nothing**, though it may
+typecheck: it fails in ownership or lowering, and a later unit naming one of
+its bindings reads an earlier unit's, in a fresh run as in the session. If it
+provided them, a unit reading past it would be cut off from the unit it does
+read. One about to compile again is reached anyway, and the reach is taken
+again with its new record. And **an import uses the name it binds**: an
+earlier unit's function under that name decides whether the import binds it
+or is a duplicate, so when the earlier unit drops it, this unit is reached and
+its record comes to provide the name.
+
 A module edit reaches the edited module, the modules that require it directly
 or not, and any module the edit broke or fixed. The last is what the import
 edges alone would miss: a module that leaves the compile because one it
@@ -649,6 +660,10 @@ Once worldgen also divided by a divisor a change could set to 0, units
 returned early and blocked others, and the generated sessions found that a
 unit blocked at run time had been taken to overwrite what it no longer
 writes; see the paragraph on the reach being taken before anything runs.
+Two more came out of later seeds: a take past a unit that typechecks and
+fails ownership, which the typecheck graph took for the provider, and an
+import that came to bind a name another unit had imported first, whose record
+never said so. Both are the corrections to the post-edit graph in section 4.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit

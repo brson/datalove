@@ -421,11 +421,17 @@ pub fn typecheck_script_unit<'db>(
                     ctx.add_error(err);
                     continue;
                 }
+                // An earlier unit's function under the name decides what the
+                // import does, so the unit uses it: when that one goes, this
+                // import is what binds the name.
                 let first = match bound.get(&item_name) {
                     Some(first) => Some(*first),
-                    None => binding_before(db, unit, env, item_name)
-                        .and_then(|binding| binding.func_ast)
-                        .map(|(_, module_id)| module_id),
+                    None => {
+                        ctx.note_asked(item_name);
+                        binding_before(db, unit, env, item_name)
+                            .and_then(|binding| binding.func_ast)
+                            .map(|(_, module_id)| module_id)
+                    }
                 };
                 if let Some(first) = first {
                     if first != source_module_id {

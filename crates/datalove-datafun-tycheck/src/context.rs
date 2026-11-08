@@ -1153,7 +1153,7 @@ replace the view rather than the elements it shows. Index down to single element
     }
 
     /// Record that something asked about `name`, found or not.
-    fn note_asked(&self, name: InternedText<'db>) {
+    pub(crate) fn note_asked(&self, name: InternedText<'db>) {
         if let Some(asked) = &self.uses {
             asked.borrow_mut().insert(name);
         }
