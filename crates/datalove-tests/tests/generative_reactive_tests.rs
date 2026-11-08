@@ -18,7 +18,9 @@
 //! reach has been wrong about, and random changes make them rarely. Other
 //! changes set a divisor worldgen made to 0, so that a unit dividing by it
 //! returns early and the units reading what that unit binds are blocked.
-//! Others revive a `var` a unit takes, by a unit put right after it.
+//! Others revive a `var` a unit takes, by a unit put right after it, or put
+//! a unit reading a quotient right after the unit that divides, and set the
+//! divisor to 0, so that the new unit is blocked.
 //! And some edit a module the units import from, or a data file they
 //! require: a number in it changed, or put back as generated, or, for a
 //! module, a function renamed or one that does not compile added, and for
@@ -105,12 +107,12 @@ struct Case {
     changes: Vec<Change>,
     /// How many of the changes were aimed, by kind; see [`AIMED_KINDS`].
     /// None for a session read from a file.
-    aimed: [usize; 6],
+    aimed: [usize; 7],
 }
 
-const AIMED_KINDS: [&str; 6] = [
+const AIMED_KINDS: [&str; 7] = [
     "shadows inserted", "shadows edited in", "shadows reordered in", "writers reordered above their providers",
-    "divisors zeroed", "revives inserted after a take",
+    "divisors zeroed", "revives inserted after a take", "quotients read and their divisors zeroed",
 ];
 
 /// `source` with every divisor worldgen declared or set set to 0, or `None`
@@ -281,7 +283,7 @@ fn generate(seed: u64) -> Case {
     let mut next = entries.len() + 1;
 
     let aims = accesses(&session.library, &entries);
-    let mut aimed = [0; 6];
+    let mut aimed = [0; 7];
 
     let mut changes = vec![Change::Enter(entries)];
     while changes.len() <= CHANGES {
@@ -293,6 +295,11 @@ fn generate(seed: u64) -> Case {
         if !session.data.is_empty() && rng.random_range(0..8) == 0 {
             let (path, original) = session.data[rng.random_range(0..session.data.len())].C();
             changes.push(Change::EditData { path, text: edit_data(&mut rng, &original) });
+            continue;
+        }
+        if rng.random_range(0..8) == 0 && let Some(made) = block(&mut live, &mut next) {
+            aimed[6] += 1;
+            changes.extend(made);
             continue;
         }
         if rng.random_range(0..6) == 0 {
@@ -397,6 +404,41 @@ fn edit_data(rng: &mut Pcg64, original: &str) -> String {
         3 => "\"text\"".S(),
         _ => "(".S(),
     }
+}
+
+/// A unit inserted right after one that divides by a divisor, reading the
+/// quotient, and the divisor set to 0 where it is declared: the quotient's
+/// unit returns early and the new unit is blocked. `None` if no live unit
+/// divides by a divisor a live unit declares.
+///
+/// A unit is only blocked by reading a quotient whose unit returned early,
+/// which the units as generated arrange too rarely to count on.
+fn block(live: &mut Vec<(String, String)>, next: &mut usize) -> Option<Vec<Change>> {
+    // `let vN: int = K /! dM`, as worldgen writes a quotient.
+    let quotient = |line: &str| {
+        let rest = line.strip_prefix("let ")?;
+        let (name, rest) = rest.split_once(": int = ")?;
+        let (_, divisor) = rest.split_once(" /! ")?;
+        Some((name.S(), divisor.trim().S()))
+    };
+    let (at, name, divisor) = live.iter().enumerate()
+        .find_map(|(at, (_, source))| source.lines().find_map(quotient).map(|(name, divisor)| (at, name, divisor)))?;
+    let declared = live.iter().position(|(_, source)| {
+        source.lines().any(|line| line.starts_with(&fmt!("var {divisor}: int = ")))
+    })?;
+    let (declarer, original) = live[declared].C();
+    let zeroed = zero_divisors(&original)?;
+
+    let unit = next.S();
+    *next += 1;
+    let source = fmt!("let w{unit}: int = {name} + 1");
+    let beside = live[at].0.C();
+    live.insert(at + 1, (unit.C(), source.C()));
+    let entry = Entry { unit, source, expression: false };
+    Some(vec![
+        Change::Insert { entry, place: Place::After, beside },
+        Change::Edit { unit: declarer, source: zeroed },
+    ])
 }
 
 /// Changes aimed at `access`, and which kind of [`AIMED_KINDS`] they are;
@@ -556,7 +598,7 @@ struct Tally {
     expressions_entered: usize,
     expressions_rerun: usize,
     /// Of those, the aimed ones, by kind; see [`AIMED_KINDS`].
-    aimed: [usize; 6],
+    aimed: [usize; 7],
     /// Units that had returned early, and that were blocked, when a step
     /// ended, summed over the steps.
     returned_early: usize,
@@ -942,7 +984,7 @@ fn corpus() -> Vec<(String, Case)> {
         .map(|path| {
             let name = path.file_name().X().to_string_lossy().S();
             let (library, changes) = read_changes(&name, &std::fs::read_to_string(&path).X());
-            (name, Case { library, changes, aimed: [0; 6] })
+            (name, Case { library, changes, aimed: [0; 7] })
         })
         .collect()
 }
@@ -962,7 +1004,7 @@ fn main() {
     if let Ok(path) = std::env::var("GENERATIVE_REACTIVE_WORLD") {
         let text = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
         let (library, changes) = read_changes(&path, &text);
-        let verdict = check(&Case { library, changes, aimed: [0; 6] }, SEED_TIMEOUT);
+        let verdict = check(&Case { library, changes, aimed: [0; 7] }, SEED_TIMEOUT);
         println!("{path}: {}", verdict.describe());
         if let Verdict::Agrees(tally) = &verdict && !tally.failed_on_entry.is_empty() {
             println!("units that do not compile when entered: {}", tally.failed_on_entry.join(", "));
