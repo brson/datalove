@@ -744,10 +744,15 @@ unsafe fn extract_map_entries(
         return Ok(());
     }
 
-    let key_size = size_of_ir_type(key_type) as usize;
+    // The node layouts are the runtime's own, so the walk reads what the
+    // runtime wrote: a key of no size, `{}`, takes no room, and the values
+    // follow the keys' offset directly.
+    let key_size = size_of_ir_type(key_type);
     let key_align = align_of_ir_type(key_type);
-    let value_size = size_of_ir_type(value_type) as usize;
+    let value_size = size_of_ir_type(value_type);
     let value_align = align_of_ir_type(value_type);
+    let internal = datalove_rtdt::layout::map_internal_node_layout(key_size, key_align);
+    let leaf = datalove_rtdt::layout::map_leaf_node_layout(key_size, key_align, value_size, value_align);
 
     // Find the leftmost leaf by descending through internal nodes.
     let mut node = root;
@@ -756,12 +761,8 @@ unsafe fn extract_map_entries(
         match tag {
             1 => {
                 // Internal node - descend to first child.
-                // Internal node layout: tag (u8 @ 0), len (u32 @ 4), then keys and child_ptrs.
-                let keys_offset = datalove_rtdt::layout::align_up(8, key_align);
-                let keys_size = datalove_rtdt::MAP_NODE_CAPACITY * datalove_rtdt::layout::align_up(key_size as u32, key_align);
-                let child_ptrs_offset = datalove_rtdt::layout::align_up(keys_offset + keys_size, 8);
                 let child_ptr = unsafe {
-                    let ptr = (node as *const u8).add(child_ptrs_offset as usize) as *const *const datalove_rtdt::MapNode;
+                    let ptr = (node as *const u8).add(internal.child_ptrs_offset as usize) as *const *const datalove_rtdt::MapNode;
                     *ptr
                 };
                 node = child_ptr;
@@ -785,19 +786,10 @@ unsafe fn extract_map_entries(
 
         let len = unsafe { *((node as *const u8).add(4) as *const u32) };
 
-        // Leaf node layout: tag (u8 @ 0), len (u32 @ 4), next_leaf (ptr @ 8), then keys, then values.
-        let next_leaf_offset = 8usize;
-        let keys_offset = datalove_rtdt::layout::align_up(next_leaf_offset as u32 + 8, key_align) as usize;
-        let key_stride = datalove_rtdt::layout::align_up(key_size as u32, key_align) as usize;
-        let key_stride = if key_stride == 0 { 1 } else { key_stride };
-        let keys_size = datalove_rtdt::MAP_NODE_CAPACITY as usize * key_stride;
-        let values_offset = datalove_rtdt::layout::align_up((keys_offset + keys_size) as u32, value_align) as usize;
-        let value_stride = datalove_rtdt::layout::align_up(value_size as u32, value_align) as usize;
-        let value_stride = if value_stride == 0 { 1 } else { value_stride };
-
+        let next_leaf_offset = leaf.next_leaf_offset as usize;
         for i in 0..len as usize {
-            let key_ptr = unsafe { (node as *const u8).add(keys_offset + i * key_stride) };
-            let value_ptr = unsafe { (node as *const u8).add(values_offset + i * value_stride) };
+            let key_ptr = unsafe { (node as *const u8).add(leaf.keys_offset as usize + i * key_size as usize) };
+            let value_ptr = unsafe { (node as *const u8).add(leaf.values_offset as usize + i * value_size as usize) };
             let key_value = extract_const_value(key_ptr, key_type)?;
             let value_value = extract_const_value(value_ptr, value_type)?;
             out.push((key_value, value_value));
