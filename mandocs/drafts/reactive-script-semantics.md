@@ -42,10 +42,10 @@ and the precise semantics have been left to future work.
 Ok, future is now.
 Let's figure it out.
 
-I developed a simple recursive algebra for deciding which code
+I developed a simple set of recursive rules for deciding which code
 must be recompiled and rerun when individual script units
 are interactively modified or their inputs change.
-This algebra is based on an analysis of variable bindings
+These rules are based on an analysis of variable bindings
 and their subsequent usage within a linear type system.
 I did this by progressively developing verifiable counter-examples
 until we are satisfied of its correctness.
@@ -61,13 +61,13 @@ I did not prove correctness.
 **Part 2. Experiments**
 
 - [If one unit moves or mutates a binding how does that affect preceding units on replay?](#user-content-if-one-unit-moves-or-mutates-a-binding-how-does-that-affect-preceding-units-on-replay)
-- [A naive algebra of reruns for moves and mutations](#user-content-a-naive-algebra-of-reruns-for-moves-and-mutations)
+- [A naive set of rerun rules for moves and mutations](#user-content-a-naive-set-of-rerun-rules-for-moves-and-mutations)
 - [But what about edits that change what a unit does?](#user-content-but-what-about-edits-that-change-what-a-unit-does)
-- [A second algebra: retract and apply](#user-content-a-second-algebra-retract-and-apply)
+- [A second set of rules: retract and apply](#user-content-a-second-set-of-rules-retract-and-apply)
 - [But what about edits that change which names later units can use?](#user-content-but-what-about-edits-that-change-which-names-later-units-can-use)
-- [A third algebra: breaks and fixes](#user-content-a-third-algebra-breaks-and-fixes)
+- [A third set of rules: breaks and fixes](#user-content-a-third-set-of-rules-breaks-and-fixes)
 - [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
-- [A complete recursive algebra of recompiles and reruns for moves and mutations](#user-content-a-complete-recursive-algebra-of-recompiles-and-reruns-for-moves-and-mutations)
+- [A complete set of recursive rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-recursive-rules-for-recompiles-and-reruns-for-moves-and-mutations)
 
 **Part 3. Results and Discussion**
 
@@ -445,7 +445,7 @@ That's the rule every step below is held to.
 
 The unit that declares a binding is its _provider_.
 After it,
-later units may perform four kinds of _operations_ on the binding:
+later units may perform four kinds of _accesses_ on the binding:
 
 - _read_ it, leaving it as it was,
 - _take_ it, moving the value out and leaving the binding empty,
@@ -511,7 +511,7 @@ unit 3 holds `c` = 30 because unit 5 overwrote it.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1` | - | compiles, runs | new | `a` = 1 |
-| 2 | `let b = 2` | - | compiles, runs | new | `b` moved |
+| 2 | `let b = 2` | - | compiles, runs | new | `b` taken |
 | 3 | `var c = 3` | - | compiles, runs | new | `c` = 30 |
 | 4 | `var d = 4` | - | compiles, runs | new | `d` = 8 |
 | 5 | `let e = a + 10; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | compiles, runs | new | `e` = 11, `f` = 2 |
@@ -549,7 +549,7 @@ because _reading_ `a` left it as it was.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1` | - | untouched | unit 5 only reads `a` | `a` = 1 |
-| 2 | `let b = 2` | - | reruns | rerun: unit 5 takes `b`, which it took when it last ran | `b` moved |
+| 2 | `let b = 2` | - | reruns | rerun: unit 5 takes `b`, which it took when it last ran | `b` taken |
 | 3 | `var c = 3` | - | untouched | unit 5 overwrites `c` without reading it | `c` = 30 |
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updates `d`, which it updated when it last ran | `d` = 8 |
 | 5 | `let e = a + 100; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompiles, runs | edited | `e` = 101, `f` = 2 |
@@ -580,7 +580,7 @@ then that unit transitively forced a rerun of previous units.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 2` | - | recompiles, runs | edited | `a` = 2 |
-| 2 | `let b = 2` | - | reruns | rerun: unit 5 reruns and takes `b`, which it took when it last ran | `b` moved |
+| 2 | `let b = 2` | - | reruns | rerun: unit 5 reruns and takes `b`, which it took when it last ran | `b` taken |
 | 3 | `var c = 3` | - | untouched | unit 5 overwrites `c` without reading it | `c` = 30 |
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 reruns and updates `d`, which it updated when it last ran | `d` = 8 |
 | 5 | `let e = a + 100; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | reruns | reads `a` from unit 1 | `e` = 102, `f` = 2 |
@@ -617,8 +617,8 @@ unit 5 won't run to overwrite it.
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updated `d` when it last ran, and is retracted | `d` = 4 |
 | 5 | `let e = a + 100; ...; let x = y` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompile fails | edited | - |
 
-So the operation of a unit to an earlier binding decides which earlier units rerun.
-If the operation is an overwrite then the nature of the modification
+So a unit's access to an earlier binding decides which earlier units rerun.
+If the access is an overwrite then the nature of the modification
 also matters: if an overwrite is edited the earlier unit does not need to rerun,
 but if an overwrite is broken the earlier unit does need to rerun to restore the value
 that will no longer be overwritten.
@@ -628,7 +628,7 @@ needs the same as one that was edited.
 
 
 
-## A naive algebra of reruns for moves and mutations
+## A naive set of rerun rules for moves and mutations
 
 <!--
 _Therefore_ we propose an algorithm.
@@ -647,7 +647,7 @@ What happens to the earlier units
 depends on what the triggering unit's code did to their bindings
 the last time it ran:
 
-| operation | break   | edit    |
+| access    | break   | edit    |
 |-----------|---------|---------|
 | read      | nothing | nothing |
 | take      | restore | restore |
@@ -661,7 +661,7 @@ that wrote it.
 Units in between that only read it are left alone.
 They would recompute what they already hold.
 
-Overwrite is the only operation that differs between a break and an edit.
+Overwrite is the only access that differs between a break and an edit.
 An edit skips the restore for an overwrite
 because the triggering unit runs again and overwrites the binding,
 so what it held before doesn't matter.
@@ -694,12 +694,12 @@ to find the full set of units that must rerun.
 ## But what about edits that change what a unit does?
 
 <!--
-_But_ the first algebra assumes an edit keeps the unit's operations.
+_But_ the first rules assume an edit keeps the unit's accesses.
 _Therefore_ an edit retracts the old code and applies the new.
 -->
 
-The first algebra looks up what the triggering unit does,
-and assumes an edit doesn't change that.
+The first rules look up what the triggering unit does,
+and assume an edit doesn't change that.
 It can.
 
 ```datalove
@@ -740,7 +740,7 @@ scriptunit-edit 2
 let c = b + 1
 ```
 
-The first algebra sees that unit 2 is a read of `b`,
+The first rules see that unit 2 is a read of `b`,
 which needs nothing,
 so unit 2 runs alone, finds 251,
 and computes an incorrect 252.
@@ -766,7 +766,7 @@ at what later units did to the binding since.
 
 
 
-## A second algebra: retract and apply
+## A second set of rules: retract and apply
 
 <!--
 _Therefore_ split every modification into a retract and an apply.
@@ -786,7 +786,7 @@ Adding covers appending a unit and inserting one.
 Retract looks up what the old code did to each earlier binding,
 and apply what the new code does:
 
-| operation | retract | apply |
+| access    | retract | apply |
 |-----------|---------|-------|
 | read      | nothing | restore if a later unit took or wrote it |
 | take      | restore | restore if a later unit took or wrote it |
@@ -799,7 +799,7 @@ if something after it has changed it since.
 When the new code overwrites a binding,
 what it held before is dead,
 so a restore the retract asks for is skipped.
-The first algebra's break column is this retract column,
+The first rules' break column is this retract column,
 and its edit column is what retract and apply give
 when nothing after the triggering unit touched the binding.
 
@@ -894,7 +894,7 @@ error[O013]: `a` was given away by an earlier unit
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | untouched | `a` is as unit 1 made it | `a` moved |
+| 1 | `let a = 1000` | - | untouched | `a` is as unit 1 made it | `a` taken |
 | 2 | `let c = a /! 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 100 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a + 2` | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |
@@ -996,7 +996,7 @@ so it breaks.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | reruns | rerun: unit 3 revived `b` when it last ran, and is retracted | `b` moved |
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 revived `b` when it last ran, and is retracted | `b` taken |
 | 2 | `let b_moved = b` | takes `b` (1) | reruns | rerun: takes `b`, which unit 1 rebuilt | `b_moved` = 125 |
 | 3 | `set b = 500; let x = y` | revives `b` (1) | recompile fails | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
@@ -1018,10 +1018,10 @@ and unit 4 can name `b` again.
 
 
 
-## A third algebra: breaks and fixes
+## A third set of rules: breaks and fixes
 
 <!--
-_Therefore_ a revive joins the operations, and modifications reach later units' compiles.
+_Therefore_ a revive joins the accesses, and modifications reach later units' compiles.
 -->
 
 Like before, each modification retracts the old code, applies the new code, or both:
@@ -1034,11 +1034,11 @@ Like before, each modification retracts the old code, applies the new code, or b
 | delete       | yes                  | -                  |
 | edit         | yes                  | yes                |
 
-A revive is a fifth operation.
+A revive is a fifth access.
 Backward it is an overwrite.
 Forward it undoes a take.
 
-| operation | retract | apply | later units that name the binding |
+| access    | retract | apply | later units that name the binding |
 |-----------|---------|-------|-----------------------------------|
 | read      | nothing | restore if a later unit took or wrote it | - |
 | take      | restore | restore if a later unit took or wrote it | break; removing the take fixes them |
@@ -1062,7 +1062,7 @@ A modification can now cause other modifications.
 ## But what if a rerun unit has other bindings that must be restored?
 
 <!--
-_But_ every rerun reruns a whole unit, with all of its operations.
+_But_ every rerun reruns a whole unit, with all of its accesses.
 _Therefore_ every rerun is a modification, and the rules repeat until nothing changes.
 -->
 
@@ -1178,8 +1178,8 @@ set w = w * 2
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
-| 2 | `let a2 = a` | takes `a` (1) | compiles, runs | new | `a2` moved |
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
+| 2 | `let a2 = a` | takes `a` (1) | compiles, runs | new | `a2` taken |
 | 3 | `var w = a2` | takes `a2` (2) | compiles, runs | new | `w` = 2000 |
 | 4 | `let c = w + 1` | reads `w` (3) | compiles, runs | new | `c` = 1001 |
 | 5 | `set w = w * 2` | updates `w` (3) | compiles, runs | new | - |
@@ -1190,8 +1190,8 @@ Edit unit 4, which reads `w` before unit 5 doubles it.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reruns and takes `a`, which it took when it last ran | `a` moved |
-| 2 | `let a2 = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `a2`, which it took when it last ran | `a2` moved |
+| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reruns and takes `a`, which it took when it last ran | `a` taken |
+| 2 | `let a2 = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `a2`, which it took when it last ran | `a2` taken |
 | 3 | `var w = a2` | takes `a2` (2) | reruns | rerun: unit 4 reads `w`, which unit 5 updated after it | `w` = 2000 |
 | 4 | `let c = w + 2` | reads `w` (3) | recompiles, runs | edited | `c` = 1002 |
 | 5 | `set w = w * 2` | updates `w` (3) | reruns | rerun: updates `w` from unit 3, which reran | - |
@@ -1204,7 +1204,7 @@ and that took `a`, so unit 1 reruns before it.
 
 
 
-## A complete recursive algebra of recompiles and reruns for moves and mutations
+## A complete set of recursive rules for recompiles and reruns for moves and mutations
 
 <!--
 _Therefore_ we propose an algorithm and suggest it is complete.
@@ -1212,9 +1212,9 @@ _Therefore_ we propose an algorithm and suggest it is complete.
 
 A session is a list of units, run in order.
 A unit provides bindings of its own,
-and performs _operations_ on the bindings of earlier units:
+and performs _accesses_ on the bindings of earlier units:
 
-| operation | what it does to the binding |
+| access    | what it does to the binding |
 |-----------|-----------------------------|
 | read      | uses the value and leaves it |
 | take      | moves the value out, leaving the binding empty |
@@ -1222,7 +1222,7 @@ and performs _operations_ on the bindings of earlier units:
 | update    | reads the value and writes a new one |
 | revive    | overwrites a binding an earlier unit took |
 
-The operations are what the compiler sees in the code.
+The accesses are what the compiler sees in the code.
 A write that might not happen,
 because it's conditional,
 or that writes only part of the binding,
@@ -1244,7 +1244,7 @@ or both:
 | edit         | yes                  | yes                |
 | rerun        | yes                  | yes, the same code |
 | data change  | yes                  | yes, the same code over new data |
-| move         | yes, in the old place | yes, in the new place |
+| reorder      | yes, in the old place | yes, in the new place |
 
 A change to the data a unit requires is a rerun of that unit,
 except that it now provides different values.
@@ -1254,7 +1254,7 @@ If the new data doesn't have the type the unit requires it at,
 the unit no longer compiles,
 and the change is a break.
 
-A move is a delete and an add of the same unit,
+A reorder is a delete and an add of the same unit,
 made in one step,
 so the session as it would stand between the two never runs.
 
@@ -1359,9 +1359,9 @@ It needs to continue to be easy to track the flow of bindings usage.
 Any language constructs that dynamically hide the flow of values
 will instantly complicate the reactive architecture.
 Imagine having traits.
-Then we need to follow the reach of all trait usages.
+Then we need to follow every use of every trait.
 Imagine having closures.
-Then we need to follow the reach of all values that disappear into them.
+Then we need to follow every value that disappears into them.
 
 These types of concerns are why one of [Datalove's principles](../principles.md)
 is to establish broad architectural capabilities early,
@@ -1400,7 +1400,7 @@ then validates them against this document,
 then inserts the new results back into the document,
 keeping it fresh.
 
-Here's a simple one, `edit-changes-operation.world`:
+Here's a simple one, `edit-changes-access.world`:
 
 ```
 ----------
@@ -1523,11 +1523,11 @@ during streaming workloads.
 I'm not sure the extent to which Datalove will care about that,
 though I think the current architecture is a reasonable foundation for future work.
 
-Datalove's rerun algebra concerns itself primarily
+Datalove's rerun rules concern themselves primarily
 with repairing the effects of moves and mutations,
 tractable because of its linear typesystem.
 FRP nodes don't mutate each other's values so those systems
-don't have backwards analysis like Datalove.
+don't have backward analysis like Datalove.
 
 So while FRP research does apply to Datalove,
 and will moreso in the future when Datalove gets real I/O,
@@ -1535,23 +1535,26 @@ the more useful comparison today is to compiler optimization,
 deterministic incremental build systems,
 and live record-and-replay debuggers.
 Elm has something like this.
-Datalove's reactive algebra is a dependence analysis,
+Datalove's rerun rules are a dependence analysis,
 bread and butter compiler stuff.
 Dependence analysis is mostly used for optimization.
 Here we are using it to determine when to rerun surrounding units.
 
-Some of the vocabulary in my algebra has established terminology:
+Some of the vocabulary in my rules has established terminology:
 
 | this post | standard name |
 |---|---|
 | a fresh run of the current code | from-scratch consistency |
 | read | use |
 | take | consume (linear types) |
-| overwrite | definition that kills the old value |
-| update | use, then definition |
+| overwrite | must-def (strong update) |
+| update | may-def, or read-modify-write |
+| revive | reinitialization after a move |
+| retract | retraction, as in Prolog and Datalog's assert and retract |
 | later units rerun on a changed value | flow (read-after-write) dependence |
 | restore because a later unit took or wrote what an earlier one reads | anti (write-after-read) dependence |
-| the nearest unit that set the binding without reading it | reaching definition |
+| the nearest unit that set the binding without reading it | nearest killing definition |
+| restore by rerunning instead of keeping the old value | rematerialization |
 | repeat until nothing more needs to rerun | worklist fixed point |
 
 There is one paper that applies directly to this work,
@@ -1560,9 +1563,9 @@ They examine existing reactive notebooks to find cases where
 replay behavior is unsound compared to a fresh run.
 They developed a language and testing methodology.
 I adopted their technique of comparing every step to a fresh run.
-The algebra developed here appears to pass all their cases and more.
+The rules developed here appear to pass all their cases and more.
 They did identify cases that I had not made explicit,
-particularly related to mutating functions and moves of script units.
+particularly related to mutating functions and reordering script units.
 I added them to my test suite.
 
 
