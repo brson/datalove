@@ -1523,6 +1523,21 @@ let c = b + 1
 Taking the shadow away moves the write back, and restores nothing: unit 3
 overwrites unit 1's `b`, and needs nothing it held.
 
+Inserting a unit that shadows `b` moves the write as the edit did, and
+restores unit 1 the same way.
+
+<!-- world shadow step 4 -->
+**Step 4: a unit that shadows `b` is inserted after unit 1.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `var b = 125` | - | reruns | rerun: unit 3 overwrote unit 1's `b` when it last ran, and now overwrites unit 5's | `b` = 125 |
+| 5 | `var b = 7` | - | compiles, runs | new | `b` = 500 |
+| 2 | `let x = 0` | - | untouched | uses nothing | `x` = 0 |
+| 3 | `set b = 500` | overwrites `b` (5) | reruns | its `b` is unit 5's now, of the same type | - |
+| 4 | `let c = b + 1` | reads `b` (5) | reruns | its `b` is unit 5's now, of the same type | `c` = 501 |
+<!-- end world -->
+
 ## Values through intermediate bindings
 
 <!-- world values-through-bindings code -->
