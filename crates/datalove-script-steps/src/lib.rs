@@ -639,7 +639,7 @@ impl SessionReader {
     /// The next unit's name, which `id`, the name its section gives it, must
     /// be if there is one.
     fn take_id(&mut self, id: Option<&str>) -> String {
-        let unit = self.next.to_string();
+        let unit = self.next.S();
         if let Some(id) = id {
             assert_eq!(id, unit, "{}: a new unit takes the next id", self.name);
         }
@@ -690,7 +690,7 @@ pub fn write_changes(library: &str, changes: &[Change]) -> String {
             _ => {}
         }
     }
-    let id = |unit: &str| (names.iter().position(|name| name == unit).X() + 1).to_string();
+    let id = |unit: &str| (names.iter().position(|name| name == unit).X() + 1).S();
     let section = |header: String, content: &str| fmt!("{SEPARATOR}\n{header}\n{SEPARATOR}\n\n{content}\n\n");
 
     let mut text = library.trim().S();

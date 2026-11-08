@@ -439,7 +439,7 @@ fn lower_statement_for_script<'db>(
                 // Not found, it is bound by an earlier unit that typechecked
                 // and did not compile.
                 let operand = ctx.lookup_var(&root_name_str)
-                    .ok_or_else(|| LowerError::BindingNotAvailable(root_name_str.clone()))?;
+                    .ok_or_else(|| LowerError::BindingNotAvailable(root_name_str.C()))?;
                 match operand {
                     Operand::Slot(slot) => {
                         let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);

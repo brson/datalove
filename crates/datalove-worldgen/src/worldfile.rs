@@ -66,9 +66,9 @@ fn gen_session_tracked<'db>(
             continue;
         }
         let keyword = if v.is_mutable { "var" } else { "let" };
-        let ty = pretty_type_hint(db, v.type_hint.clone());
+        let ty = pretty_type_hint(db, v.type_hint.C());
         let value = gen_literal(db, &mut rng, v.type_hint, &config);
-        shadows.push((v.name.clone(), format!("{} {}: {} = {}", keyword, v.name, ty, value)));
+        shadows.push((v.name.C(), format!("{} {}: {} = {}", keyword, v.name, ty, value)));
     }
     GenSession { library, modules, data: script.data, units, shadows }
 }

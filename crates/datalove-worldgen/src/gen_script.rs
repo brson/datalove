@@ -197,7 +197,7 @@ fn gen_binding_access<'db, R: Rng>(
     if !ctx.variables.is_empty() {
         kinds.push(4);
     }
-    let pick = |rng: &mut R, from: &[Variable<'db>]| from[rng.gen_range(0..from.len())].clone();
+    let pick = |rng: &mut R, from: &[Variable<'db>]| from[rng.gen_range(0..from.len())].C();
 
     match kinds[rng.gen_range(0..kinds.len())] {
         0 => {
@@ -214,9 +214,9 @@ fn gen_binding_access<'db, R: Rng>(
             let v = pick(rng, &takable);
             let name = format!("v{}", *var_counter);
             *var_counter += 1;
-            let ty = pretty_type_hint(db, v.type_hint.clone());
+            let ty = pretty_type_hint(db, v.type_hint.C());
             ctx.consume_variable(&v.name);
-            ctx.variables.push(Variable { name: name.clone(), type_hint: v.type_hint, is_mutable: false });
+            ctx.variables.push(Variable { name: name.C(), type_hint: v.type_hint, is_mutable: false });
             format!("let {}: {} = {}", name, ty, v.name)
         }
         3 => {
@@ -227,14 +227,14 @@ fn gen_binding_access<'db, R: Rng>(
         6 => {
             let name = format!("d{}", *var_counter);
             *var_counter += 1;
-            ctx.variables.push(Variable { name: name.clone(), type_hint: TypeHint::Int, is_mutable: true });
+            ctx.variables.push(Variable { name: name.C(), type_hint: TypeHint::Int, is_mutable: true });
             format!("var {}: int = {}", name, rng.gen_range(1..10))
         }
         7 => {
             let d = pick(rng, &divisors);
             let name = format!("v{}", *var_counter);
             *var_counter += 1;
-            ctx.variables.push(Variable { name: name.clone(), type_hint: TypeHint::Int, is_mutable: false });
+            ctx.variables.push(Variable { name: name.C(), type_hint: TypeHint::Int, is_mutable: false });
             format!("let {}: int = {} /! {}", name, rng.gen_range(0..200), d.name)
         }
         8 => {
@@ -246,26 +246,26 @@ fn gen_binding_access<'db, R: Rng>(
                 2 => TypeHint::Bool,
                 _ => TypeHint::String,
             };
-            let ty = pretty_type_hint(db, type_hint.clone());
+            let ty = pretty_type_hint(db, type_hint.C());
             let path = format!("local/gen/{}", name);
-            data.push((path.clone(), gen_literal(db, rng, type_hint.clone(), config)));
+            data.push((path.C(), gen_literal(db, rng, type_hint.C(), config)));
             // A data binding is a const, read wherever it is named.
             ctx.consts.push(ConstDef { name, type_hint });
             format!("require data {}: {}", path, ty)
         }
         4 => {
-            let v = pick(rng, &ctx.variables.clone());
+            let v = pick(rng, &ctx.variables.C());
             ctx.revive_variable(&v.name);
             let keyword = if v.is_mutable { "var" } else { "let" };
-            let ty = pretty_type_hint(db, v.type_hint.clone());
+            let ty = pretty_type_hint(db, v.type_hint.C());
             format!("{} {}: {} = {}", keyword, v.name, ty, gen_literal(db, rng, v.type_hint, config))
         }
         _ => {
             let name = format!("v{}", *var_counter);
             *var_counter += 1;
             let (type_hint, ty) = gen_type_hint_and_spelling(db, rng, config, &ctx.type_aliases);
-            let value = gen_literal(db, rng, type_hint.clone(), config);
-            ctx.variables.push(Variable { name: name.clone(), type_hint, is_mutable: true });
+            let value = gen_literal(db, rng, type_hint.C(), config);
+            ctx.variables.push(Variable { name: name.C(), type_hint, is_mutable: true });
             format!("var {}: {} = {}", name, ty, value)
         }
     }

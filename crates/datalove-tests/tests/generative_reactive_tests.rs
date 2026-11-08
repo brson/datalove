@@ -257,7 +257,7 @@ fn generate(seed: u64) -> Case {
     let mut rng = Pcg64::seed_from_u64(seed);
 
     let entries: Vec<Entry> = session.units.iter().enumerate()
-        .map(|(index, source)| Entry { unit: (index + 1).to_string(), source: source.C(), expression: false })
+        .map(|(index, source)| Entry { unit: (index + 1).S(), source: source.C(), expression: false })
         .collect();
     // The units in session order, each with the source it was generated
     // with, which an edit starts from; and the deleted ones, for an insert
@@ -326,7 +326,7 @@ fn generate(seed: u64) -> Case {
             }
             8 | 9 if !deleted.is_empty() => {
                 let source = deleted.remove(rng.random_range(0..deleted.len()));
-                let name = next.to_string();
+                let name = next.S();
                 next += 1;
                 live.insert(pick + 1, (name.C(), source.C()));
                 Change::Insert {
@@ -395,7 +395,7 @@ fn aim(
     }
     let shadow = &shadows.iter().find(|(name, _)| *name == access.name)?.1;
     let mut new_unit = |live: &mut Vec<(String, String)>, after: usize| {
-        let unit = next.to_string();
+        let unit = next.S();
         *next += 1;
         live.insert(after + 1, (unit.C(), shadow.C()));
         let entry = Entry { unit, source: shadow.C(), expression: false };
@@ -452,7 +452,7 @@ fn perturb(rng: &mut Pcg64, source: &str) -> String {
             i += 1;
         }
         match rng.random_bool(0.5) {
-            true => out.push_str(&rng.random_range(0..20).to_string()),
+            true => out.push_str(&rng.random_range(0..20).S()),
             false => out.extend(&chars[start..i]),
         }
     }
@@ -620,7 +620,7 @@ fn catch_panics() {
         if std::thread::current().name() != Some(CHECKING) {
             return usual(info);
         }
-        let at = info.location().map_or("an unknown place".S(), |location| location.to_string());
+        let at = info.location().map_or("an unknown place".S(), |location| location.S());
         LAST_PANIC.set(Some((at, payload_message(info.payload()))));
     }));
 }

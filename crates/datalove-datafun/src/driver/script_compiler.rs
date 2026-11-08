@@ -1284,7 +1284,7 @@ impl<'db> ScriptCompiler<'db> {
                 Some(output) => {
                     let names = self.unit_provides_names(*output);
                     provides.push(match self.unit_records[index].compiled {
-                        true => names.clone(),
+                        true => names.C(),
                         false => Vec::new(),
                     });
                     uses.push(self.unit_used_names(index, *output));
