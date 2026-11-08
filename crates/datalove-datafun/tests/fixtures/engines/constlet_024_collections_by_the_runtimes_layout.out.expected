@@ -1,0 +1,42 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v2 = const [{}, {}]
+                        v9 = const [(1u8, 2u64), (3u8, 4u64)]
+                        v16 = const #{(1u8, 9u64), (5u8, 6u64)}
+                        v18 = const #{{}}
+                        v29 = const {| a, b, c, d; 1u8, 2u64, {}, 3u16; 4u8, 5u64, {}, 6u16 |}
+                        v38 = const %{1u8 = (7u8, 8u64), 2u8 = (9u8, 10u64)}
+                        debuglog v2
+                        debuglog v9
+                        debuglog v16
+                        debuglog v18
+                        debuglog v29
+                        debuglog v38
+                        unit_end_drop v2
+                        unit_end_drop v9
+                        unit_end_drop v16
+                        unit_end_drop v18
+                        unit_end_drop v29
+                        unit_end_drop v38
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("[{}, {}]\n[(1, 2), (3, 4)]\n#{(1, 9), (5, 6)}\n#{{}}\n{| a, b, c, d; 1, 2, {}, 3; 4, 5, {}, 6 |}\n%{1 = (7, 8), 2 = (9, 10)}\n"),
+        ),
+    ],
+)

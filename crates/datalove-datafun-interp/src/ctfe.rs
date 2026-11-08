@@ -364,12 +364,9 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 if size == 0 || list_val.data.is_null() {
                     Ok(ConstValue::List(Vec::new()))
                 } else {
-                    // Compute element size and extract each element.
-                    let element_size = size_of_ir_type(element_type) as usize;
-                    let element_align = align_of_ir_type(element_type);
-                    // Element stride is size aligned up to alignment.
-                    let stride = datalove_rtdt::layout::align_up(element_size as u32, element_align) as usize;
-                    let stride = if stride == 0 { 1 } else { stride }; // Avoid zero stride for ZSTs
+                    // The elements sit one element's size apart, as the
+                    // runtime stores them; one of no size takes no room.
+                    let stride = size_of_ir_type(element_type) as usize;
 
                     let mut elements = Vec::with_capacity(size);
                     for i in 0..size {
@@ -425,29 +422,21 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                     let column_types: Vec<&IrType> = columns.iter().map(|(_, ty)| ty.as_ref()).collect();
                     let mut rows = Vec::with_capacity(num_rows);
 
-                    // Compute column offsets and sizes.
-                    let col_sizes: Vec<u32> = column_types.iter().map(|ty| size_of_ir_type(ty)).collect();
-                    let col_aligns: Vec<u32> = column_types.iter().map(|ty| align_of_ir_type(ty)).collect();
-
-                    // Compute column offsets in the data buffer.
+                    // Each column a run of its elements, where the runtime's
+                    // layout puts it.
+                    let sized: Vec<(u32, u32)> = column_types.iter()
+                        .map(|ty| (size_of_ir_type(ty), align_of_ir_type(ty)))
+                        .collect();
                     let capacity = table_val.capacity.0;
-                    let mut col_offsets = Vec::with_capacity(columns.len());
-                    let mut offset = 0u32;
-                    for i in 0..column_types.len() {
-                        offset = datalove_rtdt::layout::align_up(offset, col_aligns[i]);
-                        col_offsets.push(offset as usize);
-                        let col_size = col_sizes[i];
-                        let stride = datalove_rtdt::layout::align_up(col_size, col_aligns[i]);
-                        offset += stride * (capacity as u32);
-                    }
+                    let col_offsets: Vec<usize> = (0..sized.len())
+                        .map(|col| datalove_rtdt::layout::table_column_offset_of(&sized, col, capacity))
+                        .collect();
 
                     for row_idx in 0..num_rows {
                         let mut row_values = Vec::with_capacity(columns.len());
                         for (col_idx, col_ty) in column_types.iter().enumerate() {
                             let col_offset = col_offsets[col_idx];
-                            let elem_stride = datalove_rtdt::layout::align_up(col_sizes[col_idx], col_aligns[col_idx]) as usize;
-                            let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
-                            let elem_ptr = table_val.data.add(col_offset + row_idx * elem_stride);
+                            let elem_ptr = table_val.data.add(col_offset + row_idx * sized[col_idx].0 as usize);
                             let elem_value = extract_const_value(elem_ptr, col_ty)?;
                             row_values.push(elem_value);
                         }
@@ -666,8 +655,11 @@ unsafe fn extract_set_elements(
         return Ok(());
     }
 
-    let element_size = size_of_ir_type(element_type) as usize;
+    // The node layouts are the runtime's own, as a map's are.
+    let element_size = size_of_ir_type(element_type);
     let element_align = align_of_ir_type(element_type);
+    let internal = datalove_rtdt::layout::set_internal_node_layout(element_size, element_align);
+    let leaf = datalove_rtdt::layout::set_leaf_node_layout(element_size, element_align);
 
     // Find the leftmost leaf by descending through internal nodes.
     let mut node = root;
@@ -676,12 +668,8 @@ unsafe fn extract_set_elements(
         match tag {
             1 => {
                 // Internal node - descend to first child.
-                // Internal node layout: tag (u8 @ 0), len (u32 @ 4), then keys and child_ptrs.
-                let keys_offset = datalove_rtdt::layout::align_up(8, element_align);
-                let keys_size = datalove_rtdt::SET_NODE_CAPACITY * datalove_rtdt::layout::align_up(element_size as u32, element_align);
-                let child_ptrs_offset = datalove_rtdt::layout::align_up(keys_offset + keys_size, 8);
                 let child_ptr = unsafe {
-                    let ptr = (node as *const u8).add(child_ptrs_offset as usize) as *const *const datalove_rtdt::SetNode;
+                    let ptr = (node as *const u8).add(internal.child_ptrs_offset as usize) as *const *const datalove_rtdt::SetNode;
                     *ptr
                 };
                 node = child_ptr;
@@ -705,14 +693,9 @@ unsafe fn extract_set_elements(
 
         let len = unsafe { *((node as *const u8).add(4) as *const u32) };
 
-        // Leaf node layout: tag (u8 @ 0), len (u32 @ 4), next_leaf (ptr @ 8), keys after that.
-        let next_leaf_offset = 8usize;
-        let keys_offset = datalove_rtdt::layout::align_up(next_leaf_offset as u32 + 8, element_align) as usize;
-        let stride = datalove_rtdt::layout::align_up(element_size as u32, element_align) as usize;
-        let stride = if stride == 0 { 1 } else { stride };
-
+        let next_leaf_offset = leaf.next_leaf_offset as usize;
         for i in 0..len as usize {
-            let elem_ptr = unsafe { (node as *const u8).add(keys_offset + i * stride) };
+            let elem_ptr = unsafe { (node as *const u8).add(leaf.keys_offset as usize + i * element_size as usize) };
             let elem_value = extract_const_value(elem_ptr, element_type)?;
             out.push(elem_value);
         }

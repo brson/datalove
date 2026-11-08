@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+// Consts of each collection CTFE reads from the runtime, with elements of no
+// size and of mixed alignments: a list, a set, a table and a map, each read
+// by the runtime's own layout.
+
+const L: [{}] = [: {} / {}, : {} / {}]
+const M: [(u8, u64)] = [(: u8 / 1, : u64 / 2), (: u8 / 3, : u64 / 4)]
+const S: #{(u8, u64)} = #{(: u8 / 5, : u64 / 6), (: u8 / 1, : u64 / 9)}
+const Z: #{{}} = #{: {} / {}}
+const T: {| a: u8, b: u64, c: {}, d: u16 |} = {| a, b, c, d; 1, 2, {}, 3; 4, 5, {}, 6 |}
+const W: %{u8 = (u8, u64)} = %{: u8 / 1 = (: u8 / 7, : u64 / 8), : u8 / 2 = (: u8 / 9, : u64 / 10)}
+debuglog L
+debuglog M
+debuglog S
+debuglog Z
+debuglog T
+debuglog W

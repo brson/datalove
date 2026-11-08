@@ -515,12 +515,24 @@ pub fn table_column_offset(
     column_index: usize,
     capacity: IndexRepr,
 ) -> usize {
+    let columns: Vec<(u32, u32)> = column_tydescs.iter().map(|tydesc| (tydesc.size, tydesc.align)).collect();
+    table_column_offset_of(&columns, column_index, capacity)
+}
+
+/// The same, from each column's element size and alignment, for a reader
+/// that knows the column types and holds no descriptors.
+#[inline]
+pub fn table_column_offset_of(
+    columns: &[(u32, u32)],
+    column_index: usize,
+    capacity: IndexRepr,
+) -> usize {
     let mut offset = 0usize;
-    for i in 0..column_index {
-        offset = align_up_usize(offset, column_tydescs[i].align);
-        offset += (column_tydescs[i].size as usize) * (capacity as usize);
+    for (size, align) in &columns[..column_index] {
+        offset = align_up_usize(offset, *align);
+        offset += (*size as usize) * (capacity as usize);
     }
-    align_up_usize(offset, column_tydescs[column_index].align)
+    align_up_usize(offset, columns[column_index].1)
 }
 
 /// Compute total allocation size for a table's data.
