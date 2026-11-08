@@ -18,10 +18,11 @@ pub fn gen_script<'db, R: Rng>(
     config: &WorldGenConfig,
     modules: &[ModuleInfo<'db>],
 ) -> String {
-    gen_script_items(db, rng, config, modules).join("\n")
+    gen_script_items(db, rng, config, modules).0.join("\n")
 }
 
-/// Generate a script as its top-level items, in order.
+/// Generate a script as its top-level items, in order, and the bindings
+/// its top level makes.
 ///
 /// An item is a statement, a `require` or an `import`. Each function a
 /// statement calls is imported somewhere before that statement and after the
@@ -34,7 +35,7 @@ pub fn gen_script_items<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
     modules: &[ModuleInfo<'db>],
-) -> Vec<String> {
+) -> (Vec<String>, Vec<Variable<'db>>) {
     let mut ctx = GenContext::new();
 
     // What may be imported, and from where.
@@ -124,7 +125,7 @@ pub fn gen_script_items<'db, R: Rng>(
         }
     }
 
-    items
+    (items, ctx.variables)
 }
 
 /// A statement that makes a binding for later statements to act on, or acts

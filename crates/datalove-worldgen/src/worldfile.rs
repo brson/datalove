@@ -5,7 +5,9 @@ use rand::{Rng, SeedableRng};
 use datalove_datalit::Database;
 use crate::config::WorldGenConfig;
 use crate::gen_module::{plan_module_graph, gen_module_type_aliases, gen_module_function_sigs, gen_module_generic_sigs, gen_module};
+use crate::gen_expr::gen_literal;
 use crate::gen_script::{gen_script, gen_script_items};
+use crate::pretty::pretty_type_hint;
 
 /// Generate a complete worldfile from a seed.
 ///
@@ -22,6 +24,10 @@ pub struct GenSession {
     pub library: String,
     /// The script units, in order.
     pub units: Vec<String>,
+    /// For each name the script's top level binds, a statement that binds
+    /// it again, as `let` or `var` as it was and with a literal of its type:
+    /// a shadow of it, wherever it is in scope.
+    pub shadows: Vec<(String, String)>,
 }
 
 /// Generate a session from a seed: a worldfile's script cut into units.
@@ -39,14 +45,26 @@ fn gen_session_tracked<'db>(
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     let modules = gen_modules(db, &mut rng, &config);
     let library = modules.1.join("\n\n");
-    let items = gen_script_items(db, &mut rng, &config, &modules.0);
+    let (items, variables) = gen_script_items(db, &mut rng, &config, &modules.0);
     let mut units = Vec::new();
     let mut items = items.into_iter().peekable();
     while items.peek().is_some() {
         let count = rng.gen_range(1..=3);
         units.push(items.by_ref().take(count).collect::<Vec<_>>().join("\n"));
     }
-    GenSession { library, units }
+
+    // Drawn after the units, so asking for them changes none.
+    let mut shadows: Vec<(String, String)> = Vec::new();
+    for v in variables {
+        if shadows.iter().any(|(name, _)| *name == v.name) {
+            continue;
+        }
+        let keyword = if v.is_mutable { "var" } else { "let" };
+        let ty = pretty_type_hint(db, v.type_hint.clone());
+        let value = gen_literal(db, &mut rng, v.type_hint, &config);
+        shadows.push((v.name.clone(), format!("{} {}: {} = {}", keyword, v.name, ty, value)));
+    }
+    GenSession { library, units, shadows }
 }
 
 /// Internal tracked function for worldfile generation.

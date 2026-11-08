@@ -9,6 +9,13 @@
 //! the definition of a correct step, so no table is written, and any seed is
 //! a test.
 //!
+//! About a third of the changes aim at a unit that takes or writes an
+//! earlier unit's binding, which a session entered once to look says which
+//! are: a shadow of the binding is put between its provider and the writer,
+//! by an insert, an edit or a reorder, or added to the writer itself, or the
+//! writer is reordered above its provider. Those are the arrangements the reach has been wrong about, and
+//! random changes make them rarely.
+//!
 //! A unit can also take the session with it, by a runtime error or a crash,
 //! which ends the case: a fresh run must then reset too, the same way.
 //!
@@ -83,6 +90,64 @@ const MIN_STILL_RUNNING: f64 = 0.5;
 struct Case {
     library: String,
     changes: Vec<Change>,
+    /// How many of the changes were aimed, by kind; see [`AIMED_KINDS`].
+    /// None for a session read from a file.
+    aimed: [usize; 4],
+}
+
+const AIMED_KINDS: [&str; 4] = [
+    "shadows inserted", "shadows edited in", "shadows reordered in", "writers reordered above their providers",
+];
+
+/// A unit that takes or writes a binding an earlier unit provides, by
+/// name.
+struct Access {
+    writer: String,
+    provider: String,
+    /// The binding's name.
+    name: String,
+}
+
+/// What each unit, entered, takes or writes of earlier units' bindings;
+/// nothing if entering the units panics or hangs, which checking the case
+/// then reports.
+fn accesses(library: &str, entries: &[Entry]) -> Vec<Access> {
+    let library = library.S();
+    let enter = Change::Enter(entries.to_vec());
+    let (send, receive) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name(CHECKING.S())
+        .stack_size(32 * 1024 * 1024)
+        .spawn(move || {
+            let found = std::panic::catch_unwind(|| {
+                let workspace = Workspace::from_worldfile(&library);
+                let mut session = Session::start(workspace.sys, workspace.descriptor, workspace.also_roots);
+                session.apply(&enter);
+                let mut found = Vec::new();
+                if session.reset().is_some() {
+                    return found;
+                }
+                for (index, writer) in session.units().iter().enumerate() {
+                    if session.has_failed(writer) {
+                        continue;
+                    }
+                    // Each says `<verb> `<name>` (<provider>)`.
+                    for used in session.uses(index) {
+                        if used.starts_with("reads") {
+                            continue;
+                        }
+                        let (_, rest) = used.split_once('`').X();
+                        let (name, rest) = rest.split_once('`').X();
+                        let provider = rest.trim().trim_start_matches('(').trim_end_matches(')');
+                        found.push(Access { writer: writer.C(), provider: provider.S(), name: name.S() });
+                    }
+                }
+                found
+            });
+            send.send(found.unwrap_or_default()).ok();
+        })
+        .X();
+    receive.recv_timeout(SEED_TIMEOUT).unwrap_or_default()
 }
 
 /// The units of a session as its changes leave them, by name, in order.
@@ -171,8 +236,19 @@ fn generate(seed: u64) -> Case {
     let mut deleted: Vec<String> = Vec::new();
     let mut next = entries.len() + 1;
 
+    let aims = accesses(&session.library, &entries);
+    let mut aimed = [0; 4];
+
     let mut changes = vec![Change::Enter(entries)];
     while changes.len() <= CHANGES {
+        if !aims.is_empty() && rng.random_range(0..3) == 0 {
+            let access = &aims[rng.random_range(0..aims.len())];
+            if let Some((kind, made)) = aim(&mut rng, &mut live, &mut next, &session.shadows, access) {
+                aimed[kind] += 1;
+                changes.extend(made);
+                continue;
+            }
+        }
         let count = live.len();
         let pick = rng.random_range(0..count);
         let (unit, original) = live[pick].C();
@@ -212,8 +288,66 @@ fn generate(seed: u64) -> Case {
         };
         changes.push(change);
     }
-    debug_assert!(Order::admits(&changes));
-    Case { library: session.library, changes }
+    assert!(Order::admits(&changes), "seed {seed} makes changes that cannot be made");
+    Case { library: session.library, changes, aimed }
+}
+
+/// Changes aimed at `access`, and which kind of [`AIMED_KINDS`] they are;
+/// `None` if its writer or provider is gone or out of order.
+///
+/// `live` is the units in session order, with the source each was
+/// generated with, and `next` the number the next unit takes.
+fn aim(
+    rng: &mut Pcg64,
+    live: &mut Vec<(String, String)>,
+    next: &mut usize,
+    shadows: &[(String, String)],
+    access: &Access,
+) -> Option<(usize, Vec<Change>)> {
+    let at = |live: &[(String, String)], unit: &str| live.iter().position(|(name, _)| name == unit);
+    let provider = at(live, &access.provider)?;
+    let writer = at(live, &access.writer)?;
+    if provider >= writer {
+        return None;
+    }
+    let shadow = &shadows.iter().find(|(name, _)| *name == access.name)?.1;
+    let mut new_unit = |live: &mut Vec<(String, String)>, after: usize| {
+        let unit = next.to_string();
+        *next += 1;
+        live.insert(after + 1, (unit.C(), shadow.C()));
+        let entry = Entry { unit, source: shadow.C(), expression: false };
+        Change::Insert { entry, place: Place::After, beside: live[after].0.C() }
+    };
+    let made = match rng.random_range(0..4) {
+        0 => {
+            let after = rng.random_range(provider..writer);
+            (0, vec![new_unit(live, after)])
+        }
+        // A unit after the provider, up to the writer itself, which then
+        // binds again a name it takes or writes.
+        1 => {
+            let (unit, original) = live[rng.random_range(provider + 1..=writer)].C();
+            (1, vec![Change::Edit { unit, source: fmt!("{original}\n{shadow}") }])
+        }
+        2 => {
+            let last = live.len() - 1;
+            let insert = new_unit(live, last);
+            let entry = live.pop().X();
+            let unit = entry.0.C();
+            let after = rng.random_range(provider..writer);
+            let beside = live[after].0.C();
+            live.insert(after + 1, entry);
+            (2, vec![insert, Change::Move { unit, place: Place::After, beside }])
+        }
+        _ => {
+            let entry = live.remove(writer);
+            let unit = entry.0.C();
+            let beside = live[provider].0.C();
+            live.insert(provider, entry);
+            (3, vec![Change::Move { unit, place: Place::Before, beside }])
+        }
+    };
+    Some(made)
 }
 
 /// `source` with each integer literal, by chance, replaced by a small other
@@ -291,6 +425,8 @@ struct Tally {
     resets: usize,
     /// Changes made, by kind: edits, deletes, reorders, inserts.
     changes: [usize; 4],
+    /// Of those, the aimed ones, by kind; see [`AIMED_KINDS`].
+    aimed: [usize; 4],
     /// What the units do to earlier units' bindings as they are entered, by
     /// verb: reads, takes, overwrites, updates, revives.
     uses: [usize; 5],
@@ -309,6 +445,9 @@ impl Tally {
         for (sum, count) in self.changes.iter_mut().zip(other.changes) {
             *sum += count;
         }
+        for (sum, count) in self.aimed.iter_mut().zip(other.aimed) {
+            *sum += count;
+        }
         for (sum, count) in self.uses.iter_mut().zip(other.uses) {
             *sum += count;
         }
@@ -324,9 +463,14 @@ impl Tally {
                 self.still_running, self.remaining,
             ));
         }
-        for (kind, count) in CHANGE_KINDS.iter().zip(self.changes) {
+        for (kind, count) in CHANGE_KINDS.iter().zip(self.changes).chain(AIMED_KINDS.iter().zip(self.aimed)) {
             if count == 0 {
-                shortfalls.push(fmt!("no {kind} were made"));
+                shortfalls.push(fmt!("{kind}: none"));
+            }
+        }
+        for (verb, count) in VERBS.iter().zip(self.uses).skip(1) {
+            if count == 0 {
+                shortfalls.push(fmt!("no unit {verb} an earlier unit's binding"));
             }
         }
         shortfalls
@@ -336,12 +480,15 @@ impl Tally {
         let changes: Vec<String> = CHANGE_KINDS.iter().zip(self.changes)
             .map(|(kind, count)| fmt!("{count} {kind}"))
             .collect();
+        let aimed: Vec<String> = AIMED_KINDS.iter().zip(self.aimed)
+            .map(|(kind, count)| fmt!("{count} {kind}"))
+            .collect();
         let uses: Vec<String> = VERBS.iter().zip(self.uses)
             .map(|(verb, count)| fmt!("{count} {verb}"))
             .collect();
         fmt!(
-            "{} units entered, {} still run of {} after {}, {} sessions reset; as entered, units use earlier units' bindings: {}",
-            self.entered, self.still_running, self.remaining, changes.join(", "), self.resets, uses.join(", "),
+            "{} units entered, {} still run of {} after {} ({}), {} sessions reset; as entered, units use earlier units' bindings: {}",
+            self.entered, self.still_running, self.remaining, changes.join(", "), aimed.join(", "), self.resets, uses.join(", "),
         )
     }
 }
@@ -408,7 +555,7 @@ fn check(case: &Case, timeout: Duration) -> Verdict {
 fn run(case: &Case) -> Verdict {
     let workspace = Workspace::from_worldfile(&case.library);
     let mut session = Session::start(workspace.sys, workspace.descriptor, workspace.also_roots);
-    let mut tally = Tally::default();
+    let mut tally = Tally { aimed: case.aimed, ..Tally::default() };
     let mut failures = Vec::new();
     for (number, change) in case.changes.iter().enumerate() {
         let touched = session.apply(change);
@@ -570,7 +717,7 @@ fn corpus() -> Vec<(String, Case)> {
         .map(|path| {
             let name = path.file_name().X().to_string_lossy().S();
             let (library, changes) = read_changes(&name, &std::fs::read_to_string(&path).X());
-            (name, Case { library, changes })
+            (name, Case { library, changes, aimed: [0; 4] })
         })
         .collect()
 }
@@ -590,7 +737,7 @@ fn main() {
     if let Ok(path) = std::env::var("GENERATIVE_REACTIVE_WORLD") {
         let text = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
         let (library, changes) = read_changes(&path, &text);
-        let verdict = check(&Case { library, changes }, SEED_TIMEOUT);
+        let verdict = check(&Case { library, changes, aimed: [0; 4] }, SEED_TIMEOUT);
         println!("{path}: {}", verdict.describe());
         if let Verdict::Agrees(tally) = &verdict && !tally.failed_on_entry.is_empty() {
             println!("units that do not compile when entered: {}", tally.failed_on_entry.join(", "));

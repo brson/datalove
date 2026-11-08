@@ -600,27 +600,31 @@ of a shadowed name; and a unit's export marked given away when the unit had
 bound the name again. Most were found only once worldgen made sessions that
 overwrite, update, take, revive and shadow bindings across units
 (`WorldGenConfig::binding_access_probability`). Planting faults in seeds 0 to
-49, without those statements and with them:
+49: without those statements, with them, and with changes aimed at the units
+they make as well, a shadow put between a provider and a unit that takes or
+writes its binding, or the writer reordered above its provider. The last
+column is the 20 seeds `just test` runs.
 
-| fault | seeds failing, without | with |
-|---|---|---|
-| no backward rule | 6 | 22 |
-| the forward rule reaches only the seeds | 31 | 27 |
-| a rerun reruns no one after it | 7 | 35 |
-| no restore of a shadowed binding | 0 | 2 |
-| a reorder's restore in the new order | 0 | 0 |
-| no Fix or Break as a seed | 0 | 0 |
-| a departure's restore by the typecheck | 0 | 0 |
-| a rerun reports the nearest binding | 0 | 1 |
-| an export given away by a shadowed binding | 0 | 0 |
+| fault | without | with | aimed | aimed, of 20 |
+|---|---|---|---|---|
+| no backward rule | 6 | 22 | 16 | 7 |
+| the forward rule reaches only the seeds | 31 | 27 | 20 | 5 |
+| a rerun reruns no one after it | 7 | 35 | 39 | 16 |
+| no restore of a shadowed binding | 0 | 2 | 24 | 10 |
+| a reorder's restore in the new order | 0 | 0 | 15 | 5 |
+| no Fix or Break as a seed | 0 | 0 | 0 | 0 |
+| a departure's restore by the typecheck | 0 | 0 | 0 | 0 |
+| a rerun reports the nearest binding | 0 | 1 | 2 | 0 |
+| an export given away by a shadowed binding | 0 | 0 | 0 | 0 |
 
-The four the seeds miss are each caught by a session kept in
+Aiming is what finds the shadows. Of the faults the 20 seeds still miss, the
+first two are caught by a session kept in
 `crates/datalove-tests/tests/generative_reactive/`, the shrunk session that
-found it, except the last, which is `engine_edit_tests`'s
-`a_name_given_away_and_bound_again_is_there_for_a_later_unit`. The seeds
-rarely build the shape a bug needs, a shadow between a provider and a writer
-most of all: at 2 in 50 for the shadow, finding the next such bug takes the
-hundreds of seeds of `just test-generative`, and luck.
+found it, and the third by one of those and by `engine_edit_tests`'s
+`a_unit_rerun_before_a_shadow_reports_its_own_binding`. The last no fresh run
+can catch: it fails a unit in the session and in the fresh run alike, so the
+two agree. It is a compile bug that a shadow made reachable, and
+`a_name_given_away_and_bound_again_is_there_for_a_later_unit` is its test.
 
 **A trap in the instrument.** `QueryRecorder` answers "what executed". It
 cannot answer "would this re-run if asked". Typechecking is lazy, so a unit
