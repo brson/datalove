@@ -50,7 +50,7 @@
 //! - `GENERATIVE_REACTIVE_SEED`: the first seed, by default [`DEFAULT_SEED`].
 //!   The default is fixed, so that a failure is a change and not a draw.
 //! - `GENERATIVE_REACTIVE_COUNT`: how many seeds, by default
-//!   [`DEFAULT_COUNT`]. `just test-generative` runs more.
+//!   [`DEFAULT_COUNT`]. `just test-generative-reactive` runs more.
 //! - `GENERATIVE_REACTIVE_WORLD`: a written session to run, rather than any
 //!   seed, as a failing seed prints.
 //! - `GENERATIVE_REACTIVE_NO_SHRINK`: write failing seeds out unshrunk, for

@@ -48,7 +48,7 @@ test-slow:
     just test-wasm
     just test-sys-riders
     just test-worldgen
-    just test-generative
+    just test-generative-reactive
 
 # Generated programs, run on the interpreter under a chaos dispatcher and
 # through Cranelift AOT. CI's seed is fixed so that a failure is a change, not
@@ -61,7 +61,7 @@ test-worldgen SEED='2000':
 # test's default; this runs 1000 from far past it, so as not to repeat them,
 # about 12 minutes in a debug build. A failing seed is shrunk and written out;
 # see the test's docs.
-test-generative SEED='1000000' COUNT='1000':
+test-generative-reactive SEED='1000000' COUNT='1000':
     GENERATIVE_REACTIVE_SEED={{SEED}} GENERATIVE_REACTIVE_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test generative_reactive_tests
 
 # The programs outside the test suite, in release: the benchvs benches built
