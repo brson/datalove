@@ -57,10 +57,11 @@ test-worldgen SEED='2000':
     WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED={{SEED}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test worldgen_dual_tests
 
 # Generated script sessions, changed at random a step at a time, each step held
-# to a fresh run of the session's code. `just test` runs seeds 0 to 19; this
-# runs the next 1000, about 12 minutes in a debug build. A failing seed is
-# shrunk and written out; see the test's docs.
-test-generative SEED='20' COUNT='1000':
+# to a fresh run of the session's code. `just test` runs a few seeds from the
+# test's default; this runs 1000 from far past it, so as not to repeat them,
+# about 12 minutes in a debug build. A failing seed is shrunk and written out;
+# see the test's docs.
+test-generative SEED='1000000' COUNT='1000':
     GENERATIVE_REACTIVE_SEED={{SEED}} GENERATIVE_REACTIVE_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test generative_reactive_tests
 
 # The programs outside the test suite, in release: the benchvs benches built
