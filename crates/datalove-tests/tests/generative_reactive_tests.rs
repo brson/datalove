@@ -63,7 +63,7 @@ use std::cell::RefCell;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
-use bct::random::SeededRng;
+use bct::random::{SeededRng, env_seed};
 
 use datalove_repl::Place;
 use datalove_script_steps::{Change, Entry, Ran, Session, Workspace, read_changes, write_changes};
@@ -1023,7 +1023,7 @@ fn main() {
         }
     }
 
-    let start = env_u64("GENERATIVE_REACTIVE_SEED", DEFAULT_SEED);
+    let start = env_seed("GENERATIVE_REACTIVE_SEED", DEFAULT_SEED);
     let count = env_u64("GENERATIVE_REACTIVE_COUNT", DEFAULT_COUNT);
     println!("generative reactive tests: seeds {start} to {}", start + count.max(1) - 1);
 

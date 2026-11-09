@@ -3,7 +3,8 @@
 //! This test generates random worldfiles and verifies that interpreter (with chaos JIT)
 //! and AOT compilation produce identical results.
 //!
-//! Seed can be overridden via WORLDGEN_DUAL_SEED environment variable for reproducibility.
+//! The first seed is [`DEFAULT_SEED`] unless WORLDGEN_DUAL_SEED gives another.
+//! The default is fixed, so that a failure is a change and not a draw.
 //!
 //! Known issues:
 //! - Some seeds cause AOT "Verifier errors" (pre-existing compiler bug)
@@ -27,6 +28,9 @@ use datalove_datafun_cranelift_jit::{DispatcherConfig, OptimizingDispatcher};
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::FunctionRegistry;
 use datafun::driver::{ModuleCompiler, CompilerOptions};
+
+/// The first seed, when WORLDGEN_DUAL_SEED does not give one.
+const DEFAULT_SEED: u64 = 2000;
 
 /// Number of worldfiles to generate and test per run.
 const ITERATION_COUNT: u64 = 20;
@@ -440,7 +444,7 @@ fn main() {
         return;
     }
 
-    let base_seed = env_seed("WORLDGEN_DUAL_SEED");
+    let base_seed = env_seed("WORLDGEN_DUAL_SEED", DEFAULT_SEED);
     println!("Worldgen dual test seed: {}", base_seed);
     println!("(Set WORLDGEN_DUAL_SEED={} to reproduce)", base_seed);
     println!();

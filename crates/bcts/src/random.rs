@@ -10,10 +10,11 @@
 //! Seeds come from three places:
 //!
 //! - a number, written in a test or counted from a start, for
-//!   [`SeededRng::new`];
+//!   [`SeededRng::new`], or given in the environment through [`env_seed`];
 //! - content, such as a fixture's source, through [`seed_of`];
-//! - the OS, through [`fresh_seed`] and [`env_seed`], which print what they
-//!   drew so that the run can be repeated with it.
+//! - the OS, through [`fresh_seed`], which prints what it drew so that the
+//!   run can be repeated with it. Only the CLI does this: a test's seeds are
+//!   fixed, so that a failure is a change and not a draw.
 //!
 //! Two consumers of one seed must not draw the same stream, as a generated
 //! program and the edits made to it would if both took `SeededRng::new(seed)`.
@@ -99,11 +100,11 @@ pub fn fresh_seed(name: &str) -> u64 {
     seed
 }
 
-/// The seed in the environment variable `var`, or a fresh one if it is unset.
-pub fn env_seed(var: &str) -> u64 {
+/// The seed in the environment variable `var`, or `default` if it is unset.
+pub fn env_seed(var: &str, default: u64) -> u64 {
     match rmx::std::env::var(var) {
         Ok(s) => s.parse().unwrap_or_else(|_| panic!("{var} is not a number: {s:?}")),
-        Err(_) => fresh_seed(var),
+        Err(_) => default,
     }
 }
 
