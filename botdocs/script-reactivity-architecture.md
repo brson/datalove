@@ -688,6 +688,16 @@ expression units; and a revive aimed after a take of a `var`, which the
 generated units rarely made. A call of a function declared by a unit that
 failed ownership panicked in lowering, as the `set` had.
 
+The fault table below showed most later rules held by one kept session each,
+so two more changes were tried, aimed at them: a take of a binding put before
+a unit that uses it, which then typechecks and fails ownership, and a unit that
+takes a binding reordered past another that uses it. Neither moved any of
+those rules into the seeds -- each rule needs a particular unit after the one
+that fails, which the take did not bring -- and both were dropped. The sessions
+they changed found a compile bug, though: a function body's own binding -- a
+`const`, a `let`, a parameter -- did not stand in front of an earlier unit's
+const of the same name, and the body read the const's value as its own type.
+
 Planting a fault in each rule, as the sessions stood once they had
 functions in them: how many of the 20 seeds `just test` runs fail, how many
 of seeds 0 to 199, how many kept sessions in

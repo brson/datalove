@@ -1,0 +1,42 @@
+----------
+module local/test/m
+----------
+
+// A name a function body binds -- a const, a let, a parameter -- stands in
+// front of an earlier unit's const, or the module's, of the same name.
+
+const K: int = 70
+
+fun mk(): u32
+  const K: u32 = 142
+  ret K
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/m
+import m.mk
+const C: int = 70
+
+----------
+scriptunit-fragment
+----------
+
+fun viaconst(): u32
+  const C: u32 = 142
+  ret C
+end fun
+fun vialet(): u32
+  let C: u32 = 143
+  ret C
+end fun
+fun viaparam(C: u32): u32
+  ret C
+end fun
+debuglog mk()
+debuglog viaconst()
+debuglog vialet()
+debuglog viaparam(144)
+debuglog C

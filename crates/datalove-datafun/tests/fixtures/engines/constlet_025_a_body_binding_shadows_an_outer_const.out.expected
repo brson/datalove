@@ -1,0 +1,90 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn mk():
+                    block0:
+                        v0 = const 142u32
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 70int
+                        unit_end_drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u0()
+                        debuglog v0
+                        v1 = call u0()
+                        debuglog v1
+                        v2 = call u1()
+                        debuglog v2
+                        v3 = const 144u32
+                        v4 = call u2(v3)
+                        debuglog v4
+                        debuglog unit1.v0
+                        unit_end
+                    
+                    fn viaconst():
+                    block0:
+                        v0 = const 142u32
+                        return v0
+                    
+                    fn vialet():
+                    block0:
+                        v0 = const 143u32
+                        return v0
+                    
+                    fn viaparam(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("142\n142\n143\n144\n70\n"),
+        ),
+    ],
+)

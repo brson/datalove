@@ -26,6 +26,14 @@ use super::LowerError;
 /// when `is_fresh_const` is true, since regular `let` bindings bound to
 /// `Operand::Value` are already managed by the drop schedule.
 fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), LowerError> {
+    // A binding of this body's own -- a parameter, a `let`, or a `const`
+    // declared in it, which is lowered as one -- stands in front of a const
+    // from outside it of the same name, as the typechecker resolved it. An
+    // earlier script unit's binding does not: whether it or a const is the
+    // nearer is settled when the consts are gathered.
+    if let Some(op @ (Operand::Value(_) | Operand::ValueRef(_) | Operand::Slot(_) | Operand::Param(_))) = ctx.lookup_var(name) {
+        return Ok((op, false));
+    }
     if let Some((const_type, const_value)) = ctx.lookup_const(name) {
         let const_type = const_type.C();
         let const_value = std::sync::Arc::clone(const_value);
