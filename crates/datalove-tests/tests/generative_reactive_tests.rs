@@ -43,12 +43,13 @@
 //! The run also says how much it exercised, and fails if that is too little
 //! to mean anything: every unit must compile when first entered, enough
 //! units must still run after the changes, and every kind of change must have
-//! been made. Those floors are for a run of [`DEFAULT_COUNT`] seeds or more.
+//! been made. Those floors are for the default seeds alone.
 //!
 //! Environment:
 //!
-//! - `GENERATIVE_REACTIVE_SEED`: the first seed, by default [`DEFAULT_SEED`].
-//!   The default is fixed, so that a failure is a change and not a draw.
+//! - `GENERATIVE_REACTIVE_SEED`: the first seed, by default [`DEFAULT_SEED`],
+//!   or `random`. The default is fixed, so that a failure is a change and not
+//!   a draw.
 //! - `GENERATIVE_REACTIVE_COUNT`: how many seeds, by default
 //!   [`DEFAULT_COUNT`]. `just test-generative-reactive` runs more.
 //! - `GENERATIVE_REACTIVE_WORLD`: a written session to run, rather than any
@@ -63,7 +64,7 @@ use std::cell::RefCell;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
-use bct::random::{SeededRng, env_seed};
+use bct::random::{SeededRng, env_seeds};
 
 use datalove_repl::Place;
 use datalove_script_steps::{Change, Entry, Ran, Session, Workspace, read_changes, write_changes};
@@ -964,13 +965,6 @@ fn source(changes: &mut [Change], (index, entry): SourceAt) -> &mut String {
 // Running
 // ============================================================================
 
-fn env_u64(name: &str, default: u64) -> u64 {
-    match std::env::var(name) {
-        Ok(text) => text.parse().unwrap_or_else(|_| panic!("{name} must be a u64")),
-        Err(_) => default,
-    }
-}
-
 /// The kept sessions, by file name, in name order.
 fn corpus() -> Vec<(String, Case)> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/generative_reactive");
@@ -1023,13 +1017,12 @@ fn main() {
         }
     }
 
-    let start = env_seed("GENERATIVE_REACTIVE_SEED", DEFAULT_SEED);
-    let count = env_u64("GENERATIVE_REACTIVE_COUNT", DEFAULT_COUNT);
-    println!("generative reactive tests: seeds {start} to {}", start + count.max(1) - 1);
+    let seeds = env_seeds("GENERATIVE_REACTIVE", DEFAULT_SEED, DEFAULT_COUNT);
+    println!("generative reactive tests: {} seeds from {}", seeds.count, seeds.start);
 
     let mut total = Tally::default();
     let mut failed = Vec::new();
-    for seed in start..start + count {
+    for seed in seeds.iter() {
         let case = generate(seed);
         // A failing case is written out to be read back, so every case is.
         let written = write_changes(&case.library, &case.changes);
@@ -1066,7 +1059,7 @@ fn main() {
     }
 
     println!("{}", total.describe());
-    let shortfalls = match count >= DEFAULT_COUNT {
+    let shortfalls = match seeds.is_default() {
         true => total.shortfalls(),
         false => Vec::new(),
     };

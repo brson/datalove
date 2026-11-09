@@ -47,14 +47,32 @@ test-slow:
     just check-wasm
     just test-wasm
     just test-sys-riders
-    just test-worldgen
+    just test-worldgen-dual
     just test-generative-reactive
 
+# The suites that generate what they test from seeds take them alike: COUNT
+# seeds from SEED, which may be `random` to draw the first from the OS. Each
+# prints the seeds it ran as the variables that give them, so that a run can be
+# repeated, and a test run alone defaults to a fixed range, so that a failure
+# is a change and not a draw. `test-generative-random` runs them all from
+# drawn seeds.
+
 # Generated programs, run on the interpreter under a chaos dispatcher and
-# through Cranelift AOT. CI's seed is fixed so that a failure is a change, not
-# a draw; pass another to explore.
-test-worldgen SEED='2000':
-    WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED={{SEED}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test worldgen_dual_tests
+# through Cranelift AOT. Not in `just test`; this default is the test's own,
+# which `test-slow` runs.
+test-worldgen-dual SEED='2000' COUNT='20':
+    WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED={{SEED}} WORLDGEN_DUAL_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test worldgen_dual_tests
+
+# Generated programs typechecked. `just test` runs 50 seeds from 0; this runs
+# 1000 from far past them.
+test-worldgen-typecheck SEED='1000000' COUNT='1000':
+    WORLDGEN_TYPECHECK_SEED={{SEED}} WORLDGEN_TYPECHECK_COUNT={{COUNT}} cargo test -p datalove-worldgen --test worldgen_tests
+
+# What of the language generated programs cover, printed. Over seeds other
+# than the test's default only a kind written down as never generated that
+# turns up fails.
+test-worldgen-coverage SEED='1000000' COUNT='1000':
+    WORLDGEN_COVERAGE_SEED={{SEED}} WORLDGEN_COVERAGE_COUNT={{COUNT}} cargo test -p datalove-worldgen --test coverage_tests -- --nocapture --test-threads 1
 
 # Generated script sessions, changed at random a step at a time, each step held
 # to a fresh run of the session's code. `just test` runs a few seeds from the
@@ -63,6 +81,13 @@ test-worldgen SEED='2000':
 # see the test's docs.
 test-generative-reactive SEED='1000000' COUNT='1000':
     GENERATIVE_REACTIVE_SEED={{SEED}} GENERATIVE_REACTIVE_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test generative_reactive_tests
+
+# Every generative suite from seeds drawn from the OS, COUNT of each.
+test-generative-random COUNT='100':
+    just test-worldgen-typecheck random {{COUNT}}
+    just test-worldgen-coverage random {{COUNT}}
+    just test-worldgen-dual random {{COUNT}}
+    just test-generative-reactive random {{COUNT}}
 
 # The programs outside the test suite, in release: the benchvs benches built
 # and AOT-compiled, and the store demo's report checked against its Python

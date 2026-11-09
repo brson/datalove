@@ -2042,7 +2042,7 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
   [plan-parallel-collections.md](plan-parallel-collections.md)), and `just
   test-extras` runs `just test-slow` -- the `slow_tests` features, the wasm
   build, `just test-wasm`, a smoke test of sys riders built from source and
-  `just test-worldgen` -- then `just test-demos`. CI runs `test`, `test-64`,
+  `just test-worldgen-dual` -- then `just test-demos`. CI runs `test`, `test-64`,
   `test-cut` and `test-extras` as four jobs, and `just test-ci` runs them all;
   `test-sequential` is not in CI.
 - `DATALOVE_TEST_ENGINES=bytecode,jit` limits the suites that run a program
@@ -2087,8 +2087,33 @@ Most live in `crates/datalove-datafun/tests`.
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
 | `parallel_warm_tests` | That in a parallel compile every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
-| `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`), `worldgen_dual_tests` (in `datalove-tests`) | Generated worldfiles typecheck, cover the AST, and run the same both ways. See [Worldgen Coverage](#user-content-worldgen-coverage) |
+| `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`), `worldgen_dual_tests` (in `datalove-tests`) | Generated worldfiles typecheck, cover the AST, and run the same both ways. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
 | `generative_reactive_tests` (in `datalove-tests`) | Generated scripts, cut into fragment and expression units that declare and call functions, and edited, deleted, reordered and inserted at random, with the modules and data they require edited too, leave the session as a fresh run of its code would after every step. A few seeds from the test's default in `just test`, 1000 from seed 1000000 in `just test-generative-reactive`; a failing seed is shrunk and written out as a worldfile, and once fixed is kept in `tests/generative_reactive/`, which every run checks first |
+
+### Generative Seeds
+
+The suites that generate what they test from seeds take them alike, through
+`bct::random::env_seeds`: `COUNT` seeds from `SEED`, read from
+`{PREFIX}_SEED` and `{PREFIX}_COUNT`, each defaulting to a fixed value so that
+a failure is a change and not a draw. `{PREFIX}_SEED=random` draws the first
+seed from the OS. Every run prints its seeds to stderr as the variables that
+give them, so that a drawn run can be repeated.
+
+| Suite | Prefix | Default | `just` recipe |
+|-------|--------|---------|---------------|
+| `worldgen_tests`, typecheck tests | `WORLDGEN_TYPECHECK` | 50 from 0 | `test-worldgen-typecheck`, 1000 from 1000000 |
+| `coverage_tests` | `WORLDGEN_COVERAGE` | 300 from 1200, 200 for the floors | `test-worldgen-coverage`, 1000 from 1000000 |
+| `worldgen_dual_tests` | `WORLDGEN_DUAL` | 20 from 2000, with `WORLDGEN_DUAL_TEST=1` | `test-worldgen-dual`, the default |
+| `generative_reactive_tests` | `GENERATIVE_REACTIVE` | 20 from 60 | `test-generative-reactive`, 1000 from 1000000 |
+
+Every recipe takes `SEED` and `COUNT`, and `SEED` may be `random`. `just
+test-generative-random COUNT` runs all four from drawn seeds.
+
+What must hold of every seed is checked on any seeds. What a suite checks of
+how much its seeds exercised -- the reactive suite's floors, the coverage
+suite's floors and its roll of what is never generated -- is met by the
+default seeds and not by every run of as many, so it is checked on the
+default seeds alone; `Seeds::is_default` says which.
 
 ### index-64
 
@@ -2134,12 +2159,10 @@ and without `else`), and can go stale.
 
 What it does not tell you:
 
-- **Generated is not exercised.** `test_1000_seeds_typecheck` only typechecks,
-  and is `#[ignore]`d. Only `worldgen_dual_tests` runs ownership analysis and
-  executes anything, and it skips unless `WORLDGEN_DUAL_TEST=1`
-  (`WORLDGEN_DUAL_SEED` reproduces a run). `just test-worldgen`, part of
-  `test-slow` and so of CI's extras job, runs it on one fixed seed's twenty
-  worlds.
+- **Generated is not exercised.** `worldgen_tests` only typechecks. Only
+  `worldgen_dual_tests` runs ownership analysis and executes anything, and it
+  skips unless `WORLDGEN_DUAL_TEST=1`. `just test-worldgen-dual`, part of
+  `test-slow` and so of CI's extras job, runs it on twenty fixed seeds.
 - **It counts single node kinds, not combinations.** Every bug the generator
   has found was at an intersection -- a generic over a map at `data`, a tensor
   of a tuple holding a heap value -- and a roll of node kinds calls all of

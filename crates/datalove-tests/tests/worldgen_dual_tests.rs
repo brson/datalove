@@ -3,15 +3,17 @@
 //! This test generates random worldfiles and verifies that interpreter (with chaos JIT)
 //! and AOT compilation produce identical results.
 //!
-//! The first seed is [`DEFAULT_SEED`] unless WORLDGEN_DUAL_SEED gives another.
-//! The default is fixed, so that a failure is a change and not a draw.
+//! It runs [`DEFAULT_COUNT`] seeds from [`DEFAULT_SEED`] unless
+//! WORLDGEN_DUAL_SEED and WORLDGEN_DUAL_COUNT give others; WORLDGEN_DUAL_SEED
+//! may be `random`. The default is fixed, so that a failure is a change and
+//! not a draw.
 //!
 //! Known issues:
 //! - Some seeds cause AOT "Verifier errors" (pre-existing compiler bug)
 //! - Some seeds cause stack overflow in interpreter (deep recursion)
 //!
 //! Run manually with: WORLDGEN_DUAL_TEST=1 cargo test -p datalove-tests --test worldgen_dual_tests
-//! To reproduce a failure: WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED=<seed> cargo test -p datalove-tests --test worldgen_dual_tests
+//! To reproduce a failure: WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED=<seed> WORLDGEN_DUAL_COUNT=1 cargo test -p datalove-tests --test worldgen_dual_tests
 //!
 //! A failing world is easier to read once it is small. BISECT_WORLD=<path>
 //! takes a worldfile rather than a seed and cuts statements out of it for as
@@ -20,7 +22,7 @@
 use rmx::prelude::*;
 use std::process::Command;
 
-use bct::random::{derive_seed, env_seed};
+use bct::random::{derive_seed, env_seeds};
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
@@ -32,8 +34,8 @@ use datafun::driver::{ModuleCompiler, CompilerOptions};
 /// The first seed, when WORLDGEN_DUAL_SEED does not give one.
 const DEFAULT_SEED: u64 = 2000;
 
-/// Number of worldfiles to generate and test per run.
-const ITERATION_COUNT: u64 = 20;
+/// How many seeds, when WORLDGEN_DUAL_COUNT does not say.
+const DEFAULT_COUNT: u64 = 20;
 
 /// Result of running a worldfile.
 #[derive(Debug, Clone)]
@@ -334,8 +336,7 @@ fn aot_compile_link_run(
 }
 
 /// Test a single worldfile seed.
-fn test_worldfile(base_seed: u64, index: u64) -> Result<(), String> {
-    let seed = base_seed.wrapping_add(index);
+fn test_worldfile(seed: u64) -> Result<(), String> {
     let config = WorldGenConfig::default();
 
     // Generate worldfile.
@@ -444,22 +445,20 @@ fn main() {
         return;
     }
 
-    let base_seed = env_seed("WORLDGEN_DUAL_SEED", DEFAULT_SEED);
-    println!("Worldgen dual test seed: {}", base_seed);
-    println!("(Set WORLDGEN_DUAL_SEED={} to reproduce)", base_seed);
+    let seeds = env_seeds("WORLDGEN_DUAL", DEFAULT_SEED, DEFAULT_COUNT);
+    println!("Worldgen dual tests: {} seeds from {}", seeds.count, seeds.start);
     println!();
 
     let mut pass_count = 0;
     let mut fail_count = 0;
     let mut errors = Vec::new();
 
-    for i in 0..ITERATION_COUNT {
-        let seed = base_seed.wrapping_add(i);
+    for seed in seeds.iter() {
         // Print seed before running so we can see which seed hangs.
         print!("Testing seed {}... ", seed);
         std::io::Write::flush(&mut std::io::stdout()).ok();
 
-        let result = test_worldfile(base_seed, i);
+        let result = test_worldfile(seed);
 
         match result {
             Ok(()) => {
@@ -482,7 +481,7 @@ fn main() {
         println!();
         println!("Failed seeds:");
         for (seed, _) in &errors {
-            println!("  WORLDGEN_DUAL_SEED={}", seed);
+            println!("  WORLDGEN_DUAL_SEED={} WORLDGEN_DUAL_COUNT=1", seed);
         }
         std::process::exit(1);
     }

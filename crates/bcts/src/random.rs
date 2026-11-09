@@ -10,11 +10,13 @@
 //! Seeds come from three places:
 //!
 //! - a number, written in a test or counted from a start, for
-//!   [`SeededRng::new`], or given in the environment through [`env_seed`];
+//!   [`SeededRng::new`], or a range of them given in the environment through
+//!   [`env_seeds`];
 //! - content, such as a fixture's source, through [`seed_of`];
 //! - the OS, through [`fresh_seed`], which prints what it drew so that the
-//!   run can be repeated with it. Only the CLI does this: a test's seeds are
-//!   fixed, so that a failure is a change and not a draw.
+//!   run can be repeated with it. The CLI does this, and a generative suite
+//!   does when asked with `random` for its first seed; a test's seeds are
+//!   otherwise fixed, so that a failure is a change and not a draw.
 //!
 //! Two consumers of one seed must not draw the same stream, as a generated
 //! program and the edits made to it would if both took `SeededRng::new(seed)`.
@@ -37,6 +39,8 @@ use rmx::prelude::*;
 use rmx::rand::rand_core::{Infallible, TryRng};
 use rmx::rand_pcg::Pcg64;
 use rmx::std::hash::{Hash, Hasher};
+use rmx::std::collections::BTreeMap;
+use rmx::std::sync::Mutex;
 
 use crate::lookup::mix;
 
@@ -100,12 +104,67 @@ pub fn fresh_seed(name: &str) -> u64 {
     seed
 }
 
-/// The seed in the environment variable `var`, or `default` if it is unset.
-pub fn env_seed(var: &str, default: u64) -> u64 {
-    match rmx::std::env::var(var) {
-        Ok(s) => s.parse().unwrap_or_else(|_| panic!("{var} is not a number: {s:?}")),
-        Err(_) => default,
+/// The seeds a generative suite runs, a run of consecutive ones.
+///
+/// Every suite that generates its cases from seeds takes them the same way,
+/// through [`env_seeds`], so that each is run and repeated alike.
+#[derive(Clone, Debug)]
+pub struct Seeds {
+    /// The first seed.
+    pub start: u64,
+    /// How many seeds.
+    pub count: u64,
+    default: bool,
+}
+
+impl Seeds {
+    /// The seeds in order, wrapping past `u64::MAX`, which a drawn start may
+    /// be near.
+    pub fn iter(&self) -> impl Iterator<Item = u64> + use<> {
+        let start = self.start;
+        (0..self.count).map(move |i| start.wrapping_add(i))
     }
+
+    /// Whether these are the suite's default seeds.
+    ///
+    /// A suite may check, beside what must hold of every seed, how much its
+    /// seeds exercised, with floors met by its default seeds and not by every
+    /// run of as many. Those floors are for the default seeds alone.
+    pub fn is_default(&self) -> bool {
+        self.default
+    }
+}
+
+/// The seeds `{prefix}_SEED` and `{prefix}_COUNT` give, each defaulting.
+///
+/// `{prefix}_SEED` is a number or `random`, which draws the first seed from
+/// the OS, once a process for each prefix, so that every test of a suite
+/// asking runs the same seeds. The seeds are printed to stderr as the
+/// variables that give them, so that a run, a drawn one above all, can be
+/// repeated.
+pub fn env_seeds(prefix: &str, default_start: u64, default_count: u64) -> Seeds {
+    let var = |suffix: &str| {
+        let name = fmt!("{prefix}_{suffix}");
+        let value = rmx::std::env::var(&name).ok();
+        (name, value)
+    };
+    let number = |name: &str, text: &str| -> u64 {
+        text.parse().unwrap_or_else(|_| panic!("{name} is not a number: {text:?}"))
+    };
+    let start = match var("SEED") {
+        (_, Some(text)) if text == "random" => {
+            static DRAWN: Mutex<BTreeMap<String, u64>> = Mutex::new(BTreeMap::new());
+            *DRAWN.lock().X().entry(prefix.S()).or_insert_with(|| rmx::rand::rng().random())
+        }
+        (name, Some(text)) => number(&name, &text),
+        (_, None) => default_start,
+    };
+    let count = match var("COUNT") {
+        (name, Some(text)) => number(&name, &text),
+        (_, None) => default_count,
+    };
+    eprintln!("{prefix}_SEED={start} {prefix}_COUNT={count}");
+    Seeds { start, count, default: start == default_start && count == default_count }
 }
 
 /// The hasher seeds are made with: FNV-1a, finished with splitmix64.

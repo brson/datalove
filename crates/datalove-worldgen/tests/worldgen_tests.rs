@@ -1,12 +1,28 @@
 //! Integration tests for worldfile generation.
 //!
 //! These tests verify that generated worldfiles parse and typecheck successfully.
+//!
+//! The typecheck tests run [`DEFAULT_COUNT`] seeds from [`DEFAULT_SEED`]
+//! unless WORLDGEN_TYPECHECK_SEED and WORLDGEN_TYPECHECK_COUNT give others;
+//! WORLDGEN_TYPECHECK_SEED may be `random`. The rest look at fixed seeds.
 
 use rmx::prelude::*;
+use bct::random::{Seeds, env_seeds};
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun::{Database, package, package_resolve, package_load_worldfile, to_module_graph, module_graph};
 use datalove_datafun_tycheck::typecheck_module_graph;
 use datalove_datafun_resolve::resolve_all_names;
+
+/// The first seed the typecheck tests generate from, by default.
+const DEFAULT_SEED: u64 = 0;
+
+/// How many seeds the typecheck tests generate from, by default.
+const DEFAULT_COUNT: u64 = 50;
+
+/// The seeds the typecheck tests generate from.
+fn typecheck_seeds() -> Seeds {
+    env_seeds("WORLDGEN_TYPECHECK", DEFAULT_SEED, DEFAULT_COUNT)
+}
 
 /// Parse and typecheck a worldfile, returning the number of errors.
 fn typecheck_worldfile(source: &str) -> Vec<String> {
@@ -70,10 +86,10 @@ fn test_generated_worldfile_typechecks() {
 fn test_multiple_seeds_typecheck() {
     let config = WorldGenConfig::default();
 
-    // Test a range of seeds.
+    let seeds = typecheck_seeds();
     let mut failed_seeds = Vec::new();
 
-    for seed in 0..50 {
+    for seed in seeds.iter() {
         let wf = gen_worldfile_seeded(seed, config.C());
         let errors = typecheck_worldfile(&wf);
 
@@ -93,7 +109,7 @@ fn test_multiple_seeds_typecheck() {
                 eprintln!("  {}", err);
             }
         }
-        panic!("{} out of 50 seeds failed to typecheck", failed_seeds.len());
+        panic!("{} out of {} seeds failed to typecheck", failed_seeds.len(), seeds.count);
     }
 }
 
@@ -110,7 +126,7 @@ fn test_minimal_config_typechecks() {
     config.loop_probability = 0;
     config.function_call_probability = 0;
 
-    for seed in 0..20 {
+    for seed in typecheck_seeds().iter() {
         let wf = gen_worldfile_seeded(seed, config.C());
         let errors = typecheck_worldfile(&wf);
 
@@ -152,41 +168,6 @@ fn test_print_example_worldfile() {
     println!("========================================");
 }
 
-/// Test 1000 seeds for comprehensive coverage.
-///
-/// This test is ignored by default since it takes longer.
-/// Run with: cargo test -p datalove-worldgen test_1000_seeds -- --ignored
-#[test]
-#[ignore]
-fn test_1000_seeds_typecheck() {
-    let config = WorldGenConfig::default();
-    let mut failed_seeds = Vec::new();
-
-    for seed in 0..1000 {
-        let wf = gen_worldfile_seeded(seed, config.C());
-        let errors = typecheck_worldfile(&wf);
-
-        if !errors.is_empty() {
-            failed_seeds.push((seed, errors));
-        }
-    }
-
-    if !failed_seeds.is_empty() {
-        eprintln!("Failed {} out of 1000 seeds:", failed_seeds.len());
-        for (seed, errors) in failed_seeds.iter().take(5) {
-            eprintln!("\nSeed {}:", seed);
-            for err in errors {
-                eprintln!("  {}", err);
-            }
-        }
-        if failed_seeds.len() > 5 {
-            eprintln!("... and {} more", failed_seeds.len() - 5);
-        }
-        panic!("{} out of 1000 seeds failed to typecheck", failed_seeds.len());
-    }
-}
-
-
 // ============================================================================
 // Tests for type generation
 // ============================================================================
@@ -210,25 +191,6 @@ fn test_types_in_output() {
     }
 
     assert!(found_types, "Should generate types in worldfile");
-}
-
-/// Verify that generated expressions match their declared types.
-#[test]
-fn test_type_consistency() {
-    let config = WorldGenConfig::default();
-
-    for seed in 0..20 {
-        let wf = gen_worldfile_seeded(seed, config.C());
-        let errors = typecheck_worldfile(&wf);
-
-        if !errors.is_empty() {
-            eprintln!("Seed {}: Type consistency errors:", seed);
-            for err in &errors {
-                eprintln!("  {}", err);
-            }
-            panic!("Type consistency check failed for seed {}", seed);
-        }
-    }
 }
 
 /// Verify that type alias definitions are formatted correctly.

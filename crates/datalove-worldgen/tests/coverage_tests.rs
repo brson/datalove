@@ -18,8 +18,15 @@
 //! sounds. A first pass of this done with regular expressions reported field
 //! projection at 100%, matching the dots in `import io_0.fn0`, and division at
 //! 100%, matching the slash in `: u32 / 5`. Both are in fact never generated.
+//!
+//! The worldfiles come from seeds from [`FIRST_SEED`] unless
+//! WORLDGEN_COVERAGE_SEED and WORLDGEN_COVERAGE_COUNT give others;
+//! WORLDGEN_COVERAGE_SEED may be `random`. Over other seeds the counts are
+//! reported, and only a kind written down as never generated that turns up
+//! fails: what is never reached, and the floors, are for the default seeds.
 
 use rmx::prelude::*;
+use bct::random::{Seeds, env_seeds};
 use std::collections::{BTreeMap, BTreeSet};
 
 use datalove_datafun::package_load_worldfile::{self, WorldfileSection};
@@ -462,12 +469,12 @@ fn walk_statements<'db>(
     }
 }
 
-/// Walk every section of a generated worldfile.
-fn measure(seeds: u64) -> Coverage {
+/// Walk every section of the worldfiles `seeds` generate.
+fn measure(seeds: &Seeds) -> Coverage {
     let mut cov = Coverage::default();
     let config = WorldGenConfig::default();
 
-    for seed in FIRST_SEED..FIRST_SEED + seeds {
+    for seed in seeds.iter() {
         let worldfile = gen_worldfile_seeded(seed, config.C());
         let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes())
             .expect("generated worldfile parses into sections");
@@ -493,7 +500,8 @@ fn measure(seeds: u64) -> Coverage {
 /// written down here as something it does not.
 #[test]
 fn test_language_coverage() {
-    let cov = measure(SEEDS);
+    let seeds = env_seeds("WORLDGEN_COVERAGE", FIRST_SEED, SEEDS);
+    let cov = measure(&seeds);
 
     let categories: [(&str, &[&str]); 6] = [
         ("statement", ALL_STATEMENTS),
@@ -517,7 +525,7 @@ fn test_language_coverage() {
     let mut uncovered = Vec::new();
     let mut unexpectedly_covered = Vec::new();
 
-    println!("Language coverage over {} worldfiles:", SEEDS);
+    println!("Language coverage over {} worldfiles:", seeds.count);
     for (category, kinds) in categories {
         println!("  {}:", category);
         for kind in kinds {
@@ -563,7 +571,7 @@ fn test_language_coverage() {
     );
 
     assert!(
-        uncovered.is_empty(),
+        uncovered.is_empty() || !seeds.is_default(),
         "these are never generated and are not written down in NOT_YET_GENERATED:\n  {}\n\
          Either make the generator write them, or add them to the list with a reason.",
         uncovered.join("\n  ")
@@ -595,7 +603,8 @@ const FLOOR_SEEDS: u64 = 200;
 /// the sense that the parser has seen it and not in any sense that matters.
 #[test]
 fn test_core_constructs_are_common() {
-    let cov = measure(FLOOR_SEEDS);
+    let seeds = env_seeds("WORLDGEN_COVERAGE", FIRST_SEED, FLOOR_SEEDS);
+    let cov = measure(&seeds);
 
     // (category, kind, how many across FLOOR_SEEDS worldfiles). Each is set
     // well under what it measures, so that noise cannot trip it and a real
@@ -642,8 +651,11 @@ fn test_core_constructs_are_common() {
         }
     }
 
+    for line in &thin {
+        println!("thin: {line}");
+    }
     assert!(
-        thin.is_empty(),
+        thin.is_empty() || !seeds.is_default(),
         "these got rarer than they were:\n  {}",
         thin.join("\n  ")
     );
