@@ -362,11 +362,14 @@ compiled. `rederive_reach` iterates until it settles, either way.
 
 **But a unit that compiles differently is a modification of its own.** A unit
 that did not compile and does now is a Fix, and one that did and does not is a
-Break, so `rederive_reach` makes it a seed as soon as it compiles that way, by
-the `compiled` flag of its record against the held one. Otherwise the shrinking
-above could drop it: an overwrite that compiles for the first time is reached
-while it has no record, and left out once its record says it overwrites, with
-the units after it that use what it provides.
+Break, and either has to run. The shrinking above could drop one: an overwrite
+that compiles for the first time is reached while it has no record, and could
+be left out once its record says it overwrites, with the units after it that
+use what it provides. It is not, since the provider it overwrites is another
+one than before -- it had none -- which keeps it in. `rederive_reach` used to
+make each such unit a seed; no session needed it once the provider was
+compared, so now it asserts that a unit compiled on the way and left out
+compiled as it did, by the `compiled` flag of its record against the held one.
 
 These are reruns, and they are what make the reach sound without copying
 anything. The cost is running the rerun's start again, which may be the
@@ -520,8 +523,10 @@ read the binding and leaves what it wrote last time in place. So `reach_from`
 works out which units *may* be blocked: those that read a binding whose
 provider may return early, by `UnitLowerRecord::may_return_early`, which is
 whether its IR has a `UnitEarlyReturn`, or whose provider may be blocked
-itself, in the session as it is now or as it was before the edit, since one
-that was blocked last time wrote nothing then. An overwrite by one of those
+itself, in the session as it is now. Not as it was before the edit too, which
+it once also asked: a unit blocked last time and not now is reached by the
+provider that stopped returning early, and the units after it by what it
+writes, whatever its write counts as. An overwrite by one of those
 is a write that may not happen, which counts as an update, as a conditional
 write does: the reach goes back to rebuild the binding first, and shields
 nothing after it. So does a take by one, which the forward rule otherwise
@@ -697,12 +702,12 @@ and the step tables.
 | a rerun reruns no one after it | 9 | 91 | 7 | 14 tests |
 | no restore of a shadowed binding | 5 | 56 | 2 | the step tables |
 | a reorder's restore in the new order | 3 | 28 | 4 | none |
-| no Fix or Break as a seed | 0 | 0 | 0 | none |
+| no Fix or Break as a seed (removed) | 0 | 0 | 0 | none |
 | a departure's restore by the typecheck | 0 | 0 | 0 | none |
 | a rerun reports the nearest binding | 0 | 0 | 0 | `a_unit_rerun_before_a_shadow_reports_its_own_binding` |
 | an export given away by a shadowed binding | 0 | 0 | 0 | `a_name_given_away_and_bound_again_is_there_for_a_later_unit` |
 | no unit may be blocked | 0 | 0 | 1 | the step tables |
-| may be blocked only by the graph now | 0 | 0 | 0 | none |
+| may be blocked only by the graph now (now the rule) | 0 | 0 | 0 | none |
 | an overwrite's provider not compared | 0 | 0 | 0 | the step tables |
 | still taken by a unit that may be blocked | 0 | 0 | 1 | none |
 | still taken whatever the reader found before | 0 | 0 | 2 | none |
@@ -728,10 +733,12 @@ Three faults fail nothing:
   pick wrongly.
 - **No Fix or Break as a seed** and **may be blocked only by the graph now**
   each had a kept session that failed without the rule when it was written,
-  and passes without it now. A rule added since -- the provider comparison
-  or the post-edit graph's corrections -- covers the arrangement they were
-  for. Whether either rule still holds anything up is not known: no test can
-  tell it from a missing one.
+  and passes without it now. Neither failed seeds 0 to 3099 without its rule
+  either, and a rule added since -- the provider comparison, the post-edit
+  graph's corrections -- covers the arrangement each was for. Both rules are
+  gone: the seed is an assertion that a unit left out of the reach compiles
+  as it did, and the judgement of what may be blocked is by the units as they
+  are now.
 
 An export given away by a shadowed binding no fresh run can catch: it fails
 a unit in the session and in the fresh run alike. It is a compile bug that a

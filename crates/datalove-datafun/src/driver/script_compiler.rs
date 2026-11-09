@@ -112,8 +112,6 @@ struct HeldGraph {
     ran: Vec<usize>,
     /// Whether each unit compiled.
     compiled: Vec<bool>,
-    /// Whether each unit's code may return early.
-    may_return_early: Vec<bool>,
 }
 
 /// How a unit provides a binding: as a slot or a value, and of which type.
@@ -905,30 +903,34 @@ impl<'db> ScriptCompiler<'db> {
     ) -> Vec<(usize, ScriptCompilationResult)> {
         let held = self.held_graph(moved);
         let mut changed = held.changed.C();
-        let mut seeds = seeds;
+        let mut compiled = BTreeSet::new();
         for _ in 0..=self.unit_records.len() {
             let units = self.reach_from(&seeds, &restore, &held, &changed);
             let results = self.rederive(units.C());
+            compiled.extend(units.iter().copied());
             for (unit, record) in self.unit_records.iter().enumerate() {
                 for name in record.takes.iter().chain(&record.writes) {
                     changed[unit].insert(name.C());
                 }
             }
-            // A unit that compiles where it did not, or no longer compiles,
-            // is a Fix or a Break: a modification of its own, so a seed, and
-            // the units that use what it provides now or did are reached
-            // from it.
-            for unit in &units {
-                if self.unit_records[*unit].compiled != held.compiled[*unit] {
-                    seeds.insert(*unit);
-                }
-            }
             // What the units do now can shrink the reach as well as grow it:
             // an edit that makes a unit overwrite what it updated needs no
             // rerun, which only its new record says. The results are for the
-            // reach as it settles; a unit compiled on the way and left out of
-            // it compiled to what it was, since one that did not is a seed.
+            // reach as it settles.
+            //
+            // **A unit compiled on the way and left out of it compiled as it
+            // did.** One that compiles where it did not, or no longer does,
+            // is a Fix or a Break, which has to run; it stays in the reach
+            // by what it uses, since what made it compile differently is
+            // something it uses that changed. That is asserted, not made a
+            // seed: no session has needed it to be.
             if self.reach_from(&seeds, &restore, &held, &changed) == units {
+                for unit in compiled.iter().filter(|unit| !units.contains(unit)) {
+                    assert_eq!(
+                        self.unit_records[*unit].compiled, held.compiled[*unit],
+                        "unit at {unit} compiles differently and is out of the reach",
+                    );
+                }
                 return results;
             }
         }
@@ -1048,30 +1050,24 @@ impl<'db> ScriptCompiler<'db> {
             held.ran[..at].iter().rev().copied().find(|earlier| held.provides[*earlier].contains(name))
         };
 
-        // Whether `unit` may be blocked when it runs, or may have been when
-        // it last ran: whether it reads a binding whose provider may return
-        // early, or may be blocked itself, now or before the edit. Which
-        // units are is only known once they run, after the reach is taken,
-        // so the reach takes any that may be to write nothing, as it takes a
-        // write that may not happen: one that wrote nothing last time and
-        // writes now changes what the units after it read.
-        let mut may_block_now = vec![false; count];
-        let mut may_block_held = vec![false; count];
+        // Whether `unit` may be blocked when it runs: whether it reads a
+        // binding whose provider may return early, or may be blocked itself.
+        // Which units are is only known once they run, after the reach is
+        // taken, so the reach takes any that may be to write nothing, as it
+        // takes a write that may not happen.
+        //
+        // As the units are now, not as they were. A unit blocked last time
+        // and not now is reached by the provider that stopped returning
+        // early, and the units after it by what it writes, whatever its
+        // write counts as.
+        let mut may_block = vec![false; count];
         for unit in 0..count {
-            may_block_now[unit] = uses[unit].iter().any(|name| {
+            may_block[unit] = uses[unit].iter().any(|name| {
                 provider(unit, name).is_some_and(|provider| {
-                    self.unit_records[provider].may_return_early || may_block_now[provider]
+                    self.unit_records[provider].may_return_early || may_block[provider]
                 })
             });
         }
-        for unit in held.ran.iter().copied() {
-            may_block_held[unit] = held.uses[unit].iter().any(|name| {
-                held_provider(unit, name).is_some_and(|provider| {
-                    held.may_return_early[provider] || may_block_held[provider]
-                })
-            });
-        }
-        let may_block: Vec<bool> = (0..count).map(|unit| may_block_now[unit] || may_block_held[unit]).collect();
 
         // Whether `unit` writes the binding `name` without reading what it
         // held, as it does now: an overwrite, or a revival, which cannot read
@@ -1253,7 +1249,6 @@ impl<'db> ScriptCompiler<'db> {
             shapes: self.unit_records.iter().map(|record| binding_shapes(record)).collect(),
             ran,
             compiled: self.unit_records.iter().map(|record| record.compiled).collect(),
-            may_return_early: self.unit_records.iter().map(|record| record.may_return_early).collect(),
         }
     }
 
