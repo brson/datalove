@@ -1,0 +1,43 @@
+----------
+scriptunit-fragment 1
+----------
+
+var x: int = 1
+
+----------
+scriptunit-fragment 2
+----------
+
+var y: int = 2
+var z: int = 0
+
+----------
+scriptunit-fragment 3
+----------
+
+let t: int = y
+
+----------
+scriptunit-fragment 4
+----------
+
+let q: int = 5 /! z
+set y = 3
+
+----------
+scriptunit-fragment 5
+----------
+
+set x = y@ + 1
+
+----------
+scriptunit-fragment 6
+----------
+
+let r: int = x@
+
+----------
+scriptunit-edit 1
+----------
+
+var x: int = 5

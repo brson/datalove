@@ -790,75 +790,91 @@ And a shrink kept any disagreement as the failure it set out with, so it
 could drift to another bug; it now keeps only one whose first difference
 is of the same kind, at the same unit.
 
-Planting a fault in each rule, as the sessions stood once they had dense
-sessions beside them: how many of the 40 sessions `just test` runs fail, the
+Planting a fault in each rule, as the sessions stood once they compared
+what units show: how many of the 40 sessions `just test` runs fail, the
 generated and the dense session of each of its 20 seeds; how many of seeds 0
 to 199 fail, generated and dense apart; how many kept sessions in
 `crates/datalove-tests/tests/generative_reactive/`; and which hand-written
 tests -- the datafun script suites and engine fixtures, `engine_edit_tests`
 and the step tables.
 
+The faults are in `scripts/reach-faults.toml`, one per rule, and `just
+measure-faults` plants each in turn and prints these rows; `just
+faults-check` says which no longer match the code they break, once a rule's
+code has moved. A rule added gets a fault there. Earlier tables were made
+with faults written by hand each time, and "a rerun reruns no one after it"
+was a broader one then, which also stopped the rerun of the units a splice
+restores; its row is not comparable with theirs.
+
 | fault | of 40 | generated, of 200 | dense, of 200 | kept | hand-written |
 |---|---|---|---|---|---|
-| no backward rule | 12 | 47 | 101 | 7 | 11 tests |
-| the forward rule reaches only the seeds | 28 | 119 | 125 | 17 | 24 tests |
-| a rerun reruns no one after it | 20 | 96 | 123 | 11 | 14 tests |
-| no restore of a shadowed binding | 5 | 58 | 18 | 2 | the step tables |
-| a reorder's restore in the new order | 4 | 36 | 8 | 5 | none |
+| no backward rule | 15 | 49 | 98 | 7 | 11 tests |
+| the forward rule reaches only the seeds | 35 | 134 | 111 | 21 | 24 tests |
+| a rerun reruns no one after it | 12 | 41 | 77 | 1 | 6 tests |
+| no restore of a shadowed binding | 4 | 58 | 17 | 2 | the step tables |
+| a reorder's restore in the new order | 5 | 36 | 6 | 5 | none |
 | a departure's restore by the typecheck | 0 | 0 | 0 | 0 | none |
 | a rerun reports the nearest binding | 0 | 0 | 0 | 0 | `a_unit_rerun_before_a_shadow_reports_its_own_binding` |
 | an export given away by a shadowed binding | 0 | 0 | 0 | 0 | `a_name_given_away_and_bound_again_is_there_for_a_later_unit` |
-| no unit may be blocked | 0 | 0 | 0 | 2 | none |
-| an overwrite's provider not compared | 1 | 2 | 4 | 1 | the step tables |
+| no unit may be blocked, now or before the edit | 0 | 0 | 1 | 5 | the step tables |
+| an overwrite's provider not compared | 1 | 2 | 0 | 1 | the step tables |
 | still taken by a unit that may be blocked | 0 | 0 | 0 | 1 | none |
-| still taken whatever the reader found before | 0 | 0 | 1 | 2 | none |
+| still taken whatever the reader found before | 0 | 0 | 0 | 2 | none |
 | a unit that failed to compile provides | 0 | 0 | 0 | 0 | none |
 | an import's check is no use | 0 | 0 | 0 | 1 | none |
-| no typecheck edge | 0 | 1 | 3 | 1 | none |
-| no block on a slot a blocked unit left empty | 0 | 0 | 0 | 4 | the step tables |
-| a rerun expression unit looks its name up last | 0 | 1 | 3 | 2 | none |
+| no typecheck edge | 0 | 1 | 0 | 1 | none |
+| no block on a slot a blocked unit left empty | 0 | 0 | 0 | 5 | the step tables |
+| a rerun expression unit looks its name up last | 5 | 8 | 16 | 2 | none |
 | a `set` of a failed unit's binding panics | 0 | 0 | 1 | 2 | engine fixture `var_003` |
 | a call of a failed unit's function panics | 0 | 0 | 0 | 1 | engine fixture `var_004` |
 | no typecheck edge as the units stood | 0 | 0 | 1 | 1 | none |
-| a failed unit's names do not hide in lowering | 0 | 0 | 1 | 1 | engine fixture `var_005` |
+| a failed unit's names do not hide in lowering | 0 | 0 | 0 | 1 | engine fixture `var_005` |
 | a drop counts as a read of the slot | 0 | 0 | 0 | 0 | none |
 | a store counts as a read of the slot | 0 | 0 | 0 | 0 | none |
-| no writer may block a unit after it | 0 | 0 | 0 | 0 | none |
+| no writer may block a unit after it | 0 | 0 | 0 | 2 | none |
 | `may_block` takes the provider from both graphs | 0 | 0 | 0 | 1 | none |
 | a bare name's slot is not read | 0 | 0 | 0 | 2 | none |
 | a revival is sure though its unit may return early | 0 | 0 | 0 | 1 | none |
-| still taken though the provider moved | 0 | 0 | 0 | 1 | none |
+| still taken though the provider moved | 1 | 0 | 1 | 1 | none |
 | no unit may have been blocked before the edit | 0 | 0 | 0 | 1 | none |
 | a later write looked for in the units as they stand | 0 | 0 | 0 | 1 | none |
 
 **Dense sessions find the rules about failed units and shadows; the rest
 are held by kept sessions.** Each rule a dense seed fails on is one about a
 unit that failed to compile, or a binding behind another: few units over
-two names make those arrangements often enough to land in 200 seeds, at
-one to four. The rules about units that may be blocked, and what they leave
-in a slot, need a unit that returns early, a take after it and an edit
-between, in that order, and 200 seeds hold none. So the 20 seeds still
-stand watch only for the rules every session exercises, and a kept
-session, or a step table, holds each of the others.
+two names make those arrangements often enough to land in 200 seeds. The
+rules about units that may be blocked, and what they leave in a slot, need
+a unit that returns early, a take after it and an edit between, in that
+order, and 200 seeds hold few. So a kept session, or a step table, holds
+each of those. Comparing what units show moved one rule into the 20
+seeds: a rerun expression unit that looks its name up last now shows a
+stale value in five of their sessions, where before it failed none.
 
-Five faults fail nothing:
+Four faults fail nothing:
 
 - **A departure's restore by the typecheck** cannot show. The departure
   reads the post-edit graph, which does not count a unit that failed to
   compile as a provider, and that unit is the one the fault would pick
   wrongly.
-- **A store or a drop counted as a read**, and **no writer may block a unit
-  after it**, each undo half of one fix, and either half is enough for the
-  session that found it,
+- **A store or a drop counted as a read** each undo half of the
+  executor's fix for the session that found it,
   `overwrite-what-a-later-unit-took-after-one-that-returned-early`: an
   overwrite after a unit that returned early, rerun once a later unit has
-  taken the binding. The executor no longer holds it back for the slot it
-  writes, and the reach counts it as a unit that may be blocked, so it
-  rebuilds the binding first. With both undone, the session fails.
-- **A unit that failed to compile provides** fails nothing since lowering
-  hides such a unit's names: a later unit naming one fails to lower, in a
-  fresh run as in the session, rather than reading an earlier unit's
-  binding past it.
+  taken the binding. `set x = 30` drops what `x` held and stores, so the
+  executor held it back for either. And the writer rule in `may_block`
+  fixes the same session from the reach's side, counting the overwrite as
+  one that may be blocked, so that the binding is rebuilt first: the
+  session fails once the writer rule and either half are undone. The writer
+  rule has its own session,
+  `read-past-an-overwrite-a-revival-that-returned-early-blocks`, where
+  the unit is blocked and a later reader is left reading what it did not
+  write.
+- **A unit that failed to compile provides** fails nothing because the
+  typecheck edge as the units stood reaches the same readers: such a unit
+  is a typecheck-only provider in the held graph. With both broken,
+  `reorder-away-a-shadow-that-fails-ownership` and dense seed 103 fail.
+  The correction is kept, since it says what the session holds at run
+  time.
 
 An export given away by a shadowed binding no fresh run can catch: it fails
 a unit in the session and in the fresh run alike. It is a compile bug that a

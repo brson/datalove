@@ -1,0 +1,268 @@
+# One fault per reach rule, for `scripts/faults.py`: each breaks the rule it
+# names by replacing `find`, which must appear in `file` exactly once, with
+# `replace`. The names are the rows of the planted-fault table in
+# botdocs/script-reactivity-architecture.md.
+#
+# A fault whose `find` no longer matches is a rule whose code has moved:
+# `just faults-check` says which, and the fault is written again against the
+# code as it is.
+
+[[fault]]
+id = "F1"
+name = "no backward rule"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                    if since {
+                        added |= rerun_starts.insert(setter);"""
+replace = """
+                    if false && since {
+                        added |= rerun_starts.insert(setter);"""
+
+[[fault]]
+id = "F2"
+name = "the forward rule reaches only the seeds"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                restoring[unit] = !rederived[unit]"""
+replace = """
+                rederived[unit] = seeds.contains(&unit);
+                restoring[unit] = !rederived[unit]"""
+
+[[fault]]
+id = "F3"
+name = "a rerun reruns no one after it"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = ".is_some_and(|source| rederived[source] || restoring[source])"
+replace = ".is_some_and(|source| false && (rederived[source] || restoring[source]))"
+
+[[fault]]
+id = "F4"
+name = "no restore of a shadowed binding"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                    if !reached(setter) {
+                        added |= rerun_starts.insert(setter);"""
+replace = """
+                    if false && !reached(setter) {
+                        added |= rerun_starts.insert(setter);"""
+
+[[fault]]
+id = "F5"
+name = "a reorder's restore in the new order"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "self.rederive_reach(seeds, restore, Some((from, to)))"
+replace = "self.rederive_reach(seeds, restore, None)"
+
+[[fault]]
+id = "F7"
+name = "a departure's restore by the typecheck"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                    let record = &self.unit_records[*unit];
+                    [&record.provides, &record.overwrites, &record.revives]"""
+replace = """
+                    let record = &self.unit_records[*unit];
+                    now_provides[*unit].contains(name) || [&record.provides, &record.overwrites, &record.revives]"""
+
+[[fault]]
+id = "F8"
+name = "a rerun reports the nearest binding"
+file = "crates/datalove-script-engine/src/engine.rs"
+find = "let held = self.state.executor.unit_bindings(id);"
+replace = "let ids: Vec<u32> = self.state.executor.unit_ids().to_vec(); let held: Vec<_> = ids.iter().flat_map(|unit| self.state.executor.unit_bindings(*unit)).collect();"
+
+[[fault]]
+id = "F9"
+name = "an export given away by a shadowed binding"
+file = "crates/datalove-datafun-ownership/src/lib.rs"
+find = """
+            if shadowed {
+                continue;
+            }"""
+replace = """
+            if false && shadowed {
+                continue;
+            }"""
+
+[[fault]]
+id = "F10"
+name = "no unit may be blocked, now or before the edit"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "        may_block[unit] = blocked;"
+replace = "        may_block[unit] = false && blocked;"
+
+[[fault]]
+id = "F12"
+name = "an overwrite's provider not compared"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "(!writes_without_reading(unit, name) || provider_moved(unit, name))"
+replace = "(!writes_without_reading(unit, name) || false && provider_moved(unit, name))"
+
+[[fault]]
+id = "F13"
+name = "still taken by a unit that may be blocked"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                                && !may_block[source]
+"""
+replace = """
+                                && (true || !may_block[source])
+"""
+
+[[fault]]
+id = "F14"
+name = "still taken whatever the reader found before"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                                && held_source(unit, name) == Some(source)
+"""
+replace = """
+                                && (true || held_source(unit, name) == Some(source))
+"""
+
+[[fault]]
+id = "F15"
+name = "a unit that failed to compile provides"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                        true => names.C(),
+                        false => Vec::new(),"""
+replace = """
+                        true => names.C(),
+                        false => names.C(),"""
+
+[[fault]]
+id = "F16"
+name = "an import's check is no use"
+file = "crates/datalove-datafun-tycheck/src/api.rs"
+find = """
+                        ctx.note_asked(item_name);
+"""
+replace = "\n"
+
+[[fault]]
+id = "F17"
+name = "no typecheck edge"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])"
+replace = "false && typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])"
+
+[[fault]]
+id = "F18"
+name = "no block on a slot a blocked unit left empty"
+file = "crates/datalove-datafun/src/driver/script_executor.rs"
+find = """
+            state.status != UnitStatus::Ran
+                && state.exports.writes"""
+replace = """
+            false && state.status != UnitStatus::Ran
+                && state.exports.writes"""
+
+[[fault]]
+id = "F19"
+name = "a rerun expression unit looks its name up last"
+file = "crates/datalove-datafun/src/driver/script_executor.rs"
+find = "self.binding_before(self.position(id), name)"
+replace = "self.get_binding(name)"
+
+[[fault]]
+id = "F20"
+name = "a `set` of a failed unit's binding panics"
+file = "crates/datalove-datafun-lower/src/stmt.rs"
+find = "        None => Err(LowerError::BindingNotAvailable(root_name_str)),"
+replace = "        None => panic!(\"assignment to a missing binding\"),"
+
+[[fault]]
+id = "F21"
+name = "a call of a failed unit's function panics"
+file = "crates/datalove-datafun-lower/src/context.rs"
+find = ".ok_or(crate::LowerError::BindingNotAvailable(resolved_func_name))"
+replace = ".ok_or_else(|| -> crate::LowerError { panic!(\"local function not found\") })"
+
+[[fault]]
+id = "F22"
+name = "no typecheck edge as the units stood"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "|| held_typecheck_only_provider(unit, name) != typecheck_only_provider(unit, name)"
+replace = "|| false && held_typecheck_only_provider(unit, name) != typecheck_only_provider(unit, name)"
+
+[[fault]]
+id = "F23"
+name = "a failed unit's names do not hide in lowering"
+file = "crates/datalove-datafun-compiler/src/tracked_script_lower.rs"
+find = """
+        ctx.hide(&record.typechecked);
+"""
+replace = "\n"
+
+[[fault]]
+id = "F24"
+name = "a drop counts as a read of the slot"
+file = "crates/datalove-datafun-ir/src/lib.rs"
+find = "Instruction::Drop { operand } | Instruction::DropTracked { operand } if reads => {"
+replace = "Instruction::Drop { operand } | Instruction::DropTracked { operand } if reads && false => {"
+
+[[fault]]
+id = "F32"
+name = "a store counts as a read of the slot"
+file = "crates/datalove-datafun-ir/src/lib.rs"
+find = "_ if !reads && stored(instr).is_some() => {"
+replace = "_ if stored(instr).is_some() => {"
+
+[[fault]]
+id = "F30"
+name = "no writer may block a unit after it"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "                || before[provider.map_or(0, |provider| provider + 1)..].iter()"
+replace = "                || false && before[provider.map_or(0, |provider| provider + 1)..].iter()"
+
+[[fault]]
+id = "F25"
+name = "`may_block` takes the provider from both graphs"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "|unit: usize, name: &String| now_provides[unit].contains(name),"
+replace = "|unit: usize, name: &String| provides[unit].contains(name),"
+
+[[fault]]
+id = "F26"
+name = "a bare name's slot is not read"
+file = "crates/datalove-datafun/src/driver/script_executor.rs"
+find = """
+            slots_read.extend(slot);
+"""
+replace = "\n"
+
+[[fault]]
+id = "F27"
+name = "a revival is sure though its unit may return early"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = "record.revives.contains(name) && !record.may_return_early"
+replace = "record.revives.contains(name)"
+
+[[fault]]
+id = "F28"
+name = "still taken though the provider moved"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+                                && held_source(unit, name) == Some(source)
+                                && !provider_moved(unit, name);"""
+replace = """
+                                && held_source(unit, name) == Some(source);"""
+
+[[fault]]
+id = "F29"
+name = "no unit may have been blocked before the edit"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = """
+            !may_block[unit] && !held_may_block[unit]
+"""
+replace = """
+            !may_block[unit]
+"""
+
+[[fault]]
+id = "F31"
+name = "a later write looked for in the units as they stand"
+file = "crates/datalove-datafun/src/driver/script_compiler.rs"
+find = ".filter(|later| held_provider(*later, name) == Some(source))"
+replace = ".take_while(|later| provider(*later, name) == Some(source))"

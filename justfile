@@ -89,6 +89,17 @@ test-generative-random COUNT='100':
     just test-worldgen-dual random {{COUNT}}
     just test-generative-reactive random {{COUNT}}
 
+# Break each reach rule in turn, by the faults in scripts/reach-faults.toml,
+# and print what the tests catch of it as the planted-fault table's rows; see
+# script-reactivity-architecture.md. IDS picks faults, all by default. Takes
+# a few minutes a fault.
+measure-faults START='0' COUNT='200' *IDS='':
+    uv run scripts/faults.py measure --start {{START}} --count {{COUNT}} {{IDS}}
+
+# Say which reach faults no longer match the code they break.
+faults-check:
+    uv run scripts/faults.py check
+
 # The programs outside the test suite, in release: the benchvs benches built
 # and AOT-compiled, and the store demo's report checked against its Python
 # twin on a small dataset. Needs uv and a C compiler.
