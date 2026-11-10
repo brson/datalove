@@ -26,8 +26,15 @@
 //! module, a function renamed or one that does not compile added, and for
 //! data, text of another type or text that does not parse.
 //!
-//! A unit can also take the session with it, by a runtime error or a crash,
-//! which ends the case: a fresh run must then reset too, the same way.
+//! Each seed also makes a dense session, with no worldgen: a few units over
+//! two names, `x` and `y`, each a line or two of a dozen kinds -- bind, take,
+//! clone, read, set, update, divide, declare and call a function, import --
+//! and changes made among them alone; see [`dense`]. A unit there may name
+//! what nothing binds yet, and fail when entered.
+//!
+//! A unit can also take the session with it, by a runtime error, which ends
+//! the case: a fresh run must then reset too, the same way. Or by a crash, the
+//! engine panicking, which fails the case even when a fresh run crashes too.
 //!
 //! A failing seed is shrunk -- changes, then units, then lines of source
 //! dropped for as long as it fails the same way -- and written out as a
@@ -67,6 +74,7 @@ use std::time::Duration;
 use bct::random::{SeededRng, env_seeds};
 
 use datalove_repl::Place;
+use datalove_script_engine::Eval;
 use datalove_script_steps::{Change, Entry, Ran, Session, Workspace, read_changes, write_changes};
 use datalove_worldgen::{WorldGenConfig, gen_session_seeded};
 
@@ -374,6 +382,208 @@ fn generate(seed: u64) -> Case {
     Case { library: session.library, changes, aimed }
 }
 
+// ============================================================================
+// Dense sessions
+// ============================================================================
+
+/// The module a dense session's units may require and import from.
+const DENSE_LIBRARY: &str = "----------\nmodule local/dense/m\n----------\n\nfun g(): int\n  ret 7\nend fun\n";
+
+/// The names a dense session's units bind, read, take and write.
+const DENSE_NAMES: [&str; 2] = ["x", "y"];
+
+/// What a dense session's units are made of, so far: the temporaries and the
+/// functions bound, which later lines may name.
+#[derive(Default)]
+struct DenseNames {
+    temps: usize,
+    functions: usize,
+}
+
+impl DenseNames {
+    fn temp(&mut self) -> String {
+        self.temps += 1;
+        fmt!("t{}", self.temps - 1)
+    }
+
+    /// A temporary bound so far, or a binding name if none is.
+    fn some_temp(&self, rng: &mut SeededRng) -> String {
+        match self.temps {
+            0 => DENSE_NAMES[rng.random_range(0..DENSE_NAMES.len())].S(),
+            temps => fmt!("t{}", rng.random_range(0..temps)),
+        }
+    }
+
+    /// A number, now and then 0, which makes a divisor return early.
+    fn number(rng: &mut SeededRng) -> u32 {
+        match rng.random_range(0..4) {
+            0 => 0,
+            _ => rng.random_range(1..200),
+        }
+    }
+
+    /// One line of a fragment unit, or a few for a block or a function.
+    fn line(&mut self, rng: &mut SeededRng) -> String {
+        let name = DENSE_NAMES[rng.random_range(0..DENSE_NAMES.len())];
+        let k = DenseNames::number(rng);
+        let other = DENSE_NAMES.iter().find(|other| **other != name).X();
+        match rng.random_range(0..26) {
+            0..=3 => fmt!("var {name}: int = {k}"),
+            4 => fmt!("let {name}: int = {k}"),
+            5..=7 => fmt!("let {}: int = {name}", self.temp()),
+            8 => fmt!("let {}: int = {name}@", self.temp()),
+            9 => fmt!("debuglog {name}"),
+            10 | 11 => fmt!("set {name} = {k}"),
+            12 => fmt!("if true xor false\n  set {name} = {k}\nend if"),
+            13 => fmt!("set {name} = {name}@ + {k}"),
+            14 | 15 => fmt!("let {}: int = {} /! {name}", self.temp(), rng.random_range(1..200)),
+            16 => {
+                let read = self.some_temp(rng);
+                fmt!("let {}: int = {read}", self.temp())
+            }
+            17 => {
+                self.functions += 1;
+                fmt!("fun f{}(): int\n  ret {k}\nend fun", self.functions - 1)
+            }
+            18 if self.functions > 0 => {
+                let called = rng.random_range(0..self.functions);
+                fmt!("let {}: int = f{called}()", self.temp())
+            }
+            19 => match rng.random_range(0..3) {
+                0 => "require module local/dense/m".S(),
+                1 => "import m.g".S(),
+                _ => fmt!("let {}: int = g()", self.temp()),
+            },
+            // Bind a name and divide by it, so that the unit returns early,
+            // not providing it, when it is 0, and the units after that read
+            // it are blocked.
+            20 | 21 => fmt!("var {name}: int = {k}\nlet {}: int = {} /! {name}", self.temp(), rng.random_range(1..200)),
+            // Write one name from the other, which a unit blocked on the
+            // other would not do.
+            22 | 23 => fmt!("set {name} = {other}@ + {k}"),
+            24 => fmt!("var {name}: int = {other}@"),
+            _ => fmt!("if true xor false\n  set {name} = {k}\nend if"),
+        }
+    }
+
+    /// A fragment unit's source: one to three lines, now and then none.
+    fn fragment(&mut self, rng: &mut SeededRng) -> String {
+        let lines = match rng.random_range(0..10) {
+            0 => 0,
+            1..=4 => 1,
+            5..=8 => 2,
+            _ => 3,
+        };
+        (0..lines).map(|_| self.line(rng)).collect::<Vec<String>>().join("\n")
+    }
+
+    /// An expression unit's source.
+    fn expression(&mut self, rng: &mut SeededRng) -> String {
+        let name = DENSE_NAMES[rng.random_range(0..DENSE_NAMES.len())];
+        match rng.random_range(0..5) {
+            0 => name.S(),
+            1 => fmt!("{name}@"),
+            2 => self.some_temp(rng),
+            3 if self.functions > 0 => fmt!("f{}()", rng.random_range(0..self.functions)),
+            _ => "g()".S(),
+        }
+    }
+
+    fn source(&mut self, rng: &mut SeededRng, expression: bool) -> String {
+        match expression {
+            true => self.expression(rng),
+            false => self.fragment(rng),
+        }
+    }
+}
+
+/// A dense session: a few units over two bindings, made of a dozen kinds of
+/// line, and changes made among them alone.
+///
+/// A generated session is large and its units each compile as entered, so
+/// that its changes reach far; and so a particular arrangement around one
+/// binding -- a unit taking what a unit that fails ownership binds, a reader
+/// after a unit that may be blocked, a shadow moved past a take -- turns up
+/// in a few seeds in a thousand. Here every unit is about the same two names,
+/// a unit may name what no unit binds yet, and a change may make a unit fail
+/// or fix it, so those arrangements are common.
+fn dense(seed: u64) -> Case {
+    let mut rng = SeededRng::derive(seed, "dense");
+    let mut names = DenseNames::default();
+    // Most sessions start by binding the names, which the rest then use.
+    let mut sources: Vec<(String, bool)> = Vec::new();
+    for name in DENSE_NAMES {
+        if rng.random_range(0..4) != 0 {
+            sources.push((fmt!("var {name}: int = {}", DenseNames::number(&mut rng)), false));
+        }
+    }
+    for _ in 0..rng.random_range(3..7) {
+        let expression = rng.random_range(0..5) == 0;
+        sources.push((names.source(&mut rng, expression), expression));
+    }
+    let entries: Vec<Entry> = sources.into_iter().enumerate()
+        .map(|(index, (source, expression))| Entry { unit: (index + 1).S(), source, expression })
+        .collect();
+    let mut live: Vec<(String, String, bool)> = entries.iter()
+        .map(|entry| (entry.unit.C(), entry.source.C(), entry.expression))
+        .collect();
+    let mut next = entries.len() + 1;
+
+    let mut changes = vec![Change::Enter(entries)];
+    while changes.len() <= CHANGES {
+        let count = live.len();
+        let pick = rng.random_range(0..count);
+        let (unit, _, expression) = live[pick].C();
+        let change = match rng.random_range(0..10) {
+            0..=2 => {
+                let source = names.source(&mut rng, expression);
+                live[pick].1 = source.C();
+                Change::Edit { unit, source }
+            }
+            // Another unit's source, of the same kind, which binds or takes
+            // again what that one does.
+            3 => {
+                let alike: Vec<String> = live.iter()
+                    .filter(|other| other.2 == expression)
+                    .map(|other| other.1.C())
+                    .collect();
+                let source = alike[rng.random_range(0..alike.len())].C();
+                live[pick].1 = source.C();
+                Change::Edit { unit, source }
+            }
+            4 if count > 1 => {
+                live.remove(pick);
+                Change::Delete { unit }
+            }
+            5 | 6 if count > 1 => {
+                let entry = live.remove(pick);
+                let to = (0..count).filter(|to| *to != pick).nth(rng.random_range(0..count - 1)).X();
+                let (place, beside) = match to {
+                    0 => (Place::Before, live[0].0.C()),
+                    _ => (Place::After, live[to - 1].0.C()),
+                };
+                live.insert(to, entry);
+                Change::Move { unit, place, beside }
+            }
+            _ => {
+                let expression = rng.random_range(0..5) == 0;
+                let source = names.source(&mut rng, expression);
+                let name = next.S();
+                next += 1;
+                // A worldfile inserts after a unit, so never first; a move
+                // puts a unit first.
+                let to = rng.random_range(1..=count);
+                let beside = live[to - 1].0.C();
+                live.insert(to, (name.C(), source.C(), expression));
+                Change::Insert { entry: Entry { unit: name, source, expression }, place: Place::After, beside }
+            }
+        };
+        changes.push(change);
+    }
+    assert!(Order::admits(&changes), "seed {seed} makes dense changes that cannot be made");
+    Case { library: DENSE_LIBRARY.S(), changes, aimed: [0; 7] }
+}
+
 /// A generated module's source edited: a number changed, as generated, a
 /// function renamed, which its importers then do not find, or a function
 /// that does not compile added, which fails the module.
@@ -547,6 +757,9 @@ enum Verdict {
     /// The ways some step left the session other than a fresh run would.
     Disagrees(Vec<String>),
     Panics { at: String, message: String },
+    /// The engine panicked on a step, which empties the session; the fresh
+    /// run may have too, but a panic is wrong however many make it.
+    Crashes(String),
     Hangs,
 }
 
@@ -557,6 +770,7 @@ impl Verdict {
         match (self, other) {
             (Verdict::Disagrees(_), Verdict::Disagrees(_)) => true,
             (Verdict::Panics { at, .. }, Verdict::Panics { at: other, .. }) => at == other,
+            (Verdict::Crashes(message), Verdict::Crashes(other)) => message == other,
             _ => false,
         }
     }
@@ -567,6 +781,7 @@ impl Verdict {
             Verdict::Agrees(_) => "agrees with a fresh run".S(),
             Verdict::Disagrees(failures) => failures.join("\n"),
             Verdict::Panics { at, message } => fmt!("panicked at {at}: {message}"),
+            Verdict::Crashes(message) => fmt!("the engine crashed: {message}"),
             Verdict::Hangs => fmt!("ran longer than {SEED_TIMEOUT:?}"),
         }
     }
@@ -765,8 +980,8 @@ fn check(case: &Case, timeout: Duration) -> Verdict {
     }
 }
 
-/// How many of `entries` declare a function worldgen names `sfN`, and how
-/// many call one an earlier entry declares.
+/// How many of `entries` declare a function at their top level, and how many
+/// call one an earlier entry declares.
 fn functions_across(entries: &[Entry]) -> (usize, usize) {
     let mut declared: Vec<String> = Vec::new();
     let (mut declaring, mut calling) = (0, 0);
@@ -775,8 +990,8 @@ fn functions_across(entries: &[Entry]) -> (usize, usize) {
             calling += 1;
         }
         let names: Vec<String> = entry.source.lines()
-            .filter_map(|line| line.strip_prefix("fun sf"))
-            .map(|rest| fmt!("sf{}", rest.split('(').next().X()))
+            .filter_map(|line| line.strip_prefix("fun "))
+            .map(|rest| rest.split(['(', '<']).next().X().S())
             .collect();
         declaring += usize::from(!names.is_empty());
         declared.extend(names);
@@ -851,9 +1066,13 @@ fn run(case: &Case) -> Verdict {
     if !failures.is_empty() {
         return Verdict::Disagrees(failures);
     }
-    if session.reset().is_some() {
-        tally.resets = 1;
-        return Verdict::Agrees(tally);
+    match session.reset() {
+        Some(Eval::Crashed(message)) => return Verdict::Crashes(message.C()),
+        Some(_) => {
+            tally.resets = 1;
+            return Verdict::Agrees(tally);
+        }
+        None => {}
     }
 
     tally.remaining = session.states().len();
@@ -982,11 +1201,12 @@ fn corpus() -> Vec<(String, Case)> {
         .collect()
 }
 
-/// Write a failing case where it can be run again, and say how.
-fn write_out(seed: u64, case: &Case) -> PathBuf {
+/// Write a failing case where it can be run again, and say how; `label`
+/// says which, as `seed 12` or `seed 12 dense`.
+fn write_out(label: &str, case: &Case) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("generative-reactive");
     std::fs::create_dir_all(&dir).X();
-    let path = dir.join(fmt!("seed-{seed}.world"));
+    let path = dir.join(fmt!("{}.world", label.replace(' ', "-")));
     std::fs::write(&path, write_changes(&case.library, &case.changes)).X();
     path
 }
@@ -1021,16 +1241,20 @@ fn main() {
     println!("generative reactive tests: {} seeds from {}", seeds.count, seeds.start);
 
     let mut total = Tally::default();
+    let mut dense_total = Tally::default();
     let mut failed = Vec::new();
-    for seed in seeds.iter() {
-        let case = generate(seed);
+    for (seed, dense_case) in seeds.iter().flat_map(|seed| [(seed, false), (seed, true)]) {
+        let (case, label) = match dense_case {
+            false => (generate(seed), fmt!("seed {seed}")),
+            true => (dense(seed), fmt!("seed {seed} dense")),
+        };
         // A failing case is written out to be read back, so every case is.
         let written = write_changes(&case.library, &case.changes);
-        let (library, changes) = read_changes(&fmt!("seed {seed}"), &written);
-        assert_eq!(written, write_changes(&library, &changes), "seed {seed} reads back as it was written");
+        let (library, changes) = read_changes(&label, &written);
+        assert_eq!(written, write_changes(&library, &changes), "{label} reads back as it was written");
         let verdict = check(&case, SEED_TIMEOUT);
         let Verdict::Agrees(tally) = &verdict else {
-            println!("seed {seed}: \x1b[31mFAIL\x1b[0m\n  {}", verdict.describe().replace('\n', "\n  "));
+            println!("{label}: \x1b[31mFAIL\x1b[0m\n  {}", verdict.describe().replace('\n', "\n  "));
             let shrink_it = std::env::var("GENERATIVE_REACTIVE_NO_SHRINK").is_err();
             let case = match verdict {
                 Verdict::Hangs => case,
@@ -1040,25 +1264,30 @@ fn main() {
                     shrink(case, &verdict)
                 }
             };
-            let path = write_out(seed, &case);
+            let path = write_out(&label, &case);
             println!("  the session is {}", path.display());
             println!("  run it with GENERATIVE_REACTIVE_WORLD={} cargo test -p datalove-tests --test generative_reactive_tests", path.display());
-            failed.push(seed);
+            failed.push(label);
             continue;
         };
+        if dense_case {
+            dense_total.add(tally);
+            continue;
+        }
         if !tally.failed_on_entry.is_empty() {
-            let path = write_out(seed, &case);
+            let path = write_out(&label, &case);
             println!(
-                "seed {seed}: \x1b[31mFAIL\x1b[0m\n  units {} of {} do not compile as generated, which is a worldgen bug; the session is {}",
+                "{label}: \x1b[31mFAIL\x1b[0m\n  units {} of {} do not compile as generated, which is a worldgen bug; the session is {}",
                 tally.failed_on_entry.join(", "), tally.entered, path.display(),
             );
-            failed.push(seed);
+            failed.push(label);
             continue;
         }
         total.add(tally);
     }
 
     println!("{}", total.describe());
+    println!("dense sessions: {}", dense_total.describe());
     let shortfalls = match seeds.is_default() {
         true => total.shortfalls(),
         false => Vec::new(),

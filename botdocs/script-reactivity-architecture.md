@@ -217,10 +217,12 @@ alias, is added by hand: aliases resolve through `module_alias_before`, which
 
 The post-edit graph is the typecheck's, with two corrections. **A unit that
 failed to compile when it last compiled provides nothing**, though it may
-typecheck: it fails in ownership or lowering, and a later unit naming one of
-its bindings reads an earlier unit's, in a fresh run as in the session. If it
-provided them, a unit reading past it would be cut off from the unit it does
-read. One about to compile again is reached anyway, and the reach is taken
+typecheck: it fails in ownership or lowering, and holds no binding at run
+time. A later unit naming one of its bindings once read an earlier unit's
+past it, and providing them would have cut that unit off from the one it
+read; lowering now hides the failed unit's names, so the later unit fails to
+lower instead, and the typecheck edge below is what reaches it. One about to
+compile again is reached anyway, and the reach is taken
 again with its new record. And **an import uses the name it binds**: an
 earlier unit's function under that name decides whether the import binds it
 or is a duplicate, so when the earlier unit drops it, this unit is reached and
@@ -233,7 +235,10 @@ resolved a name, an imported function's say, in a unit of the second kind is
 reached when that unit is: it typechecks differently once that unit does. So
 each record keeps what its typecheck provided, `typechecked`, whether or not
 the compile went on, and the forward rule follows that edge as well, where it
-leads somewhere other than the binding's provider.
+leads somewhere other than the binding's provider. The edge is looked up in
+the order the units ran in as well as where they sit now: a reorder can move
+such a unit out from in front of the reader without changing how it
+compiles, and the reader then resolves the name to another unit.
 
 A module edit reaches the edited module, the modules that require it directly
 or not, and any module the edit broke or fixed. The last is what the import
@@ -355,6 +360,16 @@ the take is there before the edit and after it, the binding holds nothing after
 the edit either way. Unless the unit did not find the binding as the take left
 it when it last ran: a reorder put the take before it, or put it before a unit
 that revives or writes the binding, which the unit found as that one left it.
+Or the binding is another one, or provided another way, by the comparison of
+providers above: a `set` after the take that failed against a `let` compiles
+against a `var` put in its place, and revives it.
+
+**What a later unit changed is the binding it found when it ran.** The
+backward rule asks whether a unit after the reader changed the binding the
+reader finds since it last ran. It asks it of each later unit whose held
+provider is the reader's: a unit between them that provides the name now and
+did not then -- one that failed to compile then -- does not stand in front of
+a write made then.
 
 The records the reach reads are the units' current ones, so an edit that makes
 a unit overwrite what it used to update shrinks the reach once the unit is
@@ -495,7 +510,11 @@ the failures it can see:
 - A unit that typechecked and failed later leaves an empty `UnitLowerRecord`,
   so the typechecker sees its names and lowering does not. The later unit fails
   to lower, and `lowering_failure` reports it as "`x` is bound by unit N, which
-  did not compile".
+  did not compile". Its names still shadow: `lower_context_over` takes out of
+  the context what each unit typechecked before adding what it exports, so
+  lowering does not find an earlier binding of the name in place of the one
+  the typechecker found, a `let` for a `var` that a `set` assigns, or a value
+  of another type.
 - A unit that failed at run time keeps its full record, because typecheck and
   lowering cannot see run-time outcomes. The later units compile against it
   and the executor refuses to run them. `IrCodeUnit::script_units_read` lists
@@ -503,10 +522,16 @@ the failures it can see:
   cross-unit calls, its functions' bodies included -- and a unit that reads
   one whose status is not `Ran` is `Blocked`. A bare-name expression unit reads
   its binding outside its code, so its provider counts too. So does a unit
-  between that is not `Ran` and would have written a slot the unit names
-  (`IrCodeUnit::script_slots_written`), when the slot holds nothing: the unit
-  would have revived a binding given away, and the code after it was compiled
-  as if it had. One that holds a value is read as it is, the write undone.
+  between that is not `Ran` and would have written a slot the unit reads
+  (`IrCodeUnit::script_slots_written` against `script_slots_read`, a bare
+  name's slot included), when the slot holds nothing: the unit would have
+  revived a binding given away, and the code after it was compiled as if it
+  had. One that holds a value is read as it is, the write undone. A unit that
+  writes the slot without reading it is not held back by it -- the drop of
+  what a slot held before a store does not count as a read -- since it does
+  not care what the slot held, and the reach runs such a unit again without
+  rebuilding the binding first, after which a later unit's take may have left
+  it empty.
   The lowering half has the same shape: a `set` of a name a unit that did not
   compile binds, or a call of a function it declares, fails to lower as a
   read of one does.
@@ -523,18 +548,25 @@ read the binding and leaves what it wrote last time in place. So `reach_from`
 works out which units *may* be blocked: those that read a binding whose
 provider may return early, by `UnitLowerRecord::may_return_early`, which is
 whether its IR has a `UnitEarlyReturn`, or whose provider may be blocked
-itself, in the session as it is now. Not as it was before the edit too, which
-it once also asked: a unit blocked last time and not now is reached by the
-provider that stopped returning early, and the units after it by what it
-writes, whatever its write counts as. An overwrite by one of those
-is a write that may not happen, which counts as an update, as a conditional
-write does: the reach goes back to rebuild the binding first, and shields
-nothing after it. So does a take by one, which the forward rule otherwise
-counts on to leave the binding empty after it, as it was. The step stays one
+itself; and those that read a binding a unit between the provider and them
+writes, where that unit may return early or be blocked, since the executor
+blocks them if its write would have revived the binding. Which units provide
+what is taken from the graph as it is now, not the union with the held one: a
+provider an edit took away does not count.
+
+An overwrite by one of those is a write that may not happen, which counts as
+an update, as a conditional write does: the reach goes back to rebuild the
+binding first, and shields nothing after it. So does a take by one, which the
+forward rule otherwise counts on to leave the binding empty after it, as it
+was. The same is asked of the session as it was before the edit, in the order
+the units ran in: an overwrite by a unit that may have been blocked last time
+may not have happened, and the unit has to run now, which a provider that
+stopped returning early does not otherwise make it do. The step stays one
 pass, each unit run at most once and in order; the cost is rerunning a
 provider for an overwrite that did happen. A unit that returns early needs
-none of this: what it overwrites it overwrites on every way through it, early
-returns included.
+none of this for an overwrite, which is on every way through it, early returns
+included. A revival need not be, and one by a unit that may return early
+counts as an update too.
 
 **A unit that did not run has no frame.** `FrameStore::frames` is
 `Vec<Option<ScriptFrame>>`, by id. `ScriptExecutor::skip_unit` appends a unit
@@ -698,57 +730,120 @@ they changed found a compile bug, though: a function body's own binding -- a
 `const`, a `let`, a parameter -- did not stand in front of an earlier unit's
 const of the same name, and the body read the const's value as its own type.
 
-Planting a fault in each rule, as the sessions stood once they had
-functions in them: how many of the 20 seeds `just test` runs fail, how many
-of seeds 0 to 199, how many kept sessions in
-`crates/datalove-tests/tests/generative_reactive/`, and which hand-written
+Most of those rules were found at a few seeds in a thousand because each
+needs a particular arrangement around one binding, and a generated session is
+large, uses many names, and enters only units that compile. So each seed
+also makes a **dense session**: a few units over two names, `x` and `y`, each
+a line or two of a dozen kinds -- bind, take, clone, read, set, a conditional
+set, update, divide by one, bind one and divide by it, write one from the
+other, declare and call a function, require, import, call an imported one --
+with changes made among those units alone, and units that may name what
+nothing binds yet. And the check stopped counting a crash as agreement when
+the fresh run crashed too: an engine panic fails the case however many make
+it, which is what a panic in lowering on a `set` or a call of a failed unit's
+binding needed to be found by a seed rather than by its kept session alone.
+
+Dense sessions found nine bugs in their first thirty thousand seeds:
+
+- **Lowering found an earlier binding behind a unit that failed.** A unit that
+  typechecked and failed ownership analysis left its names to the typechecker
+  and not to lowering, so a later `set` of one lowered against an earlier
+  `let` of the same name, and panicked as an assignment to an immutable one; a
+  read would have read the earlier binding, of whatever type. Its names now
+  hide earlier ones in lowering too.
+- **The typecheck edge looked where the units sit now.** A reorder that moved
+  such a unit out from in front of a reader left the reader resolving the
+  name to it.
+- **An overwrite was held back by a slot a later unit emptied.** The executor
+  blocked a unit naming a slot an unfinished unit would have written, when the
+  slot was empty; the reach reruns an overwrite without rebuilding the
+  binding, so a later take had emptied it. Only a read counts now.
+- **`may_block` took a provider from the union of the two graphs**, so a unit
+  whose provider an edit took away was judged by that provider.
+- **A take still there exempted a unit that compiles differently**: a `set`
+  that failed against a `let` and would compile against the `var` an edit put
+  in its place.
+- **An overwrite blocked last time was not run again** when its provider
+  stopped returning early: the rule asking whether a unit may have been
+  blocked before the edit, dropped in the last round as nothing needed it, is
+  back.
+- **A unit after a writer that may not finish may be blocked**, by the
+  empty-slot rule, which `may_block` did not count.
+- **A write by a later unit was looked for past a shadow it ran before**, a
+  unit that failed to compile then and provides the name now.
+- **A bare-name expression unit was not blocked by the empty-slot rule**, its
+  binding being read outside its code, and panicked showing nothing; and a
+  revival by a unit that may return early before it was taken as sure.
+
+Planting a fault in each rule, as the sessions stood once they had dense
+sessions beside them: how many of the 40 sessions `just test` runs fail, the
+generated and the dense session of each of its 20 seeds; how many of seeds 0
+to 199 fail, generated and dense apart; how many kept sessions in
+`crates/datalove-tests/tests/generative_reactive/`; and which hand-written
 tests -- the datafun script suites and engine fixtures, `engine_edit_tests`
 and the step tables.
 
-| fault | of 20 | of 200 | kept | hand-written |
-|---|---|---|---|---|
-| no backward rule | 5 | 47 | 4 | 11 tests |
-| the forward rule reaches only the seeds | 12 | 130 | 9 | 22 tests |
-| a rerun reruns no one after it | 9 | 91 | 7 | 14 tests |
-| no restore of a shadowed binding | 5 | 56 | 2 | the step tables |
-| a reorder's restore in the new order | 3 | 28 | 4 | none |
-| no Fix or Break as a seed (removed) | 0 | 0 | 0 | none |
-| a departure's restore by the typecheck | 0 | 0 | 0 | none |
-| a rerun reports the nearest binding | 0 | 0 | 0 | `a_unit_rerun_before_a_shadow_reports_its_own_binding` |
-| an export given away by a shadowed binding | 0 | 0 | 0 | `a_name_given_away_and_bound_again_is_there_for_a_later_unit` |
-| no unit may be blocked | 0 | 0 | 1 | the step tables |
-| may be blocked only by the graph now (now the rule) | 0 | 0 | 0 | none |
-| an overwrite's provider not compared | 0 | 0 | 0 | the step tables |
-| still taken by a unit that may be blocked | 0 | 0 | 1 | none |
-| still taken whatever the reader found before | 0 | 0 | 2 | none |
-| a unit that failed to compile provides | 0 | 0 | 1 | none |
-| an import's check is no use | 0 | 0 | 1 | none |
-| no typecheck edge | 0 | 0 | 1 | none |
-| no block on a slot a blocked unit left empty | 0 | 0 | 1 | the step tables |
-| a rerun expression unit looks its name up last | 0 | 2 | 2 | none |
-| a `set` of a failed unit's binding panics | 0 | 0 | 1 | engine fixture `var_003` |
-| a call of a failed unit's function panics | 0 | 1 | 1 | engine fixture `var_004` |
+| fault | of 40 | generated, of 200 | dense, of 200 | kept | hand-written |
+|---|---|---|---|---|---|
+| no backward rule | 12 | 47 | 101 | 7 | 11 tests |
+| the forward rule reaches only the seeds | 28 | 119 | 125 | 17 | 24 tests |
+| a rerun reruns no one after it | 20 | 96 | 123 | 11 | 14 tests |
+| no restore of a shadowed binding | 5 | 58 | 18 | 2 | the step tables |
+| a reorder's restore in the new order | 4 | 36 | 8 | 5 | none |
+| a departure's restore by the typecheck | 0 | 0 | 0 | 0 | none |
+| a rerun reports the nearest binding | 0 | 0 | 0 | 0 | `a_unit_rerun_before_a_shadow_reports_its_own_binding` |
+| an export given away by a shadowed binding | 0 | 0 | 0 | 0 | `a_name_given_away_and_bound_again_is_there_for_a_later_unit` |
+| no unit may be blocked | 0 | 0 | 0 | 2 | none |
+| an overwrite's provider not compared | 1 | 2 | 4 | 1 | the step tables |
+| still taken by a unit that may be blocked | 0 | 0 | 0 | 1 | none |
+| still taken whatever the reader found before | 0 | 0 | 1 | 2 | none |
+| a unit that failed to compile provides | 0 | 0 | 0 | 0 | none |
+| an import's check is no use | 0 | 0 | 0 | 1 | none |
+| no typecheck edge | 0 | 1 | 3 | 1 | none |
+| no block on a slot a blocked unit left empty | 0 | 0 | 0 | 4 | the step tables |
+| a rerun expression unit looks its name up last | 0 | 1 | 3 | 2 | none |
+| a `set` of a failed unit's binding panics | 0 | 0 | 1 | 2 | engine fixture `var_003` |
+| a call of a failed unit's function panics | 0 | 0 | 0 | 1 | engine fixture `var_004` |
+| no typecheck edge as the units stood | 0 | 0 | 1 | 1 | none |
+| a failed unit's names do not hide in lowering | 0 | 0 | 1 | 1 | engine fixture `var_005` |
+| a drop counts as a read of the slot | 0 | 0 | 0 | 0 | none |
+| a store counts as a read of the slot | 0 | 0 | 0 | 0 | none |
+| no writer may block a unit after it | 0 | 0 | 0 | 0 | none |
+| `may_block` takes the provider from both graphs | 0 | 0 | 0 | 1 | none |
+| a bare name's slot is not read | 0 | 0 | 0 | 2 | none |
+| a revival is sure though its unit may return early | 0 | 0 | 0 | 1 | none |
+| still taken though the provider moved | 0 | 0 | 0 | 1 | none |
+| no unit may have been blocked before the edit | 0 | 0 | 0 | 1 | none |
+| a later write looked for in the units as they stand | 0 | 0 | 0 | 1 | none |
 
-**The first five are found by seeds; every rule since, by its kept session.**
-The rules a seed found after the first rounds were found at a few seeds in a
-thousand, in ranges of three thousand, and a run of 200 fails on none of
-them. So a kept session, or a step table, is what holds each of those, and
-the 20 seeds stand watch for the rules every session exercises.
+**Dense sessions find the rules about failed units and shadows; the rest
+are held by kept sessions.** Each rule a dense seed fails on is one about a
+unit that failed to compile, or a binding behind another: few units over
+two names make those arrangements often enough to land in 200 seeds, at
+one to four. The rules about units that may be blocked, and what they leave
+in a slot, need a unit that returns early, a take after it and an edit
+between, in that order, and 200 seeds hold none. So the 20 seeds still
+stand watch only for the rules every session exercises, and a kept
+session, or a step table, holds each of the others.
 
-Three faults fail nothing:
+Five faults fail nothing:
 
-- **A departure's restore by the typecheck** cannot show any more. The
-  departure reads the post-edit graph, which no longer counts a unit that
-  failed to compile as a provider, and that unit is the one the fault would
-  pick wrongly.
-- **No Fix or Break as a seed** and **may be blocked only by the graph now**
-  each had a kept session that failed without the rule when it was written,
-  and passes without it now. Neither failed seeds 0 to 3099 without its rule
-  either, and a rule added since -- the provider comparison, the post-edit
-  graph's corrections -- covers the arrangement each was for. Both rules are
-  gone: the seed is an assertion that a unit left out of the reach compiles
-  as it did, and the judgement of what may be blocked is by the units as they
-  are now.
+- **A departure's restore by the typecheck** cannot show. The departure
+  reads the post-edit graph, which does not count a unit that failed to
+  compile as a provider, and that unit is the one the fault would pick
+  wrongly.
+- **A store or a drop counted as a read**, and **no writer may block a unit
+  after it**, each undo half of one fix, and either half is enough for the
+  session that found it,
+  `overwrite-what-a-later-unit-took-after-one-that-returned-early`: an
+  overwrite after a unit that returned early, rerun once a later unit has
+  taken the binding. The executor no longer holds it back for the slot it
+  writes, and the reach counts it as a unit that may be blocked, so it
+  rebuilds the binding first. With both undone, the session fails.
+- **A unit that failed to compile provides** fails nothing since lowering
+  hides such a unit's names: a later unit naming one fails to lower, in a
+  fresh run as in the session, rather than reading an earlier unit's
+  binding past it.
 
 An export given away by a shadowed binding no fresh run can catch: it fails
 a unit in the session and in the fresh run alike. It is a compile bug that a

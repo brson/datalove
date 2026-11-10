@@ -1,0 +1,105 @@
+----------
+module local/dense/m
+----------
+
+fun g(): int
+  ret 7
+end fun
+
+----------
+scriptunit-fragment 1
+----------
+
+
+
+----------
+scriptunit-fragment 2
+----------
+
+
+
+----------
+scriptunit-fragment 3
+----------
+
+set y = x@ + 144
+
+----------
+scriptunit-expr 4
+----------
+
+
+
+----------
+scriptunit-expr 5
+----------
+
+
+
+----------
+scriptunit-fragment 6
+----------
+
+var y: int = x@
+
+----------
+scriptunit-fragment 7
+----------
+
+
+
+----------
+scriptunit-edit 2
+----------
+
+let t0: int = 19 /! x
+let t1: int = y@
+
+----------
+scriptunit-move 1 after 5
+----------
+
+
+
+----------
+scriptunit-move 2 after 1
+----------
+
+
+
+----------
+scriptunit-insert 8 after 4
+----------
+
+
+
+----------
+scriptunit-edit 1
+----------
+
+var y: int = 0
+
+----------
+scriptunit-insert 9 after 8
+----------
+
+
+
+----------
+scriptunit-edit 7
+----------
+
+set y = y@ + 21
+
+----------
+scriptunit-move 3 after 2
+----------
+
+
+
+----------
+scriptunit-edit 9
+----------
+
+let x: int = 104
+

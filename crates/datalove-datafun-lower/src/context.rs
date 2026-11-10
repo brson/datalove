@@ -198,6 +198,17 @@ impl ScriptLowerContext {
         Self::default()
     }
 
+    /// Take `names` out of the context, bindings and functions alike.
+    pub fn hide(&mut self, names: &[String]) {
+        for name in names {
+            self.values.remove(name);
+            self.value_types.remove(name);
+            self.slots.remove(name);
+            self.slot_types.remove(name);
+            self.functions.remove(name);
+        }
+    }
+
     /// Add exports from unit `unit` to the context.
     ///
     /// When a name is exported, it shadows any previous binding with the same name,

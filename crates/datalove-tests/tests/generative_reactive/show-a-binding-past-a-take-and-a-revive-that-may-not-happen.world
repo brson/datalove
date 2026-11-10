@@ -1,0 +1,40 @@
+----------
+module local/dense/m
+----------
+
+fun g(): int
+  ret 7
+end fun
+
+----------
+scriptunit-fragment 1
+----------
+
+var x: int = 0
+
+----------
+scriptunit-fragment 2
+----------
+
+
+
+----------
+scriptunit-expr 3
+----------
+
+x
+
+----------
+scriptunit-insert 4 after 2
+----------
+
+set x = y@ + 32
+
+----------
+scriptunit-edit 2
+----------
+
+let t0: int = x
+var y: int = 0
+let t1: int = 111 /! y
+

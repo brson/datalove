@@ -3102,21 +3102,28 @@ impl IrCodeUnit {
     /// A store or a field set into one, and one passed to a call, which may
     /// write it through a `mut` or `out` parameter. A unit that did not run to
     /// its end may not have written them, which the executor checks a later
-    /// unit that names one against.
+    /// unit that reads one against.
     pub fn script_slots_written(&self) -> std::collections::BTreeSet<(u32, u32)> {
         let mut slots = std::collections::BTreeSet::new();
         self.collect_script_slots(&mut slots, false);
         slots
     }
 
-    /// The slots of earlier script units this unit's code reads or writes,
-    /// its functions' included, as a unit id and a slot index.
-    pub fn script_slots_named(&self) -> std::collections::BTreeSet<(u32, u32)> {
+    /// The slots of earlier script units this unit's code reads, its
+    /// functions' included, as a unit id and a slot index.
+    ///
+    /// Any operand naming one, and one passed to a call, which may read it,
+    /// but not a drop of what one held before a store into it: a unit that
+    /// writes a slot without reading it does not care what it held, or
+    /// whether it held anything.
+    pub fn script_slots_read(&self) -> std::collections::BTreeSet<(u32, u32)> {
         let mut slots = std::collections::BTreeSet::new();
         self.collect_script_slots(&mut slots, true);
         slots
     }
 
+    /// The slots written, with `reads` false, or read, with it true; see
+    /// [`Self::script_slots_written`] and [`Self::script_slots_read`].
     fn collect_script_slots(&self, slots: &mut std::collections::BTreeSet<(u32, u32)>, reads: bool) {
         let external = |op: &Operand| match op {
             Operand::ExternalSlot { unit, slot } => Some((*unit, slot.0)),
@@ -3130,9 +3137,11 @@ impl IrCodeUnit {
                     | Instruction::SlotStoreMove { dest: SlotDest::External { unit, slot }, .. }
                     | Instruction::SlotStoreMoveTracked { dest: SlotDest::External { unit, slot }, .. }
                     | Instruction::SetField { slot: SlotDest::External { unit, slot }, .. }
-                    | Instruction::SetFieldTracked { slot: SlotDest::External { unit, slot }, .. } => {
+                    | Instruction::SetFieldTracked { slot: SlotDest::External { unit, slot }, .. }
+                        if !reads => {
                         slots.insert((*unit, slot.0));
                     }
+                    Instruction::Drop { .. } | Instruction::DropTracked { .. } if reads => continue,
                     _ => {}
                 }
                 if reads || instr.call_target().is_some() {

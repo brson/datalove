@@ -477,17 +477,32 @@ impl ScriptExecutor {
     ///
     /// `at` is where the unit sits; everything it reads sits before it. A
     /// unit that is a bare name reads that binding outside its code, so the
-    /// unit providing it counts too.
+    /// unit providing it counts too, and its slot, if it is one, as read.
     ///
     /// **So does a unit between that did not run to its end and would have
-    /// written a slot this one names, which holds nothing.** A unit that did
+    /// written a slot this one reads, which holds nothing.** A unit that did
     /// not finish did not write the slot, so it holds what it held before,
     /// which is read as it is. But if that was nothing, the unit would have
     /// revived a binding given away, and the code after it, compiled as if
-    /// it had, has nothing to read.
+    /// it had, has nothing to read. A unit that writes the slot without
+    /// reading it does not care what it held: nor does the reach, which runs
+    /// such a unit again without putting back what it held, and a later
+    /// unit's take may have left it empty.
     fn blockers(&self, at: usize, ir_unit: &IrCodeUnit) -> Vec<u32> {
         let mut read: BTreeSet<u32> = ir_unit.script_units_read().into_iter().collect();
-        let named = ir_unit.script_slots_named();
+        let mut slots_read = ir_unit.script_slots_read();
+        let script_ctx = ir_unit.script_context().expect("a script code unit");
+        if let Some(name) = &script_ctx.result_name {
+            let provider = self.provider_before(at, name);
+            read.extend(provider);
+            let slot = provider.and_then(|provider| {
+                self.unit(provider).exports.bindings.iter().find_map(|(bound, binding)| match binding {
+                    ExportBinding::Slot(slot) if bound == name => Some((provider, slot.0)),
+                    _ => None,
+                })
+            });
+            slots_read.extend(slot);
+        }
         let empty = |(unit, slot): (u32, u32)| {
             self.unit(unit).status == UnitStatus::Ran
                 && self.env.frames.external_slot(unit, datalove_datafun_ir::SlotId(slot)).is_none()
@@ -495,12 +510,8 @@ impl ScriptExecutor {
         read.extend(self.order[..at].iter().copied().filter(|writer| {
             let state = self.unit(*writer);
             state.status != UnitStatus::Ran
-                && state.exports.writes.iter().any(|slot| named.contains(slot) && empty(*slot))
+                && state.exports.writes.iter().any(|slot| slots_read.contains(slot) && empty(*slot))
         }));
-        let script_ctx = ir_unit.script_context().expect("a script code unit");
-        if let Some(name) = &script_ctx.result_name {
-            read.extend(self.provider_before(at, name));
-        }
         assert!(
             read.iter().all(|unit| self.order[..at].contains(unit)),
             "the unit at {at} reads from units {read:?}, which do not all come before it",

@@ -34,6 +34,7 @@ salsa.workspace = true
 datalove-exampletest.path = "../datalove-exampletest"
 # For the generated sessions, driven a change at a time.
 datalove-script-steps.workspace = true
+datalove-script-engine.workspace = true
 datalove-repl.workspace = true
 
 [[test]]

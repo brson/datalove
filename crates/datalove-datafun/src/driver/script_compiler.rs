@@ -112,6 +112,9 @@ struct HeldGraph {
     ran: Vec<usize>,
     /// Whether each unit compiled.
     compiled: Vec<bool>,
+    /// Whether each unit may have returned early; see
+    /// `UnitLowerRecord::may_return_early`.
+    may_return_early: Vec<bool>,
 }
 
 /// How a unit provides a binding: as a slot or a value, and of which type.
@@ -1050,6 +1053,18 @@ impl<'db> ScriptCompiler<'db> {
             held.ran[..at].iter().rev().copied().find(|earlier| held.provides[*earlier].contains(name))
         };
 
+        // The unit `unit`'s typecheck found `name` in before the edit, in the
+        // order the units ran in, when that was not the unit the binding came
+        // from. A reorder can move that unit past `unit` without changing how
+        // it compiles, and `unit` then resolves the name elsewhere, which
+        // `typecheck_only_provider`, looking at where the units sit now, does
+        // not see.
+        let held_typecheck_only_provider = |unit: usize, name: &String| {
+            let at = held.ran.iter().position(|ran| *ran == unit).X();
+            held.ran[..at].iter().rev().copied().find(|earlier| held.typechecked[*earlier].contains(name))
+                .filter(|found| held_provider(unit, name) != Some(*found))
+        };
+
         // Whether `unit` may be blocked when it runs: whether it reads a
         // binding whose provider may return early, or may be blocked itself.
         // Which units are is only known once they run, after the reach is
@@ -1060,22 +1075,54 @@ impl<'db> ScriptCompiler<'db> {
         // and not now is reached by the provider that stopped returning
         // early, and the units after it by what it writes, whatever its
         // write counts as.
+        let now_provider = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| now_provides[*earlier].contains(name))
+        };
+        //
+        // So may a unit after one that may not finish and writes a binding
+        // it reads: the executor blocks it if that write would have revived
+        // the binding.
         let mut may_block = vec![false; count];
         for unit in 0..count {
             may_block[unit] = uses[unit].iter().any(|name| {
-                provider(unit, name).is_some_and(|provider| {
-                    self.unit_records[provider].may_return_early || may_block[provider]
-                })
+                let unfinished = |earlier: usize| self.unit_records[earlier].may_return_early || may_block[earlier];
+                let provider = now_provider(unit, name);
+                provider.is_some_and(unfinished)
+                    || (provider.map_or(0, |provider| provider + 1)..unit).any(|earlier| {
+                        self.unit_records[earlier].writes.contains(name) && unfinished(earlier)
+                    })
+            });
+        }
+
+        // Whether `unit` may have been blocked when it last ran, as
+        // `may_block` asks of now, in the order the units ran in.
+        let mut held_may_block = vec![false; count];
+        for &unit in &held.ran {
+            let at = held.ran.iter().position(|ran| *ran == unit).X();
+            held_may_block[unit] = held.uses[unit].iter().any(|name| {
+                let unfinished = |earlier: usize| held.may_return_early[earlier] || held_may_block[earlier];
+                let before = &held.ran[..at];
+                let provider = before.iter().rposition(|earlier| held.provides[*earlier].contains(name));
+                provider.is_some_and(|provider| unfinished(before[provider]))
+                    || before[provider.map_or(0, |provider| provider + 1)..].iter()
+                        .any(|earlier| held.changed[*earlier].contains(name) && unfinished(*earlier))
             });
         }
 
         // Whether `unit` writes the binding `name` without reading what it
         // held, as it does now: an overwrite, or a revival, which cannot read
         // a binding that was given away. One by a unit that may be blocked is
-        // a write that may not happen, which counts as an update.
+        // a write that may not happen, which counts as an update; and so is
+        // one by a unit that may have been blocked when it last ran, which
+        // may not have happened, so that the unit has to run now. An
+        // overwrite is on every way through the unit, early returns
+        // included, and a revival need not be: one by a unit that may return
+        // early may not happen either.
         let writes_without_reading = |unit: usize, name: &String| {
             let record = &self.unit_records[unit];
-            !may_block[unit] && (record.overwrites.contains(name) || record.revives.contains(name))
+            !may_block[unit] && !held_may_block[unit]
+                && (record.overwrites.contains(name)
+                    || record.revives.contains(name) && !record.may_return_early)
         };
 
         // The nearest unit before `unit` that set the binding `name` without
@@ -1135,10 +1182,14 @@ impl<'db> ScriptCompiler<'db> {
                 // the take is by a unit that may be blocked, which then may
                 // not happen, or the unit did not find the binding as the
                 // take left it before: a reorder put the take before it, or
-                // after a unit that revived or wrote the binding since.
+                // after a unit that revived or wrote the binding since. Or
+                // the binding is another one, or provided another way, which
+                // the unit compiles against differently: a `set` that failed
+                // against a `let` compiles against a `var`, and revives it.
                 rederived[unit] = seeds.contains(&unit)
                     || uses[unit].iter().any(|name| {
                         typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])
+                            || held_typecheck_only_provider(unit, name) != typecheck_only_provider(unit, name)
                     })
                     || uses[unit].iter().any(|name| {
                         source(unit, name).is_some_and(|source| {
@@ -1146,7 +1197,8 @@ impl<'db> ScriptCompiler<'db> {
                                 && !may_block[source]
                                 && held.takes[source].contains(name)
                                 && self.unit_records[source].takes.contains(name)
-                                && held_source(unit, name) == Some(source);
+                                && held_source(unit, name) == Some(source)
+                                && !provider_moved(unit, name);
                             rederived[source]
                                 && !still_taken
                                 && (!writes_without_reading(unit, name) || provider_moved(unit, name))
@@ -1182,8 +1234,12 @@ impl<'db> ScriptCompiler<'db> {
                     if writes_without_reading(unit, name) {
                         continue;
                     }
+                    // Whether a unit after it changed the binding since,
+                    // as the binding was when that unit ran: a unit between
+                    // that provides the name now, and did not then, does
+                    // not stand in front of a write made then.
                     let since = (unit..count)
-                        .take_while(|later| provider(*later, name) == Some(source))
+                        .filter(|later| held_provider(*later, name) == Some(source))
                         .any(|later| held.changed[later].contains(name));
                     if since {
                         added |= rerun_starts.insert(setter);
@@ -1249,6 +1305,7 @@ impl<'db> ScriptCompiler<'db> {
             shapes: self.unit_records.iter().map(|record| binding_shapes(record)).collect(),
             ran,
             compiled: self.unit_records.iter().map(|record| record.compiled).collect(),
+            may_return_early: self.unit_records.iter().map(|record| record.may_return_early).collect(),
         }
     }
 

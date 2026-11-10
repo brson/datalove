@@ -112,10 +112,16 @@ impl UnitLowerRecord {
 /// later export shadows an earlier one of the same name whichever kind each is.
 /// Each binding is named by the id of the unit that binds it, `ids` being the
 /// records' units' ids.
+///
+/// A unit that typechecked and did not compile exports nothing, and still
+/// shadows: a later unit's typecheck resolved its names to it, so they hide
+/// an earlier unit's binding of the same name, and lowering a use of one
+/// finds nothing rather than that binding.
 pub fn lower_context_over(ids: &[u32], records: &[Arc<UnitLowerRecord>]) -> lower::ScriptLowerContext {
     assert_eq!(ids.len(), records.len(), "an id per record");
     let mut ctx = lower::ScriptLowerContext::new();
     for (id, record) in ids.iter().zip(records) {
+        ctx.hide(&record.typechecked);
         ctx.add_exports(
             *id,
             &record.exports,

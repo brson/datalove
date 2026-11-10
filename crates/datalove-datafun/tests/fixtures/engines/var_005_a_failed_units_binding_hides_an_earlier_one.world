@@ -1,0 +1,40 @@
+----------
+scriptunit-fragment
+----------
+
+// A unit that typechecks and fails ownership still shadows what earlier
+// units bind. A later unit's typecheck finds its binding, so lowering must
+// not find the earlier one of the same name in its place: a set of it fails
+// as it would with no earlier binding, rather than assigning an immutable
+// one, and a read fails too, rather than reading a string as an int.
+
+let x: string = "earlier"
+var d: int = 1
+let e: int = d
+
+----------
+scriptunit-fragment
+----------
+
+debuglog d
+var x: int = 2
+
+----------
+scriptunit-fragment
+----------
+
+set x = 3
+
+----------
+scriptunit-fragment
+----------
+
+if true
+  set x = 4
+end if
+
+----------
+scriptunit-fragment
+----------
+
+debuglog x

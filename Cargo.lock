@@ -1604,6 +1604,7 @@ dependencies = [
  "datalove-exampletest",
  "datalove-repl",
  "datalove-rt",
+ "datalove-script-engine",
  "datalove-script-steps",
  "datalove-worldgen",
  "rustmax",
