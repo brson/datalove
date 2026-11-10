@@ -76,6 +76,35 @@ pub enum Ran {
     Deleted,
 }
 
+/// One way a session differs from a fresh run of its code.
+#[derive(Clone, Debug)]
+pub struct Difference {
+    /// The unit it differs at; `None` for a reset of the session alone.
+    pub unit: Option<String>,
+    pub kind: Differs,
+    /// The difference in full, with the step it came at.
+    pub message: String,
+}
+
+/// What kind of difference a [`Difference`] is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Differs {
+    /// One reset and the other did not, or not the same way.
+    Reset,
+    /// A unit came to one end in the session and another in the fresh run.
+    Came { session: Ran, fresh: Ran },
+    /// A unit showed another value, or returned another.
+    Showed,
+    /// A unit holds other bindings.
+    Holds,
+}
+
+impl std::fmt::Display for Difference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
 /// What a unit did in one step.
 ///
 /// _Recompiles_ is salsa running the unit's typecheck or its ownership
@@ -97,6 +126,16 @@ fn ran(eval: &Eval) -> Ran {
         Eval::Blocked { .. } => Ran::Blocked,
         Eval::Ran(_) | Eval::Value(_) => Ran::Runs,
         Eval::Crashed(_) | Eval::RuntimeError(_) => unreachable!("a reset ends the session; see `Session::reset`"),
+    }
+}
+
+/// What a unit showed when it last ran, beyond its bindings: an expression
+/// unit's value, or what a unit that returned early returned.
+fn shown(eval: &Eval) -> Option<String> {
+    match eval {
+        Eval::Value(value) => Some(fmt!("{}: {}", value.value, value.ty)),
+        Eval::ReturnedEarly(returned) => Some(returned.C()),
+        _ => None,
     }
 }
 
@@ -128,6 +167,9 @@ pub struct Session {
     /// What each unit came to when it last ran or failed to, in the same
     /// order.
     states: Vec<Ran>,
+    /// What each unit showed when it last ran, as [`shown`] says it, in the
+    /// same order.
+    shown: Vec<Option<String>>,
     /// The units whose last compile failed, which leaves no record of what
     /// they do.
     failed: Vec<String>,
@@ -149,7 +191,7 @@ impl Session {
         assert!(engine.module_errors().is_empty(), "the modules compile: {:?}", engine.module_errors().broken);
         recorder.clear();
         Session {
-            engine, units: Vec::new(), code: Vec::new(), states: Vec::new(), failed: Vec::new(),
+            engine, units: Vec::new(), code: Vec::new(), states: Vec::new(), shown: Vec::new(), failed: Vec::new(),
             recorder, analyzed: Vec::new(), also_roots, reset: None,
         }
     }
@@ -280,6 +322,7 @@ impl Session {
                     self.units.remove(index);
                     self.code.remove(index);
                     self.states.remove(index);
+                    self.shown.remove(index);
                     ran.push((unit.C(), Ran::Deleted));
                     let reports = self.engine.delete_unit(id);
                     ran.extend(self.reported(reports));
@@ -290,10 +333,12 @@ impl Session {
                     let name = self.units.remove(from);
                     let code = self.code.remove(from);
                     let state = self.states.remove(from);
+                    let shown = self.shown.remove(from);
                     let to = place.index(self.index(beside));
                     self.units.insert(to, name);
                     self.code.insert(to, code);
                     self.states.insert(to, state);
+                    self.shown.insert(to, shown);
                     let reports = self.engine.move_unit(id, to);
                     ran.extend(self.reported(reports));
                 }
@@ -302,6 +347,7 @@ impl Session {
                     self.units.insert(index, entry.unit.C());
                     self.code.insert(index, entry.code());
                     self.states.insert(index, Ran::No);
+                    self.shown.insert(index, None);
                     let reports = self.engine.insert_unit(index, &entry.source, entry.expression);
                     ran.extend(self.reported(reports));
                 }
@@ -397,6 +443,12 @@ impl Session {
             return Vec::new();
         }
         self.note_analyzed();
+        for report in &reports {
+            if let Some(eval) = &report.eval {
+                let index = self.index(&self.name(report.unit));
+                self.shown[index] = shown(eval);
+            }
+        }
         reports.iter()
             .map(|report| (self.name(report.unit), report.eval.as_ref().map_or(Ran::No, ran)))
             .collect()
@@ -423,26 +475,29 @@ impl Session {
         let eval = self.engine.eval(entry.code());
         if eval.resets() {
             self.states.push(Ran::No);
+            self.shown.push(None);
             self.reset = Some(eval);
             return None;
         }
         self.note_analyzed();
         self.states.push(ran(&eval));
+        self.shown.push(shown(&eval));
         Some((entry.unit.C(), ran(&eval)))
     }
 
     /// Say every way this session differs from a fresh run of its current
-    /// code: each unit, in order, must have come to the same end and hold the
-    /// same bindings.
+    /// code: each unit, in order, must have come to the same end, shown the
+    /// same value or returned the same, and hold the same bindings.
     ///
     /// This is what a step is for, so it is checked whether or not the step
     /// has a table, and it does not trust the tables' `holds after`.
-    pub fn differs_from_fresh(&mut self, at: &str) -> Vec<String> {
+    pub fn differs_from_fresh(&mut self, at: &str) -> Vec<Difference> {
         let sys = datalove_sys_packages::system_library();
         let mut fresh = Engine::with_options(
             sys, self.engine.workspace().C(), datalove_datafun::DebugOutputMode::Disabled, self.also_roots.C(),
         ).expect("the engine starts");
         let mut states: Vec<Ran> = Vec::new();
+        let mut fresh_shown: Vec<Option<String>> = Vec::new();
         let mut fresh_reset = None;
         for (index, unit) in self.code.iter().enumerate() {
             let eval = fresh.eval(unit.C());
@@ -451,40 +506,52 @@ impl Session {
                 break;
             }
             states.push(ran(&eval));
+            fresh_shown.push(shown(&eval));
         }
 
         // A reset leaves nothing to compare but how it came: both must
         // reset, and the same way.
         let same_way = |a: &Eval, b: &Eval| std::mem::discriminant(a) == std::mem::discriminant(b);
+        let reset = |unit: Option<&String>, message: String| vec![Difference { unit: unit.cloned(), kind: Differs::Reset, message }];
         match (&self.reset, &fresh_reset) {
             (None, None) => {}
             (Some(reset), Some((_, fresh))) if same_way(reset, fresh) => return Vec::new(),
-            (Some(reset), Some((index, fresh))) => return vec![fmt!(
-                "{at}: the session came to {reset:?}, and a fresh run to {fresh:?} at unit {}", self.units[*index],
-            )],
-            (Some(reset), None) => return vec![fmt!(
-                "{at}: the session came to {reset:?}, and a fresh run did not reset",
-            )],
-            (None, Some((index, fresh))) => return vec![fmt!(
+            (Some(session), Some((index, fresh))) => return reset(Some(&self.units[*index]), fmt!(
+                "{at}: the session came to {session:?}, and a fresh run to {fresh:?} at unit {}", self.units[*index],
+            )),
+            (Some(session), None) => return reset(None, fmt!(
+                "{at}: the session came to {session:?}, and a fresh run did not reset",
+            )),
+            (None, Some((index, fresh))) => return reset(Some(&self.units[*index]), fmt!(
                 "{at}: a fresh run came to {fresh:?} at unit {}, and the session did not reset", self.units[*index],
-            )],
+            )),
         }
 
         let ids = self.engine.unit_ids();
         let fresh_ids = fresh.unit_ids();
         let mut failures = Vec::new();
         for (index, unit) in self.units.iter().enumerate() {
+            let mut differs = |kind: Differs, message: String| {
+                failures.push(Difference { unit: Some(unit.C()), kind, message });
+            };
             if self.states[index] != states[index] {
-                failures.push(fmt!(
+                differs(Differs::Came { session: self.states[index], fresh: states[index] }, fmt!(
                     "{at}: unit {unit} came to {:?}, and to {:?} in a fresh run",
                     self.states[index], states[index],
+                ));
+                continue;
+            }
+            if self.shown[index] != fresh_shown[index] {
+                differs(Differs::Showed, fmt!(
+                    "{at}: unit {unit} showed {}, and {} in a fresh run",
+                    self.shown[index].as_deref().unwrap_or("nothing"), fresh_shown[index].as_deref().unwrap_or("nothing"),
                 ));
                 continue;
             }
             let held = holds(&self.engine.unit_bindings(ids[index]));
             let fresh_held = holds(&fresh.unit_bindings(fresh_ids[index]));
             if held != fresh_held {
-                failures.push(fmt!("{at}: unit {unit} holds {held}, and {fresh_held} in a fresh run"));
+                differs(Differs::Holds, fmt!("{at}: unit {unit} holds {held}, and {fresh_held} in a fresh run"));
             }
         }
         failures

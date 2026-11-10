@@ -176,7 +176,7 @@ pub fn run(name: &str, workspace: Workspace, steps: &[Step]) -> Vec<String> {
 
     for (number, step) in steps.iter().enumerate() {
         let touched = session.apply(&step.change);
-        failures.extend(session.differs_from_fresh(&fmt!("{name} step {}", number + 1)));
+        failures.extend(session.differs_from_fresh(&fmt!("{name} step {}", number + 1)).iter().map(|difference| difference.message.C()));
         if let Some(reset) = session.reset() {
             failures.push(fmt!("{name} step {}: the session reset, with {reset:?}, and a step table cannot follow", number + 1));
             break;

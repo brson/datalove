@@ -3113,7 +3113,8 @@ impl IrCodeUnit {
     /// functions' included, as a unit id and a slot index.
     ///
     /// Any operand naming one, and one passed to a call, which may read it,
-    /// but not a drop of what one held before a store into it: a unit that
+    /// but not a drop of what one held, which lowering makes only before
+    /// writing it, by a store or through an `out` argument: a unit that
     /// writes a slot without reading it does not care what it held, or
     /// whether it held anything.
     pub fn script_slots_read(&self) -> std::collections::BTreeSet<(u32, u32)> {
@@ -3129,19 +3130,39 @@ impl IrCodeUnit {
             Operand::ExternalSlot { unit, slot } => Some((*unit, slot.0)),
             _ => None,
         };
+        let stored = |instr: &Instruction| match instr {
+            Instruction::SlotStoreCopy { dest: SlotDest::External { unit, slot }, .. }
+            | Instruction::SlotStoreCopyTracked { dest: SlotDest::External { unit, slot }, .. }
+            | Instruction::SlotStoreMove { dest: SlotDest::External { unit, slot }, .. }
+            | Instruction::SlotStoreMoveTracked { dest: SlotDest::External { unit, slot }, .. } => Some((*unit, slot.0)),
+            _ => None,
+        };
         for block in &self.blocks {
-            for instr in &block.instructions {
+            for (at, instr) in block.instructions.iter().enumerate() {
                 match instr {
-                    Instruction::SlotStoreCopy { dest: SlotDest::External { unit, slot }, .. }
-                    | Instruction::SlotStoreCopyTracked { dest: SlotDest::External { unit, slot }, .. }
-                    | Instruction::SlotStoreMove { dest: SlotDest::External { unit, slot }, .. }
-                    | Instruction::SlotStoreMoveTracked { dest: SlotDest::External { unit, slot }, .. }
-                    | Instruction::SetField { slot: SlotDest::External { unit, slot }, .. }
+                    Instruction::SetField { slot: SlotDest::External { unit, slot }, .. }
                     | Instruction::SetFieldTracked { slot: SlotDest::External { unit, slot }, .. }
                         if !reads => {
                         slots.insert((*unit, slot.0));
                     }
-                    Instruction::Drop { .. } | Instruction::DropTracked { .. } if reads => continue,
+                    _ if !reads && stored(instr).is_some() => {
+                        slots.extend(stored(instr));
+                    }
+                    Instruction::Drop { operand } | Instruction::DropTracked { operand } if reads => {
+                        let dropped = external(operand);
+                        let writes = |later: &Instruction| {
+                            stored(later) == dropped || later.call_target().is_some() && {
+                                let mut named = false;
+                                later.for_each_operand(|op| named |= external(op) == dropped);
+                                named
+                            }
+                        };
+                        assert!(
+                            dropped.is_none() || block.instructions[at + 1..].iter().any(writes),
+                            "an earlier unit's slot is dropped only to be written after",
+                        );
+                        continue;
+                    }
                     _ => {}
                 }
                 if reads || instr.call_target().is_some() {

@@ -775,6 +775,21 @@ Dense sessions found nine bugs in their first thirty thousand seeds:
   binding being read outside its code, and panicked showing nothing; and a
   revival by a unit that may return early before it was taken as sure.
 
+**A review then found what the check itself could not see.** It compared
+each unit's end and bindings, and an expression unit binds nothing, so a
+rerun one showing a stale value agreed with the fresh run; the expression
+bugs above were found by their panics. Now each unit's shown value, and
+what a unit that returned early returned, is compared too
+(`Session::differs_from_fresh`), and seeds 0 to 1999 agree. `debuglog`
+output is still not compared: the runtime does not say which unit printed
+what, and a bare-name expression unit asks the reach what `debuglog` of
+the name would. No session had reset, so the reset comparison had never
+run; a dense line now overflows the stack when a name holds 0, which an
+edit turns on and off, and about one dense session in fifteen resets.
+And a shrink kept any disagreement as the failure it set out with, so it
+could drift to another bug; it now keeps only one whose first difference
+is of the same kind, at the same unit.
+
 Planting a fault in each rule, as the sessions stood once they had dense
 sessions beside them: how many of the 40 sessions `just test` runs fail, the
 generated and the dense session of each of its 20 seeds; how many of seeds 0

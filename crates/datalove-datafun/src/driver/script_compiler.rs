@@ -104,6 +104,8 @@ struct HeldGraph {
     changed: Vec<BTreeSet<String>>,
     /// What each unit took of earlier units' bindings.
     takes: Vec<BTreeSet<String>>,
+    /// What each unit wrote of earlier units' bindings.
+    writes: Vec<BTreeSet<String>>,
     /// How each unit provided each of its bindings; see [`binding_shape`].
     shapes: Vec<LookupMap<String, BindingShape>>,
     /// The units in the order they ran in, by where they sit now: the same
@@ -126,6 +128,37 @@ struct HeldGraph {
 struct BindingShape {
     slot: bool,
     ty: String,
+}
+
+/// Whether each unit may be blocked when it runs, by the units' graph and
+/// the order they run in, `order`.
+///
+/// A unit may be blocked if it reads a binding whose provider may return
+/// early or may be blocked itself; or a binding a unit between writes that
+/// may not finish, since the executor blocks a unit on a slot such a writer
+/// would have revived. Which units are blocked is only known once they run,
+/// after the reach is taken, so the reach takes any that may be to write
+/// nothing, as it takes a write that may not happen.
+fn blockable(
+    order: &[usize],
+    uses: &[BTreeSet<String>],
+    provides: impl Fn(usize, &String) -> bool,
+    writes: impl Fn(usize, &String) -> bool,
+    may_return_early: impl Fn(usize) -> bool,
+) -> Vec<bool> {
+    let mut may_block = vec![false; order.len()];
+    for (at, &unit) in order.iter().enumerate() {
+        let before = &order[..at];
+        let unfinished = |earlier: usize| may_return_early(earlier) || may_block[earlier];
+        let blocked = uses[unit].iter().any(|name| {
+            let provider = before.iter().rposition(|earlier| provides(*earlier, name));
+            provider.is_some_and(|provider| unfinished(before[provider]))
+                || before[provider.map_or(0, |provider| provider + 1)..].iter()
+                    .any(|earlier| writes(*earlier, name) && unfinished(*earlier))
+        });
+        may_block[unit] = blocked;
+    }
+    may_block
 }
 
 /// How `record` says its unit provides `name`, if it does.
@@ -1065,49 +1098,28 @@ impl<'db> ScriptCompiler<'db> {
                 .filter(|found| held_provider(unit, name) != Some(*found))
         };
 
-        // Whether `unit` may be blocked when it runs: whether it reads a
-        // binding whose provider may return early, or may be blocked itself.
-        // Which units are is only known once they run, after the reach is
-        // taken, so the reach takes any that may be to write nothing, as it
-        // takes a write that may not happen.
-        //
-        // As the units are now, not as they were. A unit blocked last time
-        // and not now is reached by the provider that stopped returning
-        // early, and the units after it by what it writes, whatever its
-        // write counts as.
-        let now_provider = |unit: usize, name: &String| {
-            (0..unit).rev().find(|earlier| now_provides[*earlier].contains(name))
-        };
-        //
-        // So may a unit after one that may not finish and writes a binding
-        // it reads: the executor blocks it if that write would have revived
-        // the binding.
-        let mut may_block = vec![false; count];
-        for unit in 0..count {
-            may_block[unit] = uses[unit].iter().any(|name| {
-                let unfinished = |earlier: usize| self.unit_records[earlier].may_return_early || may_block[earlier];
-                let provider = now_provider(unit, name);
-                provider.is_some_and(unfinished)
-                    || (provider.map_or(0, |provider| provider + 1)..unit).any(|earlier| {
-                        self.unit_records[earlier].writes.contains(name) && unfinished(earlier)
-                    })
-            });
-        }
+        // Whether each unit may be blocked when it runs, as the units are
+        // now, not as they were. A unit blocked last time and not now is
+        // reached by the provider that stopped returning early, and the
+        // units after it by what it writes, whatever its write counts as.
+        let in_order: Vec<usize> = (0..count).collect();
+        let may_block = blockable(
+            &in_order,
+            &uses,
+            |unit: usize, name: &String| now_provides[unit].contains(name),
+            |unit: usize, name: &String| self.unit_records[unit].writes.contains(name),
+            |unit: usize| self.unit_records[unit].may_return_early,
+        );
 
-        // Whether `unit` may have been blocked when it last ran, as
-        // `may_block` asks of now, in the order the units ran in.
-        let mut held_may_block = vec![false; count];
-        for &unit in &held.ran {
-            let at = held.ran.iter().position(|ran| *ran == unit).X();
-            held_may_block[unit] = held.uses[unit].iter().any(|name| {
-                let unfinished = |earlier: usize| held.may_return_early[earlier] || held_may_block[earlier];
-                let before = &held.ran[..at];
-                let provider = before.iter().rposition(|earlier| held.provides[*earlier].contains(name));
-                provider.is_some_and(|provider| unfinished(before[provider]))
-                    || before[provider.map_or(0, |provider| provider + 1)..].iter()
-                        .any(|earlier| held.changed[*earlier].contains(name) && unfinished(*earlier))
-            });
-        }
+        // Whether each unit may have been blocked when it last ran, in the
+        // order the units ran in.
+        let held_may_block = blockable(
+            &held.ran,
+            &held.uses,
+            |unit: usize, name: &String| held.provides[unit].contains(name),
+            |unit: usize, name: &String| held.writes[unit].contains(name),
+            |unit: usize| held.may_return_early[unit],
+        );
 
         // Whether `unit` writes the binding `name` without reading what it
         // held, as it does now: an overwrite, or a revival, which cannot read
@@ -1302,6 +1314,7 @@ impl<'db> ScriptCompiler<'db> {
                 .map(|record| record.takes.iter().chain(&record.writes).cloned().collect())
                 .collect(),
             takes: self.unit_records.iter().map(|record| set(&record.takes)).collect(),
+            writes: self.unit_records.iter().map(|record| set(&record.writes)).collect(),
             shapes: self.unit_records.iter().map(|record| binding_shapes(record)).collect(),
             ran,
             compiled: self.unit_records.iter().map(|record| record.compiled).collect(),
@@ -1319,8 +1332,9 @@ impl<'db> ScriptCompiler<'db> {
     ///
     /// **A unit that failed to compile when it last compiled provides
     /// nothing**, though it typechecks: it fails later, in ownership or
-    /// lowering, and a later unit naming one of its bindings reads an
-    /// earlier unit's, as it would in a fresh run. A unit about to compile
+    /// lowering, and holds no binding at run time. A later unit naming one
+    /// of its bindings fails to lower, since lowering hides them, and is
+    /// reached by the typecheck edge. A unit about to compile
     /// for the first time, or differently, is reached anyway, and the reach
     /// is taken again with what its new record provides.
     fn graph_now(&self) -> (Vec<Vec<String>>, Vec<Vec<String>>) {

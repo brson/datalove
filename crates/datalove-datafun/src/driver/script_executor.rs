@@ -714,11 +714,6 @@ impl ScriptExecutor {
             .or_else(|| self.script_ctx.functions.get(name).map(|(unit, _)| *unit))
     }
 
-    /// Get the type and value of a binding by name; the value is `None` for
-    /// a binding a later unit gave away.
-    ///
-    /// `None` when the nearest unit binding it did not run to its end, as when
-    /// nothing binds it: what that unit bound is not on offer.
     /// The binding `name` as a unit at position `at` finds it, its type and
     /// its value printed; the value is `None` if it was given away.
     fn binding_before(&mut self, at: usize, name: &str) -> Option<(String, Option<String>)> {
@@ -739,6 +734,11 @@ impl ScriptExecutor {
         Some((ty, value.map(|v| printed(&mut self.interp, &v))))
     }
 
+    /// Get the type and value of a binding by name; the value is `None` for
+    /// a binding a later unit gave away.
+    ///
+    /// `None` when the nearest unit binding it did not run to its end, as when
+    /// nothing binds it: what that unit bound is not on offer.
     pub fn get_binding(&mut self, name: &str) -> Option<(String, Option<String>)> {
         let provider = self.script_ctx.values.get(name).map(|(unit, _)| *unit)
             .or_else(|| self.script_ctx.slots.get(name).map(|(unit, _)| *unit));

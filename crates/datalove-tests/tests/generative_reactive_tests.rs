@@ -75,7 +75,7 @@ use bct::random::{SeededRng, env_seeds};
 
 use datalove_repl::Place;
 use datalove_script_engine::Eval;
-use datalove_script_steps::{Change, Entry, Ran, Session, Workspace, read_changes, write_changes};
+use datalove_script_steps::{Change, Difference, Entry, Ran, Session, Workspace, read_changes, write_changes};
 use datalove_worldgen::{WorldGenConfig, gen_session_seeded};
 
 /// The first seed of a default run.
@@ -398,6 +398,9 @@ const DENSE_NAMES: [&str; 2] = ["x", "y"];
 struct DenseNames {
     temps: usize,
     functions: usize,
+    /// Functions that recurse without end, named apart from `functions` so
+    /// that no other line calls one.
+    runaways: usize,
 }
 
 impl DenseNames {
@@ -427,7 +430,7 @@ impl DenseNames {
         let name = DENSE_NAMES[rng.random_range(0..DENSE_NAMES.len())];
         let k = DenseNames::number(rng);
         let other = DENSE_NAMES.iter().find(|other| **other != name).X();
-        match rng.random_range(0..26) {
+        match rng.random_range(0..27) {
             0..=3 => fmt!("var {name}: int = {k}"),
             4 => fmt!("let {name}: int = {k}"),
             5..=7 => fmt!("let {}: int = {name}", self.temp()),
@@ -462,6 +465,17 @@ impl DenseNames {
             // other would not do.
             22 | 23 => fmt!("set {name} = {other}@ + {k}"),
             24 => fmt!("var {name}: int = {other}@"),
+            // Overflow the stack when a name holds 0, a runtime error, which
+            // empties the session: an edit to the name turns it on or off,
+            // and the fresh run must reset as the session does.
+            25 => {
+                self.runaways += 1;
+                let runaway = fmt!("down{}", self.runaways - 1);
+                fmt!(
+                    "fun {runaway}(n: int): int\n  ret {runaway}(n) + 1\nend fun\nif {name} == 0\n  let {}: int = {runaway}(0)\nend if",
+                    self.temp(),
+                )
+            }
             _ => fmt!("if true xor false\n  set {name} = {k}\nend if"),
         }
     }
@@ -755,7 +769,7 @@ fn perturb(rng: &mut SeededRng, source: &str) -> String {
 enum Verdict {
     Agrees(Tally),
     /// The ways some step left the session other than a fresh run would.
-    Disagrees(Vec<String>),
+    Disagrees(Vec<Difference>),
     Panics { at: String, message: String },
     /// The engine panicked on a step, which empties the session; the fresh
     /// run may have too, but a panic is wrong however many make it.
@@ -765,10 +779,17 @@ enum Verdict {
 
 impl Verdict {
     /// Whether `self` is the failure `other` is, for shrinking: the same
-    /// panic, by where it was raised, or a disagreement of any kind.
+    /// panic, by where it was raised, or a disagreement whose first
+    /// difference is of the same kind at the same unit.
+    ///
+    /// Any disagreement would let a shrink drift from the bug it set out
+    /// with to another, which the kept session would then pin instead.
     fn same_failure(&self, other: &Verdict) -> bool {
         match (self, other) {
-            (Verdict::Disagrees(_), Verdict::Disagrees(_)) => true,
+            (Verdict::Disagrees(ours), Verdict::Disagrees(theirs)) => {
+                let (ours, theirs) = (&ours[0], &theirs[0]);
+                ours.kind == theirs.kind && ours.unit == theirs.unit
+            }
             (Verdict::Panics { at, .. }, Verdict::Panics { at: other, .. }) => at == other,
             (Verdict::Crashes(message), Verdict::Crashes(other)) => message == other,
             _ => false,
@@ -779,7 +800,7 @@ impl Verdict {
         match self {
             Verdict::Agrees(tally) if tally.resets > 0 => "agrees with a fresh run, both resetting".S(),
             Verdict::Agrees(_) => "agrees with a fresh run".S(),
-            Verdict::Disagrees(failures) => failures.join("\n"),
+            Verdict::Disagrees(failures) => failures.iter().map(|failure| failure.message.as_str()).collect::<Vec<_>>().join("\n"),
             Verdict::Panics { at, message } => fmt!("panicked at {at}: {message}"),
             Verdict::Crashes(message) => fmt!("the engine crashed: {message}"),
             Verdict::Hangs => fmt!("ran longer than {SEED_TIMEOUT:?}"),
@@ -986,7 +1007,10 @@ fn functions_across(entries: &[Entry]) -> (usize, usize) {
     let mut declared: Vec<String> = Vec::new();
     let (mut declaring, mut calling) = (0, 0);
     for entry in entries {
-        if declared.iter().any(|name| entry.source.contains(&fmt!("{name}("))) {
+        let calls = |name: &String| entry.source.match_indices(&fmt!("{name}(")).any(|(at, _)| {
+            !entry.source[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_')
+        });
+        if declared.iter().any(calls) {
             calling += 1;
         }
         let names: Vec<String> = entry.source.lines()

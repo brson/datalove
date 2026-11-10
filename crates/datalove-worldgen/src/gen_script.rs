@@ -281,7 +281,12 @@ fn gen_binding_access<'db>(
         }
         1 => {
             let v = pick(rng, &writable);
+            // The condition may borrow the variable and not give it away:
+            // the `set` would revive it on one branch alone.
+            let saved_protected = ctx.loop_protected_variables.C();
+            ctx.loop_protect_variable(&v.name);
             let condition = gen_bool_expr(db, rng, config, ctx);
+            ctx.loop_protected_variables = saved_protected;
             let value = gen_literal(db, rng, v.type_hint, config);
             format!("if {}\n  set {} = {}\nend if", condition, v.name, value)
         }
