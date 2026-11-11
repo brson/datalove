@@ -23,10 +23,10 @@ id = "F2"
 name = "the forward rule reaches only the seeds"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
 find = """
-                restoring[unit] = !rederived[unit]"""
+        // The units rerun to restore a binding,"""
 replace = """
-                rederived[unit] = seeds.contains(&unit);
-                restoring[unit] = !rederived[unit]"""
+        let rederived: Vec<bool> = (0..count).map(|unit| seeds.contains(&unit)).collect();
+        // The units rerun to restore a binding,"""
 
 [[fault]]
 id = "F3"
@@ -103,10 +103,10 @@ id = "F13"
 name = "still taken by a unit that may be blocked"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
 find = """
-                                && !may_block[source]
+                            && !may_block[source]
 """
 replace = """
-                                && (true || !may_block[source])
+                            && (true || !may_block[source])
 """
 
 [[fault]]
@@ -114,10 +114,10 @@ id = "F14"
 name = "still taken whatever the reader found before"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
 find = """
-                                && held_source(unit, name) == Some(source)
+                            && held.source(unit, name) == Some(source)
 """
 replace = """
-                                && (true || held_source(unit, name) == Some(source))
+                            && (true || held.source(unit, name) == Some(source))
 """
 
 [[fault]]
@@ -144,8 +144,8 @@ replace = "\n"
 id = "F17"
 name = "no typecheck edge"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
-find = "typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])"
-replace = "false && typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])"
+find = "graph.typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])"
+replace = "false && graph.typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])"
 
 [[fault]]
 id = "F18"
@@ -183,8 +183,8 @@ replace = ".ok_or_else(|| -> crate::LowerError { panic!(\"local function not fou
 id = "F22"
 name = "no typecheck edge as the units stood"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
-find = "|| held_typecheck_only_provider(unit, name) != typecheck_only_provider(unit, name)"
-replace = "|| false && held_typecheck_only_provider(unit, name) != typecheck_only_provider(unit, name)"
+find = "|| held.typecheck_only_provider(unit, name) != graph.typecheck_only_provider(unit, name)"
+replace = "|| false && held.typecheck_only_provider(unit, name) != graph.typecheck_only_provider(unit, name)"
 
 [[fault]]
 id = "F23"
@@ -221,7 +221,7 @@ id = "F25"
 name = "`may_block` takes the provider from both graphs"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
 find = "|unit: usize, name: &String| now_provides[unit].contains(name),"
-replace = "|unit: usize, name: &String| provides[unit].contains(name),"
+replace = "|unit: usize, name: &String| graph.provides[unit].contains(name),"
 
 [[fault]]
 id = "F26"
@@ -244,10 +244,10 @@ id = "F28"
 name = "still taken though the provider moved"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
 find = """
-                                && held_source(unit, name) == Some(source)
-                                && !provider_moved(unit, name);"""
+                            && held.source(unit, name) == Some(source)
+                            && !provider_moved(unit, name);"""
 replace = """
-                                && held_source(unit, name) == Some(source);"""
+                            && held.source(unit, name) == Some(source);"""
 
 [[fault]]
 id = "F29"
@@ -264,5 +264,5 @@ replace = """
 id = "F31"
 name = "a later write looked for in the units as they stand"
 file = "crates/datalove-datafun/src/driver/script_compiler.rs"
-find = ".filter(|later| held_provider(*later, name) == Some(source))"
-replace = ".take_while(|later| provider(*later, name) == Some(source))"
+find = ".filter(|later| held.provider(*later, name) == Some(source))"
+replace = ".take_while(|later| graph.provider(*later, name) == Some(source))"

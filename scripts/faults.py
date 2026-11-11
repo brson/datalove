@@ -73,7 +73,11 @@ def default_seeds():
 def run(command, env=None):
     full = dict(os.environ, **(env or {}))
     done = subprocess.run(command, cwd=ROOT, env=full, capture_output=True, text=True)
-    return done.stdout + done.stderr
+    output = done.stdout + done.stderr
+    # A fault that does not build would otherwise read as one nothing caught.
+    if re.search(r"^error: could not compile", output, re.M):
+        raise RuntimeError(f"`{' '.join(command)}` does not build with the fault planted:\n{output}")
+    return output
 
 
 def generative(start, count):

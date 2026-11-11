@@ -112,11 +112,83 @@ struct HeldGraph {
     /// order, but after a reorder, which has already put the records where
     /// the units now sit.
     ran: Vec<usize>,
+    /// Where each unit, by where it sits now, is in `ran`.
+    at: Vec<usize>,
     /// Whether each unit compiled.
     compiled: Vec<bool>,
     /// Whether each unit may have returned early; see
     /// `UnitLowerRecord::may_return_early`.
     may_return_early: Vec<bool>,
+}
+
+impl HeldGraph {
+    /// The units that ran before `unit` before the edit, nearest first.
+    fn before(&self, unit: usize) -> impl Iterator<Item = usize> + '_ {
+        self.ran[..self.at[unit]].iter().rev().copied()
+    }
+
+    /// The unit that provided `name` to `unit` before the edit.
+    fn provider(&self, unit: usize, name: &String) -> Option<usize> {
+        self.before(unit).find(|earlier| self.provides[*earlier].contains(name))
+    }
+
+    /// The unit `unit`'s typecheck found `name` in before the edit, when that
+    /// was not the unit the binding came from.
+    ///
+    /// A reorder can move that unit past `unit` without changing how it
+    /// compiles, and `unit` then resolves the name elsewhere, which
+    /// [`UnionGraph::typecheck_only_provider`], looking at where the units
+    /// sit now, does not see.
+    fn typecheck_only_provider(&self, unit: usize, name: &String) -> Option<usize> {
+        self.before(unit).find(|earlier| self.typechecked[*earlier].contains(name))
+            .filter(|found| self.provider(unit, name) != Some(*found))
+    }
+
+    /// The unit `unit` found the binding `name` as when it last ran: the
+    /// nearest one before it that provided, took or wrote it.
+    fn source(&self, unit: usize, name: &String) -> Option<usize> {
+        self.before(unit)
+            .find(|earlier| self.provides[*earlier].contains(name) || self.changed[*earlier].contains(name))
+    }
+}
+
+/// The units' graph over the union of what it was before an edit and what it
+/// is after, by where the units sit now; see [`ScriptCompiler::reach_from`].
+struct UnionGraph<'a> {
+    provides: Vec<BTreeSet<String>>,
+    uses: Vec<BTreeSet<String>>,
+    /// What each unit's typecheck provides; see `UnitLowerRecord::typechecked`.
+    typechecked: Vec<BTreeSet<String>>,
+    /// What each unit took or wrote of earlier units' bindings, before the
+    /// edit or since it was compiled again.
+    changed: &'a [BTreeSet<String>],
+}
+
+impl UnionGraph<'_> {
+    /// The unit `name` resolves to from `unit`: the nearest earlier one that
+    /// provides it.
+    fn provider(&self, unit: usize, name: &String) -> Option<usize> {
+        (0..unit).rev().find(|earlier| self.provides[*earlier].contains(name))
+    }
+
+    /// The unit `unit`'s typecheck finds `name` in, when that is not the unit
+    /// the binding comes from.
+    ///
+    /// That is one that typechecked and failed later, which provides the name
+    /// to the typechecker and not to lowering. A unit that resolved a name
+    /// there, an imported function's say, compiles differently once that
+    /// unit typechecks differently.
+    fn typecheck_only_provider(&self, unit: usize, name: &String) -> Option<usize> {
+        (0..unit).rev().find(|earlier| self.typechecked[*earlier].contains(name))
+            .filter(|found| self.provider(unit, name) != Some(*found))
+    }
+
+    /// The unit the binding `name` is as `unit` finds it: the nearest earlier
+    /// one that provided, took or wrote it.
+    fn source(&self, unit: usize, name: &String) -> Option<usize> {
+        (0..unit).rev()
+            .find(|earlier| self.provides[*earlier].contains(name) || self.changed[*earlier].contains(name))
+    }
 }
 
 /// How a unit provides a binding: as a slot or a value, and of which type.
@@ -1053,49 +1125,14 @@ impl<'db> ScriptCompiler<'db> {
              do not line up",
         );
 
-        let union = |held: &BTreeSet<String>, now: &[String]| -> BTreeSet<String> {
-            held.iter().chain(now.iter()).cloned().collect()
+        let union = |held: &[BTreeSet<String>], now: &[Vec<String>]| -> Vec<BTreeSet<String>> {
+            held.iter().zip(now).map(|(held, now)| held.iter().chain(now).cloned().collect()).collect()
         };
-        let provides: Vec<_> = (0..count)
-            .map(|unit| union(&held.provides[unit], &now_provides[unit]))
-            .collect();
-        let uses: Vec<_> = (0..count)
-            .map(|unit| union(&held.uses[unit], &now_uses[unit]))
-            .collect();
-        let provider = |unit: usize, name: &String| {
-            (0..unit).rev().find(|earlier| provides[*earlier].contains(name))
-        };
-        let typechecked: Vec<_> = (0..count)
-            .map(|unit| union(&held.typechecked[unit], &now_typechecked[unit]))
-            .collect();
-
-        // The unit `unit`'s typecheck found `name` in, when that is not the
-        // unit the binding comes from: one that typechecked and failed later,
-        // which provides the name to the typechecker and not to lowering. A
-        // unit that resolved a name there, an imported function's say,
-        // compiles differently once that unit typechecks differently.
-        let typecheck_only_provider = |unit: usize, name: &String| {
-            (0..unit).rev().find(|earlier| typechecked[*earlier].contains(name))
-                .filter(|found| provider(unit, name) != Some(*found))
-        };
-
-        // The unit that provided `name` to `unit` before the edit, in the
-        // order the units ran in.
-        let held_provider = |unit: usize, name: &String| {
-            let at = held.ran.iter().position(|ran| *ran == unit).X();
-            held.ran[..at].iter().rev().copied().find(|earlier| held.provides[*earlier].contains(name))
-        };
-
-        // The unit `unit`'s typecheck found `name` in before the edit, in the
-        // order the units ran in, when that was not the unit the binding came
-        // from. A reorder can move that unit past `unit` without changing how
-        // it compiles, and `unit` then resolves the name elsewhere, which
-        // `typecheck_only_provider`, looking at where the units sit now, does
-        // not see.
-        let held_typecheck_only_provider = |unit: usize, name: &String| {
-            let at = held.ran.iter().position(|ran| *ran == unit).X();
-            held.ran[..at].iter().rev().copied().find(|earlier| held.typechecked[*earlier].contains(name))
-                .filter(|found| held_provider(unit, name) != Some(*found))
+        let graph = UnionGraph {
+            provides: union(&held.provides, &now_provides),
+            uses: union(&held.uses, &now_uses),
+            typechecked: union(&held.typechecked, &now_typechecked),
+            changed,
         };
 
         // Whether each unit may be blocked when it runs, as the units are
@@ -1105,7 +1142,7 @@ impl<'db> ScriptCompiler<'db> {
         let in_order: Vec<usize> = (0..count).collect();
         let may_block = blockable(
             &in_order,
-            &uses,
+            &graph.uses,
             |unit: usize, name: &String| now_provides[unit].contains(name),
             |unit: usize, name: &String| self.unit_records[unit].writes.contains(name),
             |unit: usize| self.unit_records[unit].may_return_early,
@@ -1137,20 +1174,14 @@ impl<'db> ScriptCompiler<'db> {
                     || record.revives.contains(name) && !record.may_return_early)
         };
 
-        // The nearest unit before `unit` that set the binding `name` without
-        // reading it, as the units do now.
+        // What builds the binding `name` as a unit at `unit` finds it: the
+        // nearest unit before it that sets it without reading it, its
+        // provider or an overwrite after that. Running that one again is
+        // enough.
         let setter = |unit: usize, name: &String| {
-            (0..unit).rev().find(|earlier| {
-                provides[*earlier].contains(name) || writes_without_reading(*earlier, name)
-            })
-        };
-
-        // The unit the binding `name` is as a unit at `unit` finds it: the
-        // nearest earlier one that provided, took or wrote it.
-        let source = |unit: usize, name: &String| {
-            (0..unit).rev().find(|earlier| {
-                provides[*earlier].contains(name) || changed[*earlier].contains(name)
-            })
+            (0..unit).rev()
+                .find(|earlier| graph.provides[*earlier].contains(name) || writes_without_reading(*earlier, name))
+                .expect("a binding with a provider has a setter")
         };
 
         // Whether unit `provider` provides `name` other than it did before
@@ -1161,65 +1192,65 @@ impl<'db> ScriptCompiler<'db> {
 
         // Whether `name` is another binding to `unit` than before the edit:
         // another unit provides it, or the same one another way.
-        let provider_moved = |unit: usize, name: &String| match provider(unit, name) {
-            Some(now) => held_provider(unit, name) != Some(now) || reshaped(now, name),
-            None => held_provider(unit, name).is_some(),
+        let provider_moved = |unit: usize, name: &String| match graph.provider(unit, name) {
+            Some(now) => held.provider(unit, name) != Some(now) || reshaped(now, name),
+            None => held.provider(unit, name).is_some(),
         };
 
-        // The unit `unit` found the binding `name` as when it last ran: the
-        // nearest one before it, in the order they ran in, that provided,
-        // took or wrote it.
-        let held_source = |unit: usize, name: &String| {
-            let at = held.ran.iter().position(|ran| *ran == unit).X();
-            held.ran[..at].iter().rev().copied()
-                .find(|earlier| held.provides[*earlier].contains(name) || held.changed[*earlier].contains(name))
-        };
+        // The units re-derived for their own sake: a seed, or a unit that
+        // uses what a re-derived unit provides, and finds it otherwise than
+        // it did. One pass in index order is enough, since a unit's providers
+        // all sit before it, and a rerun re-derives nothing.
+        //
+        // A unit that writes a binding without reading it does not care how
+        // an earlier unit left it, only what the binding is, which its
+        // provider says. While the same provider provides it as it did, the
+        // unit writes what it wrote before, so the units after it see no new
+        // value. It is rerun, since its provider undid its write. A provider
+        // that is another unit now, a shadow put in between, is another
+        // binding, which the unit's code has to name.
+        //
+        // Nor does a unit after a take that is still there: the binding holds
+        // nothing after it, as it did before. Unless the take is by a unit
+        // that may be blocked, which then may not happen, or the unit did not
+        // find the binding as the take left it before: a reorder put the take
+        // before it, or after a unit that revived or wrote the binding since.
+        // Or the binding is another one, or provided another way, which the
+        // unit compiles against differently: a `set` that failed against a
+        // `let` compiles against a `var`, and revives it.
+        let mut rederived = vec![false; count];
+        for unit in 0..count {
+            rederived[unit] = seeds.contains(&unit)
+                || graph.uses[unit].iter().any(|name| {
+                    graph.typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])
+                        || held.typecheck_only_provider(unit, name) != graph.typecheck_only_provider(unit, name)
+                })
+                || graph.uses[unit].iter().any(|name| {
+                    graph.source(unit, name).is_some_and(|source| {
+                        let still_taken = !graph.provides[source].contains(name)
+                            && !may_block[source]
+                            && held.takes[source].contains(name)
+                            && self.unit_records[source].takes.contains(name)
+                            && held.source(unit, name) == Some(source)
+                            && !provider_moved(unit, name);
+                        rederived[source]
+                            && !still_taken
+                            && (!writes_without_reading(unit, name) || provider_moved(unit, name))
+                    })
+                });
+        }
 
+        // The units rerun to restore a binding, which grows with the setters
+        // the backward rule finds until it adds none: each start, and every
+        // unit that took or wrote what a reached unit before it builds.
         let mut rerun_starts = restore.C();
         loop {
-            let mut rederived = vec![false; count];
             let mut restoring = vec![false; count];
             for unit in 0..count {
-                // A unit that writes a binding without reading it does not
-                // care how an earlier unit left it, only what the binding is,
-                // which its provider says. While the same provider provides
-                // it as it did, the unit writes what it wrote before, so the
-                // units after it see no new value. It is rerun, since its
-                // provider undid its write. A provider that is another unit
-                // now, a shadow put in between, is another binding, which the
-                // unit's code has to name.
-                //
-                // Nor does a unit after a take that is still there: the
-                // binding holds nothing after it, as it did before. Unless
-                // the take is by a unit that may be blocked, which then may
-                // not happen, or the unit did not find the binding as the
-                // take left it before: a reorder put the take before it, or
-                // after a unit that revived or wrote the binding since. Or
-                // the binding is another one, or provided another way, which
-                // the unit compiles against differently: a `set` that failed
-                // against a `let` compiles against a `var`, and revives it.
-                rederived[unit] = seeds.contains(&unit)
-                    || uses[unit].iter().any(|name| {
-                        typecheck_only_provider(unit, name).is_some_and(|found| rederived[found])
-                            || held_typecheck_only_provider(unit, name) != typecheck_only_provider(unit, name)
-                    })
-                    || uses[unit].iter().any(|name| {
-                        source(unit, name).is_some_and(|source| {
-                            let still_taken = !provides[source].contains(name)
-                                && !may_block[source]
-                                && held.takes[source].contains(name)
-                                && self.unit_records[source].takes.contains(name)
-                                && held_source(unit, name) == Some(source)
-                                && !provider_moved(unit, name);
-                            rederived[source]
-                                && !still_taken
-                                && (!writes_without_reading(unit, name) || provider_moved(unit, name))
-                        })
-                    });
                 restoring[unit] = !rederived[unit]
                     && (rerun_starts.contains(&unit)
                         || changed[unit].iter().any(|name| {
-                            source(unit, name)
+                            graph.source(unit, name)
                                 .is_some_and(|source| rederived[source] || restoring[source])
                         }));
             }
@@ -1227,16 +1258,13 @@ impl<'db> ScriptCompiler<'db> {
 
             let mut added = false;
             for unit in (0..count).filter(|unit| reached(*unit)) {
-                for name in &uses[unit] {
-                    let Some(source) = provider(unit, name) else {
+                for name in &graph.uses[unit] {
+                    let Some(source) = graph.provider(unit, name) else {
                         continue;
                     };
-                    // What builds the binding as this unit finds it is the
-                    // nearest unit before it that sets it without reading it:
-                    // its provider, or an overwrite after that. Running that
-                    // one again is enough, and if it runs anyway, nothing is
+                    // If what builds the binding runs anyway, nothing is
                     // needed.
-                    let setter = setter(unit, name).expect("a binding with a provider has a setter");
+                    let setter = setter(unit, name);
                     if reached(setter) {
                         continue;
                     }
@@ -1251,7 +1279,7 @@ impl<'db> ScriptCompiler<'db> {
                     // that provides the name now, and did not then, does
                     // not stand in front of a write made then.
                     let since = (unit..count)
-                        .filter(|later| held_provider(*later, name) == Some(source))
+                        .filter(|later| held.provider(*later, name) == Some(source))
                         .any(|later| held.changed[later].contains(name));
                     if since {
                         added |= rerun_starts.insert(setter);
@@ -1262,28 +1290,25 @@ impl<'db> ScriptCompiler<'db> {
                 // unit between them provides it since the edit, and shadows
                 // it. The unit runs against the new binding, and nothing
                 // gives back the old one what the unit took or wrote of it,
-                // so what built the old one runs again. That is the nearest
-                // unit that sets it without reading it, among the units that
-                // still find it.
+                // so what built the old one runs again: the setter of the
+                // binding as the first shadow finds it. The held provider
+                // provides the name in the union, so that is the held
+                // provider or a unit after it.
                 //
                 // The binding it changed is found in the order the units
                 // ran in, which a reorder has changed. A provider that now
                 // sits after the unit is the unit reordered, which reruns
                 // and builds its bindings again anyway.
                 for name in &held.changed[unit] {
-                    let at = held.ran.iter().position(|ran| *ran == unit).X();
-                    let Some(old) = held.ran[..at].iter().rev().copied()
-                        .find(|earlier| held.provides[*earlier].contains(name)) else {
+                    let Some(old) = held.provider(unit, name) else {
                         continue;
                     };
-                    if old > unit || provider(unit, name) == Some(old) {
+                    if old > unit || graph.provider(unit, name) == Some(old) {
                         continue;
                     }
-                    let shadow = (old + 1..unit).find(|later| provides[*later].contains(name))
+                    let shadow = (old + 1..unit).find(|later| graph.provides[*later].contains(name))
                         .expect("a nearer provider than the held one");
-                    let setter = (old..shadow).rev()
-                        .find(|earlier| provides[*earlier].contains(name) || writes_without_reading(*earlier, name))
-                        .expect("the held provider provides the name");
+                    let setter = setter(shadow, name);
                     if !reached(setter) {
                         added |= rerun_starts.insert(setter);
                     }
@@ -1305,8 +1330,13 @@ impl<'db> ScriptCompiler<'db> {
             ran.remove(to);
             ran.insert(from, to);
         }
+        let mut at = vec![0; ran.len()];
+        for (place, unit) in ran.iter().enumerate() {
+            at[*unit] = place;
+        }
         let set = |names: &[String]| names.iter().cloned().collect::<BTreeSet<String>>();
         HeldGraph {
+            at,
             provides: self.unit_records.iter().map(|record| set(&record.provides)).collect(),
             typechecked: self.unit_records.iter().map(|record| set(&record.typechecked)).collect(),
             uses: self.unit_records.iter().map(|record| set(&record.uses)).collect(),
