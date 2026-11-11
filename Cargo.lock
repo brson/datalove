@@ -1460,6 +1460,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-formal-tests"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datafun-tycheck",
+ "datalove-datalit",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
 name = "datalove-paths"
 version = "0.1.0"
 dependencies = [

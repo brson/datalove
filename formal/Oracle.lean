@@ -1,0 +1,52 @@
+import Datalove
+
+/-!
+# The oracle
+
+Reads queries, one JSON object per line, from the file named on the command
+line, and writes one answer per line to stdout, in order:
+
+```
+{"convert": H}   →  {"ok": T} or {"err": {"kind": K, "name": N}}
+{"pair": [A, B]} →  {"equiv": b, "meet": b, "adapt": b}
+{"type": T}      →  {"copy": b, "wf": b, "expose": T}
+```
+
+`crates/datalove-formal-tests` asks the Rust the same questions and compares.
+-/
+
+open Lean (Json)
+open Datalove
+
+def answer (q : Json) : Except String Json := do
+  if let .ok h := q.getObjVal? "convert" then
+    let h ← Hint.fromJson h
+    return match h.convert with
+      | .ok t => Json.mkObj [("ok", t.toJson)]
+      | .error e => Json.mkObj [("err", Json.mkObj [("kind", e.kind.toJson), ("name", e.name)])]
+  if let .ok p := q.getObjVal? "pair" then
+    let (a, b) ← pair p
+    let a ← Ty.fromJson a
+    let b ← Ty.fromJson b
+    return Json.mkObj [("equiv", a.equiv b), ("meet", a.meet b), ("adapt", a.canAdapt b)]
+  if let .ok t := q.getObjVal? "type" then
+    let t ← Ty.fromJson t
+    let wf := decide t.WF
+    -- `expose` is the Rust's only on a well-formed type; elsewhere the Rust
+    -- may not finish.
+    let exposed := if wf then t.expose.toJson else Json.null
+    return Json.mkObj [("copy", t.isCopy), ("wf", wf), ("expose", exposed)]
+  throw s!"unknown query: {q.compress}"
+
+def main (args : List String) : IO UInt32 := do
+  let [path] := args
+    | IO.eprintln "usage: datalove-oracle QUERIES.jsonl"; return 2
+  let out ← IO.getStdout
+  for line in (← IO.FS.lines path) do
+    if line.trimAscii.isEmpty then continue
+    match Json.parse line >>= answer with
+    | .ok a => out.putStrLn a.compress
+    | .error e =>
+      IO.eprintln s!"bad query: {e}\n  {line}"
+      return 1
+  return 0

@@ -1,0 +1,38 @@
+// An atom or term adapted with `@` into a recursive enum, as into the enum it
+// unfolds to. The literal checks against the recursive type directly; a value
+// of the atom's or term's own type goes through `@`, which makes it the
+// variant it names.
+
+type Json: rec J enum { atom Null, term Num f64, term Arr [J] }
+
+let null = atom Null
+let num = term Num 2.5
+let a: Json = null@
+let b: Json = num@
+let items: [Json] = [a@, b@]
+let arr = term Arr items
+let c: Json = arr@
+
+fun name(j: Json): string
+  match j
+  case atom Null
+    ret "null"
+  case term Num n
+    ret "num"
+  case term Arr items
+    ret "arr"
+  end match
+end fun
+
+debuglog name(a@)
+debuglog name(b@)
+debuglog name(c@)
+debuglog c
+
+// And from one: a recursive type whose unfolding is a term adapts to an enum
+// that lists the term, as the term does.
+type Chain: rec X term Link [X]
+type Linked: enum { atom End, term Link [Chain] }
+let chain: Chain = term Link [term Link []]
+let linked: Linked = chain@
+debuglog linked

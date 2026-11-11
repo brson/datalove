@@ -90,6 +90,19 @@ test-generative-random COUNT='100':
     just test-worldgen-engines random {{COUNT}}
     just test-generative-reactive random {{COUNT}}
 
+# Build the Lean model of the type system in formal/, which checks its
+# proofs, and the oracle the Rust is tested against. Any warning fails it, a
+# `sorry` among them. Needs Lean through elan; see botdocs/formal.md.
+formal-build:
+    cd formal && lake build --wfail
+
+# The type relations held to the Lean model's oracle, over COUNT seeds from
+# SEED. Not in `just test`, which has no Lean; the laws the model proves are,
+# in `law_tests`, without it.
+test-formal SEED='0' COUNT='1000':
+    just formal-build
+    FORMAL_ORACLE_TEST=1 FORMAL_ORACLE_SEED={{SEED}} FORMAL_ORACLE_COUNT={{COUNT}} cargo test -p datalove-formal-tests --test oracle_tests
+
 # Break each reach rule in turn, by the faults in scripts/reach-faults.toml,
 # and print what the tests catch of it as the planted-fault table's rows; see
 # script-reactivity-architecture.md. IDS picks faults, all by default. Takes

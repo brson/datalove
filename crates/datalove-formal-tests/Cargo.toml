@@ -1,0 +1,25 @@
+[package]
+name = "datalove-formal-tests"
+description = "Differential tests of datalove's type system against the Lean model in formal/."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+# Tests, not a library anybody installs.
+publish = false
+repository.workspace = true
+
+[dependencies]
+rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
+datalove-datalit.workspace = true
+datalove-datafun-tycheck.workspace = true
+
+[[test]]
+name = "oracle_tests"
+path = "tests/oracle_tests.rs"
+
+[[test]]
+name = "law_tests"
+path = "tests/law_tests.rs"

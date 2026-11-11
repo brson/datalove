@@ -363,11 +363,19 @@ The postfix `@` clones, and converts where a type is expected. `T ⇝ U`, "a
   `u32 ⇝ i64`; each also `⇝ int`.
 - `index ⇝ int`, `offset ⇝ int`, `f32 ⇝ f64`.
 - `atom a ⇝ E` when `atom a ∈ E`, and `term a T ⇝ E` when `term a T' ∈ E`
-  with `T ≡ T'`.
+  with `T ≡ T'`. Each side is read unfolded at the head: `E` may be a
+  recursive type whose unfolding is the enum, and the atom or term a
+  recursive type that unfolds to one. With `J = rec J enum { atom Null, term
+  Arr [J] }`, `atom Null ⇝ J`; with `T = rec X term A [X]`,
+  `T ⇝ enum { term A [T] }`.
 - `T ⇝ U` when `T ≈ U`, meeting at the head: a clone, as between two values
   of one type.
 
 Nothing else adapts. There is no narrowing, and no enum adapts to another.
+On well-formed types `⇝` is reflexive and transitive, so `@` never needs to be
+written twice; the Lean model proves it, assuming one property of recursive
+types that is tested but not yet proved (see
+[Proving the Type System](formal.md)).
 
 ```
 Γ ⊢ e ⇒ T    T ⇝ U                Γ ⊢ e ⇒ T

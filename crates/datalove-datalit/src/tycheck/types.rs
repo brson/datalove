@@ -567,11 +567,17 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
 /// of it, widens `f32` to `f64`, and makes an atom or term a value of an enum
 /// that lists it. Nothing else: no narrowing, and no enum adapts to
 /// another.
+///
+/// Either side may be a recursive type that unfolds to the atom, term or
+/// enum: `rec J enum { atom Null, term Arr [J] }` lists `atom Null`, and
+/// `rec X term A [X]` is a `term A`. A recursive type meets its unfolding at
+/// the head, so it adapts as its unfolding does, which is what makes `@`
+/// transitive; see `botdocs/formal.md`.
 pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db>) -> bool {
     if types_equivalent_at_head(db, from, to) || can_widen_to(from, to) {
         return true;
     }
-    match (from, to) {
+    match (&*expose(from), &*expose(to)) {
         // An unsigned integer widens to any wider signed one.
         (Type::U8, Type::I16 | Type::I32 | Type::I64 | Type::Int) => true,
         (Type::U16, Type::I32 | Type::I64 | Type::Int) => true,

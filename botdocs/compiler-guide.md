@@ -111,6 +111,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-rider-sys-std` (`sys/std/rider`) | Native rider implementations for `sys/std` |
 | `datalove-tests` | Workspace-wide test suites |
 | `datalove-rt-tests` | Runtime tests, separated so the runtime need not depend on datalit |
+| `datalove-formal-tests` | The type relations held to the Lean model in `formal/`, and the laws it proves held to the Rust; see [formal.md](formal.md) |
 | `datalove-bench` | Divan benchmarks |
 | `datalove-doc-fixtures` | The fixtures behind what the docs show the engine producing, and the tests that keep them fresh; see [doc-fixtures.md](doc-fixtures.md) |
 | `datalove-script-steps` | Script sessions driven a change at a time and compared with a fresh run, for the step tables and the generated sessions |
@@ -2090,6 +2091,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`) | Generated worldfiles typecheck and cover the AST. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
 | `worldgen_engine_tests` | Generated worldfiles, a third of them one fragment and the rest cut into units as a session is, through `engine_tests`' checks (`tests/engines/mod.rs`, which both share): every unit compiles, and every engine observes what the IR walker did. A failing world is written out under the target directory and run again with `WORLDGEN_ENGINES_WORLD`. See [plan-worldgen-engines.md](plan-worldgen-engines.md) |
 | `generative_reactive_tests` (in `datalove-tests`) | Generated scripts, cut into fragment and expression units that declare and call functions, and edited, deleted, reordered and inserted at random, with the modules and data they require edited too, and beside each a dense session of a few units over two names, leave each unit as a fresh run of its code would after every step, in how it ended, what it binds and what it shows, and never crash the engine. A few seeds from the test's default in `just test`, 1000 from seed 1000000 in `just test-generative-reactive`; a failing seed is shrunk and written out as a worldfile, and once fixed is kept in `tests/generative_reactive/`, which every run checks first. `just measure-faults` breaks each reach rule in turn, by `scripts/reach-faults.toml`, and says what these tests and the hand-written ones catch of it |
+| `oracle_tests`, `law_tests` (in `datalove-formal-tests`) | Generated type hints and the types they convert to, asked of the Rust and of the Lean model's oracle, which must agree on conversion, copy, `expose`, `≡`, `≈` and `⇝` (`just test-formal`, not in `just test`); and `≈` and `⇝` transitive on the chains the generated pairs make, and no two recursive types unfolding alike, randomly and exhaustively to a size (in `just test`). See [formal.md](formal.md) |
 
 ### Generative Seeds
 

@@ -1,0 +1,5 @@
+"null"
+"num"
+"arr"
+enum { term Arr [enum { atom Null }, enum { term Num 2.5 }] }
+enum { term Link [term Link []] }

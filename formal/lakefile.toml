@@ -1,0 +1,9 @@
+name = "datalove-formal"
+defaultTargets = ["Datalove", "datalove-oracle"]
+
+[[lean_lib]]
+name = "Datalove"
+
+[[lean_exe]]
+name = "datalove-oracle"
+root = "Oracle"
