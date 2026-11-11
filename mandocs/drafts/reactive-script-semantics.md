@@ -32,23 +32,20 @@ Datalove is an interactive scripting language and environment.
 The compiler quickly re-compiles the program
 whenever its code changes.
 The program quickly re-runs whenever its code or data changes.
+Both recompilation and rerun are incremental,
+performing only the work necessary to compute the changes.
 It is _reactive_ to changes to both code and data.
-Reruns are deterministic and,
-in the absence of semantic changes,
-identical from run to run.
-
-Until now though the CLI REPL has only barely functioned,
-and the precise semantics have been left to future work.
-Ok, future is now.
-Let's figure it out.
+Reruns are deterministic.
+In the presence of arbitrary changes to a live coding session
+Datalove produces the same results as if it had been run fresh.
 
 I developed a simple set of recursive rules for deciding which code
 must be recompiled and rerun when individual script units
 are interactively modified or their inputs change.
-These rules are based on an analysis of variable bindings
+These rules are based on analyzing variable bindings
 and their subsequent usage within a linear type system.
 I did this by progressively developing verifiable counter-examples
-until we are satisfied of its correctness.
+until I was satisfied of their correctness.
 I did not prove correctness.
 
 
@@ -97,19 +94,17 @@ Motivating example.
 
 Datalove is an interactive scripting language.
 The compiler and interpreter live together in a long-running engine.
-In Datalove reactivity applies to scripts (distinct from modules).
-A script runs to completion,
+Datalove scripts are reactive:
+a script runs to completion,
 then the engine waits for some external force to change the code or input data,
 then it recompiles and reruns the script to completion again.
-That is what I mean by _reactive_.
-To recompile and rerun could require the same amount of work as the initial compile and run.
-With careful design though the engine avoids fully recompiling and rerunning the script.
+With careful design the engine avoids fully recompiling and rerunning the script.
 As the code changes and as its input data changes,
 the engine preserves its existing state and only reevaluates
 what is necessary to produce a correct new result.
 
 Here is an example script one might hack on interactively,
-performing the kind of data transformation Datalove is designed for.
+performing a simple data transformation.
 It reads a month of bank transactions,
 sorts each payee into a category,
 totals the categories,
@@ -196,7 +191,7 @@ let output = {
 }
 ```
 
-This processes input `transactions` and produces an output `output`.
+This processes input `transactions` and produces `output`.
 Datalove today has no programmatic access to I/O at runtime.
 The `require data` statement includes data at compile time,
 bound to a variable named `transactions`,
@@ -211,7 +206,7 @@ impose I/O on a script.
 > [treats `<` and `>` as matched brackets in the lexer](../datafun.md#user-content-comparison-and-equality).
 > The remaining Datalove syntax in this example is similar to other common languages.
 
-The script produces `output`:
+On first run the script produces `output`:
 
 ```datalove
 {
@@ -231,7 +226,8 @@ when the input `transactions` changes,
 or when the script code itself changes,
 or when any of the modules it imports changes.
 
-Imagine we are developing this script experimentally.
+**Imagine we are developing this script experimentally in an interactive live coding environment**.
+
 In the initial output nothing is overbudget,
 but "Bi-Rite" is a grocery store,
 and its transactions are currently being accumulated in the "other" category.
@@ -295,6 +291,8 @@ end for
 
 `budget` is calculated before `category` is ever mentioned.
 Probably doesn't need to run again.
+`spent` is built from a calculation that uses `category` so
+any code that writes or reads it probably does.
 
 Continuing, imagine the month goes on,
 and my bank appends a coffee to the data file:
@@ -316,7 +314,7 @@ Reevaluate just what needs to reevaluate.
 
 I'll develop the rules Datalove follows to make
 these cases and more work correctly.
-The rules are based on analysis of how bindings are used within a linear typesystem.
+The rules are based on analyzing how bindings are used within a linear typesystem.
 I'll end with a live demonstration of how this particular script actually reacts to modifications.
 
 
@@ -342,23 +340,23 @@ We'll show a version of it live at the end.
 
 -->
 
-There are two pillars to Datalove's design that help make the goal
+There are two pillars to Datalove's design that make the goal
 of interactive deterministic reexecution feasible:
 
 _Language restrictions_.
 Datalove has a linear type system and its functions are side-effect free.
 At the moment there is not even any way to do I/O,
 which would complicate determinism greatly.
-The compiler can track precise data dependencies statically,
-and know exactly which code can mutate which data.
+The compiler tracks data dependencies statically and precisely,
+and knows exactly which code can mutate which data.
 
 _Fast incremental recompilation_.
 The compiler's analyses are memoized,
 and modules are compiled in parallel.
-Editing a unit or a module only recompiles what depends on it.
+Editing code recompiles only what depends on it.
 The compiler design is aided by and informs the restrictions of the language design.
 
-A language that doesn't do any I/O is quite limited.
+A language that doesn't do any I/O is limited in utility.
 Datalove will have I/O.
 One of my [principles](../principles.md) in Datalove is to start with a severely
 restricted language design, build out the desired compiler capabilities,
@@ -373,8 +371,8 @@ A single script unit, executed once, is just a script.
 Scripts are the entry points to Datalove programs.
 Multiple script units, chained together,
 are the basis of interactive Datalove.
+A single REPL input is a script unit.
 Interactive Datalove is intended for the REPL and scientific notebook use cases.
-Their semantics are the subject of the work at hand.
 
 In most respects script units are like a function,
 except that they accept no arguments and are not required to return a result.
@@ -383,7 +381,6 @@ Script units can be chained together in a list dynamically at run time.
 New script units inherit the type checking and execution environment of previous script units.
 
 In this example of a self-contained Datalove _worldfile_ we have two sequential script units.
-They share a type checking context and execution environment.
 
 ```datalove
 ----------
@@ -407,8 +404,10 @@ let b_moved = b
 let c = a_moved /! b_moved
 ```
 
-> Worldfiles are chunks of text delimited by headers bound between `----------` lines.
-> Each chunk is interpreted as determined by the header.
+> Worldfiles are sections of text delimited by headers between `----------` lines.
+> Each section is interpreted as determined by the header.
+> There are many section types.
+> Worldfiles can fully describe all input to the compiler and are the base format of the Datalove test suite.
 
 In this example the integers are type `int`, bigints.
 They are linear types allocated on the heap,
@@ -1577,6 +1576,12 @@ I added them to my test suite.
 _Therefore_ we implemented this.
 Here's a cool demo. Use original motivating example.
 -->
+
+This is the same script from the intro,
+divided by hand into script units.
+This is a replay captured from the actual Datalove scripting engine.
+It is presented in a similar style to the actual Datalove interactive CLI
+(the `datalove repl` command).
 
 <!--
 The replay is recorded from
