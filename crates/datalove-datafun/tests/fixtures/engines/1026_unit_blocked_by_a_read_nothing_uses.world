@@ -1,0 +1,36 @@
+----------
+scriptunit-fragment
+----------
+
+// This unit leaves early, before it binds `v`.
+
+let a: u32 = (: u32 / 1) -! (: u32 / 2)
+let v: bool = true
+
+----------
+scriptunit-fragment
+----------
+
+// So this one, which reads `v`, is not run, though nothing uses what it
+// reads. With consts inlined, dead code elimination took the read away, and
+// with it what the unit reads from, so that it ran with consts inlined and
+// not without. Found by worldgen_engine_tests.
+
+let w: bool = v
+debuglog "ran"
+
+----------
+scriptunit-fragment
+----------
+
+// And the same in a loop.
+
+var n: int = 0
+loop
+    let x: bool = v
+    set n = n + 1
+    if n == 2
+        break
+    end if
+end loop
+debuglog n

@@ -606,6 +606,9 @@ fn gen_if_binding<'db>(
 /// Generates either:
 /// - `loop while condition` - conditional loop
 /// - `loop` - bare infinite loop (must have break)
+///
+/// Either ends its body with a `break`, or, counted, with a `break` once a
+/// counter it keeps reaches a round drawn for it.
 pub fn gen_loop<'db>(
     db: &'db dyn salsa::Database,
     rng: &mut SeededRng,
@@ -632,17 +635,25 @@ pub fn gen_loop<'db>(
         Option::None
     };
 
+    // The counter of a counted loop, and the round it breaks after. Not a
+    // variable of the context, so nothing in the body writes or takes it.
+    let counter = if config.counted_loop_probability > 0
+        && config.check_probability(rng, config.counted_loop_probability)
+    {
+        let name = format!("v{}", *var_counter);
+        *var_counter += 1;
+        Some((name, rng.random_range(2..=6u32)))
+    } else {
+        Option::None
+    };
+
     let mut result = String::new();
     if let Some(flag) = &continue_flag {
         result.push_str(&format!("{}var {}: bool = true\n", indent, flag));
     }
-
-    result.push_str(&if is_bare_loop {
-        format!("{}loop\n", indent)
-    } else {
-        let condition = gen_bool_expr(db, rng, config, ctx);
-        format!("{}loop while {}\n", indent, condition)
-    });
+    if let Some((name, _)) = &counter {
+        result.push_str(&format!("{}var {}: int = 0\n", indent, name));
+    }
 
     let inner_indent = format!("{}  ", indent);
     ctx.control_flow_depth += 1;
@@ -663,6 +674,15 @@ pub fn gen_loop<'db>(
     for name in linear_vars {
         ctx.loop_protect_variable(&name);
     }
+
+    // The condition is read before every pass, so it is under the same
+    // protection as the body: what it moved would be gone on the next read.
+    result.push_str(&if is_bare_loop {
+        format!("{}loop\n", indent)
+    } else {
+        let condition = gen_bool_expr(db, rng, config, ctx);
+        format!("{}loop while {}\n", indent, condition)
+    });
 
     // A round that goes back to the top before reaching the end of the body.
     //
@@ -691,7 +711,15 @@ pub fn gen_loop<'db>(
         // Even `loop while` conditions can be always-true (e.g., `not false`).
         let is_last = i == body_stmt_count - 1;
         if is_last {
-            result.push_str(&format!("{}break\n", inner_indent));
+            match &counter {
+                Some((name, rounds)) => {
+                    result.push_str(&format!("{}set {} = {} + 1\n", inner_indent, name, name));
+                    result.push_str(&format!("{}if {} >= {}\n", inner_indent, name, rounds));
+                    result.push_str(&format!("{}  break\n", inner_indent));
+                    result.push_str(&format!("{}end if\n", inner_indent));
+                }
+                None => result.push_str(&format!("{}break\n", inner_indent)),
+            }
         } else {
             let stmt = gen_loop_body_statement(db, rng, config, ctx, var_counter, &inner_indent);
             result.push_str(&stmt);
@@ -859,6 +887,16 @@ pub fn gen_body_statement<'db>(
     let can_if = !ctx.at_max_depth(config) && config.check_probability(rng, config.if_probability);
     let can_loop = !ctx.at_max_depth(config) && config.check_probability(rng, config.loop_probability);
     let can_debuglog = config.check_probability(rng, config.debuglog_probability);
+
+    // Left to the table below, behind every roll before it, a `loop` came up
+    // in none of twenty worlds. A config that asks for counted loops, which
+    // the osr engine needs, reaches for one first.
+    if config.counted_loop_probability > 0
+        && !ctx.at_max_depth(config)
+        && config.check_probability(rng, config.loop_probability)
+    {
+        return gen_loop(db, rng, config, ctx, var_counter, indent);
+    }
 
     let can_generic = !ctx.generic_functions.is_empty()
         && config.check_probability(rng, config.generic_call_probability);

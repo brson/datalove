@@ -1,0 +1,53 @@
+----------
+scriptunit-fragment
+----------
+
+// A loop's condition is read before every pass, so what it moves has to
+// have a value again by the time it is read the next time, as a move in the
+// body does. `v!` takes `v` apart. Found by worldgen_engine_tests, where `v`
+// came from an earlier unit and the second read of the condition found it
+// gone.
+
+let v: !string = ok "a"
+var n: int = 0
+loop while v! != "b"
+    set n = n + 1
+    if n == 3
+        break
+    end if
+end loop
+
+----------
+scriptunit-fragment
+----------
+
+// Given a value again at the end of the body, it may be.
+
+var w: !string = ok "a"
+var m: int = 0
+loop while w! != "b"
+    set w = ok "a"
+    set m = m + 1
+    if m == 3
+        set w = ok "b"
+    end if
+end loop
+debuglog m
+
+----------
+scriptunit-fragment
+----------
+
+// And the same in a function.
+
+fun f(): !int
+    let v: !string = ok "a"
+    var n: int = 0
+    loop while v! != "b"
+        set n = n + 1
+        if n == 3
+            break
+        end if
+    end loop
+    ret ok n
+end fun

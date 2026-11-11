@@ -158,6 +158,12 @@ pub fn gen_function<'db>(
         None => rng.random_bool(0.5),  // Void functions: 50% include bare ret.
     };
 
+    if config.observe_bindings {
+        for v in ctx.variables.iter().filter(|v| !ctx.is_consumed(&v.name)) {
+            lines.push(format!("  debuglog {}", v.name));
+        }
+    }
+
     if include_ret {
         let ret_stmt = gen_ret(db, rng, config, &mut ctx, "  ");
         lines.push(ret_stmt);

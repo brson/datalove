@@ -275,8 +275,14 @@ impl IrInterpreter {
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 let is_some_slot = frame.value_dest(*is_some);
+                let some_ptr = is_some_slot.ptr as *const bool;
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
-                frame.mark_value_live(*dest);
+                // Only the side the value took holds anything. A script unit
+                // that leaves early by the other keeps its frame, and what its
+                // frame says it holds is destroyed when the session ends.
+                if unsafe { *some_ptr } {
+                    frame.mark_value_live(*dest);
+                }
                 frame.mark_value_live(*is_some);
                 Self::mark_source_dropped_all(src, frame, frames);
             }
@@ -292,9 +298,14 @@ impl IrInterpreter {
                 let ok_slot = frame.value_dest(*ok_dest);
                 let err_slot = frame.value_dest(*err_dest);
                 let is_ok_slot = frame.value_dest(*is_ok);
+                let ok_ptr = is_ok_slot.ptr as *const bool;
                 self.execute_unwrap_result(&src_val, ok_slot, err_slot, is_ok_slot);
-                frame.mark_value_live(*ok_dest);
-                frame.mark_value_live(*err_dest);
+                // Only the side the value took holds anything, as above.
+                if unsafe { *ok_ptr } {
+                    frame.mark_value_live(*ok_dest);
+                } else {
+                    frame.mark_value_live(*err_dest);
+                }
                 frame.mark_value_live(*is_ok);
                 Self::mark_source_dropped_all(src, frame, frames);
             }

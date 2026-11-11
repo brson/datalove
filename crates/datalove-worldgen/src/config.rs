@@ -52,9 +52,31 @@ pub struct WorldGenConfig {
 
     /// Probability that a script item is an expression unit rather than a
     /// statement: a live binding's name, or an expression of a simple type.
-    /// Only a session cuts one into a unit of its own; a worldfile's single
-    /// fragment leaves them out. Zero draws nothing.
+    /// Each is a unit of its own; a worldfile written as one fragment leaves
+    /// them out. Zero draws nothing.
     pub expression_unit_probability: u32,
+
+    /// Whether generated code shows what it binds: a script statement
+    /// `debuglog`s each binding it made, and a function each binding it
+    /// still holds before it returns. What is not shown is not compared
+    /// between engines. Off draws nothing.
+    pub observe_bindings: bool,
+
+    /// Whether the script ends by calling each function it may import that
+    /// it has not called yet, where it has the arguments to, so that the
+    /// bodies run. Off draws nothing.
+    pub call_every_function: bool,
+
+    /// Whether the script's top level may return early with an error, as a
+    /// function returning a result may: checked arithmetic, fallible
+    /// indexing and unwrapping with `!`. A unit is checked as a function
+    /// returning `!()`, so it can. Off draws nothing.
+    pub fallible_script: bool,
+
+    /// Whether a worldfile's script is one fragment rather than a section
+    /// for each unit. The AOT backends take only one fragment. A session is
+    /// cut into units either way.
+    pub one_fragment: bool,
 
     /// Maximum nesting depth for control flow.
     pub max_control_flow_depth: usize,
@@ -67,6 +89,12 @@ pub struct WorldGenConfig {
 
     /// Probability that a loop body goes back round early, under a guard.
     pub continue_probability: u32,
+
+    /// Probability that a `loop` counts its rounds and breaks after a few,
+    /// rather than at the end of its first, which is as far as the osr
+    /// engine's threshold has to be passed for it to enter one. Zero draws
+    /// nothing.
+    pub counted_loop_probability: u32,
 
     /// Probability that an `if` destructures an option or a result rather than
     /// testing a condition, where there is one in scope to destructure.
@@ -136,10 +164,15 @@ impl Default for WorldGenConfig {
             script_statements: (1, 5),
             binding_access_probability: 0,
             expression_unit_probability: 0,
+            one_fragment: false,
+            observe_bindings: false,
+            call_every_function: false,
+            fallible_script: false,
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,
             continue_probability: 40,
+            counted_loop_probability: 0,
             if_binding_probability: 40,
             for_probability: 15,
             param_mode_probability: 35,

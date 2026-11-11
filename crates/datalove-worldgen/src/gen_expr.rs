@@ -62,8 +62,9 @@ fn is_signed_fixed_int(type_hint: &TypeHint<'_>) -> bool {
 /// A fixed integer has no bare arithmetic. What it has is checked -- `+!`,
 /// which early-returns an error where it overflows -- and optional -- `+?`,
 /// which early-returns `none`. Each is an early return of its own shape, so
-/// which one is available is decided by what the function it sits in returns,
-/// and in a script fragment, which returns nothing, neither is.
+/// which one is available is decided by what the function it sits in returns.
+/// A script's top level is taken to return nothing, so neither is there,
+/// unless [`WorldGenConfig::fallible_script`] has it return `!()`.
 pub fn early_return_mark(return_type: &Option<TypeHint<'_>>) -> Option<&'static str> {
     overflow_form(return_type)
 }

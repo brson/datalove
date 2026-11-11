@@ -2873,6 +2873,18 @@ pub struct ScriptContext {
     /// expression, a test -- has none, and is run as the next unit.
     #[serde(default)]
     pub unit: Option<u32>,
+    /// What the unit read from earlier units as it was lowered, before any
+    /// pass could take a read away; see [`IrCodeUnit::record_lowered_reads`].
+    #[serde(default)]
+    pub lowered_reads: Option<ScriptReads>,
+}
+
+/// The earlier units a script unit reads from, and the slots of theirs it
+/// reads, by `(unit, slot)`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ScriptReads {
+    pub units: std::collections::BTreeSet<u32>,
+    pub slots: std::collections::BTreeSet<(u32, u32)>,
 }
 
 /// Context for a native function implemented in Rust.
@@ -3063,7 +3075,33 @@ impl IrCodeUnit {
     pub fn script_units_read(&self) -> std::collections::BTreeSet<u32> {
         let mut units = std::collections::BTreeSet::new();
         self.collect_script_units_read(&mut units);
+        if let Some(reads) = self.lowered_reads() {
+            units.extend(reads.units.iter().copied());
+        }
         units
+    }
+
+    /// Record what this script unit reads from earlier units, as it is now.
+    ///
+    /// A unit that reads from one that did not run to its end is not run, and
+    /// what it reads is a fact of its source, not of what the passes left of
+    /// it: dead code elimination takes away a read whose value goes unused,
+    /// and with it the unit's dependency, so that whether the unit ran turned
+    /// on whether consts were inlined. Called as the unit is lowered; what
+    /// [`Self::script_units_read`] and [`Self::script_slots_read`] say
+    /// includes it from then on.
+    pub fn record_lowered_reads(&mut self) {
+        let reads = ScriptReads { units: self.script_units_read(), slots: self.script_slots_read() };
+        if let CodeUnitContext::Script(ctx) = &mut self.context {
+            ctx.lowered_reads = Some(reads);
+        }
+    }
+
+    fn lowered_reads(&self) -> Option<&ScriptReads> {
+        match &self.context {
+            CodeUnitContext::Script(ctx) => ctx.lowered_reads.as_ref(),
+            _ => None,
+        }
     }
 
     fn collect_script_units_read(&self, units: &mut std::collections::BTreeSet<u32>) {
@@ -3120,6 +3158,9 @@ impl IrCodeUnit {
     pub fn script_slots_read(&self) -> std::collections::BTreeSet<(u32, u32)> {
         let mut slots = std::collections::BTreeSet::new();
         self.collect_script_slots(&mut slots, true);
+        if let Some(reads) = self.lowered_reads() {
+            slots.extend(reads.slots.iter().copied());
+        }
         slots
     }
 

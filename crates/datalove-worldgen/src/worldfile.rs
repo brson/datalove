@@ -11,10 +11,27 @@ use crate::pretty::pretty_type_hint;
 
 /// Generate a complete worldfile from a seed.
 ///
-/// Returns the worldfile as a string that can be parsed and typechecked.
+/// Returns the worldfile as a string that can be parsed and typechecked. It
+/// is the session of the same seed written out: its library, and a section
+/// for each unit, or with [`WorldGenConfig::one_fragment`] a single fragment
+/// of every statement, which leaves the expressions out.
 pub fn gen_worldfile_seeded(seed: u64, config: WorldGenConfig) -> String {
-    let db = Database::default();
-    gen_worldfile_tracked(&db, seed, config)
+    let one_fragment = config.one_fragment;
+    let session = gen_session_seeded(seed, config);
+    let mut sections = vec![session.library];
+    if one_fragment {
+        let statements: Vec<&str> = session.units.iter()
+            .filter(|unit| !unit.expression)
+            .map(|unit| unit.source.as_str())
+            .collect();
+        sections.push(format!("----------\nscriptunit-fragment\n----------\n\n{}", statements.join("\n")));
+    } else {
+        for unit in &session.units {
+            let kind = if unit.expression { "scriptunit-expr" } else { "scriptunit-fragment" };
+            sections.push(format!("----------\n{}\n----------\n\n{}", kind, unit.source));
+        }
+    }
+    sections.join("\n\n")
 }
 
 /// A generated REPL session: the modules and data it requires, and its
@@ -89,41 +106,6 @@ fn gen_session_tracked<'db>(
         shadows.push((v.name.C(), format!("{} {}: {} = {}", keyword, v.name, ty, value)));
     }
     GenSession { library, modules, data: script.data, units, shadows }
-}
-
-/// Internal tracked function for worldfile generation.
-///
-/// Must be tracked to allow creation of Salsa tracked structs.
-#[salsa::tracked(returns(clone))]
-fn gen_worldfile_tracked<'db>(
-    db: &'db dyn salsa::Database,
-    seed: u64,
-    config: WorldGenConfig,
-) -> String {
-    let mut rng = SeededRng::new(seed);
-    gen_worldfile_inner(db, &mut rng, &config)
-}
-
-/// Generate a complete worldfile.
-fn gen_worldfile_inner<'db>(
-    db: &'db dyn salsa::Database,
-    rng: &mut SeededRng,
-    config: &WorldGenConfig,
-) -> String {
-    let (infos, modules) = gen_modules(db, rng, config);
-    let script = gen_script_items(db, rng, config, &infos);
-    let mut sections = library_sections(&modules, &script.data);
-    // A worldfile is one fragment, which an expression cannot stand in.
-    let statements: Vec<&str> = script.items.iter()
-        .filter(|item| !item.expression)
-        .map(|item| item.text.as_str())
-        .collect();
-    sections.push(format!(
-        "----------\nscriptunit-fragment\n----------\n\n{}",
-        statements.join("\n")
-    ));
-
-    sections.join("\n\n")
 }
 
 /// The worldfile sections of `modules` and `data`, each a path and its text.

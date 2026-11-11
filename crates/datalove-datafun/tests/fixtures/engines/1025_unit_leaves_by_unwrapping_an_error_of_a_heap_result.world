@@ -1,0 +1,58 @@
+----------
+scriptunit-fragment
+----------
+
+// A unit that leaves early by `v!` never gives `w` a value, and the frame it
+// keeps must not say it holds one: when the session ends, what a kept frame
+// holds is destroyed, and this was a string's garbage. Found by
+// worldgen_engine_tests.
+
+let v: !string = er error : u8 / 1
+let w: string = v!
+
+----------
+scriptunit-fragment
+----------
+
+let d: !data = er error : (u8,) / (: u8 / 2,)
+let e: data = d!
+
+----------
+scriptunit-fragment
+----------
+
+// A unit that leaves early before the statement that moves `s` has to drop
+// it: the frame keeps only what is live at the unit's end, and `s` is not.
+// Found by worldgen_engine_tests, as a leak.
+
+let s: !string = er error : u8 / 3
+let n: u8 = (: u8 / 117) +! (: u8 / 179)
+let t: string = s!
+
+----------
+scriptunit-fragment
+----------
+
+// The same after a loop. An early return looks up what to drop by the
+// statement it is in, and a script unit's statements were numbered by their
+// place among the top-level ones while the drops were kept by a number
+// counting the loop's statements too, so this unit's overflow looked up the
+// drops of the statement after it.
+
+var c: int = 0
+loop while c .< 2
+    set c = c + 1
+end loop
+let r: !string = ok "r"
+let o: u8 = (: u8 / 117) +! (: u8 / 179)
+let q: string = r!
+
+----------
+scriptunit-fragment
+----------
+
+// What units after them do not read runs.
+
+let x: !string = ok "kept"
+let y: string = x!
+debuglog y

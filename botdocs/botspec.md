@@ -2388,6 +2388,18 @@ end loop
 
 Copy types and operator operands (which are borrowed) are exempt.
 
+A `loop while` condition is read before every pass, so a move in it is a move
+in the loop: what it moves has to be given a value again in the body, by the
+end of it and before every `continue`.
+
+```datalove
+let r: !string = ok "a"
+var n: int = 0
+loop while r! != "b"   // error (O007): cannot move `r` in loop
+    set n = n + 1
+end loop
+```
+
 ### 11.5 The Collection a `for` Walks
 
 The collection a `for` walks is frozen for the loop's body, since its element

@@ -1,0 +1,101 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "error[O007]: cannot move `v` in loop\n  help: use `@` to clone `v` in the loop\'s condition",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "a"
+                        v1 = ok v0
+                        store.move.tracked s0, v1
+                        v2 = const 0int
+                        store.move.tracked s1, v2
+                        goto block1
+                    block1:
+                        v3 = load.move.tracked s0
+                        v4, v5, v6 = unwrap_result v3
+                        branch v6, block3, block2
+                    block2:
+                        v7 = err v5
+                        unit_early_return v7
+                    block3:
+                        v8 = const "b"
+                        v9 = ne v4, v8
+                        drop v4
+                        drop v8
+                        branch v9, block4, block8
+                    block4:
+                        v10 = const "a"
+                        v11 = ok v10
+                        drop.tracked s0
+                        store.move.tracked s0, v11
+                        v12 = const 1int
+                        v13 = add s1, v12
+                        drop v12
+                        drop.tracked s1
+                        store.move.tracked s1, v13
+                        v14 = const 3int
+                        v15 = eq s1, v14
+                        drop v14
+                        branch v15, block5, block6
+                    block5:
+                        v16 = const "b"
+                        v17 = ok v16
+                        drop.tracked s0
+                        store.move.tracked s0, v17
+                        goto block7
+                    block6:
+                        goto block7
+                    block7:
+                        goto block1
+                    block8:
+                        debuglog s1
+                        unit_end_drop.tracked s0
+                        unit_end_drop.tracked s1
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("3\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "f: error[O007]: cannot move `v` in loop\n  help: use `@` to clone `v` in the loop\'s condition",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

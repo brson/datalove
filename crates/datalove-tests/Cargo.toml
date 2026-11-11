@@ -13,12 +13,7 @@ repository.workspace = true
 rmx.workspace = true
 datalove-worldgen.workspace = true
 datalove-datafun.workspace = true
-datalove-datafun-pkg.workspace = true
 datalove-datafun-ir.workspace = true
-datalove-datafun-interp.workspace = true
-datalove-datafun-cranelift-jit.workspace = true
-datalove-datafun-cranelift-aot.workspace = true
-datalove-rt.workspace = true
 # For the tests that moved here to break a dependency cycle: a test needing
 # the whole pipeline to drive one crate cannot live in that crate, because
 # the pipeline is built on it.
@@ -36,11 +31,6 @@ datalove-exampletest.path = "../datalove-exampletest"
 datalove-script-steps.workspace = true
 datalove-script-engine.workspace = true
 datalove-repl.workspace = true
-
-[[test]]
-name = "worldgen_dual_tests"
-path = "tests/worldgen_dual_tests.rs"
-harness = false
 
 [[test]]
 name = "generative_reactive_tests"

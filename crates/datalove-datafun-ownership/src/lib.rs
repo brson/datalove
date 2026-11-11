@@ -820,15 +820,26 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// Get all live bindings for return (all live bindings in all scopes).
     ///
-    /// For functions, stops at Function scope. For scripts, stops at ScriptUnit scope.
-    /// Script top-level bindings are NOT included (they're exported, not dropped).
+    /// For functions, stops at Function scope. For scripts, stops at ScriptUnit
+    /// scope, taking the unit's own bindings but not an earlier unit's. Those
+    /// the unit keeps at its end are taken out again once the unit has been
+    /// analyzed and it is known which they are; see `drop_kept_from_exits`.
     fn live_bindings_for_return(&self) -> Vec<BindingId> {
         let mut result = Vec::new();
         let mut seen = vec![false; self.bindings.len()];
         for frame in self.scope_stack.iter().rev() {
-            // For ScriptUnit, don't include its bindings (they're exported).
-            // Just stop here without adding them.
             if frame.kind == ScopeKind::ScriptUnit {
+                for &id in &frame.bindings {
+                    if std::mem::replace(&mut seen[id.0 as usize], true) || self.is_external(id) {
+                        continue;
+                    }
+                    if self.owned_here(id, frame.current_state.get(&id)) {
+                        let info = &self.bindings[id.0 as usize];
+                        if !info.ty.is_copy() && !info.is_borrowed() {
+                            result.push(id);
+                        }
+                    }
+                }
                 break;
             }
 
@@ -1567,6 +1578,8 @@ pub fn analyze_script_statements_with_externals<'db>(
         })
         .unwrap_or_default();
 
+    drop_kept_from_exits(&mut ctx.schedule, &unit_end_bindings);
+
     // Collect the exports that hold no value while the scope still has the
     // final state of each binding.
     let dead_exports = ctx.dead_exports();
@@ -1594,6 +1607,26 @@ pub fn analyze_script_statements_with_externals<'db>(
         overwritten_externals,
         externals,
     }
+}
+
+/// Take the bindings a script unit keeps at its end out of what its early
+/// exits drop.
+///
+/// A unit that leaves early keeps its frame, and the frame destroys what it
+/// keeps when the session ends. What it does not keep -- a `let` the unit
+/// moves later, on the way it did not take -- is the early exit's to drop, or
+/// nothing does.
+fn drop_kept_from_exits(schedule: &mut DropSchedule, kept: &[BindingId]) {
+    for drops in schedule.before_try_return.values_mut()
+        .chain(schedule.before_set_target_early_return.values_mut())
+        .chain(schedule.before_return.values_mut())
+    {
+        drops.retain(|id| !kept.contains(id));
+    }
+    for moved in schedule.try_return_not_yet_moved.values_mut() {
+        moved.retain(|(_, id)| !kept.contains(id));
+    }
+    schedule.try_return_not_yet_moved.retain(|_, moved| !moved.is_empty());
 }
 
 /// Result of analyzing a standalone expression.
@@ -2465,8 +2498,23 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
     // function before the body is reached -- `loop while a -? b .< c` leaves
     // where the subtraction goes under -- so what the function still owns has
     // to go with it. Nothing was dropped on that way out.
+    //
+    // But it is read again before every pass, so what it moves -- `v!` takes
+    // `v` apart -- has to have been given a value again by the time the loop
+    // goes back to its head, as a move in the body does.
+    let mut condition_moves = Vec::new();
     if let Some(condition) = stmt.condition {
+        let live_before: Vec<BindingId> = ctx.scope_stack.last()
+            .map(|frame| frame.current_state.iter()
+                .filter(|(_, state)| **state == BindingState::Live)
+                .map(|(id, _)| id)
+                .collect())
+            .unwrap_or_default();
         analyze_read_before_loop(ctx, ctx.expr(condition), stmt_idx);
+        condition_moves = live_before.into_iter()
+            .filter(|id| ctx.get_state(*id) == Some(BindingState::Moved))
+            .filter(|id| !ctx.bindings[id.0 as usize].ty.is_copy())
+            .collect();
     }
 
     let entry = LoopEntry::of(ctx);
@@ -2477,6 +2525,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
 
     let exits = ctx.loop_exits.pop().expect("unbalanced loop exit records");
     check_loop_repeats(ctx, &stmt.body, &exits, &entry);
+    check_condition_repeats(ctx, &stmt.body, &exits, &entry, &condition_moves);
 
     // Drops at end of loop iteration.
     let loop_drops = ctx.exit_scope();
@@ -2646,6 +2695,34 @@ fn check_loop_repeats<'db>(
             let expr_key = ctx.get_moved_at(*id).X();
             let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                 description: format!("clone `{}` inside the loop", name),
+            };
+            ctx.errors.push(AnalysisError::MoveInLoop { expr_key, name, recovery_hint });
+        }
+    }
+}
+
+/// Refuse a move a loop's condition makes that the loop does not undo before
+/// it reads the condition again: at the end of the body, if the body can
+/// reach its end, and at every `continue`.
+fn check_condition_repeats<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    body: &[Statement<'db>],
+    exits: &LoopExits<'db>,
+    entry: &LoopEntry<'db>,
+    condition_moves: &[BindingId],
+) {
+    let body_reaches_head = body_completes(body);
+    for &id in condition_moves {
+        let moved_at_body_end = body_reaches_head
+            && ctx.get_state(id) == Some(BindingState::Moved);
+        let moved_at_continue = exits.continues.iter()
+            .any(|state| state.get(&id) == Some(&BindingState::Moved));
+        if moved_at_body_end || moved_at_continue {
+            let name = ctx.bindings[id.0 as usize].name.C();
+            let expr_key = *entry.moved_at_before.get(&id)
+                .expect("a binding the condition moved has where it was moved");
+            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                description: format!("clone `{}` in the loop's condition", name),
             };
             ctx.errors.push(AnalysisError::MoveInLoop { expr_key, name, recovery_hint });
         }

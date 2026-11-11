@@ -47,7 +47,7 @@ test-slow:
     just check-wasm
     just test-wasm
     just test-sys-riders
-    just test-worldgen-dual
+    just test-worldgen-engines
     just test-generative-reactive
 
 # The suites that generate what they test from seeds take them alike: COUNT
@@ -57,11 +57,12 @@ test-slow:
 # is a change and not a draw. `test-generative-random` runs them all from
 # drawn seeds.
 
-# Generated programs, run on the interpreter under a chaos dispatcher and
-# through Cranelift AOT. Not in `just test`; this default is the test's own,
-# which `test-slow` runs.
-test-worldgen-dual SEED='2000' COUNT='20':
-    WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED={{SEED}} WORLDGEN_DUAL_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test worldgen_dual_tests
+# Generated programs on every engine, each held to the IR walker, as the
+# engine fixtures are. `just test` runs 20 seeds from 0; this runs 1000 from
+# far past them, about a minute and a half in a debug build. A failing world
+# is written out; see the test's docs.
+test-worldgen-engines SEED='1000000' COUNT='1000':
+    WORLDGEN_ENGINES_SEED={{SEED}} WORLDGEN_ENGINES_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun --test worldgen_engine_tests
 
 # Generated programs typechecked. `just test` runs 50 seeds from 0; this runs
 # 1000 from far past them.
@@ -86,7 +87,7 @@ test-generative-reactive SEED='1000000' COUNT='1000':
 test-generative-random COUNT='100':
     just test-worldgen-typecheck random {{COUNT}}
     just test-worldgen-coverage random {{COUNT}}
-    just test-worldgen-dual random {{COUNT}}
+    just test-worldgen-engines random {{COUNT}}
     just test-generative-reactive random {{COUNT}}
 
 # Break each reach rule in turn, by the faults in scripts/reach-faults.toml,

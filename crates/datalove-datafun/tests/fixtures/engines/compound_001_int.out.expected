@@ -81,8 +81,6 @@ Analysis(
                         v30 = const "arithmetic overflow"
                         v31 = error_from v30
                         v32 = err v31
-                        drop.tracked s0
-                        drop.tracked s1
                         unit_early_return v32
                     block4:
                         goto block1

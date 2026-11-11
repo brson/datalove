@@ -2042,12 +2042,12 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
   [plan-parallel-collections.md](plan-parallel-collections.md)), and `just
   test-extras` runs `just test-slow` -- the `slow_tests` features, the wasm
   build, `just test-wasm`, a smoke test of sys riders built from source and
-  `just test-worldgen-dual` -- then `just test-demos`. CI runs `test`, `test-64`,
+  `just test-worldgen-engines` -- then `just test-demos`. CI runs `test`, `test-64`,
   `test-cut` and `test-extras` as four jobs, and `just test-ci` runs them all;
   `test-sequential` is not in CI.
 - `DATALOVE_TEST_ENGINES=bytecode,jit` limits the suites that run a program
-  on several engines -- `engine_tests`, `std_engine_tests`, and the cli's
-  `backend_tests`, `aot_run_tests` and `deep_recursion_tests` -- to the ones
+  on several engines -- `engine_tests`, `worldgen_engine_tests`,
+  `std_engine_tests`, and the cli's `backend_tests`, `aot_run_tests` and `deep_recursion_tests` -- to the ones
   named, from `engine_tests`' names: `bytecode`, `plain`, `jit`, `chaos`,
   `osr`, `aot`, `c`, `noconst`, `nospec`. The IR walker, the reference, always
   runs. Unset, all do.
@@ -2087,7 +2087,8 @@ Most live in `crates/datalove-datafun/tests`.
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
 | `parallel_warm_tests` | That in a parallel compile every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
-| `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`), `worldgen_dual_tests` (in `datalove-tests`) | Generated worldfiles typecheck, cover the AST, and run the same both ways. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
+| `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`) | Generated worldfiles typecheck and cover the AST. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
+| `worldgen_engine_tests` | Generated worldfiles, a third of them one fragment and the rest cut into units as a session is, through `engine_tests`' checks (`tests/engines/mod.rs`, which both share): every unit compiles, and every engine observes what the IR walker did. A failing world is written out under the target directory and run again with `WORLDGEN_ENGINES_WORLD`. See [plan-worldgen-engines.md](plan-worldgen-engines.md) |
 | `generative_reactive_tests` (in `datalove-tests`) | Generated scripts, cut into fragment and expression units that declare and call functions, and edited, deleted, reordered and inserted at random, with the modules and data they require edited too, and beside each a dense session of a few units over two names, leave each unit as a fresh run of its code would after every step, in how it ended, what it binds and what it shows, and never crash the engine. A few seeds from the test's default in `just test`, 1000 from seed 1000000 in `just test-generative-reactive`; a failing seed is shrunk and written out as a worldfile, and once fixed is kept in `tests/generative_reactive/`, which every run checks first. `just measure-faults` breaks each reach rule in turn, by `scripts/reach-faults.toml`, and says what these tests and the hand-written ones catch of it |
 
 ### Generative Seeds
@@ -2103,7 +2104,7 @@ give them, so that a drawn run can be repeated.
 |-------|--------|---------|---------------|
 | `worldgen_tests`, typecheck tests | `WORLDGEN_TYPECHECK` | 50 from 0 | `test-worldgen-typecheck`, 1000 from 1000000 |
 | `coverage_tests` | `WORLDGEN_COVERAGE` | 300 from 1200, 200 for the floors | `test-worldgen-coverage`, 1000 from 1000000 |
-| `worldgen_dual_tests` | `WORLDGEN_DUAL` | 20 from 2000, with `WORLDGEN_DUAL_TEST=1` | `test-worldgen-dual`, the default |
+| `worldgen_engine_tests` | `WORLDGEN_ENGINES` | 20 from 0 | `test-worldgen-engines`, 1000 from 1000000 |
 | `generative_reactive_tests` | `GENERATIVE_REACTIVE` | 20 from 60 | `test-generative-reactive`, 1000 from 1000000 |
 
 Every recipe takes `SEED` and `COUNT`, and `SEED` may be `random`. `just
@@ -2159,10 +2160,11 @@ and without `else`), and can go stale.
 
 What it does not tell you:
 
-- **Generated is not exercised.** `worldgen_tests` only typechecks. Only
-  `worldgen_dual_tests` runs ownership analysis and executes anything, and it
-  skips unless `WORLDGEN_DUAL_TEST=1`. `just test-worldgen-dual`, part of
-  `test-slow` and so of CI's extras job, runs it on twenty fixed seeds.
+- **Generated is not all observed.** `worldgen_engine_tests` runs every
+  generated world on every engine, and its config has generated code show
+  what it binds, but only where the generator's default config is: other
+  suites' worlds show about one `debuglog` each. See
+  [plan-worldgen-engines.md](plan-worldgen-engines.md).
 - **It counts single node kinds, not combinations.** Every bug the generator
   has found was at an intersection -- a generic over a map at `data`, a tensor
   of a tuple holding a heap value -- and a roll of node kinds calls all of

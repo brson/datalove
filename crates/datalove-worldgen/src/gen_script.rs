@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 
 use bct::random::SeededRng;
-use datalove_datalit::ast::TypeHint;
+use datalove_datalit::ast::{TypeHint, TypeHintAnonTuple, TypeHintResult};
 use crate::config::WorldGenConfig;
 use crate::context::{ConstDef, FunctionSig, GenContext, ModuleInfo, Variable, is_linear_type};
 use crate::gen_function::{gen_function, gen_function_signature};
@@ -47,6 +47,11 @@ pub fn gen_script_items<'db>(
     modules: &[ModuleInfo<'db>],
 ) -> GenScript<'db> {
     let mut ctx = GenContext::new();
+    if config.fallible_script {
+        ctx.return_type = Some(TypeHint::Result(TypeHintResult {
+            inner_type: Box::new(TypeHint::AnonTuple(TypeHintAnonTuple { fields: Vec::new() })),
+        }));
+    }
     let mut data = Vec::new();
     let mut quotients = Vec::new();
 
@@ -111,17 +116,42 @@ pub fn gen_script_items<'db>(
         if config.expression_unit_probability > 0
             && config.check_probability(rng, config.expression_unit_probability)
         {
+            // An expression unit has no early return to take.
+            let return_type = ctx.return_type.take();
             let text = gen_expression_unit(db, rng, config, &mut ctx);
+            ctx.return_type = return_type;
             push(rng, &mut items, &mut ctx, ScriptItem { text, expression: true });
             continue;
         }
         let access = config.binding_access_probability > 0
             && config.check_probability(rng, config.binding_access_probability);
-        let stmt = match access {
+        let bound_before = ctx.variables.len();
+        let mut stmt = match access {
             true => gen_binding_access(db, rng, config, &mut ctx, &mut var_counter, &mut data, &mut quotients),
             false => gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, ""),
         };
+        if config.observe_bindings {
+            stmt.push_str(&observe(&ctx, bound_before));
+        }
         push(rng, &mut items, &mut ctx, fragment(stmt));
+    }
+
+    // Each function nothing has called yet, where there are the bindings to
+    // pass it. One that has been called has been imported, and the script
+    // calls only what it imports.
+    if config.call_every_function {
+        for func in ctx.imported_functions.C() {
+            let import = format!("import {}.{}", sources[&func.name].alias(), func.name);
+            if items.iter().any(|item| item.text == import) || !can_call(db, &func, &ctx) {
+                continue;
+            }
+            let bound_before = ctx.variables.len();
+            let mut stmt = call_statement(db, rng, config, &mut ctx, &mut var_counter, &func);
+            if config.observe_bindings {
+                stmt.push_str(&observe(&ctx, bound_before));
+            }
+            push(rng, &mut items, &mut ctx, fragment(stmt));
+        }
     }
 
     // Generate a final expression using a variable or function call.
@@ -361,17 +391,7 @@ fn gen_binding_access<'db>(
         }
         11 => {
             let func = callable[rng.random_range(0..callable.len())].C();
-            let call = gen_function_call(db, rng, &func, config, ctx);
-            match func.return_type {
-                Some(ret) => {
-                    let name = format!("v{}", *var_counter);
-                    *var_counter += 1;
-                    let ty = pretty_type_hint(db, ret.C());
-                    ctx.variables.push(Variable { name: name.C(), type_hint: ret, is_mutable: false });
-                    format!("let {}: {} = {}", name, ty, call)
-                }
-                None => format!("call {}", call),
-            }
+            call_statement(db, rng, config, ctx, var_counter, &func)
         }
         4 => {
             let v = pick(rng, &ctx.variables.C());
@@ -389,4 +409,36 @@ fn gen_binding_access<'db>(
             format!("var {}: {} = {}", name, ty, value)
         }
     }
+}
+
+/// A statement calling `func`: its answer bound to a new name, or a `call`
+/// where there is none.
+fn call_statement<'db>(
+    db: &'db dyn salsa::Database,
+    rng: &mut SeededRng,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+    func: &FunctionSig<'db>,
+) -> String {
+    let call = gen_function_call(db, rng, func, config, ctx);
+    match func.return_type.C() {
+        Some(ret) => {
+            let name = format!("v{}", *var_counter);
+            *var_counter += 1;
+            let ty = pretty_type_hint(db, ret.C());
+            ctx.variables.push(Variable { name: name.C(), type_hint: ret, is_mutable: false });
+            format!("let {}: {} = {}", name, ty, call)
+        }
+        None => format!("call {}", call),
+    }
+}
+
+/// `debuglog` lines for the bindings made since there were `bound_before`,
+/// those not already moved, each line begun with a newline.
+fn observe(ctx: &GenContext<'_>, bound_before: usize) -> String {
+    ctx.variables[bound_before..].iter()
+        .filter(|v| !ctx.is_consumed(&v.name))
+        .map(|v| format!("\ndebuglog {}", v.name))
+        .collect()
 }

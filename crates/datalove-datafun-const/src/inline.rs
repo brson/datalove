@@ -326,6 +326,7 @@ mod tests {
                 result_name: None,
                 exports: vec![("X".S(), ExportBinding::Value(ValueId(2)))],
                 unit: None,
+                lowered_reads: None,
             }),
             nested_units: vec![],
         };
@@ -386,6 +387,7 @@ mod tests {
                 result_name: None,
                 exports: vec![("X".S(), ExportBinding::Value(ValueId(0)))],
                 unit: None,
+                lowered_reads: None,
             }),
             nested_units: vec![],
         };
@@ -462,6 +464,7 @@ mod tests {
                 result_name: None,
                 exports: vec![("X".S(), ExportBinding::Value(ValueId(1)))],
                 unit: None,
+                lowered_reads: None,
             }),
             nested_units: vec![],
         };

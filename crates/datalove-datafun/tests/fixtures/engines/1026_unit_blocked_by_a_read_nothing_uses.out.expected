@@ -1,0 +1,99 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2, v3 = sub.checked v0, v1
+                        branch v3, block1, block2
+                    block1:
+                        v4 = const "arithmetic overflow"
+                        v5 = error_from v4
+                        v6 = err v5
+                        unit_early_return v6
+                    block2:
+                        v7 = const true
+                        unit_end
+                """,
+            ),
+            output: "er error \"arithmetic overflow\"",
+            debug_output: Some("er error \"arithmetic overflow\"\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = copy unit1.v7
+                        v1 = const "ran"
+                        debuglog v1
+                        drop v1
+                        unit_end
+                """,
+            ),
+            output: "(not run: it reads from units [1], which did not finish)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        goto block1
+                    block1:
+                        v2 = const 1int
+                        v3 = add s0, v2
+                        drop v2
+                        drop.tracked s0
+                        store.move.tracked s0, v3
+                        v4 = const 2int
+                        v5 = eq s0, v4
+                        drop v4
+                        branch v5, block2, block3
+                    block2:
+                        goto block5
+                    block3:
+                        goto block4
+                    block4:
+                        goto block1
+                    block5:
+                        debuglog s0
+                        unit_end_drop.tracked s0
+                        unit_end
+                """,
+            ),
+            output: "(not run: it reads from units [1], which did not finish)",
+        ),
+    ],
+)

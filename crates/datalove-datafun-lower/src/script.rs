@@ -130,10 +130,8 @@ pub fn lower_script_fragment_raw<'db>(
         }
     }
 
-    // Lower all statements with index tracking.
-    for (idx, stmt) in stmts.iter().enumerate() {
-        ctx.body.current_stmt_idx = Some(idx);
-        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types, func_return_types, &already_lowered_funcs)?;
+    for stmt in stmts {
+        lower_statement_for_script(&mut ctx, stmt, &func_analyses, func_param_types, func_return_types, &already_lowered_funcs)?;
     }
     ctx.body.current_stmt_idx = None;
 
@@ -152,7 +150,7 @@ pub fn lower_script_fragment_raw<'db>(
     // Renumber blocks for O(1) lookup in interpreter.
     ctx.renumber_blocks();
 
-    Ok(IrCodeUnit {
+    let mut unit = IrCodeUnit {
         id: CodeUnitId(0),
         name: String::new(),
         blocks: std::mem::take(&mut ctx.body.blocks),
@@ -170,9 +168,12 @@ pub fn lower_script_fragment_raw<'db>(
             result_name: None,
             exports: ctx.exports,
             unit: None,
+            lowered_reads: None,
         }),
         nested_units: ctx.functions,
-    })
+    };
+    unit.record_lowered_reads();
+    Ok(unit)
 }
 
 /// What lowering a script unit's functions produced.
@@ -334,7 +335,7 @@ pub fn lower_script_expr<'db>(
     ctx.renumber_blocks();
 
     // Expression units don't create script-level bindings, so unit_end is empty.
-    Ok(IrCodeUnit {
+    let mut unit = IrCodeUnit {
         id: CodeUnitId(0),
         name: String::new(),
         blocks: std::mem::take(&mut ctx.body.blocks),
@@ -352,9 +353,12 @@ pub fn lower_script_expr<'db>(
             result_name,
             exports: ctx.exports,
             unit: None,
+            lowered_reads: None,
         }),
         nested_units: ctx.functions,
-    })
+    };
+    unit.record_lowered_reads();
+    Ok(unit)
 }
 
 /// The binding an expression unit merely shows, if that is all it does.
@@ -389,7 +393,6 @@ fn shown_binding<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<String>
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &'db datalove_datafun_ast::ast::Statement<'db>,
-    _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&LookupMap<String, Vec<Type<'db>>>>,
     func_return_types: Option<&LookupMap<String, Type<'db>>>,
@@ -399,6 +402,11 @@ fn lower_statement_for_script<'db>(
     // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,
     // so lowering must do the same to ensure drop schedule lookups match.
     let stmt_idx = ctx.alloc_stmt_id(stmt);
+    // And it is the statement being lowered, which is what an early return
+    // from inside it looks its drops up by. Its position among the top-level
+    // statements is the same number only until something nests, and after a
+    // loop an early return found the drops of the statement before it.
+    ctx.body.current_stmt_idx = Some(stmt_idx);
     match stmt {
         Statement::Let(let_stmt) => {
             let init_expr = let_stmt.value;
