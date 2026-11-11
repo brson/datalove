@@ -5,6 +5,7 @@ use bct::random::SeededRng;
 use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
+use crate::gen_function::MAX_FUEL;
 use crate::context::{GenContext, FunctionSig, Param, ParamMode, Variable, is_linear_type, types_match};
 use crate::gen_type::{gen_bool_type, gen_u32_type};
 use crate::pretty::{pretty_expr, pretty_type_hint};
@@ -99,7 +100,7 @@ pub fn gen_expr<'db>(
 ) -> String {
     // What could stand here, each rolled for on its own.
     let has_matching_vars = !ctx.variables_of_type(db, type_hint.C()).is_empty();
-    let can_use_var = has_matching_vars && rng.random_bool(0.4);
+    let can_use_var = has_matching_vars && rng.random_bool(config.variable_odds());
 
     // Clone the matching functions to avoid borrow issues.
     let type_hint_for_filter = type_hint.C();
@@ -238,7 +239,11 @@ pub fn gen_expr<'db>(
                 return gen_literal(db, rng, type_hint, config);
             }
             let var_name = matching_vars[rng.random_range(0..matching_vars.len())].name.C();
-            ctx.consume_variable(&var_name);
+            // A copy is not a move, but counting it as one is harmless, and
+            // the default config keeps doing so to keep what its seeds make.
+            if is_linear_type(&type_hint) || !config.compute_from_variables {
+                ctx.consume_variable(&var_name);
+            }
             var_name
         }
         Choice::Call => {
@@ -435,8 +440,9 @@ fn gen_arithmetic_expr<'db>(
     let op = ops[rng.random_range(0..ops.len())];
 
     // Generate operands - for bigints, may use variables (operators borrow).
-    let lhs = gen_arith_operand(db, rng, type_hint.C(), config, ctx, is_bigint);
-    let rhs = gen_arith_operand(db, rng, type_hint.C(), config, ctx, is_bigint);
+    let variables = is_bigint || config.compute_from_variables;
+    let lhs = gen_arith_operand(db, rng, type_hint.C(), config, ctx, variables);
+    let rhs = gen_arith_operand(db, rng, type_hint.C(), config, ctx, variables);
 
     if is_float || is_bigint {
         // Float and bigint literals need type hints to avoid inference issues.
@@ -499,7 +505,7 @@ fn gen_overflow_operand<'db>(
     ctx: &GenContext<'db>,
 ) -> String {
     let borrowable = ctx.variables_of_type_for_borrow(db, type_hint.C());
-    if !borrowable.is_empty() && rng.random_bool(0.4) {
+    if !borrowable.is_empty() && rng.random_bool(config.variable_odds()) {
         return borrowable[rng.random_range(0..borrowable.len())].name.C();
     }
     let type_str = pretty_type_hint(db, type_hint.C());
@@ -515,8 +521,9 @@ enum ArithOperand {
 
 /// Generate an operand for arithmetic expressions.
 ///
-/// For bigints, may use an existing variable (operators use ref semantics).
-/// Returns whether the operand is a variable (which already has a known type).
+/// Where `allow_variables`, may use an existing variable (operators use ref
+/// semantics). Returns whether the operand is a variable (which already has a
+/// known type).
 fn gen_arith_operand<'db>(
     db: &'db dyn salsa::Database,
     rng: &mut SeededRng,
@@ -526,9 +533,8 @@ fn gen_arith_operand<'db>(
     allow_variables: bool,
 ) -> ArithOperand {
     if allow_variables {
-        // For bigints, 40% chance to use an existing variable if available.
         let borrowable_vars = ctx.variables_of_type_for_borrow(db, type_hint.C());
-        if !borrowable_vars.is_empty() && rng.random_bool(0.4) {
+        if !borrowable_vars.is_empty() && rng.random_bool(config.variable_odds()) {
             let var = borrowable_vars[rng.random_range(0..borrowable_vars.len())];
             return ArithOperand::Variable(var.name.C());
         }
@@ -539,7 +545,7 @@ fn gen_arith_operand<'db>(
 /// Generate a unary negation expression.
 ///
 /// Only works for floats and bigints.
-/// For bigints, may use an existing variable as operand.
+/// May use an existing variable as operand, as [`gen_arith_operand`] says.
 fn gen_unary_negation<'db>(
     db: &'db dyn salsa::Database,
     rng: &mut SeededRng,
@@ -547,8 +553,8 @@ fn gen_unary_negation<'db>(
     config: &WorldGenConfig,
     ctx: &GenContext<'db>,
 ) -> String {
-    let is_bigint = matches!(type_hint, TypeHint::Int);
-    let operand = gen_arith_operand(db, rng, type_hint.C(), config, ctx, is_bigint);
+    let variables = matches!(type_hint, TypeHint::Int) || config.compute_from_variables;
+    let operand = gen_arith_operand(db, rng, type_hint.C(), config, ctx, variables);
 
     // Literals need type hints for unary negation.
     // Variables already have known types, so no hint needed.
@@ -684,6 +690,11 @@ pub fn gen_function_call<'db>(
         .enumerate()
         .map(|(i, param)| match spoken_for.iter().find(|(j, _)| *j == i) {
             Some((_, name)) => format!("{}{}", param.mode.marker(), name),
+            // Most often fuel it will recurse on, which an expression of
+            // its type seldom is.
+            Option::None if func.recurses() && i + 1 == func.params.len() && rng.random_bool(0.7) => {
+                rng.random_range(1..=MAX_FUEL).to_string()
+            }
             Option::None => gen_expr(db, rng, param.type_hint.C(), config, ctx),
         })
         .collect();

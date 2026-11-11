@@ -721,19 +721,19 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Emit drop for an operand, choosing precise or tracked based on binding.
+    /// The drop for an operand, none for a copy type, choosing precise or
+    /// tracked based on binding.
     ///
-    /// Uses Drop for precise bindings (values, temps) and DropTracked for tracked
+    /// Drop for precise bindings (values, temps) and DropTracked for tracked
     /// bindings (slots in control flow, Out params).
-    pub fn emit_drop_for_operand(&mut self, operand: &Operand, ty: &IrType) {
+    pub fn drop_for_operand(&self, operand: &Operand, ty: &IrType) -> Option<Instruction> {
         if ty.is_copy() {
-            return;
+            return None;
         }
-        if self.is_operand_tracked(operand.C()) {
-            self.emit(Instruction::DropTracked { operand: operand.C() });
-        } else {
-            self.emit(Instruction::Drop { operand: operand.C() });
-        }
+        Some(match self.is_operand_tracked(operand.C()) {
+            true => Instruction::DropTracked { operand: operand.C() },
+            false => Instruction::Drop { operand: operand.C() },
+        })
     }
 
     /// Record an expression temporary that needs dropping after the operation.

@@ -473,8 +473,13 @@ mod unix_impl {
             unsafe { self.discard_all() };
 
             // Report leaks after cleanup.
+            // Not while a panic unwinds, which leaves whatever was live
+            // undropped: a second panic would abort, and hide the first.
             if let Some(full_report) = leak_report {
                 match self.leak_check_mode {
+                    _ if std::thread::panicking() => {
+                        eprintln!("leaks after a panic, as unwinding leaves them:{}", full_report);
+                    }
                     LeakCheckMode::Warn => {
                         eprintln!("{}", full_report);
                     }
@@ -668,8 +673,13 @@ mod wasm_impl {
             unsafe { self.discard_all() };
 
             // Report leaks after cleanup.
+            // Not while a panic unwinds, which leaves whatever was live
+            // undropped: a second panic would abort, and hide the first.
             if let Some(full_report) = leak_report {
                 match self.leak_check_mode {
+                    _ if std::thread::panicking() => {
+                        eprintln!("leaks after a panic, as unwinding leaves them:{}", full_report);
+                    }
                     LeakCheckMode::Warn => {
                         eprintln!("{}", full_report);
                     }

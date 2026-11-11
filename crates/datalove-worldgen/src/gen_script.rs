@@ -1,5 +1,7 @@
 //! Script fragment generation.
 
+use std::cell::RefCell;
+
 use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 
@@ -61,12 +63,21 @@ pub fn gen_script_items<'db>(
     // and so on, so two of them export the same name, and a second import
     // under a name already bound is an error rather than a shadowing. The
     // module generator has kept to this; the script did not.
+    //
+    // With `qualified_calls`, a function whose name is taken is called
+    // qualified instead, by a name with its module's alias in it, which
+    // needs the module required and nothing imported.
     let mut sources: LookupMap<String, &ModuleInfo<'db>> = LookupMap::default();
+    let mut qualified_sources: LookupMap<String, &ModuleInfo<'db>> = LookupMap::default();
     for module in modules {
         for func in &module.functions {
             if !sources.contains_key(&func.name) {
                 sources.insert(func.name.C(), module);
                 ctx.imported_functions.push(func.C());
+            } else if config.qualified_calls {
+                let func = func.qualified(module.alias());
+                qualified_sources.insert(func.name.C(), module);
+                ctx.imported_functions.push(func);
             }
         }
         // The generics too, under the same one-name-once rule.
@@ -79,20 +90,25 @@ pub fn gen_script_items<'db>(
     }
 
     let mut items: Vec<ScriptItem> = Vec::new();
-    let mut imported: LookupSet<String> = LookupSet::default();
+    // The module functions called so far, by the name they were called by;
+    // pushing an item adds to it, and the calls below read it between pushes.
+    let reached: RefCell<LookupSet<String>> = RefCell::default();
     let fragment = |text: String| ScriptItem { text, expression: false };
-    let mut push = |rng: &mut SeededRng, items: &mut Vec<ScriptItem>, ctx: &mut GenContext<'db>, item: ScriptItem| {
-        // A module's function, not yet imported; a function the script
+    let push = |rng: &mut SeededRng, items: &mut Vec<ScriptItem>, ctx: &mut GenContext<'db>, item: ScriptItem| {
+        // A module's function, not called before; a function the script
         // declares is called by name.
         let mut called: Vec<String> = ctx.called.drain_unordered()
-            .filter(|name| sources.contains_key(name) && !imported.contains(name))
+            .filter(|name| (sources.contains_key(name) || qualified_sources.contains_key(name)) && !reached.borrow().contains(name))
             .collect();
         // In the order they were first called would be as good, but a set
         // has no order, and the output has to follow from the seed.
         called.sort();
         for name in called {
-            imported.insert(name.C());
-            let module = sources[&name];
+            reached.borrow_mut().insert(name.C());
+            let (module, import) = match sources.get(&name) {
+                Some(module) => (*module, true),
+                None => (qualified_sources[&name], false),
+            };
             let require = format!("require module {}", module.path());
             let required = match items.iter().position(|item| item.text == require) {
                 Some(at) => at,
@@ -102,8 +118,10 @@ pub fn gen_script_items<'db>(
                     at
                 }
             };
-            let at = rng.random_range(required + 1..=items.len());
-            items.insert(at, fragment(format!("import {}.{}", module.alias(), name)));
+            if import {
+                let at = rng.random_range(required + 1..=items.len());
+                items.insert(at, fragment(format!("import {}.{}", module.alias(), name)));
+            }
         }
         items.push(item);
     };
@@ -137,12 +155,10 @@ pub fn gen_script_items<'db>(
     }
 
     // Each function nothing has called yet, where there are the bindings to
-    // pass it. One that has been called has been imported, and the script
-    // calls only what it imports.
+    // pass it.
     if config.call_every_function {
         for func in ctx.imported_functions.C() {
-            let import = format!("import {}.{}", sources[&func.name].alias(), func.name);
-            if items.iter().any(|item| item.text == import) || !can_call(db, &func, &ctx) {
+            if reached.borrow().contains(&func.name) || !can_call(db, &func, &ctx) {
                 continue;
             }
             let bound_before = ctx.variables.len();

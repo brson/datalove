@@ -129,8 +129,11 @@ pub fn lower_operand<'db>(
 /// For ref/mut/out params with field projection args, emits GetFieldRef instead
 /// of GetField to pass a reference to the field without copying.
 ///
-/// For 'out' mode params, the callee expects uninitialized memory, so we emit
-/// a Drop for the existing value before passing the reference.
+/// For 'out' mode params, the callee expects uninitialized memory, so the
+/// existing value is dropped before the call: the drop is pushed to
+/// `out_drops`, for the caller to emit once every argument is lowered. A later
+/// argument may return early, by `?`, `!` or checked arithmetic, and the
+/// destination is not dropped on that path, where it is still live.
 ///
 /// For 'in' mode params, the function CONSUMES the argument (takes ownership).
 /// So we don't record temps - the value is transferred to the callee.
@@ -139,11 +142,12 @@ fn lower_call_arg<'db>(
     arg: ExprFun<'db>,
     mode: ParamMode,
     arg_type: Option<&IrType>,
+    out_drops: &mut Vec<Instruction>,
 ) -> Result<Operand, LowerError> {
     // Check if this is a ref context AND the arg is a field projection or index.
     if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
         // Index expression: a[i]? or a[i]!
-        if let Some(operand) = try_lower_arg_index_as_ref(ctx, arg, mode, arg_type)? {
+        if let Some(operand) = try_lower_arg_index_as_ref(ctx, arg, mode, arg_type, out_drops)? {
             return Ok(operand);
         }
         // Place with steps: lower as ref.
@@ -154,7 +158,7 @@ fn lower_call_arg<'db>(
                     if let Operand::Value(ref_value) = operand {
                         if let Some(ty) = arg_type {
                             if !ty.is_copy() {
-                                ctx.emit(Instruction::DropViaRef { ref_value });
+                                out_drops.push(Instruction::DropViaRef { ref_value });
                             }
                         }
                     }
@@ -170,7 +174,7 @@ fn lower_call_arg<'db>(
                 if let Operand::Value(ref_value) = operand {
                     if let Some(ty) = arg_type {
                         if !ty.is_copy() {
-                            ctx.emit(Instruction::DropViaRef { ref_value });
+                            out_drops.push(Instruction::DropViaRef { ref_value });
                         }
                     }
                 }
@@ -185,7 +189,7 @@ fn lower_call_arg<'db>(
         // Use precise Drop for values/temps, DropTracked for tracked bindings (slots, Out params).
         if mode == ParamMode::Out {
             if let Some(ty) = arg_type {
-                ctx.emit_drop_for_operand(&operand, ty);
+                out_drops.extend(ctx.drop_for_operand(&operand, ty));
             }
         }
         return Ok(operand);
@@ -229,6 +233,7 @@ fn try_lower_arg_index_as_ref<'db>(
     arg: ExprFun<'db>,
     mode: ParamMode,
     arg_type: Option<&IrType>,
+    out_drops: &mut Vec<Instruction>,
 ) -> Result<Option<Operand>, LowerError> {
     let operand = match arg.kind() {
         ExprFunKind::TryOption(try_op) => {
@@ -259,8 +264,8 @@ fn try_lower_arg_index_as_ref<'db>(
         && !ty.is_copy()
     {
         match operand {
-            Operand::Value(ref_value) => ctx.emit(Instruction::DropViaRef { ref_value }),
-            ref place => ctx.emit_drop_for_operand(place, ty),
+            Operand::Value(ref_value) => out_drops.push(Instruction::DropViaRef { ref_value }),
+            ref place => out_drops.extend(ctx.drop_for_operand(place, ty)),
         }
     }
 
@@ -562,9 +567,10 @@ pub fn lower_expression<'db>(
             // Lower each arg, tracking in-mode args as pending intermediates.
             let call_args = &call.args;
             let mut args = Vec::with_capacity(call_args.len());
+            let mut out_drops = Vec::new();
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i))?;
+                let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i), &mut out_drops)?;
                 // Track in-mode args as pending intermediate, a binding handed
                 // over as well as a value: a later argument's `?` returns
                 // before the call takes either.
@@ -582,6 +588,9 @@ pub fn lower_expression<'db>(
                     }
                 }
                 args.push(operand);
+            }
+            for drop in out_drops {
+                ctx.emit(drop);
             }
 
             let result_type = ctx.expr_type(expr);

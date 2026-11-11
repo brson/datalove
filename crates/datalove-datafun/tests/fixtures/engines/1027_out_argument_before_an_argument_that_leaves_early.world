@@ -1,0 +1,43 @@
+----------
+module local/gen/m
+----------
+fun f(out p0: string, p1: index): index
+  set p0 = "set"
+  ret p1
+end fun
+
+// The call drops what `s` holds, for `f` to write it, and then works out
+// the next argument, which overflows and leaves. `s` was dropped on that
+// path, and dropped again when `g` left with it live. The drop now comes
+// after every argument, just before the call. Found by
+// worldgen_engine_tests.
+
+fun g(): !index
+  var s: string = "before"
+  let n: index = f(out s, (: index / 4) -! (: index / 46))
+  debuglog s
+  ret ok n
+end fun
+----------
+scriptunit-fragment
+----------
+require module local/gen/m
+import m.f
+import m.g
+let r: !index = g()
+debuglog r
+var s: string = "before"
+----------
+scriptunit-fragment
+----------
+
+// The same with an earlier unit's binding, which the unit leaving early
+// keeps for the session: dropped here, it held nothing for the session's
+// end to drop, and the unit's IR, read for what it reads, broke an
+// assertion that such a drop is followed by the write.
+
+let n: index = f(out s, (: index / 4) -! (: index / 46))
+----------
+scriptunit-fragment
+----------
+debuglog s

@@ -3,7 +3,7 @@
 A plan to hold generated programs to the IR walker on every engine, as the
 hand-written engine fixtures are, and to make the generated programs show
 enough of what they compute for that to mean something. Written November
-2026; phase 1 is done, the rest is not.
+2026; phases 1 and 2 are done, the rest is not.
 
 ## Contents
 
@@ -113,7 +113,7 @@ what "generated is not exercised" in the compiler guide asks for.
    two to six rounds, and reaches for one first; over 1000 seeds the chaos
    dispatcher then entered 36 loops and the osr engine 33. Every one of the
    1000 agreed with the reference on every engine.
-2. **Partly done.** The observing config, three settings that draw nothing
+2. **Done.** The observing config, three settings that draw nothing
    when off: `observe_bindings` (a script statement shows what it binds, a
    function what it holds before it returns), `call_every_function` (the
    script ends by calling what it has not), and `fallible_script` (the top
@@ -140,13 +140,31 @@ what "generated is not exercised" in the compiler guide asks for.
      unit reading a failed unit's binding ran with consts inlined and was
      blocked without (`1026`).
 
-   Still to do: computation from parameters, recursion, and qualified calls,
-   since the script imports only the first function of each name and every
-   module names its functions `fn0`, `fn1` and so on.
+   Then three more settings:
+   `qualified_calls` (a function whose name is already imported is called
+   as `util_0.fn1(...)`, from the script and from modules, about one call a
+   world in two), `compute_from_variables` (bindings, parameters among them,
+   read twice as often as before, and a copy read no longer counted as a
+   move), and `recursion_probability` (a module function whose parameters
+   are all `in` takes `fuel: int`, returns early unless it is 1 to
+   `MAX_FUEL`, 4, and calls itself once with one less; a call passes 1 to 4
+   most of the time). Over 1000 seeds that is about 15800 lines of debug
+   log. `WORLDGEN_ENGINES_WRITE` writes out every world checked, to be read.
+   One bug in 4000 seeds, and a fixture:
+   - A call dropped an `out` argument's destination as it lowered that
+     argument, before the arguments after it, and one of them leaving early
+     left the destination dropped and live: the IR walker read an empty slot
+     in a function, and in a script unit an assertion in the IR broke
+     (`1027`). The drops now come after every argument.
+
+   That one aborted the run rather than failing a seed: the leak check
+   panicked in a destructor while the first panic unwound. It reports
+   instead now, while a thread panics, so the seed is caught and named.
 3. Shrinking, into `fixtures/engines/`; the floors. And each seed in a
    process of its own, or something like it: a crash that is not a panic --
    one early run segfaulted -- takes the whole run down without saying which
-   seed it was. Panics are caught per seed already.
+   seed it was. Panics are caught per seed already, and no longer turned
+   into aborts by the leak check.
 4. What the generator never writes, each taken off `NOT_YET_GENERATED` in
    `coverage_tests` as it lands: standard library calls, data files in
    worldfiles, `rec` types, hex literals, `icall`, a test rider. Then

@@ -63,6 +63,18 @@ pub struct FunctionSig<'db> {
     pub return_type: Option<TypeHint<'db>>,
 }
 
+impl<'db> FunctionSig<'db> {
+    /// Whether it recurses, which it does by a last parameter named `fuel`.
+    pub fn recurses(&self) -> bool {
+        self.params.last().is_some_and(|p| p.name == "fuel")
+    }
+
+    /// The same function, named as a call qualified by `alias` names it.
+    pub fn qualified(&self, alias: &str) -> FunctionSig<'db> {
+        FunctionSig { name: format!("{}.{}", alias, self.name), ..self.C() }
+    }
+}
+
 /// One variant of a generated enum: an atom, or a term over a payload.
 #[derive(Clone)]
 pub struct EnumVariant<'db> {

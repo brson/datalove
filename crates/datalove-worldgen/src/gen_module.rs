@@ -4,7 +4,8 @@ use rmx::prelude::*;
 use bct::random::SeededRng;
 use bct::lookup::LookupSet;
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, ModuleInfo, TypeAlias, FunctionSig};
+use datalove_datalit::ast::TypeHint;
+use crate::context::{GenContext, ModuleInfo, TypeAlias, FunctionSig, Param, ParamMode};
 use crate::gen_type::{gen_type_alias, format_type_alias};
 use crate::gen_function::{gen_function_signature, gen_function};
 use crate::gen_generic::{GenericSig, Shape, gen_generic_function};
@@ -73,7 +74,16 @@ pub fn gen_module_function_sigs<'db>(
 
     for i in 0..count {
         let name = format!("fn{}", i);
-        let sig = gen_function_signature(db, rng, &name, config);
+        let mut sig = gen_function_signature(db, rng, &name, config);
+        // Only where every parameter is `in`, which the self-call can always
+        // pass; a `ref`, a `mut` or an `out` wants a binding the body may
+        // have moved by then.
+        if config.recursion_probability > 0
+            && sig.params.iter().all(|p| p.mode == ParamMode::In)
+            && config.check_probability(rng, config.recursion_probability)
+        {
+            sig.params.push(Param { name: "fuel".S(), type_hint: TypeHint::Int, mode: ParamMode::In });
+        }
         sigs.push(sig);
     }
 
@@ -155,6 +165,8 @@ pub fn gen_module<'db>(
             let import_line = format!("import {}.{}", prior.alias(), func.name);
             if lines.contains(&import_line) {
                 ctx.imported_functions.push(func.C());
+            } else if config.qualified_calls && lines.contains(&format!("require module {}", prior.path())) {
+                ctx.imported_functions.push(func.qualified(prior.alias()));
             }
         }
     }

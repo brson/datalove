@@ -73,6 +73,31 @@ pub struct WorldGenConfig {
     /// returning `!()`, so it can. Off draws nothing.
     pub fallible_script: bool,
 
+    /// Whether a module's function that is not imported, most often because
+    /// a function of its name already is, may be called qualified by its
+    /// module's alias, `util_0.fn1(...)`, from the script and from the
+    /// modules that require its module. Every module names its functions
+    /// `fn0`, `fn1` and so on, so without this the script reaches only the
+    /// first module's. Off draws nothing.
+    pub qualified_calls: bool,
+
+    /// Whether expressions read the bindings in scope, a function's
+    /// parameters among them, more often than they write literals, so that
+    /// what a body computes depends on what it was called with and is not
+    /// all folded at compile time. A binding is read twice as often, a copy
+    /// one read is not counted as moved, and an operand of float arithmetic
+    /// may be one, as an operand of bigint arithmetic already may. Off draws
+    /// nothing.
+    pub compute_from_variables: bool,
+
+    /// The chance a module's function whose parameters are all `in` recurses.
+    ///
+    /// It does so by a last parameter, `fuel: int`: the body returns early
+    /// unless it is between 1 and [`MAX_FUEL`](crate::gen_function::MAX_FUEL),
+    /// and calls itself once, at its top level, with one less. Zero draws
+    /// nothing.
+    pub recursion_probability: u32,
+
     /// Whether a worldfile's script is one fragment rather than a section
     /// for each unit. The AOT backends take only one fragment. A session is
     /// cut into units either way.
@@ -138,6 +163,14 @@ impl WorldGenConfig {
     pub fn check_probability(&self, rng: &mut SeededRng, pct: u32) -> bool {
         rng.random_range(0..100) < pct
     }
+
+    /// How likely an expression is to read a binding where it could.
+    pub fn variable_odds(&self) -> f64 {
+        match self.compute_from_variables {
+            true => 0.8,
+            false => 0.4,
+        }
+    }
 }
 
 impl Default for WorldGenConfig {
@@ -168,6 +201,9 @@ impl Default for WorldGenConfig {
             observe_bindings: false,
             call_every_function: false,
             fallible_script: false,
+            qualified_calls: false,
+            compute_from_variables: false,
+            recursion_probability: 0,
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,

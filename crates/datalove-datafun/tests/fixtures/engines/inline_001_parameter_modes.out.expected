@@ -142,8 +142,8 @@ Analysis(
                     block2:
                         v6 = const "old"
                         store.move s2, v6
-                        drop s2
                         v7 = const "new"
+                        drop s2
                         v20 = clone v7
                         drop.tracked s4
                         store.move.tracked s4, v20
@@ -160,8 +160,8 @@ Analysis(
                         v12 = pack tuple/2 {v10, v11}
                         store.move s3, v12
                         v13 = getfieldref s3.1
-                        drop.ref v13
                         v14 = const "c"
+                        drop.ref v13
                         v28 = clone v14
                         drop.tracked s5
                         store.move.tracked s5, v28

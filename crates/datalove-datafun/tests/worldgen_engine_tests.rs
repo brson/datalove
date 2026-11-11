@@ -24,6 +24,8 @@
 //!   `just test-worldgen-engines` runs more.
 //! - `WORLDGEN_ENGINES_WORLD`: a worldfile to check, rather than any seed, as
 //!   a failing seed prints.
+//! - `WORLDGEN_ENGINES_WRITE`: when set, every world is written out where a
+//!   failing one is, passing or not, to be read.
 //! - `DATALOVE_TEST_ENGINES`: the engines to run, as for `engine_tests`.
 
 mod engines;
@@ -58,6 +60,9 @@ fn config(seed: u64) -> WorldGenConfig {
     config.observe_bindings = true;
     config.call_every_function = true;
     config.fallible_script = true;
+    config.qualified_calls = true;
+    config.compute_from_variables = true;
+    config.recursion_probability = 30;
     config.script_statements = (4, 12);
     config.arithmetic_probability = 50;
     config
@@ -156,11 +161,15 @@ fn main() {
     }
 
     let seeds = env_seeds("WORLDGEN_ENGINES", DEFAULT_SEED, DEFAULT_COUNT);
+    let write_all = std::env::var_os("WORLDGEN_ENGINES_WRITE").is_some();
     let shown = Mutex::new(Shown::default());
     let mut failures: Vec<(u64, String)> = seeds.iter().collect::<Vec<_>>()
         .into_par_iter()
         .filter_map(|seed| {
             let world = gen_worldfile_seeded(seed, config(seed));
+            if write_all {
+                write_out(seed, &world);
+            }
             match check(&world) {
                 Ok(reference) => {
                     shown.lock().X().add(&reference);

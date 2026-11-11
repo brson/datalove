@@ -6,9 +6,13 @@ use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, Param, ParamMode, Variable};
 use crate::gen_type::gen_type_hint;
-use crate::gen_expr::gen_expr;
+use crate::gen_expr::{gen_expr, gen_function_call};
 use crate::gen_stmt::{gen_body_statement, gen_ret};
 use crate::pretty::pretty_type_hint;
+
+/// The most fuel a recursive function recurses on: given more, it returns at
+/// once, so a caller passing what it likes cannot make the recursion deep.
+pub const MAX_FUEL: u32 = 4;
 
 /// Pick how a parameter is passed.
 ///
@@ -141,14 +145,34 @@ pub fn gen_function<'db>(
             ctx.loop_protect_variable(&param.name);
         }
     }
+    // Fuel is read by the self-call, wherever that is, so nothing before it
+    // may move it.
+    if sig.recurses() {
+        ctx.loop_protect_variable("fuel");
+    }
     lines.extend(lead_statements);
 
-    // Generate body statements.
+    // A recursive function returns early when its fuel is out, or more than
+    // it may recurse on, and calls itself at some point among the body's
+    // statements, at the top, so once a call.
     let stmt_count = rng.random_range(config.statements_per_function.0..=config.statements_per_function.1);
+    let recurse_at = match sig.recurses() {
+        true => {
+            lines.push(base_case(db, rng, config, &mut ctx, "fuel <= 0"));
+            lines.push(base_case(db, rng, config, &mut ctx, &format!("fuel .> {MAX_FUEL}")));
+            Some(rng.random_range(0..=stmt_count))
+        }
+        false => None,
+    };
 
-    for _ in 0..stmt_count {
-        let stmt = gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, "  ");
-        lines.push(stmt);
+    for at in 0..=stmt_count {
+        if recurse_at == Some(at) {
+            lines.push(self_call(db, rng, config, sig, &mut ctx, &mut var_counter));
+        }
+        if at < stmt_count {
+            let stmt = gen_body_statement(db, rng, config, &mut ctx, &mut var_counter, "  ");
+            lines.push(stmt);
+        }
     }
 
     // Generate return statement.
@@ -171,4 +195,47 @@ pub fn gen_function<'db>(
 
     lines.push("end fun".S());
     lines.join("\n")
+}
+
+/// An `if` returning when `condition` holds.
+///
+/// What its `ret` moves is moved only on the way out, so the statements after
+/// it may still use it.
+fn base_case<'db>(
+    db: &'db dyn salsa::Database,
+    rng: &mut SeededRng,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    condition: &str,
+) -> String {
+    let consumed = ctx.consumed_variables.C();
+    let ret = gen_ret(db, rng, config, ctx, "    ");
+    ctx.consumed_variables = consumed;
+    format!("  if {}\n{}\n  end if", condition, ret)
+}
+
+/// A recursive function's call of itself, with one less fuel, its answer
+/// bound to a new name where it has one.
+fn self_call<'db>(
+    db: &'db dyn salsa::Database,
+    rng: &mut SeededRng,
+    config: &WorldGenConfig,
+    sig: &FunctionSig<'db>,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+) -> String {
+    let mut without_fuel = sig.C();
+    without_fuel.params.pop();
+    let call = gen_function_call(db, rng, &without_fuel, config, ctx);
+    let call = format!("{}{}fuel - 1)", call.strip_suffix(')').X(), if without_fuel.params.is_empty() { "" } else { ", " });
+    match sig.return_type.C() {
+        Some(ret) => {
+            let name = format!("v{}", *var_counter);
+            *var_counter += 1;
+            let ty = pretty_type_hint(db, ret.C());
+            ctx.variables.push(Variable { name: name.C(), type_hint: ret, is_mutable: false });
+            format!("  let {}: {} = {}", name, ty, call)
+        }
+        None => format!("  call {}", call),
+    }
 }
