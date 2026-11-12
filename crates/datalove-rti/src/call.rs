@@ -1075,8 +1075,8 @@ pub unsafe fn dtlv_rti_table_get_local(rt: LocalRtHandle, table_ref: rtdt::AnyRe
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_table_set_local(rt: LocalRtHandle, table_mut: rtdt::AnyMut<'_>, table_tydesc: &rtdt::TyDesc, row: rtdt::IndexRepr, col: u32, value_ref: rtdt::AnyRef<'_>, value_tydesc: &rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_table_set_local)(rt, table_mut, table_tydesc, row, col, value_ref, value_tydesc) }
+pub unsafe fn dtlv_rti_table_set_local(rt: LocalRtHandle, table_mut: rtdt::AnyMut<'_>, table_tydesc: &rtdt::TyDesc, row: rtdt::IndexRepr, col: u32, value_in: rtdt::AnyOwned<'_>, value_tydesc: &rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_table_set_local)(rt, table_mut, table_tydesc, row, col, value_in, value_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_table_clear_local`](crate::table::RtiTable::dtlv_rti_table_clear_local).

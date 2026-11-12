@@ -2609,7 +2609,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_get_local(
     }
 }
 
-/// Set an element at (row, col).
+/// Replace the element at (row, col), moving the new one in.
+///
+/// A row or column past the end is `Error`. The value is taken either way, as
+/// every value moved into the runtime is: one that does not land is destroyed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_table_set_local(
     rt: LocalRtHandle,
@@ -2617,16 +2620,16 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_set_local(
     table_tydesc: &rtdt::TyDesc,
     row: rtdt::IndexRepr,
     col: u32,
-    value_ref: rtdt::AnyRef<'_>,
+    value_in: rtdt::AnyOwned<'_>,
     value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     lend!("table_set_local";
         table_mut: table_tydesc.size as usize,
-        value_ref: value_tydesc.size as usize,
+        value_in: value_tydesc.size as usize,
     );
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert_aligned(table_mut.as_ptr(), table_tydesc, "table_set:table");
-    debug_assert_aligned(value_ref.as_ptr(), value_tydesc, "table_set:value");
+    debug_assert_aligned(value_in.as_ptr(), value_tydesc, "table_set:value");
     unsafe {
         let tydesc_ref = rtdt::TyDescRef::from_ref(table_tydesc);
         crate::c::impls::table::table_set_element(
@@ -2635,7 +2638,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_set_local(
             tydesc_ref,
             row,
             col,
-            value_ref.as_ptr(),
+            value_in.as_ptr(),
             value_tydesc,
         )
     }

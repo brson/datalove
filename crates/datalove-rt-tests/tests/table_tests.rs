@@ -711,3 +711,102 @@ fn test_table_full_index_refuses_row() {
 
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
 }
+
+// ============================================================================
+// Setting Elements
+// ============================================================================
+
+fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
+    arena.alloc(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::String,
+        flags: 0,
+        size: std::mem::size_of::<rtdt::String>() as u32,
+        align: std::mem::align_of::<rtdt::String>() as u32,
+        type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
+    })
+}
+
+/// A table of one `string` column named "s", and the tuple of a row of it.
+fn create_table_string_tydescs(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let string_tydesc = create_string_tydesc(arena);
+    let (name_ptr, name_len) = arena.alloc_col_name("s");
+    let columns = arena.alloc_col_array(vec![
+        rtdt::TyInfoTableColumn { name: name_ptr, name_len, tydesc: string_tydesc },
+    ]);
+    let table_tydesc = arena.alloc(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Table,
+        flags: 0,
+        size: std::mem::size_of::<rtdt::Table>() as u32,
+        align: std::mem::align_of::<rtdt::Table>() as u32,
+        type_info: rtdt::TyInfo { table: rtdt::TyInfoTable { num_columns: 1, columns } },
+    });
+    let fields = arena.alloc_field_array(vec![rtdt::TyInfoTupleField { offset: 0, tydesc: string_tydesc }]);
+    let row_tydesc = arena.alloc(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Tuple,
+        flags: 0,
+        size: std::mem::size_of::<rtdt::String>() as u32,
+        align: std::mem::align_of::<rtdt::String>() as u32,
+        type_info: rtdt::TyInfo { tuple: rtdt::TyInfoTuple { num_fields: 1, fields } },
+    });
+    (table_tydesc, row_tydesc, string_tydesc)
+}
+
+unsafe fn make_string(rt: datalove_rt::c::LocalRtHandle, tydesc: *const rtdt::TyDesc, s: &str) -> rtdt::String {
+    unsafe {
+        let mut out = std::mem::MaybeUninit::<rtdt::String>::uninit();
+        datalove_rt::c::dtlv_rti_string_create_local(rt, rtdt::AnyOut::new(out.as_mut_ptr() as *mut u8), &*tydesc);
+        let mut string = out.assume_init();
+        datalove_rt::c::dtlv_rti_string_push_bytes_local(
+            rt, rtdt::AnyMut::from_mut(&mut string), &*tydesc, s.as_ptr(), (s.len() as u32).into());
+        string
+    }
+}
+
+/// Setting an element moves the new value in and destroys the old one; past
+/// the end it destroys the new value, which is taken either way. The leak
+/// check sees a value cloned in, as one used to be, or left behind.
+#[test]
+fn test_table_set_moves_the_value_in() {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    let (table_tydesc, row_tydesc, string_tydesc) = create_table_string_tydescs(&arena);
+
+    let mut table = rtdt::Table { len: rtdt::Index::ZERO, capacity: rtdt::Index::ZERO, data: ptr::null() };
+    let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
+    unsafe { datalove_rt::c::dtlv_rti_table_create_local(rt, rtdt::AnyOut::new(table_ptr), &*table_tydesc) };
+
+    // A pushed row is consumed.
+    for text in ["first", "second"] {
+        let row = unsafe { make_string(rt, string_tydesc, text) };
+        unsafe {
+            datalove_rt::c::dtlv_rti_table_push_row_local(
+                rt, rtdt::AnyMut::new(table_ptr), &*table_tydesc, rtdt::AnyRef::from_ref(&row), &*row_tydesc);
+        }
+        std::mem::forget(row);
+    }
+
+    let set = |row: u32, col: u32, text: &str| unsafe {
+        let mut value = make_string(rt, string_tydesc, text);
+        let status = datalove_rt::c::dtlv_rti_table_set_local(
+            rt, rtdt::AnyMut::new(table_ptr), &*table_tydesc, row.into(), col,
+            rtdt::AnyOwned::new(&mut value as *mut rtdt::String as *mut u8), &*string_tydesc);
+        std::mem::forget(value);
+        status
+    };
+    let get = |row: u32| unsafe {
+        let ptr = datalove_rt::c::dtlv_rti_table_get_local(
+            rt, rtdt::AnyRef::new(table_ptr as *const u8), &*table_tydesc, row.into(), 0);
+        (*(ptr as *const rtdt::String)).as_str().S()
+    };
+
+    assert_eq!(set(1, 0, "replaced"), datalove_rt::c::RtStatus::Ok);
+    assert_eq!(get(0), "first");
+    assert_eq!(get(1), "replaced");
+    assert_eq!(set(2, 0, "past the last row"), datalove_rt::c::RtStatus::Error);
+    assert_eq!(set(0, 1, "past the last column"), datalove_rt::c::RtStatus::Error);
+    assert_eq!(get(0), "first");
+    assert_eq!(get(1), "replaced");
+
+    unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, rtdt::AnyOwned::new(table_ptr), &*table_tydesc) };
+    assert_eq!(unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) }, datalove_rt::c::RtStatus::Ok);
+}

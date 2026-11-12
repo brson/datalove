@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 123;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x9b4d72361d7cfbce;
+pub const TABLE_SHAPE: u64 = 0xcfbfefc2358ac3d2;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -126,7 +126,7 @@ pub struct RtiTable {
     pub dtlv_rti_table_push_row_local: unsafe extern "C-unwind" fn(LocalRtHandle, rtdt::AnyMut<'_>, &rtdt::TyDesc, rtdt::AnyRef<'_>, &rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_table_build_from_rows_local: unsafe extern "C-unwind" fn(LocalRtHandle, rtdt::AnyOut<'_>, &rtdt::TyDesc, *mut u8, &rtdt::TyDesc, rtdt::IndexRepr) -> RtStatus,
     pub dtlv_rti_table_get_local: unsafe extern "C-unwind" fn(LocalRtHandle, rtdt::AnyRef<'_>, &rtdt::TyDesc, rtdt::IndexRepr, u32) -> *const u8,
-    pub dtlv_rti_table_set_local: unsafe extern "C-unwind" fn(LocalRtHandle, rtdt::AnyMut<'_>, &rtdt::TyDesc, rtdt::IndexRepr, u32, rtdt::AnyRef<'_>, &rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_table_set_local: unsafe extern "C-unwind" fn(LocalRtHandle, rtdt::AnyMut<'_>, &rtdt::TyDesc, rtdt::IndexRepr, u32, rtdt::AnyOwned<'_>, &rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_table_clear_local: unsafe extern "C-unwind" fn(LocalRtHandle, rtdt::AnyMut<'_>, &rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_table_len: unsafe extern "C-unwind" fn(LocalRtHandle, rtdt::AnyRef<'_>, &rtdt::TyDesc) -> rtdt::IndexRepr,
     pub dtlv_rti_abandon: unsafe extern "C-unwind" fn(LocalRtHandle, u8) -> RtStatus,

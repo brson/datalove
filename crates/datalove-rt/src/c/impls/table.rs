@@ -241,16 +241,18 @@ pub unsafe fn table_get_element_ptr(
     }
 }
 
-/// Set an element at (row, col).
+/// Replace the element at (row, col), moving the new one in.
 ///
-/// Returns Error if row or col is out of bounds.
+/// Returns Error if row or col is out of bounds. The value is taken either
+/// way, as `list_set_impl` takes its element: one that does not land is
+/// destroyed.
 pub unsafe fn table_set_element(
     rt: &mut rt_local::RtLocal,
     table_mut: *mut u8,
     tydesc: rtdt::TyDescRef,
     row: rtdt::IndexRepr,
     col: u32,
-    value_ref: *const u8,
+    value_in: *mut u8,
     value_tydesc: &rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
@@ -258,10 +260,7 @@ pub unsafe fn table_set_element(
         let column_tydescs = collect_column_tydescs(tydesc);
 
         if row >= table.len.0 || col as usize >= column_tydescs.len() {
-            return RtStatus::Error;
-        }
-
-        if table.data.is_null() {
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, value_in, value_tydesc);
             return RtStatus::Error;
         }
 
@@ -280,8 +279,9 @@ pub unsafe fn table_set_element(
             return status;
         }
 
-        // Clone new value into place.
-        crate::c::impls::clone::clone_value(rt, value_ref, value_tydesc, dst)
+        // Move the new value into place.
+        rtdt::bytes::copy_value(value_in, dst, col_tydesc.size as usize);
+        RtStatus::Ok
     }
 }
 
