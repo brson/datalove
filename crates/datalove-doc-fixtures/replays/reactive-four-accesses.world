@@ -1,0 +1,107 @@
+// The four accesses example of mandocs/drafts/reactive-script-semantics.md, from
+// reactive/four-accesses.world, as the session its replay plays.
+----------
+scriptunit-fragment
+----------
+
+let a = 1
+
+----------
+scriptunit-fragment
+----------
+
+let b = 2
+
+----------
+scriptunit-fragment
+----------
+
+var c = 3
+
+----------
+scriptunit-fragment
+----------
+
+var d = 4
+
+----------
+scriptunit-fragment
+----------
+
+let e = a + 10
+let f = b
+set c = 30
+set d = d * 2
+
+----------
+expect all five units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `a` = 1 |
+| 2 | - | compiles, runs | new | `b` taken |
+| 3 | - | compiles, runs | new | `c` = 30 |
+| 4 | - | compiles, runs | new | `d` = 8 |
+| 5 | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | compiles, runs | new | `e` = 11, `f` = 2 |
+
+----------
+repl-command
+----------
+
+/edit 5 let e = a + 100
+let f = b
+set c = 30
+set d = d * 2
+
+----------
+expect unit 5 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 5 only reads `a` | `a` = 1 |
+| 2 | - | reruns | rerun: unit 5 took `b` when it last ran, and the edit retracts that | `b` taken |
+| 3 | - | untouched | unit 5 overwrites `c` without reading it | `c` = 30 |
+| 4 | - | reruns | rerun: unit 5 updated `d` when it last ran, and the edit retracts that | `d` = 8 |
+| 5 | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompiles, runs | edited | `e` = 101, `f` = 2 |
+
+----------
+repl-command
+----------
+
+/edit 1 let a = 2
+
+----------
+expect unit 1 is edited
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | recompiles, runs | edited | `a` = 2 |
+| 2 | - | reruns | rerun: unit 5 reruns and takes `b`, which it took when it last ran | `b` taken |
+| 3 | - | untouched | unit 5 overwrites `c` without reading it | `c` = 30 |
+| 4 | - | reruns | rerun: unit 5 reruns and updates `d`, which it updated when it last ran | `d` = 8 |
+| 5 | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | reruns | reads `a` from unit 1 | `e` = 102, `f` = 2 |
+
+----------
+repl-command
+----------
+
+/edit 5 let e = a + 100
+let f = b
+set c = 30
+set d = d * 2
+let x = y
+
+----------
+expect unit 5 is broken
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 5 only read `a` | `a` = 2 |
+| 2 | - | reruns | rerun: unit 5 took `b` when it last ran, and is retracted | `b` = 2 |
+| 3 | - | reruns | rerun: unit 5 overwrote `c` when it last ran, and is retracted | `c` = 3 |
+| 4 | - | reruns | rerun: unit 5 updated `d` when it last ran, and is retracted | `d` = 4 |
+| 5 | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompile fails | edited | - |

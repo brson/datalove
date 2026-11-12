@@ -64,7 +64,7 @@ I did not prove correctness.
 - [But what about edits that change which names later units can use?](#user-content-but-what-about-edits-that-change-which-names-later-units-can-use)
 - [A third set of rules: breaks and fixes](#user-content-a-third-set-of-rules-breaks-and-fixes)
 - [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
-- [A complete set of recursive rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-recursive-rules-for-recompiles-and-reruns-for-moves-and-mutations)
+- [A complete set of rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-rules-for-recompiles-and-reruns-for-moves-and-mutations)
 
 **Part 3. Results and Discussion**
 
@@ -612,6 +612,20 @@ unit 5 won't run to overwrite it.
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updated `d` when it last ran, and is retracted | `d` = 4 |
 | 5 | `let e = a + 100; ...; let x = y` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompile fails | edited | - |
 
+Here are those four steps replayed from the actual Datalove scripting engine,
+presented in the style of the Datalove interactive CLI.
+Step through it with Run and Back:
+
+<!--
+The replay is recorded from
+crates/datalove-doc-fixtures/replays/reactive-four-accesses.world;
+run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
+-->
+
+<div class="datalove-replay" data-replay="reactive-four-accesses"></div>
+<script src="../assets/datalove-replay.js"></script>
+<script src="../assets/reactive-four-accesses.replay.js"></script>
+
 So a unit's access to an earlier binding decides which earlier units rerun.
 If the access is an overwrite then the nature of the modification
 also matters: if an overwrite is edited the earlier unit does not need to rerun,
@@ -678,8 +692,7 @@ so does not rerun,
 and the units after that one see what it wrote,
 so they do not rerun.
 
-_A rerun is an edit that doesn't change the code_,
-so a unit rerun this way gets the edit column too,
+_A rerun is like an edit that doesn't change the code_,
 and triggers the same analysis recursively
 to find the full set of units that must rerun.
 
@@ -751,6 +764,17 @@ and unit 3, which runs after it.
 | 1 | `var b = 125` | - | reruns | rerun: unit 2 updated `b` when it last ran, and the edit retracts that | `b` = 126 |
 | 2 | `let c = b + 1` | reads `b` (1) | recompiles, runs | edited | `c` = 126 |
 | 3 | `set b = b + 1` | updates `b` (1) | reruns | rerun: updates `b`, which unit 1 rebuilt | - |
+
+The same session, replayed from the Datalove scripting engine:
+
+<!--
+The replay is recorded from
+crates/datalove-doc-fixtures/replays/reactive-edit-changes-access.world;
+run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
+-->
+
+<div class="datalove-replay" data-replay="reactive-edit-changes-access"></div>
+<script src="../assets/reactive-edit-changes-access.replay.js"></script>
 
 So an edit is two modifications.
 It retracts what the old code did,
@@ -921,6 +945,17 @@ so it is fixed.
 Unit 4 is fixed without recompiling:
 its compile from step 1 is still memoized.
 
+The same session, replayed from the Datalove scripting engine:
+
+<!--
+The replay is recorded from
+crates/datalove-doc-fixtures/replays/reactive-add-move.world;
+run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
+-->
+
+<div class="datalove-replay" data-replay="reactive-add-move"></div>
+<script src="../assets/reactive-add-move.replay.js"></script>
+
 The opposite of a take is a _revive_,
 an overwrite of a `var` that an earlier unit gave away.
 It gives the name back,
@@ -1009,6 +1044,17 @@ and unit 4 can name `b` again.
 | 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
 | 3 | `set b = 500` | revives `b` (1) | recompiles, runs | edited | - |
 | 4 | `let c = b + 1` | reads `b` (1) | reruns | `b` can be named again, as it could in step 1, whose compile is still memoized | `c` = 501 |
+
+The same session, replayed from the Datalove scripting engine:
+
+<!--
+The replay is recorded from
+crates/datalove-doc-fixtures/replays/reactive-revive.world;
+run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
+-->
+
+<div class="datalove-replay" data-replay="reactive-revive"></div>
+<script src="../assets/reactive-revive.replay.js"></script>
 
 
 
@@ -1134,6 +1180,17 @@ though unit 4 never names `z`.
 | 4 | `let c = b + 2` | reads `b` (1) | recompiles, runs | edited | `c` = 502 |
 | 5 | `set b = 0` | overwrites `b` (1) | reruns | rerun: overwrites `b` after unit 4 | - |
 
+The same session, replayed from the Datalove scripting engine:
+
+<!--
+The replay is recorded from
+crates/datalove-doc-fixtures/replays/reactive-rerun-needs-rerun.world;
+run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
+-->
+
+<div class="datalove-replay" data-replay="reactive-rerun-needs-rerun"></div>
+<script src="../assets/reactive-rerun-needs-rerun.replay.js"></script>
+
 A chain of moves walks back one link at a time.
 Here `w` is made from `a2`, which was made from `a`.
 
@@ -1196,10 +1253,21 @@ but it took `a2` the last time it ran,
 so unit 2 reruns first,
 and that took `a`, so unit 1 reruns before it.
 
+The same session, replayed from the Datalove scripting engine:
+
+<!--
+The replay is recorded from
+crates/datalove-doc-fixtures/replays/reactive-rerun-through-moves.world;
+run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
+-->
+
+<div class="datalove-replay" data-replay="reactive-rerun-through-moves"></div>
+<script src="../assets/reactive-rerun-through-moves.replay.js"></script>
 
 
 
-## A complete set of recursive rules for recompiles and reruns for moves and mutations
+
+## A complete set of rules for recompiles and reruns for moves and mutations
 
 <!--
 _Therefore_ we propose an algorithm and suggest it is complete.
@@ -1589,5 +1657,4 @@ run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
 -->
 
 <div class="datalove-replay" data-replay="reactive-transactions"></div>
-<script src="../assets/datalove-replay.js"></script>
 <script src="../assets/reactive-transactions.replay.js"></script>

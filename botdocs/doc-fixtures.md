@@ -146,6 +146,10 @@ player goes:
 <script src="../assets/reactive-transactions.replay.js"></script>
 ```
 
+A page with several replays loads the player once, before the first, and
+each trace after its own `div`; registering a trace mounts it on every
+element that names it, so the order of the `div`s does not matter.
+
 The trace is a `.js` file calling `DataloveReplay.register(name, trace)`
 rather than JSON the player fetches, so a page opened from the disk plays
 too. `DataloveReplay.mount(element, trace)` puts a player in an element

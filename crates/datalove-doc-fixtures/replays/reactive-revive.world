@@ -1,0 +1,71 @@
+// The revive example of mandocs/drafts/reactive-script-semantics.md, as the
+// session its replay plays. reactive/revive.world goes further.
+----------
+scriptunit-fragment
+----------
+
+var b = 125
+
+----------
+scriptunit-fragment
+----------
+
+let b_moved = b
+
+----------
+scriptunit-fragment
+----------
+
+set b = 500
+
+----------
+scriptunit-fragment
+----------
+
+let c = b + 1
+
+----------
+expect all four units are entered
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | compiles, runs | new | `b` = 500 |
+| 2 | takes `b` (1) | compiles, runs | new | `b_moved` = 125 |
+| 3 | revives `b` (1) | compiles, runs | new | - |
+| 4 | reads `b` (1) | compiles, runs | new | `c` = 501 |
+
+----------
+repl-command
+----------
+
+/edit 3 set b = 500
+let x = y
+
+----------
+expect unit 3 is broken
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | reruns | rerun: unit 3 revived `b` when it last ran, and is retracted | `b` taken |
+| 2 | takes `b` (1) | reruns | rerun: takes `b`, which unit 1 rebuilt | `b_moved` = 125 |
+| 3 | revives `b` (1) | recompile fails | edited | - |
+| 4 | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
+
+----------
+repl-command
+----------
+
+/edit 3 set b = 500
+
+----------
+expect unit 3 is fixed
+----------
+
+| unit | uses | this step | because | holds after |
+|------|------|-----------|---------|-------------|
+| 1 | - | untouched | unit 3 overwrites `b` without reading it | `b` = 500 |
+| 2 | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
+| 3 | revives `b` (1) | recompiles, runs | edited | - |
+| 4 | reads `b` (1) | reruns | `b` can be named again, as it could in step 1, whose compile is still memoized | `c` = 501 |
