@@ -250,14 +250,18 @@ doc. The datalit fixture `79_atom_then_hinted_term_of_its_name` holds it in
 The third part takes datafun: a slice of
 [its typing rules](datafun-typing-rules.md), written from the doc as the
 literal typing was (`formal/Datalove/Fun.lean`). The slice is scripts of
-functions and statements: `let`, `var`, `set` with or without an operator
-and through fields and indexes, `if` and the binding `if`, `loop` and
-`loop while`, `for`, `break`, `continue`, `ret`, `debuglog` and `call`;
-datalit's literal forms, which datafun types by datalit's rules with a
-context added; and datafun's variables, places with field and index steps,
-fields and indexes of what is not a place, operators, `?`, `!`, `@` and
-calls, each in a borrowed position or not. It leaves out generics, modules
-and requires, consts, type aliases, patterns and `match`. Inference is
+functions, type aliases and statements: `let` and `var`, binding a name or a
+pattern, `set` with or without an operator and through fields and indexes,
+`if` and the binding `if`, `loop` and `loop while`, `for`, `match`,
+`break`, `continue`, `ret`, `debuglog` and `call`; datalit's literal forms,
+which datafun types by datalit's rules with a context added; and datafun's
+variables, places with field and index steps, fields and indexes of what is
+not a place, operators, `?`, `!`, `@` and calls, each in a borrowed position
+or not. It leaves out generics, modules and requires, and consts. A script's
+aliases and its functions' signatures are resolved first, in the order they
+are written, each seeing the aliases above it, as the Rust's name
+resolution does; hint conversion is datalit's with the aliases in scope
+(`Hint.convertWith`), and so is its `rec` checking. Inference is
 datalit's, extended by the doc's table: the `@` class lives in `Lit.lean`'s
 unifier, as datafun's lives in datalit's in the Rust, and so does an
 `unknown` class for what inference cannot read, which the Rust marks by a
@@ -300,6 +304,11 @@ What it found:
   checked as any negation is: there F016, and F026 for `-(: i64 / 8)`. A
   mutation that changed a binding's type from `int` to `u8` found it; the
   error fixture `128_negated_literal_with_a_hint` holds it.
+- **Aliases, patterns and `match` agreed on the first run**, the corpus
+  and the generated scripts alike, worldgen now writing enums under aliases
+  and matching on them, and a mutation damaging a `match`'s cases. Writing
+  them down settled recovery the doc had not said, now in
+  [Going on after an error](datafun-typing-rules.md#user-content-going-on-after-an-error).
 - **Two of the model's own rules were wrong**, found when projections
   widened what the tests reach. A literal form with no rule for the
   expected type inferred itself first, so `ret some x` with `x` unbound was
@@ -324,7 +333,7 @@ What it found:
   the bound writes what it wrote before; three hundred default-configured
   worlds are byte for byte the same.
 
-Two things are proved of it:
+Three things are proved of it:
 
 - **Every early return fits the function** (`Fun.checkFun_early_returns_fit`,
   in `Proofs/EarlyReturn.lean`). A function whose check reports nothing has
@@ -341,8 +350,19 @@ Two things are proved of it:
   that finishes normally, against a semantics of control flow in which any
   statement holding an expression may return early, a condition may go either
   way, and a loop runs until a `break`, a return or, for `loop while`, its
-  condition, as a `for` does. So a function F063 lets through always
-  returns. Saying a `loop while` cannot complete breaks the proof.
+  condition, as a `for` does, and a `match` runs one of its arms or its
+  default. So a function F063 lets through always returns. Saying a
+  `loop while` cannot complete breaks the proof.
+- **A `match` that is let through covers its enum**
+  (`Fun.checkMatch_exhaustive`, in `Proofs/Exhaustive.lean`). A `match`
+  whose check reports nothing takes apart an enum its input synthesizes,
+  names each variant at most once, each with a case of its kind of a variant
+  the enum has, and with no default names every variant: a value of the
+  enum reaches exactly one case, or the default. That is what lets the
+  semantics above, and the Rust's `reachable.rs`, give a `match` no way of
+  falling through. Taking out F100 or F097 breaks the proof. It finds a
+  variant by name, as the Rust does, so "exactly one" rests on an enum's
+  variant names being distinct, which the model does not state.
 
 To make these provable, checking was made total: it takes inference as a
 parameter (`InferEnv`), which only says what types are and so cannot move an
@@ -410,13 +430,15 @@ In rough order of what to do next:
   but that the value is one of the type needs a value semantics for datafun's
   expressions, which only datalit's literals have (`Lit.check_sound`).
 - **The rest of datafun.** Generics, whose substitution lemma is what
-  monomorphization relies on, modules, consts, patterns and `match` are
-  outside the slice. The serde AST already
-  carries them; the model and the generator's configuration are what widen.
-- **Aliases and type parameters in hints.** The model takes datalit's
-  hints, with no aliases or type parameters, so T063 for an alias and the
-  conversion's T066 check are not modelled. `Ty.WF` states T066 for a type
-  parameter already in a `Ty`, and the generator makes few of those.
+  monomorphization relies on, modules and consts are outside the slice. The
+  serde AST already carries them; the model and the generator's
+  configuration are what widen.
+- **Type parameters in hints, and aliases in the conversion proof.** Hints
+  convert with aliases, but not type parameters, so the conversion's T066
+  check is not modelled. `Hint.convert_wf` is proved of the conversion with
+  no aliases, datalit's; with them, it would need each alias's type well
+  formed, and a recursive one kept out of keys, which the conversion checks
+  (T065) and the proof does not yet use.
 - **The random generator rarely makes a type that starts with two `rec`s**,
   so the transitivity chains in `law_tests` would not have found the third
   hole above; the exhaustive test does.

@@ -895,6 +895,15 @@ afterwards, decides which faults after the first are reported:
   bound.
 - **A failed call** binds nothing, as for any value that does not
   synthesize.
+- **A `match`** whose input does not synthesize, or is not an enum (F096),
+  checks no case. A second case of a variant (F097) is reported and its body
+  left unchecked. A case of a variant the enum has not (F099), or of the
+  wrong kind (F098), still counts as naming it, so it adds no F100, and its
+  body is checked with nothing bound.
+- **A pattern** that does not fit (F071) binds none of its names.
+- **An alias** whose body does not convert is reported and names nothing, so
+  a later alias may take the name; an alias of a name taken (F066) is
+  refused without its body being converted, and the first stays.
 
 The Lean model of these rules ([Proving the Type System](formal.md)) does the
 same, and its tests hold the Rust to it.

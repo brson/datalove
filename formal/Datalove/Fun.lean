@@ -4,11 +4,12 @@ import Datalove.Classes
 /-!
 # Datafun's statements and expressions
 
-A first slice of `botdocs/datafun-typing-rules.md`, written from the doc:
-scripts of functions and statements, with no generics, modules, consts,
-patterns or `match`. A script's top level is a
-body returning `!()`; a function's body sees its parameters and nothing else
-the script binds.
+A slice of `botdocs/datafun-typing-rules.md`, written from the doc: scripts
+of functions, type aliases and statements, `match` and patterns included,
+with no generics, modules or consts. A script's top level is a body
+returning `!()`; a function's body sees its parameters, and the aliases
+declared above it, and nothing else the script binds. The aliases and
+signatures are resolved before anything is checked (`resolveNames`).
 
 Expressions are datalit's literal forms, which datafun types by datalit's
 rules with a context added, and datafun's own: variables, places with field
@@ -36,7 +37,7 @@ are the oracle for `crates/datalove-formal-tests/tests/fun_tests.rs`.
 
 namespace Datalove.Fun
 
-open Datalove.Lit (PTy InferM fresh prune unify resolve convertHint Code unknownCode intRange hexBits
+open Datalove.Lit (PTy InferM fresh prune unify resolve Code unknownCode intRange hexBits
   tysList fieldsList)
 
 inductive BinOp where
@@ -119,11 +120,23 @@ inductive Step where
 
 end
 
+/-- What a `let` or `var` binds: a name, or a pattern one level deep that
+takes the value apart. -/
+inductive Pat where
+  | name (x : String)
+  /-- `(x₁, ..., xₙ)`; `()` is the empty one. -/
+  | tuple (xs : List String)
+  /-- `{ℓ₁ = x₁, ..., ℓₙ = xₙ}`, in any order. -/
+  | struct (fs : List (String × String))
+  | atom (a : String)
+  | term (a x : String)
+  deriving Inhabited
+
 mutual
 
 inductive Stmt where
-  | let_ (x : String) (hint : Option Hint) (e : Expr)
-  | var_ (x : String) (hint : Option Hint) (e : Option Expr)
+  | let_ (p : Pat) (hint : Option Hint) (e : Expr)
+  | var_ (p : Pat) (hint : Option Hint) (e : Option Expr)
   | set_ (x : String) (steps : List Step) (op : Option BinOp) (e : Expr)
   | fun_ (f : FunDecl)
   | ret (e : Option Expr)
@@ -138,6 +151,17 @@ inductive Stmt where
   | call (e : Expr)
   /-- `for x̄ in ref p ... end for`. -/
   | for_ (names : List String) (coll : Expr) (body : List Stmt)
+  /-- `type n: h`, an alias, at a script's top level. -/
+  | type_ (n : String) (h : Hint)
+  /-- `match e ... end match`: its cases in order, and its `case default`. -/
+  | match_ (e : Expr) (cases : List Case) (dflt : Option (List Stmt))
+  deriving Inhabited
+
+/-- A `match`'s case: `case atom a`, or `case term a x`, binding the payload
+to `x`. -/
+inductive Case where
+  | atom (a : String) (body : List Stmt)
+  | term (a x : String) (body : List Stmt)
   deriving Inhabited
 
 inductive FunDecl where
@@ -146,6 +170,14 @@ inductive FunDecl where
   deriving Inhabited
 
 end
+
+/-- A case's variant's name. -/
+def Case.name : Case → String
+  | .atom a _ | .term a _ _ => a
+
+/-- A case's body. -/
+def Case.body : Case → List Stmt
+  | .atom _ b | .term _ _ b => b
 
 /-! ## Contexts -/
 
@@ -175,6 +207,8 @@ structure Ctx where
   /-- Whether this is an argument passed `mut` or `out`, which no tensor view
   may be (F073). -/
   mutArg : Bool := false
+  /-- The aliases declared before this point of the script. -/
+  aliases : Aliases := []
 
 /-- A borrowed position: an operand, the operand of `@`, `debuglog`'s
 argument, a compound `set`'s value, a `for`'s collection. -/
@@ -183,6 +217,21 @@ def Ctx.borrow (Γ : Ctx) : Ctx := { Γ with borrowed := true }
 /-- An argument's position, by its parameter's mode. -/
 def Ctx.forArg (Γ : Ctx) (m : Mode) : Ctx :=
   { Γ with borrowed := m != .in_, mutArg := m == .mut || m == .out }
+
+/-- A conversion's error as datafun reports it: a name that names no alias
+nor `rec` is F064, where datalit says T059. -/
+def convErrCode : ConvErrKind → Code
+  | .unbound => "F064"
+  | k => Lit.errCode k
+
+/-- A hint as a type, where names stand for `aliases`. -/
+def convertIn (aliases : Aliases) (h : Hint) : Except Code Ty :=
+  match h.convertWith aliases with
+  | .ok t => .ok t
+  | .error e => .error (convErrCode e.kind)
+
+/-- A hint as a type, under the aliases in scope. -/
+def Ctx.hint (Γ : Ctx) (h : Hint) : Except Code Ty := convertIn Γ.aliases h
 
 def Ctx.lookup (Γ : Ctx) (x : String) : Option (Ty × Kind) :=
   (Γ.vars.find? (·.1 == x)).map (·.2)
@@ -331,7 +380,7 @@ mutual
 /-- `⊢ e ⇝ τ`: datalit's rules for the literal forms, and the doc's table for
 datafun's. Nothing here fails: what cannot be read is `unknown`. -/
 partial def infer (Γ : Ctx) : Expr → InferM PTy
-  | .hinted h _ => match convertHint h with
+  | .hinted h _ => match Γ.hint h with
     | .ok t => pure (.known t)
     | .error _ => fresh .unknown
   | .tt | .ff => pure (.known .bool)
@@ -522,7 +571,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
     let Γ := Γ₀.enter e
     match e with
     | .hinted h inner => do
-      let t ← liftE (convertHint h)
+      let t ← liftE (Γ.hint h)
       checkForm env n Γ inner t
       pure t
     | .var x => match Γ.lookup x with
@@ -753,7 +802,7 @@ def argsF (env : InferEnv) : Nat → Ctx → List (Option Mode × Expr) → List
 def checkF (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
   | 0, _, _, _ => throw "fuel"
   | n + 1, Γ, .hinted h inner, expected => do
-    let hinted ← liftE (convertHint h)
+    let hinted ← liftE (Γ.hint h)
     if !hinted.meet expected then throw "T040"
     checkForm env n (Γ.enter (.hinted h inner)) inner expected
   | n + 1, Γ, e, expected => checkForm env n (Γ.enter e) e expected
@@ -938,7 +987,20 @@ def completesS : Stmt → Bool
   | .if_ _ _ _ t (Option.some e) => completes t || completes e
   | .loop (Option.some _) _ => true
   | .loop Option.none body => hasBreak body
+  -- No falling out of a `match`: it has a case for every variant or a
+  -- default (`Proofs/Exhaustive.lean`), so an arm that completes is the only
+  -- way through.
+  | .match_ _ cases dflt => casesComplete cases || completesElse dflt
   | _ => true
+
+/-- Whether any case's body completes. -/
+def casesComplete : List Case → Bool
+  | [] => false
+  | .atom _ b :: cs | .term _ _ b :: cs => completes b || casesComplete cs
+
+def completesElse : Option (List Stmt) → Bool
+  | Option.none => false
+  | Option.some e => completes e
 
 /-- Whether a body holds a `break` belonging to the loop it is the body of:
 not one inside a nested loop. -/
@@ -949,7 +1011,12 @@ def hasBreak : List Stmt → Bool
 def hasBreakS : Stmt → Bool
   | .brk => true
   | .if_ _ _ _ t e => hasBreak t || hasBreakElse e
+  | .match_ _ cases dflt => casesBreak cases || hasBreakElse dflt
   | _ => false
+
+def casesBreak : List Case → Bool
+  | [] => false
+  | .atom _ b :: cs | .term _ _ b :: cs => hasBreak b || casesBreak cs
 
 def hasBreakElse : Option (List Stmt) → Bool
   | Option.none => false
@@ -957,29 +1024,58 @@ def hasBreakElse : Option (List Stmt) → Bool
 
 end
 
-def convertReporting (h : Hint) : StateM (Array Code) (Option Ty) :=
-  runChk (liftE (convertHint h))
+def convertReporting (Γ : Ctx) (h : Hint) : StateM (Array Code) (Option Ty) :=
+  runChk (liftE (Γ.hint h))
 
 def bindOpt (Γ : Ctx) (x : Option String) (t : Ty) : Ctx :=
   match x with
   | Option.some x => Γ.bind x t .let_
   | Option.none => Γ
 
+/-- What a pattern binds taking apart a value of type `t` (Pat-Var,
+Pat-Tuple, Pat-Struct, Pat-Atom, Pat-Term), or F071. A name binds the value
+whole; any other pattern sees the parts of a recursive type's unfolding. A
+struct pattern names every field, and no other; an enum is taken apart by
+`match`, not by a pattern. -/
+def patBindings (p : Pat) (t : Ty) : Except Code (List (String × Ty)) :=
+  match p, t.expose with
+  | .name x, _ => pure [(x, t)]
+  | .tuple xs, .tuple ts =>
+    if xs.length == (tysList ts).length then pure (xs.zip (tysList ts)) else throw "F071"
+  | .struct fs, .struct ts =>
+    let tl := fieldsList ts
+    if fs.any (fun (f, _) => (tl.lookup f).isNone) then throw "F071"
+    else if tl.any (fun (f, _) => !fs.any (·.1 == f)) then throw "F071"
+    else pure (fs.filterMap fun (f, x) => (tl.lookup f).map (x, ·))
+  | .atom a, .atom b => if a == b then pure [] else throw "F071"
+  | .term a x, .term b p => if a == b then pure [(x, p)] else throw "F071"
+  | _, _ => throw "F071"
+
+def Ctx.bindAllAs (Γ : Ctx) (Δ : List (String × Ty)) (k : Kind) : Ctx :=
+  Δ.foldl (fun Γ (x, t) => Γ.bind x t k) Γ
+
+/-- Bind what a pattern takes out of a `t`; one that does not fit is
+reported, and binds nothing. -/
+def bindPat (Γ : Ctx) (p : Pat) (t : Ty) (k : Kind) : StateM (Array Code) Ctx :=
+  match patBindings p t with
+  | .ok Δ => pure (Γ.bindAllAs Δ k)
+  | .error c => modify (·.push c) >>= fun _ => pure Γ
+
 /-- A `let` or `var` with a value. A hint is the type the name is bound at
 whatever the value does; with none, a value that does not synthesize leaves
 the name unbound. -/
-def bindChecked (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (hint : Option Hint) (e : Expr)
+def bindChecked (env : InferEnv) (n : Nat) (Γ : Ctx) (p : Pat) (hint : Option Hint) (e : Expr)
     (k : Kind) : StateM (Array Code) Ctx := do
   match hint with
   | Option.some h =>
-    match ← convertReporting h with
+    match ← convertReporting Γ h with
     | Option.none => pure Γ
     | Option.some t =>
       let _ ← runChk (checkF env n Γ e t)
-      pure (Γ.bind x t k)
+      bindPat Γ p t k
   | Option.none =>
     match ← runChk (synthF env n Γ e) with
-    | Option.some t => pure (Γ.bind x t k)
+    | Option.some t => bindPat Γ p t k
     | Option.none => pure Γ
 
 /-- What a `for` binds walking a collection, by the doc's table: an element,
@@ -1096,6 +1192,13 @@ def checkSet (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (steps : List St
     reportModes Γ (setModes steps) >>= fun _ =>
     setSteps env n Γ t op e steps
 
+/-- `type n: h`: the aliases with `n` naming `h`'s type, or what is wrong. A
+name an alias already has is F066, its body not looked at; a body that does
+not convert leaves the name unnamed, for a later alias to take. -/
+def defineAlias (aliases : Aliases) (n : String) (h : Hint) : Except Code Aliases :=
+  if (aliases.lookup n).isSome then .error "F066"
+  else (fun t => aliases ++ [(n, t)]) <$> convertIn aliases h
+
 /-- `ret` and `ret e` (F052, F053, Ret). -/
 def checkRet (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Option Expr) : StateM (Array Code) Unit :=
   match Γ.ret, e with
@@ -1111,11 +1214,11 @@ so that `Proofs/EarlyReturn.lean` can follow each step. -/
 def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) Ctx
   | 0, Γ, _ => modify (·.push "fuel") >>= fun _ => pure Γ
   | n + 1, Γ, s => match s with
-    | .let_ x hint e => bindChecked env n Γ x hint e .let_
-    | .var_ x hint (Option.some e) => bindChecked env n Γ x hint e .var_
-    | .var_ x (Option.some hint) Option.none =>
-      convertReporting hint >>= fun r => match r with
-      | Option.some t => pure (Γ.bind x t .var_)
+    | .let_ p hint e => bindChecked env n Γ p hint e .let_
+    | .var_ p hint (Option.some e) => bindChecked env n Γ p hint e .var_
+    | .var_ p (Option.some hint) Option.none =>
+      convertReporting Γ hint >>= fun r => match r with
+      | Option.some t => bindPat Γ p t .var_
       | Option.none => pure Γ
     | .var_ _ Option.none Option.none => pure Γ
     | .set_ x steps op e => checkSet env n Γ x steps op e >>= fun _ => pure Γ
@@ -1166,6 +1269,24 @@ def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) C
       | Option.some t => reportIf (t != unitTy) "F095"
       | Option.none => pure ()) >>= fun _ =>
       pure Γ
+    -- Reported when the script's names were resolved (`checkScript`); here
+    -- the alias only comes into scope.
+    | .type_ x h => pure (match defineAlias Γ.aliases x h with
+      | .ok aliases => { Γ with aliases }
+      | .error _ => Γ)
+    -- The input must be an enum (F096); with it, each case, then the
+    -- default, and a variant no case covers with no default is F100.
+    | .match_ e cases dflt =>
+      runChk (synthF env n Γ e) >>= fun r =>
+      (match r with
+      | Option.none => pure ()
+      | Option.some t => match t.expose with
+        | .enum vs =>
+          checkCases env n Γ vs.toList cases [] >>= fun covered =>
+          checkElse env n Γ dflt >>= fun _ =>
+          reportIf (dflt.isNone && vs.toList.any (fun (v, _) => !covered.contains v)) "F100"
+        | _ => modify (·.push "F096")) >>= fun _ =>
+      pure Γ
     | .for_ names coll body =>
       forBindings env n Γ names coll >>= fun r =>
       (match r with
@@ -1174,6 +1295,27 @@ def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) C
       -- unchecked.
       | Option.none => pure ()) >>= fun _ =>
       pure Γ
+
+/-- A `match`'s cases in order (Match), against the variants of the enum it
+takes apart, and the names they have covered so far, which it returns. A
+second case of a name is F097, and its body is not checked. A case of a
+name the enum has not is F099, and of the wrong kind F098; either still
+covers the name, and its body is checked with nothing bound. -/
+def checkCases (env : InferEnv) : Nat → Ctx → List (String × Option Ty) → List Case → List String →
+    StateM (Array Code) (List String)
+  | 0, _, _, _, covered => modify (·.push "fuel") >>= fun _ => pure covered
+  | _ + 1, _, _, [], covered => pure covered
+  | n + 1, Γ, vs, c :: cs, covered =>
+    if covered.contains c.name then
+      modify (·.push "F097") >>= fun _ => checkCases env n Γ vs cs covered
+    else
+      (match c, vs.lookup c.name with
+      | .atom _ b, Option.some p => reportIf p.isSome "F098" >>= fun _ => checkBlockF env n Γ b
+      | .term _ x b, Option.some (Option.some p) => checkBlockF env n (Γ.bind x p .let_) b
+      | .term _ _ b, Option.some Option.none =>
+        modify (·.push "F098") >>= fun _ => checkBlockF env n Γ b
+      | c, Option.none => modify (·.push "F099") >>= fun _ => checkBlockF env n Γ c.body) >>= fun _ =>
+      checkCases env n Γ vs cs (covered ++ [c.name])
 
 /-- An `else` body, if there is one. -/
 def checkElse (env : InferEnv) : Nat → Ctx → Option (List Stmt) → StateM (Array Code) Unit
@@ -1193,12 +1335,13 @@ def checkBlock (Γ : Ctx) (ss : List Stmt) : StateM (Array Code) Unit := checkBl
 
 /-! ## Scripts -/
 
-/-- A function's signature, or the code of what is wrong with it. -/
-def sigOf : FunDecl → Except Code Sig
+/-- A function's signature, or the code of what is wrong with it, under the
+aliases declared before it. -/
+def sigOf (aliases : Aliases) : FunDecl → Except Code Sig
   | .mk _ params ret _ => do
-    let ps ← params.mapM fun (m, _, h) => do pure (m, ← convertHint h)
+    let ps ← params.mapM fun (m, _, h) => do pure (m, ← convertIn aliases h)
     let r ← match ret with
-      | Option.some h => Ret.ty <$> convertHint h
+      | Option.some h => Ret.ty <$> convertIn aliases h
       | Option.none => pure .void
     pure { params := ps, ret := r }
 
@@ -1211,36 +1354,51 @@ def FunDecl.name : FunDecl → String
 
 /-- A function's body under its parameters (Fun), and F063 if it has a
 return type and can reach its end. A function whose signature is not well
-formed is not in `sigs`, and its body is not checked. -/
-def checkFun (sigs : List (String × Sig)) : FunDecl → StateM (Array Code) Unit
+formed is not in `sigs`, and its body is not checked. It sees the aliases
+declared before it. -/
+def checkFun (sigs : List (String × Sig)) (aliases : Aliases) : FunDecl → StateM (Array Code) Unit
   | .mk name params _ body =>
     match sigs.lookup name with
     | Option.none => pure ()
     | Option.some sig =>
       let vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m)
-      checkBlock { vars, ret := sig.ret, sigs } body >>= fun _ =>
+      checkBlock { vars, ret := sig.ret, sigs, aliases } body >>= fun _ =>
       reportIf (match sig.ret with
         | .ty _ => completes body
         | .void => false) "F063"
 
-/-- The diagnostics of a script, in order. Signatures are collected first, so
-that functions may call each other in any order; a second function of a name
-is F086, and the first stays. The top level is a body returning `!()`. -/
-def checkScript (ss : List Stmt) : Array Code := Id.run do
+/-- The script's names resolved, before anything is checked: its aliases and
+its functions' signatures, in the order they are written, each seeing the
+aliases above it. An alias or signature that does not convert is reported,
+an alias of a name taken is F066, and a second function of a name is F086,
+the first staying. -/
+def resolveNames (ss : List Stmt) : List (String × Sig) × Array Code := Id.run do
+  let mut aliases : Aliases := []
   let mut sigs : List (String × Sig) := []
   let mut diags : Array Code := #[]
   for s in ss do
-    if let .fun_ f := s then
+    match s with
+    | .type_ n h => match defineAlias aliases n h with
+      | .ok as => aliases := as
+      | .error c => diags := diags.push c
+    | .fun_ f =>
       if (sigs.lookup f.name).isSome then
         diags := diags.push "F086"
-      else match sigOf f with
+      else match sigOf aliases f with
         | .ok sig => sigs := sigs ++ [(f.name, sig)]
         | .error c => diags := diags.push c
-  let Γ : Ctx := { ret := .ty (.result unitTy), sigs }
+    | _ => pure ()
+  pure (sigs, diags)
+
+/-- The diagnostics of a script, in order: its names resolved
+(`resolveNames`), so that functions may call each other in any order, and
+then each statement checked. The top level is a body returning `!()`. -/
+def checkScript (ss : List Stmt) : Array Code :=
+  let (sigs, diags) := resolveNames ss
   let run : StateM (Array Code) Unit := do
-    let mut Γ := Γ
+    let mut Γ : Ctx := { ret := .ty (.result unitTy), sigs }
     for s in ss do
-      if let .fun_ f := s then checkFun sigs f
+      if let .fun_ f := s then checkFun sigs Γ.aliases f
       else Γ ← checkStmt Γ s
   (run.run diags).2
 

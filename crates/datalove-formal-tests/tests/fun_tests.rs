@@ -3,14 +3,15 @@
 //!
 //! The model in `formal/Datalove/Fun.lean` is written from
 //! `botdocs/datafun-typing-rules.md` for a slice of datafun: scripts of
-//! functions and statements, without generics, modules, consts, patterns or
-//! `match`. A script outside it is skipped and counted.
+//! functions, type aliases and statements, without generics, modules or
+//! consts. A script outside it is skipped and counted.
 //!
 //! Scripts come from worldgen, made to stay inside the slice, and are then
 //! changed a line at a time at random, so that most are wrong somewhere: a
 //! type or a literal changed, an operator swapped, `?`, `!` or `@` added, a
 //! name made unbound, a `ret` dropped, a stray `break` or `set` added, a field
-//! or index read or written through, borrowed or not. Before
+//! or index read or written through, borrowed or not, a `match`'s case
+//! damaged. Before
 //! them runs a corpus of cases written by hand. Each script is parsed and
 //! typechecked, and the codes of every diagnostic the Rust reports, in order,
 //! are compared with the model's.
@@ -82,6 +83,32 @@ const CORPUS: &[&str] = &[
     "fun f(s: {a: u8, b: string}, t: (u8, string)): u8\n  let a: u8 = s.a\n  let b = s.zz\n  let c = t.2\n  let d = t.a\n  let e = s.0\n  let g = s.b\n  let h = t.1@\n  debuglog s.b\n  let i = s.b == \"x\"\n  ret t.0\nend fun\n",
     // Fields of what is not a place.
     "fun mk(): {a: u8, b: string}\n  ret {a = 1, b = \"s\"}\nend fun\nfun f(): u8\n  let a = mk().a\n  let b = mk().b\n  let c = mk().zz\n  let d = (1, 2).1\n  debuglog mk().b\n  ret mk().a\nend fun\n",
+    // Aliases: resolved with the signatures, in order, before anything is
+    // checked, each seeing only the aliases above it. A name taken is F066
+    // and the first stays; a body that does not convert leaves the name free.
+    "let a = 1 + \"s\"\ntype E: enum { atom A, term B u8 }\ntype P: (u8, Zz)\nfun f(e: E, q: Qq): u8\n  ret 0\nend fun\ntype E: enum { atom C }\nlet b: E = enum { atom A }\nlet c: Nope = 1\n",
+    "fun f(q: Qq): u8\n  ret 0\nend fun\ntype P: (u8, Zz)\nlet b: E = enum { atom A }\ntype E: enum { atom A }\nlet c: E = enum { atom A }\n",
+    "fun f(e: E): u8\n  let x: E = 1\n  ret 0\nend fun\ntype E: u8\ntype P: (u8, Zz)\nlet a: P = (1, 2)\nfun g(p: P): u8\n  ret 0\nend fun\n",
+    "type E: Zz\ntype E: u8\nlet x: E = 300\ntype E: u8\ntype L: [L]\nlet a: L = []\ntype A: u8\ntype B: (A, A)\nlet y: B = (1, 300)\n",
+    // An alias's `rec` is datalit's, a `rec` may not take an alias's name, and
+    // a recursive alias is no map's key or set's element.
+    "type J: rec J u8\nlet x: J = 1\ntype A: u8\ntype K: rec A [A]\ntype R: rec R [R]\nlet m: %{R = u8} = %{}\nlet s: #{(u8, R)} = #{}\nlet l: [R] = []\ntype S: rec S (R, [S])\n",
+    "fun f(): u8\n  ret 0\nend fun\ntype f: u8\nfun f(): u8\n  ret 1\nend fun\nlet x: Zz = 1\ntype E: enum { atom A }\nfun g(e: E, z: Zz): u8\n  let y: Qq = 1\n  ret 0\nend fun\nlet h: E = : E / enum { atom A }\nlet k = : Qq / 1\n",
+    // Patterns: a tuple's and a struct's parts, an atom's and a term's; one
+    // that does not fit is F071 and binds nothing.
+    "let (a, b) = (1, \"s\")\nlet c: string = b\nlet (d, e, f) = (1, 2)\nlet g = d\nlet (h,) = (true,)\nlet () = ()\nlet (i, j): (u8, u8) = (1, 300)\nlet k: u8 = i\n",
+    "let {x, y} = {x = 1, y = true}\nlet z: bool = y\nlet {x = p, y = q} = {y = 1, x = 2}\nlet {x} = {x = 1, y = 2}\nlet {x, w} = {x = 1}\nlet r = p\n",
+    "let atom A = atom A\nlet atom B = atom A\nlet term T v = term T 5\nlet w: int = v\nlet term U u = term T 5\nlet s = u\n",
+    "type E: enum { atom A, term B u8 }\nfun f(e: E, l: [u8], o: ?u8): u8\n  let atom A = e\n  let (a, b) = l\n  let {x} = o\n  let (c, d) = 1\n  ret 0\nend fun\n",
+    "type L: rec L (u8, [L])\nfun f(l: L): u8\n  let (n, rest) = l\n  let m: [L] = rest\n  ret n\nend fun\nvar (a, b) = (1, 2)\nset a = 3\nset b += 1\nvar (c, d): (u8, u8) = (1, 2)\nvar e: (u8, u8)\n",
+    // `match`: an enum's variants each once, of the right kind, or a
+    // default; a term case binds the payload.
+    "type E: enum { atom A, term B u8, atom C }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case term B x\n    ret x\n  case atom C\n    ret 3\n  end match\nend fun\nfun g(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case default\n    ret 2\n  end match\nend fun\n",
+    "type E: enum { atom A, term B u8, atom C }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret true\n  case atom A\n    ret zz\n  case atom B\n    ret zz\n  case term C y\n    ret y\n  case term D z\n    ret z\n  end match\n  ret 0\nend fun\n",
+    "type E: enum { atom A, term B u8 }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  end match\nend fun\nfun g(n: u8): u8\n  match n\n  case atom A\n    ret zz\n  end match\n  match zz\n  case atom A\n    ret zz\n  end match\n  ret 0\nend fun\n",
+    // A `match` completes when an arm or its default does, and a `break` in
+    // an arm is the loop's.
+    "type E: enum { atom A, atom B }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case atom B\n    debuglog 0\n  end match\nend fun\nfun g(e: E): u8\n  loop\n    match e\n    case atom A\n      break\n    case default\n      ret 1\n    end match\n  end loop\nend fun\nfun h(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case default\n    ret 2\n  end match\nend fun\n",
     // Elements of what is not a place, refused unless borrowed.
     "fun mk(): [string]\n  ret [\"a\"]\nend fun\nfun f(): ?u8\n  let a = mk()[0]?\n  let b = mk()[0]?@\n  debuglog mk()[0]?\n  let c = mk()[0]? == \"a\"\n  ret none\nend fun\n",
     // Indexes: with `?` and `!` and neither, into what cannot be indexed,
@@ -108,10 +135,10 @@ fn config() -> WorldGenConfig {
     config.generic_call_probability = 0;
     config.type_aliases_per_module = (0, 0);
     config.type_alias_usage_probability = 0;
-    config.enums_per_module = (0, 0);
+    config.enums_per_module = (0, 3);
     config.consts_per_module = (0, 0);
     config.const_probability = 0;
-    config.match_probability = 0;
+    config.match_probability = 20;
     config.for_probability = 15;
     config.param_mode_probability = 0;
     config.projection_probability = 40;
@@ -137,7 +164,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
     let name = |rng: &mut SeededRng| pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2", "1", "0x10", "1.5", "true"]);
     let step = |rng: &mut SeededRng| pick(rng, STEPS);
-    let changed = match rng.random_range(0..18) {
+    let changed = match rng.random_range(0..19) {
         // A type named in the line changed.
         0 => {
             let ty = pick(rng, TYPES);
@@ -228,6 +255,25 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             let (a, st) = (name(rng), step(rng));
             let op = pick(rng, &["", "", "+", "+!", "*?"]);
             fmt!("{line}\n{indent}set {a}{st} {op}= {}", pick(rng, VALUES))
+        }
+        // A `match`'s case damaged: of the other kind, of a variant the
+        // enum has not, a default made a case, or the input not an enum.
+        17 => {
+            let trimmed = line.trim_start();
+            let words: Vec<&str> = trimmed.split_whitespace().collect();
+            match words.as_slice() {
+                ["case", "atom", name] => match rng.random_range(0..2) {
+                    0 => fmt!("{indent}case term {name} w"),
+                    _ => fmt!("{indent}case atom Zz"),
+                },
+                ["case", "term", name, _] => match rng.random_range(0..2) {
+                    0 => fmt!("{indent}case atom {name}"),
+                    _ => fmt!("{indent}case term Zz w"),
+                },
+                ["case", "default"] => fmt!("{indent}case atom Zz"),
+                ["match", _] => fmt!("{indent}match {}", name(rng)),
+                _ => line,
+            }
         }
         // A literal at a range's edge, negated.
         _ => fmt!("{line}\n{indent}let w: {} = -{}", pick(rng, &["i8", "u8", "i16", "f32", "int"]), pick(rng, &["5", "128", "129", "300", "1.5"])),

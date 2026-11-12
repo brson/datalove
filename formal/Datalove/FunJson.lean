@@ -204,6 +204,20 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
 
 end
 
+/-- What a `let` or `var` binds: its name, or its pattern. -/
+def patFromSerde (j : Json) : Except String Pat := do
+  match optField j "pattern" with
+  | Option.none => .name <$> (← field j "name").getStr?
+  | Option.some p =>
+    let str (k : String) : Except String String := do (← field p k).getStr?
+    match ← str "kind" with
+    | "Tuple" => .tuple <$> (← (← field p "names").getArr?).toList.mapM (·.getStr?)
+    | "Struct" => .struct <$> (← (← field p "fields").getArr?).toList.mapM fun f => do
+        pure (← (← field f "field").getStr?, ← (← field f "binding").getStr?)
+    | "Atom" => .atom <$> str "name"
+    | "Term" => .term <$> str "name" <*> str "binding"
+    | k => throw s!"unknown pattern {k}"
+
 mutual
 
 partial def stmtFromSerde (j : Json) : Except String Stmt := do
@@ -213,14 +227,12 @@ partial def stmtFromSerde (j : Json) : Except String Stmt := do
     | Option.some h => Option.some <$> hintFromSerde h
   match kind with
   | "Let" =>
-    if (optField j "pattern").isSome then unsupported "pattern"
-    .let_ <$> (← field j "name").getStr? <*> hint <*> exprFromSerde (← field j "value")
+    .let_ <$> patFromSerde j <*> hint <*> exprFromSerde (← field j "value")
   | "Var" =>
-    if (optField j "pattern").isSome then unsupported "pattern"
     let value ← match optField j "value" with
       | Option.none => pure Option.none
       | Option.some v => Option.some <$> exprFromSerde v
-    pure (.var_ (← (← field j "name").getStr?) (← hint) value)
+    pure (.var_ (← patFromSerde j) (← hint) value)
   | "Set" => do
     let target ← field j "target"
     let steps ← (← (← field target "steps").getArr?).toList.mapM stepFromSerde
@@ -250,6 +262,20 @@ partial def stmtFromSerde (j : Json) : Except String Stmt := do
   | "Continue" => pure .cont
   | "DebugLog" => .debuglog <$> exprFromSerde (← field j "value")
   | "ExprStatement" => .call <$> exprFromSerde (← field j "expr")
+  | "Match" => do
+    let cases ← (← (← field j "cases").getArr?).toList.mapM fun c => do
+      let k ← field c "kind"
+      let name ← (← field k "name").getStr?
+      let b ← body (← field c "body")
+      match ← (← field k "variant").getStr? with
+      | "Atom" => pure (Case.atom name b)
+      | "Term" => pure (Case.term name (← (← field k "binding").getStr?) b)
+      | v => throw s!"unknown case {v}"
+    let dflt ← match optField j "default_body" with
+      | Option.none => pure Option.none
+      | Option.some d => Option.some <$> body d
+    pure (.match_ (← exprFromSerde (← field j "input")) cases dflt)
+  | "TypeAlias" => .type_ <$> (← field j "name").getStr? <*> hintFromSerde (← field j "type_hint")
   | "For" => do
     let names ← (← (← field j "bindings").getArr?).toList.mapM (·.getStr?)
     pure (.for_ names (← exprFromSerde (← field j "iteratee")) (← body (← field j "body")))

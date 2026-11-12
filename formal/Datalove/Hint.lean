@@ -85,16 +85,49 @@ structure Scope where
 
 abbrev ConvM := StateT Scope (Except ConvErr)
 
+/-- The types names stand for where a hint is converted: datafun's aliases,
+and none in datalit. Read only. -/
+abbrev Aliases := List (String × Ty)
+
+mutual
+
+/-- Whether a `rec`, or a use of one, is anywhere in a type, as
+`contains_rec` in `types.rs`. -/
+def Ty.containsRec : Ty → Bool
+  | .mu _ | .recvar _ => true
+  | .tuple ts => ts.containsRec
+  | .struct fs | .table fs => fs.containsRec
+  | .list t | .set t | .option t | .result t | .tensor t _ | .term _ t => t.containsRec
+  | .map k v => k.containsRec || v.containsRec
+  | .enum vs => vs.containsRec
+  | _ => false
+
+def Tys.containsRec : Tys → Bool
+  | .nil => false
+  | .cons t ts => t.containsRec || ts.containsRec
+
+def Fields.containsRec : Fields → Bool
+  | .nil => false
+  | .cons _ t fs => t.containsRec || fs.containsRec
+
+def Variants.containsRec : Variants → Bool
+  | .nil => false
+  | .atom _ vs => vs.containsRec
+  | .term _ t vs => t.containsRec || vs.containsRec
+
+end
+
 namespace ConvM
 
 def fail (kind : ConvErrKind) (name : String) : ConvM α :=
   throw ⟨kind, name⟩
 
-/-- Enter the body of `rec name`, as `RecScope::bind`. -/
-def bind (name : String) : ConvM Unit := do
+/-- Enter the body of `rec name`, as `RecScope::bind`. A name an alias has
+is taken. -/
+def bind (aliases : Aliases) (name : String) : ConvM Unit := do
   let s ← get
   if s.inKey then fail .inKey name
-  if s.binders.any (·.name == name) then fail .shadowed name
+  if s.binders.any (·.name == name) || (aliases.lookup name).isSome then fail .shadowed name
   set { s with binders := ⟨name, s.colls, false⟩ :: s.binders }
 
 /-- Leave the body of the innermost `rec`, as `RecScope::unbind`. -/
@@ -112,12 +145,15 @@ def markUsed : List Binder → Nat → List Binder
   | b :: bs, 0 => { b with used := true } :: bs
   | b :: bs, n + 1 => b :: markUsed bs n
 
-/-- A use of a name, as `RecScope::lookup` followed by datalit's
-`NoAliases::resolve` when no `rec` binds it. -/
-def lookup (name : String) : ConvM Ty := do
+/-- A use of a name, as `RecScope::lookup`, or when no `rec` binds it, the
+alias's type, as `resolve` and `check_named`: a type with a `rec` in it is
+no map's key or set's element. -/
+def lookup (aliases : Aliases) (name : String) : ConvM Ty := do
   let s ← get
   match s.binders.findIdx? (·.name == name) with
-  | none => fail .unbound name
+  | none => match aliases.lookup name with
+    | none => fail .unbound name
+    | some t => if s.inKey && t.containsRec then fail .inKey name else pure t
   | some depth =>
     let b := s.binders[depth]!
     set { s with binders := markUsed s.binders depth }
@@ -155,7 +191,7 @@ def Variants.sortByName (vs : Variants) : Variants :=
 open ConvM in
 mutual
 
-def Hint.conv : Hint → ConvM Ty
+def Hint.conv (aliases : Aliases) : Hint → ConvM Ty
   | .bool => pure .bool
   | .u8 => pure .u8
   | .i8 => pure .i8
@@ -173,62 +209,66 @@ def Hint.conv : Hint → ConvM Ty
   | .string => pure .string
   | .data => pure .data
   | .error => pure .error
-  | .tuple fs => .tuple <$> fs.conv
-  | .struct fs => .struct <$> fs.conv
-  | .list t => .list <$> collection false t.conv
+  | .tuple fs => .tuple <$> fs.conv aliases
+  | .struct fs => .struct <$> fs.conv aliases
+  | .list t => .list <$> collection false (t.conv aliases)
   | .map k v => do
-    let k ← collection true k.conv
-    let v ← collection false v.conv
+    let k ← collection true (k.conv aliases)
+    let v ← collection false (v.conv aliases)
     pure (.map k v)
-  | .set t => .set <$> collection true t.conv
-  | .option t => .option <$> t.conv
-  | .result t => .result <$> t.conv
-  | .tensor t r => (.tensor · r) <$> collection false t.conv
-  | .table cs => .table <$> cs.convColumns
+  | .set t => .set <$> collection true (t.conv aliases)
+  | .option t => .option <$> t.conv aliases
+  | .result t => .result <$> t.conv aliases
+  | .tensor t r => (.tensor · r) <$> collection false (t.conv aliases)
+  | .table cs => .table <$> cs.convColumns aliases
   | .atom a => pure (.atom a)
-  | .term a t => .term a <$> t.conv
-  | .enum vs => (.enum ∘ Variants.sortByName) <$> vs.conv
+  | .term a t => .term a <$> t.conv aliases
+  | .enum vs => (.enum ∘ Variants.sortByName) <$> vs.conv aliases
   | .mu n body => do
-    bind n
-    let b ← body.conv
+    bind aliases n
+    let b ← body.conv aliases
     unbind
     pure (.mu b)
-  | .name n => lookup n
+  | .name n => lookup aliases n
 
-def Hints.conv : Hints → ConvM Tys
+def Hints.conv (aliases : Aliases) : Hints → ConvM Tys
   | .nil => pure .nil
   | .cons t ts => do
-    let t ← t.conv
-    let ts ← ts.conv
+    let t ← t.conv aliases
+    let ts ← ts.conv aliases
     pure (.cons t ts)
 
-def HFields.conv : HFields → ConvM Fields
+def HFields.conv (aliases : Aliases) : HFields → ConvM Fields
   | .nil => pure .nil
   | .cons n t fs => do
-    let t ← t.conv
-    let fs ← fs.conv
+    let t ← t.conv aliases
+    let fs ← fs.conv aliases
     pure (.cons n t fs)
 
 /-- A table's columns: each inside a collection. -/
-def HFields.convColumns : HFields → ConvM Fields
+def HFields.convColumns (aliases : Aliases) : HFields → ConvM Fields
   | .nil => pure .nil
   | .cons n t fs => do
-    let t ← collection false t.conv
-    let fs ← fs.convColumns
+    let t ← collection false (t.conv aliases)
+    let fs ← fs.convColumns aliases
     pure (.cons n t fs)
 
-def HVariants.conv : HVariants → ConvM Variants
+def HVariants.conv (aliases : Aliases) : HVariants → ConvM Variants
   | .nil => pure .nil
-  | .atom n vs => .atom n <$> vs.conv
+  | .atom n vs => .atom n <$> vs.conv aliases
   | .term n t vs => do
-    let t ← t.conv
-    let vs ← vs.conv
+    let t ← t.conv aliases
+    let vs ← vs.conv aliases
     pure (.term n t vs)
 
 end
 
 /-- Convert a hint to a type, or say the first thing wrong with it. -/
 def Hint.convert (h : Hint) : Except ConvErr Ty :=
-  (h.conv.run {}).map (·.1)
+  ((h.conv []).run {}).map (·.1)
+
+/-- Convert a hint where names stand for the aliases' types. -/
+def Hint.convertWith (aliases : Aliases) (h : Hint) : Except ConvErr Ty :=
+  ((h.conv aliases).run {}).map (·.1)
 
 end Datalove

@@ -165,7 +165,7 @@ theorem collection_sound {key : Bool} {f : ConvM Ty} {s s' : Scope} {t : Ty}
   · intro d hd; exact used d hd
   · simpa [Scope.ctx, Scope.enter, WfCtx.coll] using wf
 
-theorem bind_name_ok {n : String} {s s' : Scope} {u : Unit} (h : (ConvM.bind n).run s = .ok (u, s')) :
+theorem bind_name_ok {n : String} {s s' : Scope} {u : Unit} (h : (ConvM.bind [] n).run s = .ok (u, s')) :
     s.inKey = false ∧ s' = { s with binders := ⟨n, s.colls, false⟩ :: s.binders } := by
   simp only [ConvM.bind] at h
   obtain ⟨g, s₀, hg, k₁⟩ := bind_ok h
@@ -221,7 +221,7 @@ theorem markUsed_used : ∀ (l : List Binder) (k d : Nat),
     · exact Or.inl (by simpa using e)
     · exact Or.inr (by omega)
 
-theorem lookup_ok {n : String} {s s' : Scope} {t : Ty} (h : (ConvM.lookup n).run s = .ok (t, s')) :
+theorem lookup_ok {n : String} {s s' : Scope} {t : Ty} (h : (ConvM.lookup [] n).run s = .ok (t, s')) :
     ∃ depth b, s.binders[depth]? = some b ∧ s.inKey = false ∧ b.colls < s.colls ∧
       t = .recvar depth ∧ s' = { s with binders := ConvM.markUsed s.binders depth } := by
   simp only [ConvM.lookup] at h
@@ -291,7 +291,7 @@ theorem sortByName_mentions (vs : Variants) (d : Nat) : vs.sortByName.mentions d
 
 mutual
 
-theorem Hint.conv_sound : ∀ (h : Hint) (s s' : Scope) (t : Ty), h.conv.run s = .ok (t, s') →
+theorem Hint.conv_sound : ∀ (h : Hint) (s s' : Scope) (t : Ty), (h.conv []).run s = .ok (t, s') →
     Sound s s' t.mentions t.wfIn
   | .list e, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
@@ -381,7 +381,7 @@ theorem Hint.conv_sound : ∀ (h : Hint) (s s' : Scope) (t : Ty), h.conv.run s =
     obtain ⟨rfl, rfl⟩ := pure_ok h
     exact ⟨Same.refl _, UsedBy.refl _ _, by simp [Ty.wfIn]⟩
 
-theorem Hints.conv_sound : ∀ (h : Hints) (s s' : Scope) (t : Tys), h.conv.run s = .ok (t, s') →
+theorem Hints.conv_sound : ∀ (h : Hints) (s s' : Scope) (t : Tys), (h.conv []).run s = .ok (t, s') →
     Sound s s' t.mentions t.wfIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
@@ -393,7 +393,7 @@ theorem Hints.conv_sound : ∀ (h : Hints) (s s' : Scope) (t : Tys), h.conv.run 
     have := (Hint.conv_sound e _ _ _ h₁).seq (Hints.conv_sound es _ _ _ h₂)
     exact ⟨this.1, this.2.1.mono (by simp [Tys.mentions]), by simpa [Tys.wfIn] using this.2.2⟩
 
-theorem HFields.conv_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields), h.conv.run s = .ok (t, s') →
+theorem HFields.conv_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields), (h.conv []).run s = .ok (t, s') →
     Sound s s' t.mentions t.wfIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
@@ -406,7 +406,7 @@ theorem HFields.conv_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields), h.co
     exact ⟨this.1, this.2.1.mono (by simp [Fields.mentions]), by simpa [Fields.wfIn] using this.2.2⟩
 
 theorem HFields.convColumns_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields),
-    h.convColumns.run s = .ok (t, s') → Sound s s' t.mentions t.wfColumnsIn
+    (h.convColumns []).run s = .ok (t, s') → Sound s s' t.mentions t.wfColumnsIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
     exact ⟨Same.refl _, UsedBy.refl _ _, by simp [Fields.wfColumnsIn]⟩
@@ -420,7 +420,7 @@ theorem HFields.convColumns_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields
       by simpa [Fields.wfColumnsIn] using this.2.2⟩
 
 theorem HVariants.conv_sound : ∀ (h : HVariants) (s s' : Scope) (t : Variants),
-    h.conv.run s = .ok (t, s') → Sound s s' t.mentions t.wfIn
+    (h.conv []).run s = .ok (t, s') → Sound s s' t.mentions t.wfIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
     exact ⟨Same.refl _, UsedBy.refl _ _, by simp [Variants.wfIn]⟩
