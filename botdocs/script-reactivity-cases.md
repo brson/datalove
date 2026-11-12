@@ -790,7 +790,7 @@ let a = 1000
 scriptunit-fragment 2
 ----------
 
-let c = a /! 10
+let c = a + 10
 
 ----------
 scriptunit-fragment 3
@@ -812,7 +812,7 @@ let e = a + 2
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
-| 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
+| 2 | `let c = a + 10` | reads `a` (1) | compiles, runs | new | `c` = 1010 |
 | 3 | `let d = a + 1` | reads `a` (1) | compiles, runs | new | `d` = 1001 |
 | 4 | `let e = a + 2` | reads `a` (1) | compiles, runs | new | `e` = 1002 |
 <!-- end world -->
@@ -823,7 +823,7 @@ let e = a + 2
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | untouched | `a` is as unit 1 made it | `a` taken |
-| 2 | `let c = a /! 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 100 |
+| 2 | `let c = a + 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 1010 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a + 2` | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |
 <!-- end world -->
@@ -837,7 +837,7 @@ forward: unit 4 can no longer name `a`.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | reruns | rerun: unit 3 took `a` when it last ran, and the edit retracts that | `a` = 1000 |
-| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 100 |
+| 2 | `let c = a + 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 1010 |
 | 3 | `let d = a + 1` | reads `a` (1) | recompiles, runs | edited | `d` = 1001 |
 | 4 | `let e = a + 2` | reads `a` (1) | reruns | `a` can be named again, as it could in step 1, whose compile is still memoized | `e` = 1002 |
 <!-- end world -->

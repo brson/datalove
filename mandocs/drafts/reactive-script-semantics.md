@@ -380,7 +380,7 @@ At run time they have the same layout as a function's stack frame.
 Script units can be chained together in a list dynamically at run time.
 New script units inherit the type checking and execution environment of previous script units.
 
-In this example of a self-contained Datalove _worldfile_ we have two sequential script units.
+In this example of a self-contained Datalove _worldfile_ we have three sequential script units.
 
 ```datalove
 ----------
@@ -401,7 +401,7 @@ scriptunit-fragment 3
 
 let a_moved = a
 let b_moved = b
-let c = a_moved /! b_moved
+let c = a_moved + b_moved
 ```
 
 > Worldfiles are sections of text delimited by headers between `----------` lines.
@@ -412,13 +412,9 @@ let c = a_moved /! b_moved
 In this example the integers are type `int`, bigints.
 They are linear types allocated on the heap,
 so the assignment `let a_moved = a` moves `a` into `a_moved`, leaving `a` empty.
-The `/!` operator is checked division, and returns early on divide by 0,
-indicating failure.
-Scripts and script units are allowed to return the type `!()`,
-"result of unit".
 
 In this example all three units compile and execute successfully.
-The third binds `c` to 10.
+The third binds `c` to 1100.
 Each unit compiles and runs before the next.
 A later unit compiles against the bindings earlier units provide,
 and runs only if the units it reads from ran to their end.
@@ -838,7 +834,7 @@ let a = 1000
 scriptunit-fragment 2
 ----------
 
-let c = a /! 10
+let c = a + 10
 
 ----------
 scriptunit-fragment 3
@@ -860,7 +856,7 @@ Three units read `a`, and nothing takes it.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
-| 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
+| 2 | `let c = a + 10` | reads `a` (1) | compiles, runs | new | `c` = 1010 |
 | 3 | `let d = a + 1` | reads `a` (1) | compiles, runs | new | `d` = 1001 |
 | 4 | `let e = a + 2` | reads `a` (1) | compiles, runs | new | `e` = 1002 |
 
@@ -894,7 +890,7 @@ error[O013]: `a` was given away by an earlier unit
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | untouched | `a` is as unit 1 made it | `a` taken |
-| 2 | `let c = a /! 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 100 |
+| 2 | `let c = a + 10` | reads `a` (1) | untouched | reads `a` before the take | `c` = 1010 |
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a + 2` | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |
 
@@ -918,7 +914,7 @@ so it is fixed.
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1000` | - | reruns | rerun: unit 3 took `a` when it last ran, and the edit retracts that | `a` = 1000 |
-| 2 | `let c = a /! 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 100 |
+| 2 | `let c = a + 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 1010 |
 | 3 | `let d = a + 1` | reads `a` (1) | recompiles, runs | edited | `d` = 1001 |
 | 4 | `let e = a + 2` | reads `a` (1) | reruns | `a` can be named again, as it could in step 1, whose compile is still memoized | `e` = 1002 |
 
