@@ -3,13 +3,14 @@
 //!
 //! The model in `formal/Datalove/Fun.lean` is written from
 //! `botdocs/datafun-typing-rules.md` for a slice of datafun: scripts of
-//! functions and statements, without generics, modules, consts, patterns,
-//! projections, `for` or `match`. A script outside it is skipped and counted.
+//! functions and statements, without generics, modules, consts, patterns or
+//! `match`. A script outside it is skipped and counted.
 //!
 //! Scripts come from worldgen, made to stay inside the slice, and are then
 //! changed a line at a time at random, so that most are wrong somewhere: a
 //! type or a literal changed, an operator swapped, `?`, `!` or `@` added, a
-//! name made unbound, a `ret` dropped, a stray `break` or `set` added. Before
+//! name made unbound, a `ret` dropped, a stray `break` or `set` added, a field
+//! or index read or written through, borrowed or not. Before
 //! them runs a corpus of cases written by hand. Each script is parsed and
 //! typechecked, and the codes of every diagnostic the Rust reports, in order,
 //! are compared with the model's.
@@ -25,7 +26,7 @@
 use rmx::prelude::*;
 use rmx::serde_json::{Value, json};
 use bct::random::SeededRng;
-use datalove_formal_tests::ask_oracle;
+use datalove_formal_tests::{ask_oracle, oracle_path};
 use datalove_worldgen::WorldGenConfig;
 use std::collections::BTreeMap;
 
@@ -73,6 +74,28 @@ const CORPUS: &[&str] = &[
     // A `set` of an immutable binding still checks its value.
     "let x: u8 = 1\nset x = true\n",
     "if zz |v|\n  call nope()\nelse\n  call nope()\nend if\nif zz\n  call nope()\nelse\n  call nope()\nend if\n",
+    // Inference that cannot read a part leaves the part to be synthesized,
+    // and a literal it cannot read is still a mismatch.
+    "fun f(): u8\n  ret some x\nend fun\nfun g(): u8\n  let a = (x, none)\n  let b = (none, x)\n  let c = [zz, 1]\n  let d = [zz.a]\n  ret some (: Foo / 1)\nend fun\n",
+    // Fields: by name and by position, missing, out of range, of what has
+    // none, and not copied out of a place but where it is borrowed.
+    "fun f(s: {a: u8, b: string}, t: (u8, string)): u8\n  let a: u8 = s.a\n  let b = s.zz\n  let c = t.2\n  let d = t.a\n  let e = s.0\n  let g = s.b\n  let h = t.1@\n  debuglog s.b\n  let i = s.b == \"x\"\n  ret t.0\nend fun\n",
+    // Fields of what is not a place.
+    "fun mk(): {a: u8, b: string}\n  ret {a = 1, b = \"s\"}\nend fun\nfun f(): u8\n  let a = mk().a\n  let b = mk().b\n  let c = mk().zz\n  let d = (1, 2).1\n  debuglog mk().b\n  ret mk().a\nend fun\n",
+    // Indexes: with `?` and `!` and neither, into what cannot be indexed,
+    // with a key of the wrong type, returning early where the function does
+    // not, and a non-copy element moved out.
+    "fun f(l: [u8], m: %{string = u8}, n: u8, ls: [string]): ?u8\n  let a = l[0]?\n  let b = l[0]!\n  let c = l[0]\n  let d = n[0]?\n  let e = l[true]?\n  let g = m[\"k\"]?\n  let h = m[1]?\n  let i = ls[0]?\n  let j = ls[0]?@\n  debuglog ls[0]?\n  ret l[0]?\nend fun\n",
+    // A tensor of rank 2 indexes to a row, a view, which no `mut` argument
+    // may be.
+    "fun g(mut r: [|u8, 1|])\nend fun\nfun h(ref r: [|u8, 1|])\nend fun\nfun f(mut t: [|u8, 2|]): ?()\n  let r = t[0]?\n  call g(mut t[0]?)\n  call h(ref t[0]?)\n  let x: u8 = t[0]?[1]?\n  ret some ()\nend fun\n",
+    // Steps along a place: fields and indexes, each but the last borrowed.
+    "fun f(s: {l: [string], t: (u8, [u8])}): ?u8\n  let a = s.l[0]?\n  let b = s.t.1[0]?\n  let c = s.t.1\n  let d = s.l\n  ret s.t.0\nend fun\n",
+    // `set` through a place: fields, indexes, a map's insertion, views, and
+    // the early returns its indexes make.
+    "fun f(mut s: {a: u8, l: [u8]}, mut m: %{string = u8}, mut t: [|u8, 2|], mut n: u8): ?()\n  set s.a = 1\n  set s.zz = 1\n  set s.l[0]? = 2\n  set s.l[0] = 2\n  set m[\"k\"] = 1\n  set m[\"k\"] += 1\n  set m[1] = true\n  set m[\"k\"]? = 2\n  set m[\"k\"]! = 2\n  set t[0]? = t[1]?\n  set t[0]?[1]? = 1\n  set n[0]? = 1\n  set s.l[0][0]? = 1\n  set s.a +!= 1\n  set s.a += 1\n  set s.a += true\n  ret some ()\nend fun\n",
+    // A `for` over a field or an element.
+    "fun f(s: {l: [u8], ls: [[u8]]}): ?()\n  for x in ref s.l\n    let a: u8 = x\n  end for\n  for x in ref s.ls[0]?\n    let a: string = x\n  end for\n  for x in ref s.zz\n    call nope()\n  end for\n  ret some ()\nend fun\n",
 ];
 
 fn config() -> WorldGenConfig {
@@ -97,6 +120,7 @@ fn config() -> WorldGenConfig {
 
 const TYPES: &[&str] = &["u8", "i8", "u32", "i64", "int", "f32", "f64", "bool", "string", "index", "?u8", "!u8", "[u8]", "()"];
 const VALUES: &[&str] = &["0", "1", "-1", "300", "true", "\"s\"", "1.5", "none", "some 1", "ok 1", "()", "[]"];
+const STEPS: &[&str] = &[".0", ".1", ".a", ".zz", "[0]?", "[0]!", "[0]", "[true]?", ".0[0]?", "[0]?.0", "[0]?[0]?", "[0]"];
 const OPS: &[&str] = &["+", "-", "*", "/", "+!", "-!", "*?", "/?", "==", ".<", "and"];
 
 /// One random change to one line of a script.
@@ -110,7 +134,8 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     let indent: String = line.chars().take_while(|c| *c == ' ').collect();
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
     let name = |rng: &mut SeededRng| pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2", "1", "0x10", "1.5", "true"]);
-    let changed = match rng.random_range(0..16) {
+    let step = |rng: &mut SeededRng| pick(rng, STEPS);
+    let changed = match rng.random_range(0..18) {
         // A type named in the line changed.
         0 => {
             let ty = pick(rng, TYPES);
@@ -185,6 +210,22 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
         14 => {
             let names = pick(rng, &["w", "i, w", "k, w"]);
             fmt!("{line}\n{indent}for {names} in ref {}\n{indent}  debuglog w\n{indent}  let z: u8 = w\n{indent}end for", name(rng))
+        }
+        // A step into something in scope, read moved or borrowed.
+        15 => {
+            let (a, st) = (name(rng), step(rng));
+            match rng.random_range(0..4) {
+                0 => fmt!("{line}\n{indent}debuglog {a}{st}"),
+                1 => fmt!("{line}\n{indent}let w = {a}{st}@"),
+                2 => fmt!("{line}\n{indent}let w = {a}{st} == {a}{}", step(rng)),
+                _ => fmt!("{line}\n{indent}let w = {a}{st}"),
+            }
+        }
+        // A `set` through a place, plain or compound.
+        16 => {
+            let (a, st) = (name(rng), step(rng));
+            let op = pick(rng, &["", "", "+", "+!", "*?"]);
+            fmt!("{line}\n{indent}set {a}{st} {op}= {}", pick(rng, VALUES))
         }
         // A literal at a range's edge, negated.
         _ => fmt!("{line}\n{indent}let w: {} = -{}", pick(rng, &["i8", "u8", "i16", "f32", "int"]), pick(rng, &["5", "128", "129", "300", "1.5"])),
@@ -273,12 +314,17 @@ fn statement_typing_agrees() {
     assert!(mismatches.is_empty(), "the Rust and the typing rules disagree on {} scripts", mismatches.len());
 }
 
-/// Print the serde AST of `FORMAL_FUN_AST_OF`, a file.
+/// Print the serde AST of `FORMAL_FUN_AST_OF`, a file, with the codes the Rust
+/// and the model give it.
 #[test]
 fn ast_of() {
     let Ok(path) = std::env::var("FORMAL_FUN_AST_OF") else { return };
     let (codes, script) = rust_side(&std::fs::read_to_string(path).X());
-    println!("{codes:?}\n{}", rmx::serde_json::to_string_pretty(&script).X());
+    println!("{}", rmx::serde_json::to_string_pretty(&script).X());
+    println!("rust:  {codes:?}");
+    if oracle_path().exists() {
+        println!("model: {}", ask_oracle(&[json!({ "fun": script })])[0]);
+    }
 }
 
 /// Print the script a seed makes, to look at a failure:

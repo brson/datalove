@@ -96,6 +96,38 @@ def modeOf : String → Except String Mode
 
 def digits (s : String) : String := String.ofList (s.toList.filter (· != '_'))
 
+def selFromSerde (j : Json) : Except String Sel := do
+  match ← (← field j "variant").getStr? with
+  | "Name" => .name <$> (← field j "name").getStr?
+  | "Index" => .pos <$> (← field j "index").getNat?
+  | v => throw s!"unknown selector {v}"
+
+def modeFromSerde (j : Option Json) : Except String (Option IdxMode) :=
+  match j with
+  | Option.none => pure Option.none
+  | Option.some m => do
+    match ← m.getStr? with
+    | "Option" => pure (Option.some .opt)
+    | "Result" => pure (Option.some .res)
+    | v => throw s!"unknown index mode {v}"
+
+mutual
+
+partial def stepFromSerde (j : Json) : Except String Step := do
+  match ← (← field j "step").getStr? with
+  | "Field" => .field <$> selFromSerde j
+  | "Index" => .index <$> exprFromSerde (← field j "index") <*> modeFromSerde (optField j "error_mode")
+  | v => throw s!"unknown step {v}"
+
+/-- `e[k]` under `?` or `!`, which the model takes as one form, or what is
+under it. -/
+partial def tryFromSerde (j : Json) (mode : IdxMode) (wrap : Expr → Expr) : Except String Expr := do
+  let e ← field j "expr"
+  if (← (← field e "kind").getStr?) == "Index" then
+    pure (.index (← exprFromSerde (← field e "base")) (← exprFromSerde (← field e "index"))
+      (Option.some mode))
+  else wrap <$> exprFromSerde j
+
 partial def exprFromSerde (j : Json) : Except String Expr := do
   let e ← field j "expr"
   let kind ← (← field e "kind").getStr?
@@ -145,12 +177,16 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
     | "EnumLiteral" => .enum <$> sub "variant"
     | "Hinted" => sub "inner"
     | "Place" => do
-      let steps ← (← field e "steps").getArr?
-      if steps.size != 0 then unsupported "projection" else .var <$> (← field e "root").getStr?
+      let root ← (← field e "root").getStr?
+      match ← (← (← field e "steps").getArr?).toList.mapM stepFromSerde with
+      | [] => pure (.var root)
+      | steps => pure (.place root steps)
+    | "FieldProj" => .proj <$> sub "base" <*> selFromSerde (← field e "field")
+    | "Index" => .index <$> sub "base" <*> sub "index" <*> pure Option.none
     | "BinOp" => .binop <$> binOpOf (← (← field e "op").getStr?) <*> sub "lhs" <*> sub "rhs"
     | "UnaryOp" => .unop <$> unOpOf (← (← field e "op").getStr?) <*> sub "operand"
-    | "TryOption" => .tryOpt <$> sub "operand"
-    | "TryResult" => .tryRes <$> sub "operand"
+    | "TryOption" => tryFromSerde (← field e "operand") .opt .tryOpt
+    | "TryResult" => tryFromSerde (← field e "operand") .res .tryRes
     | "CloneCoerce" => .adapt <$> sub "operand"
     | "FunctionCall" => do
       if (optField e "qualifier").isSome then unsupported "qualified call"
@@ -165,6 +201,8 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
   match optField e "type_hint" with
   | Option.some h => pure (.hinted (← hintFromSerde h) core)
   | Option.none => pure core
+
+end
 
 mutual
 
@@ -185,11 +223,11 @@ partial def stmtFromSerde (j : Json) : Except String Stmt := do
     pure (.var_ (← (← field j "name").getStr?) (← hint) value)
   | "Set" => do
     let target ← field j "target"
-    if (← (← field target "steps").getArr?).size != 0 then unsupported "projection"
+    let steps ← (← (← field target "steps").getArr?).toList.mapM stepFromSerde
     let op ← match optField j "op" with
       | Option.none => pure Option.none
       | Option.some o => Option.some <$> binOpOf (← o.getStr?)
-    pure (.set_ (← (← field target "root").getStr?) op (← exprFromSerde (← field j "value")))
+    pure (.set_ (← (← field target "root").getStr?) steps op (← exprFromSerde (← field j "value")))
   | "Fun" => .fun_ <$> funFromSerde j
   | "Ret" => .ret <$> match optField j "value" with
     | Option.none => pure Option.none

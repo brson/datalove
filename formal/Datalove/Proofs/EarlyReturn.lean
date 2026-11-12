@@ -31,8 +31,8 @@ inductive Early where
 /-- What a return type allows: `none` into an option, an error into a
 result. -/
 def Ret.allows (r : Ret) : Early → Bool
-  | .none_ => (Ctx.mk [] r false []).returnsOption
-  | .er => (Ctx.mk [] r false []).returnsResult
+  | .none_ => ({ ret := r, sigs := [] } : Ctx).returnsOption
+  | .er => ({ ret := r, sigs := [] } : Ctx).returnsResult
 
 theorem Ctx.returnsOption_eq (Γ : Ctx) : Γ.returnsOption = Γ.ret.allows .none_ := by
   simp [Ret.allows, Ctx.returnsOption]
@@ -40,33 +40,54 @@ theorem Ctx.returnsOption_eq (Γ : Ctx) : Γ.returnsOption = Γ.ret.allows .none
 theorem Ctx.returnsResult_eq (Γ : Ctx) : Γ.returnsResult = Γ.ret.allows .er := by
   simp [Ret.allows, Ctx.returnsResult]
 
-/-- Where an expression returns early itself, not inside a part. -/
-def Expr.early : Expr → Option Early
-  | .tryOpt _ => some .none_
-  | .tryRes _ => some .er
-  | .unop .negO _ => some .none_
-  | .unop .negC _ => some .er
-  | .binop op _ _ => match needs op with
-    | .result => some .er
-    | .option => some .none_
-    | .nothing => none
+def IdxMode.early : IdxMode → Early
+  | .opt => .none_
+  | .res => .er
+
+theorem Ctx.fitsMode_eq (Γ : Ctx) (m : IdxMode) : Γ.fitsMode m = Γ.ret.allows m.early := by
+  cases m <;> simp [Ctx.fitsMode, IdxMode.early, Ret.allows, Ctx.returnsOption, Ctx.returnsResult]
+
+/-- Where a step of a place returns early: an index with `?` or `!`. -/
+def Step.early : Step → Option Early
+  | .index _ (some m) => some m.early
   | _ => none
 
-/-- An expression's parts, one level down. -/
+/-- A step's key, if it is an index. -/
+def Step.key : Step → Option Expr
+  | .index k _ => some k
+  | .field _ => none
+
+/-- Where an expression returns early itself, not inside a part: a place at
+each of its indexes. -/
+def Expr.earlies : Expr → List Early
+  | .tryOpt _ => [.none_]
+  | .tryRes _ => [.er]
+  | .unop .negO _ => [.none_]
+  | .unop .negC _ => [.er]
+  | .binop op _ _ => match needs op with
+    | .result => [.er]
+    | .option => [.none_]
+    | .nothing => []
+  | .index _ _ (some m) => [m.early]
+  | .place _ steps => steps.filterMap Step.early
+  | _ => []
+
+/-- An expression's parts, one level down: a place's are its keys. -/
 def Expr.parts : Expr → List Expr
   | .tuple es | .list es | .set es | .tensor _ es => es
   | .struct fs => fs.map (·.2)
   | .map es => es.flatMap fun (k, v) => [k, v]
   | .table _ rows => rows.flatten
   | .some_ e | .ok e | .er e | .data e | .error e | .term _ e | .enum e | .hinted _ e
-  | .unop _ e | .tryOpt e | .tryRes e | .adapt e => [e]
-  | .binop _ a b => [a, b]
+  | .unop _ e | .tryOpt e | .tryRes e | .adapt e | .proj e _ => [e]
+  | .binop _ a b | .index a b _ => [a, b]
   | .call _ args => args.map (·.2)
+  | .place _ steps => steps.filterMap Step.key
   | _ => []
 
 /-- Every early return in an expression, at any depth, is one `ok` allows. -/
 inductive Guarded (ok : Early → Bool) : Expr → Prop where
-  | mk : (∀ k, e.early = some k → ok k = true) → (∀ p ∈ e.parts, Guarded ok p) → Guarded ok e
+  | mk : (∀ k ∈ e.earlies, ok k = true) → (∀ p ∈ e.parts, Guarded ok p) → Guarded ok e
 
 /-! ## Running the checker -/
 
@@ -114,43 +135,77 @@ theorem report_not_clean {c : Code} : ¬ Clean (report c) := by
 @[simp] theorem clean_throw {α} {c : Code} : Clean (throw c : ChkM α) ↔ False :=
   ⟨throw_not_clean, False.elim⟩
 
-theorem literalMismatch_not_clean {env : InferEnv} {Γ : Ctx} {e : Expr} :
-    ¬ Clean (literalMismatch env Γ e) := by
-  intro h
-  obtain ⟨_, _, h⟩ := peel h
-  exact throw_not_clean h
+theorem clean_recover {m : ChkM Unit} (h : Clean (recover m)) : Clean m := by
+  obtain ⟨_, h⟩ := h
+  rcases hm : m.run with ⟨l, v⟩
+  have e : m = ⟨l, v⟩ := hm
+  subst e
+  cases v with
+  | ok a =>
+    simp [recover, ExceptT.mk, ExceptT.run] at h
+    exact ⟨a, by simp [ExceptT.run, h]⟩
+  | error c => simp [recover, ExceptT.mk, ExceptT.run] at h
+
+@[simp] theorem Ctx.enter_ret (Γ : Ctx) (e : Expr) : (Γ.enter e).ret = Γ.ret := rfl
+@[simp] theorem Ctx.borrow_ret (Γ : Ctx) : Γ.borrow.ret = Γ.ret := rfl
+@[simp] theorem Ctx.through_ret (Γ : Ctx) : Γ.through.ret = Γ.ret := rfl
+@[simp] theorem Ctx.forArg_ret (Γ : Ctx) (m : Mode) : (Γ.forArg m).ret = Γ.ret := rfl
+
+@[simp] theorem Ctx.enter_returnsOption (Γ : Ctx) (e : Expr) :
+    (Γ.enter e).returnsOption = Γ.returnsOption := rfl
+@[simp] theorem Ctx.enter_returnsResult (Γ : Ctx) (e : Expr) :
+    (Γ.enter e).returnsResult = Γ.returnsResult := rfl
 
 /-- An operator that succeeds fits the function's return type. -/
 theorem finishBinop_fits {Γ : Ctx} {op : BinOp} {t : Ty} (h : Clean (finishBinop Γ op t)) :
-    ∀ k, (Expr.binop op .tt .tt).early = some k → Γ.ret.allows k = true := by
+    ∀ k ∈ (Expr.binop op .tt .tt).earlies, Γ.ret.allows k = true := by
   intro k hk
-  cases op <;> simp [Expr.early, needs] at hk <;> subst hk <;>
+  cases op <;> simp [Expr.earlies, needs] at hk <;> subst hk <;>
     simp only [finishBinop, fits, needs] at h <;>
     (first | rw [← Ctx.returnsResult_eq] | rw [← Ctx.returnsOption_eq]) <;>
     (cases hr : Γ.returnsResult <;> cases ho : Γ.returnsOption <;> simp_all <;>
       (split at h <;> simp at h))
 
-theorem Guarded.leaf {ok : Early → Bool} {e : Expr} (h1 : e.early = none) (h2 : e.parts = []) :
+/-- What a place's step returns early is one `ok` allows, and its key is
+`Guarded`. -/
+def StepOk (ok : Early → Bool) (st : Step) : Prop :=
+  (∀ k, st.early = some k → ok k = true) ∧ (∀ p, st.key = some p → Guarded ok p)
+
+theorem Guarded.leaf {ok : Early → Bool} {e : Expr} (h1 : e.earlies = []) (h2 : e.parts = []) :
     Guarded ok e :=
   .mk (by simp [h1]) (by simp [h2])
 
-theorem Guarded.one {ok : Early → Bool} {e p : Expr} (h1 : e.early = none) (h2 : e.parts = [p])
+theorem Guarded.one {ok : Early → Bool} {e p : Expr} (h1 : e.earlies = []) (h2 : e.parts = [p])
     (hp : Guarded ok p) : Guarded ok e :=
   .mk (by simp [h1]) (by intro q hq; simp [h2] at hq; subst hq; exact hp)
 
-theorem Guarded.all {ok : Early → Bool} {e : Expr} {ps : List Expr} (h1 : e.early = none)
+theorem Guarded.all {ok : Early → Bool} {e : Expr} {ps : List Expr} (h1 : e.earlies = [])
     (h2 : e.parts = ps) (hp : ∀ p ∈ ps, Guarded ok p) : Guarded ok e :=
   .mk (by simp [h1]) (by rw [h2]; exact hp)
 
--- Close a goal whose hypothesis `h` is a check that cannot succeed: a
--- `throw`, or a literal with no rule for the head.
-set_option hygiene false in
-macro "impossible" : tactic => `(tactic| first
-  | (simp at h; done)
-  | exact absurd h literalMismatch_not_clean)
+/-- A place whose steps are each `StepOk`. -/
+theorem Guarded.place {ok : Early → Bool} {x : String} {steps : List Step}
+    (h : ∀ st ∈ steps, StepOk ok st) : Guarded ok (.place x steps) := by
+  refine .mk (fun k hk => ?_) (fun p hp => ?_)
+  · simp only [Expr.earlies, List.mem_filterMap] at hk
+    obtain ⟨st, hst, hk⟩ := hk
+    exact (h st hst).1 k hk
+  · simp only [Expr.parts, List.mem_filterMap] at hp
+    obtain ⟨st, hst, hp⟩ := hp
+    exact (h st hst).2 p hp
 
+-- Close a goal whose hypothesis `h` is a check that cannot succeed.
 set_option hygiene false in
-macro "parts_of" : tactic => `(tactic| (intro q hq; simp [Expr.parts] at hq))
+macro "impossible" : tactic => `(tactic| (simp at h; done))
+
+theorem clean_ite_throw {α} {c : Prop} [Decidable c] {s : Code} {f : PUnit → ChkM α}
+    {g : ChkM α} (h : Clean (if c then throw s >>= f else g)) : ¬ c ∧ Clean g := by
+  split at h
+  · simp at h
+  · exact ⟨‹_›, h⟩
+
+@[simp] theorem Ctx.enter_fitsMode (Γ : Ctx) (e : Expr) (m : IdxMode) :
+    (Γ.enter e).fitsMode m = Γ.fitsMode m := rfl
 
 mutual
 
@@ -163,67 +218,67 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
       simp only [synthF] at h
       obtain ⟨-, _, h⟩ := peel h
       obtain ⟨hc, -⟩ := peel h
-      exact .one rfl rfl (checkForm_guarded env n Γ inner _ hc)
+      exact .one rfl rfl (checkForm_guarded env n (Γ.enter _) inner _ hc)
     case var | tt | ff | int | hex | float | str | none_ | atom => exact .leaf rfl rfl
     case binop op a b =>
       simp only [synthF] at h
       obtain ⟨hp, _, hf⟩ := peel h
-      obtain ⟨ga, gb⟩ := pairF_guarded env n Γ a b _ hp
-      refine .mk (fun k hk => finishBinop_fits hf k (by simpa [Expr.early] using hk)) ?_
+      obtain ⟨ga, gb⟩ := pairF_guarded env n (Γ.enter _) a b _ hp
+      refine .mk (fun k hk => finishBinop_fits hf k (by simpa [Expr.earlies] using hk)) ?_
       intro q hq; simp [Expr.parts] at hq; rcases hq with rfl | rfl <;> assumption
     case unop op a =>
       cases op
       case neg | not =>
         simp only [synthF] at h
         obtain ⟨ha, -⟩ := peel h
-        exact .one rfl rfl (synthF_guarded env n Γ a ha)
+        exact .one rfl rfl (synthF_guarded env n (Γ.enter _).borrow a ha)
       case negO =>
         simp only [synthF] at h
         obtain ⟨ha, _, h⟩ := peel h
-        have ga := synthF_guarded env n Γ a ha
+        have ga := synthF_guarded env n (Γ.enter _).borrow a ha
         refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; subst hq; exact ga)
         intro k hk
-        simp [Expr.early] at hk; subst hk
+        simp [Expr.earlies] at hk; subst hk
         rw [← Ctx.returnsOption_eq]
         cases ho : Γ.returnsOption <;> simp_all <;> (split at h <;> simp at h)
       case negC =>
         simp only [synthF] at h
         obtain ⟨ha, _, h⟩ := peel h
-        have ga := synthF_guarded env n Γ a ha
+        have ga := synthF_guarded env n (Γ.enter _).borrow a ha
         refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; subst hq; exact ga)
         intro k hk
-        simp [Expr.early] at hk; subst hk
+        simp [Expr.earlies] at hk; subst hk
         rw [← Ctx.returnsResult_eq]
         cases hr : Γ.returnsResult <;> simp_all <;> (split at h <;> simp at h)
     case tryOpt a =>
       simp only [synthF] at h
       obtain ⟨ha, _, h⟩ := peel h
       refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; rw [hq]
-                        exact synthF_guarded env n Γ a ha)
+                        exact synthF_guarded env n (Γ.enter _) a ha)
       intro k hk
-      simp [Expr.early] at hk; subst hk
+      simp [Expr.earlies] at hk; subst hk
       rw [← Ctx.returnsOption_eq]
       split at h
       · split at h
-        · assumption
+        · simpa using ‹_›
         · simp at h
       · simp at h
     case tryRes a =>
       simp only [synthF] at h
       obtain ⟨ha, _, h⟩ := peel h
       refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; rw [hq]
-                        exact synthF_guarded env n Γ a ha)
+                        exact synthF_guarded env n (Γ.enter _) a ha)
       intro k hk
-      simp [Expr.early] at hk; subst hk
+      simp [Expr.earlies] at hk; subst hk
       rw [← Ctx.returnsResult_eq]
       split at h
       · split at h
-        · assumption
+        · simpa using ‹_›
         · simp at h
       · simp at h
     case adapt a =>
       simp only [synthF] at h
-      exact .one rfl rfl (synthF_guarded env n Γ a h)
+      exact .one rfl rfl (synthF_guarded env n (Γ.enter _).borrow a h)
     case call f args =>
       simp only [synthF] at h
       split at h
@@ -236,14 +291,87 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
           refine .all rfl rfl (fun p hp => ?_)
           simp [Expr.parts] at hp
           obtain ⟨m, hm⟩ := hp
-          exact argsF_guarded env n Γ args sig.params hargs hl (m, p) hm
+          exact argsF_guarded env n (Γ.enter _) args sig.params hargs hl (m, p) hm
       · impossible
+    case place x steps =>
+      simp only [synthF] at h
+      split at h
+      · exact .place (stepsF_guarded env n (Γ.enter _) _ steps h)
+      · impossible
+    case proj b s =>
+      simp only [synthF] at h
+      obtain ⟨hb, -⟩ := peel h
+      exact .one rfl rfl (synthF_guarded env n (Γ.enter _) b hb)
+    case index b k mode =>
+      cases mode with
+      | none => simp only [synthF] at h; impossible
+      | some m =>
+        simp only [synthF] at h
+        obtain ⟨hb, _, h⟩ := peel h
+        obtain ⟨-, ⟨t, kt⟩, h⟩ := peel h
+        obtain ⟨hk, _, h⟩ := peel h
+        refine .mk (fun e he => ?_) (fun p hp => ?_)
+        · simp only [Expr.earlies, List.mem_singleton] at he
+          subst he
+          rw [← Ctx.fitsMode_eq]
+          obtain ⟨-, h⟩ := clean_ite_throw h
+          obtain ⟨hf, -⟩ := clean_ite_throw h
+          simpa using hf
+        · simp only [Expr.parts, List.mem_cons, List.not_mem_nil, or_false] at hp
+          rcases hp with rfl | rfl
+          · exact synthF_guarded env n (Γ.enter _) _ hb
+          · exact checkF_guarded env n (Γ.enter _) _ _ (clean_recover hk)
     case tuple | struct | list | set | map | tensor | table | some_ | ok | er | data | error
       | term | enum =>
       simp only [synthF] at h
-      obtain ⟨-, _, h⟩ := peel h
-      obtain ⟨hc, -⟩ := peel h
-      exact checkForm_guarded env n Γ _ _ hc
+      split at h
+      · obtain ⟨-, _, h⟩ := peel h
+        obtain ⟨hc, -⟩ := peel h
+        exact checkForm_guarded env n (Γ.enter _) _ _ hc
+      · split at h
+        · obtain ⟨-, _, h⟩ := peel h
+          obtain ⟨hc, -⟩ := peel h
+          exact checkForm_guarded env n (Γ.enter _) _ _ hc
+        · impossible
+
+theorem stepsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (steps : List Step),
+    Clean (stepsF env n Γ t steps) → ∀ st ∈ steps, StepOk Γ.ret.allows st
+  | 0, _, _, _, h => by simp [stepsF] at h
+  | _ + 1, _, _, [], _ => by simp
+  | n + 1, Γ, t, [st], h => by
+    simp only [stepsF] at h
+    intro s hs
+    simp at hs; subst hs
+    exact stepF_guarded env n Γ t s h
+  | n + 1, Γ, t, st :: st' :: rest, h => by
+    simp only [stepsF] at h
+    obtain ⟨hs, _, h⟩ := peel h
+    intro s hs'
+    simp only [List.mem_cons] at hs'
+    rcases hs' with rfl | hs'
+    · exact stepF_guarded env n Γ.through t s hs
+    · exact stepsF_guarded env n Γ _ (st' :: rest) h s (by simpa using hs')
+
+theorem stepF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (st : Step),
+    Clean (stepF env n Γ t st) → StepOk Γ.ret.allows st
+  | 0, _, _, _, h => by simp [stepF] at h
+  | _ + 1, _, _, .field _, _ => ⟨by simp [Step.early], by simp [Step.key]⟩
+  | _ + 1, _, _, .index _ none, h => by simp [stepF] at h
+  | n + 1, Γ, t, .index k (some m), h => by
+    simp only [stepF] at h
+    obtain ⟨-, ⟨et, kt⟩, h⟩ := peel h
+    obtain ⟨hk, _, h⟩ := peel h
+    refine ⟨fun e he => ?_, fun p hp => ?_⟩
+    · simp only [Step.early, Option.some.injEq] at he
+      subst he
+      rw [← Ctx.fitsMode_eq]
+      obtain ⟨-, h⟩ := clean_ite_throw h
+      obtain ⟨-, h⟩ := clean_ite_throw h
+      obtain ⟨hf, -⟩ := clean_ite_throw h
+      simpa using hf
+    · simp only [Step.key, Option.some.injEq] at hp
+      subst hp
+      exact checkF_guarded env n Γ _ _ (clean_recover hk)
 
 theorem pairF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (a b : Expr) (x : Option Ty)
     , Clean (pairF env n Γ a b x) →
@@ -252,11 +380,12 @@ theorem pairF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (a b : Expr) (
   | n + 1, Γ, a, b, x, h => by
     simp only [pairF] at h
     obtain ⟨-, _, h⟩ := peel h
+    obtain ⟨-, _, h⟩ := peel h
     split at h
     · simp at h
     · obtain ⟨ha, _, h⟩ := peel h
       obtain ⟨hb, -⟩ := peel h
-      exact ⟨checkF_guarded env n Γ a _ ha, checkF_guarded env n Γ b _ hb⟩
+      exact ⟨checkF_guarded env n Γ.borrow a _ ha, checkF_guarded env n Γ.borrow b _ hb⟩
 
 theorem argsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × Expr))
     (params : List (Mode × Ty)), Clean (argsF env n Γ args params) →
@@ -266,7 +395,7 @@ theorem argsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (args : List (
   | _ + 1, _, _ :: _, [], _, hl => by simp at hl
   | n + 1, Γ, (marker, e) :: args, (mode, t) :: params, h, hl => by
     simp only [argsF] at h
-    have h : Clean (checkF env n Γ e t >>= fun _ => argsF env n Γ args params) := by
+    have h : Clean (checkF env n (Γ.forArg mode) e t >>= fun _ => argsF env n Γ args params) := by
       split at h <;> split at h
       all_goals first
         | exact h
@@ -275,7 +404,7 @@ theorem argsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (args : List (
     intro me hme
     simp at hme
     rcases hme with rfl | hme
-    · exact checkF_guarded env n Γ e _ he
+    · exact checkF_guarded env n (Γ.forArg mode) e _ he
     · exact argsF_guarded env n Γ args params h (by simpa using hl) me hme
 
 theorem checkF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty)
@@ -288,8 +417,8 @@ theorem checkF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t
       obtain ⟨-, _, h⟩ := peel h
       split at h
       · simp at h
-      · exact .one rfl rfl (checkForm_guarded env n Γ inner _ h)
-    all_goals (simp only [checkF] at h; exact checkForm_guarded env n Γ _ _ h)
+      · exact .one rfl rfl (checkForm_guarded env n (Γ.enter _) inner _ h)
+    all_goals (simp only [checkF] at h; exact checkForm_guarded env n (Γ.enter _) _ _ h)
 
 theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty)
     , Clean (checkForm env n Γ e t) → Guarded Γ.ret.allows e
@@ -393,14 +522,14 @@ theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr)
       · obtain ⟨hp, _, h⟩ := peel h
         obtain ⟨ga, gb⟩ := pairF_guarded env n Γ a b _ hp
         obtain ⟨hf, -⟩ := peel h
-        refine .mk (fun k hk => finishBinop_fits hf k (by simpa [Expr.early] using hk)) ?_
+        refine .mk (fun k hk => finishBinop_fits hf k (by simpa [Expr.earlies] using hk)) ?_
         intro q hq; simp [Expr.parts] at hq; rcases hq with rfl | rfl <;> assumption
       · exact subsumeF_guarded env n Γ _ _ h
     case adapt a =>
       simp only [checkForm] at h
       obtain ⟨ha, -⟩ := peel h
-      exact .one rfl rfl (synthF_guarded env n Γ a ha)
-    case tryOpt | tryRes | call | hinted =>
+      exact .one rfl rfl (synthF_guarded env n Γ.borrow a ha)
+    case tryOpt | tryRes | call | hinted | place | proj | index =>
       simp only [checkForm] at h
       exact subsumeF_guarded env n Γ _ _ h
 
@@ -496,7 +625,8 @@ end
 
 /-- The expressions a statement holds itself, not in a body inside it. -/
 def Stmt.exprs : Stmt → List Expr
-  | .let_ _ _ e | .set_ _ _ e | .debuglog e | .call e => [e]
+  | .let_ _ _ e | .debuglog e | .call e => [e]
+  | .set_ x steps _ e => [.place x steps, e]
   | .var_ _ _ (Option.some e) => [e]
   | .ret (Option.some e) => [e]
   | .if_ c _ _ _ _ => [c]
@@ -615,22 +745,163 @@ theorem reportIf_good {c : Bool} {code : Code} :
   · exact good_weaken good_push (fun _ _ => trivial) (fun _ _ h => h.elim)
   · exact good_pure trivial trivial
 
-theorem checkSet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (op : Option BinOp)
-    (e : Expr) : Good (checkSet env n Γ x op e) (fun _ => True) (fun _ => Guarded Γ.ret.allows e) := by
-  unfold checkSet
+/-- `reportIf` that reports nothing found its condition false. -/
+theorem reportIf_quiet {c : Bool} {code : Code} :
+    Good (reportIf c code) (fun _ => True) (fun _ => c = false) := by
+  unfold reportIf
   split
   · exact good_weaken good_push (fun _ _ => trivial) (fun _ _ h => h.elim)
-  · rename_i t k _
-    refine good_bind reportIf_good (fun _ _ => ?_)
-    cases op with
-    | none =>
-      refine good_bind (good_runChk _) (fun r _ => good_pure trivial (fun hq _ => ?_))
-      obtain ⟨_, _, hs⟩ := hq
-      exact checkF_guarded env n Γ e t hs
-    | some op =>
-      refine good_bind (good_runChk _) (fun r _ => good_pure trivial (fun hq _ => ?_))
-      obtain ⟨_, _, hs⟩ := hq
-      exact checkF_guarded env n Γ e t (peel hs).1
+  · rename_i hc
+    exact good_pure trivial (by simpa using hc)
+
+theorem push_good {c : Code} {P : PUnit → Prop} :
+    Good (modify (·.push c) : StateM (Array Code) PUnit) (fun _ => True) P :=
+  good_weaken good_push (fun _ _ => trivial) (fun _ _ h => h.elim)
+
+theorem runChk_checkF_good (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) :
+    Good (runChk (checkF env n Γ e t)) (fun _ => True) (fun _ => Guarded Γ.ret.allows e) :=
+  good_weaken (good_runChk _) (fun _ h => h)
+    (fun _ _ ⟨_, _, hs⟩ => checkF_guarded env n Γ e t hs)
+
+theorem setValue_good (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (op : Option BinOp)
+    (e : Expr) :
+    Good (setValue env n Γ t op e) (fun _ => True) (fun _ => Guarded Γ.ret.allows e) := by
+  cases op with
+  | none =>
+    simp only [setValue]
+    exact good_bind (runChk_checkF_good env n Γ e t) (fun _ _ => good_pure trivial id)
+  | some op =>
+    simp only [setValue]
+    refine good_bind (runChk_checkF_good env n Γ.borrow e t) (fun _ _ => ?_)
+    split
+    · exact push_good
+    · exact good_weaken reportIf_good (fun _ h => h) (fun _ _ _ h => h)
+
+theorem setIndex_good (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr)
+    (mode : Option IdxMode) (op : Option BinOp) (e : Expr) :
+    Good (setIndex env n Γ t k mode op e) (fun _ => True)
+      (fun _ => Guarded Γ.ret.allows k ∧ Guarded Γ.ret.allows e) := by
+  unfold setIndex
+  split
+  · exact push_good
+  · split
+    · refine good_bind (runChk_checkF_good env n Γ k _) (fun _ _ => ?_)
+      refine good_bind (runChk_checkF_good env n Γ e _) (fun _ _ => ?_)
+      exact good_pure trivial (fun he hk => ⟨hk, he⟩)
+    · exact push_good
+  · split
+    · exact push_good
+    · split
+      · exact push_good
+      · refine good_bind (runChk_checkF_good env n Γ k _) (fun _ _ => ?_)
+        exact good_weaken (setValue_good env n Γ _ op e) (fun _ h => h)
+          (fun _ _ he hk => ⟨hk, he⟩)
+
+/-- A `set` target's steps check each key they reach, and the value. -/
+theorem setSteps_good (env : InferEnv) (n : Nat) (Γ : Ctx) (op : Option BinOp) (e : Expr) :
+    ∀ (t : Ty) (steps : List Step), Good (setSteps env n Γ t op e steps) (fun _ => True)
+      (fun _ => (∀ st ∈ steps, ∀ p, st.key = some p → Guarded Γ.ret.allows p) ∧
+        Guarded Γ.ret.allows e)
+  | t, [] => by
+    simp only [setSteps]
+    exact good_weaken (setValue_good env n Γ t op e) (fun _ h => h) (fun _ _ h => ⟨by simp, h⟩)
+  | t, [.index k mode] => by
+    simp only [setSteps]
+    refine good_weaken (setIndex_good env n Γ t k mode op e) (fun _ h => h) (fun _ _ h => ?_)
+    refine ⟨fun st hst p hp => ?_, h.2⟩
+    simp at hst; subst hst
+    simp [Step.key] at hp; subst hp
+    exact h.1
+  | t, .field s :: rest => by
+    simp only [setSteps]
+    split
+    · refine good_weaken (setSteps_good env n Γ op e _ rest) (fun _ h => h) (fun _ _ h => ?_)
+      refine ⟨fun st hst p hp => ?_, h.2⟩
+      simp at hst
+      rcases hst with rfl | hst
+      · simp [Step.key] at hp
+      · exact h.1 st hst p hp
+    · exact push_good
+  | t, .index _ none :: _ :: _ => by
+    simp only [setSteps]
+    exact push_good
+  | t, .index k (some _) :: st' :: rest => by
+    simp only [setSteps]
+    split
+    · exact push_good
+    · refine good_bind (runChk_checkF_good env n Γ k _) (fun _ _ => ?_)
+      refine good_weaken (setSteps_good env n Γ op e _ (st' :: rest)) (fun _ h => h)
+        (fun _ _ h hk => ⟨fun st hst p hp => ?_, h.2⟩)
+      simp only [List.mem_cons] at hst
+      rcases hst with rfl | hst
+      · simp [Step.key] at hp; subst hp; exact hk
+      · exact h.1 st (by simpa using hst) p hp
+
+theorem reportModes_good (Γ : Ctx) : ∀ (ms : List IdxMode),
+    Good (reportModes Γ ms) (fun _ => True) (fun _ => ∀ m ∈ ms, Γ.fitsMode m = true)
+  | [] => good_pure trivial (by simp)
+  | m :: ms => by
+    simp only [reportModes]
+    refine good_bind reportIf_quiet (fun _ _ => ?_)
+    exact good_weaken (reportModes_good Γ ms) (fun _ h => h) (fun _ _ h hm m' hm' => by
+      simp at hm'
+      rcases hm' with rfl | hm'
+      · simpa using hm
+      · exact h m' hm')
+
+theorem addMode_keeps {ms : List IdxMode} {m : IdxMode} (st : Step) (h : m ∈ ms) :
+    m ∈ setModes.addMode ms st := by
+  unfold setModes.addMode
+  split
+  · split <;> simp [h]
+  · exact h
+
+theorem addMode_adds (ms : List IdxMode) (st : Step) {k : Early} (h : st.early = some k) :
+    ∃ m ∈ setModes.addMode ms st, m.early = k := by
+  cases st with
+  | field _ => simp [Step.early] at h
+  | index _ mode =>
+    cases mode with
+    | none => simp [Step.early] at h
+    | some m =>
+      simp [Step.early] at h
+      refine ⟨m, ?_, h⟩
+      unfold setModes.addMode
+      split <;> simp_all
+      split <;> simp_all
+
+theorem setModes_go : ∀ (steps : List Step) (ms : List IdxMode),
+    (∀ m ∈ ms, m ∈ steps.foldl setModes.addMode ms) ∧
+    (∀ st ∈ steps, ∀ k, st.early = some k → ∃ m ∈ steps.foldl setModes.addMode ms, m.early = k)
+  | [], _ => ⟨fun _ h => h, by simp⟩
+  | st :: rest, ms => by
+    obtain ⟨keep, adds⟩ := setModes_go rest (setModes.addMode ms st)
+    refine ⟨fun m hm => keep m (addMode_keeps st hm), fun st' hst k hk => ?_⟩
+    simp at hst
+    rcases hst with rfl | hst
+    · obtain ⟨m, hm, rfl⟩ := addMode_adds ms st' hk
+      exact ⟨m, keep m hm, rfl⟩
+    · exact adds st' hst k hk
+
+theorem checkSet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (steps : List Step)
+    (op : Option BinOp) (e : Expr) :
+    Good (checkSet env n Γ x steps op e) (fun _ => True)
+      (fun _ => ∀ e' ∈ (Stmt.set_ x steps op e).exprs, Guarded Γ.ret.allows e') := by
+  unfold checkSet
+  split
+  · exact push_good
+  · refine good_bind reportIf_good (fun _ _ => ?_)
+    refine good_bind (reportModes_good Γ (setModes steps)) (fun _ _ => ?_)
+    refine good_weaken (setSteps_good env n Γ op e _ steps) (fun _ h => h)
+      (fun _ _ hs hm _ => ?_)
+    intro e' he'
+    simp only [Stmt.exprs, List.mem_cons, List.not_mem_nil, or_false] at he'
+    rcases he' with rfl | rfl
+    · refine .place (fun st hst => ⟨fun k hk => ?_, fun p hp => hs.1 st hst p hp⟩)
+      obtain ⟨m, hm', rfl⟩ := (setModes_go steps []).2 st hst k hk
+      rw [← Ctx.fitsMode_eq]
+      exact hm m hm'
+    · exact hs.2
 
 theorem checkRet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Option Expr) :
     Good (checkRet env n Γ e) (fun _ => True)
@@ -762,10 +1033,10 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
     case fun_ f =>
       simp only [checkStmtF]
       exact good_pure rfl (.of (by simp [Stmt.exprs]) (by simp [Stmt.blocks]))
-    case set_ x op e =>
+    case set_ x steps op e =>
       simp only [checkStmtF]
-      exact good_bind (checkSet_good env n Γ x op e)
-        (fun _ _ => good_pure rfl (fun hq => .of (by simp [Stmt.exprs, hq]) (by simp [Stmt.blocks])))
+      exact good_bind (checkSet_good env n Γ x steps op e)
+        (fun _ _ => good_pure rfl (fun hq => .of hq (by simp [Stmt.blocks])))
     case ret e =>
       simp only [checkStmtF]
       exact good_bind (checkRet_good env n Γ e)
@@ -778,7 +1049,7 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
       simp only [checkStmtF]
       refine good_bind (good_runChk _) (fun r _ => good_pure rfl (fun hq => ?_))
       obtain ⟨_, _, hs⟩ := hq
-      exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ e hs) (by simp [Stmt.blocks])
+      exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ.borrow e hs) (by simp [Stmt.blocks])
     case call e =>
       simp only [checkStmtF]
       refine good_bind (good_runChk _) (fun r _ => ?_)
@@ -806,18 +1077,12 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
       simp only [checkStmtF]
       refine good_bind (Px := fun _ => True)
         (Qx := fun r => r.isSome = true ∧ Guarded Γ.ret.allows coll) ?_ (fun r _ => ?_)
-      · cases coll
-        case var x =>
-          have e : forBindings env n Γ names (.var x) = runChk (do
-              let t ← synthF env n Γ (.var x)
-              liftE (walk t.expose names)) := rfl
-          rw [e]
-          refine good_weaken (good_runChk _) (fun _ h => h) (fun r _ hq => ?_)
+      · unfold forBindings
+        split
+        · refine good_weaken (good_runChk _) (fun _ h => h) (fun r _ hq => ?_)
           obtain ⟨_, rfl, hs⟩ := hq
-          exact ⟨rfl, synthF_guarded env n Γ _ (peel hs).1⟩
-        all_goals
-          simp only [forBindings]
-          exact good_bind good_push (fun _ _ => good_pure trivial (fun h => h.elim))
+          exact ⟨rfl, synthF_guarded env n Γ.borrow _ (peel hs).1⟩
+        · exact good_bind good_push (fun _ _ => good_pure trivial (fun h => h.elim))
       · refine good_bind (Px := fun _ => True) (Qx := fun _ => r.isSome →
             ∀ s ∈ body, GuardedS Γ.ret.allows s) ?_ (fun _ _ => good_pure rfl (fun hb hc => ?_))
         · cases r with

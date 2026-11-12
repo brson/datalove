@@ -250,14 +250,18 @@ doc. The datalit fixture `79_atom_then_hinted_term_of_its_name` holds it in
 The third part takes datafun: a slice of
 [its typing rules](datafun-typing-rules.md), written from the doc as the
 literal typing was (`formal/Datalove/Fun.lean`). The slice is scripts of
-functions and statements: `let`, `var`, `set` with or without an operator,
-`if` and the binding `if`, `loop` and `loop while`, `for`, `break`,
-`continue`, `ret`, `debuglog` and `call`; datalit's literal forms, which datafun types by
-datalit's rules with a context added; and datafun's variables, operators,
-`?`, `!`, `@` and calls. It leaves out generics, modules and requires,
-consts, type aliases, patterns, projections and indexing, and `match`.
-Inference is datalit's, extended by the doc's table: the `@` class lives in
-`Lit.lean`'s unifier, as datafun's lives in datalit's in the Rust.
+functions and statements: `let`, `var`, `set` with or without an operator
+and through fields and indexes, `if` and the binding `if`, `loop` and
+`loop while`, `for`, `break`, `continue`, `ret`, `debuglog` and `call`;
+datalit's literal forms, which datafun types by datalit's rules with a
+context added; and datafun's variables, places with field and index steps,
+fields and indexes of what is not a place, operators, `?`, `!`, `@` and
+calls, each in a borrowed position or not. It leaves out generics, modules
+and requires, consts, type aliases, patterns and `match`. Inference is
+datalit's, extended by the doc's table: the `@` class lives in `Lit.lean`'s
+unifier, as datafun's lives in datalit's in the Rust, and so does an
+`unknown` class for what inference cannot read, which the Rust marks by a
+variable's origin.
 
 The checker reports what is wrong and goes on, so the model's answer for a
 script is every diagnostic code, in order, and so is what it is held to. That
@@ -272,13 +276,14 @@ Worldgen's bodies use their bindings little, so each script is changed up to
 three times a line at a time: a type or value changed, an operator swapped,
 `?`, `!` or `@` added, a name unbound, a `ret` dropped, a stray `break`,
 `set` or `call`, or a statement added that computes from the parameters and
-locals in scope, unwraps them, matches on them with a binding `if`, or calls
-with them. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
+locals in scope, unwraps them, matches on them with a binding `if`, calls
+with them, reads a field or element of them, borrowed or not, or sets one. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
 the oracle's input, read as it is (`formal/Datalove/FunJson.lean`); a script
 using a form outside the slice is skipped and counted. A corpus of cases
-written by hand runs first. Forty thousand scripts from a random seed agree
-on every diagnostic, about thirty-seven thousand of them inside the slice,
-reaching every statement code the slice has.
+written by hand runs first; worldgen's parameters are mostly scalars, so it
+is the corpus that reaches F069 to F073 most. Thirty thousand scripts from a
+random seed agree on every diagnostic, all but the 1773 that do not parse
+inside the slice, reaching every statement code the slice has.
 
 What it found:
 
@@ -295,6 +300,19 @@ What it found:
   checked as any negation is: there F016, and F026 for `-(: i64 / 8)`. A
   mutation that changed a binding's type from `int` to `u8` found it; the
   error fixture `128_negated_literal_with_a_hint` holds it.
+- **Two of the model's own rules were wrong**, found when projections
+  widened what the tests reach. A literal form with no rule for the
+  expected type inferred itself first, so `ret some x` with `x` unbound was
+  F001 in the model and F016 in the Rust, which only describes the literal
+  there. And the model threw where inference could not read a name, where
+  the Rust leaves a variable to be synthesized, which decides between F001
+  and T016 in `(x, none)`. Both now follow the Rust, and the doc says how
+  the second goes.
+- **A temporary's field is refused where its element is not.** `f().name`
+  of a non-copy field is F070, and `f()[0]?` of a non-copy element has no
+  F072 check at all, though nothing is left behind in a temporary either
+  way. The model follows the code; [the issue](issues.md#user-content-a-temporarys-field-is-refused-where-its-element-is-not)
+  says what to decide.
 - **Worldgen could recurse without end.** An argument of a call may itself
   be a call, with no bound, so a function of enough parameters drew calls
   inside calls until the stack overflowed: past one expected call per call,
@@ -307,12 +325,13 @@ Two things are proved of it:
 
 - **Every early return fits the function** (`Fun.checkFun_early_returns_fit`,
   in `Proofs/EarlyReturn.lean`). A function whose check reports nothing has
-  every early return in its body, from `?`, `!`, `-?`, `-!` or a checked or
-  optional operator, at any depth of any expression of any statement, one its
-  return type can carry: `none` only where it returns an option, an error only
-  where it returns a result. Underneath it, `Fun.checkF_guarded` says the same
-  of any expression that checks or synthesizes. Taking `fits` out of `?`'s
-  rule breaks the proof.
+  every early return in its body, from `?`, `!`, `-?`, `-!`, an index's `?`
+  or `!`, read or in a `set` target, or a checked or optional operator, at
+  any depth of any expression of any statement, one its return type can
+  carry: `none` only where it returns an option, an error only where it
+  returns a result. Underneath it, `Fun.checkF_guarded` says the same of any
+  expression that checks or synthesizes. Taking `fits` out of `?`'s rule
+  breaks the proof, as taking F049 out of a place's index step does.
 - **`completes` is sound** (`Fun.completes_sound`, in
   `Proofs/Completes.lean`). A body it says cannot complete has no execution
   that finishes normally, against a semantics of control flow in which any
@@ -382,15 +401,16 @@ In rough order of what to do next:
   constraints all hold, the order of a collection's elements does not change
   what it synthesizes. Proving it needs unification made total, with a
   measure or fuel, and `Lit.lean`'s inference is partial.
-- **Datafun's `@` class in inference**, `Class::Adapt`, which datalit's
-  inference carries for datafun. `Lit.lean` has no `@` and leaves it out.
 - **What `ret e` returns.** The early-return theorem covers the returns an
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's
   expressions, which only datalit's literals have (`Lit.check_sound`).
+- **A compound `set`'s own early return.** `set x +!= 1` returns early as
+  `x +! 1` does, and the checker requires that it fit (F049), but the
+  early-return theorem does not yet count it among a statement's.
 - **The rest of datafun.** Generics, whose substitution lemma is what
-  monomorphization relies on, modules, consts, patterns, projections,
-  indexing and `match` are outside the slice. The serde AST already
+  monomorphization relies on, modules, consts, patterns and `match` are
+  outside the slice. The serde AST already
   carries them; the model and the generator's configuration are what widen.
 - **Aliases and type parameters in hints.** The model takes datalit's
   hints, with no aliases or type parameters, so T063 for an alias and the

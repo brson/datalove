@@ -514,6 +514,14 @@ read only in a borrowed position carry the side condition
 `copy(T) ∨ borrowed`; it is left out of the rules above for brevity. A view
 (an element of a tensor of rank above 1) passed `mut` or `out` is F073.
 
+A borrowed position ends at an expression that builds a value of its parts:
+a tuple, struct, collection, table, `some`, `ok`, `er`, `data`, `error` or
+term. The parts are moved into what is built, so `debuglog (p.name,)` is
+F070 for a `string` field as `let t = (p.name,)` is. An element indexed out
+of what is not a place, `f()[k]?`, is a temporary's, and is never F072; a
+field of one, `f().name`, is still F070
+([an issue](issues.md#user-content-a-temporarys-field-is-refused-where-its-element-is-not)).
+
 ### Inference
 
 Datafun infers with datalit's inference and unifier, and adds rules for its
@@ -538,6 +546,14 @@ The class `adapt T` admits every type `T` adapts to (`T ⇝ U`) and defaults to
 admits `T`, as `adapt T`, so a literal beside `e@` goes along with `T`. Two
 `@` meet at the first one's type when the second adapts to it, so with
 `a : u32` and `b : u8`, `a@ .< b@` compares `u32`s and `b@ .< a@` is F016.
+
+Where inference cannot read a part at all, an unbound name, a field its
+type lacks, `?` on what is not an option, a call of no function, it leaves a
+variable no literal stands behind. A literal form whose type comes to one is
+synthesized from its parts instead, in order, each of a collection's like
+its first, so the fault reported is the part's own (F001, F067, F048, F002)
+rather than T016. A literal left open that such a variable meets still is
+T016: `(none, x)` with `x` unbound is T016, and `(x, none)` is F001.
 
 An expression is inferred once, when something first asks for its type, with
 everything inside it. The inferred type of each part is kept, and checking
@@ -861,8 +877,15 @@ afterwards, decides which faults after the first are reported:
 - **A `let` or `var`** with a type binds its name at that type, whether or
   not the value checks. One without a type binds its name only if the value
   synthesizes, so a later use of the name is F001.
+- **An index's key** that is not of the key type is reported, and the index
+  goes on to what it reads.
 - **A `set` of an immutable binding** (F055) still checks its value against
-  the binding's type.
+  the binding's type. A `set` reports F049 for each of `?` and `!` that its
+  target's indexes use and the function does not fit, once each, before it
+  follows the steps. A field the target's type lacks, a bare index partway
+  along, and an index into what has none stop the statement; a key is
+  reported and the steps go on. A compound `set` whose value does not check
+  still checks its operator (F026, then F049).
 - **An `if`** whose condition is not a `bool` still checks both bodies. A
   binding `if` checks neither body when its condition has no type, when it
   is neither an option nor a result (F093), or when it is a result with no

@@ -92,6 +92,10 @@ inductive Class where
   if nothing decides. Datalit's own inference never makes one; it is here
   because datafun's inference is datalit's, extended. -/
   | adapt (t : Ty)
+  /-- Datafun's: a type inference could not read, such as an unbound name's,
+  which checking reports by synthesizing what holds it. It is open, but one
+  made one with a literal's open type stays that literal's (T016). -/
+  | unknown
   deriving Inhabited
 
 inductive VarState where
@@ -131,7 +135,7 @@ def Ty.isUnsigned : Ty → Bool
 /-- Whether a class admits a type, by the type's head (the doc's table). A
 literal's class admits a recursive type when it admits the unfolding. -/
 partial def Class.admits : Class → PTy → Bool
-  | .open_, _ => true
+  | .open_, _ | .unknown, _ => true
   | c, .known t@(.mu _) => c.admits (.known t.expose)
   | .int, .known t => t.isFixedInt || t == .int
   | .hex, .known t => Ty.isUnsigned t || t == .int || t.isFloat
@@ -151,6 +155,7 @@ partial def Class.admits : Class → PTy → Bool
 /-- Two classes made one, and payloads to unify then, or `none` if no type is
 of both (the doc's table of merges). -/
 def mergeClasses : Class → Class → Option (Class × Option (PTy × PTy))
+  | .unknown, c | c, .unknown => some (c, none)
   | .open_, c | c, .open_ => some (c, none)
   | .int, .int => some (.int, none)
   | .hex, .hex => some (.hex, none)
@@ -286,6 +291,10 @@ end
 
 /-! ## Defaults -/
 
+/-- What `resolve` throws for a variable of the `unknown` class: not a
+diagnostic, but word to synthesize the expression instead. -/
+def unknownCode : Code := "unknown"
+
 /-- The type a variable-holding type comes to, each undecided variable taking
 its class's default. A variable with none is T016. -/
 partial def resolve (t : PTy) : InferM Ty := do
@@ -299,11 +308,12 @@ partial def resolve (t : PTy) : InferM Ty := do
     | .free (.variant a (some p)) => .term a <$> resolve p
     | .free (.adapt f) => pure f
     | .free .open_ => throw "T016"
+    | .free .unknown => throw unknownCode
     | _ => panic! "a pruned variable is free"
+  -- Parts in order, so that the first undecided is the one thrown.
   | .tuple ts => do
-    let mut out := Tys.nil
-    for t in ts.reverse do out := .cons (← resolve t) out
-    pure (.tuple out)
+    let rs ← ts.mapM resolve
+    pure (.tuple (rs.foldr .cons .nil))
   | .struct fs => .struct <$> resolveFields fs
   | .table fs => .table <$> resolveFields fs
   | .list t => .list <$> resolve t
@@ -314,17 +324,14 @@ partial def resolve (t : PTy) : InferM Ty := do
   | .tensor t r => (.tensor · r) <$> resolve t
   | .term a t => .term a <$> resolve t
   | .enum vs => do
-    let mut out := Variants.nil
-    for (n, p) in vs.reverse do
-      out ← match p with
-        | none => pure (.atom n out)
-        | some p => do pure (.term n (← resolve p) out)
-    pure (.enum out)
+    let rs ← vs.mapM fun (n, p) => do pure (n, ← p.mapM resolve)
+    pure (.enum (rs.foldr (fun (n, p) out => match p with
+      | none => .atom n out
+      | some t => .term n t out) .nil))
 where
   resolveFields (fs : List (String × PTy)) : InferM Fields := do
-    let mut out := Fields.nil
-    for (n, t) in fs.reverse do out := .cons n (← resolve t) out
-    pure out
+    let rs ← fs.mapM fun (n, t) => do pure (n, ← resolve t)
+    pure (rs.foldr (fun (n, t) out => .cons n t out) .nil)
 
 /-! ## Hints -/
 
