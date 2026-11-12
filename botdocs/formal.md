@@ -168,9 +168,10 @@ names, and the exhaustive search had two. Meeting at the head compared one
 side's unfolding with the other side as it was, so each of the two met their
 common unfolding and not each other, and `@` from one to the other was F091.
 `types_equivalent_at_head` now unfolds both sides, which makes `≈` equality
-of unfoldings, and the assumption is gone. The script fixture
-`07_recursive_types_unfolding_alike` holds the case; Cranelift AOT cannot yet
-compile the type at all, which is in [issues](issues.md).
+of unfoldings, and the assumption is gone. The backend fixture
+`44_recursive_types_unfolding_alike` holds the case. Cranelift AOT could not
+compile such a type at all, with or without the change: the two types each
+reserved the descriptor of their common unfolding, and now share it.
 
 Two things the tests confirmed that the docs only claimed: `≡` and the derived
 `PartialEq` agree, and the conversion reports the same first error as a

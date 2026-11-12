@@ -276,14 +276,24 @@ impl TyDescEmitter {
     /// before the unfolding's descriptor is made, so that the parts' uses of
     /// the type are relocated to it, and the unfolding's descriptor is then
     /// defined into it.
+    ///
+    /// Two recursive types may unfold alike: `rec L rec M [(L, M)]` and its
+    /// one-step unfolding `rec N [(rec L rec M [(L, M)], N)]` both unfold to
+    /// one list, and the second is reached while that list's descriptor is
+    /// made for the first. Its unfolding is then already reserved, and it shares
+    /// the descriptor being made, as it shares the layout.
     fn emit_rec<M: Module>(&mut self, module: &mut M, ty: &IrType) -> Result<DataId, CraneliftError> {
+        let unfolded = ty.exposed().into_owned();
+        if let Some(&id) = self.reserved.get(&unfolded) {
+            self.tydescs.insert(ty.C(), id);
+            return Ok(id);
+        }
         let name = format!("__tydesc_{}", self.counter);
         self.counter += 1;
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
             .map_err(|e| CraneliftError::Module(format!("declare rec tydesc: {}", e)))?;
         self.tydescs.insert(ty.C(), data_id);
-        let unfolded = ty.exposed().into_owned();
         // A descriptor of the unfolding made before this one is set aside, so
         // that one is made into the reserved data, and put back after: the
         // two are alike, and what already points at the first may go on.

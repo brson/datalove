@@ -42,7 +42,6 @@ home here.
   - [Datafun records a copy of every expression's type](#user-content-datafun-records-a-copy-of-every-expressions-type)
 
 - [Backends and performance](#user-content-backends-and-performance)
-  - [Cranelift AOT panics on a type with two leading `rec`s](#user-content-cranelift-aot-panics-on-a-type-with-two-leading-recs)
   - [A generic's descriptor-table cache holds one binding](#user-content-a-generics-descriptor-table-cache-holds-one-binding)
   - [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
   - [The C backend emits code the size of the data](#user-content-the-c-backend-emits-code-the-size-of-the-data)
@@ -544,34 +543,6 @@ types would remove both.
 ## Backends and performance
 
 Compiled code that is wrong in a corner, or slower or larger than it needs to be.
-
-### Cranelift AOT panics on a type with two leading `rec`s
-
-Reproduced. A script holding a value of `rec L rec M [(L, M)]` does not
-compile through Cranelift AOT:
-
-```datalove
-type Outer: rec L rec M [(L, M)]
-let outer: Outer = [([], [])]
-debuglog outer
-```
-
-`datalove aot-compile` panics at the assertion in
-`crates/datalove-datafun-cranelift/src/tydesc_emit.rs` that the unfolding's
-descriptor is defined into the data reserved for it. The interpreter and the
-JIT run it. It predates the change that made the two types meet at the head;
-the type alone is enough.
-
-The likely cause, not confirmed: the descriptor of the outer type reserves
-data for its unfolding, `[(Outer, rec N [(Outer, N)])]`, and emitting that
-unfolding reaches `rec N [(Outer, N)]`, whose own unfolding is the same type,
-so it reserves the same key again and the outer descriptor is defined
-elsewhere. A descriptor keyed by the full unfolding, shared by every `rec`
-that unfolds to it, would make the two one.
-
-The case is in the script fixture `07_recursive_types_unfolding_alike`, run
-by the interpreter only, until this is fixed and it can join the backend
-fixtures.
 
 ### A generic's descriptor-table cache holds one binding
 
