@@ -47,7 +47,7 @@
 //!   and was refused at none.
 
 use datalove_datafun_compiler::instances::GenericsPolicy;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
@@ -64,6 +64,7 @@ use datalove_datafun_c_aot::CAotCompiler;
 use datalove_datafun_interp::{Engine, FunctionRegistry};
 use datalove_datafun_ir::{expand_ir_strings, IrCodeUnit};
 use datalove_datafun_pkg::package_load_worldfile::{self, ParsedWorldfile, WorldfileSection};
+use datafun::driver::rider_build;
 use datafun::driver::{CompilerOptions, SystemLibrary, LoweringResult, OwnershipResult, ScriptExecutor, TypecheckResult};
 use datafun::worldfile_analysis::{Analysis, AnalysisOptions, ExecutorHooks, SectionResult};
 
@@ -413,19 +414,7 @@ pub fn section_compiled(section: &SectionResult) -> bool {
 /// Whether the AOT backends apply: one fragment, no expressions, nothing but
 /// modules and data beside it, and every unit compiled and run to completion by the
 /// reference.
-///
-/// Nor where the world requires the system library, whose rider the AOT
-/// builds here do not link.
 fn aot_applies(parsed: &ParsedWorldfile, reference: &Analysis) -> bool {
-    let requires_system = parsed.sections.iter().any(|s| match s {
-        WorldfileSection::Module { source, .. } | WorldfileSection::ScriptFragment { source } => {
-            source.contains("require module sys/")
-        }
-        _ => false,
-    });
-    if requires_system {
-        return false;
-    }
     let fragments = parsed.sections.iter()
         .filter(|s| matches!(s, WorldfileSection::ScriptFragment { .. }))
         .count();
@@ -438,13 +427,17 @@ fn aot_applies(parsed: &ParsedWorldfile, reference: &Analysis) -> bool {
 
 /// Compile the fragment for an AOT backend and hand it to `build_and_run`,
 /// which returns the program's stderr.
+///
+/// With a system library, what the program links is a component built with
+/// the library's riders in it, rather than the runtime alone.
 fn run_aot(
     parsed: &ParsedWorldfile,
-    build_and_run: fn(&IrCodeUnit, &FunctionRegistry, &Path) -> Result<String, String>,
+    system: Option<&SystemLibrary>,
+    build_and_run: fn(&IrCodeUnit, &FunctionRegistry, &[PathBuf], &Path) -> Result<String, String>,
 ) -> Result<String, String> {
     let db = datafun::Database::default();
-    let mut module_compiler = datafun::driver::ModuleCompiler::from_sections(
-        &db, &parsed.sections, CompilerOptions::default());
+    let (mut module_compiler, workspace) = datafun::worldfile_analysis::worldfile_module_compiler(
+        &db, &parsed.sections, CompilerOptions::default(), system);
     let compiled = module_compiler.compile(&db);
     let mut compiler = compiled.script_compiler_default(&db)
         .ok_or("the modules did not compile")?;
@@ -455,8 +448,15 @@ fn run_aot(
         })
         .X();
     let unit = compiler.compile_fragment(source).ir_unit.ok_or("the fragment did not compile")?;
+    let libs = match workspace {
+        Some((_, descriptor)) => vec![
+            rider_build::build_component_staticlib(&rider_build::default_work_dir(), &descriptor.rider_crates())
+                .map_err(|e| format!("the riders did not build: {e}"))?,
+        ],
+        None => Vec::new(),
+    };
     let dir = rmx::tempfile::tempdir().map_err(|e| e.S())?;
-    build_and_run(&unit, &compiled.module_registry(), dir.path())
+    build_and_run(&unit, &compiled.module_registry(), &libs, dir.path())
 }
 
 /// Run an executable, returning its stderr if it succeeded.
@@ -469,18 +469,20 @@ fn run_exe(exe: &Path) -> Result<String, String> {
     Ok(stderr)
 }
 
-fn cranelift_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -> Result<String, String> {
+/// Each builds `unit` into an executable linking `libs`, the native
+/// component, or the runtime alone where there are none, and runs it.
+fn cranelift_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, libs: &[PathBuf], dir: &Path) -> Result<String, String> {
     let mut compiler = AotCompiler::new_for_host().map_err(|e| e.S())?;
     let product = compiler
         .compile_script_unit_in_world(unit, registry)
         .map_err(|e| format!("compile failed: {e}"))?;
     let object = product.emit().map_err(|e| format!("emit failed: {e}"))?;
     let exe = dir.join("test");
-    datafun::driver::aot::link_object_to_path(&object, &exe).map_err(|e| format!("link failed: {e}"))?;
+    datafun::driver::aot::link_object_to_path_with_libs(&object, &exe, libs).map_err(|e| format!("link failed: {e}"))?;
     run_exe(&exe)
 }
 
-fn c_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -> Result<String, String> {
+fn c_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, libs: &[PathBuf], dir: &Path) -> Result<String, String> {
     let output = CAotCompiler::new().compile_world(unit, registry).map_err(|e| format!("compile failed: {e}"))?;
     let mut cmd = Command::new("cc");
     cmd.args(["-std=c11", "-O0", "-g"]);
@@ -492,7 +494,14 @@ fn c_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -
         std::fs::write(&path, content).map_err(|e| e.S())?;
         cmd.arg(path);
     }
-    cmd.arg(datafun::driver::aot::runtime_only_component().map_err(|e| e.S())?);
+    match libs {
+        [] => {
+            cmd.arg(datafun::driver::aot::runtime_only_component().map_err(|e| e.S())?);
+        }
+        libs => {
+            cmd.args(libs);
+        }
+    }
     let exe = dir.join("test");
     cmd.args(["-ldl", "-lpthread", "-lm", "-o"]).arg(&exe);
     let cc = cmd.output().map_err(|e| format!("failed to run cc: {e}"))?;
@@ -599,7 +608,7 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
             _ => c_build_and_run,
         };
         TALLY.lock().X().ran[i] += 1;
-        let stderr = run_aot(&parsed, build_and_run)
+        let stderr = run_aot(&parsed, base.system.as_deref(), build_and_run)
             .map_err(|e| format!("{}: {e}", engine.name()))?;
         let fragment = reference.sections.iter().find(|s| s.section_type == "scriptunit-fragment").X();
         let expected = fragment.debug_output.as_deref().unwrap_or("");

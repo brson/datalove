@@ -216,8 +216,9 @@ what "generated is not exercised" in the compiler guide asks for.
      argument in the billions, the first ran past two minutes. Worldfile
      analysis compiles the library when `AnalysisOptions::system` is given,
      as far as the sections require it, and registers its natives; the
-     oracle gives it to a world that requires `sys/`. The AOT backends do
-     not link its rider, so worlds of one fragment call none of it.
+     oracle gives it to a world that requires `sys/`. The AOT backends link
+     the native component built with its riders, as `std_engine_tests` does,
+     so a world of one fragment calls it too.
    - `icall`: every intrinsic but the remainders, whose zero divisor is not
      defined, as functions named `icall name`.
    - `worldgen_tests` retired: the suite's compile check is stricter than
@@ -241,7 +242,7 @@ what "generated is not exercised" in the compiler guide asks for.
      and left a drop of the whole struct, freeing what was read after
      (`1031`). The reference itself was wrong; `noconst` was right.
 
-   Still to do: `rec` types, a test rider, AOT with the standard library.
+   Still to do: `rec` types, a test rider.
 
 ## Open questions
 

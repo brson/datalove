@@ -28,7 +28,7 @@ use crate::driver::{
     ModuleCompiler, CompilerOptions, TypecheckResult, OwnershipResult, LoweringResult,
     SystemLibrary, WorkspaceDescriptor, format_ownership_result, format_lowering_result,
 };
-use crate::driver::rider_load::register_natives;
+use crate::driver::rider_load::{RiderNatives, register_natives};
 use crate::incremental::Roots;
 
 // ============================================================================
@@ -152,16 +152,8 @@ pub fn analyze_worldfile_with_hooks(
         keep_ir_dumps: true,
         ..CompilerOptions::default()
     };
-    let (mut module_compiler, natives) = match &options.system {
-        None => (ModuleCompiler::from_sections(db, &parsed.sections, compiler_options), None),
-        Some(system) => {
-            let descriptor = WorkspaceDescriptor::from_system_library(system)
-                .merge(&WorkspaceDescriptor::from_worldfile_sections(&parsed.sections, compiler_options));
-            let (mut module_compiler, natives) = descriptor.to_compiler_with_natives(db, &system.natives);
-            module_compiler.set_roots(Roots::From(required_system_modules(&parsed.sections)));
-            (module_compiler, Some(natives))
-        }
-    };
+    let (mut module_compiler, natives) =
+        worldfile_module_compiler(db, &parsed.sections, compiler_options, options.system.as_deref());
 
     // Compile modules (typecheck, drop analysis, lower).
     let compiled = module_compiler.compile(db);
@@ -202,7 +194,7 @@ pub fn analyze_worldfile_with_hooks(
     }
     // After the dispatcher is in, which is told the natives' addresses too.
     let _registered = match (&natives, &mut executor) {
-        (Some(natives), Some(executor)) => Some(register_natives(natives, &compiled, executor)?),
+        (Some((natives, _)), Some(executor)) => Some(register_natives(natives, &compiled, executor)?),
         _ => None,
     };
 
@@ -221,6 +213,29 @@ pub fn analyze_worldfile_with_hooks(
 // ============================================================================
 // Internal Helpers
 // ============================================================================
+
+/// A module compiler for a worldfile's sections, and beside them the system
+/// library's modules the sections require, if there is a library.
+///
+/// With a library, the natives its riders provide come back too, for an
+/// executor to register; the compiler has them already, for consts that call
+/// one. And the workspace, which says which riders a program that calls them
+/// has to link.
+pub fn worldfile_module_compiler(
+    db: &crate::Database,
+    sections: &[WorldfileSection],
+    options: CompilerOptions,
+    system: Option<&SystemLibrary>,
+) -> (ModuleCompiler, Option<(Arc<RiderNatives>, WorkspaceDescriptor)>) {
+    let Some(system) = system else {
+        return (ModuleCompiler::from_sections(db, sections, options), None);
+    };
+    let descriptor = WorkspaceDescriptor::from_system_library(system)
+        .merge(&WorkspaceDescriptor::from_worldfile_sections(sections, options));
+    let (mut module_compiler, natives) = descriptor.to_compiler_with_natives(db, &system.natives);
+    module_compiler.set_roots(Roots::From(required_system_modules(sections)));
+    (module_compiler, Some((natives, descriptor)))
+}
 
 /// The modules a worldfile's sections are compiled from, as roots: its own,
 /// and the system library's that any section requires by a line of its

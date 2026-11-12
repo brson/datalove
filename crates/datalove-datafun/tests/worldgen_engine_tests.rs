@@ -100,14 +100,10 @@ const WORKER: &str = "WORLDGEN_ENGINES_WORKER";
 
 /// The generator's configuration for a seed: [`WorldGenConfig::engines`],
 /// written as one fragment for one seed in [`ONE_FRAGMENT_EVERY`].
-///
-/// A world of one fragment is for the AOT backends, which do not link the
-/// standard library's rider here, so it calls none of the library.
 fn config(seed: u64) -> WorldGenConfig {
-    let engines = WorldGenConfig::engines();
-    match SeededRng::derive(seed, "one-fragment").random_range(0..ONE_FRAGMENT_EVERY) == 0 {
-        true => WorldGenConfig { one_fragment: true, std_modules: (0, 0), ..engines },
-        false => engines,
+    WorldGenConfig {
+        one_fragment: SeededRng::derive(seed, "one-fragment").random_range(0..ONE_FRAGMENT_EVERY) == 0,
+        ..WorldGenConfig::engines()
     }
 }
 
