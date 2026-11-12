@@ -31,6 +31,9 @@ datalove-exampletest.path = "../datalove-exampletest"
 datalove-script-steps.workspace = true
 # For the chaos JIT the generative reactive sessions run their calls through.
 datalove-datafun-cranelift-jit.workspace = true
+# For what the generative reactive tests' workers send back.
+serde = { workspace = true, features = ["derive"] }
+ron = "0.8"
 datalove-script-engine.workspace = true
 datalove-repl.workspace = true
 

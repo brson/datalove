@@ -73,7 +73,7 @@ test-worldgen-coverage SEED='1000000' COUNT='1000':
 # Generated script sessions, changed at random a step at a time, each step held
 # to a fresh run of the session's code. `just test` runs a few seeds from the
 # test's default; this runs 1000 from far past it, so as not to repeat them,
-# about 12 minutes in a debug build. A failing seed is shrunk and written out;
+# about 10 minutes in a debug build on four CPUs. A failing seed is shrunk and written out;
 # see the test's docs.
 test-generative-reactive SEED='1000000' COUNT='1000':
     GENERATIVE_REACTIVE_SEED={{SEED}} GENERATIVE_REACTIVE_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test generative_reactive_tests

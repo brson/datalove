@@ -1625,8 +1625,10 @@ dependencies = [
  "datalove-script-engine",
  "datalove-script-steps",
  "datalove-worldgen",
+ "ron",
  "rustmax",
  "salsa",
+ "serde",
 ]
 
 [[package]]

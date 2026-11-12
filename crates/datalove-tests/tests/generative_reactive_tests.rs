@@ -45,10 +45,15 @@
 //! the case: a fresh run must then reset too, the same way. Or by a crash, the
 //! engine panicking, which fails the case even when a fresh run crashes too.
 //!
+//! Seeds are checked in worker processes, this test run again, one for each
+//! CPU, each sent a seed at a time: a seed that crashes its worker or does
+//! not finish fails alone and by name, with both its cases written out as
+//! generated, and a new worker takes the next seed.
+//!
 //! A failing seed is shrunk -- changes, then units, then lines of source
-//! dropped for as long as it fails the same way -- and written out as a
-//! worldfile in the reactive fixtures' format, from which a step-table case
-//! can be made. A seed that runs longer than [`SEED_TIMEOUT`] fails too, and
+//! dropped for as long as it fails the same way, for five minutes at most --
+//! and written out as a worldfile in the reactive fixtures' format, from
+//! which a step-table case can be made. A seed that runs longer than [`SEED_TIMEOUT`] fails too, and
 //! is written out unshrunk.
 //!
 //! A shrunk session that once failed and was fixed is kept in
@@ -77,8 +82,13 @@
 use rmx::prelude::*;
 use std::path::PathBuf;
 use std::cell::RefCell;
-use std::sync::mpsc::RecvTimeoutError;
-use std::time::Duration;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
+use std::time::{Duration, Instant};
+
+use serde::{Deserialize, Serialize};
 
 use bct::random::{SeededRng, derive_seed, env_seeds, seed_of};
 use datalove_datafun_cranelift_jit::{DispatcherConfig, OptimizingDispatcher};
@@ -102,6 +112,11 @@ const CHANGES: usize = 12;
 /// How long one seed may take, shrinking aside, before it is taken to hang.
 /// A seed takes well under a second in a debug build.
 const SEED_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// How long one shrink may go on. A case that hangs is shrunk by candidates
+/// that each take [`SHRINK_TIMEOUT`] to fail, which with no bound on them
+/// all made one shrink of `worldgen_engine_tests` run past an hour.
+const SHRINK_BUDGET: Duration = Duration::from_secs(300);
 
 /// How long a case may take while shrinking. A candidate that takes longer
 /// is not the failure being shrunk; shrinking can make a loop that never
@@ -828,7 +843,7 @@ impl Verdict {
 }
 
 /// What a run exercised.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct Tally {
     /// Units entered, and of those, the ones that did not compile, by name.
     entered: usize,
@@ -1148,11 +1163,14 @@ fn run(case: &Case) -> Verdict {
 
 /// The smallest case found that fails as `verdict` says `case` does: with
 /// changes, then units, then lines of source taken out, for as long as one
-/// can be.
+/// can be, or until [`SHRINK_BUDGET`] is spent.
 fn shrink(case: Case, verdict: &Verdict) -> Case {
     let mut case = case;
+    let deadline = Instant::now() + SHRINK_BUDGET;
     let fails = |candidate: &Case| {
-        Order::admits(&candidate.changes) && check(candidate, SHRINK_TIMEOUT).same_failure(verdict)
+        Instant::now() < deadline
+            && Order::admits(&candidate.changes)
+            && check(candidate, SHRINK_TIMEOUT).same_failure(verdict)
     };
     loop {
         let mut smaller = false;
@@ -1207,7 +1225,7 @@ fn shrink(case: Case, verdict: &Verdict) -> Case {
             }
         }
 
-        if !smaller {
+        if !smaller || Instant::now() >= deadline {
             return case;
         }
     }
@@ -1273,8 +1291,203 @@ fn write_out(label: &str, case: &Case) -> PathBuf {
     path
 }
 
+/// What checking one seed came to: what to print, and the tallies of its
+/// two cases, where they agreed with a fresh run, and the labels of those
+/// that did not.
+#[derive(Serialize, Deserialize)]
+struct SeedOutcome {
+    seed: u64,
+    report: String,
+    generated: Option<Tally>,
+    dense: Option<Tally>,
+    failed: Vec<String>,
+}
+
+/// Check seed `seed`'s two cases, its generated session and its dense one,
+/// shrinking and writing out what fails.
+fn check_seed(seed: u64) -> SeedOutcome {
+    let mut outcome = SeedOutcome { seed, report: String::new(), generated: None, dense: None, failed: Vec::new() };
+    let report = &mut outcome.report;
+    for dense_case in [false, true] {
+        let (case, label) = match dense_case {
+            false => (generate(seed), fmt!("seed {seed}")),
+            true => (dense(seed), fmt!("seed {seed} dense")),
+        };
+        // A failing case is written out to be read back, so every case is.
+        let written = write_changes(&case.library, &case.changes);
+        let (library, changes) = read_changes(&label, &written);
+        assert_eq!(written, write_changes(&library, &changes), "{label} reads back as it was written");
+        let verdict = check(&case, SEED_TIMEOUT);
+        let Verdict::Agrees(tally) = verdict else {
+            report.push_str(&fmt!("{label}: \x1b[31mFAIL\x1b[0m\n  {}\n", verdict.describe().replace('\n', "\n  ")));
+            let shrink_it = std::env::var("GENERATIVE_REACTIVE_NO_SHRINK").is_err();
+            let case = match verdict {
+                Verdict::Hangs => case,
+                _ if !shrink_it => case,
+                _ => shrink(case, &verdict),
+            };
+            report_written(report, &label, &case);
+            outcome.failed.push(label);
+            continue;
+        };
+        if dense_case {
+            outcome.dense = Some(tally);
+            continue;
+        }
+        if !tally.failed_on_entry.is_empty() {
+            let path = write_out(&label, &case);
+            report.push_str(&fmt!(
+                "{label}: \x1b[31mFAIL\x1b[0m\n  units {} of {} do not compile as generated, which is a worldgen bug; the session is {}\n",
+                tally.failed_on_entry.join(", "), tally.entered, path.display(),
+            ));
+            outcome.failed.push(label);
+            continue;
+        }
+        outcome.generated = Some(tally);
+    }
+    outcome
+}
+
+/// Write `case` out, and say in `report` where and how to run it again.
+fn report_written(report: &mut String, label: &str, case: &Case) {
+    let path = write_out(label, case);
+    report.push_str(&fmt!("  the session is {}\n", path.display()));
+    report.push_str(&fmt!(
+        "  run it with GENERATIVE_REACTIVE_WORLD={} cargo test -p datalove-tests --test generative_reactive_tests\n",
+        path.display(),
+    ));
+}
+
+// ============================================================================
+// Workers
+// ============================================================================
+
+/// What a worker's line starts with, telling it from anything else the
+/// process prints.
+const PROTOCOL: &str = "@reactive ";
+
+/// The variable that makes this process a worker, checking each seed it is
+/// sent on stdin, a line each, until stdin ends.
+const WORKER: &str = "GENERATIVE_REACTIVE_WORKER";
+
+/// How long a worker may take over one seed before it is killed and the
+/// seed failed: its two cases, and a shrink of each.
+const WORKER_TIMEOUT: Duration = Duration::from_secs(2 * (SEED_TIMEOUT.as_secs() + SHRINK_BUDGET.as_secs()) + 60);
+
+/// Check each seed sent, saying how it went.
+fn work() {
+    for line in std::io::stdin().lines() {
+        let seed: u64 = line.X().parse().X();
+        println!("{PROTOCOL}{}", ron::to_string(&check_seed(seed)).X());
+    }
+}
+
+/// A worker: this test run again, and its stdout a line at a time.
+struct Worker {
+    child: Child,
+    lines: Receiver<String>,
+}
+
+impl Worker {
+    fn new() -> Worker {
+        let mut child = Command::new(std::env::current_exe().X())
+            .env(WORKER, "")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("this test run again");
+        let stdout = child.stdout.take().X();
+        let (send, lines) = channel();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                let Ok(line) = line else { break };
+                if send.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+        Worker { child, lines }
+    }
+
+    /// Kill it, if it has not ended, and say how it ended.
+    fn end(mut self) -> String {
+        let _ = self.child.kill();
+        self.child.wait().map_or_else(|e| e.S(), |status| status.S())
+    }
+}
+
+/// Check the seeds from `start` to `end` in a worker for each CPU, each
+/// taking the next seed in turn, so that a seed that crashes its worker or
+/// never ends fails alone and by name; a new worker takes the next one.
+fn check_in_workers(start: u64, end: u64) -> Vec<SeedOutcome> {
+    let next = AtomicU64::new(start);
+    let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers).map(|_| scope.spawn(|| check_in_worker(&next, end))).collect();
+        handles.into_iter().flat_map(|handle| handle.join().expect("a thread running a worker")).collect()
+    })
+}
+
+fn check_in_worker(next: &AtomicU64, end: u64) -> Vec<SeedOutcome> {
+    let mut outcomes = Vec::new();
+    let mut worker: Option<Worker> = None;
+    loop {
+        let seed = next.fetch_add(1, Ordering::Relaxed);
+        if seed >= end {
+            break;
+        }
+        let running = worker.get_or_insert_with(Worker::new);
+        let mut stdin = running.child.stdin.as_ref().X();
+        // A worker that died has no stdin to write to; its end says why.
+        let sent = writeln!(stdin, "{seed}").and_then(|()| stdin.flush()).is_ok();
+        loop {
+            let line = match sent {
+                true => running.lines.recv_timeout(WORKER_TIMEOUT),
+                false => Err(RecvTimeoutError::Disconnected),
+            };
+            match line {
+                Ok(line) => match line.strip_prefix(PROTOCOL) {
+                    Some(said) => outcomes.push(ron::from_str(said).X()),
+                    None => {
+                        println!("{line}");
+                        continue;
+                    }
+                },
+                Err(timeout_or_end) => {
+                    let how = match timeout_or_end {
+                        RecvTimeoutError::Timeout => fmt!("timed out after {WORKER_TIMEOUT:?}"),
+                        RecvTimeoutError::Disconnected => "the worker ended".S(),
+                    };
+                    let status = worker.take().X().end();
+                    outcomes.push(died(seed, &fmt!("{how}: {status}")));
+                }
+            }
+            break;
+        }
+    }
+    if let Some(mut running) = worker {
+        drop(running.child.stdin.take());
+        running.child.wait().X();
+    }
+    outcomes
+}
+
+/// A seed whose worker died on it or never finished it: both its cases
+/// written out as generated, since which one it was is not known.
+fn died(seed: u64, how: &str) -> SeedOutcome {
+    let mut report = fmt!("seed {seed}: \x1b[31mFAIL\x1b[0m\n  {how}\n");
+    report_written(&mut report, &fmt!("seed {seed}"), &generate(seed));
+    report_written(&mut report, &fmt!("seed {seed} dense"), &dense(seed));
+    SeedOutcome { seed, report, generated: None, dense: None, failed: vec![fmt!("seed {seed}")] }
+}
+
 fn main() {
     catch_panics();
+    if std::env::var_os(WORKER).is_some() {
+        work();
+        return;
+    }
 
     if let Ok(path) = std::env::var("GENERATIVE_REACTIVE_WORLD") {
         let text = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
@@ -1302,50 +1515,16 @@ fn main() {
     let seeds = env_seeds("GENERATIVE_REACTIVE", DEFAULT_SEED, DEFAULT_COUNT);
     println!("generative reactive tests: {} seeds from {}", seeds.count, seeds.start);
 
+    let mut outcomes = check_in_workers(seeds.start, seeds.start + seeds.count);
+    outcomes.sort_by_key(|outcome| outcome.seed);
     let mut total = Tally::default();
     let mut dense_total = Tally::default();
     let mut failed = Vec::new();
-    for (seed, dense_case) in seeds.iter().flat_map(|seed| [(seed, false), (seed, true)]) {
-        let (case, label) = match dense_case {
-            false => (generate(seed), fmt!("seed {seed}")),
-            true => (dense(seed), fmt!("seed {seed} dense")),
-        };
-        // A failing case is written out to be read back, so every case is.
-        let written = write_changes(&case.library, &case.changes);
-        let (library, changes) = read_changes(&label, &written);
-        assert_eq!(written, write_changes(&library, &changes), "{label} reads back as it was written");
-        let verdict = check(&case, SEED_TIMEOUT);
-        let Verdict::Agrees(tally) = &verdict else {
-            println!("{label}: \x1b[31mFAIL\x1b[0m\n  {}", verdict.describe().replace('\n', "\n  "));
-            let shrink_it = std::env::var("GENERATIVE_REACTIVE_NO_SHRINK").is_err();
-            let case = match verdict {
-                Verdict::Hangs => case,
-                _ if !shrink_it => case,
-                _ => {
-                    println!("  shrinking...");
-                    shrink(case, &verdict)
-                }
-            };
-            let path = write_out(&label, &case);
-            println!("  the session is {}", path.display());
-            println!("  run it with GENERATIVE_REACTIVE_WORLD={} cargo test -p datalove-tests --test generative_reactive_tests", path.display());
-            failed.push(label);
-            continue;
-        };
-        if dense_case {
-            dense_total.add(tally);
-            continue;
-        }
-        if !tally.failed_on_entry.is_empty() {
-            let path = write_out(&label, &case);
-            println!(
-                "{label}: \x1b[31mFAIL\x1b[0m\n  units {} of {} do not compile as generated, which is a worldgen bug; the session is {}",
-                tally.failed_on_entry.join(", "), tally.entered, path.display(),
-            );
-            failed.push(label);
-            continue;
-        }
-        total.add(tally);
+    for outcome in &outcomes {
+        print!("{}", outcome.report);
+        failed.extend(outcome.failed.iter().cloned());
+        total.add(outcome.generated.as_ref().unwrap_or(&Tally::default()));
+        dense_total.add(outcome.dense.as_ref().unwrap_or(&Tally::default()));
     }
 
     println!("{}", total.describe());
