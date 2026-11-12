@@ -28,7 +28,6 @@ home here.
 - [The language and its checks](#user-content-the-language-and-its-checks)
   - [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
   - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
-  - [A temporary's field is refused where its element is not](#user-content-a-temporarys-field-is-refused-where-its-element-is-not)
   - [A `let` with no type that fails to typecheck leaves its name undefined](#user-content-a-let-with-no-type-that-fails-to-typecheck-leaves-its-name-undefined)
   - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
   - [Nothing takes a value back out of data or error](#user-content-nothing-takes-a-value-back-out-of-data-or-error)
@@ -330,18 +329,6 @@ than imprecise.
 
 Loop exits themselves are settled: see `merge_loop_exits`, O014, and
 `std_tests/152_owned_past_a_loop_exit`.
-
-### A temporary's field is refused where its element is not
-
-A non-copy part read outside a borrowed position is refused because it would
-be moved out of the aggregate that still holds it: F070 for a field, F072 for
-an element. A temporary holds nothing afterwards, and the checker treats the
-two kinds of part differently there. `f()[0]?` of a `[string]` is accepted,
-with no F072 check at all (`synthesize_index_common`), while `f().name` of a
-`{name: string}` is F070 (`synthesize_field_proj`). Lowering can move a field
-out of a temporary, so the F070 looks like a restriction with no reason
-behind it, unless it is meant and the index is what lacks a check. The formal
-model (`formal/Datalove/Fun.lean`) follows the code as it is.
 
 ### A `let` with no type that fails to typecheck leaves its name undefined
 

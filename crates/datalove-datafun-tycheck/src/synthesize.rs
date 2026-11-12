@@ -1611,10 +1611,13 @@ fn synthesize_field_proj<'db>(
     let field_ty = resolve_field_type(db, &base_ty, &proj.field)
         .map_err(|e| ctx.report_place_error(site, e))?;
 
-    // Check that field is a copy type or we're in ref context.
-    // Move-type field projections are allowed in ref context.
+    // A non-copy field read out of a place moves it out of what still holds
+    // it, which only a borrowed position may leave in place. A field of a
+    // temporary, `f().name`, is free to move: nothing holds the rest
+    // afterwards, and lowering drops it.
+    let of_place = crate::statement::is_place(db, ctx.expr(proj.base));
     if let Type::Datalit(ref dt) = field_ty {
-        if !is_copy_type(db, dt) && !ctx.ref_context {
+        if of_place && !is_copy_type(db, dt) && !ctx.ref_context {
             return Err(ctx.report_place_error(site, TypeError::NonCopyFieldProjection {
                 field_ty: datalit::tycheck::type_to_string(db, dt),
             }));

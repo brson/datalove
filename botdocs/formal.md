@@ -308,11 +308,15 @@ What it found:
   the Rust leaves a variable to be synthesized, which decides between F001
   and T016 in `(x, none)`. Both now follow the Rust, and the doc says how
   the second goes.
-- **A temporary's field is refused where its element is not.** `f().name`
-  of a non-copy field is F070, and `f()[0]?` of a non-copy element has no
-  F072 check at all, though nothing is left behind in a temporary either
-  way. The model follows the code; [the issue](issues.md#user-content-a-temporarys-field-is-refused-where-its-element-is-not)
-  says what to decide.
+- **A temporary's field was refused where its element was not.**
+  `f().name` of a non-copy field was F070, while `f()[0]?` of a non-copy
+  element had no F072 check, though nothing is left behind in a temporary
+  either way. F070 now applies to a field of a place only. Lowering was not
+  ready for it: it read the field out of the temporary and then dropped the
+  temporary whole, and borrowing a field of one leaked the temporary. The
+  field is now cloned out, as an element is, and a borrowed one's temporary
+  is dropped once the borrow is done; the backend fixture
+  `45_field_of_a_temporary` holds both.
 - **Worldgen could recurse without end.** An argument of a call may itself
   be a call, with no bound, so a function of enough parameters drew calls
   inside calls until the stack overflowed: past one expected call per call,

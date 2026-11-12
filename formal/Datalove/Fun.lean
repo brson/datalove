@@ -227,6 +227,12 @@ def buildsFromParts : Expr → Bool
   | .hinted _ e => buildsFromParts e
   | _ => false
 
+/-- Whether an expression is a place: a variable, with steps into it or not. -/
+def isPlace : Expr → Bool
+  | .var _ | .place _ _ => true
+  | .proj b _ => isPlace b
+  | _ => false
+
 /-! ## Classes of types -/
 
 def isFixT (t : Ty) : Bool := t.isFixedInt
@@ -568,11 +574,12 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
     | .place x steps => match Γ.lookup x with
       | Option.some (t, _) => stepsF env n Γ t steps
       | Option.none => throw "F001"
-    -- Syn-FieldProj, for what is not a place.
+    -- Syn-FieldProj. A field of a temporary is free to move out; one of a
+    -- place is moved out of what holds it (F070).
     | .proj b s => do
       let bt ← synthF env n Γ b
       let t ← liftE (fieldType bt s)
-      if !t.isCopy && !Γ.borrowed then throw "F070"
+      if isPlace b && !t.isCopy && !Γ.borrowed then throw "F070"
       pure t
     -- Syn-Index, for what is not a place. Its element is a temporary's, and
     -- may be moved out (no F072).
@@ -995,12 +1002,6 @@ def walk (c : Ty) (names : List String) : Except Code (List (String × Ty)) :=
   | .map k v, [a, b] => pure [(a, k), (b, v)]
   | .list _, _ | .tensor _ _, _ | .set _, _ | .map _ _, _ => throw "F109"
   | _, _ => throw "F087"
-
-/-- Whether an expression is a place: a variable, with steps into it or not. -/
-def isPlace : Expr → Bool
-  | .var _ | .place _ _ => true
-  | .proj b _ => isPlace b
-  | _ => false
 
 /-- A `for`'s bindings: its collection a place (else F108), read borrowed, of
 a type it walks. With none, the body is left unchecked. -/

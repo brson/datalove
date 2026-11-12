@@ -1,0 +1,13 @@
+"ada"
+["y", "z"]
+"n"
+("ada", "x")
+"ada"
+"ada"
+"b"
+"y"
+"p"
+some "p"
+"h"
+("h", "t")
+some {n = 1, name = "p"}

@@ -517,10 +517,9 @@ read only in a borrowed position carry the side condition
 A borrowed position ends at an expression that builds a value of its parts:
 a tuple, struct, collection, table, `some`, `ok`, `er`, `data`, `error` or
 term. The parts are moved into what is built, so `debuglog (p.name,)` is
-F070 for a `string` field as `let t = (p.name,)` is. An element indexed out
-of what is not a place, `f()[k]?`, is a temporary's, and is never F072; a
-field of one, `f().name`, is still F070
-([an issue](issues.md#user-content-a-temporarys-field-is-refused-where-its-element-is-not)).
+F070 for a `string` field as `let t = (p.name,)` is. A part of what is not a
+place, `f().name` or `f()[k]?`, is a temporary's, which nothing holds
+afterwards, so it may be read anywhere: never F070 or F072.
 
 ### Inference
 
@@ -927,9 +926,9 @@ same, and its tests hold the Rust to it.
 | F067 | No such field |
 | F068 | Projection on a type with no fields |
 | F069 | Tuple index out of range |
-| F070 | A non-copy field read outside a borrowed position |
+| F070 | A non-copy field of a place read outside a borrowed position |
 | F071 | Destructuring pattern does not fit the value |
-| F072 | A non-copy element read outside a borrowed position |
+| F072 | A non-copy element of a place read outside a borrowed position |
 | F073 | A tensor view passed `mut` or `out`, or written by `set` |
 | F074 | A bare index in a `set` target that is not the last step, not into a map, or under a compound assignment |
 | F076 | An argument to a const parameter that is not a const binding |

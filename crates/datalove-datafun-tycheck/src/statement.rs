@@ -1196,7 +1196,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
 /// Whether an expression names somewhere a value already is: a name with
 /// field or element steps, or a field of one. A field of anything else is a
 /// field of a temporary.
-fn is_place<'db>(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> bool {
+pub(crate) fn is_place<'db>(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> bool {
     match expr.kind() {
         ExprFunKind::Place(_) => true,
         ExprFunKind::FieldProj(proj) => is_place(db, expr.at(proj.base)),

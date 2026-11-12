@@ -310,7 +310,14 @@ pub fn lower_field_proj_as_ref<'db>(
     }
 
     // When the base is a nested FieldProj, recurse to get a ref, then
-    // apply GetFieldRef on top.
+    // apply GetFieldRef on top. A base that is a value made here is a
+    // temporary, kept until whatever borrows the field is done with it and
+    // then dropped whole, as `lower_operand` keeps any other.
+    let temporary = |ctx: &mut LowerCtx<'db>| -> Result<Operand, LowerError> {
+        let base_id = lower_expression(ctx, ctx.expr(proj.base))?;
+        ctx.record_expr_temp(base_id, base_type.C());
+        Ok(Operand::Value(base_id))
+    };
     let src = match ctx.expr(proj.base).kind() {
         ExprFunKind::FieldProj(inner_proj) => {
             let base_ref = lower_field_proj_as_ref(ctx, ctx.expr(proj.base), inner_proj)?;
@@ -320,19 +327,17 @@ pub fn lower_field_proj_as_ref<'db>(
             if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?)
             } else {
-                Operand::Value(lower_expression(ctx, ctx.expr(proj.base))?)
+                temporary(ctx)?
             }
         }
         ExprFunKind::TryResult(try_op) => {
             if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?)
             } else {
-                Operand::Value(lower_expression(ctx, ctx.expr(proj.base))?)
+                temporary(ctx)?
             }
         }
-        _ => {
-            Operand::Value(lower_expression(ctx, ctx.expr(proj.base))?)
-        }
+        _ => temporary(ctx)?,
     };
 
     let field_index = resolve_field_index(&proj.field, &base_type, ctx.db)?;
@@ -1925,9 +1930,20 @@ fn lower_field_proj<'db>(
 
     // Get the result type.
     let result_type = ctx.expr_type(expr);
-    let dest = ctx.fresh_value(result_type);
+    let dest = ctx.fresh_value(result_type.C());
 
-    ctx.emit_get_field(dest, Operand::Value(base_id), field_index);
+    // A field that owns something is still the temporary's, which is dropped
+    // whole below, so what is read out is a clone of it, through a reference,
+    // as an element read out of a temporary list is. `GetField` only ever
+    // reads a copy field. A place base reaches here only for one: a non-copy
+    // field of a place is F070, or borrowed, which reads through a reference.
+    if result_type.is_copy() {
+        ctx.emit_get_field(dest, Operand::Value(base_id), field_index);
+    } else {
+        let field_ref = ctx.fresh_value(IrType::Ref(Box::new(result_type)));
+        ctx.emit(Instruction::GetFieldRef { dest: field_ref, src: Operand::Value(base_id), field_index });
+        ctx.emit(Instruction::Clone { dest, src: Operand::ValueRef(field_ref) });
+    }
     ctx.emit_expr_temp_drops_since(temps_mark);
     Ok(dest)
 }

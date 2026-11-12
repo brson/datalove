@@ -1,0 +1,61 @@
+// A field of a temporary is moved out of it: nothing holds the temporary
+// afterwards, so nothing sees the field gone, and the rest of it is dropped.
+// An element of one is too. Read where it is borrowed, it is not moved.
+
+fun person(): {age: u32, name: string}
+  ret {age = 36, name = "ada"}
+end fun
+
+fun pair(): (string, [string])
+  ret ("x", ["y", "z"])
+end fun
+
+fun nested(): {inner: {name: string, tag: string}, n: u8}
+  ret {inner = {name = "n", tag = "t"}, n = 1}
+end fun
+
+fun names(): [string]
+  ret ["a", "b"]
+end fun
+
+fun takes(s: string): string
+  ret s
+end fun
+
+let a = person().name
+debuglog a
+let b = pair().1
+debuglog b
+let c = nested().inner.name
+debuglog c
+let d = (person().name, pair().0)
+debuglog d
+debuglog person().name
+debuglog takes(person().name)
+let e = names()[1]!
+debuglog e
+let f = pair().1[0]!
+debuglog f
+
+// Inside a function, and through `?`, which takes the option it unwraps.
+fun first_name(o: ?{n: u8, name: string}): ?string
+  debuglog o@?.name
+  let s = o?.name
+  ret some s
+end fun
+
+fun found(): ?{n: u8, name: string}
+  ret some {n = 1, name = "h"}
+end fun
+
+fun both(): ?()
+  debuglog found()?.name
+  let t = (found()?.name, nested().inner.tag)
+  debuglog t
+  ret some ()
+end fun
+
+let p: ?{n: u8, name: string} = some {n = 1, name = "p"}
+debuglog first_name(p@)
+let q = both()
+debuglog p
