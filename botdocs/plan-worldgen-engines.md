@@ -3,7 +3,7 @@
 A plan to hold generated programs to the IR walker on every engine, as the
 hand-written engine fixtures are, and to make the generated programs show
 enough of what they compute for that to mean something. Written November
-2026; phases 1 to 3 are done, and phase 4 in part.
+2026; done, but for a test rider (phase 4).
 
 ## Contents
 
@@ -249,7 +249,20 @@ what "generated is not exercised" in the compiler guide asks for.
    `rec` (`1033`). A generic's ordered parameter, a set's element or a map's
    key, is never one (T065).
 
-   Still to do: a test rider.
+   Not done: a test rider, for worldfile `rider` sections and generated
+   `native fun`s. The standard library's string functions are rider natives
+   already, so generated worlds call riders on every engine, AOT included;
+   what a test rider would add is the worldfile's own rider section, at the
+   cost of a rider crate and a way to point a worldfile's rider at it.
+
+5. **Done.** The generative reactive tests took four of these settings,
+   `fallible_script`, `compute_from_variables`, `qualified_calls` and
+   `std_modules`, which over 200 seeds tripled the units returning early and
+   blocked; the rest change values and code rather than what units reach of
+   each other. Their sessions run their calls through the chaos JIT, kept
+   across the changes, against a fresh run on the bytecode, by
+   `Engine::use_dispatcher`. And they check seeds in worker processes, and
+   bound a shrink, as this suite does.
 
 ## Open questions
 
