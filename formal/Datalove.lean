@@ -18,3 +18,5 @@ import Datalove.FunJson
 import Datalove.Proofs.Completes
 import Datalove.Proofs.EarlyReturn
 import Datalove.Proofs.Exhaustive
+import Datalove.Proofs.Instance
+import Datalove.Proofs.InstanceCheck
