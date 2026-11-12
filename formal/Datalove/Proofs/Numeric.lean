@@ -57,7 +57,7 @@ theorem Ty.adapt_int_preserves (w : Nat) (a b : Ty) (pa pb : Int → Prop)
   rcases ma with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
   rcases mb with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
   simp [Ty.holdsInt] at ha hb <;> subst ha hb <;>
-  simp_all [Ty.canAdapt, Ty.adaptTable, Ty.meet, Ty.canWiden, Ty.equiv, Ty.isMu, Ty.expose,
+  simp_all [Ty.canAdapt, Ty.adaptTable, Ty.meet, Ty.canWiden, Ty.equiv, Ty.expose,
     Ty.leadingMus, Ty.exposeN] <;> omega
 
 theorem Ty.adapt_numeric_antisymm_all :
@@ -83,17 +83,5 @@ theorem Ty.adapt_numeric_trans (a b c : Ty)
     (ha : a.isNumeric = true) (hb : b.isNumeric = true) (hc : c.isNumeric = true)
     (h₁ : a.canAdapt b = true) (h₂ : b.canAdapt c = true) : a.canAdapt c = true :=
   Ty.adapt_numeric_trans_all a (Ty.mem_numerics ha) b (Ty.mem_numerics hb) c (Ty.mem_numerics hc) h₁ h₂
-
-theorem Ty.meet_refl (a : Ty) : a.meet a = true := by
-  simp [Ty.meet, Ty.equiv_refl]
-
-theorem Ty.meet_symm (a b : Ty) : a.meet b = b.meet a := by
-  unfold Ty.meet
-  rw [Ty.equiv_symm a b, Ty.equiv_symm a.expose b, Ty.equiv_symm a b.expose]
-  cases b.equiv a <;> cases a.isMu <;> cases b.isMu <;> cases b.equiv a.expose <;>
-    cases b.expose.equiv a <;> rfl
-
-theorem Ty.adapt_refl (a : Ty) : a.canAdapt a = true := by
-  simp [Ty.canAdapt, Ty.meet_refl]
 
 end Datalove

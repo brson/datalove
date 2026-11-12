@@ -68,28 +68,16 @@ fn relation_laws() {
         transitivity_failures(db, &pairs, |a, b| tc::can_adapt_to(db, a, b));
     report("@ is transitive", adapt_chains, &adapt_failures);
 
-    // Two recursive types that unfold to one type are one type. Meeting at
-    // the head is transitive just when this holds; see
-    // `formal/Datalove/Proofs/Meet.lean`.
-    let mut by_exposure: BTreeMap<String, Vec<&Type<'_>>> = BTreeMap::new();
-    for ty in pool.iter().filter(|t| matches!(t, Type::Rec(_))) {
-        by_exposure.entry(type_to_json(db, &tc::expose(ty)).S()).or_default().push(ty);
-    }
-    let collisions: Vec<String> = by_exposure.values()
-        .filter(|tys| tys.len() > 1)
-        .map(|tys| tys.iter().map(|t| t.syntax(db).S()).collect::<Vec<_>>().join(" and "))
-        .collect();
-    println!("{} recursive types, {} exposures shared", by_exposure.values().map(|v| v.len()).sum::<usize>(), collisions.len());
-
     assert!(meet_chains > 0 && adapt_chains > 0, "no chains to test");
-    assert!(collisions.is_empty(), "recursive types that unfold alike: {collisions:?}");
     assert!(meet_failures.is_empty(), "meeting at the head is not transitive");
     assert!(adapt_failures.is_empty(), "@ is not transitive");
 }
 
 /// Every hint of exactly `size` nodes over a small grammar: `int`, `bool`, a
-/// list, an option, a pair, and `rec` over two names. Small enough to list
-/// them all, and rich enough to nest recursive types and use either name.
+/// list, an option, a pair, and `rec` over three names. Small enough to list
+/// them all, and rich enough to nest recursive types and use any name; three
+/// names are what it takes to write a type beside its one-step unfolding, as
+/// `rec L rec M [(L, M)]` beside `rec N [(rec L rec M [(L, M)], N)]`.
 fn small_hints<'db>(db: &'db Db, size: usize, memo: &mut BTreeMap<usize, Vec<TypeHint<'db>>>) -> Vec<TypeHint<'db>> {
     use datalove_datalit::ast::*;
     if let Some(hints) = memo.get(&size) {
@@ -100,14 +88,14 @@ fn small_hints<'db>(db: &'db Db, size: usize, memo: &mut BTreeMap<usize, Vec<Typ
     if size == 1 {
         hints.push(TypeHint::Int);
         hints.push(TypeHint::Bool);
-        for n in ["L", "M"] {
+        for n in REC_NAMES {
             hints.push(TypeHint::Alias(TypeHintAlias { name: name(n), local_index: None }));
         }
     } else {
         for inner in small_hints(db, size - 1, memo) {
             hints.push(TypeHint::List(TypeHintList { element_type: Box::new(inner.C()) }));
             hints.push(TypeHint::Option(TypeHintOption { inner_type: Box::new(inner.C()) }));
-            for n in ["L", "M"] {
+            for n in REC_NAMES {
                 hints.push(TypeHint::Rec(TypeHintRec { name: name(n), body: Box::new(inner.C()), local_index: None }));
             }
         }
@@ -125,34 +113,46 @@ fn small_hints<'db>(db: &'db Db, size: usize, memo: &mut BTreeMap<usize, Vec<Typ
     hints
 }
 
-/// No two well-formed recursive types, up to a size, unfold alike: the
-/// `ExposeInjective` the proofs of transitivity assume, held to every case
-/// small enough to list. `FORMAL_LAWS_SIZE` sets the size.
+const REC_NAMES: [&str; 3] = ["L", "M", "N"];
+
+/// Every small recursive type meets its one-step unfolding and what it
+/// exposes to, and adapts to both and back. A type that starts with more than
+/// one `rec` unfolds in one step to another recursive type, which differs from
+/// what it exposes to; it is those that make meeting at the head transitive or
+/// not, and they are counted, to be sure there are some. `FORMAL_LAWS_SIZE`
+/// sets the size.
 #[test]
-fn expose_injective_exhaustive() {
-    let max: usize = std::env::var("FORMAL_LAWS_SIZE").map(|s| s.parse().X()).unwrap_or(8);
+fn unfolding_meets_exhaustive() {
+    let max: usize = std::env::var("FORMAL_LAWS_SIZE").map(|s| s.parse().X()).unwrap_or(7);
     let db = &Db::default();
     let mut memo = BTreeMap::new();
-    let mut by_exposure: BTreeMap<String, Vec<Type<'_>>> = BTreeMap::new();
     let mut hints = 0;
+    let mut recursive = 0;
+    let mut nested = 0;
+    let mut failures = Vec::new();
     for size in 1..=max {
         for hint in small_hints(db, size, &mut memo) {
             hints += 1;
-            if let Ok(ty @ Type::Rec(_)) = tc::convert_type_hint(db, &hint) {
-                let exposed = type_to_json(db, &tc::expose(&ty)).S();
-                let same = by_exposure.entry(exposed).or_default();
-                if !same.contains(&ty) {
-                    same.push(ty);
+            let Ok(ty) = tc::convert_type_hint(db, &hint) else { continue };
+            let Type::Rec(r) = &ty else { continue };
+            recursive += 1;
+            let unfolded = r.unfold();
+            if matches!(unfolded, Type::Rec(_)) {
+                nested += 1;
+            }
+            for other in [unfolded, tc::expose(&ty).into_owned()] {
+                let meets = tc::types_equivalent_at_head(db, &ty, &other);
+                let adapts = tc::can_adapt_to(db, &ty, &other) && tc::can_adapt_to(db, &other, &ty);
+                if !meets || !adapts {
+                    failures.push(fmt!("{} and {}", ty.syntax(db), other.syntax(db)));
                 }
             }
         }
     }
-    let recursive: usize = by_exposure.values().map(|v| v.len()).sum();
-    println!("{hints} hints up to size {max}: {recursive} distinct recursive types");
-    let collisions: Vec<String> = by_exposure.values()
-        .filter(|tys| tys.len() > 1)
-        .map(|tys| tys.iter().map(|t| t.syntax(db).S()).collect::<Vec<_>>().join(" and "))
-        .collect();
-    assert!(recursive > 0);
-    assert!(collisions.is_empty(), "recursive types that unfold alike: {collisions:?}");
+    println!("{hints} hints up to size {max}: {recursive} recursive, {nested} starting with more than one rec");
+    for f in failures.iter().take(10) {
+        println!("  do not meet: {f}");
+    }
+    assert!(nested > 0, "no type starts with two recs, so the case that matters went untested");
+    assert!(failures.is_empty(), "{} pairs that should meet do not", failures.len());
 }

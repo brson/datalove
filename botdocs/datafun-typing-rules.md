@@ -373,8 +373,7 @@ The postfix `@` clones, and converts where a type is expected. `T ⇝ U`, "a
 
 Nothing else adapts. There is no narrowing, and no enum adapts to another.
 On well-formed types `⇝` is reflexive and transitive, so `@` never needs to be
-written twice; the Lean model proves it, assuming one property of recursive
-types that is tested but not yet proved (see
+written twice; the Lean model proves it (see
 [Proving the Type System](formal.md)).
 
 ```

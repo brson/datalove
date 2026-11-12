@@ -3,20 +3,23 @@ import Datalove.WF
 import Datalove.Proofs.Equiv
 import Datalove.Proofs.Numeric
 import Datalove.Proofs.Expose
+import Datalove.Proofs.Meet
 
 /-!
 # `@` is transitive
 
 `Ty.adapt_trans`: on well-formed types, if `a@` converts to `b` and `b@` to
-`c`, then `a@` converts to `c`, given `ExposeInjective`, which meeting at the
-head needs too (`Ty.meet_trans`).
+`c`, then `a@` converts to `c`.
 
-It took two changes to `can_adapt_to` to make this true, both found by
-trying to prove it. An atom or term did not adapt to a recursive enum, though
+It took three changes to make this true, the first two found by trying to
+prove it and the third by a review of the first attempt. An atom or term did not adapt to a recursive enum, though
 it adapted to the enum the recursive type unfolds to, which meets the
 recursive type at the head; and a recursive type whose unfolding is a term
 did not adapt to an enum listing the term. `can_adapt_to` now consults its
-table of conversions with both sides exposed.
+table of conversions with both sides exposed. And meeting at the head
+compared one side's unfolding with the other side as it was, which two
+recursive types that unfold alike do not pass (`Proofs/Meet.lean`); it now
+compares both unfoldings.
 
 The proof leans on one fact about well-formed recursive types beside
 `Ty.expose_not_mu`: one never exposes to a number (`Ty.expose_not_numeric`),
@@ -31,15 +34,6 @@ namespace Ty
 
 theorem expose_of_not_mu {t : Ty} (h : t.isMu = false) : t.expose = t := by
   cases t <;> simp_all [expose, exposeN, leadingMus, isMu]
-
-/-- Types that meet at the head expose alike. -/
-theorem meet_expose {x y : Ty} (wx : x.WF) (wy : y.WF) (h : x.meet y = true) :
-    x.expose = y.expose := by
-  rw [meet_iff] at h
-  rcases h with rfl | ⟨_, rfl⟩ | ⟨_, rfl⟩
-  · rfl
-  · exact (expose_of_not_mu (expose_not_mu wx)).symm
-  · exact expose_of_not_mu (expose_not_mu wy)
 
 theorem subst_numeric {t : Ty} (h : t.isRecvar = false) (d : Nat) (w : Ty) :
     (t.subst d w).isNumeric = t.isNumeric := by
@@ -139,8 +133,8 @@ theorem expose_numeric {t : Ty} (h : t.isNumeric = true) : t.expose.isNumeric = 
 
 end Ty
 
-/-- `@` is transitive on well-formed types, given `ExposeInjective`. -/
-theorem Ty.adapt_trans (inj : ExposeInjective) {a b c : Ty} (wa : a.WF) (wb : b.WF) (wc : c.WF)
+/-- `@` is transitive on well-formed types. -/
+theorem Ty.adapt_trans {a b c : Ty} (wa : a.WF) (wb : b.WF) (wc : c.WF)
     (h₁ : a.canAdapt b = true) (h₂ : b.canAdapt c = true) : a.canAdapt c = true := by
   -- Every step between numbers is between the types themselves, and those
   -- compose by `adapt_numeric_trans`.
@@ -155,17 +149,17 @@ theorem Ty.adapt_trans (inj : ExposeInjective) {a b c : Ty} (wa : a.WF) (wb : b.
   simp only [Ty.canAdapt, Bool.or_eq_true] at h₁' h₂'
   rcases h₁' with (m₁ | w₁) | t₁ <;> rcases h₂' with (m₂ | w₂) | t₂
   -- Meeting, then meeting.
-  · simp [Ty.canAdapt, Ty.meet_trans inj wa wb wc m₁ m₂]
+  · simp [Ty.canAdapt, Ty.meet_trans m₁ m₂]
   -- Meeting, then widening: `b` is a number, and `a` exposes as `b` does.
   · have nb := (Ty.canWiden_numeric w₂).1
-    have ea := Ty.meet_expose wa wb m₁
+    have ea := Ty.meet_iff.mp m₁
     exact numeric (by rw [ea]; exact Ty.expose_numeric nb) (Ty.expose_numeric nb)
       (Ty.expose_numeric (Ty.canWiden_numeric w₂).2)
   -- Meeting, then the table: the table reads `b` exposed, which is `a` exposed.
-  · simp [Ty.canAdapt, Ty.meet_expose wa wb m₁, t₂]
+  · simp [Ty.canAdapt, Ty.meet_iff.mp m₁, t₂]
   -- Widening, then meeting: `b` is a number, and `c` exposes as `b` does.
   · have nb := (Ty.canWiden_numeric w₁).2
-    have ec := Ty.meet_expose wb wc m₂
+    have ec := Ty.meet_iff.mp m₂
     exact numeric (Ty.expose_numeric (Ty.canWiden_numeric w₁).1) (Ty.expose_numeric nb)
       (by rw [← ec]; exact Ty.expose_numeric nb)
   -- Widening, then widening.
@@ -178,7 +172,7 @@ theorem Ty.adapt_trans (inj : ExposeInjective) {a b c : Ty} (wa : a.WF) (wb : b.
     · rw [e, Ty.adaptTable_numeric_enum (Ty.expose_numeric nb)] at t₂
       exact absurd t₂ (by simp)
   -- The table, then meeting: `c` exposes as `b` does.
-  · simp [Ty.canAdapt, ← Ty.meet_expose wb wc m₂, t₁]
+  · simp [Ty.canAdapt, ← Ty.meet_iff.mp m₂, t₁]
   -- The table, then widening: `b` is a number, so the table relates numbers.
   · have nb := (Ty.canWiden_numeric w₂).1
     rcases Ty.adaptTable_cases t₁ with ⟨na, _⟩ | ⟨vs, e⟩
@@ -195,5 +189,8 @@ theorem Ty.adapt_trans (inj : ExposeInjective) {a b c : Ty} (wa : a.WF) (wb : b.
         exact absurd t₂ (by simp)
     · rw [e, Ty.adaptTable_enum_left] at t₂
       exact absurd t₂ (by simp)
+
+theorem Ty.adapt_refl (a : Ty) : a.canAdapt a = true := by
+  simp [Ty.canAdapt, Ty.meet_refl]
 
 end Datalove

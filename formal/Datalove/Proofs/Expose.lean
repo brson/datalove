@@ -1,6 +1,7 @@
 import Datalove.Relations
 import Datalove.WF
 import Datalove.Proofs.Equiv
+import Datalove.Proofs.Meet
 
 /-!
 # Exposing a recursive type
@@ -11,11 +12,6 @@ unfolds as many times as the type has leading `mu`s. `Ty.expose_not_mu`
 shows that is enough on every well-formed type, so the two agree there and
 the Rust loop ends: what stops `rec X X` is T064.
 
-Then meeting at the head. `Ty.meet_trans` shows `≈` is transitive on
-well-formed types if two recursive types that unfold alike are one type,
-`ExposeInjective`. That is not proved here; the law tests in
-`crates/datalove-formal-tests` look for a counterexample and have not found
-one.
 -/
 
 namespace Datalove
@@ -108,34 +104,22 @@ loop ends, and ends where the model's does. -/
 theorem expose_not_mu {t : Ty} (h : t.WF) : t.expose.isMu = false :=
   exposeN_not_mu _ t rfl (wf_core_not_recvar t {} rfl h)
 
-theorem meet_iff {a b : Ty} :
-    a.meet b = true ↔ a = b ∨ (a.isMu = true ∧ a.expose = b) ∨ (b.isMu = true ∧ a = b.expose) := by
-  simp [meet, Ty.equiv_iff_eq, or_assoc]
+theorem unfold_of_not_mu {t : Ty} (h : t.isMu = false) : t.unfold = t := by
+  cases t <;> simp_all [unfold, isMu]
+
+/-- A well-formed type meets its one-step unfolding at the head, however many
+`rec`s it starts with. -/
+theorem meet_unfold {t : Ty} (w : t.WF) : t.meet t.unfold = true := by
+  cases hm : t.isMu
+  · rw [unfold_of_not_mu hm]; exact meet_refl t
+  · cases t <;> simp_all [isMu]
+    rename_i b
+    have hc := wf_core_not_recvar _ {} rfl w
+    have hs := subst_core b 0 (mu b) (by simpa [core] using hc)
+    rw [meet_iff]
+    simp only [expose, leadingMus, exposeN, unfold]
+    rw [hs.1]
 
 end Ty
-
-/-- Two well-formed recursive types that unfold alike are one type.
-
-Believed, not proved. If it fails, two different recursive types each meet
-their common unfolding at the head without meeting each other, and `≈` is not
-transitive. The law tests look for such a pair among the types they make. -/
-def ExposeInjective : Prop :=
-  ∀ x y : Ty, x.WF → y.WF → x.isMu = true → y.isMu = true → x.expose = y.expose → x = y
-
-/-- Meeting at the head is transitive on well-formed types, given
-`ExposeInjective`. -/
-theorem Ty.meet_trans (inj : ExposeInjective) {a b c : Ty} (wa : a.WF) (wb : b.WF) (wc : c.WF)
-    (h₁ : a.meet b = true) (h₂ : b.meet c = true) : a.meet c = true := by
-  rw [Ty.meet_iff] at h₁ h₂ ⊢
-  rcases h₁ with rfl | ⟨ma, rfl⟩ | ⟨mb, rfl⟩ <;> rcases h₂ with rfl | ⟨mb', rfl⟩ | ⟨mc, e⟩
-  · exact Or.inl rfl
-  · exact Or.inr (Or.inl ⟨mb', rfl⟩)
-  · exact Or.inr (Or.inr ⟨mc, e⟩)
-  · exact Or.inr (Or.inl ⟨ma, rfl⟩)
-  · simp [Ty.expose_not_mu wa] at mb'
-  · exact Or.inl (inj a c wa wc ma mc e)
-  · exact Or.inr (Or.inr ⟨mb, rfl⟩)
-  · exact Or.inl rfl
-  · simp [e, Ty.expose_not_mu wc] at mb
 
 end Datalove

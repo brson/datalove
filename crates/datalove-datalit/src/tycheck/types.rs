@@ -525,18 +525,21 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
 }
 
 /// Whether a value of `actual` may stand where `expected` is wanted: the two
-/// are equivalent, or are once a recursive type at the head of one is
-/// unfolded.
+/// are equivalent once any `rec` at the head of either is unfolded.
 ///
 /// A recursive type and its unfolding mean the same thing and have one
 /// layout, and are told apart only so that equivalence stays syntactic. Where
 /// a value meets the type expected of it, they meet at the head: a `rec T [?T]`
 /// is a `[?(rec T [?T])]`, and the other way round. Inside a type they stay
 /// apart, so `[rec T [?T]]` is not `[[?(rec T [?T])]]`.
+///
+/// Both sides are unfolded all the way, so that two recursive types that
+/// unfold alike meet each other, as `rec L rec M [(L, M)]` meets its one-step
+/// unfolding `rec N [(rec L rec M [(L, M)], N)]`. Comparing one side's
+/// unfolding with the other side as it is would not, and meeting would not be
+/// transitive; see `botdocs/formal.md`.
 pub fn types_equivalent_at_head<'db>(db: &'db dyn crate::Db, actual: &Type<'db>, expected: &Type<'db>) -> bool {
-    types_equivalent(db, actual, expected)
-        || (matches!(actual, Type::Rec(_)) && types_equivalent(db, &expose(actual), expected))
-        || (matches!(expected, Type::Rec(_)) && types_equivalent(db, actual, &expose(expected)))
+    types_equivalent(db, &expose(actual), &expose(expected))
 }
 
 /// Check if a type can widen to another type.
@@ -572,7 +575,7 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
 /// enum: `rec J enum { atom Null, term Arr [J] }` lists `atom Null`, and
 /// `rec X term A [X]` is a `term A`. A recursive type meets its unfolding at
 /// the head, so it adapts as its unfolding does, which is what makes `@`
-/// transitive; see `botdocs/formal.md`.
+/// transitive; `formal/` proves it, and `botdocs/formal.md` says how.
 pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db>) -> bool {
     if types_equivalent_at_head(db, from, to) || can_widen_to(from, to) {
         return true;

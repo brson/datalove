@@ -1,0 +1,13 @@
+// Two recursive types that unfold alike stand for each other: `Outer`
+// unfolded once is `Inner`, and both unfold to `[(Outer, Inner)]`. Not a
+// backend fixture, since Cranelift AOT cannot yet compile `Outer`; see
+// botdocs/issues.md.
+
+type Outer: rec L rec M [(L, M)]
+type Inner: rec N [(Outer, N)]
+let outer: Outer = [([], [])]
+let inner: Inner = outer@
+let back: Outer = inner@
+debuglog back
+let also: Inner = back
+debuglog also

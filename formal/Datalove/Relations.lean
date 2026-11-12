@@ -55,11 +55,10 @@ end
 
 namespace Ty
 
-/-- `T ≈ U`, meeting at the head, as `types_equivalent_at_head`. -/
+/-- `T ≈ U`, meeting at the head, as `types_equivalent_at_head`: the two are
+equivalent once each is unfolded at the head. -/
 def meet (actual expected : Ty) : Bool :=
-  actual.equiv expected
-    || (actual.isMu && actual.expose.equiv expected)
-    || (expected.isMu && actual.equiv expected.expose)
+  actual.expose.equiv expected.expose
 
 /-- Numeric widening along a chain, as `can_widen_to`. -/
 def canWiden : Ty → Ty → Bool

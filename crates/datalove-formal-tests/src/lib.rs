@@ -330,8 +330,8 @@ pub fn extra_types(db: &Db) -> Vec<Type<'_>> {
 }
 
 /// Pairs worth asking about. Random pairs of types are almost never related,
-/// so beside them are pairs built to be: each type with itself and with what
-/// it exposes to, every pair of scalars, and each variant of an enum with
+/// so beside them are pairs built to be: each type with itself, with what it
+/// unfolds to in one step, and with what it exposes to, every pair of scalars, and each variant of an enum with
 /// the enum, both as the enum and as the recursive type that unfolds to it.
 /// And the other way about: an atom or term, or a type that unfolds to one,
 /// with an enum that lists it.
@@ -342,10 +342,16 @@ pub fn pairs<'db>(db: &'db Db, pool: &[Type<'db>], seed: u64) -> Vec<(Type<'db>,
     let mut pairs = Vec::new();
     for ty in pool {
         pairs.push((ty.C(), ty.C()));
-        if matches!(ty, Type::Rec(_)) {
+        if let Type::Rec(r) = ty {
             let exposed = tc::expose(ty).into_owned();
             pairs.push((ty.C(), exposed.C()));
             pairs.push((exposed.C(), ty.C()));
+            // Unfolded once, which differs from unfolded all the way where the
+            // type starts with more than one `rec`.
+            let unfolded = r.unfold();
+            pairs.push((ty.C(), unfolded.C()));
+            pairs.push((unfolded.C(), ty.C()));
+            pairs.push((unfolded, exposed));
         }
         let exposed = tc::expose(ty).into_owned();
         if let Type::Enum(e) = &exposed {

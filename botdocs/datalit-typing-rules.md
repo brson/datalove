@@ -153,15 +153,22 @@ Everything else is positional and exact:
   unfolding, though a value of one has the layout of a value of the other.
 
 Where a typed value meets the type expected of it, types are compared by a
-looser relation, `T ≈ U`, *meeting at the head*: `T ≡ U`, or one of them is a
-recursive type that, unfolded until its head is not a `rec`, is equivalent to
-the other.
+looser relation, `T ≈ U`, *meeting at the head*: `T` and `U` are equivalent
+once each is unfolded until its head is not a `rec`. `unfold*(T)` is `T` when
+`T` is not a recursive type.
 
 ```
-T ≡ U              unfold*(T) ≡ U          T ≡ unfold*(U)
----------- (Meet)    ------------- (Meet-Unroll)   ------------- (Meet-Roll)
-T ≈ U              T ≈ U                   T ≈ U
+unfold*(T) ≡ unfold*(U)
+----------------------- (Meet)
+T ≈ U
 ```
+
+So `≈` is an equivalence relation. Unfolding both sides matters where a type
+starts with more than one `rec`: `rec L rec M [(L, M)]` unfolds in one step
+to `rec N [(rec L rec M [(L, M)], N)]`, another recursive type, and the two
+meet because both unfold all the way to the same list. Comparing one side
+unfolded with the other as it is, which this rule replaced in November 2026,
+said they did not, though each met the list.
 
 `≈` holds at the head only: `[rec L [L]] ≉ [[rec L [L]]]`, though an element
 of either is one of the other. A recursive type and its unfolding mean the
