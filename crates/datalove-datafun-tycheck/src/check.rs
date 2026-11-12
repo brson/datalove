@@ -388,8 +388,13 @@ fn check_unhinted<'db>(
             // though 2147483648 is not, and -5 is no u32 even though 5 is.
             // This is how datalit reads a signed literal, which carries its
             // sign in the token rather than under an operator.
+            //
+            // Only a bare literal: one with a hint of its own has the type the
+            // hint gives it, and is checked as anything else is, so that
+            // `-(: string / 8)` is no `i8`.
             if let (Type::Datalit(expected_datalit_ty), ExprFunKind::Int(int_expr)) =
                 (expected, expr.at(unary.operand).kind())
+                && int_expr.type_hint.is_none()
             {
                 if is_fixed_int_type(expected) {
                     let negated = format!("-{}", int_expr.value.as_str(db));

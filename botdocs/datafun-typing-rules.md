@@ -195,7 +195,9 @@ the other, so a callee writing through the borrow leaves a valid value
 behind. `list.push(mut t, x)` with `t : rec T [?T]` pushes onto `t` as the
 `[?(rec T [?T])]` it unfolds to.
 
-These make `let x: i32 = -5` and `let y: f32 = -1.5` check, and pass a
+`n` is a literal with no hint of its own: one with a hint has the hint's
+type, and `-(: string / 8)` is checked as any other negation is, so it is no
+`i8`. These make `let x: i32 = -5` and `let y: f32 = -1.5` check, and pass a
 float expected type through the sign, so with `x : f32`, `let y: f64 = -x@`
 widens. There is no such rule for `int`: with `x : u8`, `let y: int = -x@`
 synthesizes `-` over a `u8`, which is F026 by `Syn-Neg`.

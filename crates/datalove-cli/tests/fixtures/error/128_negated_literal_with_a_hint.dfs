@@ -1,0 +1,4 @@
+// A negated literal with a hint of its own has the hint's type: it is not
+// range-checked against what is expected, as a bare one is.
+let a: i8 = -(: string / 8)
+let b: i8 = -(: i64 / 8)
