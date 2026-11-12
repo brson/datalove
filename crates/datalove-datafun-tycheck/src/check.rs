@@ -406,10 +406,13 @@ fn check_unhinted<'db>(
                 }
             }
             // A float negates to its own type, so the expected width reaches
-            // the operand. The operand is only read, as when the negation is
-            // synthesized, so it is borrowed: `-(mk().r!)` reads a field of a
-            // temporary either way.
-            if is_float_type(expected) {
+            // the operand, and so does a type parameter bounded to the floats,
+            // which is checked as each of its instances would be. The operand
+            // is only read, as when the negation is synthesized, so it is
+            // borrowed: `-(mk().r!)` reads a field of a temporary either way.
+            let float_bounded = crate::synthesize::operand_bound(ctx, expected)
+                == Some(datalove_datafun_ast::ast::TypeBound::Float);
+            if is_float_type(expected) || float_bounded {
                 let old_ref_context = ctx.ref_context;
                 ctx.ref_context = true;
                 let checked = check_expr(ctx, ctx.expr(unary.operand), expected);

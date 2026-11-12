@@ -147,6 +147,8 @@ const CORPUS: &[&str] = &[
     "fun id<T>(x: T): T\n  ret x\nend fun\nfun f<T>(x: T, l: [T]): [T]\n  let a: T = id(x)\n  let b = id(l)\n  let c: [T] = id([])\n  let d = id(x) == id(x)\n  let e: ?T = id(none)\n  ret b\nend fun\n",
     // `-` reads its operand borrowed, synthesized or checked against a float.
     "fun mk(): {r: !f32}\n  ret {r = ok 1.5}\nend fun\nlet a: f32 = -(mk().r!)\nlet b = -(mk().r!)\nfun g<T>(x: T): !T where { T is float, }\n  let y: T = -(id(x))\n  ret ok y\nend fun\nfun id<T>(x: T): T\n  ret x\nend fun\n",
+    // A parameter bounded to the floats is checked under `-` as a float is.
+    "fun f<T>(x: T, y: u8): !T where { T is float, }\n  let a: T = -x\n  let b: T = -(x * x)\n  let c: T = -(-x)\n  let d: T = -y\n  let e: T = -1.5\n  let g: T = -5\n  ret ok a\nend fun\nfun h<T>(x: T): T where { T is ord, }\n  let a: T = -x\n  ret x\nend fun\n",
     // Every marker is reported before any argument is checked.
     "fun g(ref a: u8, b: u8)\nend fun\ncall g(1, ref true)\ncall g(ref true, ref 1)\n",
 ];

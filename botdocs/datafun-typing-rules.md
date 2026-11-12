@@ -165,13 +165,18 @@ negation operator and datalit has only signed literals:
 Γ ⊢ -n ⇐ I
 ```
 
-And for negation of anything under a float:
+And for negation of anything under a float, or a type parameter bounded to
+the floats:
 
 ```
-Γ ⊢ e ⇐ F    F ∈ Float
----------------------- (Check-Neg)
+Γ ⊢ e ⇐ F    F ∈ Float⁺
+----------------------- (Check-Neg)
 Γ ⊢ -e ⇐ F
 ```
+
+The operand is in a borrowed position, as it is when the negation is
+synthesized. A parameter `T is float` is checked as `f32` and `f64` are, so
+that a generic body and its instances take the same rule.
 
 `Check-Roll` holds for the literal forms: a tuple, struct, list, set, map,
 tensor, table, `none`, `some`, `ok`, `er`, atom, term or enum literal checked

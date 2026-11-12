@@ -1157,13 +1157,16 @@ def checkForm (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
       | .error => do let _ ← synthF env n Γ p; pure ()
       | _ => throw "F016"
     -- Datafun's.
+    -- A float, or a type parameter bounded to the floats, reaches the
+    -- operand, read borrowed.
     | .unop .neg a =>
       let t := expected.expose
+      let float := isFloatT t || Γ.boundOf t == Option.some .float
       match a with
       | .int k => match intRange t with
         | Option.some (lo, hi, code) => if lo ≤ -k && -k ≤ hi then pure () else throw code
-        | Option.none => if isFloatT t then checkF env n Γ.borrow a t else subsumeF env n Γ e expected
-      | _ => if isFloatT t then checkF env n Γ.borrow a t else subsumeF env n Γ e expected
+        | Option.none => if float then checkF env n Γ.borrow a t else subsumeF env n Γ e expected
+      | _ => if float then checkF env n Γ.borrow a t else subsumeF env n Γ e expected
     | .binop op a b =>
       if yieldsOperand op then do
         let t ← pairF env n Γ a b (Option.some expected)
