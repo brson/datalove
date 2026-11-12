@@ -217,6 +217,9 @@ pub struct StmtIf {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtLoop {
+    /// The condition of `loop while`, checked at the start of each round.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition: Option<ExprFun>,
     pub body: Vec<Statement>,
 }
 
@@ -863,6 +866,7 @@ impl StmtIf {
 impl StmtLoop {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::StmtLoop<'db>) -> Self {
         StmtLoop {
+            condition: ast.condition.map(|c| ExprFun::from_ast(db, arena.get(c))),
             body: ast.body.iter().map(|s| Statement::from_ast(db, arena, s)).collect(),
         }
     }
