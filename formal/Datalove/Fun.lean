@@ -20,8 +20,11 @@ cannot be typed reports one code and stops (`throw`); a few rules report and
 go on (`report`), as a call goes on to its next argument. A failed `let` with
 a hint binds its name at the hint's type; one without binds nothing.
 
-Everything is `partial`, being built on `Lit`'s inference, and serves as the
-oracle for `crates/datalove-formal-tests/tests/fun_tests.rs`.
+Inference is `partial`, being `Lit`'s. Checking and synthesis are total:
+they take inference as a parameter (`InferEnv`) and run on fuel, which a
+check that runs out of fails. So `Proofs/EarlyReturn.lean` and
+`Proofs/Completes.lean` can reason about them, and with inference given they
+are the oracle for `crates/datalove-formal-tests/tests/fun_tests.rs`.
 -/
 
 namespace Datalove.Fun
@@ -285,11 +288,6 @@ end
 
 /-! ## Checking and synthesis -/
 
-/-- The forms datafun shares with datalit, which datalit's rules type. -/
-def isLiteralForm : Expr → Bool
-  | .var _ | .binop .. | .unop .. | .tryOpt _ | .tryRes _ | .adapt _ | .call .. | .hinted .. => false
-  | _ => true
-
 /-- The checker's monad: a code thrown stops the expression; a code reported
 does not. -/
 abbrev ChkM := ExceptT Code (StateM (Array Code))
@@ -309,59 +307,10 @@ for one with none). -/
 def inferType (Γ : Ctx) (e : Expr) : Except Code Ty :=
   (do let p ← infer Γ e; resolve p).run' #[]
 
-mutual
-
-/-- `Γ ⊢ e ⇒ T`. -/
-partial def synth (Γ : Ctx) (e : Expr) : ChkM Ty := do
-  match e with
-  | .hinted h _ =>
-    let t ← liftE (convertHint h)
-    check Γ e t
-    pure t
-  | .var x => match Γ.lookup x with
-    | Option.some (t, _) => pure t
-    | Option.none => throw "F001"
-  | .binop op a b =>
-    let t ← pair Γ a b none
-    finishBinop Γ op t
-  | .unop .neg a =>
-    let t ← synth Γ a
-    if isFloatT t || t == .int then pure t else throw "F026"
-  | .unop .not a =>
-    let t ← synth Γ a
-    if t == .bool then pure t else throw "F026"
-  | .unop .negC a =>
-    let t ← synth Γ a
-    if !isFixT t then throw "F026"
-    if !Γ.returnsResult then throw "F049"
-    pure t
-  | .unop .negO a =>
-    let t ← synth Γ a
-    if !isFixT t then throw "F026"
-    if !Γ.returnsOption then throw "F049"
-    pure t
-  | .tryOpt a =>
-    let t ← synth Γ a
-    match t.expose with
-    | .option p => if Γ.returnsOption then pure p else throw "F049"
-    | _ => throw "F048"
-  | .tryRes a =>
-    let t ← synth Γ a
-    match t.expose with
-    | .result p => if Γ.returnsResult then pure p else throw "F049"
-    | _ => throw "F048"
-  | .adapt a => synth Γ a
-  | .call f args => synthCall Γ f args
-  | e =>
-    let t ← liftE (inferType Γ e)
-    check Γ e t
-    pure t
-
-/-- `Γ ⊢ e₁ ~ e₂ ⇒ T` (Pair): the operands inferred together, each given
-its default, the two equal (else F090), each checked against the type. With
-an expected type (Check-BinOp), each operand is unified with it first. -/
-partial def pair (Γ : Ctx) (a b : Expr) (expected : Option Ty) : ChkM Ty := do
-  let r : Except Code (Ty × Ty) := (do
+/-- Infer two operands together, unifying each first with an expected type
+if there is one, and give each its default: the inference half of Pair. -/
+def pairTypes (Γ : Ctx) (a b : Expr) (expected : Option Ty) : Except Code (Ty × Ty) :=
+  (do
     let ta ← infer Γ a
     let tb ← infer Γ b
     if let Option.some t := expected then
@@ -369,15 +318,26 @@ partial def pair (Γ : Ctx) (a b : Expr) (expected : Option Ty) : ChkM Ty := do
       unify tb (.known t)
     unify ta tb
     pure (← resolve ta, ← resolve tb)).run' #[]
-  let (ta, tb) ← liftE r
-  if ta != tb then throw "F090"
-  check Γ a ta
-  check Γ b ta
-  pure ta
+
+/-- What checking takes from inference: an expression's type (`inferType`),
+two operands' (`pairTypes`), and whether inferring finds a malformed hint.
+Given as parameters, so that checking is a total function; inference only
+says what types are, and never where an early return may be, so what
+`Proofs/EarlyReturn.lean` shows of checking holds whatever it says. -/
+structure InferEnv where
+  ty : Ctx → Expr → Except Code Ty
+  pair : Ctx → Expr → Expr → Option Ty → Except Code (Ty × Ty)
+  probe : Ctx → Expr → Except Code Unit
+
+/-- Inference as `Lit.lean` has it. -/
+def inferEnv : InferEnv where
+  ty := inferType
+  pair := pairTypes
+  probe Γ e := do let _ ← (infer Γ e).run' #[]
 
 /-- An operator's type, given its operands': Syn-Arith, Syn-Ord, Syn-Eq,
 Syn-Logic. -/
-partial def finishBinop (Γ : Ctx) (op : BinOp) (t : Ty) : ChkM Ty := do
+def finishBinop (Γ : Ctx) (op : BinOp) (t : Ty) : ChkM Ty := do
   match op with
   | .lt | .gt | .le | .ge =>
     if t.isNumeric then pure .bool else throw "F026"
@@ -390,253 +350,435 @@ partial def finishBinop (Γ : Ctx) (op : BinOp) (t : Ty) : ChkM Ty := do
     if !fits Γ (needs op) then throw "F049"
     pure t
 
-/-- Syn-Call: the function's signature, the argument count (F045), and each
-argument in order: a marker that disagrees with its mode is reported (F057)
-and checking goes on, and the first argument not of its parameter's type
-stops the call. -/
-partial def synthCall (Γ : Ctx) (f : String) (args : List (Option Mode × Expr)) : ChkM Ty := do
-  let Option.some sig := Γ.sigs.lookup f | throw "F002"
-  if args.length != sig.params.length then throw "F045"
-  for ((marker, e), (mode, t)) in args.zip sig.params do
-    let wanted := if mode == .in_ then Option.none else Option.some mode
-    if marker != wanted then report "F057"
-    check Γ e t
-  match sig.ret with
-  | .ty r => pure r
-  | .void => pure unitTy
-
-/-- `Γ ⊢ e ⇐ T`, by the doc's rule selection. -/
-partial def check (Γ : Ctx) (e : Expr) (expected : Ty) : ChkM Unit := do
-  let e ← match e with
-    | .hinted h inner => do
-      let hinted ← liftE (convertHint h)
-      if !hinted.meet expected then throw "T040"
-      pure inner
-    | e => pure e
-  let exposed := expected.expose
-  match e, exposed with
-  -- Datalit's rules, with the context added.
-  | .none_, .option _ => pure ()
-  | .some_ p, .option t => check Γ p t
-  | .ok p, .result t => check Γ p t
-  | .er p, .result _ => check Γ p .error
-  | .none_, _ | .er _, _ => throw "F016"
-  | .tt, _ | .ff, _ => if Ty.bool == expected then pure () else throw "F016"
-  | .str, _ => if Ty.string == expected then pure () else throw "F016"
-  | .int n, t =>
-    if t == .int then pure ()
-    else match intRange t with
-      | Option.some (lo, hi, code) => if lo ≤ n && n ≤ hi then pure () else throw code
-      | Option.none => subsume Γ e expected
-  | .float, .f32 | .float, .f64 => pure ()
-  | .hex n, t =>
-    if t == .int then pure ()
-    else match hexBits t with
-      | Option.some (bits, code) => if n < 2 ^ bits then pure () else throw code
-      | Option.none => subsume Γ e expected
-  | .tuple es, .tuple ts =>
-    let ts := tysList ts
-    if es.length != ts.length then throw "T038"
-    for (e, t) in es.zip ts do check Γ e t
-  | .struct fs, .struct ts =>
-    let ts := fieldsList ts
-    if fs.length != ts.length then throw "T039"
-    for ((n, e), (m, t)) in fs.zip ts do
-      if n != m then throw "T042"
-      check Γ e t
-  | .list es, .list t | .set es, .set t => for e in es do check Γ e t
-  | .map es, .map k v => for (ke, ve) in es do check Γ ke k; check Γ ve v
-  | .tensor shape es, .tensor t rank =>
-    if shape.length != rank then throw "T048"
-    if es.length != shape.foldl (· * ·) 1 then throw "T049"
-    for e in es do check Γ e t
-  | .table header rows, .table cols =>
-    let cols := fieldsList cols
-    if header.length != cols.length then throw "T054"
-    if header != cols.map (·.1) then throw "T055"
-    for row in rows do
-      if row.length != cols.length then throw "T056"
-      for (e, (_, t)) in row.zip cols do check Γ e t
-  | .atom a, .atom b => if a == b then pure () else throw "T057"
-  | .atom a, .enum vs => if Lit.Variants.atomListed a vs then pure () else throw "T057"
-  | .term a p, .term b t => if a == b then check Γ p t else throw "T057"
-  | .term a p, .enum vs =>
-    match Lit.Variants.termPayload a vs with
-    | Option.some t => check Γ p t
-    | Option.none => throw "T057"
-  | .enum inner, .enum _ => check Γ inner expected
-  | .enum _, _ => throw "T058"
-  | .data p, .data | .error p, .error => do let _ ← synth Γ p; pure ()
-  -- Datafun's.
-  | .unop .neg (.int n), t =>
-    match intRange t with
-    | Option.some (lo, hi, code) => if lo ≤ -n && -n ≤ hi then pure () else throw code
-    | Option.none => if isFloatT t then check Γ (.int n) t else subsume Γ e expected
-  | .unop .neg a, t => if isFloatT t then check Γ a t else subsume Γ e expected
-  | .binop op a b, _ =>
-    if yieldsOperand op then
-      let t ← pair Γ a b (Option.some expected)
-      let r ← finishBinop Γ op t
-      if r != expected then throw "F016"
-    else subsume Γ e expected
-  | .adapt a, _ =>
-    let t ← synth Γ a
-    if !t.canAdapt expected then throw "F091"
-  | e, _ => if isLiteralForm e then literalMismatch Γ e else subsume Γ e expected
-
 /-- A literal form with no rule for the expected head: datalit's rule
 selection, under which it fails without being synthesized, as a plain
 mismatch (F016), unless inferring it finds a malformed hint first. -/
-partial def literalMismatch (Γ : Ctx) (e : Expr) : ChkM Unit := do
-  let _ ← liftE ((infer Γ e).run' #[])
+def literalMismatch (env : InferEnv) (Γ : Ctx) (e : Expr) : ChkM Unit := do
+  liftE (env.probe Γ e)
   throw "F016"
+
+/-- Enough fuel for any expression or body a test writes: every call of the
+checker spends one, and running out is an error, never a success. -/
+def fuel : Nat := 1000000
+
+mutual
+
+/-- `Γ ⊢ e ⇒ T`. -/
+def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
+  | 0, _, _ => throw "fuel"
+  | n + 1, Γ, e => match e with
+    | .hinted h inner => do
+      let t ← liftE (convertHint h)
+      checkForm env n Γ inner t
+      pure t
+    | .var x => match Γ.lookup x with
+      | Option.some (t, _) => pure t
+      | Option.none => throw "F001"
+    | .binop op a b => do
+      let t ← pairF env n Γ a b Option.none
+      finishBinop Γ op t
+    | .unop .neg a => do
+      let t ← synthF env n Γ a
+      if isFloatT t || t == .int then pure t else throw "F026"
+    | .unop .not a => do
+      let t ← synthF env n Γ a
+      if t == .bool then pure t else throw "F026"
+    | .unop .negC a => do
+      let t ← synthF env n Γ a
+      if !isFixT t then throw "F026"
+      if !Γ.returnsResult then throw "F049"
+      pure t
+    | .unop .negO a => do
+      let t ← synthF env n Γ a
+      if !isFixT t then throw "F026"
+      if !Γ.returnsOption then throw "F049"
+      pure t
+    | .tryOpt a => do
+      let t ← synthF env n Γ a
+      match t.expose with
+      | .option p => if Γ.returnsOption then pure p else throw "F049"
+      | _ => throw "F048"
+    | .tryRes a => do
+      let t ← synthF env n Γ a
+      match t.expose with
+      | .result p => if Γ.returnsResult then pure p else throw "F049"
+      | _ => throw "F048"
+    | .adapt a => synthF env n Γ a
+    | .call f args => do
+      let Option.some sig := Γ.sigs.lookup f | throw "F002"
+      if args.length != sig.params.length then throw "F045"
+      argsF env n Γ args sig.params
+      match sig.ret with
+      | .ty r => pure r
+      | .void => pure unitTy
+    | e => do
+      let t ← liftE (env.ty Γ e)
+      checkForm env n Γ e t
+      pure t
+
+/-- Pair: the operands' types, which must be one (else F090), and each
+checked against it. -/
+def pairF (env : InferEnv) : Nat → Ctx → Expr → Expr → Option Ty → ChkM Ty
+  | 0, _, _, _, _ => throw "fuel"
+  | n + 1, Γ, a, b, expected => do
+    let (ta, tb) ← liftE (env.pair Γ a b expected)
+    if ta != tb then throw "F090"
+    checkF env n Γ a ta
+    checkF env n Γ b ta
+    pure ta
+
+/-- A call's arguments in order: a marker that disagrees with its mode is
+reported (F057) and checking goes on, and the first argument not of its
+parameter's type stops the call. -/
+def argsF (env : InferEnv) : Nat → Ctx → List (Option Mode × Expr) → List (Mode × Ty) → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | n + 1, Γ, (marker, e) :: args, (mode, t) :: params => do
+    let wanted := if mode == .in_ then Option.none else Option.some mode
+    if marker != wanted then report "F057"
+    checkF env n Γ e t
+    argsF env n Γ args params
+  | _ + 1, _, _, _ => pure ()
+
+/-- `Γ ⊢ e ⇐ T`: a hint first (Check-Hinted), then the rule for the form. -/
+def checkF (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | n + 1, Γ, .hinted h inner, expected => do
+    let hinted ← liftE (convertHint h)
+    if !hinted.meet expected then throw "T040"
+    checkForm env n Γ inner expected
+  | n + 1, Γ, e, expected => checkForm env n Γ e expected
+
+/-- The rule for an expression's form and the expected type's head, unrolled
+(Check-Roll); a literal form with none fails (`literalMismatch`), and any
+other is checked by Check-Subsume. Matched on the form first, then the head,
+as the doc's rule selection reads. -/
+def checkForm (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | n + 1, Γ, e, expected =>
+    match e with
+    -- Datalit's rules, with the context added.
+    | .none_ => match expected.expose with
+      | .option _ => pure ()
+      | _ => throw "F016"
+    | .er p => match expected.expose with
+      | .result _ => checkF env n Γ p .error
+      | _ => throw "F016"
+    | .some_ p => match expected.expose with
+      | .option t => checkF env n Γ p t
+      | _ => literalMismatch env Γ e
+    | .ok p => match expected.expose with
+      | .result t => checkF env n Γ p t
+      | _ => literalMismatch env Γ e
+    | .tt | .ff => if Ty.bool == expected then pure () else throw "F016"
+    | .str => if Ty.string == expected then pure () else throw "F016"
+    | .int k =>
+      let t := expected.expose
+      if t == .int then pure ()
+      else match intRange t with
+        | Option.some (lo, hi, code) => if lo ≤ k && k ≤ hi then pure () else throw code
+        | Option.none => literalMismatch env Γ e
+    | .float => match expected.expose with
+      | .f32 | .f64 => pure ()
+      | _ => literalMismatch env Γ e
+    | .hex k =>
+      let t := expected.expose
+      if t == .int then pure ()
+      else match hexBits t with
+        | Option.some (bits, code) => if k < 2 ^ bits then pure () else throw code
+        | Option.none => literalMismatch env Γ e
+    | .tuple es => match expected.expose with
+      | .tuple ts =>
+        if es.length != (tysList ts).length then throw "T038"
+        else pairsF env n Γ es (tysList ts)
+      | _ => literalMismatch env Γ e
+    | .struct fs => match expected.expose with
+      | .struct ts =>
+        if fs.length != (fieldsList ts).length then throw "T039"
+        else fieldsF env n Γ fs (fieldsList ts)
+      | _ => literalMismatch env Γ e
+    | .list es => match expected.expose with
+      | .list t => allF env n Γ es t
+      | _ => literalMismatch env Γ e
+    | .set es => match expected.expose with
+      | .set t => allF env n Γ es t
+      | _ => literalMismatch env Γ e
+    | .map es => match expected.expose with
+      | .map k v => entriesF env n Γ es k v
+      | _ => literalMismatch env Γ e
+    | .tensor shape es => match expected.expose with
+      | .tensor t rank =>
+        if shape.length != rank then throw "T048"
+        else if es.length != shape.foldl (· * ·) 1 then throw "T049"
+        else allF env n Γ es t
+      | _ => literalMismatch env Γ e
+    | .table header rows => match expected.expose with
+      | .table cols =>
+        if header.length != (fieldsList cols).length then throw "T054"
+        else if header != (fieldsList cols).map (·.1) then throw "T055"
+        else rowsF env n Γ rows (fieldsList cols)
+      | _ => literalMismatch env Γ e
+    | .atom a => match expected.expose with
+      | .atom b => if a == b then pure () else throw "T057"
+      | .enum vs => if Lit.Variants.atomListed a vs then pure () else throw "T057"
+      | _ => literalMismatch env Γ e
+    | .term a p => match expected.expose with
+      | .term b t => if a == b then checkF env n Γ p t else throw "T057"
+      | .enum vs => match Lit.Variants.termPayload a vs with
+        | Option.some t => checkF env n Γ p t
+        | Option.none => throw "T057"
+      | _ => literalMismatch env Γ e
+    | .enum inner => match expected.expose with
+      | .enum _ => checkF env n Γ inner expected
+      | _ => throw "T058"
+    | .data p => match expected.expose with
+      | .data => do let _ ← synthF env n Γ p; pure ()
+      | _ => literalMismatch env Γ e
+    | .error p => match expected.expose with
+      | .error => do let _ ← synthF env n Γ p; pure ()
+      | _ => literalMismatch env Γ e
+    -- Datafun's.
+    | .unop .neg a =>
+      let t := expected.expose
+      match a with
+      | .int k => match intRange t with
+        | Option.some (lo, hi, code) => if lo ≤ -k && -k ≤ hi then pure () else throw code
+        | Option.none => if isFloatT t then checkF env n Γ a t else subsumeF env n Γ e expected
+      | _ => if isFloatT t then checkF env n Γ a t else subsumeF env n Γ e expected
+    | .binop op a b =>
+      if yieldsOperand op then do
+        let t ← pairF env n Γ a b (Option.some expected)
+        let r ← finishBinop Γ op t
+        if r != expected then throw "F016"
+      else subsumeF env n Γ e expected
+    | .adapt a => do
+      let t ← synthF env n Γ a
+      if !t.canAdapt expected then throw "F091"
+    | .unop _ _ | .var _ | .tryOpt _ | .tryRes _ | .call _ _ | .hinted _ _ =>
+      subsumeF env n Γ e expected
 
 /-- Check-Subsume: what the expression synthesizes meets the expected type at
 the head, or F016. -/
-partial def subsume (Γ : Ctx) (e : Expr) (expected : Ty) : ChkM Unit := do
-  let t ← synth Γ e
-  if !t.meet expected then throw "F016"
+def subsumeF (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | n + 1, Γ, e, expected => do
+    let t ← synthF env n Γ e
+    if !t.meet expected then throw "F016"
+
+def pairsF (env : InferEnv) : Nat → Ctx → List Expr → List Ty → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | n + 1, Γ, e :: es, t :: ts => do checkF env n Γ e t; pairsF env n Γ es ts
+  | _ + 1, _, _, _ => pure ()
+
+def fieldsF (env : InferEnv) : Nat → Ctx → List (String × Expr) → List (String × Ty) → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | n + 1, Γ, (m, e) :: fs, (k, t) :: ts => do
+    if m != k then throw "T042"
+    checkF env n Γ e t
+    fieldsF env n Γ fs ts
+  | _ + 1, _, _, _ => pure ()
+
+def allF (env : InferEnv) : Nat → Ctx → List Expr → Ty → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | _ + 1, _, [], _ => pure ()
+  | n + 1, Γ, e :: es, t => do checkF env n Γ e t; allF env n Γ es t
+
+def entriesF (env : InferEnv) : Nat → Ctx → List (Expr × Expr) → Ty → Ty → ChkM Unit
+  | 0, _, _, _, _ => throw "fuel"
+  | _ + 1, _, [], _, _ => pure ()
+  | n + 1, Γ, (ke, ve) :: es, k, v => do
+    checkF env n Γ ke k
+    checkF env n Γ ve v
+    entriesF env n Γ es k v
+
+def rowsF (env : InferEnv) : Nat → Ctx → List (List Expr) → List (String × Ty) → ChkM Unit
+  | 0, _, _, _ => throw "fuel"
+  | _ + 1, _, [], _ => pure ()
+  | n + 1, Γ, r :: rs, cols => do
+    if r.length != cols.length then throw "T056"
+    pairsF env n Γ r (cols.map (·.2))
+    rowsF env n Γ rs cols
 
 end
+
+def synth (Γ : Ctx) (e : Expr) : ChkM Ty := synthF inferEnv fuel Γ e
+def check (Γ : Ctx) (e : Expr) (t : Ty) : ChkM Unit := checkF inferEnv fuel Γ e t
 
 /-! ## Statements -/
 
 /-- Run an expression's check, reporting what it threw. -/
 def runChk {α} (m : ChkM α) : StateM (Array Code) (Option α) := do
-  match ← m.run with
+  -- The check runs on a fresh list, whose reports are added after, so that
+  -- what a statement adds says whether its checks succeeded.
+  let (r, reported) := m.run.run #[]
+  modify (· ++ reported)
+  match r with
   | .ok a => pure (Option.some a)
   | .error c => modify (·.push c); pure Option.none
 
-/-- `completes(s̄)`: whether control can reach the end, by the doc's rules. -/
-partial def completes : List Stmt → Bool
+mutual
+
+/-- `completes(s̄)`: whether control can reach the end, by the doc's rules.
+Total, so that `Proofs/Completes.lean` can show it sound. -/
+def completes : List Stmt → Bool
   | [] => true
-  | s :: ss => completes1 s && completes ss
-where
-  completes1 : Stmt → Bool
-    | .ret _ | .brk | .cont => false
-    | .if_ _ _ _ _ Option.none => true
-    | .if_ _ _ _ t (Option.some e) => completes t || completes e
-    | .loop (Option.some _) _ => true
-    | .loop Option.none body => hasBreak body
-    | _ => true
-  /-- A `break` belonging to this loop: not one inside a nested loop. -/
-  hasBreak : List Stmt → Bool
-    | [] => false
-    | .brk :: _ => true
-    | .if_ _ _ _ t e :: ss => hasBreak t || (e.map hasBreak).getD false || hasBreak ss
-    | _ :: ss => hasBreak ss
+  | s :: ss => completesS s && completes ss
+
+def completesS : Stmt → Bool
+  | .ret _ | .brk | .cont => false
+  | .if_ _ _ _ _ Option.none => true
+  | .if_ _ _ _ t (Option.some e) => completes t || completes e
+  | .loop (Option.some _) _ => true
+  | .loop Option.none body => hasBreak body
+  | _ => true
+
+/-- Whether a body holds a `break` belonging to the loop it is the body of:
+not one inside a nested loop. -/
+def hasBreak : List Stmt → Bool
+  | [] => false
+  | s :: ss => hasBreakS s || hasBreak ss
+
+def hasBreakS : Stmt → Bool
+  | .brk => true
+  | .if_ _ _ _ t e => hasBreak t || hasBreakElse e
+  | _ => false
+
+def hasBreakElse : Option (List Stmt) → Bool
+  | Option.none => false
+  | Option.some e => hasBreak e
+
+end
 
 def convertReporting (h : Hint) : StateM (Array Code) (Option Ty) :=
   runChk (liftE (convertHint h))
 
-mutual
-
-/-- `Γ ⊢ s ⊣ Γ'`, reporting what is wrong. -/
-partial def checkStmt (Γ : Ctx) : Stmt → StateM (Array Code) Ctx
-  | .let_ x hint e => bindChecked Γ x hint e .let_
-  | .var_ x hint (Option.some e) => bindChecked Γ x hint e .var_
-  | .var_ x (Option.some hint) Option.none => do
-    match ← convertReporting hint with
-    | Option.some t => pure (Γ.bind x t .var_)
-    | Option.none => pure Γ
-  | .var_ _ Option.none Option.none => pure Γ
-  | .set_ x op e => do
-    match Γ.lookup x with
-    | Option.none => modify (·.push "F054")
-    | Option.some (t, k) =>
-      -- An immutable root is reported, and the value is still checked.
-      if k == .let_ then modify (·.push "F055")
-      match op with
-      | Option.none => let _ ← runChk (check Γ e t)
-      | Option.some op =>
-        let _ ← runChk (do
-          check Γ e t
-          if !arithAdmits op t then throw "F026"
-          if !fits Γ (needs op) then throw "F049")
-    pure Γ
-  | .fun_ _ => pure Γ
-  | .ret e => do
-    match Γ.ret, e with
-    | .void, Option.some _ => modify (·.push "F052")
-    | .ty _, Option.none => modify (·.push "F053")
-    | .ty r, Option.some e => let _ ← runChk (check Γ e r)
-    | .void, Option.none => pure ()
-    pure Γ
-  | .if_ c Option.none Option.none t e => do
-    let _ ← runChk (check Γ c .bool)
-    checkBlock Γ t
-    if let Option.some e := e then checkBlock Γ e
-    pure Γ
-  | .if_ c thenB elseB t e => do
-    match ← runChk (synth Γ c) with
-    -- A condition with no type binds nothing to check the bodies under, and
-    -- they are left unchecked.
-    | Option.none => pure ()
-    | Option.some ct =>
-      match ct.expose with
-      -- An option has no error to bind: F094, after the body that binds the
-      -- payload and before the one that cannot bind the error.
-      | .option p =>
-        checkBlock (bindOpt Γ thenB p) t
-        if elseB.isSome then modify (·.push "F094")
-        if let Option.some e := e then checkBlock Γ e
-      -- A result needs its error bound (F046), and without it the bodies are
-      -- left unchecked.
-      | .result p =>
-        if elseB.isNone then modify (·.push "F046")
-        else
-          checkBlock (bindOpt Γ thenB p) t
-          if let Option.some e := e then checkBlock (bindOpt Γ elseB .error) e
-      -- Nothing to bind, so the bodies are left unchecked, as for a
-      -- condition with no type.
-      | _ => modify (·.push "F093")
-    pure Γ
-  | .loop c body => do
-    if let Option.some c := c then let _ ← runChk (check Γ c .bool)
-    checkBlock { Γ with inLoop := true } body
-    pure Γ
-  | .brk => do
-    if !Γ.inLoop then modify (·.push "F050")
-    pure Γ
-  | .cont => do
-    if !Γ.inLoop then modify (·.push "F051")
-    pure Γ
-  | .debuglog e => do
-    let _ ← runChk (synth Γ e)
-    pure Γ
-  | .call e => do
-    if let Option.some t ← runChk (synth Γ e) then
-      if t != unitTy then modify (·.push "F095")
-    pure Γ
+def bindOpt (Γ : Ctx) (x : Option String) (t : Ty) : Ctx :=
+  match x with
+  | Option.some x => Γ.bind x t .let_
+  | Option.none => Γ
 
 /-- A `let` or `var` with a value. A hint is the type the name is bound at
 whatever the value does; with none, a value that does not synthesize leaves
 the name unbound. -/
-partial def bindChecked (Γ : Ctx) (x : String) (hint : Option Hint) (e : Expr) (k : Kind) :
-    StateM (Array Code) Ctx := do
+def bindChecked (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (hint : Option Hint) (e : Expr)
+    (k : Kind) : StateM (Array Code) Ctx := do
   match hint with
   | Option.some h =>
     match ← convertReporting h with
     | Option.none => pure Γ
     | Option.some t =>
-      let _ ← runChk (check Γ e t)
+      let _ ← runChk (checkF env n Γ e t)
       pure (Γ.bind x t k)
   | Option.none =>
-    match ← runChk (synth Γ e) with
+    match ← runChk (synthF env n Γ e) with
     | Option.some t => pure (Γ.bind x t k)
     | Option.none => pure Γ
 
-partial def bindOpt (Γ : Ctx) (x : Option String) (t : Ty) : Ctx :=
-  match x with
-  | Option.some x => Γ.bind x t .let_
-  | Option.none => Γ
+/-- Report `c` when `cond`. -/
+def reportIf (cond : Bool) (c : Code) : StateM (Array Code) Unit :=
+  if cond then modify (·.push c) else pure ()
+
+/-- `set x = e`, or `set x ⊕= e`: the root (F054, F055), and the value
+checked against it, an immutable root's included. -/
+def checkSet (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (op : Option BinOp) (e : Expr) :
+    StateM (Array Code) Unit :=
+  match Γ.lookup x with
+  | Option.none => modify (·.push "F054")
+  | Option.some (t, k) =>
+    reportIf (k == .let_) "F055" >>= fun _ =>
+    match op with
+    | Option.none => runChk (checkF env n Γ e t) >>= fun _ => pure ()
+    | Option.some op =>
+      runChk (do
+        checkF env n Γ e t
+        if !arithAdmits op t then throw "F026"
+        if !fits Γ (needs op) then throw "F049") >>= fun _ => pure ()
+
+/-- `ret` and `ret e` (F052, F053, Ret). -/
+def checkRet (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Option Expr) : StateM (Array Code) Unit :=
+  match Γ.ret, e with
+  | .void, Option.some _ => modify (·.push "F052")
+  | .ty _, Option.none => modify (·.push "F053")
+  | .ty r, Option.some e => runChk (checkF env n Γ e r) >>= fun _ => pure ()
+  | .void, Option.none => pure ()
+
+mutual
+
+/-- `Γ ⊢ s ⊣ Γ'`, reporting what is wrong. Written with its binds explicit,
+so that `Proofs/EarlyReturn.lean` can follow each step. -/
+def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) Ctx
+  | 0, Γ, _ => modify (·.push "fuel") >>= fun _ => pure Γ
+  | n + 1, Γ, s => match s with
+    | .let_ x hint e => bindChecked env n Γ x hint e .let_
+    | .var_ x hint (Option.some e) => bindChecked env n Γ x hint e .var_
+    | .var_ x (Option.some hint) Option.none =>
+      convertReporting hint >>= fun r => match r with
+      | Option.some t => pure (Γ.bind x t .var_)
+      | Option.none => pure Γ
+    | .var_ _ Option.none Option.none => pure Γ
+    | .set_ x op e => checkSet env n Γ x op e >>= fun _ => pure Γ
+    | .fun_ _ => pure Γ
+    | .ret e => checkRet env n Γ e >>= fun _ => pure Γ
+    | .if_ c Option.none Option.none t e =>
+      runChk (checkF env n Γ c .bool) >>= fun _ =>
+      checkBlockF env n Γ t >>= fun _ =>
+      checkElse env n Γ e >>= fun _ =>
+      pure Γ
+    | .if_ c thenB elseB t e =>
+      runChk (synthF env n Γ c) >>= fun r =>
+      (match r with
+      -- A condition with no type binds nothing to check the bodies under, and
+      -- they are left unchecked.
+      | Option.none => pure ()
+      | Option.some ct =>
+        match ct.expose with
+        -- An option has no error to bind: F094, after the body that binds the
+        -- payload and before the one that cannot bind the error.
+        | .option p =>
+          checkBlockF env n (bindOpt Γ thenB p) t >>= fun _ =>
+          reportIf elseB.isSome "F094" >>= fun _ =>
+          checkElse env n Γ e
+        -- A result needs its error bound (F046), and without it the bodies are
+        -- left unchecked.
+        | .result p =>
+          if elseB.isNone then modify (·.push "F046")
+          else
+            checkBlockF env n (bindOpt Γ thenB p) t >>= fun _ =>
+            checkElse env n (bindOpt Γ elseB .error) e
+        -- Nothing to bind, so the bodies are left unchecked, as for a
+        -- condition with no type.
+        | _ => modify (·.push "F093")) >>= fun _ =>
+      pure Γ
+    | .loop c body =>
+      (match c with
+      | Option.some c => runChk (checkF env n Γ c .bool) >>= fun _ => pure ()
+      | Option.none => pure ()) >>= fun _ =>
+      checkBlockF env n { Γ with inLoop := true } body >>= fun _ =>
+      pure Γ
+    | .brk => reportIf (!Γ.inLoop) "F050" >>= fun _ => pure Γ
+    | .cont => reportIf (!Γ.inLoop) "F051" >>= fun _ => pure Γ
+    | .debuglog e => runChk (synthF env n Γ e) >>= fun _ => pure Γ
+    | .call e =>
+      runChk (synthF env n Γ e) >>= fun r =>
+      (match r with
+      | Option.some t => reportIf (t != unitTy) "F095"
+      | Option.none => pure ()) >>= fun _ =>
+      pure Γ
+
+/-- An `else` body, if there is one. -/
+def checkElse (env : InferEnv) : Nat → Ctx → Option (List Stmt) → StateM (Array Code) Unit
+  | n, Γ, Option.some e => checkBlockF env n Γ e
+  | _, _, Option.none => pure ()
 
 /-- A block: what it binds does not escape it. -/
-partial def checkBlock (Γ : Ctx) (ss : List Stmt) : StateM (Array Code) Unit := do
-  let mut Γ := Γ
-  for s in ss do Γ ← checkStmt Γ s
+def checkBlockF (env : InferEnv) : Nat → Ctx → List Stmt → StateM (Array Code) Unit
+  | 0, _, _ => modify (·.push "fuel")
+  | _ + 1, _, [] => pure ()
+  | n + 1, Γ, s :: ss => checkStmtF env n Γ s >>= fun Γ' => checkBlockF env n Γ' ss
 
 end
+
+def checkStmt (Γ : Ctx) (s : Stmt) : StateM (Array Code) Ctx := checkStmtF inferEnv fuel Γ s
+def checkBlock (Γ : Ctx) (ss : List Stmt) : StateM (Array Code) Unit := checkBlockF inferEnv fuel Γ ss
 
 /-! ## Scripts -/
 
@@ -660,12 +802,15 @@ def FunDecl.name : FunDecl → String
 return type and can reach its end. A function whose signature is not well
 formed is not in `sigs`, and its body is not checked. -/
 def checkFun (sigs : List (String × Sig)) : FunDecl → StateM (Array Code) Unit
-  | .mk name params _ body => do
-    let Option.some sig := sigs.lookup name | pure ()
-    let vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m)
-    checkBlock { vars, ret := sig.ret, sigs } body
-    if let .ty _ := sig.ret then
-      if completes body then modify (·.push "F063")
+  | .mk name params _ body =>
+    match sigs.lookup name with
+    | Option.none => pure ()
+    | Option.some sig =>
+      let vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m)
+      checkBlock { vars, ret := sig.ret, sigs } body >>= fun _ =>
+      reportIf (match sig.ret with
+        | .ty _ => completes body
+        | .void => false) "F063"
 
 /-- The diagnostics of a script, in order. Signatures are collected first, so
 that functions may call each other in any order; a second function of a name

@@ -103,6 +103,8 @@ Under `formal/Datalove/Proofs/`:
   (`Ty.expose_not_numeric`), since its body uses its name.
 - **A literal that checks is a value of its type** (`Lit.check_sound`); see
   [Literal typing](#user-content-literal-typing).
+- **In datafun, every early return fits the function, and `completes` is
+  sound**; see [Statements](#user-content-statements).
 - **A recursive type meets its one-step unfolding** (`Ty.meet_unfold`), on
   well-formed types, however many `rec`s it starts with.
 - **`@` is reflexive and transitive** on well-formed types (`Ty.adapt_refl`,
@@ -294,11 +296,35 @@ What it found:
   the bound writes what it wrote before; three hundred default-configured
   worlds are byte for byte the same.
 
-Nothing is proved of this part yet. The claims to prove are that every early
-return, from `?`, `!`, the checked and optional operators, carries a value of
-the function's declared return type, and that `completes`, which F063 rests
-on, is sound: a body it says cannot complete never does. Both need checking
-made total, as the literal typing's was, and a semantics of statements.
+Two things are proved of it:
+
+- **Every early return fits the function** (`Fun.checkFun_early_returns_fit`,
+  in `Proofs/EarlyReturn.lean`). A function whose check reports nothing has
+  every early return in its body, from `?`, `!`, `-?`, `-!` or a checked or
+  optional operator, at any depth of any expression of any statement, one its
+  return type can carry: `none` only where it returns an option, an error only
+  where it returns a result. Underneath it, `Fun.checkF_guarded` says the same
+  of any expression that checks or synthesizes. Taking `fits` out of `?`'s
+  rule breaks the proof.
+- **`completes` is sound** (`Fun.completes_sound`, in
+  `Proofs/Completes.lean`). A body it says cannot complete has no execution
+  that finishes normally, against a semantics of control flow in which any
+  statement holding an expression may return early, a condition may go either
+  way, and a loop runs until a `break`, a return or, for `loop while`, its
+  condition. So a function F063 lets through always returns. Saying a `loop
+  while` cannot complete breaks the proof.
+
+To make these provable, checking was made total: it takes inference as a
+parameter (`InferEnv`), which only says what types are and so cannot move an
+early return, and it runs on fuel, every call spending one, so that the
+recursion between checking and synthesis needs no measure. Running out is a
+failure, never a success, so the theorems hold for any fuel; the oracle gives
+a million. A statement's expression checks run on a fresh list of
+diagnostics, added to the statement's after, so that a statement that adds
+none is one whose checks all succeeded. And the statement checker is written
+with its binds explicit, the `match` and `if` of `do` notation otherwise
+copying what follows into every branch. Each of these leaves the answers as
+they were, which `fun_tests` confirms.
 
 ## Running it
 
@@ -351,8 +377,10 @@ In rough order of what to do next:
   measure or fuel, and `Lit.lean`'s inference is partial.
 - **Datafun's `@` class in inference**, `Class::Adapt`, which datalit's
   inference carries for datafun. `Lit.lean` has no `@` and leaves it out.
-- **Proofs about statements.** The early-return and `completes` theorems
-  above, on the slice.
+- **What `ret e` returns.** The early-return theorem covers the returns an
+  expression makes on its own. A `ret e` is checked against the return type,
+  but that the value is one of the type needs a value semantics for datafun's
+  expressions, which only datalit's literals have (`Lit.check_sound`).
 - **The rest of datafun.** Generics, whose substitution lemma is what
   monomorphization relies on, modules, consts, patterns, projections,
   indexing, `for` and `match` are outside the slice. The serde AST already
