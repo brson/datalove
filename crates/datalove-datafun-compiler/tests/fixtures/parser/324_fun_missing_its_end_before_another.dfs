@@ -1,0 +1,11 @@
+// `a` is missing its `end fun`, so `b` is parsed inside it, as a `fun`
+// inside a block, and `a` is unterminated. Parsing `b` as a function inside
+// another lost the script's expression counters, and a debug assertion that
+// they matched the script's expressions failed. Found by shrinking a world in
+// worldgen_engine_tests.
+fun a(x: int): int
+  ret x
+
+fun b(y: int): int
+  ret y
+end fun

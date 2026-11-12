@@ -615,7 +615,7 @@ statements that run belong in a function or a script")
         let type_bounds = self.parse_where_clause(&type_params, type_bounds);
 
         // Enter function context for expression identity tracking.
-        self.enter_function(name);
+        let enclosing = self.enter_function(name);
 
         // `inline`, alone on the body's first line, marks the function for
         // inlining. Anywhere else it is an error, which `parse_statement` gives.
@@ -644,7 +644,7 @@ statements that run belong in a function or a script")
             body.push(stmt);
         }
 
-        let arena = self.exit_function(local_index);
+        let arena = self.exit_function(local_index, enclosing);
         if !found_end_fun {
             return self.unterminated_block("fun");
         }

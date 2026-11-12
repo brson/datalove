@@ -1,0 +1,40 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "unterminated fun body"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P074",
+      "labels": [
+        {
+          "message": "`fun` is only read at the top level",
+          "span": [
+            359,
+            362
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "`fun` inside a block"
+    },
+    {
+      "code": "P034",
+      "labels": [
+        {
+          "message": "expected `end fun` before the end of the input",
+          "span": [
+            349,
+            349
+          ],
+          "text": ""
+        }
+      ],
+      "message": "unterminated fun body"
+    }
+  ]
+}

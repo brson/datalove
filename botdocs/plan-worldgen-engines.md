@@ -3,7 +3,7 @@
 A plan to hold generated programs to the IR walker on every engine, as the
 hand-written engine fixtures are, and to make the generated programs show
 enough of what they compute for that to mean something. Written November
-2026; phases 1 and 2 are done, the rest is not.
+2026; phases 1 to 3 are done, the rest is not.
 
 ## Contents
 
@@ -78,9 +78,8 @@ seeds keep what they make:
 
 ## Failures become fixtures
 
-A failing seed is shrunk -- units, then lines, dropped while it fails the
-same way -- with the shrinker `generative_reactive_tests` has, moved where
-both can use it. Because a shrunk world is a worldfile and the oracle is
+A failing seed is shrunk -- sections, blocks, then lines, dropped while it
+fails the same way. Because a shrunk world is a worldfile and the oracle is
 shared, it goes into `fixtures/engines/` with an expected file, and is from
 then on a regression test on every engine. There is no separate directory of
 kept seeds.
@@ -160,11 +159,50 @@ what "generated is not exercised" in the compiler guide asks for.
    That one aborted the run rather than failing a seed: the leak check
    panicked in a destructor while the first panic unwound. It reports
    instead now, while a thread panics, so the seed is caught and named.
-3. Shrinking, into `fixtures/engines/`; the floors. And each seed in a
-   process of its own, or something like it: a crash that is not a panic --
-   one early run segfaulted -- takes the whole run down without saying which
-   seed it was. Panics are caught per seed already, and no longer turned
-   into aborts by the leak check.
+3. **Done.** Each seed is checked in a worker process, this test run again,
+   one a CPU, each sent a seed at a time on stdin, saying how it went and
+   what the engines did over it on a line of its own: a seed that crashes its
+   worker, or takes more than two minutes, fails alone and by name, and a new
+   worker takes the next seed. That costs about a fifth of the time with four
+   workers -- one worker is as quick as one thread was -- and the planted
+   abort and hang that tested it each failed only their seeds.
+   The oracle's counts are a `Tally` a worker sends back, the bytecode's op
+   kinds and the IR left to the walker among them, which the run reports.
+
+   A failing world is shrunk: sections, then whole blocks, then runs of
+   lines halving down to one, each dropped while what is left fails the same
+   way, each candidate checked in a process of its own. The same way is the
+   first two lines of the failure with numbers masked, or for an engine that
+   differs from the reference, which engine. The world that found `1027`
+   shrank from 249 lines to 32 in ten seconds. A shrunk world is written out
+   beside the original; making it a fixture, with a comment saying what it
+   shows, is left to whoever reads it. The shrinker is not
+   `generative_reactive_tests`', which takes apart a session's changes
+   rather than a worldfile's text; the two share only the idea.
+
+   Floors on the default seeds, now 40: the chaos dispatcher compiled
+   functions and entered loops, the osr engine entered loops, fragments ran
+   to the end, returned early with an error and were blocked by one that
+   did, and each AOT backend ran on a tenth of the worlds. At 20 seeds no
+   fragment was blocked, which is why there are 40.
+
+   5000 seeds from 5000000 then found two bugs, and shrinking a third:
+   - The generator gave a call's `ref`, `mut` and `out` parameters bindings
+     at random, and one pick could take what a later one needed, which
+     `can_call`'s greedy check had found for it; the generator panicked. A
+     pick now leaves a binding for each after it. Its panic was outside the
+     one caught, and took down the run where it wrote the world out again;
+     the generator's panics are caught now too.
+   - A copy value passed twice to a generic, `pair(v0, v0)`, which constant
+     propagation makes of two copies, was passed by one pointer, by the JIT
+     and by the IR walker calling compiled code; the callee handed the map
+     insert one place as both its key and its value, and the runtime
+     refused it, aborting (`1028`). Each argument after the first naming an
+     operand is passed a copy.
+   - The parser, given a `fun` missing its `end fun` before another, parsed
+     the second as a function inside the first -- an error -- and lost the
+     script's expression counters, failing a debug assertion (parser
+     fixture `324`). Function scopes nest now. Found by shrink candidates.
 4. What the generator never writes, each taken off `NOT_YET_GENERATED` in
    `coverage_tests` as it lands: standard library calls, data files in
    worldfiles, `rec` types, hex literals, `icall`, a test rider. Then

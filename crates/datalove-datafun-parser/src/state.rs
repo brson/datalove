@@ -46,6 +46,14 @@ impl<'db> TokenSource<'db> {
     }
 }
 
+/// What entering a function replaced, which leaving it restores.
+pub(super) struct EnclosingScope<'db> {
+    script_expr_counter: u32,
+    script_call_counter: u32,
+    script_exprs: Vec<ast::ExprFunKind<'db>>,
+    fn_name: Option<InternedText<'db>>,
+}
+
 /// Script-level identity counters carried from one line's parser to the next.
 ///
 /// A `Parser` is built per line, so without this the script-level expression
@@ -345,19 +353,32 @@ impl<'db> Parser<'db> {
         self.source.buffer[1].as_ref()
     }
 
-    /// Enter function context for expression identity tracking.
-    pub(super) fn enter_function(&mut self, name: InternedText<'db>) {
+    /// Enter function context for expression identity tracking, giving back
+    /// what it replaced for [`Self::exit_function`] to restore.
+    ///
+    /// A `fun` inside a function's body is an error, but it is parsed as a
+    /// function all the same, inside the other one: what is saved here is
+    /// then the outer function's, and not the script's.
+    #[must_use]
+    pub(super) fn enter_function(&mut self, name: InternedText<'db>) -> EnclosingScope<'db> {
+        let enclosing = EnclosingScope {
+            script_expr_counter: self.script_expr_counter,
+            script_call_counter: self.script_call_counter,
+            script_exprs: rmx::std::mem::take(&mut self.script_exprs),
+            fn_name: self.current_fn_name,
+        };
         self.script_expr_counter = self.expr_counter;
         self.script_call_counter = self.call_counter;
         self.script_exprs = rmx::std::mem::take(&mut self.filed.exprs);
         self.current_fn_name = Some(name);
         self.expr_counter = 0;
         self.call_counter = 0;
+        enclosing
     }
 
-    /// Exit function context, restoring the script-level counters, and give
+    /// Exit function context, restoring the enclosing counters, and give
     /// back the function's expressions. `local_index` is the function's.
-    pub(super) fn exit_function(&mut self, local_index: u32) -> ast::ExprArena<'db> {
+    pub(super) fn exit_function(&mut self, local_index: u32, enclosing: EnclosingScope<'db>) -> ast::ExprArena<'db> {
         debug_assert_eq!(self.filed.exprs.len(), self.expr_counter as usize);
         let arena = ast::ExprArena {
             module_id: self.module_id,
@@ -365,9 +386,12 @@ impl<'db> Parser<'db> {
             body: local_index + 1,
             exprs: rmx::std::mem::replace(&mut self.filed.exprs, rmx::std::mem::take(&mut self.script_exprs)),
         };
-        self.current_fn_name = None;
         self.expr_counter = self.script_expr_counter;
         self.call_counter = self.script_call_counter;
+        self.script_expr_counter = enclosing.script_expr_counter;
+        self.script_call_counter = enclosing.script_call_counter;
+        self.script_exprs = enclosing.script_exprs;
+        self.current_fn_name = enclosing.fn_name;
         arena
     }
 

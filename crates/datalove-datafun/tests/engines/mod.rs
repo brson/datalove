@@ -49,7 +49,10 @@
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::collections::BTreeSet;
+use std::sync::Mutex;
+
+use serde::{Deserialize, Serialize};
 
 use rmx::prelude::*;
 
@@ -64,19 +67,84 @@ use datalove_datafun_pkg::package_load_worldfile::{self, ParsedWorldfile, Worldf
 use datafun::driver::{CompilerOptions, LoweringResult, OwnershipResult, ScriptExecutor, TypecheckResult};
 use datafun::worldfile_analysis::{Analysis, AnalysisOptions, ExecutorHooks, SectionResult};
 
-/// Functions the chaos dispatcher JIT-compiled, over the whole corpus.
-static CHAOS_COMPILED: AtomicU32 = AtomicU32::new(0);
-/// Entries at loop headers it compiled, and loop headers it could not enter.
-static CHAOS_LOOPS: AtomicU32 = AtomicU32::new(0);
-static CHAOS_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
-/// The same for the `osr` engine.
-static OSR_LOOPS: AtomicU32 = AtomicU32::new(0);
-static OSR_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
-/// The same for the `jit` engine, whose loops are compiled with their
-/// functions and so should never be entered on their own.
-static JIT_LOOPS: AtomicU32 = AtomicU32::new(0);
-/// Fixtures each engine ran, in the order of `Differential::ALL`.
-static RAN: [AtomicU32; Differential::ALL.len()] = [const { AtomicU32::new(0) }; Differential::ALL.len()];
+/// What the engines did, over every program checked here.
+static TALLY: Mutex<Tally> = Mutex::new(Tally::new());
+
+/// What the engines did over some programs: what a run reports, and what
+/// its floors are checked on. A process checking programs adds to its own,
+/// [`Tally::taken`]; one that has others check them adds up theirs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tally {
+    /// Programs each engine ran, in the order of `Differential::ALL`.
+    ran: [u32; Differential::ALL.len()],
+    /// Functions the chaos dispatcher JIT-compiled.
+    chaos_compiled: u32,
+    /// Entries at loop headers it compiled, and loop headers it could not
+    /// enter.
+    chaos_loops: u32,
+    chaos_loops_refused: u32,
+    /// The same for the `osr` engine.
+    osr_loops: u32,
+    osr_loops_refused: u32,
+    /// The same for the `jit` engine, whose loops are compiled with their
+    /// functions and so should never be entered on their own.
+    jit_loops: u32,
+    /// The bytecode's ops some body was lowered to, by kind.
+    bytecode_ops: BTreeSet<String>,
+    /// The IR instructions, by kind, the bytecode left to the IR walker.
+    escaped: BTreeSet<String>,
+}
+
+impl Default for Tally {
+    fn default() -> Tally {
+        Tally::new()
+    }
+}
+
+// `engine_tests` checks its programs in one process and uses less of this
+// than `worldgen_engine_tests`, which shares the module.
+#[allow(dead_code)]
+impl Tally {
+    const fn new() -> Tally {
+        Tally {
+            ran: [0; Differential::ALL.len()],
+            chaos_compiled: 0,
+            chaos_loops: 0,
+            chaos_loops_refused: 0,
+            osr_loops: 0,
+            osr_loops_refused: 0,
+            jit_loops: 0,
+            bytecode_ops: BTreeSet::new(),
+            escaped: BTreeSet::new(),
+        }
+    }
+
+    /// What this process's checks have done since it was last taken.
+    pub fn take() -> Tally {
+        std::mem::take(&mut *TALLY.lock().X())
+    }
+
+    /// Add what `other` counted.
+    pub fn add(&mut self, other: &Tally) {
+        for (n, m) in self.ran.iter_mut().zip(&other.ran) {
+            *n += m;
+        }
+        self.chaos_compiled += other.chaos_compiled;
+        self.chaos_loops += other.chaos_loops;
+        self.chaos_loops_refused += other.chaos_loops_refused;
+        self.osr_loops += other.osr_loops;
+        self.osr_loops_refused += other.osr_loops_refused;
+        self.jit_loops += other.jit_loops;
+        self.bytecode_ops.extend(other.bytecode_ops.iter().cloned());
+        self.escaped.extend(other.escaped.iter().cloned());
+    }
+
+    /// Programs `engine` ran, by its name.
+    pub fn ran(&self, engine: &str) -> u32 {
+        let at = Differential::ALL.iter().position(|e| e.name() == engine).X();
+        self.ran[at]
+    }
+}
 
 /// The engines compared with the reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -237,6 +305,9 @@ impl ExecutorHooks for Setup {
                 escaped: stats.escaped_kinds.C(),
                 ..LastRun::default()
             };
+            let mut tally = TALLY.lock().X();
+            tally.bytecode_ops.extend(stats.op_kinds.iter().cloned());
+            tally.escaped.extend(stats.escaped_kinds.iter().cloned());
         });
         let Some(dispatcher) = executor.take_dispatcher() else {
             return;
@@ -252,9 +323,10 @@ impl ExecutorHooks for Setup {
                     }
                 }
             }
-            CHAOS_COMPILED.fetch_add(stats.compiled_count, Ordering::Relaxed);
-            CHAOS_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
-            CHAOS_LOOPS_REFUSED.fetch_add(stats.osr_refused_count, Ordering::Relaxed);
+            let mut tally = TALLY.lock().X();
+            tally.chaos_compiled += stats.compiled_count;
+            tally.chaos_loops += stats.osr_compiled_count;
+            tally.chaos_loops_refused += stats.osr_refused_count;
         } else if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
             let stats = jit.stats();
             LAST_RUN.with(|run| {
@@ -264,11 +336,12 @@ impl ExecutorHooks for Setup {
             });
             match self.differential {
                 Some(Differential::Osr) => {
-                    OSR_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
-                    OSR_LOOPS_REFUSED.fetch_add(stats.osr_refused_count, Ordering::Relaxed);
+                    let mut tally = TALLY.lock().X();
+                    tally.osr_loops += stats.osr_compiled_count;
+                    tally.osr_loops_refused += stats.osr_refused_count;
                 }
                 Some(Differential::Jit) => {
-                    JIT_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
+                    TALLY.lock().X().jit_loops += stats.osr_compiled_count;
                 }
                 _ => {}
             }
@@ -440,7 +513,7 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
             if !compiled_cleanly(&reference) {
                 continue;
             }
-            RAN[i].fetch_add(1, Ordering::Relaxed);
+            TALLY.lock().X().ran[i] += 1;
             // Specialization is offered only to the IR walker so far.
             let walker = if matches!(engine, Differential::Spec | Differential::SpecChaos) {
                 Engine::IrWalker
@@ -481,7 +554,7 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
             Differential::Aot | Differential::C | Differential::NoConst | Differential::NoSpec | Differential::Spec | Differential::SpecChaos => None,
         };
         if let Some(setup) = interpreted {
-            RAN[i].fetch_add(1, Ordering::Relaxed);
+            TALLY.lock().X().ran[i] += 1;
             let (_, other) = analyze(&parsed, AnalysisOptions::default(), setup)?;
             if other != rendered {
                 return Err(format!("{} differs from the reference {}", engine.name(), first_difference(&rendered, &other)));
@@ -501,7 +574,7 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
             Differential::Aot => cranelift_build_and_run,
             _ => c_build_and_run,
         };
-        RAN[i].fetch_add(1, Ordering::Relaxed);
+        TALLY.lock().X().ran[i] += 1;
         let stderr = run_aot(&parsed, build_and_run)
             .map_err(|e| format!("{}: {e}", engine.name()))?;
         let fragment = reference.sections.iter().find(|s| s.section_type == "scriptunit-fragment").X();
@@ -514,19 +587,25 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
     Ok((reference, rendered))
 }
 
-/// Report what each engine ran over every program checked; and, with
+/// Report what each engine did over the programs `tally` counted; and, with
 /// `floors`, the chaos dispatcher and the osr engine have to have done
 /// something somewhere, or they tested nothing. A JIT that compiles every
 /// function first must never have entered a loop by OSR, floors or not.
-pub fn report(floors: bool) -> Result<(), String> {
-    let ran: Vec<_> = Differential::ALL.iter().zip(&RAN)
-        .map(|(e, n)| format!("{} {}", e.name(), n.load(Ordering::Relaxed)))
+pub fn report(tally: &Tally, floors: bool) -> Result<(), String> {
+    let ran: Vec<_> = Differential::ALL.iter().zip(&tally.ran)
+        .map(|(e, n)| format!("{} {}", e.name(), n))
         .collect();
     println!("programs run per engine: {}", ran.join(", "));
+    if datalove_exampletest::engine_enabled("bytecode") {
+        let escaped: Vec<&str> = tally.escaped.iter().map(|k| k.as_str()).collect();
+        println!(
+            "bytecode: {} kinds of op lowered to; left to the IR walker: {}",
+            tally.bytecode_ops.len(),
+            if escaped.is_empty() { "nothing".S() } else { escaped.join(" ") },
+        );
+    }
     if datalove_exampletest::engine_enabled("chaos") {
-        let compiled = CHAOS_COMPILED.load(Ordering::Relaxed);
-        let loops = CHAOS_LOOPS.load(Ordering::Relaxed);
-        let refused = CHAOS_LOOPS_REFUSED.load(Ordering::Relaxed);
+        let (compiled, loops, refused) = (tally.chaos_compiled, tally.chaos_loops, tally.chaos_loops_refused);
         println!("chaos: {compiled} functions JIT-compiled, {loops} loops entered ({refused} refused)");
         if floors && compiled == 0 {
             return Err("the chaos dispatcher never engaged: 0 compiled".S());
@@ -536,17 +615,14 @@ pub fn report(floors: bool) -> Result<(), String> {
         }
     }
     if datalove_exampletest::engine_enabled("osr") {
-        let osr = OSR_LOOPS.load(Ordering::Relaxed);
-        let osr_refused = OSR_LOOPS_REFUSED.load(Ordering::Relaxed);
+        let (osr, osr_refused) = (tally.osr_loops, tally.osr_loops_refused);
         println!("osr: {osr} loops entered ({osr_refused} refused)");
         if floors && osr == 0 {
             return Err("the osr engine never entered a loop".S());
         }
     }
-    let jit = JIT_LOOPS.load(Ordering::Relaxed);
-    if jit != 0 {
-        return Err(format!("the jit engine entered {jit} loops by OSR, though it compiles every function first"));
+    if tally.jit_loops != 0 {
+        return Err(format!("the jit engine entered {} loops by OSR, though it compiles every function first", tally.jit_loops));
     }
     Ok(())
 }
-

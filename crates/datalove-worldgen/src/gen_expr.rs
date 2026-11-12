@@ -636,6 +636,34 @@ pub fn can_call<'db>(
     true
 }
 
+/// Whether each of `params` that wants a binding can be given its own, none
+/// of them `taken`.
+fn completable<'db>(
+    db: &'db dyn salsa::Database,
+    params: &[Param<'db>],
+    ctx: &GenContext<'db>,
+    taken: &mut Vec<String>,
+) -> bool {
+    let Some((param, rest)) = params.split_first() else {
+        return true;
+    };
+    if param.mode == ParamMode::In {
+        return completable(db, rest, ctx, taken);
+    }
+    for name in argument_candidates(db, param, ctx) {
+        if taken.contains(&name) {
+            continue;
+        }
+        taken.push(name);
+        let completed = completable(db, rest, ctx, taken);
+        taken.pop();
+        if completed {
+            return true;
+        }
+    }
+    false
+}
+
 /// The bindings a parameter of this mode would take, by name.
 fn argument_candidates<'db>(
     db: &'db dyn salsa::Database,
@@ -661,6 +689,10 @@ pub fn gen_function_call<'db>(
     // The borrowed and written ones are picked first, because which binding
     // each takes has to be settled before an `in` argument is allowed to
     // consume one of them.
+    //
+    // Each picked at random among those that leave a binding for every one
+    // after it: [`can_call`] found one way to give each its own, but a pick
+    // at random may take what a later one needs.
     let mut spoken_for: Vec<(usize, String)> = Vec::new();
     for (i, param) in func.params.iter().enumerate() {
         if param.mode == ParamMode::In {
@@ -670,6 +702,11 @@ pub fn gen_function_call<'db>(
         let candidates: Vec<String> = argument_candidates(db, param, ctx)
             .into_iter()
             .filter(|name| !taken.contains(name))
+            .filter(|name| {
+                let mut taken = taken.C();
+                taken.push(name.C());
+                completable(db, &func.params[i + 1..], ctx, &mut taken)
+            })
             .collect();
         let name = candidates[rng.random_range(0..candidates.len())].C();
         spoken_for.push((i, name));

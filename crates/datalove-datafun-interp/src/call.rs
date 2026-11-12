@@ -515,9 +515,24 @@ impl IrInterpreter {
         let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
         let mut callee_frame = self.frame_stack.push(layout)?;
 
+        // A copy value passed twice is one operand twice, `f(v0, v0)`, and so
+        // one place; but each parameter has to be a place of its own, which a
+        // compiled callee may own and hand on, and the runtime refuses two
+        // places that overlap where either is owned. So each argument after
+        // the first naming the operand is a copy, kept for the call.
+        let mut copies: Vec<Box<[u128]>> = Vec::new();
         for (i, op) in args.iter().enumerate() {
             let mode = callee_frame.layout().param_modes[i];
-            let val = self.resolve_arg(mode, op, frame, frames);
+            let mut val = self.resolve_arg(mode, op, frame, frames);
+            if args[..i].contains(op) && is_plain(&val) {
+                // SAFETY: a value's descriptor.
+                let size = unsafe { (*val.tydesc).size } as usize;
+                let mut copy = vec![0u128; size.div_ceil(16)].into_boxed_slice();
+                // SAFETY: the value is `size` bytes, and the copy as many.
+                unsafe { std::ptr::copy_nonoverlapping(val.ptr, copy.as_mut_ptr().cast::<u8>(), size) };
+                val.ptr = copy.as_mut_ptr().cast();
+                copies.push(copy);
+            }
             callee_frame.set_param(i, val.ptr);
         }
         // After every argument is read, in case one place is passed twice.

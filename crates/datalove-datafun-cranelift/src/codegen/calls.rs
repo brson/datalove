@@ -230,9 +230,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Each argument by pointer, or by value where the callee takes it so.
         let param_types = self.callee_param_types(code_ref);
         assert_eq!(args.len(), layout.args.len(), "an argument per parameter");
-        for (arg, ((pass, at), ty)) in args.iter().zip(layout.args.iter().zip(&param_types)) {
+        for (i, (arg, ((pass, at), ty))) in args.iter().zip(layout.args.iter().zip(&param_types)).enumerate() {
             match pass {
-                ArgPass::Pointer => call_args[at.start] = self.get_operand_ptr(builder, arg)?,
+                ArgPass::Pointer => call_args[at.start] = self.arg_ptr(builder, args, i)?,
                 ArgPass::Value(_) => {
                     let regs = match types::ir_type_to_cranelift(ty) {
                         CraneliftRepr::Scalar(_) => vec![self.get_operand_value(builder, arg)?],
@@ -277,6 +277,35 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         Ok(())
+    }
+
+    /// Where `args[i]`, passed by pointer, is.
+    ///
+    /// A copy value passed twice is the same operand twice, `f(v0, v0)`, and
+    /// has one home; but each parameter is a place of its own, which the
+    /// callee may own and hand on, and the runtime refuses two places that
+    /// overlap where either is owned. So an argument naming the copy operand
+    /// an earlier one did is passed a copy. A value that is not copied is
+    /// passed twice only to be borrowed twice, `f(ref s, ref s)`, which one
+    /// place serves.
+    fn arg_ptr(&mut self, builder: &mut FunctionBuilder, args: &[Operand], i: usize) -> Result<cl_ir::Value, CraneliftError> {
+        let ptr = self.get_operand_ptr(builder, &args[i])?;
+        if !args[..i].contains(&args[i]) {
+            return Ok(ptr);
+        }
+        let ty = self.get_operand_type(&args[i])?;
+        if !ty.is_copy() {
+            return Ok(ptr);
+        }
+        let size = types::ir_type_size(&ty);
+        let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot,
+            size,
+            types::align_shift(size.max(1)),
+        ));
+        let copy = builder.ins().stack_addr(PTR_TYPE, slot, 0);
+        self.copy_bytes(builder, copy, ptr, size as u64);
+        Ok(copy)
     }
 
     /// Call a function compiled from IR, giving back what it returns in
@@ -416,8 +445,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let mut call_args = Vec::with_capacity(1 + args.len() * 2 + 2);
         call_args.push(rt_handle);
 
-        for arg in args {
-            call_args.push(self.get_operand_ptr(builder, arg)?);
+        for (i, arg) in args.iter().enumerate() {
+            call_args.push(self.arg_ptr(builder, args, i)?);
             call_args.push(self.operand_tydesc(builder, arg)?);
         }
 

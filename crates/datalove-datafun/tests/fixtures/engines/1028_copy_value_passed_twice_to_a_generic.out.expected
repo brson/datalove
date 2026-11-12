@@ -1,0 +1,62 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/gen/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn pair(p0, p1):
+                      desc0 = param<0>
+                      desc1 = param<1>
+                      desc2 = map<param<0>, param<1>>
+                    block0:
+                        v0 = move p0
+                        v1 = move p1
+                        v2 = %{v0: v1}
+                        return v2
+                    
+                    fn f():
+                    block0:
+                        v0 = const true
+                        v1 = call m0.u0(v0, v0) <bool, bool>
+                        return v1
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u1()
+                        debuglog v0
+                        drop v0
+                        v1 = const false
+                        v2 = call m0.u0(v1, v1) <bool, bool>
+                        debuglog v2
+                        drop v2
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("%{true = true}\n%{false = false}\n"),
+        ),
+    ],
+)

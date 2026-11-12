@@ -22,6 +22,6 @@ fn main() {
         .fixture_subdir("engines")
         .file_extension("world")
         .allow_errors(true)
-        .after_all(move || engines::report(floors))
+        .after_all(move || engines::report(&engines::Tally::take(), floors))
         .run();
 }
