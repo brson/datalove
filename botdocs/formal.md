@@ -310,13 +310,12 @@ What it found:
   the second goes.
 - **A temporary's field was refused where its element was not.**
   `f().name` of a non-copy field was F070, while `f()[0]?` of a non-copy
-  element had no F072 check, though nothing is left behind in a temporary
-  either way. F070 now applies to a field of a place only. Lowering was not
-  ready for it: it read the field out of the temporary and then dropped the
-  temporary whole, and borrowing a field of one leaked the temporary. The
-  field is now cloned out, as an element is, and a borrowed one's temporary
-  is dropped once the borrow is done; the backend fixture
-  `45_field_of_a_temporary` holds both.
+  element had no F072 check, and was read by cloning it, with no `@`
+  written. Both are now refused outside a borrowed position
+  ([the issue](issues.md#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
+  says why), and a borrowed one is read through a reference: `f()[0]?@`
+  cloned twice, and `debuglog f().name` leaked the temporary. The backend
+  fixture `45_borrowed_part_of_a_temporary` holds both.
 - **Worldgen could recurse without end.** An argument of a call may itself
   be a call, with no bound, so a function of enough parameters drew calls
   inside calls until the stack overflowed: past one expected call per call,

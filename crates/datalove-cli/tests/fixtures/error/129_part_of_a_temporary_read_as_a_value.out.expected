@@ -1,0 +1,19 @@
+[31m[F070] Error:[0m a field of type `string` cannot be read out of what holds it
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/129_part_of_a_temporary_read_as_a_value.dfs:10:17 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m10 │[0m [38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249ms[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;201m.[0m[38;5;201mn[0m[38;5;201ma[0m[38;5;201mm[0m[38;5;201me[0m
+ [38;5;240m   │[0m                 [38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m[38;5;201m─[0m  
+ [38;5;240m   │[0m                   [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m this would move the field out
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mNote[0m: the field's type is not a copy type, so reading it would move it while the aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.
+[38;5;246m────╯[0m
+[31m[F072] Error:[0m an element of type `string` cannot be read out of what holds it
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/129_part_of_a_temporary_read_as_a_value.dfs:11:16 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m11 │[0m [38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249m([0m[38;5;249m)[0m[38;5;155m[[0m[38;5;155m1[0m[38;5;155m][0m[38;5;155m![0m
+ [38;5;240m   │[0m                [38;5;155m─[0m[38;5;155m─[0m[38;5;155m┬[0m[38;5;155m─[0m  
+ [38;5;240m   │[0m                  [38;5;155m╰[0m[38;5;155m─[0m[38;5;155m─[0m[38;5;155m─[0m this would move the element out
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mNote[0m: the element's type is not a copy type, so reading it would move it while the collection still holds it. Borrow it with `ref`, or clone it out with `@`.
+[38;5;246m────╯[0m
+Error: Type error

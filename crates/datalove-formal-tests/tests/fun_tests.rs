@@ -80,8 +80,10 @@ const CORPUS: &[&str] = &[
     // Fields: by name and by position, missing, out of range, of what has
     // none, and not copied out of a place but where it is borrowed.
     "fun f(s: {a: u8, b: string}, t: (u8, string)): u8\n  let a: u8 = s.a\n  let b = s.zz\n  let c = t.2\n  let d = t.a\n  let e = s.0\n  let g = s.b\n  let h = t.1@\n  debuglog s.b\n  let i = s.b == \"x\"\n  ret t.0\nend fun\n",
-    // Fields of what is not a place, which may be moved out of it.
+    // Fields of what is not a place.
     "fun mk(): {a: u8, b: string}\n  ret {a = 1, b = \"s\"}\nend fun\nfun f(): u8\n  let a = mk().a\n  let b = mk().b\n  let c = mk().zz\n  let d = (1, 2).1\n  debuglog mk().b\n  ret mk().a\nend fun\n",
+    // Elements of what is not a place, refused unless borrowed.
+    "fun mk(): [string]\n  ret [\"a\"]\nend fun\nfun f(): ?u8\n  let a = mk()[0]?\n  let b = mk()[0]?@\n  debuglog mk()[0]?\n  let c = mk()[0]? == \"a\"\n  ret none\nend fun\n",
     // Indexes: with `?` and `!` and neither, into what cannot be indexed,
     // with a key of the wrong type, returning early where the function does
     // not, and a non-copy element moved out.

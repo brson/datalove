@@ -1,0 +1,12 @@
+// A non-copy field or element of a temporary read as a value is refused, as
+// one of a place is: reading it would clone it without an `@`. Borrow it, or
+// clone it out with `@`.
+fun person(): {age: u32, name: string}
+  ret {age = 36, name = "ada"}
+end fun
+fun names(): [string]
+  ret ["a", "b"]
+end fun
+let a = person().name
+let b = names()[1]!
+let c = person().age

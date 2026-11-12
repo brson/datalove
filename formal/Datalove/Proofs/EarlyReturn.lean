@@ -315,6 +315,7 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
           subst he
           rw [← Ctx.fitsMode_eq]
           obtain ⟨-, h⟩ := clean_ite_throw h
+          obtain ⟨-, h⟩ := clean_ite_throw h
           obtain ⟨hf, -⟩ := clean_ite_throw h
           simpa using hf
         · simp only [Expr.parts, List.mem_cons, List.not_mem_nil, or_false] at hp

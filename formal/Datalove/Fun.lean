@@ -227,12 +227,6 @@ def buildsFromParts : Expr → Bool
   | .hinted _ e => buildsFromParts e
   | _ => false
 
-/-- Whether an expression is a place: a variable, with steps into it or not. -/
-def isPlace : Expr → Bool
-  | .var _ | .place _ _ => true
-  | .proj b _ => isPlace b
-  | _ => false
-
 /-! ## Classes of types -/
 
 def isFixT (t : Ty) : Bool := t.isFixedInt
@@ -574,15 +568,14 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
     | .place x steps => match Γ.lookup x with
       | Option.some (t, _) => stepsF env n Γ t steps
       | Option.none => throw "F001"
-    -- Syn-FieldProj. A field of a temporary is free to move out; one of a
-    -- place is moved out of what holds it (F070).
+    -- Syn-FieldProj, for what is not a place.
     | .proj b s => do
       let bt ← synthF env n Γ b
       let t ← liftE (fieldType bt s)
-      if isPlace b && !t.isCopy && !Γ.borrowed then throw "F070"
+      if !t.isCopy && !Γ.borrowed then throw "F070"
       pure t
-    -- Syn-Index, for what is not a place. Its element is a temporary's, and
-    -- may be moved out (no F072).
+    -- Syn-Index, for what is not a place: a non-copy element is refused
+    -- outside a borrowed position, as one of a place is (F072).
     | .index b k mode => match mode with
       | Option.none => throw "F104"
       | Option.some m => do
@@ -590,6 +583,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
         let (t, kt) ← liftE (indexTypes bt)
         recover (checkF env n Γ k kt)
         if Γ.mutArg && isView bt then throw "F073"
+        if !t.isCopy && !Γ.borrowed then throw "F072"
         if !Γ.fitsMode m then throw "F049"
         pure t
     -- A literal form: its type is what inference finds for its parts
@@ -1002,6 +996,12 @@ def walk (c : Ty) (names : List String) : Except Code (List (String × Ty)) :=
   | .map k v, [a, b] => pure [(a, k), (b, v)]
   | .list _, _ | .tensor _ _, _ | .set _, _ | .map _ _, _ => throw "F109"
   | _, _ => throw "F087"
+
+/-- Whether an expression is a place: a variable, with steps into it or not. -/
+def isPlace : Expr → Bool
+  | .var _ | .place _ _ => true
+  | .proj b _ => isPlace b
+  | _ => false
 
 /-- A `for`'s bindings: its collection a place (else F108), read borrowed, of
 a type it walks. With none, the body is left unchecked. -/

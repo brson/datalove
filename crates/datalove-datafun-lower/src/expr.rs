@@ -96,9 +96,9 @@ pub fn lower_operand<'db>(
         // A projection borrows part of what it reads from and reads through
         // the borrow. Reading a linear field as a value moves it out of an
         // aggregate that still holds it, and the temporary that records is
-        // dropped, freeing it twice. An index has no such fault -- `ListGet`
-        // and its neighbours clone the element -- but it clones it a second
-        // time when `@` follows, which borrowing avoids.
+        // dropped, freeing it twice. An index read as a value has `ListGet`
+        // clone the element, and again when `@` follows, which borrowing
+        // avoids.
         //
         // A copy element keeps the direct read: there is nothing to move out
         // and nothing to free, so a borrow would buy nothing.
@@ -112,6 +112,20 @@ pub fn lower_operand<'db>(
         ExprFunKind::FieldProj(proj) if !ctx.expr_type(expr).is_copy() => {
             let field_ref = lower_field_proj_as_ref(ctx, expr, proj)?;
             Ok(operand_as_value_ref(field_ref))
+        }
+        // An element of what is not a place, borrowed, as one of a place is:
+        // read as a value, `ListGet` would clone it.
+        ExprFunKind::TryOption(try_op) if !ctx.expr_type(expr).is_copy()
+            && matches!(ctx.expr(try_op.operand).kind(), ExprFunKind::Index(_)) =>
+        {
+            let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() else { unreachable!() };
+            Ok(operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?))
+        }
+        ExprFunKind::TryResult(try_op) if !ctx.expr_type(expr).is_copy()
+            && matches!(ctx.expr(try_op.operand).kind(), ExprFunKind::Index(_)) =>
+        {
+            let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() else { unreachable!() };
+            Ok(operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?))
         }
         _ => {
             // Compound expression: lower to a value.
@@ -1930,20 +1944,9 @@ fn lower_field_proj<'db>(
 
     // Get the result type.
     let result_type = ctx.expr_type(expr);
-    let dest = ctx.fresh_value(result_type.C());
+    let dest = ctx.fresh_value(result_type);
 
-    // A field that owns something is still the temporary's, which is dropped
-    // whole below, so what is read out is a clone of it, through a reference,
-    // as an element read out of a temporary list is. `GetField` only ever
-    // reads a copy field. A place base reaches here only for one: a non-copy
-    // field of a place is F070, or borrowed, which reads through a reference.
-    if result_type.is_copy() {
-        ctx.emit_get_field(dest, Operand::Value(base_id), field_index);
-    } else {
-        let field_ref = ctx.fresh_value(IrType::Ref(Box::new(result_type)));
-        ctx.emit(Instruction::GetFieldRef { dest: field_ref, src: Operand::Value(base_id), field_index });
-        ctx.emit(Instruction::Clone { dest, src: Operand::ValueRef(field_ref) });
-    }
+    ctx.emit_get_field(dest, Operand::Value(base_id), field_index);
     ctx.emit_expr_temp_drops_since(temps_mark);
     Ok(dest)
 }

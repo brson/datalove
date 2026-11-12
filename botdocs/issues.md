@@ -28,6 +28,7 @@ home here.
 - [The language and its checks](#user-content-the-language-and-its-checks)
   - [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
   - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
+  - [A non-copy part of a temporary can only be borrowed](#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
   - [A `let` with no type that fails to typecheck leaves its name undefined](#user-content-a-let-with-no-type-that-fails-to-typecheck-leaves-its-name-undefined)
   - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
   - [Nothing takes a value back out of data or error](#user-content-nothing-takes-a-value-back-out-of-data-or-error)
@@ -329,6 +330,18 @@ than imprecise.
 
 Loop exits themselves are settled: see `merge_loop_exits`, O014, and
 `std_tests/152_owned_past_a_loop_exit`.
+
+### A non-copy part of a temporary can only be borrowed
+
+`f().name` and `f()[0]?` with a non-copy part read as a value are F070 and
+F072, as the same reads of a place are, so a program has to borrow the part
+or clone it out with a written `@`. Nothing holds a temporary afterwards, so
+refusing is stricter than ownership needs, but each way of allowing it does
+something the program did not say. Cloning the part hides a clone, which
+`@` is meant to mark. Moving it out works for a field, the other fields
+dropped beside it, but for an element it means destroying the rest of the
+collection to keep one element, which is no meaning a reader would guess.
+Until there is a rule worth having, the read is refused.
 
 ### A `let` with no type that fails to typecheck leaves its name undefined
 

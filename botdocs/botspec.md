@@ -1135,10 +1135,10 @@ Value expressions:
 
 Field access and indexing can also follow value expressions (`f(x).field`,
 `f(x)[i]?`), but these produce values, not places -- the result cannot be
-used as a `set` target or `mut` argument (O012). Nothing holds a value
-expression afterwards, so a linear part of one may be read anywhere, unlike
-a linear part of a place (Section 7.2): `mk().0` with an `int` first element
-is that element, and the rest of what `mk()` returned is dropped.
+used as a `set` target or `mut` argument (O012). A linear part of one is
+refused as a linear part of a place is (Section 7.2): `mk().0` with an `int`
+first element is F070, and `mk()[0]?` of an `[int]` is F072. Either may be
+borrowed, or cloned out with `@`.
 
 ### 7.2 Field Access
 
@@ -1158,9 +1158,8 @@ Chained access navigates nested structures:
 let inner = outer.a.b.c
 ```
 
-A projection of a place's field whose type is linear may not be read as a
-value: it would move the field out of an aggregate that still holds it
-(F070). It may be
+A projection of a field whose type is linear may not be read as a value: it
+would move the field out of an aggregate that still holds it (F070). It may be
 borrowed -- as a `ref`, `mut` or `out` argument, an operator's operand, a
 `set` target, under `debuglog` -- or cloned out with `@`:
 

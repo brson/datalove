@@ -1350,6 +1350,18 @@ fn synthesize_index_common<'db>(
         }));
     }
 
+    // A non-copy element of a temporary is refused outside a borrowed
+    // position, as one of a place is: taking it would clone it, or move it
+    // out of a collection whose other elements then have nowhere to go.
+    if let Type::Datalit(ref dt) = element_ty {
+        if !is_copy_type(ctx.db, dt) && !ctx.ref_context {
+            let site = crate::ErrorSite::Expr(expr.key());
+            return Err(ctx.report_place_error(site, TypeError::NonCopyIndexProjection {
+                elem_ty: datalit::tycheck::type_to_string(ctx.db, dt),
+            }));
+        }
+    }
+
     Ok(element_ty)
 }
 
@@ -1611,13 +1623,10 @@ fn synthesize_field_proj<'db>(
     let field_ty = resolve_field_type(db, &base_ty, &proj.field)
         .map_err(|e| ctx.report_place_error(site, e))?;
 
-    // A non-copy field read out of a place moves it out of what still holds
-    // it, which only a borrowed position may leave in place. A field of a
-    // temporary, `f().name`, is free to move: nothing holds the rest
-    // afterwards, and lowering drops it.
-    let of_place = crate::statement::is_place(db, ctx.expr(proj.base));
+    // Check that field is a copy type or we're in ref context.
+    // Move-type field projections are allowed in ref context.
     if let Type::Datalit(ref dt) = field_ty {
-        if of_place && !is_copy_type(db, dt) && !ctx.ref_context {
+        if !is_copy_type(db, dt) && !ctx.ref_context {
             return Err(ctx.report_place_error(site, TypeError::NonCopyFieldProjection {
                 field_ty: datalit::tycheck::type_to_string(db, dt),
             }));

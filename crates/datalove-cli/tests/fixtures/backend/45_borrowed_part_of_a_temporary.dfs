@@ -1,0 +1,37 @@
+// A non-copy field or element of a temporary may be read where it is
+// borrowed: under `debuglog`, as an operand, under `@`, as a `ref` argument.
+// It is read through a reference, not cloned, and the temporary is dropped
+// once the borrow is done.
+
+fun person(): {age: u32, name: string}
+  ret {age = 36, name = "ada"}
+end fun
+
+fun pair(): (string, [string])
+  ret ("x", ["y", "z"])
+end fun
+
+fun names(): [string]
+  ret ["a", "b"]
+end fun
+
+fun ages(): %{string = string}
+  ret %{"ada" = "36"}
+end fun
+
+fun is_b(ref s: string): bool
+  ret s == "b"
+end fun
+
+debuglog person().name
+debuglog person().name == "ada"
+let a = person().name@
+debuglog a
+debuglog is_b(ref person().name)
+debuglog names()[1]!
+debuglog names()[1]! == "b"
+let b = names()[0]!@
+debuglog b
+debuglog pair().1[0]!
+debuglog ages()["ada"]!
+debuglog is_b(ref names()[1]!)
