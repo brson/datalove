@@ -12,10 +12,12 @@
             "steps": [
               {
                 "name": "b",
+                "step": "Field",
                 "variant": "Name"
               },
               {
                 "name": "c",
+                "step": "Field",
                 "variant": "Name"
               }
             ]

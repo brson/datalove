@@ -22,6 +22,7 @@
                             "steps": [
                               {
                                 "name": "b",
+                                "step": "Field",
                                 "variant": "Name"
                               }
                             ]

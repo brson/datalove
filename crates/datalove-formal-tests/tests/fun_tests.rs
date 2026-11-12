@@ -273,6 +273,14 @@ fn statement_typing_agrees() {
     assert!(mismatches.is_empty(), "the Rust and the typing rules disagree on {} scripts", mismatches.len());
 }
 
+/// Print the serde AST of `FORMAL_FUN_AST_OF`, a file.
+#[test]
+fn ast_of() {
+    let Ok(path) = std::env::var("FORMAL_FUN_AST_OF") else { return };
+    let (codes, script) = rust_side(&std::fs::read_to_string(path).X());
+    println!("{codes:?}\n{}", rmx::serde_json::to_string_pretty(&script).X());
+}
+
 /// Print the script a seed makes, to look at a failure:
 /// `FORMAL_FUN_DUMP=<seed> cargo test -p datalove-formal-tests --test fun_tests dump -- --nocapture`.
 #[test]

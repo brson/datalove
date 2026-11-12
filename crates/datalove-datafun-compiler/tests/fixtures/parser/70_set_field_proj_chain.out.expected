@@ -20,14 +20,17 @@
           "steps": [
             {
               "name": "x",
+              "step": "Field",
               "variant": "Name"
             },
             {
               "index": 0,
+              "step": "Field",
               "variant": "Index"
             },
             {
               "name": "y",
+              "step": "Field",
               "variant": "Name"
             }
           ]

@@ -19,10 +19,11 @@
                     "steps": []
                   }
                 },
-                "variant": "Index"
+                "step": "Index"
               },
               {
                 "name": "field",
+                "step": "Field",
                 "variant": "Name"
               }
             ]

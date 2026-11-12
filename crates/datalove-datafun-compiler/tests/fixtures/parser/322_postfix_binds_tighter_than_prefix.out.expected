@@ -108,6 +108,7 @@
                 "steps": [
                   {
                     "name": "a",
+                    "step": "Field",
                     "variant": "Name"
                   }
                 ]
@@ -184,7 +185,7 @@
                         "value": "0"
                       }
                     },
-                    "variant": "Index"
+                    "step": "Index"
                   }
                 ]
               }

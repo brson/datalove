@@ -117,8 +117,11 @@ pub struct Place {
     pub steps: Vec<PlaceStep>,
 }
 
+/// Tagged by `step`, not `variant`, which a field step's selector is tagged by:
+/// with one key for both, the selector's tag overwrote the step's, and a field
+/// step read as an index step.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "variant")]
+#[serde(tag = "step")]
 pub enum PlaceStep {
     Field(FieldSelector),
     Index(PlaceIndex),

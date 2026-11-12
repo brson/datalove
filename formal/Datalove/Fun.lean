@@ -290,19 +290,26 @@ end
 
 /-! ## Checking and synthesis -/
 
+/-- A computation that adds to a log of diagnostics and never takes from it:
+what a composite logs is what its parts log, in order. -/
+structure Log (α : Type) where
+  log : Array Code
+  val : α
+
+instance : Monad Log where
+  pure a := ⟨#[], a⟩
+  bind x f := let y := f x.val; ⟨x.log ++ y.log, y.val⟩
+
 /-- The checker's monad: a code thrown stops the expression; a code reported
 does not. -/
-abbrev ChkM := ExceptT Code (StateM (Array Code))
+abbrev ChkM := ExceptT Code Log
 
-def report (c : Code) : ChkM Unit := modify (·.push c)
+def report (c : Code) : ChkM Unit := ExceptT.lift ⟨#[c], ()⟩
 
 def liftE {α} (x : Except Code α) : ChkM α :=
   match x with
   | .ok a => pure a
   | .error c => throw c
-
-/-- Datalit's codes for a plain mismatch are datafun's F016. -/
-def plain (c : Code) : Code := if c == "T022" || c == "T032" then "F016" else c
 
 /-- Infer an expression and give each undecided variable its default (T016
 for one with none). -/
@@ -608,14 +615,12 @@ def check (Γ : Ctx) (e : Expr) (t : Ty) : ChkM Unit := checkF inferEnv fuel Γ 
 /-! ## Statements -/
 
 /-- Run an expression's check, reporting what it threw. -/
-def runChk {α} (m : ChkM α) : StateM (Array Code) (Option α) := do
-  -- The check runs on a fresh list, whose reports are added after, so that
-  -- what a statement adds says whether its checks succeeded.
-  let (r, reported) := m.run.run #[]
-  modify (· ++ reported)
-  match r with
+def runChk {α} (m : ChkM α) : StateM (Array Code) (Option α) :=
+  let r := m.run
+  modify (· ++ r.log) >>= fun _ =>
+  match r.val with
   | .ok a => pure (Option.some a)
-  | .error c => modify (·.push c); pure Option.none
+  | .error c => modify (·.push c) >>= fun _ => pure Option.none
 
 mutual
 

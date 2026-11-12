@@ -70,51 +70,58 @@ inductive Guarded (ok : Early → Bool) : Expr → Prop where
 
 /-! ## Running the checker -/
 
-/-- A checker step that succeeds from a state. -/
-def Succeeds {α} (m : ChkM α) (s : Array Code) : Prop := ∃ a s', m.run.run s = (.ok a, s')
+/-- A check that logs nothing and returns a value. -/
+def Clean {α} (m : ChkM α) : Prop := ∃ a, m.run = ⟨#[], .ok a⟩
 
-theorem bind_succeeds {α β} {x : ChkM α} {f : α → ChkM β} {s : Array Code}
-    (h : Succeeds (x >>= f) s) : ∃ a s', x.run.run s = (.ok a, s') ∧ Succeeds (f a) s' := by
-  obtain ⟨b, s'', h⟩ := h
-  simp only [ExceptT.run_bind, StateT.run_bind] at h
-  rcases hx : x.run.run s with ⟨r, s'⟩
+theorem run_bind {α β} (x : ChkM α) (f : α → ChkM β) :
+    (x >>= f).run = (match x.run.val with
+      | .ok a => ⟨x.run.log ++ (f a).run.log, (f a).run.val⟩
+      | .error c => ⟨x.run.log, .error c⟩) := by
+  rcases hx : x.run with ⟨l, v⟩
+  have e : x = ⟨l, v⟩ := hx
+  subst e
+  cases v <;> rfl
+
+theorem peel {α β} {x : ChkM α} {f : α → ChkM β} (h : Clean (x >>= f)) :
+    Clean x ∧ ∃ a, Clean (f a) := by
+  obtain ⟨b, h⟩ := h
+  rw [run_bind] at h
+  rcases hx : x.run with ⟨l, v⟩
   rw [hx] at h
-  cases r with
-  | ok a => exact ⟨a, s', rfl, b, s'', h⟩
-  | error c => cases h
+  cases v with
+  | error c => simp at h
+  | ok a =>
+    simp at h
+    obtain ⟨hl, hv⟩ := h
+    refine ⟨⟨a, by rw [hx, hl.1]⟩, a, b, ?_⟩
+    rcases hf : (f a).run with ⟨l', v'⟩
+    rw [hf] at hl hv
+    simp at hl hv
+    rw [hl.2, hv]
 
-theorem succeeds_of_bind {α β} {x : ChkM α} {f : α → ChkM β} {s : Array Code}
-    (h : Succeeds (x >>= f) s) : Succeeds x s := by
-  obtain ⟨a, s', hx, -⟩ := bind_succeeds h
-  exact ⟨a, s', hx⟩
+theorem throw_not_clean {α} {c : Code} : ¬ Clean (throw c : ChkM α) := by
+  rintro ⟨a, h⟩
+  simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run, pure] at h
 
-theorem throw_not_succeeds {α} {c : Code} {s : Array Code} : ¬ Succeeds (throw c : ChkM α) s := by
-  rintro ⟨a, s', h⟩
-  simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run, StateT.run, pure,
-    StateT.pure] at h
-  cases h
+theorem report_not_clean {c : Code} : ¬ Clean (report c) := by
+  rintro ⟨a, h⟩
+  simp [report, ExceptT.lift, ExceptT.mk, ExceptT.run, Functor.map] at h
 
-theorem succeeds_pure_bind {α β} {a : α} {f : α → ChkM β} {s : Array Code}
-    (h : Succeeds (pure a >>= f) s) : Succeeds (f a) s := by
-  simpa using h
+@[simp] theorem clean_throw_bind {α β} {c : Code} {f : α → ChkM β} :
+    Clean (throw c >>= f) ↔ False :=
+  ⟨fun h => throw_not_clean (peel h).1, False.elim⟩
 
-theorem literalMismatch_not_succeeds {env : InferEnv} {Γ : Ctx} {e : Expr} {s : Array Code} :
-    ¬ Succeeds (literalMismatch env Γ e) s := by
+@[simp] theorem clean_throw {α} {c : Code} : Clean (throw c : ChkM α) ↔ False :=
+  ⟨throw_not_clean, False.elim⟩
+
+theorem literalMismatch_not_clean {env : InferEnv} {Γ : Ctx} {e : Expr} :
+    ¬ Clean (literalMismatch env Γ e) := by
   intro h
-  obtain ⟨_, _, _, h⟩ := bind_succeeds h
-  exact throw_not_succeeds h
-
-@[simp] theorem succeeds_throw_bind {α β} {c : Code} {f : α → ChkM β} {s : Array Code} :
-    Succeeds (throw c >>= f) s ↔ False :=
-  ⟨fun h => throw_not_succeeds (succeeds_of_bind h), False.elim⟩
-
-@[simp] theorem succeeds_throw {α} {c : Code} {s : Array Code} :
-    Succeeds (throw c : ChkM α) s ↔ False :=
-  ⟨throw_not_succeeds, False.elim⟩
+  obtain ⟨_, _, h⟩ := peel h
+  exact throw_not_clean h
 
 /-- An operator that succeeds fits the function's return type. -/
-theorem finishBinop_fits {Γ : Ctx} {op : BinOp} {t : Ty} {s : Array Code}
-    (h : Succeeds (finishBinop Γ op t) s) :
+theorem finishBinop_fits {Γ : Ctx} {op : BinOp} {t : Ty} (h : Clean (finishBinop Γ op t)) :
     ∀ k, (Expr.binop op .tt .tt).early = some k → Γ.ret.allows k = true := by
   intro k hk
   cases op <;> simp [Expr.early, needs] at hk <;> subst hk <;>
@@ -126,11 +133,6 @@ theorem finishBinop_fits {Γ : Ctx} {op : BinOp} {t : Ty} {s : Array Code}
 theorem Guarded.leaf {ok : Early → Bool} {e : Expr} (h1 : e.early = none) (h2 : e.parts = []) :
     Guarded ok e :=
   .mk (by simp [h1]) (by simp [h2])
-
-theorem peel {α β} {x : ChkM α} {f : α → ChkM β} {s : Array Code}
-    (h : Succeeds (x >>= f) s) : Succeeds x s ∧ ∃ a s', Succeeds (f a) s' := by
-  obtain ⟨a, s', hx, hf⟩ := bind_succeeds h
-  exact ⟨⟨a, s', hx⟩, a, s', hf⟩
 
 theorem Guarded.one {ok : Early → Bool} {e p : Expr} (h1 : e.early = none) (h2 : e.parts = [p])
     (hp : Guarded ok p) : Guarded ok e :=
@@ -145,28 +147,28 @@ theorem Guarded.all {ok : Early → Bool} {e : Expr} {ps : List Expr} (h1 : e.ea
 set_option hygiene false in
 macro "impossible" : tactic => `(tactic| first
   | (simp at h; done)
-  | exact absurd h literalMismatch_not_succeeds)
+  | exact absurd h literalMismatch_not_clean)
 
 set_option hygiene false in
 macro "parts_of" : tactic => `(tactic| (intro q hq; simp [Expr.parts] at hq))
 
 mutual
 
-theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (s : Array Code),
-    Succeeds (synthF env n Γ e) s → Guarded Γ.ret.allows e
-  | 0, _, _, _, h => by simp [synthF] at h
-  | n + 1, Γ, e, s, h => by
+theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
+    Clean (synthF env n Γ e) → Guarded Γ.ret.allows e
+  | 0, _, _, h => by simp [synthF] at h
+  | n + 1, Γ, e, h => by
     cases e
     case hinted hh inner =>
       simp only [synthF] at h
-      obtain ⟨-, _, _, h⟩ := peel h
+      obtain ⟨-, _, h⟩ := peel h
       obtain ⟨hc, -⟩ := peel h
-      exact .one rfl rfl (checkForm_guarded env n Γ inner _ _ hc)
+      exact .one rfl rfl (checkForm_guarded env n Γ inner _ hc)
     case var | tt | ff | int | hex | float | str | none_ | atom => exact .leaf rfl rfl
     case binop op a b =>
       simp only [synthF] at h
-      obtain ⟨hp, _, _, hf⟩ := peel h
-      obtain ⟨ga, gb⟩ := pairF_guarded env n Γ a b _ _ hp
+      obtain ⟨hp, _, hf⟩ := peel h
+      obtain ⟨ga, gb⟩ := pairF_guarded env n Γ a b _ hp
       refine .mk (fun k hk => finishBinop_fits hf k (by simpa [Expr.early] using hk)) ?_
       intro q hq; simp [Expr.parts] at hq; rcases hq with rfl | rfl <;> assumption
     case unop op a =>
@@ -174,11 +176,11 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (s
       case neg | not =>
         simp only [synthF] at h
         obtain ⟨ha, -⟩ := peel h
-        exact .one rfl rfl (synthF_guarded env n Γ a _ ha)
+        exact .one rfl rfl (synthF_guarded env n Γ a ha)
       case negO =>
         simp only [synthF] at h
-        obtain ⟨ha, _, _, h⟩ := peel h
-        have ga := synthF_guarded env n Γ a _ ha
+        obtain ⟨ha, _, h⟩ := peel h
+        have ga := synthF_guarded env n Γ a ha
         refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; subst hq; exact ga)
         intro k hk
         simp [Expr.early] at hk; subst hk
@@ -186,8 +188,8 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (s
         cases ho : Γ.returnsOption <;> simp_all <;> (split at h <;> simp at h)
       case negC =>
         simp only [synthF] at h
-        obtain ⟨ha, _, _, h⟩ := peel h
-        have ga := synthF_guarded env n Γ a _ ha
+        obtain ⟨ha, _, h⟩ := peel h
+        have ga := synthF_guarded env n Γ a ha
         refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; subst hq; exact ga)
         intro k hk
         simp [Expr.early] at hk; subst hk
@@ -195,9 +197,9 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (s
         cases hr : Γ.returnsResult <;> simp_all <;> (split at h <;> simp at h)
     case tryOpt a =>
       simp only [synthF] at h
-      obtain ⟨ha, _, _, h⟩ := peel h
+      obtain ⟨ha, _, h⟩ := peel h
       refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; rw [hq]
-                        exact synthF_guarded env n Γ a _ ha)
+                        exact synthF_guarded env n Γ a ha)
       intro k hk
       simp [Expr.early] at hk; subst hk
       rw [← Ctx.returnsOption_eq]
@@ -208,9 +210,9 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (s
       · simp at h
     case tryRes a =>
       simp only [synthF] at h
-      obtain ⟨ha, _, _, h⟩ := peel h
+      obtain ⟨ha, _, h⟩ := peel h
       refine .mk ?_ (by intro q hq; simp [Expr.parts] at hq; rw [hq]
-                        exact synthF_guarded env n Γ a _ ha)
+                        exact synthF_guarded env n Γ a ha)
       intro k hk
       simp [Expr.early] at hk; subst hk
       rw [← Ctx.returnsResult_eq]
@@ -221,7 +223,7 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (s
       · simp at h
     case adapt a =>
       simp only [synthF] at h
-      exact .one rfl rfl (synthF_guarded env n Γ a _ h)
+      exact .one rfl rfl (synthF_guarded env n Γ a h)
     case call f args =>
       simp only [synthF] at h
       split at h
@@ -234,86 +236,86 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (s
           refine .all rfl rfl (fun p hp => ?_)
           simp [Expr.parts] at hp
           obtain ⟨m, hm⟩ := hp
-          exact argsF_guarded env n Γ args sig.params _ hargs hl (m, p) hm
+          exact argsF_guarded env n Γ args sig.params hargs hl (m, p) hm
       · impossible
     case tuple | struct | list | set | map | tensor | table | some_ | ok | er | data | error
       | term | enum =>
       simp only [synthF] at h
-      obtain ⟨-, _, _, h⟩ := peel h
+      obtain ⟨-, _, h⟩ := peel h
       obtain ⟨hc, -⟩ := peel h
-      exact checkForm_guarded env n Γ _ _ _ hc
+      exact checkForm_guarded env n Γ _ _ hc
 
 theorem pairF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (a b : Expr) (x : Option Ty)
-    (s : Array Code), Succeeds (pairF env n Γ a b x) s →
+    , Clean (pairF env n Γ a b x) →
     Guarded Γ.ret.allows a ∧ Guarded Γ.ret.allows b
-  | 0, _, _, _, _, _, h => by simp [pairF] at h
-  | n + 1, Γ, a, b, x, s, h => by
+  | 0, _, _, _, _, h => by simp [pairF] at h
+  | n + 1, Γ, a, b, x, h => by
     simp only [pairF] at h
-    obtain ⟨-, _, _, h⟩ := peel h
+    obtain ⟨-, _, h⟩ := peel h
     split at h
     · simp at h
-    · obtain ⟨ha, _, _, h⟩ := peel h
+    · obtain ⟨ha, _, h⟩ := peel h
       obtain ⟨hb, -⟩ := peel h
-      exact ⟨checkF_guarded env n Γ a _ _ ha, checkF_guarded env n Γ b _ _ hb⟩
+      exact ⟨checkF_guarded env n Γ a _ ha, checkF_guarded env n Γ b _ hb⟩
 
 theorem argsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × Expr))
-    (params : List (Mode × Ty)) (s : Array Code), Succeeds (argsF env n Γ args params) s →
+    (params : List (Mode × Ty)), Clean (argsF env n Γ args params) →
     args.length = params.length → ∀ me ∈ args, Guarded Γ.ret.allows me.2
-  | 0, _, _, _, _, h, _ => by simp [argsF] at h
-  | _ + 1, _, [], _, _, _, _ => by simp
-  | _ + 1, _, _ :: _, [], _, _, hl => by simp at hl
-  | n + 1, Γ, (marker, e) :: args, (mode, t) :: params, s, h, hl => by
+  | 0, _, _, _, h, _ => by simp [argsF] at h
+  | _ + 1, _, [], _, _, _ => by simp
+  | _ + 1, _, _ :: _, [], _, hl => by simp at hl
+  | n + 1, Γ, (marker, e) :: args, (mode, t) :: params, h, hl => by
     simp only [argsF] at h
-    obtain ⟨s', h⟩ : ∃ s', Succeeds (checkF env n Γ e t >>= fun _ => argsF env n Γ args params) s' := by
+    have h : Clean (checkF env n Γ e t >>= fun _ => argsF env n Γ args params) := by
       split at h <;> split at h
       all_goals first
-        | exact ⟨_, h⟩
-        | (obtain ⟨-, _, _, h⟩ := peel h; exact ⟨_, h⟩)
-    obtain ⟨he, _, _, h⟩ := peel h
+        | exact h
+        | exact absurd (peel h).1 report_not_clean
+    obtain ⟨he, _, h⟩ := peel h
     intro me hme
     simp at hme
     rcases hme with rfl | hme
-    · exact checkF_guarded env n Γ e _ _ he
-    · exact argsF_guarded env n Γ args params _ h (by simpa using hl) me hme
+    · exact checkF_guarded env n Γ e _ he
+    · exact argsF_guarded env n Γ args params h (by simpa using hl) me hme
 
 theorem checkF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty)
-    (s : Array Code), Succeeds (checkF env n Γ e t) s → Guarded Γ.ret.allows e
-  | 0, _, _, _, _, h => by simp [checkF] at h
-  | n + 1, Γ, e, t, s, h => by
+    , Clean (checkF env n Γ e t) → Guarded Γ.ret.allows e
+  | 0, _, _, _, h => by simp [checkF] at h
+  | n + 1, Γ, e, t, h => by
     cases e
     case hinted hh inner =>
       simp only [checkF] at h
-      obtain ⟨-, _, _, h⟩ := peel h
+      obtain ⟨-, _, h⟩ := peel h
       split at h
       · simp at h
-      · exact .one rfl rfl (checkForm_guarded env n Γ inner _ _ h)
-    all_goals (simp only [checkF] at h; exact checkForm_guarded env n Γ _ _ _ h)
+      · exact .one rfl rfl (checkForm_guarded env n Γ inner _ h)
+    all_goals (simp only [checkF] at h; exact checkForm_guarded env n Γ _ _ h)
 
 theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty)
-    (s : Array Code), Succeeds (checkForm env n Γ e t) s → Guarded Γ.ret.allows e
-  | 0, _, _, _, _, h => by simp [checkForm] at h
-  | n + 1, Γ, e, t, s, h => by
+    , Clean (checkForm env n Γ e t) → Guarded Γ.ret.allows e
+  | 0, _, _, _, h => by simp [checkForm] at h
+  | n + 1, Γ, e, t, h => by
     cases e
     case var | tt | ff | int | hex | float | str | none_ | atom => exact .leaf rfl rfl
     case some_ p | ok p | er p | enum p =>
       simp only [checkForm] at h
       split at h
-      · exact .one rfl rfl (checkF_guarded env n Γ p _ _ h)
+      · exact .one rfl rfl (checkF_guarded env n Γ p _ h)
       · impossible
     case data p | error p =>
       simp only [checkForm] at h
       split at h
       · obtain ⟨hp, -⟩ := peel h
-        exact .one rfl rfl (synthF_guarded env n Γ p _ hp)
+        exact .one rfl rfl (synthF_guarded env n Γ p hp)
       · impossible
     case term a p =>
       simp only [checkForm] at h
       split at h
       · split at h
-        · exact .one rfl rfl (checkF_guarded env n Γ p _ _ h)
+        · exact .one rfl rfl (checkF_guarded env n Γ p _ h)
         · impossible
       · split at h
-        · exact .one rfl rfl (checkF_guarded env n Γ p _ _ h)
+        · exact .one rfl rfl (checkF_guarded env n Γ p _ h)
         · impossible
       · impossible
     case tuple es =>
@@ -323,7 +325,7 @@ theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr)
         · impossible
         · rename_i hl
           simp at hl
-          exact .all rfl rfl (pairsF_guarded env n Γ es _ _ h hl)
+          exact .all rfl rfl (pairsF_guarded env n Γ es _ h hl)
       · impossible
     case struct fs =>
       simp only [checkForm] at h
@@ -335,17 +337,17 @@ theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr)
           refine .all rfl rfl (fun p hp => ?_)
           simp [Expr.parts] at hp
           obtain ⟨m, hm⟩ := hp
-          exact fieldsF_guarded env n Γ fs _ _ h hl (m, p) hm
+          exact fieldsF_guarded env n Γ fs _ h hl (m, p) hm
       · impossible
     case list es | set es =>
       simp only [checkForm] at h
       split at h
-      · exact .all rfl rfl (allF_guarded env n Γ es _ _ h)
+      · exact .all rfl rfl (allF_guarded env n Γ es _ h)
       · impossible
     case map es =>
       simp only [checkForm] at h
       split at h
-      · have g := entriesF_guarded env n Γ es _ _ _ h
+      · have g := entriesF_guarded env n Γ es _ _ h
         refine .all rfl rfl (fun p hp => ?_)
         simp [Expr.parts] at hp
         obtain ⟨k, v, hkv, hp⟩ := hp
@@ -360,7 +362,7 @@ theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr)
         · impossible
         · split at h
           · impossible
-          · exact .all rfl rfl (allF_guarded env n Γ es _ _ h)
+          · exact .all rfl rfl (allF_guarded env n Γ es _ h)
       · impossible
     case table header rows =>
       simp only [checkForm] at h
@@ -369,7 +371,7 @@ theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr)
         · impossible
         · split at h
           · impossible
-          · have g := rowsF_guarded env n Γ rows _ _ h
+          · have g := rowsF_guarded env n Γ rows _ h
             refine .all rfl rfl (fun p hp => ?_)
             simp [Expr.parts] at hp
             obtain ⟨r, hr, hp⟩ := hp
@@ -382,111 +384,111 @@ theorem checkForm_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr)
         split at h
         · exact .one rfl rfl (.leaf rfl rfl)
         · split at h
-          · exact .one rfl rfl (checkF_guarded env n Γ a _ _ h)
-          · exact subsumeF_guarded env n Γ _ _ _ h
-      all_goals (simp only [checkForm] at h; exact subsumeF_guarded env n Γ _ _ _ h)
+          · exact .one rfl rfl (checkF_guarded env n Γ a _ h)
+          · exact subsumeF_guarded env n Γ _ _ h
+      all_goals (simp only [checkForm] at h; exact subsumeF_guarded env n Γ _ _ h)
     case binop op a b =>
       simp only [checkForm] at h
       split at h
-      · obtain ⟨hp, _, _, h⟩ := peel h
-        obtain ⟨ga, gb⟩ := pairF_guarded env n Γ a b _ _ hp
+      · obtain ⟨hp, _, h⟩ := peel h
+        obtain ⟨ga, gb⟩ := pairF_guarded env n Γ a b _ hp
         obtain ⟨hf, -⟩ := peel h
         refine .mk (fun k hk => finishBinop_fits hf k (by simpa [Expr.early] using hk)) ?_
         intro q hq; simp [Expr.parts] at hq; rcases hq with rfl | rfl <;> assumption
-      · exact subsumeF_guarded env n Γ _ _ _ h
+      · exact subsumeF_guarded env n Γ _ _ h
     case adapt a =>
       simp only [checkForm] at h
       obtain ⟨ha, -⟩ := peel h
-      exact .one rfl rfl (synthF_guarded env n Γ a _ ha)
+      exact .one rfl rfl (synthF_guarded env n Γ a ha)
     case tryOpt | tryRes | call | hinted =>
       simp only [checkForm] at h
-      exact subsumeF_guarded env n Γ _ _ _ h
+      exact subsumeF_guarded env n Γ _ _ h
 
 theorem subsumeF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty)
-    (s : Array Code), Succeeds (subsumeF env n Γ e t) s → Guarded Γ.ret.allows e
-  | 0, _, _, _, _, h => by simp [subsumeF] at h
-  | n + 1, Γ, e, t, s, h => by
+    , Clean (subsumeF env n Γ e t) → Guarded Γ.ret.allows e
+  | 0, _, _, _, h => by simp [subsumeF] at h
+  | n + 1, Γ, e, t, h => by
     simp only [subsumeF] at h
     obtain ⟨he, -⟩ := peel h
-    exact synthF_guarded env n Γ e _ he
+    exact synthF_guarded env n Γ e he
 
 theorem pairsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (ts : List Ty)
-    (s : Array Code), Succeeds (pairsF env n Γ es ts) s → es.length = ts.length →
+    , Clean (pairsF env n Γ es ts) → es.length = ts.length →
     ∀ e ∈ es, Guarded Γ.ret.allows e
-  | 0, _, _, _, _, h, _ => by simp [pairsF] at h
-  | _ + 1, _, [], _, _, _, _ => by simp
-  | _ + 1, _, _ :: _, [], _, _, hl => by simp at hl
-  | n + 1, Γ, e :: es, t :: ts, s, h, hl => by
+  | 0, _, _, _, h, _ => by simp [pairsF] at h
+  | _ + 1, _, [], _, _, _ => by simp
+  | _ + 1, _, _ :: _, [], _, hl => by simp at hl
+  | n + 1, Γ, e :: es, t :: ts, h, hl => by
     simp only [pairsF] at h
-    obtain ⟨he, _, _, h⟩ := peel h
+    obtain ⟨he, _, h⟩ := peel h
     intro x hx
     simp at hx
     rcases hx with rfl | hx
-    · exact checkF_guarded env n Γ x _ _ he
-    · exact pairsF_guarded env n Γ es ts _ h (by simpa using hl) x hx
+    · exact checkF_guarded env n Γ x _ he
+    · exact pairsF_guarded env n Γ es ts h (by simpa using hl) x hx
 
 theorem fieldsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (fs : List (String × Expr))
-    (ts : List (String × Ty)) (s : Array Code), Succeeds (fieldsF env n Γ fs ts) s →
+    (ts : List (String × Ty)) , Clean (fieldsF env n Γ fs ts) →
     fs.length = ts.length → ∀ f ∈ fs, Guarded Γ.ret.allows f.2
-  | 0, _, _, _, _, h, _ => by simp [fieldsF] at h
-  | _ + 1, _, [], _, _, _, _ => by simp
-  | _ + 1, _, _ :: _, [], _, _, hl => by simp at hl
-  | n + 1, Γ, (m, e) :: fs, (k, t) :: ts, s, h, hl => by
+  | 0, _, _, _, h, _ => by simp [fieldsF] at h
+  | _ + 1, _, [], _, _, _ => by simp
+  | _ + 1, _, _ :: _, [], _, hl => by simp at hl
+  | n + 1, Γ, (m, e) :: fs, (k, t) :: ts, h, hl => by
     simp only [fieldsF] at h
     split at h
     · impossible
-    · obtain ⟨he, _, _, h⟩ := peel h
+    · obtain ⟨he, _, h⟩ := peel h
       intro f hf
       simp at hf
       rcases hf with rfl | hf
-      · exact checkF_guarded env n Γ e _ _ he
-      · exact fieldsF_guarded env n Γ fs ts _ h (by simpa using hl) f hf
+      · exact checkF_guarded env n Γ e _ he
+      · exact fieldsF_guarded env n Γ fs ts h (by simpa using hl) f hf
 
 theorem allF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (t : Ty)
-    (s : Array Code), Succeeds (allF env n Γ es t) s → ∀ e ∈ es, Guarded Γ.ret.allows e
-  | 0, _, _, _, _, h => by simp [allF] at h
-  | _ + 1, _, [], _, _, _ => by simp
-  | n + 1, Γ, e :: es, t, s, h => by
+    , Clean (allF env n Γ es t) → ∀ e ∈ es, Guarded Γ.ret.allows e
+  | 0, _, _, _, h => by simp [allF] at h
+  | _ + 1, _, [], _, _ => by simp
+  | n + 1, Γ, e :: es, t, h => by
     simp only [allF] at h
-    obtain ⟨he, _, _, h⟩ := peel h
+    obtain ⟨he, _, h⟩ := peel h
     intro x hx
     simp at hx
     rcases hx with rfl | hx
-    · exact checkF_guarded env n Γ x _ _ he
-    · exact allF_guarded env n Γ es t _ h x hx
+    · exact checkF_guarded env n Γ x _ he
+    · exact allF_guarded env n Γ es t h x hx
 
 theorem entriesF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (es : List (Expr × Expr))
-    (k v : Ty) (s : Array Code), Succeeds (entriesF env n Γ es k v) s →
+    (k v : Ty) , Clean (entriesF env n Γ es k v) →
     ∀ kv ∈ es, Guarded Γ.ret.allows kv.1 ∧ Guarded Γ.ret.allows kv.2
-  | 0, _, _, _, _, _, h => by simp [entriesF] at h
-  | _ + 1, _, [], _, _, _, _ => by simp
-  | n + 1, Γ, (ke, ve) :: es, k, v, s, h => by
+  | 0, _, _, _, _, h => by simp [entriesF] at h
+  | _ + 1, _, [], _, _, _ => by simp
+  | n + 1, Γ, (ke, ve) :: es, k, v, h => by
     simp only [entriesF] at h
-    obtain ⟨hk, _, _, h⟩ := peel h
-    obtain ⟨hv, _, _, h⟩ := peel h
+    obtain ⟨hk, _, h⟩ := peel h
+    obtain ⟨hv, _, h⟩ := peel h
     intro kv hkv
     simp at hkv
     rcases hkv with rfl | hkv
-    · exact ⟨checkF_guarded env n Γ _ _ _ hk, checkF_guarded env n Γ _ _ _ hv⟩
-    · exact entriesF_guarded env n Γ es k v _ h kv hkv
+    · exact ⟨checkF_guarded env n Γ _ _ hk, checkF_guarded env n Γ _ _ hv⟩
+    · exact entriesF_guarded env n Γ es k v h kv hkv
 
 theorem rowsF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (rows : List (List Expr))
-    (cols : List (String × Ty)) (s : Array Code), Succeeds (rowsF env n Γ rows cols) s →
+    (cols : List (String × Ty)) , Clean (rowsF env n Γ rows cols) →
     ∀ r ∈ rows, ∀ e ∈ r, Guarded Γ.ret.allows e
-  | 0, _, _, _, _, h => by simp [rowsF] at h
-  | _ + 1, _, [], _, _, _ => by simp
-  | n + 1, Γ, r :: rs, cols, s, h => by
+  | 0, _, _, _, h => by simp [rowsF] at h
+  | _ + 1, _, [], _, _ => by simp
+  | n + 1, Γ, r :: rs, cols, h => by
     simp only [rowsF] at h
     split at h
     · impossible
     · rename_i hl
       simp at hl
-      obtain ⟨hp, _, _, h⟩ := peel h
+      obtain ⟨hp, _, h⟩ := peel h
       intro row hrow
       simp at hrow
       rcases hrow with rfl | hrow
-      · exact pairsF_guarded env n Γ row _ _ hp (by simpa using hl)
-      · exact rowsF_guarded env n Γ rs cols _ h row hrow
+      · exact pairsF_guarded env n Γ row _ hp (by simpa using hl)
+      · exact rowsF_guarded env n Γ rs cols h row hrow
 
 end
 
@@ -544,21 +546,20 @@ theorem good_push {c : Code} :
   simp
 
 theorem good_runChk {α} (m : ChkM α) :
-    Good (runChk m) (fun _ => True) (fun r => ∃ a, r = Option.some a ∧ Succeeds m #[]) := by
+    Good (runChk m) (fun _ => True) (fun r => ∃ a, r = Option.some a ∧ Clean m) := by
   intro d
-  rcases hm : m.run.run #[] with ⟨r, ds⟩
-  have hm' : ExceptT.run m #[] = (r, ds) := hm
+  rcases hm : m.run with ⟨l, r⟩
   cases r with
   | ok a =>
-    have e : (runChk m).run d = (Option.some a, d ++ ds) := by
-      simp only [runChk, StateT.run]; rw [hm']; rfl
+    have e : (runChk m).run d = (Option.some a, d ++ l) := by
+      simp only [runChk, hm]; rfl
     rw [e]
-    refine ⟨by simp, trivial, fun hs => ⟨a, rfl, a, ds, ?_⟩⟩
+    refine ⟨by simp, trivial, fun hs => ⟨a, rfl, a, ?_⟩⟩
     simp at hs
-    rw [hm]
+    rw [hm, hs]
   | error c =>
-    have e : (runChk m).run d = (Option.none, (d ++ ds).push c) := by
-      simp only [runChk, StateT.run]; rw [hm']; rfl
+    have e : (runChk m).run d = (Option.none, (d ++ l).push c) := by
+      simp only [runChk, hm]; rfl
     rw [e]
     refine ⟨by simp, trivial, fun hs => ?_⟩
     simp at hs
@@ -594,12 +595,12 @@ theorem bindChecked_good (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (hin
     | some t =>
       refine good_bind (good_runChk _) (fun r2 _ => good_pure rfl (fun hq2 _ => ?_))
       obtain ⟨_, _, hs⟩ := hq2
-      exact checkF_guarded env n Γ e t #[] hs
+      exact checkF_guarded env n Γ e t hs
   | none =>
     simp only [bindChecked]
     refine good_bind (good_runChk _) (fun r _ => ?_)
-    have g : (∃ a, r = some a ∧ Succeeds (synthF env n Γ e) #[]) → Guarded Γ.ret.allows e :=
-      fun ⟨_, _, hs⟩ => synthF_guarded env n Γ e #[] hs
+    have g : (∃ a, r = some a ∧ Clean (synthF env n Γ e)) → Guarded Γ.ret.allows e :=
+      fun ⟨_, _, hs⟩ => synthF_guarded env n Γ e hs
     cases r with
     | none => exact good_pure rfl (fun hq => g hq)
     | some t => exact good_pure rfl (fun hq => g hq)
@@ -625,11 +626,11 @@ theorem checkSet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (op : O
     | none =>
       refine good_bind (good_runChk _) (fun r _ => good_pure trivial (fun hq _ => ?_))
       obtain ⟨_, _, hs⟩ := hq
-      exact checkF_guarded env n Γ e t #[] hs
+      exact checkF_guarded env n Γ e t hs
     | some op =>
       refine good_bind (good_runChk _) (fun r _ => good_pure trivial (fun hq _ => ?_))
       obtain ⟨_, _, hs⟩ := hq
-      exact checkF_guarded env n Γ e t #[] (peel hs).1
+      exact checkF_guarded env n Γ e t (peel hs).1
 
 theorem checkRet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Option Expr) :
     Good (checkRet env n Γ e) (fun _ => True)
@@ -644,7 +645,7 @@ theorem checkRet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Option Expr) :
     intro e'' he''
     simp [Stmt.exprs] at he''
     subst he''
-    exact checkF_guarded env n Γ _ _ #[] hs
+    exact checkF_guarded env n Γ _ _ hs
   · exact good_pure trivial (by simp [Stmt.exprs])
 
 theorem checkElse_good (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Option (List Stmt))
@@ -723,7 +724,7 @@ theorem bindingIf_good (env : InferEnv) (n : Nat) (Γ : Ctx) (c : Expr)
           exact good_weaken this (fun _ h => h) (fun _ _ he ht => ⟨ht, he⟩)
       · exact good_weaken good_push (fun _ _ => trivial) (fun _ _ h => h.elim)
   · obtain ⟨_, hr, hs⟩ := hc
-    exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ c #[] hs) (hb (by simp [hr]))
+    exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ c hs) (hb (by simp [hr]))
 
 mutual
 
@@ -777,7 +778,7 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
       simp only [checkStmtF]
       refine good_bind (good_runChk _) (fun r _ => good_pure rfl (fun hq => ?_))
       obtain ⟨_, _, hs⟩ := hq
-      exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ e #[] hs) (by simp [Stmt.blocks])
+      exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ e hs) (by simp [Stmt.blocks])
     case call e =>
       simp only [checkStmtF]
       refine good_bind (good_runChk _) (fun r _ => ?_)
@@ -787,7 +788,7 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
         | none => exact good_pure trivial trivial
         | some t => exact reportIf_good
       · obtain ⟨_, _, hs⟩ := hq
-        exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ e #[] hs) (by simp [Stmt.blocks])
+        exact .of (by simp [Stmt.exprs]; exact synthF_guarded env n Γ e hs) (by simp [Stmt.blocks])
     case loop c body =>
       simp only [checkStmtF]
       refine good_bind (Px := fun _ => True) (Qx := fun _ => ∀ e ∈ (Stmt.loop c body).exprs,
@@ -798,7 +799,7 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
           refine good_bind (good_runChk _) (fun r _ => good_pure trivial (fun hq => ?_))
           obtain ⟨_, _, hs⟩ := hq
           simp [Stmt.exprs]
-          exact checkF_guarded env n Γ c _ #[] hs
+          exact checkF_guarded env n Γ c _ hs
       · refine good_bind (blocks { Γ with inLoop := true } rfl body) (fun _ _ => good_pure rfl (fun hb he => ?_))
         exact .of he (by simp [Stmt.blocks]; exact hb)
     case for_ names coll body =>
@@ -813,7 +814,7 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
           rw [e]
           refine good_weaken (good_runChk _) (fun _ h => h) (fun r _ hq => ?_)
           obtain ⟨_, rfl, hs⟩ := hq
-          exact ⟨rfl, synthF_guarded env n Γ _ #[] (peel hs).1⟩
+          exact ⟨rfl, synthF_guarded env n Γ _ (peel hs).1⟩
         all_goals
           simp only [forBindings]
           exact good_bind good_push (fun _ _ => good_pure trivial (fun h => h.elim))
@@ -835,7 +836,7 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
         refine good_bind (checkElse_good env n Γ e (blocks _ rfl)) (fun _ _ => ?_)
         refine good_pure rfl (fun he ht hc => ?_)
         obtain ⟨_, _, hs⟩ := hc
-        refine .of (by simp [Stmt.exprs]; exact checkF_guarded env n Γ c _ #[] hs) ?_
+        refine .of (by simp [Stmt.exprs]; exact checkF_guarded env n Γ c _ hs) ?_
         intro bl hbl s' hs'
         cases e <;> simp [Stmt.blocks] at hbl <;> rcases hbl with rfl | rfl <;> simp_all
       all_goals

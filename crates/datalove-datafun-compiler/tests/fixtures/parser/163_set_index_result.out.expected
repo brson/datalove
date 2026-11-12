@@ -27,7 +27,7 @@
                   "steps": []
                 }
               },
-              "variant": "Index"
+              "step": "Index"
             }
           ]
         },

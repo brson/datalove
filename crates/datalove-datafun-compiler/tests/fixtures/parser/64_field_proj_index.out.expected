@@ -12,6 +12,7 @@
             "steps": [
               {
                 "index": 0,
+                "step": "Field",
                 "variant": "Index"
               }
             ]

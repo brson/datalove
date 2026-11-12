@@ -38,6 +38,7 @@
             "steps": [
               {
                 "name": "<error>",
+                "step": "Field",
                 "variant": "Name"
               }
             ]
