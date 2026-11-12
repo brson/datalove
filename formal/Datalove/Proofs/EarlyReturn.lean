@@ -635,6 +635,18 @@ def Stmt.exprs : Stmt → List Expr
   | .for_ _ coll _ => [coll]
   | _ => []
 
+/-- Where a compound assignment's operator returns early: `set x +!= e` as
+`x +! e` does. -/
+def opEarlies : Option BinOp → List Early
+  | Option.none => []
+  | Option.some op => (Expr.binop op .tt .tt).earlies
+
+/-- Where a statement returns early itself, not in an expression of it or a
+body inside it: a compound `set`, at its operator. -/
+def Stmt.earlies : Stmt → List Early
+  | .set_ _ _ op _ => opEarlies op
+  | _ => []
+
 /-- The bodies inside a statement. -/
 def Stmt.blocks : Stmt → List (List Stmt)
   | .if_ _ _ _ t (Option.some e) => [t, e]
@@ -642,12 +654,12 @@ def Stmt.blocks : Stmt → List (List Stmt)
   | .loop _ b | .for_ _ _ b => [b]
   | _ => []
 
-/-- Every early return in a statement, in its expressions and in the bodies
-inside it, is one `ok` allows. A function's body is not inside the statement
-that declares it: it is checked under its own return type. -/
+/-- Every early return in a statement, its own, in its expressions and in the
+bodies inside it, is one `ok` allows. A function's body is not inside the
+statement that declares it: it is checked under its own return type. -/
 inductive GuardedS (ok : Early → Bool) : Stmt → Prop where
   | mk : (∀ e ∈ s.exprs, Guarded ok e) → (∀ b ∈ s.blocks, ∀ s' ∈ b, GuardedS ok s') →
-      GuardedS ok s
+      (∀ k ∈ s.earlies, ok k = true) → GuardedS ok s
 
 /-- A step of statement checking that only adds diagnostics, whose result is
 `P`, and is `Q` too when it adds none. -/
@@ -736,8 +748,12 @@ theorem bindChecked_good (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (hin
     | none => exact good_pure rfl (fun hq => g hq)
     | some t => exact good_pure rfl (fun hq => g hq)
 
+/-- `GuardedS.mk`, for the statements that return early only in what they
+hold, which is all but a compound `set`. -/
 theorem GuardedS.of {ok : Early → Bool} {s : Stmt} (he : ∀ e ∈ s.exprs, Guarded ok e)
-    (hb : ∀ b ∈ s.blocks, ∀ s' ∈ b, GuardedS ok s') : GuardedS ok s := .mk he hb
+    (hb : ∀ b ∈ s.blocks, ∀ s' ∈ b, GuardedS ok s')
+    (hk : ∀ k ∈ s.earlies, ok k = true := by simp [Stmt.earlies]) : GuardedS ok s :=
+  .mk he hb hk
 
 theorem reportIf_good {c : Bool} {code : Code} :
     Good (reportIf c code) (fun _ => True) (fun _ => True) := by
@@ -764,31 +780,45 @@ theorem runChk_checkF_good (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Expr) (t :
   good_weaken (good_runChk _) (fun _ h => h)
     (fun _ _ ⟨_, _, hs⟩ => checkF_guarded env n Γ e t hs)
 
+/-- An operator the function fits returns early only as its return type
+allows. -/
+theorem fits_op_earlies {Γ : Ctx} {op : BinOp} (h : fits Γ (needs op) = true) :
+    ∀ k ∈ opEarlies (some op), Γ.ret.allows k = true := by
+  intro k hk
+  cases op <;> simp [opEarlies, Expr.earlies, needs] at hk <;> subst hk <;>
+    simp_all [fits, needs, Ctx.returnsResult_eq, Ctx.returnsOption_eq]
+
+/-- What a `set` writes is `Guarded`, and so is its operator. -/
+def SetValueOk (ok : Early → Bool) (op : Option BinOp) (e : Expr) : Prop :=
+  Guarded ok e ∧ ∀ k ∈ opEarlies op, ok k = true
+
 theorem setValue_good (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (op : Option BinOp)
     (e : Expr) :
-    Good (setValue env n Γ t op e) (fun _ => True) (fun _ => Guarded Γ.ret.allows e) := by
+    Good (setValue env n Γ t op e) (fun _ => True) (fun _ => SetValueOk Γ.ret.allows op e) := by
   cases op with
   | none =>
     simp only [setValue]
-    exact good_bind (runChk_checkF_good env n Γ e t) (fun _ _ => good_pure trivial id)
+    exact good_bind (runChk_checkF_good env n Γ e t)
+      (fun _ _ => good_pure trivial (fun he => ⟨he, by simp [opEarlies]⟩))
   | some op =>
     simp only [setValue]
     refine good_bind (runChk_checkF_good env n Γ.borrow e t) (fun _ _ => ?_)
     split
     · exact push_good
-    · exact good_weaken reportIf_good (fun _ h => h) (fun _ _ _ h => h)
+    · exact good_weaken reportIf_quiet (fun _ h => h)
+        (fun _ _ hq he => ⟨he, fits_op_earlies (by simpa using hq)⟩)
 
 theorem setIndex_good (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr)
     (mode : Option IdxMode) (op : Option BinOp) (e : Expr) :
     Good (setIndex env n Γ t k mode op e) (fun _ => True)
-      (fun _ => Guarded Γ.ret.allows k ∧ Guarded Γ.ret.allows e) := by
+      (fun _ => Guarded Γ.ret.allows k ∧ SetValueOk Γ.ret.allows op e) := by
   unfold setIndex
   split
   · exact push_good
   · split
     · refine good_bind (runChk_checkF_good env n Γ k _) (fun _ _ => ?_)
       refine good_bind (runChk_checkF_good env n Γ e _) (fun _ _ => ?_)
-      exact good_pure trivial (fun he hk => ⟨hk, he⟩)
+      exact good_pure trivial (fun he hk => ⟨hk, he, by simp [opEarlies]⟩)
     · exact push_good
   · split
     · exact push_good
@@ -802,7 +832,7 @@ theorem setIndex_good (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr)
 theorem setSteps_good (env : InferEnv) (n : Nat) (Γ : Ctx) (op : Option BinOp) (e : Expr) :
     ∀ (t : Ty) (steps : List Step), Good (setSteps env n Γ t op e steps) (fun _ => True)
       (fun _ => (∀ st ∈ steps, ∀ p, st.key = some p → Guarded Γ.ret.allows p) ∧
-        Guarded Γ.ret.allows e)
+        SetValueOk Γ.ret.allows op e)
   | t, [] => by
     simp only [setSteps]
     exact good_weaken (setValue_good env n Γ t op e) (fun _ h => h) (fun _ _ h => ⟨by simp, h⟩)
@@ -887,7 +917,8 @@ theorem setModes_go : ∀ (steps : List Step) (ms : List IdxMode),
 theorem checkSet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (steps : List Step)
     (op : Option BinOp) (e : Expr) :
     Good (checkSet env n Γ x steps op e) (fun _ => True)
-      (fun _ => ∀ e' ∈ (Stmt.set_ x steps op e).exprs, Guarded Γ.ret.allows e') := by
+      (fun _ => (∀ e' ∈ (Stmt.set_ x steps op e).exprs, Guarded Γ.ret.allows e') ∧
+        ∀ k ∈ (Stmt.set_ x steps op e).earlies, Γ.ret.allows k = true) := by
   unfold checkSet
   split
   · exact push_good
@@ -895,14 +926,14 @@ theorem checkSet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (steps 
     refine good_bind (reportModes_good Γ (setModes steps)) (fun _ _ => ?_)
     refine good_weaken (setSteps_good env n Γ op e _ steps) (fun _ h => h)
       (fun _ _ hs hm _ => ?_)
-    intro e' he'
+    refine ⟨fun e' he' => ?_, hs.2.2⟩
     simp only [Stmt.exprs, List.mem_cons, List.not_mem_nil, or_false] at he'
     rcases he' with rfl | rfl
     · refine .place (fun st hst => ⟨fun k hk => ?_, fun p hp => hs.1 st hst p hp⟩)
       obtain ⟨m, hm', rfl⟩ := (setModes_go steps []).2 st hst k hk
       rw [← Ctx.fitsMode_eq]
       exact hm m hm'
-    · exact hs.2
+    · exact hs.2.1
 
 theorem checkRet_good (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Option Expr) :
     Good (checkRet env n Γ e) (fun _ => True)
@@ -1037,7 +1068,7 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
     case set_ x steps op e =>
       simp only [checkStmtF]
       exact good_bind (checkSet_good env n Γ x steps op e)
-        (fun _ _ => good_pure rfl (fun hq => .of hq (by simp [Stmt.blocks])))
+        (fun _ _ => good_pure rfl (fun hq => .of hq.1 (by simp [Stmt.blocks]) hq.2))
     case ret e =>
       simp only [checkStmtF]
       exact good_bind (checkRet_good env n Γ e)

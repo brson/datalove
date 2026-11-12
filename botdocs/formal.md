@@ -329,12 +329,13 @@ Two things are proved of it:
 - **Every early return fits the function** (`Fun.checkFun_early_returns_fit`,
   in `Proofs/EarlyReturn.lean`). A function whose check reports nothing has
   every early return in its body, from `?`, `!`, `-?`, `-!`, an index's `?`
-  or `!`, read or in a `set` target, or a checked or optional operator, at
-  any depth of any expression of any statement, one its return type can
-  carry: `none` only where it returns an option, an error only where it
+  or `!`, read or in a `set` target, or a checked or optional operator, a
+  compound `set`'s included, at any depth of any expression of any
+  statement, one its return type can carry: `none` only where it returns an option, an error only where it
   returns a result. Underneath it, `Fun.checkF_guarded` says the same of any
   expression that checks or synthesizes. Taking `fits` out of `?`'s rule
-  breaks the proof, as taking F049 out of a place's index step does.
+  breaks the proof, as taking F049 out of a place's index step or a compound
+  `set` does.
 - **`completes` is sound** (`Fun.completes_sound`, in
   `Proofs/Completes.lean`). A body it says cannot complete has no execution
   that finishes normally, against a semantics of control flow in which any
@@ -408,9 +409,6 @@ In rough order of what to do next:
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's
   expressions, which only datalit's literals have (`Lit.check_sound`).
-- **A compound `set`'s own early return.** `set x +!= 1` returns early as
-  `x +! 1` does, and the checker requires that it fit (F049), but the
-  early-return theorem does not yet count it among a statement's.
 - **The rest of datafun.** Generics, whose substitution lemma is what
   monomorphization relies on, modules, consts, patterns and `match` are
   outside the slice. The serde AST already
