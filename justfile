@@ -197,7 +197,7 @@ test-miri-rt-one TEST:
 test-miri-rt-tests *ARGS='':
     env PROPTEST_CASES=8 MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --no-fail-fast \
-        --test anypack_tests --test boxing_tests --test btreemap_tests --test btreeset_tests --test clone_tests --test cmp_tests --test cmp_total_tests --test cursor_tests --test destroy_tests --test eq_tests --test eq_unique_tests --test instantiate_tests --test int_math_tests --test list_generic_tests --test list_tests --test pretty_tests --test rust_api_tests --test string_tests --test table_tests --test tensor_tests \
+        --test anypack_tests --test boxing_tests --test btree_separator_tests --test btreemap_tests --test btreeset_tests --test clone_tests --test cmp_tests --test cmp_total_tests --test cursor_tests --test destroy_tests --test eq_tests --test eq_unique_tests --test instantiate_tests --test int_math_tests --test list_generic_tests --test list_tests --test pretty_tests --test rust_api_tests --test string_tests --test table_tests --test tensor_tests \
         {{ARGS}}
     env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
         cargo +nightly miri test -p datalove-rt-tests --test roundtrip_tests {{ARGS}}
