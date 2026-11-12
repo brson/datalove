@@ -10,7 +10,13 @@ line, and writes one answer per line to stdout, in order:
 {"convert": H}   →  {"ok": T} or {"err": {"kind": K, "name": N}}
 {"pair": [A, B]} →  {"equiv": b, "meet": b, "adapt": b}
 {"type": T}      →  {"copy": b, "wf": b, "expose": T}
+{"synth": E}     →  {"ok": T} or {"err": code}
 ```
+
+`synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
+asks about both modes.
+
+Expressions are encoded as `Datalove/LitJson.lean` says.
 
 `crates/datalove-formal-tests` asks the Rust the same questions and compares.
 -/
@@ -36,6 +42,16 @@ def answer (q : Json) : Except String Json := do
     -- may not finish.
     let exposed := if wf then t.expose.toJson else Json.null
     return Json.mkObj [("copy", t.isCopy), ("wf", wf), ("expose", exposed)]
+  if let .ok e := q.getObjVal? "synth" then
+    let e ← Lit.Expr.fromJson e
+    return match Lit.synthesize e with
+      | .ok t => Json.mkObj [("ok", t.toJson)]
+      | .error c => Json.mkObj [("err", c)]
+  if let .ok e := q.getObjVal? "synth" then
+    let e ← Lit.Expr.fromJson e
+    return match Lit.synthesize e with
+      | .ok t => Json.mkObj [("ok", t.toJson)]
+      | .error c => Json.mkObj [("err", c)]
   throw s!"unknown query: {q.compress}"
 
 def main (args : List String) : IO UInt32 := do

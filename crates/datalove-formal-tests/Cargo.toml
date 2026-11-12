@@ -15,6 +15,7 @@ bct.workspace = true
 salsa.workspace = true
 datalove-datalit.workspace = true
 datalove-datafun-tycheck.workspace = true
+datalove-diagnostic.workspace = true
 
 [[test]]
 name = "oracle_tests"
@@ -23,3 +24,7 @@ path = "tests/oracle_tests.rs"
 [[test]]
 name = "law_tests"
 path = "tests/law_tests.rs"
+
+[[test]]
+name = "lit_tests"
+path = "tests/lit_tests.rs"

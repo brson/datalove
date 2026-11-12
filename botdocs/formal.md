@@ -2,7 +2,8 @@
 
 How datalove's type rules are modelled in Lean, what is proved of the model,
 and how the model is held to the Rust. Explanation and how-to; written
-November 2026, when the first part, the type language of datalit, went in.
+November 2026, when the first part, the type language of datalit, went in,
+and extended when the second, datalit's literal typing, did.
 
 ## Contents
 
@@ -12,6 +13,7 @@ November 2026, when the first part, the type language of datalit, went in.
 - [What is proved](#user-content-what-is-proved)
 - [What ties the model to the code](#user-content-what-ties-the-model-to-the-code)
 - [What it found](#user-content-what-it-found)
+- [Literal typing](#user-content-literal-typing)
 - [Running it](#user-content-running-it)
 - [Keeping it true](#user-content-keeping-it-true)
 - [What is not covered](#user-content-what-is-not-covered)
@@ -177,6 +179,53 @@ Two things the tests confirmed that the docs only claimed: `≡` and the derived
 `PartialEq` agree, and the conversion reports the same first error as a
 direct reading of the rules would, in every one of the error kinds.
 
+## Literal typing
+
+The second part takes the typing of datalit's expressions: inference with
+literal classes and unification, the defaults, checking and synthesis
+(`formal/Datalove/Lit.lean`). It is a different kind of model from the first.
+The type relations were transcribed from the Rust, so that proofs about them
+are about the code. The literal typing is written from
+[the typing rules](datalit-typing-rules.md) instead, rule by rule, so that
+holding the Rust to it holds the code to the doc. Where the doc leaves a
+choice open, the model says which it made. It is not wholly independent of
+the code: it was written by someone who had read the checker first, and its
+structure follows the checker's where the doc allows.
+
+Its definitions are `partial`, since unification has no structural measure,
+so nothing is proved of them yet; the part is an oracle only.
+
+`lit_tests` holds the Rust to it. It starts from an expression `ast_gen`
+makes, or from a literal of a type the hint generator above makes, which
+brings in recursive types, and changes it up to three times at random: a
+hint dropped, replaced, or stripped from a whole part so that inference types
+it; a part swapped for another expression; an integer or hex literal at the
+edge of a range; a variant renamed, or made an atom from a term or the
+reverse; a struct field dropped or renamed, a tuple lengthened, a table
+column renamed. Each is printed, parsed back, and synthesized, and the type
+the Rust synthesizes, or the code of the first diagnostic it reports, is
+compared with the oracle's. A hinted expression `: T / e` is checked against
+`T`, so both modes are asked about.
+
+Before the generated cases it runs a corpus: every example the typing rules
+give, with what the doc says each synthesizes or is reported as, held to the
+doc as well as to the oracle, and the cases found by hand. A hundred thousand
+generated expressions reach every code in the doc's table but four: T017, a
+parse error, which the test skips; T066, which is datafun's; and T049 and
+T056, a tensor's element count and a table row's width, which the parser
+refuses before the checker sees them, as the doc says.
+
+It found one place where the code and the doc differed. The doc gives an
+atom literal's class as admitting `atom a` and any enum, and a term
+literal's as admitting `term a T` and any enum. The code's let either admit
+the other kind of the same name, so in `[atom A, : term A int / term A 1]`
+the atom's variable took the hinted term's type, the list became a list of
+terms, and the atom was reported (T032), where the doc's rule that the first
+in source order keeps the shared type reports the hint (T040). The generator
+did not find this; a case written by hand did, and the code now follows the
+doc. The datalit fixture `79_atom_then_hinted_term_of_its_name` holds it in
+`just test`.
+
 ## Running it
 
 Lean comes through elan; `formal/lean-toolchain` pins the version, which
@@ -184,8 +233,8 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
 
 - `just formal-build` builds the model and the oracle, checking every proof.
   About twenty seconds from clean.
-- `just test-formal SEED COUNT` builds, then runs `oracle_tests` over `COUNT`
-  seeds from `SEED` (`random` draws one), as every generative suite takes its
+- `just test-formal SEED COUNT` builds, then runs `oracle_tests` and
+  `lit_tests` over `COUNT` seeds from `SEED` (`random` draws one), as every generative suite takes its
   seeds.
 - `law_tests` runs in `just test`. `FORMAL_LAWS_SEED`, `FORMAL_LAWS_COUNT` and
   `FORMAL_LAWS_SIZE` widen it. Size 8 takes a few seconds in release; size 10
@@ -209,6 +258,11 @@ over them, in the JSON encoding on both sides, and in the generator. Lean
 says which functions lack the case; the Rust's exhaustive matches say the
 same on its side.
 
+A change to the literal typing rules needs the doc, `Lit.lean` and the code to
+change together; `lit_tests` fails on whichever is left behind. Add a case to
+its corpus for anything the change is about, since the generator may not find
+it, as it did not find the atom and term case.
+
 ## What is not covered
 
 In rough order of what to do next:
@@ -216,14 +270,20 @@ In rough order of what to do next:
 - **Enum variants are sorted and named once.** The model, like the Rust,
   relies on both and states neither.
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
-- **The expression and statement rules.** The next part is datalit's
-  literal typing: the inference with classes, the unifier, and checking,
-  where the docs claim syntax-directedness and that synthesis and checking
-  report the same faults. After it, datafun's statements, where the early
+- **Proofs about literal typing.** `Lit.lean` is partial, and an oracle only.
+  The claims worth proving are that a literal that checks against a type is a
+  value of it (in range, of the tensor's shape, with the table's columns),
+  and that where unification's constraints all hold, the order of a
+  collection's elements does not change what it synthesizes. The first
+  needs only checking, which is structural; the second needs unification
+  made total, with a measure or fuel.
+- **Datafun's `@` class in inference**, `Class::Adapt`, which datalit's
+  inference carries for datafun. `Lit.lean` has no `@` and leaves it out.
+- **The statement rules.** Datafun's statements, where the early
   returns of `?`, `!` and the checked operators make an effect system worth a
   soundness theorem, and generics, whose substitution lemma is what
-  monomorphization relies on. Each needs an AST encoding for the oracle; the
-  worldgen programs and `datalit/src/mutation_gen.rs` are the inputs.
+  monomorphization relies on. Each needs an encoding of datafun's AST for the
+  oracle, and the worldgen programs are the inputs.
 - **Aliases and type parameters in hints.** The model takes datalit's
   hints, with no aliases or type parameters, so T063 for an alias and the
   conversion's T066 check are not modelled. `Ty.WF` states T066 for a type

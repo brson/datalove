@@ -422,3 +422,51 @@ pub fn type_pool<'db>(
     pool.retain(|ty| seen.insert(type_to_json(db, ty).S()));
     (pool, hints)
 }
+
+/// An expression in the oracle's encoding; see `formal/Datalove/LitJson.lean`.
+pub fn expr_to_json(db: &Db, expr: &ExprFull<'_>) -> Value {
+    let inner = match expr.expr() {
+        Expr::True => json!("true"),
+        Expr::False => json!("false"),
+        Expr::Float(_) => json!("float"),
+        Expr::String(_) => json!("string"),
+        Expr::None => json!("none"),
+        Expr::Int(i) => json!(["int", datalove_datalit::parser_util::strip_separators(i.value.as_str(db))]),
+        Expr::Hex(h) => {
+            let digits = datalove_datalit::parser_util::strip_separators(h.value.as_str(db));
+            let digits = digits.trim_start_matches("0x").trim_start_matches("0X");
+            json!(["hex", digits])
+        }
+        Expr::AnonTuple(t) => json!(["tuple", exprs_to_json(db, &t.elements)]),
+        Expr::AnonStruct(s) => json!(["struct", s.fields.iter()
+            .map(|f| json!([f.name.as_str(db), expr_to_json(db, &f.value)]))
+            .collect::<Vec<_>>()]),
+        Expr::List(l) => json!(["list", exprs_to_json(db, &l.elements)]),
+        Expr::Set(s) => json!(["set", exprs_to_json(db, &s.elements)]),
+        Expr::Map(m) => json!(["map", m.entries.iter()
+            .map(|e| json!([expr_to_json(db, &e.key), expr_to_json(db, &e.value)]))
+            .collect::<Vec<_>>()]),
+        Expr::Tensor(t) => json!(["tensor", t.shape, exprs_to_json(db, &t.elements)]),
+        Expr::Table(t) => json!(["table",
+            t.header.iter().map(|h| h.as_str(db)).collect::<Vec<_>>(),
+            t.rows.iter().map(|r| exprs_to_json(db, &r.elements)).collect::<Vec<_>>()]),
+        Expr::Some(s) => json!(["some", expr_to_json(db, &s.payload)]),
+        Expr::Ok(o) => json!(["ok", expr_to_json(db, &o.payload)]),
+        Expr::Er(e) => json!(["er", expr_to_json(db, &e.payload)]),
+        Expr::Data(d) => json!(["data", expr_to_json(db, &d.value)]),
+        Expr::Error(e) => json!(["error", expr_to_json(db, &e.value)]),
+        Expr::Atom(a) => json!(["atom", a.name.as_str(db)]),
+        Expr::Term(t) => json!(["term", t.name.as_str(db), expr_to_json(db, &t.payload)]),
+        Expr::Enum(e) => json!(["enum", expr_to_json(db, &e.variant)]),
+        Expr::Group(g) => json!(["group", expr_to_json(db, &g.inner)]),
+        Expr::ParseError(_) => panic!("expressions with parse errors are skipped before encoding"),
+    };
+    match expr.type_hint() {
+        Some(hint) => json!(["hint", hint_to_json(db, &hint), inner]),
+        None => inner,
+    }
+}
+
+fn exprs_to_json(db: &Db, exprs: &[ExprFull<'_>]) -> Value {
+    exprs.iter().map(|e| expr_to_json(db, e)).collect()
+}

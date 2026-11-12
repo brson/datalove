@@ -101,9 +101,12 @@ impl<'db> Class<'db> {
                 is_unsigned_int_type(t) || is_bigint_type(t) || is_float_type(t)
             }
             (Class::Literal(LiteralKind::Float), PType::Known(t)) => is_float_type(t),
-            (Class::Variant { name, .. }, PType::Known(Type::Atom(a))) => a.name == *name,
-            (Class::Variant { name, .. }, PType::Known(Type::Term(t))) => t.name == *name,
-            (Class::Variant { name, .. }, PType::Term(term_name, _)) => term_name == name,
+            // An atom literal is an atom of its name, and a term literal a
+            // term: neither is a value of the other kind, though the names
+            // agree.
+            (Class::Variant { name, payload: None }, PType::Known(Type::Atom(a))) => a.name == *name,
+            (Class::Variant { name, payload: Some(_) }, PType::Known(Type::Term(t))) => t.name == *name,
+            (Class::Variant { name, payload: Some(_) }, PType::Term(term_name, _)) => term_name == name,
             (Class::Variant { .. }, PType::Known(Type::Enum(_)) | PType::Enum(_)) => true,
             _ => false,
         }

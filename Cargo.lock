@@ -1466,6 +1466,7 @@ dependencies = [
  "bcts",
  "datalove-datafun-tycheck",
  "datalove-datalit",
+ "datalove-diagnostic",
  "rustmax",
  "salsa",
 ]

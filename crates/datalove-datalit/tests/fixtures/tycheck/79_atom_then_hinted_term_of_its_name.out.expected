@@ -1,0 +1,64 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Atom": {
+                "name": "A"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Term": {
+                "name": "A",
+                "payload": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "type_hint": null
+                }
+              }
+            },
+            "type_hint": {
+              "Term": {
+                "name": "A",
+                "payload": "Int"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "T040",
+      "labels": [
+        {
+          "message": "expected `atom A`, found `term A int`",
+          "span": [
+            9,
+            32
+          ],
+          "text": ": term A int / term A 1"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "term A int",
+      "expected": "atom A",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}
