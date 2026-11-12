@@ -1311,8 +1311,8 @@ so the step ends.
 
 All of the examples used to develop these rules so far
 were based on variable bindings.
-The motivating example from the beginning of this document
-though included modules and functions as well.
+The motivating example from the intro
+included modules and functions as well.
 
 ```datalove
 require module sys/std/list
@@ -1350,19 +1350,22 @@ On each step the engine just needs to track where these
 are used and apply the same rules as `let` and `var`.
 
 This does suggest a constraint for future design directions though.
-It needs to continue to be easy to track the flow of bindings usage.
-Any language constructs that dynamically hide the flow of values
-will instantly complicate the reactive architecture.
-Imagine having traits.
-Then we need to follow every use of every trait.
-Imagine having closures.
-Then we need to follow every value that disappears into them.
+It needs to continue to be easy to track the flow of data through bindings.
+Any language features that hide the flow of values through bindings
+will complicate the reactive architecture.
+First-class references are an example.
+If references to values could outlive the current statement
+then the analysis would have to track their lifetimes as well.
+Interior mutability is another.
+I/O presents more problems.
 
 These types of concerns are why one of [Datalove's principles](../principles.md)
 is to establish broad architectural capabilities early,
 develop the language later.
-Discover the big constraints now so I don't accidentally add
-incompatible semantics to the surface language.
+Discover the big constraints now,
+and add comprehensive test suites to preserve them,
+so I don't accidentally add
+incompatible semantics to the surface language later.
 
 
 
