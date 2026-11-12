@@ -1359,7 +1359,7 @@ then the analysis would have to track their lifetimes as well.
 Interior mutability is another.
 I/O presents more problems.
 
-These types of concerns are why one of [Datalove's principles](../principles.md)
+These kinds of concerns are why one of [Datalove's principles](../principles.md)
 is to establish broad architectural capabilities early,
 develop the language later.
 Discover the big constraints now,
