@@ -11,6 +11,10 @@
 //! of `Statement`, `ExprFunKind`, `BinOp`, `UnaryOp`, `ParamMode` and datalit's
 //! `TypeHint`. The worldfiles are parsed with the real parser and walked, and
 //! what is never reached has to be named in `NOT_YET_GENERATED` with a reason.
+//!
+//! The worldfiles are those of `WorldGenConfig::engines`, which
+//! `worldgen_engine_tests` runs on every engine: what is counted here is what
+//! the engines are held to the IR walker on.
 //! Adding a variant to any of those enums makes `kind_names!` fail to compile
 //! until someone says which of the two it is.
 //!
@@ -146,11 +150,9 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // `v.a` and `v[i]?` parse as a place with a step rather than as `FieldProj`
     // and `Index`, which are for a base that is not a place. Both pairs are
     // written; the place forms are counted under the two place-step shapes.
-    ("expr", "Hex", "hex literals are not generated"),
     ("expr", "Hinted", "the generator only hints literals, which keep the hint themselves"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
-    ("expr", "DataFile", "`require data` needs a data file in the world, and worldfiles from the generator have none"),
 
 
 
@@ -472,7 +474,7 @@ fn walk_statements<'db>(
 /// Walk every section of the worldfiles `seeds` generate.
 fn measure(seeds: &Seeds) -> Coverage {
     let mut cov = Coverage::default();
-    let config = WorldGenConfig::default();
+    let config = WorldGenConfig::engines();
 
     for seed in seeds.iter() {
         let worldfile = gen_worldfile_seeded(seed, config.C());
@@ -485,6 +487,9 @@ fn measure(seeds: &Seeds) -> Coverage {
                 WorldfileSection::Module { source, .. }
                 | WorldfileSection::ModuleAdd { source, .. } => source.C(),
                 WorldfileSection::ScriptFragment { source } => source.C(),
+                // An expression unit is an expression, not a statement, which
+                // `debuglog` makes it one of to be parsed as the rest are.
+                WorldfileSection::ScriptExpr { source } => format!("debuglog {}", source.trim()),
                 _ => continue,
             };
             let source = bct::input::Source::new(&db, source_text);

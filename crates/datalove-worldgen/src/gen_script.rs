@@ -89,6 +89,22 @@ pub fn gen_script_items<'db>(
         }
     }
 
+    // Some of the standard library's modules, whose functions are called
+    // qualified. Not by `call_every_function`, which would call every one.
+    let mut std_names: LookupSet<String> = LookupSet::default();
+    let std_modules = crate::std_lib::std_modules();
+    if config.std_modules.1 > 0 {
+        let count = rng.random_range(config.std_modules.0..=config.std_modules.1) as usize;
+        for module in pick_std_modules(rng, &std_modules, count) {
+            for func in &module.functions {
+                let func = func.qualified(module.alias());
+                qualified_sources.insert(func.name.C(), module);
+                std_names.insert(func.name.C());
+                ctx.imported_functions.push(func);
+            }
+        }
+    }
+
     let mut items: Vec<ScriptItem> = Vec::new();
     // The module functions called so far, by the name they were called by;
     // pushing an item adds to it, and the calls below read it between pushes.
@@ -158,7 +174,7 @@ pub fn gen_script_items<'db>(
     // pass it.
     if config.call_every_function {
         for func in ctx.imported_functions.C() {
-            if reached.borrow().contains(&func.name) || !can_call(db, &func, &ctx) {
+            if std_names.contains(&func.name) || reached.borrow().contains(&func.name) || !can_call(db, &func, &ctx) {
                 continue;
             }
             let bound_before = ctx.variables.len();
@@ -456,5 +472,17 @@ fn observe(ctx: &GenContext<'_>, bound_before: usize) -> String {
     ctx.variables[bound_before..].iter()
         .filter(|v| !ctx.is_consumed(&v.name))
         .map(|v| format!("\ndebuglog {}", v.name))
+        .collect()
+}
+
+/// `count` of the standard library's modules, none twice.
+pub fn pick_std_modules<'m, 'db>(
+    rng: &mut SeededRng,
+    modules: &'m [ModuleInfo<'db>],
+    count: usize,
+) -> Vec<&'m ModuleInfo<'db>> {
+    let mut left: Vec<&ModuleInfo<'db>> = modules.iter().collect();
+    (0..count.min(left.len()))
+        .map(|_| left.remove(rng.random_range(0..left.len())))
         .collect()
 }

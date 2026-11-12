@@ -15,6 +15,7 @@ mod gen_generic;
 mod gen_module;
 mod gen_script;
 mod pretty;
+mod std_lib;
 mod worldfile;
 
 pub use config::WorldGenConfig;

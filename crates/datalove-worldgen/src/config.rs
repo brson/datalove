@@ -98,6 +98,17 @@ pub struct WorldGenConfig {
     /// nothing.
     pub recursion_probability: u32,
 
+    /// The chance a literal of `int`, an unsigned fixed-width type or
+    /// `index` is written in hex, `0xFF`, of a value small or anywhere in
+    /// the type's range. Zero draws nothing.
+    pub hex_probability: u32,
+
+    /// How many of the standard library's modules a script calls into, from
+    /// `std_modules.0` to `std_modules.1`; where it is more than none, each
+    /// generated module calls into one half the time. Their functions are
+    /// called qualified; see `std_lib`. `(0, 0)` draws nothing.
+    pub std_modules: (u32, u32),
+
     /// Whether a worldfile's script is one fragment rather than a section
     /// for each unit. The AOT backends take only one fragment. A session is
     /// cut into units either way.
@@ -164,6 +175,28 @@ impl WorldGenConfig {
         rng.random_range(0..100) < pct
     }
 
+    /// The configuration `worldgen_engine_tests` runs on every engine, which
+    /// `coverage_tests` measures: everything the generator can write and
+    /// show, with each world's script cut into units.
+    pub fn engines() -> WorldGenConfig {
+        WorldGenConfig {
+            expression_unit_probability: 15,
+            counted_loop_probability: 70,
+            loop_probability: 20,
+            observe_bindings: true,
+            call_every_function: true,
+            fallible_script: true,
+            qualified_calls: true,
+            compute_from_variables: true,
+            recursion_probability: 30,
+            binding_access_probability: 25,
+            hex_probability: 15,
+            script_statements: (4, 12),
+            arithmetic_probability: 50,
+            ..WorldGenConfig::default()
+        }
+    }
+
     /// How likely an expression is to read a binding where it could.
     pub fn variable_odds(&self) -> f64 {
         match self.compute_from_variables {
@@ -204,6 +237,8 @@ impl Default for WorldGenConfig {
             qualified_calls: false,
             compute_from_variables: false,
             recursion_probability: 0,
+            hex_probability: 0,
+            std_modules: (0, 0),
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,

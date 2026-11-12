@@ -153,8 +153,21 @@ pub fn gen_module<'db>(
         }
     }
 
+    // One of the standard library's modules half the time, whose functions
+    // are called qualified.
+    let std_modules = crate::std_lib::std_modules();
+    let mut std_functions = Vec::new();
+    if config.std_modules.1 > 0 && rng.random_bool(0.5) {
+        for module in crate::gen_script::pick_std_modules(rng, &std_modules, 1) {
+            lines.push(format!("require module {}", module.path()));
+            lines.push(String::new());
+            std_functions.extend(module.functions.iter().map(|f| f.qualified(module.alias())));
+        }
+    }
+
     // Build module context.
     let mut ctx = GenContext::new();
+    ctx.imported_functions.extend(std_functions);
     ctx.type_aliases = info.type_aliases.C();
     ctx.functions = info.functions.C();
 

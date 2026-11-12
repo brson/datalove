@@ -54,6 +54,7 @@ use rmx::rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use bct::random::{SeededRng, env_seeds};
+use datalove_datafun::driver::{LoweringResult, OwnershipResult, TypecheckResult};
 use datalove_datafun::worldfile_analysis::Analysis;
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use engines::Tally;
@@ -95,22 +96,13 @@ const FAIL: &str = "\x1b[31mFAIL\x1b[0m";
 /// is sent on stdin, a line each, until stdin ends.
 const WORKER: &str = "WORLDGEN_ENGINES_WORKER";
 
-/// The generator's configuration for a seed.
+/// The generator's configuration for a seed: [`WorldGenConfig::engines`],
+/// written as one fragment for one seed in [`ONE_FRAGMENT_EVERY`].
 fn config(seed: u64) -> WorldGenConfig {
-    let mut config = WorldGenConfig::default();
-    config.one_fragment = SeededRng::derive(seed, "one-fragment").random_range(0..ONE_FRAGMENT_EVERY) == 0;
-    config.expression_unit_probability = 15;
-    config.counted_loop_probability = 70;
-    config.loop_probability = 20;
-    config.observe_bindings = true;
-    config.call_every_function = true;
-    config.fallible_script = true;
-    config.qualified_calls = true;
-    config.compute_from_variables = true;
-    config.recursion_probability = 30;
-    config.script_statements = (4, 12);
-    config.arithmetic_probability = 50;
-    config
+    WorldGenConfig {
+        one_fragment: SeededRng::derive(seed, "one-fragment").random_range(0..ONE_FRAGMENT_EVERY) == 0,
+        ..WorldGenConfig::engines()
+    }
 }
 
 /// What a run of worlds showed, over every world checked.
@@ -219,10 +211,19 @@ fn generate(seed: u64) -> Result<String, String> {
 }
 
 /// What went wrong compiling each unit that did not compile.
+///
+/// Only those that failed a phase, and not those whose later phases were
+/// skipped for it, which every unit's are where one fails: the first line is
+/// then the first failure, which a shrink keeps to.
 fn compile_errors(reference: &Analysis) -> String {
     reference.sections.iter()
         .enumerate()
-        .filter(|(_, s)| !engines::section_compiled(s))
+        .filter(|(_, s)| {
+            matches!(s.typecheck, TypecheckResult::Error { .. })
+                || matches!(s.ownership, OwnershipResult::Error { .. })
+                || matches!(s.lowering, LoweringResult::Error { .. })
+                || matches!(s.typecheck, TypecheckResult::ParseError { .. })
+        })
         .map(|(i, s)| format!("  section {} ({}): {:?} {:?} {:?}\n", i + 1, s.section_type, s.typecheck, s.ownership, s.lowering))
         .collect()
 }

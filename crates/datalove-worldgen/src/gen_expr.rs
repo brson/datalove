@@ -597,6 +597,9 @@ pub fn gen_literal<'db>(
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {
+    if let Some(hex) = gen_hex_literal(db, rng, &type_hint, config) {
+        return hex;
+    }
     let expr = ast_gen::gen_expr_matching_type(
         db,
         rng,
@@ -614,6 +617,42 @@ pub fn gen_literal<'db>(
     } else {
         expr_str
     }
+}
+
+/// A hex literal of `type_hint`, where it is a type one may be and
+/// `hex_probability` says to write one.
+///
+/// Half of them small, and half anywhere up to the type's largest, which
+/// decimal literals never reach. An `int` is given a 64-bit value at most.
+fn gen_hex_literal<'db>(
+    db: &'db dyn salsa::Database,
+    rng: &mut SeededRng,
+    type_hint: &TypeHint<'db>,
+    config: &WorldGenConfig,
+) -> Option<String> {
+    let max: u64 = match type_hint {
+        TypeHint::U8 => u8::MAX.into(),
+        TypeHint::U16 => u16::MAX.into(),
+        // `index` is 32 bits unless the `index-64` feature is on.
+        TypeHint::U32 | TypeHint::Index => u32::MAX.into(),
+        TypeHint::U64 | TypeHint::Int => u64::MAX,
+        _ => return None,
+    };
+    if config.hex_probability == 0 || !config.check_probability(rng, config.hex_probability) {
+        return None;
+    }
+    let value = match rng.random_bool(0.5) {
+        true => rng.random_range(0..=max.min(255)),
+        false => rng.random_range(0..=max),
+    };
+    let digits = match rng.random_bool(0.5) {
+        true => format!("0x{value:X}"),
+        false => format!("0x{value:x}"),
+    };
+    Some(match needs_integer_type_hint(type_hint) {
+        true => format!(": {} / {}", pretty_type_hint(db, type_hint.C()), digits),
+        false => digits,
+    })
 }
 
 /// Generate a function call expression.
