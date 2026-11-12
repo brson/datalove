@@ -1076,6 +1076,8 @@ dependencies = [
  "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-datalit",
+ "datalove-rt",
+ "datalove-rtdt",
  "datalove-sys-packages",
  "datalove-vio",
  "divan",

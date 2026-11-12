@@ -443,7 +443,8 @@ enum LeafInsertResult {
 
 /// Information about a node split.
 struct SplitInfo {
-    /// The separator key to insert into parent.
+    /// The separator key to insert into parent, owned until it is moved into
+    /// a node; `destroy` it on a way out that does not.
     separator_key_buf: AlignedBuffer,
     /// The new right sibling node created by the split.
     new_node: *mut MapNode,
@@ -646,6 +647,9 @@ unsafe fn split_leaf(
 
 /// Insert a separator key and child pointer into an internal node.
 ///
+/// The key is moved in: whichever node it lands in owns it, this one or, if
+/// this one was full and had to split, one of the halves.
+///
 /// Returns Ok if successful, Err(SplitInfo) if the node was full and had to split.
 unsafe fn insert_into_internal(
     rt: &mut RtLocal,
@@ -702,17 +706,9 @@ unsafe fn insert_into_internal(
             std::ptr::copy(src_child, dst_child, shift_count);
         }
 
-        // Clone the separator key into the node.
+        // Move the separator key into the node.
         let key_slot = keys_ptr.add(insert_pos * key_size);
-        let status = crate::c::impls::clone::clone_value(
-            rt,
-            separator_key.as_ptr(),
-            ty.key.as_ref(),
-            key_slot,
-        );
-        if status != RtStatus::Ok {
-            panic!("Failed to clone separator key during insert_into_internal");
-        }
+        std::ptr::copy_nonoverlapping(separator_key.as_ptr(), key_slot, key_size);
 
         // Insert the right child pointer.
         *children_ptr.add(insert_pos + 1) = right_child;
@@ -745,23 +741,12 @@ unsafe fn split_internal_node(
 
         let key_size = ty.key.size() as usize;
 
-        // Clone the middle key as the separator to push up.
+        // Move the middle key out as the separator to push up.
         let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.key.as_ref());
-        let status = crate::c::impls::clone::clone_value(
-            rt,
+        std::ptr::copy_nonoverlapping(
             keys_ptr.add(split_point * key_size),
-            ty.key.as_ref(),
             separator_key_buf.as_mut_ptr(),
-        );
-        if status != RtStatus::Ok {
-            panic!("Failed to clone separator key during internal node split");
-        }
-
-        // Destroy the separator key in the old node since we've cloned it out.
-        let _ = crate::c::impls::destroy::any_destroy_local(
-            rt,
-            keys_ptr.add(split_point * key_size),
-            ty.key.as_ref(),
+            key_size,
         );
 
         // Move keys after split_point (excluding the separator) to new node.
@@ -1063,22 +1048,16 @@ unsafe fn propagate_split_up(
             // Create new internal root.
             let new_root = alloc_internal_node(rt, ty);
             if new_root.is_null() {
+                split_info.destroy(rt, ty.key);
                 return RtStatus::Error;
             }
 
             let root_keys_ptr = internal_keys_ptr(new_root, ty);
             let root_children_ptr = internal_child_ptrs_ptr(new_root, ty);
 
-            // Clone separator key into new root.
-            let status = crate::c::impls::clone::clone_value(
-                rt,
-                split_info.separator_key_buf.as_ptr(),
-                ty.key.as_ref(),
-                root_keys_ptr,
-            );
-            if status != RtStatus::Ok {
-                return RtStatus::Error;
-            }
+            // Move separator key into new root.
+            std::ptr::copy_nonoverlapping(
+                split_info.separator_key_buf.as_ptr(), root_keys_ptr, ty.key.size() as usize);
 
             // Set children.
             *root_children_ptr.add(0) = child;
@@ -1086,8 +1065,6 @@ unsafe fn propagate_split_up(
 
             write_node_len(new_root, 1);
             *root_ptr = new_root;
-
-            split_info.destroy(rt, ty.key);
             return RtStatus::Ok;
         }
 
@@ -1100,15 +1077,10 @@ unsafe fn propagate_split_up(
                 split_info.new_node,
                 ty,
             ) {
-                Ok(()) => {
-                    // Successfully inserted into parent, done!
-                    split_info.destroy(rt, ty.key);
-                    return RtStatus::Ok;
-                }
+                // The separator moved into the parent, or into one of its
+                // halves if it split, and the split goes on up.
+                Ok(()) => return RtStatus::Ok,
                 Err(new_split_info) => {
-                    // Parent split, continue propagating up.
-                    // Destroy the old split_info before replacing it.
-                    split_info.destroy(rt, ty.key);
                     child = parent;
                     split_info = new_split_info;
                 }
@@ -1118,30 +1090,22 @@ unsafe fn propagate_split_up(
         // If we get here, the root split.
         let new_root = alloc_internal_node(rt, ty);
         if new_root.is_null() {
+            split_info.destroy(rt, ty.key);
             return RtStatus::Error;
         }
 
         let root_keys_ptr = internal_keys_ptr(new_root, ty);
         let root_children_ptr = internal_child_ptrs_ptr(new_root, ty);
 
-        // Clone separator key into new root.
-        let status = crate::c::impls::clone::clone_value(
-            rt,
-            split_info.separator_key_buf.as_ptr(),
-            ty.key.as_ref(),
-            root_keys_ptr,
-        );
-        if status != RtStatus::Ok {
-            return RtStatus::Error;
-        }
+        // Move separator key into new root.
+        std::ptr::copy_nonoverlapping(
+            split_info.separator_key_buf.as_ptr(), root_keys_ptr, ty.key.size() as usize);
 
         *root_children_ptr.add(0) = child;
         *root_children_ptr.add(1) = split_info.new_node;
 
         write_node_len(new_root, 1);
         *root_ptr = new_root;
-
-        split_info.destroy(rt, ty.key);
         RtStatus::Ok
     }
 }
@@ -1758,10 +1722,11 @@ unsafe fn merge_with_left_internal(
         let parent_keys_ptr = internal_keys_ptr(parent, ty);
 
 
-        // Clone parent separator down to left.
+        // Move parent separator down to left; the caller removes its slot
+        // from the parent without destroying it.
         let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
         let left_separator_slot = left_keys_ptr.add(left_len as usize * key_size);
-        let _ = crate::c::impls::clone::clone_value(rt, parent_key, ty.key.as_ref(), left_separator_slot);
+        std::ptr::copy_nonoverlapping(parent_key, left_separator_slot, key_size);
 
         // Copy all keys from node to left.
         if node_len > 0 {
@@ -1833,6 +1798,7 @@ unsafe fn internal_remove_key(
     rt: &mut RtLocal,
     node: *mut MapNode,
     key_idx: usize,
+    moved_out: bool,
     ty: MapTy,
 ) {
     unsafe {
@@ -1841,9 +1807,11 @@ unsafe fn internal_remove_key(
         let children_ptr = internal_child_ptrs_ptr(node, ty);
         let key_size = ty.key.size() as usize;
 
-        // Destroy the key.
+        // Destroy the key, unless it has been moved out.
         let key_slot = keys_ptr.add(key_idx * key_size);
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, key_slot, ty.key.as_ref());
+        if !moved_out {
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, key_slot, ty.key.as_ref());
+        }
 
         // Shift keys left.
         if key_idx < (len - 1) as usize {
@@ -1948,27 +1916,31 @@ unsafe fn fix_underflow(
         if child_idx > 0 {
             // Merge with left sibling.
             let left = *children_ptr.add(child_idx - 1);
-            match child_tag {
+            let moved_out = match child_tag {
                 MapNodeTag::Leaf => {
                     merge_with_left_leaf(rt, left, child, ty);
+                    false
                 }
                 MapNodeTag::Internal => {
                     merge_with_left_internal(rt, parent, child_idx - 1, left, child, ty);
+                    true
                 }
-            }
-            internal_remove_key(rt, parent, child_idx - 1, ty);
+            };
+            internal_remove_key(rt, parent, child_idx - 1, moved_out, ty);
         } else {
             // Merge with right sibling.
             let right = *children_ptr.add(child_idx + 1);
-            match child_tag {
+            let moved_out = match child_tag {
                 MapNodeTag::Leaf => {
                     merge_with_left_leaf(rt, child, right, ty);
+                    false
                 }
                 MapNodeTag::Internal => {
                     merge_with_left_internal(rt, parent, child_idx, child, right, ty);
+                    true
                 }
-            }
-            internal_remove_key(rt, parent, child_idx, ty);
+            };
+            internal_remove_key(rt, parent, child_idx, moved_out, ty);
         }
 
         // Check if parent underflows.

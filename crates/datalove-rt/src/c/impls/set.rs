@@ -854,6 +854,9 @@ unsafe fn find_leaf_with_path(
 }
 
 /// Insert a separator key and child pointer into an internal node.
+///
+/// The key is moved in: whichever node it lands in owns it, this one or, if
+/// this one was full and had to split, one of the halves.
 unsafe fn insert_into_internal(
     rt: &mut RtLocal,
     node: *mut SetNode,
@@ -907,21 +910,9 @@ unsafe fn insert_into_internal(
             std::ptr::copy(src_child, dst_child, shift_count);
         }
 
-        // Clone the separator key into the node.
+        // Move the separator key into the node.
         let key_slot = keys_ptr.add(insert_pos * element_size);
-        let status = crate::c::impls::clone::clone_value(
-            rt,
-            separator_key.as_ptr(),
-            ty.elem.as_ref(),
-            key_slot,
-        );
-        if status != RtStatus::Ok {
-            return Err(SplitInfo {
-                separator_key_buf: AlignedBuffer::new(0),
-                new_node: std::ptr::null_mut(),
-                insert_result: LeafInsertResult::NeedsSplit,
-            });
-        }
+        std::ptr::copy_nonoverlapping(separator_key.as_ptr(), key_slot, element_size);
 
         // Insert the right child pointer.
         *children_ptr.add(insert_pos + 1) = right_child;
@@ -958,27 +949,12 @@ unsafe fn split_internal_node(
         let new_children_ptr = internal_child_ptrs_ptr(new_internal, ty);
         let element_size = ty.elem.size() as usize;
 
-        // Clone the middle key as the separator to push up.
+        // Move the middle key out as the separator to push up.
         let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.elem.as_ref());
-        let status = crate::c::impls::clone::clone_value(
-            rt,
+        std::ptr::copy_nonoverlapping(
             keys_ptr.add(split_point * element_size),
-            ty.elem.as_ref(),
             separator_key_buf.as_mut_ptr(),
-        );
-        if status != RtStatus::Ok {
-            return SplitInfo {
-                separator_key_buf: AlignedBuffer::new(0),
-                new_node: std::ptr::null_mut(),
-                insert_result: LeafInsertResult::NeedsSplit,
-            };
-        }
-
-        // Destroy the separator key in the old node since we've cloned it out.
-        let _ = crate::c::impls::destroy::any_destroy_local(
-            rt,
-            keys_ptr.add(split_point * element_size),
-            ty.elem.as_ref(),
+            element_size,
         );
 
         // Move keys after split_point (excluding the separator) to new node.
@@ -1047,17 +1023,9 @@ unsafe fn propagate_split_up(
             let root_keys_ptr = internal_keys_ptr(new_root, ty);
             let root_children_ptr = internal_child_ptrs_ptr(new_root, ty);
 
-            // Clone separator into new root.
-            let status = crate::c::impls::clone::clone_value(
-                rt,
-                split_info.separator_key_buf.as_ptr(),
-                ty.elem.as_ref(),
-                root_keys_ptr,
-            );
-            if status != RtStatus::Ok {
-                split_info.destroy(rt, ty.elem.as_ref());
-                return status;
-            }
+            // Move separator into new root.
+            std::ptr::copy_nonoverlapping(
+                split_info.separator_key_buf.as_ptr(), root_keys_ptr, ty.elem.size() as usize);
 
             // Set children: old root and new sibling.
             *root_children_ptr = *root_ptr as *mut SetNode;
@@ -1065,7 +1033,6 @@ unsafe fn propagate_split_up(
             write_node_len(new_root, 1);
 
             *root_ptr = new_root;
-            split_info.destroy(rt, ty.elem.as_ref());
             return RtStatus::Ok;
         }
 
@@ -1080,13 +1047,11 @@ unsafe fn propagate_split_up(
                 ty,
             );
 
+            // The separator moved into the parent, or into one of its halves
+            // if it split, and the split goes on up.
             match result {
-                Ok(()) => {
-                    split_info.destroy(rt, ty.elem.as_ref());
-                    return RtStatus::Ok;
-                }
+                Ok(()) => return RtStatus::Ok,
                 Err(new_split_info) => {
-                    split_info.destroy(rt, ty.elem.as_ref());
                     split_info = new_split_info;
 
                     if i == 0 {
@@ -1100,23 +1065,14 @@ unsafe fn propagate_split_up(
                         let root_keys_ptr = internal_keys_ptr(new_root, ty);
                         let root_children_ptr = internal_child_ptrs_ptr(new_root, ty);
 
-                        let status = crate::c::impls::clone::clone_value(
-                            rt,
-                            split_info.separator_key_buf.as_ptr(),
-                            ty.elem.as_ref(),
-                            root_keys_ptr,
-                        );
-                        if status != RtStatus::Ok {
-                            split_info.destroy(rt, ty.elem.as_ref());
-                            return status;
-                        }
+                        std::ptr::copy_nonoverlapping(
+                            split_info.separator_key_buf.as_ptr(), root_keys_ptr, ty.elem.size() as usize);
 
                         *root_children_ptr = *root_ptr as *mut SetNode;
                         *root_children_ptr.add(1) = split_info.new_node;
                         write_node_len(new_root, 1);
 
                         *root_ptr = new_root;
-                        split_info.destroy(rt, ty.elem.as_ref());
                         return RtStatus::Ok;
                     }
                 }
@@ -1492,13 +1448,10 @@ unsafe fn merge_with_left_internal(
         let node_keys_ptr = internal_keys_ptr(node, ty);
         let node_children_ptr = internal_child_ptrs_ptr(node, ty);
 
+        // Move the parent's separator down; the caller removes its slot from
+        // the parent without destroying it.
         let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
-        let _ = crate::c::impls::clone::clone_value(
-            rt,
-            parent_key,
-            ty.elem.as_ref(),
-            left_keys_ptr.add(left_len as usize * size),
-        );
+        std::ptr::copy_nonoverlapping(parent_key, left_keys_ptr.add(left_len as usize * size), size);
 
         if node_len > 0 {
             std::ptr::copy_nonoverlapping(
@@ -1543,11 +1496,13 @@ unsafe fn merge_with_left_leaf(
     }
 }
 
-/// Removes a separator and the child to its right from an internal node.
+/// Removes a separator and the child to its right from an internal node,
+/// destroying the separator unless it has been moved out.
 unsafe fn internal_remove_key(
     rt: &mut RtLocal,
     node: *mut SetNode,
     key_idx: usize,
+    moved_out: bool,
     ty: SetTy,
 ) {
     unsafe {
@@ -1556,7 +1511,9 @@ unsafe fn internal_remove_key(
         let children_ptr = internal_child_ptrs_ptr(node, ty);
         let size = ty.elem.size() as usize;
 
-        let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(key_idx * size), ty.elem.as_ref());
+        if !moved_out {
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(key_idx * size), ty.elem.as_ref());
+        }
 
         let after = (len - 1) as usize - key_idx;
         if after > 0 {
@@ -1611,11 +1568,17 @@ unsafe fn fix_underflow(
         } else {
             (child_idx, child, *children_ptr.add(child_idx + 1))
         };
-        match child_tag {
-            SetNodeTag::Leaf => merge_with_left_leaf(rt, left, right, ty),
-            SetNodeTag::Internal => merge_with_left_internal(rt, parent, left_idx, left, right, ty),
-        }
-        internal_remove_key(rt, parent, left_idx, ty);
+        let moved_out = match child_tag {
+            SetNodeTag::Leaf => {
+                merge_with_left_leaf(rt, left, right, ty);
+                false
+            }
+            SetNodeTag::Internal => {
+                merge_with_left_internal(rt, parent, left_idx, left, right, ty);
+                true
+            }
+        };
+        internal_remove_key(rt, parent, left_idx, moved_out, ty);
 
         if read_node_len(parent) < MIN_KEYS {
             RemoveResult::Underflow

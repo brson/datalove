@@ -26,6 +26,8 @@ bct.workspace = true
 salsa.workspace = true
 datalove-ct.workspace = true
 rmx.workspace = true
+datalove-rt.workspace = true
+datalove-rtdt.workspace = true
 
 [[bench]]
 name = "parallel"
@@ -45,4 +47,8 @@ harness = false
 
 [[bench]]
 name = "runtime"
+harness = false
+
+[[bench]]
+name = "btree"
 harness = false
