@@ -285,8 +285,18 @@ partial def body (j : Json) : Except String (List Stmt) := do
   (← j.getArr?).toList.mapM stmtFromSerde
 
 partial def funFromSerde (j : Json) : Except String FunDecl := do
-  if let Option.some tp := optField j "type_params" then
-    if (← tp.getArr?).size != 0 then unsupported "generic"
+  let tparams ← match optField j "type_params" with
+    | Option.none => pure []
+    | Option.some tp => (← tp.getArr?).toList.mapM (·.getStr?)
+  let bounds ← match optField j "type_bounds" with
+    | Option.none => pure []
+    | Option.some bs => (← bs.getArr?).toList.mapM fun b =>
+      if b.isNull then pure Option.none else do
+        match ← b.getStr? with
+        | "Ord" => pure (Option.some Bound.ord)
+        | "Float" => pure (Option.some Bound.float)
+        | "FixedInt" => pure (Option.some Bound.fixedint)
+        | other => throw s!"unknown bound {other}"
   let params ← (← (← field j "params").getArr?).toList.mapM fun p => do
     if (← (← field p "is_comptime").getBool?) then unsupported "const parameter"
     pure (← modeOf (← (← field p "mode").getStr?), ← (← field p "name").getStr?,
@@ -294,7 +304,8 @@ partial def funFromSerde (j : Json) : Except String FunDecl := do
   let ret ← match optField j "return_type" with
     | Option.none => pure Option.none
     | Option.some h => Option.some <$> hintFromSerde h
-  pure (.mk (← (← field j "name").getStr?) params ret (← body (← field j "body")))
+  let tps := tparams.zip (bounds ++ List.replicate (tparams.length - bounds.length) Option.none)
+  pure (.mk (← (← field j "name").getStr?) tps params ret (← body (← field j "body")))
 
 end
 

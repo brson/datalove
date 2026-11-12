@@ -406,9 +406,15 @@ fn check_unhinted<'db>(
                 }
             }
             // A float negates to its own type, so the expected width reaches
-            // the operand.
+            // the operand. The operand is only read, as when the negation is
+            // synthesized, so it is borrowed: `-(mk().r!)` reads a field of a
+            // temporary either way.
             if is_float_type(expected) {
-                check_expr(ctx, ctx.expr(unary.operand), expected)?;
+                let old_ref_context = ctx.ref_context;
+                ctx.ref_context = true;
+                let checked = check_expr(ctx, ctx.expr(unary.operand), expected);
+                ctx.ref_context = old_ref_context;
+                checked?;
                 ctx.store_expr_type(expr, expected);
                 return Ok(());
             }

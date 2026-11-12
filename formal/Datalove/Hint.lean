@@ -61,6 +61,8 @@ deriving instance Repr for Hint
 that names nothing, which datalit reports as `CannotSynthesize`. -/
 inductive ConvErrKind where
   | unused | shadowed | unguarded | inKey | unbound
+  /-- A type parameter inside a `rec` (T066). -/
+  | generic
   deriving DecidableEq, Repr
 
 structure ConvErr where
@@ -117,6 +119,35 @@ def Variants.containsRec : Variants → Bool
 
 end
 
+mutual
+
+/-- Whether a type parameter is anywhere in a type, as `contains_var` in
+`types.rs`. -/
+def Ty.containsVar : Ty → Bool
+  | .var _ => true
+  | .mu b => b.containsVar
+  | .tuple ts => ts.containsVar
+  | .struct fs | .table fs => fs.containsVar
+  | .list t | .set t | .option t | .result t | .tensor t _ | .term _ t => t.containsVar
+  | .map k v => k.containsVar || v.containsVar
+  | .enum vs => vs.containsVar
+  | _ => false
+
+def Tys.containsVar : Tys → Bool
+  | .nil => false
+  | .cons t ts => t.containsVar || ts.containsVar
+
+def Fields.containsVar : Fields → Bool
+  | .nil => false
+  | .cons _ t fs => t.containsVar || fs.containsVar
+
+def Variants.containsVar : Variants → Bool
+  | .nil => false
+  | .atom _ vs => vs.containsVar
+  | .term _ t vs => t.containsVar || vs.containsVar
+
+end
+
 namespace ConvM
 
 def fail (kind : ConvErrKind) (name : String) : ConvM α :=
@@ -147,13 +178,17 @@ def markUsed : List Binder → Nat → List Binder
 
 /-- A use of a name, as `RecScope::lookup`, or when no `rec` binds it, the
 alias's type, as `resolve` and `check_named`: a type with a `rec` in it is
-no map's key or set's element. -/
+no map's key or set's element, and one with a type parameter in it is not
+inside a `rec`. -/
 def lookup (aliases : Aliases) (name : String) : ConvM Ty := do
   let s ← get
   match s.binders.findIdx? (·.name == name) with
   | none => match aliases.lookup name with
     | none => fail .unbound name
-    | some t => if s.inKey && t.containsRec then fail .inKey name else pure t
+    | some t =>
+      if s.inKey && t.containsRec then fail .inKey name
+      else if !s.binders.isEmpty && t.containsVar then fail .generic name
+      else pure t
   | some depth =>
     let b := s.binders[depth]!
     set { s with binders := markUsed s.binders depth }

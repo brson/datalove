@@ -1,5 +1,6 @@
 // A non-copy field or element of a temporary may be read where it is
-// borrowed: under `debuglog`, as an operand, under `@`, as a `ref` argument.
+// borrowed: under `debuglog`, as an operand, under `@`, as a `ref` argument,
+// under `-` whether the negation is synthesized or checked against a float.
 // It is read through a reference, not cloned, and the temporary is dropped
 // once the borrow is done.
 
@@ -19,6 +20,10 @@ fun ages(): %{string = string}
   ret %{"ada" = "36"}
 end fun
 
+fun reading(): {r: !f32}
+  ret {r = ok 1.5}
+end fun
+
 fun is_b(ref s: string): bool
   ret s == "b"
 end fun
@@ -35,3 +40,7 @@ debuglog b
 debuglog pair().1[0]!
 debuglog ages()["ada"]!
 debuglog is_b(ref names()[1]!)
+let c = -(reading().r!)
+debuglog c
+let d: f32 = -(reading().r!)
+debuglog d

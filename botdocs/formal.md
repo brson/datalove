@@ -250,14 +250,20 @@ doc. The datalit fixture `79_atom_then_hinted_term_of_its_name` holds it in
 The third part takes datafun: a slice of
 [its typing rules](datafun-typing-rules.md), written from the doc as the
 literal typing was (`formal/Datalove/Fun.lean`). The slice is scripts of
-functions, type aliases and statements: `let` and `var`, binding a name or a
+functions, generic or not, type aliases and statements: `let` and `var`, binding a name or a
 pattern, `set` with or without an operator and through fields and indexes,
 `if` and the binding `if`, `loop` and `loop while`, `for`, `match`,
 `break`, `continue`, `ret`, `debuglog` and `call`; datalit's literal forms,
 which datafun types by datalit's rules with a context added; and datafun's
 variables, places with field and index steps, fields and indexes of what is
 not a place, operators, `?`, `!`, `@` and calls, each in a borrowed position
-or not. It leaves out generics, modules and requires, and consts. A script's
+or not. It leaves out modules and requires, and consts. A function's type
+parameters are names for themselves, in scope in its signature and body as
+aliases are; one is in a class only by its bound, a set or map over one
+needs an order (F061), and a call infers what each stands for from its
+arguments and then from what it is expected to be, as the Rust does, then
+holds the answers to their bounds (F092) and reports one nothing decided
+(F101). A script's
 aliases and its functions' signatures are resolved first, in the order they
 are written, each seeing the aliases above it, as the Rust's name
 resolution does; hint conversion is datalit's with the aliases in scope
@@ -281,13 +287,16 @@ three times a line at a time: a type or value changed, an operator swapped,
 `?`, `!` or `@` added, a name unbound, a `ret` dropped, a stray `break`,
 `set` or `call`, or a statement added that computes from the parameters and
 locals in scope, unwraps them, matches on them with a binding `if`, calls
-with them, reads a field or element of them, borrowed or not, or sets one. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
+with them, reads a field or element of them, borrowed or not, or sets one,
+or changes a generic's bound, uses its type parameters, or calls it with
+what is at hand. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
 the oracle's input, read as it is (`formal/Datalove/FunJson.lean`); a script
 using a form outside the slice is skipped and counted. A corpus of cases
 written by hand runs first; worldgen's parameters are mostly scalars, so it
-is the corpus that reaches F069 to F073 most. Thirty thousand scripts from a
-random seed agree on every diagnostic, all but the 1773 that do not parse
-inside the slice, reaching every statement code the slice has.
+is the corpus that reaches F069 to F073 most, and F101, since every generic
+worldgen writes names its type parameter in a parameter. Thirty thousand
+scripts from a random seed agree on every diagnostic, all but the 1216 that
+do not parse inside the slice, reaching every statement code the slice has.
 
 What it found:
 
@@ -325,6 +334,22 @@ What it found:
   says why), and a borrowed one is read through a reference: `f()[0]?@`
   cloned twice, and `debuglog f().name` leaked the temporary. The backend
   fixture `45_borrowed_part_of_a_temporary` holds both.
+- **Generics agreed on the first run**, worldgen writing generic functions
+  of a dozen shapes and calling them, mutations changing, dropping or adding
+  a bound, using a type parameter in a body and calling a generic with what
+  is at hand. The model's own call rule was wrong where nothing had tested
+  it: it reported a mode marker that disagreed with its parameter as it
+  reached each argument, where the Rust reports every one before checking
+  any, so `call g(1, ref true)` lost its second F057.
+- **Checking a negation against a float did not borrow its operand.**
+  Synthesizing `-e` reads `e` in a borrowed position, but checking it
+  against `f32` or `f64` passed the type down to `e` outside one, so
+  `let y: f32 = -(mk().r!)` was F070 where `let y = -(mk().r!)` was accepted.
+  A generic showed it: with `T is float`, `let y: T = -(mk(x).r!)` takes
+  the synthesizing path, and its instance at `f32` the other, so the generic
+  was accepted and its instance refused. Working out what the check-once
+  theorem below would need found it. The operand is now borrowed either way;
+  the backend fixture `45_borrowed_part_of_a_temporary` holds it.
 - **Worldgen could recurse without end.** An argument of a call may itself
   be a call, with no bound, so a function of enough parameters drew calls
   inside calls until the stack overflowed: past one expected call per call,
@@ -429,16 +454,24 @@ In rough order of what to do next:
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's
   expressions, which only datalit's literals have (`Lit.check_sound`).
-- **The rest of datafun.** Generics, whose substitution lemma is what
-  monomorphization relies on, modules and consts are outside the slice. The
+- **Checking a generic once is enough.** Generics are modelled, and agree
+  with the Rust, but the theorem monomorphization relies on is not yet
+  proved: that a generic body that checks quietly checks quietly at any type
+  arguments its bounds admit. It will take inference as given, as the
+  theorems above do, assuming it answers on an instance what it answered on
+  the generic, substituted, and that expecting the type it would find
+  anyway changes nothing. It has to leave out recursive type arguments: the
+  Rust's `ord` admits them, and they run, but an instance that spells one
+  into a set's element or map's key is T065, which only refuses the
+  spelling (an inferred `#{x@}` over a recursive `x` is accepted).
+- **The rest of datafun.** Modules and consts are outside the slice. The
   serde AST already carries them; the model and the generator's
   configuration are what widen.
-- **Type parameters in hints, and aliases in the conversion proof.** Hints
-  convert with aliases, but not type parameters, so the conversion's T066
-  check is not modelled. `Hint.convert_wf` is proved of the conversion with
-  no aliases, datalit's; with them, it would need each alias's type well
-  formed, and a recursive one kept out of keys, which the conversion checks
-  (T065) and the proof does not yet use.
+- **Aliases in the conversion proof.** Hints convert with aliases and type
+  parameters, and T066 is modelled, but `Hint.convert_wf` is proved of the
+  conversion with no aliases, datalit's; with them, it would need each
+  alias's type well formed, and a recursive one kept out of keys, which the
+  conversion checks (T065) and the proof does not yet use.
 - **The random generator rarely makes a type that starts with two `rec`s**,
   so the transitivity chains in `law_tests` would not have found the third
   hole above; the exhaustive test does.

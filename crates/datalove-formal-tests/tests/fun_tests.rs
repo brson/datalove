@@ -3,15 +3,16 @@
 //!
 //! The model in `formal/Datalove/Fun.lean` is written from
 //! `botdocs/datafun-typing-rules.md` for a slice of datafun: scripts of
-//! functions, type aliases and statements, without generics, modules or
-//! consts. A script outside it is skipped and counted.
+//! functions, generic or not, type aliases and statements, without modules
+//! or consts. A script outside it is skipped and counted.
 //!
 //! Scripts come from worldgen, made to stay inside the slice, and are then
 //! changed a line at a time at random, so that most are wrong somewhere: a
 //! type or a literal changed, an operator swapped, `?`, `!` or `@` added, a
 //! name made unbound, a `ret` dropped, a stray `break` or `set` added, a field
 //! or index read or written through, borrowed or not, a `match`'s case
-//! damaged. Before
+//! damaged, a generic's bound changed or its parameters used, a generic
+//! called with what is at hand. Before
 //! them runs a corpus of cases written by hand. Each script is parsed and
 //! typechecked, and the codes of every diagnostic the Rust reports, in order,
 //! are compared with the model's.
@@ -125,14 +126,37 @@ const CORPUS: &[&str] = &[
     "fun f(mut s: {a: u8, l: [u8]}, mut m: %{string = u8}, mut t: [|u8, 2|], mut n: u8): ?()\n  set s.a = 1\n  set s.zz = 1\n  set s.l[0]? = 2\n  set s.l[0] = 2\n  set m[\"k\"] = 1\n  set m[\"k\"] += 1\n  set m[1] = true\n  set m[\"k\"]? = 2\n  set m[\"k\"]! = 2\n  set t[0]? = t[1]?\n  set t[0]?[1]? = 1\n  set n[0]? = 1\n  set s.l[0][0]? = 1\n  set s.a +!= 1\n  set s.a += 1\n  set s.a += true\n  ret some ()\nend fun\n",
     // A `for` over a field or an element.
     "fun f(s: {l: [u8], ls: [[u8]]}): ?()\n  for x in ref s.l\n    let a: u8 = x\n  end for\n  for x in ref s.ls[0]?\n    let a: string = x\n  end for\n  for x in ref s.zz\n    call nope()\n  end for\n  ret some ()\nend fun\n",
+    // Signatures: a type parameter in a set's element or a map's key has to be
+    // ordered (F061), at any depth but a map's value.
+    "fun a<T>(s: #{T})\nend fun\nfun b<T>(x: T): %{T = u8}\n  ret %{}\nend fun\nfun c<T>(m: %{u8 = #{?T}}) where { T is ord, }\nend fun\nfun d<T>(l: [%{(T,) = u8}])\nend fun\nfun e<T>(m: %{u8 = T})\nend fun\ncall a(#{})\n",
+    // Bindings in a body are held to F061 too, where their type is written.
+    "fun f<T, U>(x: T, y: U): u8 where { T is ord, }\n  var s: #{T}\n  var t: #{U}\n  let u: %{U = T} = %{}\n  let v: [#{U}] = []\n  let w: #{T} = #{x}\n  let z = #{y}\n  ret 0\nend fun\n",
+    // A bounded type parameter has the operators every type of its bound has.
+    "fun f<F, I, O, A>(a: F, b: F, i: I, j: I, o: O, p: O, x: A): ?bool where { F is float, I is fixedint, O is ord, }\n  let s = a + b\n  let d = a / b\n  let n = -a\n  let c = a .< b\n  let e = a == b\n  let k = i +? j\n  let m = i + j\n  let q = -?i\n  let r = -i\n  let t = i <= j\n  let u = o == p\n  let v = o .< p\n  let w = x == x\n  let y = (a, a) == (b, b)\n  let z = -!i\n  let g = not a\n  ret some true\nend fun\nfun h<F, I>(mut a: F, mut i: I): ?() where { F is float, I is fixedint, }\n  set a += a\n  set i +?= i\n  set i += i\n  set a +?= a\n  ret some ()\nend fun\n",
+    // A type parameter is no literal's type, and is not copied.
+    "fun f<T>(x: T, s: {v: T}, l: [T]): ?T\n  let a: T = 1\n  let b = s.v\n  let c = l[0]?\n  debuglog s.v\n  let d = x +? 1\n  let e: ?T = none\n  let g: T = s.v@\n  ret some x\nend fun\n",
+    // Calls: type arguments inferred from the arguments, then from what is
+    // expected; open (T016), refused by a bound (F092), or undecided (F101).
+    "fun id<T>(x: T): T\n  ret x\nend fun\nfun z<T>(): ?T\n  ret none\nend fun\nfun two<T>(a: T, b: T): T\n  ret a\nend fun\nfun fl<T>(a: T): T where { T is float, }\n  ret a\nend fun\nfun fi<T>(a: T): T where { T is fixedint, }\n  ret a\nend fun\nlet a: u32 = id(5)\nlet b = id(5)\nlet c: u8 = b\ndebuglog id([])\ndebuglog z()\nlet d: ?u8 = z()\nlet e = two(1, : u8 / 2)\nlet f = two(1, 2.0)\nlet g = fl(1.5)\nlet h = fl(1)\nlet i: u8 = fi(1)\nlet j = fi(: f32 / 1.0)\nlet k: string = id(5)\nlet l = id(ref 5)\nlet m = id()\nlet n = two(none, some 1)\nlet o = id(zz)\nlet p = [id(1), : u8 / 2]\n",
+    // A caller's own type parameter satisfies only the bound it has itself.
+    "fun o<T>(x: T): T where { T is ord, }\n  ret x\nend fun\nfun fl<T>(x: T): T where { T is float, }\n  ret o(x)\nend fun\nfun an<T>(x: T): T\n  ret o(x)\nend fun\nfun or2<T>(x: T): T where { T is ord, }\n  ret o(x)\nend fun\nfun fl2<T>(x: T): T where { T is float, }\n  ret fl(x)\nend fun\nfun i2<T>(x: T): T where { T is fixedint, }\n  ret fl(x)\nend fun\n",
+    // Type parameters among names: no `rec` around one (T066), none named as
+    // one (T063), one shadowing an alias, and none outside its function.
+    "type T: u8\nfun f<T>(x: T): rec L [(L, T)]\n  ret x\nend fun\nfun g<T>(x: rec T [T]): u8\n  ret 0\nend fun\nfun h<U>(x: T, y: U): U\n  let a: T = 300\n  let b: rec M [(M, U)] = []\n  ret y\nend fun\nfun k<T>(x: T): u8\n  let a: T = 300\n  ret 0\nend fun\nlet q: U = 1\nlet r: T = 300\n",
+    // Generics calling generics, at the caller's type parameters.
+    "fun id<T>(x: T): T\n  ret x\nend fun\nfun f<T>(x: T, l: [T]): [T]\n  let a: T = id(x)\n  let b = id(l)\n  let c: [T] = id([])\n  let d = id(x) == id(x)\n  let e: ?T = id(none)\n  ret b\nend fun\n",
+    // `-` reads its operand borrowed, synthesized or checked against a float.
+    "fun mk(): {r: !f32}\n  ret {r = ok 1.5}\nend fun\nlet a: f32 = -(mk().r!)\nlet b = -(mk().r!)\nfun g<T>(x: T): !T where { T is float, }\n  let y: T = -(id(x))\n  ret ok y\nend fun\nfun id<T>(x: T): T\n  ret x\nend fun\n",
+    // Every marker is reported before any argument is checked.
+    "fun g(ref a: u8, b: u8)\nend fun\ncall g(1, ref true)\ncall g(ref true, ref 1)\n",
 ];
 
 fn config() -> WorldGenConfig {
     let mut config = WorldGenConfig::default();
     config.module_count = (1, 1);
     config.functions_per_module = (1, 4);
-    config.generics_per_module = (0, 0);
-    config.generic_call_probability = 0;
+    config.generics_per_module = (0, 3);
+    config.generic_call_probability = 35;
     config.type_aliases_per_module = (0, 0);
     config.type_alias_usage_probability = 0;
     config.enums_per_module = (0, 3);
@@ -164,7 +188,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
     let name = |rng: &mut SeededRng| pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2", "1", "0x10", "1.5", "true"]);
     let step = |rng: &mut SeededRng| pick(rng, STEPS);
-    let changed = match rng.random_range(0..19) {
+    let changed = match rng.random_range(0..21) {
         // A type named in the line changed.
         0 => {
             let ty = pick(rng, TYPES);
@@ -274,6 +298,44 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
                 ["match", _] => fmt!("{indent}match {}", name(rng)),
                 _ => line,
             }
+        }
+        // A generic's bound changed, dropped or added, or a statement added
+        // that uses its type parameters.
+        18 => {
+            let bound = pick(rng, &["ord", "float", "fixedint"]);
+            if let Some(p) = line.find(" where {") {
+                match rng.random_range(0..2) {
+                    0 => line[..p].S(),
+                    _ => ["ord", "float", "fixedint"].iter()
+                        .find(|b| line.contains(&fmt!(" is {b},")))
+                        .map(|b| line.replacen(&fmt!(" is {b},"), &fmt!(" is {bound},"), 1))
+                        .unwrap_or(line),
+                }
+            } else if line.starts_with("fun gen") {
+                fmt!("{line} where {{ {} is {bound}, }}", pick(rng, &["T", "K", "V"]))
+            } else {
+                let (a, b) = (pick(rng, &["x", "a", "b", "k", "v"]), pick(rng, &["x", "a", "b", "k", "v"]));
+                let stmt = match rng.random_range(0..8) {
+                    0 => fmt!("let w: #{{T}} = #{{}}"),
+                    1 => fmt!("var w: %{{{} = u8}}", pick(rng, &["T", "K", "V", "[T]", "?K"])),
+                    2 => fmt!("let w: T = {a}"),
+                    3 => fmt!("let w = {a} {} {b}", pick(rng, OPS)),
+                    4 => fmt!("let w = {}{a}", pick(rng, &["-", "-?", "-!", "not "])),
+                    5 => fmt!("let w = {a} {} {b}", pick(rng, &[".<", "<=", "==", "!="])),
+                    6 => fmt!("let w: {} = {a}", pick(rng, &["T", "?T", "[T]", "K", "V"])),
+                    _ => fmt!("let w = gen0_{}({a})", rng.random_range(0..3)),
+                };
+                fmt!("{line}\n{indent}{stmt}")
+            }
+        }
+        // A generic called with what is at hand, its answer bound with a type
+        // or without.
+        19 => {
+            let args: Vec<String> = (0..rng.random_range(0..3))
+                .map(|_| if rng.random_bool(0.5) { name(rng) } else { pick(rng, VALUES) })
+                .collect();
+            let hint = if rng.random_bool(0.5) { fmt!(": {}", pick(rng, TYPES)) } else { String::new() };
+            fmt!("{line}\n{indent}let w{hint} = gen0_{}({})", rng.random_range(0..3), args.join(", "))
         }
         // A literal at a range's edge, negated.
         _ => fmt!("{line}\n{indent}let w: {} = -{}", pick(rng, &["i8", "u8", "i16", "f32", "int"]), pick(rng, &["5", "128", "129", "300", "1.5"])),

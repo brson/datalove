@@ -341,6 +341,7 @@ def errCode : ConvErrKind → Code
   | .unguarded => "T064"
   | .inKey => "T065"
   | .unbound => "T059"
+  | .generic => "T066"
 
 def convertHint (h : Hint) : Except Code Ty :=
   match h.convert with

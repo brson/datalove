@@ -177,5 +177,6 @@ def ConvErrKind.toJson : ConvErrKind → Json
   | .unguarded => "unguarded"
   | .inKey => "in_key"
   | .unbound => "unbound"
+  | .generic => "generic"
 
 end Datalove

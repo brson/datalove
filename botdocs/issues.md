@@ -37,6 +37,7 @@ home here.
   - [What writing the store demo ran into](#user-content-what-writing-the-store-demo-ran-into)
   - [A printed type loses its alias](#user-content-a-printed-type-loses-its-alias)
   - [`(T)` is read as a tuple of one](#user-content-t-is-read-as-a-tuple-of-one)
+  - [T065 refuses a recursive key only where it is written](#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)
 
 - [The typecheckers: cost and limits](#user-content-the-typecheckers-cost-and-limits)
   - [Deeply nested literals overflow the stack](#user-content-deeply-nested-literals-overflow-the-stack)
@@ -506,6 +507,20 @@ as `(T,)`. A value is the other way: `(x)` is `x` in parentheses, a tuple of one
 is `(x,)`, and a pattern `(x)` is refused (P070). The type printer writes
 `(T,)`, so what is printed reads the same either way; whether `(T)` should be
 refused as a pattern is, or read as `T` in parentheses, is the open part.
+
+### T065 refuses a recursive key only where it is written
+
+**Reproduced.** `let t: #{L} = #{}` with `L` recursive is T065, but
+`let s = #{x@}` with `x: L` is accepted and runs, and so does
+`%{x@ = 1}`: the check is made of hints as they are converted, and an
+inferred type is never converted. A generic `fun one<T>(x: T): #{T} where
+{ T is ord, }` called with an `L` builds a set of `L` the same way, since
+`ord` admits every type. The runtime orders a recursive value as any other,
+so nothing breaks; what the rule leaves open is whether recursive keys are
+meant to be allowed, in which case T065 can go, or refused, in which case
+inference and `ord` have to refuse them too. It is also why the check-once
+theorem in [formal.md](formal.md) leaves recursive type arguments out: an
+instance that spells one into a key is T065 where its generic was not.
 
 ## The typecheckers: cost and limits
 

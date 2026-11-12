@@ -5,11 +5,16 @@ import Datalove.Classes
 # Datafun's statements and expressions
 
 A slice of `botdocs/datafun-typing-rules.md`, written from the doc: scripts
-of functions, type aliases and statements, `match` and patterns included,
-with no generics, modules or consts. A script's top level is a body
-returning `!()`; a function's body sees its parameters, and the aliases
-declared above it, and nothing else the script binds. The aliases and
-signatures are resolved before anything is checked (`resolveNames`).
+of functions, generic or not, type aliases and statements, `match` and
+patterns included, with no modules or consts. A script's top level is a body
+returning `!()`; a function's body sees its parameters, its type parameters,
+and the aliases declared above it, and nothing else the script binds. The
+aliases and signatures are resolved before anything is checked
+(`resolveNames`).
+
+A type parameter is a name for `Ty.var`, in scope in its function's
+signature and body as an alias is (`tparamAliases`). It is in a class only by
+its bound (`Ctx.boundOf`), and a call infers what it stands for.
 
 Expressions are datalit's literal forms, which datafun types by datalit's
 rules with a context added, and datafun's own: variables, places with field
@@ -54,6 +59,12 @@ inductive UnOp where
 
 inductive Mode where
   | in_ | out | ref | mut
+  deriving DecidableEq, Repr, Inhabited
+
+/-- A type parameter's bound. `any`, the bound of one with none written, is
+`Option.none` where a bound is optional. -/
+inductive Bound where
+  | ord | float | fixedint
   deriving DecidableEq, Repr, Inhabited
 
 /-- A field selector: a struct's field by name, a tuple's by position. -/
@@ -165,8 +176,8 @@ inductive Case where
   deriving Inhabited
 
 inductive FunDecl where
-  | mk (name : String) (params : List (Mode × String × Hint)) (ret : Option Hint)
-    (body : List Stmt)
+  | mk (name : String) (tparams : List (String × Option Bound))
+    (params : List (Mode × String × Hint)) (ret : Option Hint) (body : List Stmt)
   deriving Inhabited
 
 end
@@ -192,6 +203,8 @@ inductive Ret where
   | ty (t : Ty)
 
 structure Sig where
+  /-- The type parameters, each with its bound if it has one. -/
+  tparams : List (String × Option Bound) := []
   params : List (Mode × Ty)
   ret : Ret
 
@@ -207,8 +220,11 @@ structure Ctx where
   /-- Whether this is an argument passed `mut` or `out`, which no tensor view
   may be (F073). -/
   mutArg : Bool := false
-  /-- The aliases declared before this point of the script. -/
+  /-- The aliases declared before this point of the script, and the type
+  parameters of the enclosing function, which stand for themselves. -/
   aliases : Aliases := []
+  /-- The bounds of the enclosing function's type parameters that have one. -/
+  bounds : List (String × Bound) := []
 
 /-- A borrowed position: an operand, the operand of `@`, `debuglog`'s
 argument, a compound `set`'s value, a `for`'s collection. -/
@@ -238,6 +254,81 @@ def Ctx.lookup (Γ : Ctx) (x : String) : Option (Ty × Kind) :=
 
 def Ctx.bind (Γ : Ctx) (x : String) (t : Ty) (k : Kind) : Ctx :=
   { Γ with vars := (x, t, k) :: Γ.vars }
+
+/-- A type's bound, if it is a type parameter with one, as `operand_bound`. -/
+def Ctx.boundOf (Γ : Ctx) : Ty → Option Bound
+  | .var n => Γ.bounds.lookup n
+  | _ => Option.none
+
+/-- Whether a type parameter has promised an order: every bound implies
+`ord`. -/
+def Ctx.ordered (Γ : Ctx) (n : String) : Bool := (Γ.bounds.lookup n).isSome
+
+mutual
+
+/-- Whether a type parameter that has not promised an order is anywhere in a
+type, as `first_unordered_param`. -/
+def _root_.Datalove.Ty.unordered (ok : String → Bool) : Ty → Bool
+  | .var n => !ok n
+  | .tuple ts => ts.unordered ok
+  | .struct fs | .table fs => fs.unordered ok
+  | .list t | .set t | .tensor t _ | .option t | .result t | .term _ t => t.unordered ok
+  | .map k v => k.unordered ok || v.unordered ok
+  | .enum vs => vs.unordered ok
+  | _ => false
+
+def _root_.Datalove.Tys.unordered (ok : String → Bool) : Tys → Bool
+  | .nil => false
+  | .cons t ts => t.unordered ok || ts.unordered ok
+
+def _root_.Datalove.Fields.unordered (ok : String → Bool) : Fields → Bool
+  | .nil => false
+  | .cons _ t fs => t.unordered ok || fs.unordered ok
+
+def _root_.Datalove.Variants.unordered (ok : String → Bool) : Variants → Bool
+  | .nil => false
+  | .atom _ vs => vs.unordered ok
+  | .term _ t vs => t.unordered ok || vs.unordered ok
+
+end
+
+mutual
+
+/-- Whether a type puts a type parameter that has not promised an order in a
+set's element or a map's key, at any depth, as
+`first_unordered_collection_key`: the F061 test. A map's values are not
+ordered, but a set or map inside one is looked at. -/
+def _root_.Datalove.Ty.unorderedKey (ok : String → Bool) : Ty → Bool
+  | .set t => t.unordered ok || t.unorderedKey ok
+  | .map k v => k.unordered ok || k.unorderedKey ok || v.unorderedKey ok
+  | .list t | .tensor t _ | .option t | .result t | .term _ t => t.unorderedKey ok
+  | .tuple ts => ts.unorderedKey ok
+  | .struct fs | .table fs => fs.unorderedKey ok
+  | .enum vs => vs.unorderedKey ok
+  | _ => false
+
+def _root_.Datalove.Tys.unorderedKey (ok : String → Bool) : Tys → Bool
+  | .nil => false
+  | .cons t ts => t.unorderedKey ok || ts.unorderedKey ok
+
+def _root_.Datalove.Fields.unorderedKey (ok : String → Bool) : Fields → Bool
+  | .nil => false
+  | .cons _ t fs => t.unorderedKey ok || fs.unorderedKey ok
+
+def _root_.Datalove.Variants.unorderedKey (ok : String → Bool) : Variants → Bool
+  | .nil => false
+  | .atom _ vs => vs.unorderedKey ok
+  | .term _ t vs => t.unorderedKey ok || vs.unorderedKey ok
+
+end
+
+/-- Type parameters as aliases, each naming itself, ahead of `aliases`. -/
+def tparamAliases (tps : List (String × Option Bound)) (aliases : Aliases) : Aliases :=
+  tps.map (fun (n, _) => (n, Ty.var n)) ++ aliases
+
+/-- The bounds of the type parameters that have one. -/
+def boundsOf (tps : List (String × Option Bound)) : List (String × Bound) :=
+  tps.filterMap fun (n, b) => b.map (n, ·)
 
 def unitTy : Ty := .tuple .nil
 
@@ -276,18 +367,87 @@ def buildsFromParts : Expr → Bool
   | .hinted _ e => buildsFromParts e
   | _ => false
 
+/-! ## Type arguments -/
+
+mutual
+
+/-- A type with each type parameter `θ` gives a type replaced by it, as
+`substitute_type_params`. -/
+def _root_.Datalove.Ty.inst (θ : List (String × Ty)) : Ty → Ty
+  | .var n => (θ.lookup n).getD (.var n)
+  | .tuple ts => .tuple (ts.inst θ)
+  | .struct fs => .struct (fs.inst θ)
+  | .table cs => .table (cs.inst θ)
+  | .list t => .list (t.inst θ)
+  | .set t => .set (t.inst θ)
+  | .map k v => .map (k.inst θ) (v.inst θ)
+  | .option t => .option (t.inst θ)
+  | .result t => .result (t.inst θ)
+  | .tensor t r => .tensor (t.inst θ) r
+  | .term a t => .term a (t.inst θ)
+  | .enum vs => .enum (vs.inst θ)
+  | .mu b => .mu (b.inst θ)
+  | t => t
+
+def _root_.Datalove.Tys.inst (θ : List (String × Ty)) : Tys → Tys
+  | .nil => .nil
+  | .cons t ts => .cons (t.inst θ) (ts.inst θ)
+
+def _root_.Datalove.Fields.inst (θ : List (String × Ty)) : Fields → Fields
+  | .nil => .nil
+  | .cons n t fs => .cons n (t.inst θ) (fs.inst θ)
+
+def _root_.Datalove.Variants.inst (θ : List (String × Ty)) : Variants → Variants
+  | .nil => .nil
+  | .atom n vs => .atom n (vs.inst θ)
+  | .term n t vs => .term n (t.inst θ) (vs.inst θ)
+
+end
+
+/-- Whether bound `b` admits `t`, as `bound_admits`: `ord` every type, `float`
+the floats and `fixedint` the fixed-width integers. A type parameter of the
+caller's satisfies only its own bound, carried on. -/
+def Ctx.admits (Γ : Ctx) (b : Bound) : Ty → Bool
+  | .var n => Γ.bounds.lookup n == Option.some b
+  | t => match b with
+    | .ord => true
+    | .float => t.isFloat
+    | .fixedint => t.isFixedInt
+
+/-- The type arguments inference decided, in order, or the code of the first
+that an argument left open (T016). One nothing decided is left out, for the
+call to report (F101). -/
+def decided : List (String × Except Code Ty) → Except Code (List (String × Ty))
+  | [] => pure []
+  | (p, .ok t) :: rest => ((p, t) :: ·) <$> decided rest
+  | (_, .error c) :: rest => if c == unknownCode then decided rest else throw c
+
+/-- Whether a call's every type parameter is decided. -/
+def allDecided (tps : List (String × Option Bound)) (θ : List (String × Ty)) : Bool :=
+  tps.all fun (p, _) => (θ.lookup p).isSome
+
+/-- Whether each bounded type parameter's argument is one its bound admits. -/
+def boundsHold (Γ : Ctx) (tps : List (String × Option Bound)) (θ : List (String × Ty)) : Bool :=
+  tps.all fun (p, b) => match b, θ.lookup p with
+    | Option.some b, Option.some t => Γ.admits b t
+    | _, _ => true
+
 /-! ## Classes of types -/
 
 def isFixT (t : Ty) : Bool := t.isFixedInt
 def isFloatT (t : Ty) : Bool := t.isFloat
 
-/-- `Arith(⊕)`, by the doc's table. -/
-def arithAdmits : BinOp → Ty → Bool
-  | .add, t | .sub, t | .mul, t => isFloatT t || t == .int
-  | .div, t => isFloatT t
-  | .addC, t | .subC, t | .mulC, t | .addO, t | .subO, t | .mulO, t => isFixT t
-  | .divC, t | .divO, t => isFixT t || t == .int
-  | _, _ => false
+/-- `Arith(⊕)`, by the doc's table, for a type with bound `b`: a parameter
+bounded to the floats or the fixed-width integers has what they all have. -/
+def arithAdmits (op : BinOp) (t : Ty) (b : Option Bound) : Bool :=
+  let float := b == Option.some .float || isFloatT t
+  let fixed := b == Option.some .fixedint || isFixT t
+  match op with
+  | .add | .sub | .mul => float || t == .int
+  | .div => float
+  | .addC | .subC | .mulC | .addO | .subO | .mulO => fixed
+  | .divC | .divO => fixed || t == .int
+  | _ => false
 
 /-- Whether an operator yields its operand type: the arithmetic ones. -/
 def yieldsOperand : BinOp → Bool
@@ -326,17 +486,28 @@ def fits (Γ : Ctx) : Needs → Bool
 
 mutual
 
-/-- The `Eq` class. -/
-partial def isEqT : Ty → Bool
+/-- The `Eq` class: the numbers, `bool`, `string` and atoms, and the options,
+tuples, structs, terms and enums of them. -/
+def isEqT : Ty → Bool
   | .bool | .string | .atom _ | .int => true
-  | .tuple ts => (tysList ts).all isEqT
-  | .struct fs => (fieldsList fs).all (isEqT ·.2)
+  | .tuple ts => isEqTys ts
+  | .struct fs => isEqFields fs
   | .option t | .term _ t => isEqT t
-  | .enum vs => (Lit.variantsP vs).all fun (_, p) => match p with
-    | Option.none => true
-    | Option.some (.known t) => isEqT t
-    | Option.some _ => false
+  | .enum vs => isEqVariants vs
   | t => t.isNumeric
+
+def isEqTys : Tys → Bool
+  | .nil => true
+  | .cons t ts => isEqT t && isEqTys ts
+
+def isEqFields : Fields → Bool
+  | .nil => true
+  | .cons _ t fs => isEqT t && isEqFields fs
+
+def isEqVariants : Variants → Bool
+  | .nil => true
+  | .atom _ vs => isEqVariants vs
+  | .term _ t vs => isEqT t && isEqVariants vs
 
 end
 
@@ -369,6 +540,41 @@ def elementOf (b : PTy) : InferM PTy := do
   | .map _ v => pure v
   | .tensor e r => pure (if r ≤ 1 then e else .tensor e (r - 1))
   | _ => fresh .unknown
+
+mutual
+
+/-- A signature's type with its type parameters replaced by the variables
+standing for them at a call, as `instantiate` in `infer.rs`. -/
+def instantiate (ps : List (String × PTy)) (t : Ty) : PTy :=
+  if !t.containsVar then .known t else match t with
+  | .var n => (ps.lookup n).getD (.known t)
+  | .tuple ts => .tuple (instTys ps ts)
+  | .struct fs => .struct (instFields ps fs)
+  | .table cs => .table (instFields ps cs)
+  | .list e => .list (instantiate ps e)
+  | .set e => .set (instantiate ps e)
+  | .map k v => .map (instantiate ps k) (instantiate ps v)
+  | .option e => .option (instantiate ps e)
+  | .result e => .result (instantiate ps e)
+  | .tensor e r => .tensor (instantiate ps e) r
+  | .term a e => .term a (instantiate ps e)
+  | .enum vs => .enum (instVariants ps vs)
+  | t => .known t
+
+def instTys (ps : List (String × PTy)) : Tys → List PTy
+  | .nil => []
+  | .cons t ts => instantiate ps t :: instTys ps ts
+
+def instFields (ps : List (String × PTy)) : Fields → List (String × PTy)
+  | .nil => []
+  | .cons n t fs => (n, instantiate ps t) :: instFields ps fs
+
+def instVariants (ps : List (String × PTy)) : Variants → List (String × Option PTy)
+  | .nil => []
+  | .atom n vs => (n, Option.none) :: instVariants ps vs
+  | .term n t vs => (n, Option.some (instantiate ps t)) :: instVariants ps vs
+
+end
 
 /-- The variable a collection's elements share: open, for the collection to
 be reported, when there are none. -/
@@ -444,11 +650,23 @@ partial def infer (Γ : Ctx) : Expr → InferM PTy
     match (resolve t).run s with
     | .ok (from_, s') => set s'; fresh (.adapt from_)
     | .error _ => pure t
-  | .call f _ => match Γ.sigs.lookup f with
-    | Option.some sig => match sig.ret with
-      | .ty r => pure (.known r)
-      | .void => pure (.known unitTy)
+  | .call f args => match Γ.sigs.lookup f with
+    | Option.some sig => (·.1) <$> inferCall Γ sig args
     | Option.none => fresh .unknown
+
+/-- A call's type, as `infer_call`: each type parameter a variable of the
+`unknown` class, unified with what each argument in its positions is; and
+the variables. -/
+partial def inferCall (Γ : Ctx) (sig : Sig) (args : List (Option Mode × Expr)) :
+    InferM (PTy × List (String × PTy)) := do
+  let ps ← sig.tparams.mapM fun (p, _) => do pure (p, ← fresh .unknown)
+  for ((_, a), (_, pt)) in args.zip sig.params do
+    let ta ← infer Γ a
+    unify (instantiate ps pt) ta
+  let r := match sig.ret with
+    | .ty r => instantiate ps r
+    | .void => .known unitTy
+  pure (r, ps)
 
 /-- Expressions that must share a type, and that type. -/
 partial def together (Γ : Ctx) (es : List Expr) : InferM PTy := do
@@ -492,6 +710,22 @@ for one with none, `unknownCode` for one inference could not read). -/
 def inferType (Γ : Ctx) (e : Expr) : Except Code Ty :=
   (do let p ← infer Γ e; resolve p).run' #[]
 
+/-- What a call's type parameters come to, as `call_type_args`: inferred
+from the arguments, and then from what the call is expected to be if that is
+known, each undecided one taking its default. -/
+def callTypeArgs (Γ : Ctx) (f : String) (args : List (Option Mode × Expr)) (expected : Option Ty) :
+    List (String × Except Code Ty) :=
+  match Γ.sigs.lookup f with
+  | Option.none => []
+  | Option.some sig =>
+    let m : InferM (List (String × PTy)) := do
+      let (r, ps) ← inferCall Γ sig args
+      if let Option.some t := expected then unify r (.known t)
+      pure ps
+    match m.run #[] with
+    | .ok (ps, s) => ps.map fun (p, v) => (p, (resolve v).run' s)
+    | .error c => sig.tparams.map fun (p, _) => (p, .error c)
+
 /-- Infer two operands together, unifying each first with an expected type
 if there is one, and give each its default: the inference half of Pair. -/
 def pairTypes (Γ : Ctx) (a b : Expr) (expected : Option Ty) : Except Code Ty × Except Code Ty :=
@@ -515,24 +749,30 @@ whatever it says. -/
 structure InferEnv where
   ty : Ctx → Expr → Except Code Ty
   pair : Ctx → Expr → Expr → Option Ty → Except Code Ty × Except Code Ty
+  /-- A call's type arguments (`callTypeArgs`). -/
+  call : Ctx → String → List (Option Mode × Expr) → Option Ty → List (String × Except Code Ty)
 
 /-- Inference as `Lit.lean` has it. -/
 def inferEnv : InferEnv where
   ty := inferType
   pair := pairTypes
+  call := callTypeArgs
 
 /-- An operator's type, given its operands': Syn-Arith, Syn-Ord, Syn-Eq,
 Syn-Logic. -/
 def finishBinop (Γ : Ctx) (op : BinOp) (t : Ty) : ChkM Ty := do
+  let b := Γ.boundOf t
+  -- What the bounds admit are all numeric, with comparisons; `ord`'s are not.
+  let bounded := b == Option.some .float || b == Option.some .fixedint
   match op with
   | .lt | .gt | .le | .ge =>
-    if t.isNumeric then pure .bool else throw "F026"
+    if bounded || t.isNumeric then pure .bool else throw "F026"
   | .eq | .ne =>
-    if isEqT t then pure .bool else throw "F026"
+    if bounded || isEqT t then pure .bool else throw "F026"
   | .and | .or | .xor =>
     if t == .bool then pure .bool else throw "F026"
   | op =>
-    if !arithAdmits op t then throw "F026"
+    if !arithAdmits op t b then throw "F026"
     if !fits Γ (needs op) then throw "F049"
     pure t
 
@@ -558,6 +798,15 @@ def fieldsOf : List (String × Ty) → Fields
   | [] => .nil
   | (n, t) :: fs => .cons n t (fieldsOf fs)
 
+/-- Each argument whose marker disagrees with its parameter's mode, reported
+(F057), before any argument is checked. -/
+def markers : List (Option Mode × Expr) → List (Mode × Ty) → ChkM Unit
+  | (marker, _) :: args, (mode, _) :: params => do
+    let wanted := if mode == .in_ then Option.none else Option.some mode
+    if marker != wanted then report "F057"
+    markers args params
+  | _, _ => pure ()
+
 /-- Enough fuel for any expression or body a test writes: every call of the
 checker spends one, and running out is an error, never a success. -/
 def fuel : Nat := 1000000
@@ -582,18 +831,19 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
       finishBinop Γ op t
     | .unop .neg a => do
       let t ← synthF env n Γ.borrow a
-      if isFloatT t || t == .int then pure t else throw "F026"
+      if Γ.boundOf t == Option.some .float || isFloatT t || t == .int then pure t
+      else throw "F026"
     | .unop .not a => do
       let t ← synthF env n Γ.borrow a
       if t == .bool then pure t else throw "F026"
     | .unop .negC a => do
       let t ← synthF env n Γ.borrow a
-      if !isFixT t then throw "F026"
+      if !(Γ.boundOf t == Option.some .fixedint || isFixT t) then throw "F026"
       if !Γ.returnsResult then throw "F049"
       pure t
     | .unop .negO a => do
       let t ← synthF env n Γ.borrow a
-      if !isFixT t then throw "F026"
+      if !(Γ.boundOf t == Option.some .fixedint || isFixT t) then throw "F026"
       if !Γ.returnsOption then throw "F049"
       pure t
     | .tryOpt a => do
@@ -607,13 +857,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
       | .result p => if Γ.returnsResult then pure p else throw "F049"
       | _ => throw "F048"
     | .adapt a => synthF env n Γ.borrow a
-    | .call f args => do
-      let Option.some sig := Γ.sigs.lookup f | throw "F002"
-      if args.length != sig.params.length then throw "F045"
-      argsF env n Γ args sig.params
-      match sig.ret with
-      | .ty r => pure r
-      | .void => pure unitTy
+    | .call f args => callF env n Γ f args Option.none
     | .place x steps => match Γ.lookup x with
       | Option.some (t, _) => stepsF env n Γ t steps
       | Option.none => throw "F001"
@@ -785,15 +1029,32 @@ def rowLikeF (env : InferEnv) : Nat → Ctx → List Expr → List Ty → ChkM U
     rowLikeF env n Γ es ts
   | _ + 1, _, _, _ => pure ()
 
+/-- A call (Syn-Call, Syn-GenericCall), with the type expected of it if
+that is known (Check-GenericCall): the callee (F002) and the argument count
+(F045); each marker that disagrees with its parameter's mode, reported (F057);
+the type arguments inferred, an open one stopping the call (T016); each
+argument checked against its parameter's type with them substituted, the
+first that is not stopping the call; a type argument its bound refuses
+(F092), and a type parameter nothing decided (F101). -/
+def callF (env : InferEnv) : Nat → Ctx → String → List (Option Mode × Expr) → Option Ty → ChkM Ty
+  | 0, _, _, _, _ => throw "fuel"
+  | n + 1, Γ, f, args, expected => do
+    let Option.some sig := Γ.sigs.lookup f | throw "F002"
+    if args.length != sig.params.length then throw "F045"
+    markers args sig.params
+    let θ ← liftE (decided (env.call Γ f args expected))
+    argsF env n Γ args (sig.params.map fun (m, t) => (m, t.inst θ))
+    if !boundsHold Γ sig.tparams θ then throw "F092"
+    if !allDecided sig.tparams θ then throw "F101"
+    match sig.ret with
+    | .ty r => pure (r.inst θ)
+    | .void => pure unitTy
+
 /-- A call's arguments in order, each in the position its parameter's mode
-makes it: a marker that disagrees with its mode is reported (F057) and
-checking goes on, and the first argument not of its parameter's type stops
-the call. -/
+makes it; the first not of its parameter's type stops the call. -/
 def argsF (env : InferEnv) : Nat → Ctx → List (Option Mode × Expr) → List (Mode × Ty) → ChkM Unit
   | 0, _, _, _ => throw "fuel"
-  | n + 1, Γ, (marker, e) :: args, (mode, t) :: params => do
-    let wanted := if mode == .in_ then Option.none else Option.some mode
-    if marker != wanted then report "F057"
+  | n + 1, Γ, (_, e) :: args, (mode, t) :: params => do
     checkF env n (Γ.forArg mode) e t
     argsF env n Γ args params
   | _ + 1, _, _, _ => pure ()
@@ -901,8 +1162,8 @@ def checkForm (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
       match a with
       | .int k => match intRange t with
         | Option.some (lo, hi, code) => if lo ≤ -k && -k ≤ hi then pure () else throw code
-        | Option.none => if isFloatT t then checkF env n Γ a t else subsumeF env n Γ e expected
-      | _ => if isFloatT t then checkF env n Γ a t else subsumeF env n Γ e expected
+        | Option.none => if isFloatT t then checkF env n Γ.borrow a t else subsumeF env n Γ e expected
+      | _ => if isFloatT t then checkF env n Γ.borrow a t else subsumeF env n Γ e expected
     | .binop op a b =>
       if yieldsOperand op then do
         let t ← pairF env n Γ a b (Option.some expected)
@@ -912,7 +1173,11 @@ def checkForm (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
     | .adapt a => do
       let t ← synthF env n Γ.borrow a
       if !t.canAdapt expected then throw "F091"
-    | .unop _ _ | .var _ | .tryOpt _ | .tryRes _ | .call _ _ | .hinted _ _
+    -- A call learns its type arguments from what is expected of it too.
+    | .call f args => do
+      let t ← callF env n Γ f args (Option.some expected)
+      if !t.meet expected then throw "F016"
+    | .unop _ _ | .var _ | .tryOpt _ | .tryRes _ | .hinted _ _
     | .place _ _ | .proj _ _ | .index _ _ _ =>
       subsumeF env n Γ e expected
 
@@ -1063,7 +1328,8 @@ def bindPat (Γ : Ctx) (p : Pat) (t : Ty) (k : Kind) : StateM (Array Code) Ctx :
 
 /-- A `let` or `var` with a value. A hint is the type the name is bound at
 whatever the value does; with none, a value that does not synthesize leaves
-the name unbound. -/
+the name unbound. A hint that puts a type parameter with no order in a set or
+a map is F061, and the value is not checked. -/
 def bindChecked (env : InferEnv) (n : Nat) (Γ : Ctx) (p : Pat) (hint : Option Hint) (e : Expr)
     (k : Kind) : StateM (Array Code) Ctx := do
   match hint with
@@ -1071,7 +1337,8 @@ def bindChecked (env : InferEnv) (n : Nat) (Γ : Ctx) (p : Pat) (hint : Option H
     match ← convertReporting Γ h with
     | Option.none => pure Γ
     | Option.some t =>
-      let _ ← runChk (checkF env n Γ e t)
+      if t.unorderedKey Γ.ordered then modify (·.push "F061")
+      else let _ ← runChk (checkF env n Γ e t)
       bindPat Γ p t k
   | Option.none =>
     match ← runChk (synthF env n Γ e) with
@@ -1126,7 +1393,7 @@ def setValue (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (op : Option BinOp) 
   | Option.none => runChk (checkF env n Γ e t) >>= fun _ => pure ()
   | Option.some op =>
     runChk (checkF env n Γ.borrow e t) >>= fun _ =>
-    if !arithAdmits op t then modify (·.push "F026")
+    if !arithAdmits op t (Γ.boundOf t) then modify (·.push "F026")
     else reportIf (!fits Γ (needs op)) "F049"
 
 /-- A `set` target's last step, an index: with no `?` or `!`, an insertion,
@@ -1218,7 +1485,9 @@ def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) C
     | .var_ p hint (Option.some e) => bindChecked env n Γ p hint e .var_
     | .var_ p (Option.some hint) Option.none =>
       convertReporting Γ hint >>= fun r => match r with
-      | Option.some t => bindPat Γ p t .var_
+      | Option.some t =>
+        reportIf (t.unorderedKey Γ.ordered) "F061" >>= fun _ =>
+        bindPat Γ p t .var_
       | Option.none => pure Γ
     | .var_ _ Option.none Option.none => pure Γ
     | .set_ x steps op e => checkSet env n Γ x steps op e >>= fun _ => pure Γ
@@ -1336,33 +1605,41 @@ def checkBlock (Γ : Ctx) (ss : List Stmt) : StateM (Array Code) Unit := checkBl
 /-! ## Scripts -/
 
 /-- A function's signature, or the code of what is wrong with it, under the
-aliases declared before it. -/
+aliases declared before it and its type parameters: each parameter's type,
+then the return type, converted and then held to F061. -/
 def sigOf (aliases : Aliases) : FunDecl → Except Code Sig
-  | .mk _ params ret _ => do
-    let ps ← params.mapM fun (m, _, h) => do pure (m, ← convertIn aliases h)
+  | .mk _ tps params ret _ => do
+    let aliases := tparamAliases tps aliases
+    let ordered := fun p => ((boundsOf tps).lookup p).isSome
+    let checked (h : Hint) : Except Code Ty := do
+      let t ← convertIn aliases h
+      if t.unorderedKey ordered then throw "F061"
+      pure t
+    let ps ← params.mapM fun (m, _, h) => do pure (m, ← checked h)
     let r ← match ret with
-      | Option.some h => Ret.ty <$> convertIn aliases h
+      | Option.some h => Ret.ty <$> checked h
       | Option.none => pure .void
-    pure { params := ps, ret := r }
+    pure { tparams := tps, params := ps, ret := r }
 
 def kindOf : Mode → Kind
   | .in_ | .ref => .let_
   | .mut | .out => .var_
 
 def FunDecl.name : FunDecl → String
-  | .mk n _ _ _ => n
+  | .mk n _ _ _ _ => n
 
 /-- A function's body under its parameters (Fun), and F063 if it has a
 return type and can reach its end. A function whose signature is not well
 formed is not in `sigs`, and its body is not checked. It sees the aliases
-declared before it. -/
+declared before it, and its type parameters with their bounds. -/
 def checkFun (sigs : List (String × Sig)) (aliases : Aliases) : FunDecl → StateM (Array Code) Unit
-  | .mk name params _ body =>
+  | .mk name tps params _ body =>
     match sigs.lookup name with
     | Option.none => pure ()
     | Option.some sig =>
       let vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m)
-      checkBlock { vars, ret := sig.ret, sigs, aliases } body >>= fun _ =>
+      checkBlock { vars, ret := sig.ret, sigs, aliases := tparamAliases tps aliases,
+                   bounds := boundsOf tps } body >>= fun _ =>
       reportIf (match sig.ret with
         | .ty _ => completes body
         | .void => false) "F063"
