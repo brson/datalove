@@ -1,0 +1,22 @@
+----------
+module local/gen/m
+----------
+
+// A const of a recursive type: evaluated at compile time and read back as
+// its unfolding. Reading it back did not know `rec`, so a function with
+// one did not lower. Found by worldgen_engine_tests.
+
+fun tree(): rec R { value: int, kids: [R] }
+  const T: rec R { value: int, kids: [R] } = {value = 1, kids = [{value = 2, kids = []}, {value = 3, kids = [{value = 4, kids = []}]}]}
+  ret T@
+end fun
+----------
+scriptunit-fragment
+----------
+require module local/gen/m
+import m.tree
+debuglog tree()
+const E: rec R enum { term Leaf bool, term Node [R] } = enum { term Node [term Leaf true, term Node []] }
+debuglog E@
+const N: rec R [R] = [[], [[]]]
+debuglog N@

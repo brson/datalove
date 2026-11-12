@@ -409,6 +409,48 @@ pub fn gen_type_hint<'db>(
     }
 }
 
+/// How many elements a collection value has, `depth` down.
+///
+/// Drawn from the config's range, but none past the depth a value of a type
+/// `gen_type_hint` writes can reach: deeper is a recursive type unfolding,
+/// and an empty collection is what stops it, since the type's name is used
+/// only inside one.
+fn value_collection_size(rng: &mut SeededRng, config: &AstGenConfig, depth: usize) -> usize {
+    let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
+    match depth > config.max_depth + 1 {
+        true => 0,
+        false => count,
+    }
+}
+
+/// `ty` with each use of `name`, a recursive type's own, standing for
+/// `whole`, the recursive type: its unfolding.
+fn unfold_name<'db>(ty: &TypeHint<'db>, name: InternedText<'db>, whole: &TypeHint<'db>) -> TypeHint<'db> {
+    let go = |t: &TypeHint<'db>| unfold_name(t, name, whole);
+    let boxed = |t: &TypeHint<'db>| Box::new(go(t));
+    let field = |f: &TypeHintNamedField<'db>| TypeHintNamedField { name: f.name, type_hint: boxed(&f.type_hint) };
+    match ty {
+        TypeHint::Alias(alias) if alias.name == name => whole.C(),
+        TypeHint::AnonTuple(t) => TypeHint::AnonTuple(TypeHintAnonTuple { fields: t.fields.iter().map(go).collect() }),
+        TypeHint::AnonStruct(t) => TypeHint::AnonStruct(TypeHintAnonStruct { fields: t.fields.iter().map(field).collect() }),
+        TypeHint::List(t) => TypeHint::List(TypeHintList { element_type: boxed(&t.element_type) }),
+        TypeHint::Map(t) => TypeHint::Map(TypeHintMap { key_type: boxed(&t.key_type), value_type: boxed(&t.value_type) }),
+        TypeHint::Set(t) => TypeHint::Set(TypeHintSet { element_type: boxed(&t.element_type) }),
+        TypeHint::Option(t) => TypeHint::Option(TypeHintOption { inner_type: boxed(&t.inner_type) }),
+        TypeHint::Result(t) => TypeHint::Result(TypeHintResult { inner_type: boxed(&t.inner_type) }),
+        TypeHint::Tensor(t) => TypeHint::Tensor(TypeHintTensor { element_type: boxed(&t.element_type), rank: t.rank }),
+        TypeHint::Table(t) => TypeHint::Table(TypeHintTable { columns: t.columns.iter().map(field).collect() }),
+        TypeHint::Term(t) => TypeHint::Term(TypeHintTerm { name: t.name, payload: boxed(&t.payload) }),
+        TypeHint::Enum(t) => TypeHint::Enum(TypeHintEnum {
+            variants: t.variants.iter()
+                .map(|v| TypeHintEnumVariant { name: v.name, payload: v.payload.as_deref().map(boxed) })
+                .collect(),
+        }),
+        TypeHint::Rec(r) => TypeHint::Rec(TypeHintRec { body: boxed(&r.body), ..r.C() }),
+        other => other.C(),
+    }
+}
+
 /// Generate a value matching the given type hint.
 pub fn gen_expr_matching_type<'db>(
     db: &'db dyn salsa::Database,
@@ -465,7 +507,7 @@ pub fn gen_expr_matching_type<'db>(
 
         TypeHint::List(th) => {
             let element_type = *th.element_type.C();
-            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
+            let count = value_collection_size(rng, config, depth);
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_inner(db, rng, element_type.C(), config, depth + 1))
                 .collect();
@@ -474,7 +516,7 @@ pub fn gen_expr_matching_type<'db>(
         TypeHint::Map(th) => {
             let key_type = *th.key_type.C();
             let value_type = *th.value_type.C();
-            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
+            let count = value_collection_size(rng, config, depth);
             let entries: Vec<_> = (0..count)
                 .map(|_| {
                     let key = gen_expr_full_inner(db, rng, key_type.C(), config, depth + 1);
@@ -486,7 +528,7 @@ pub fn gen_expr_matching_type<'db>(
         }
         TypeHint::Set(th) => {
             let element_type = *th.element_type.C();
-            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
+            let count = value_collection_size(rng, config, depth);
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_inner(db, rng, element_type.C(), config, depth + 1))
                 .collect();
@@ -563,7 +605,7 @@ pub fn gen_expr_matching_type<'db>(
             // The header is the type's columns in the type's order, which is
             // the only order a table literal may be written in.
             let header: Vec<_> = th.columns.iter().map(|c| c.name).collect();
-            let count = rng.random_range(config.min_collection_size..=config.max_collection_size);
+            let count = value_collection_size(rng, config, depth);
             let rows: Vec<_> = (0..count)
                 .map(|_| {
                     let elements = th
@@ -585,7 +627,14 @@ pub fn gen_expr_matching_type<'db>(
             Expr::Table(ExprTable { header, rows })
         }
         TypeHint::Alias(_) => Expr::None,
-        TypeHint::Rec(_) => todo!("gen_type_hint writes no recursive types"),
+        // Its body, in which its name stands for the whole again, one level
+        // further down: past `value_collection_size`'s depth the collections
+        // that every use of the name sits inside are empty, which ends it.
+        TypeHint::Rec(rec) => {
+            let whole = TypeHint::Rec(rec.C());
+            let unfolded = unfold_name(&rec.body, rec.name, &whole);
+            gen_expr_matching_type(db, rng, unfolded, config, depth + 1)
+        }
         TypeHint::Atom(th) => Expr::Atom(ExprAtom { name: th.name }),
         TypeHint::Term(th) => {
             let payload = gen_expr_full_inner(db, rng, *th.payload.C(), config, depth + 1);

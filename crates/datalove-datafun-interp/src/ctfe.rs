@@ -503,6 +503,10 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 })
             }
 
+            // Read as its unfolding, as anything taking a value apart reads
+            // it; what is inside comes back here as it recurs.
+            IrType::Rec(_) => extract_const_value(ptr, &ir_type.exposed()),
+
             _ => Err(CtfeError::UnsupportedType(format!("{}", ir_type))),
         }
     }

@@ -114,6 +114,10 @@ pub struct WorldGenConfig {
     /// draws nothing.
     pub intrinsic_calls: bool,
 
+    /// The chance a type the generator picks is a recursive one, `rec R
+    /// ...`, of one of the shapes `gen_rec_type` writes. Zero draws nothing.
+    pub rec_probability: u32,
+
     /// Whether a worldfile's script is one fragment rather than a section
     /// for each unit. The AOT backends take only one fragment. A session is
     /// cut into units either way.
@@ -198,6 +202,7 @@ impl WorldGenConfig {
             hex_probability: 15,
             std_modules: (1, 3),
             intrinsic_calls: true,
+            rec_probability: 8,
             script_statements: (4, 12),
             arithmetic_probability: 50,
             ..WorldGenConfig::default()
@@ -247,6 +252,7 @@ impl Default for WorldGenConfig {
             hex_probability: 0,
             std_modules: (0, 0),
             intrinsic_calls: false,
+            rec_probability: 0,
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,

@@ -504,7 +504,9 @@ F090, the refusal phase 1 put in, is gone.
   is as in phase 1.
 - **Constants.** A data file's value is read against its type, and the two
   AOT constant writers walk a constant against its type, so each unfolds at
-  every level. The interpreter and the JIT needed nothing.
+  every level. The interpreter and the JIT needed nothing, but for reading
+  a const's value back after evaluating it, which unfolds too: a const of a
+  recursive type did not lower until generated programs wrote one.
 - **`eq_tydesc` and `cmp_tydesc` end on cycles.** Each carries the pairs of
   collection descriptors it is inside, and a pair met again is alike: the
   steps since were alike and the walk would repeat. Only collections are

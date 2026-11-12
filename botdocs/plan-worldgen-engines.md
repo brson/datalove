@@ -242,7 +242,14 @@ what "generated is not exercised" in the compiler guide asks for.
      and left a drop of the whole struct, freeing what was read after
      (`1031`). The reference itself was wrong; `noconst` was right.
 
-   Still to do: `rec` types, a test rider.
+   `rec` types: `rec_probability` makes a type a recursive one of five
+   shapes, and datalit's value generator unfolds one, its collections empty
+   past the depth a type of its own can reach. A `const` of one did not
+   lower: compile-time evaluation read a value back by its type and knew no
+   `rec` (`1033`). A generic's ordered parameter, a set's element or a map's
+   key, is never one (T065).
+
+   Still to do: a test rider.
 
 ## Open questions
 

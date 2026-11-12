@@ -58,8 +58,11 @@ impl Bound {
         config: &WorldGenConfig,
     ) -> TypeHint<'db> {
         match self {
-            // Every type is ordered, so neither of these narrows anything.
-            Bound::None | Bound::Ord => gen_type_hint(db, rng, config),
+            Bound::None => gen_type_hint(db, rng, config),
+            // Every type is ordered, but what is ordered here is a set's
+            // element or a map's key, which a recursive type cannot be
+            // (T065).
+            Bound::Ord => gen_type_hint(db, rng, &WorldGenConfig { rec_probability: 0, ..config.C() }),
             Bound::FixedInt => match rng.random_range(0..10) {
                 0 => TypeHint::U8,
                 1 => TypeHint::I8,

@@ -512,6 +512,12 @@ pub fn types_match<'db>(
         (TypeHint::Alias(na), TypeHint::Alias(nb)) => {
             na.name.as_str(db) == nb.name.as_str(db)
         }
+        // By name and body, the name standing for the type within: two the
+        // generator wrote with one name are one type when the bodies are.
+        (TypeHint::Rec(ra), TypeHint::Rec(rb)) => {
+            ra.name.as_str(db) == rb.name.as_str(db)
+                && types_match(db, (*ra.body).C(), (*rb.body).C())
+        }
         _ => false,
     }
 }

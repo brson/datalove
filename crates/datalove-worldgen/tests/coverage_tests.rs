@@ -159,7 +159,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // A type parameter parses as an alias too, and those are everywhere.
     // `TypeParams` tells the two apart, so an alias count is alias references.
     ("type", "ParseError", "a parse error means the generator wrote something wrong"),
-    ("type", "Rec", "gen_type_hint writes no recursive types yet"),
 ];
 
 /// What was seen, by category and kind.

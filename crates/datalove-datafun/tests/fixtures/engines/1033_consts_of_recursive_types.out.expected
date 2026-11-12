@@ -1,0 +1,58 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/gen/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn tree():
+                    block0:
+                        v11 = staticref {value = 1int, kids = [{value = 2int, kids = []}, {value = 3int, kids = [{value = 4int, kids = []}]}]}
+                        v12 = clone *v11
+                        return v12
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u0()
+                        debuglog v0
+                        drop v0
+                        v6 = const enum Node([enum Leaf(true), enum Node([])])
+                        v7 = clone v6
+                        debuglog v7
+                        drop v7
+                        v11 = const [[], [[]]]
+                        v12 = clone v11
+                        debuglog v12
+                        drop v12
+                        unit_end_drop v6
+                        unit_end_drop v11
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{value = 1, kids = [{value = 2, kids = []}, {value = 3, kids = [{value = 4, kids = []}]}]}\nenum { term Node [enum { term Leaf true }, enum { term Node [] }] }\n[[], [[]]]\n"),
+        ),
+    ],
+)
