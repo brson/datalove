@@ -57,6 +57,8 @@ inductive ExecS : Stmt → Outcome → Prop where
   | ifElse : Exec e o → ExecS (.if_ c a b t (Option.some e)) o
   | ifSkip : ExecS (.if_ c a b t Option.none) .normal
   | loop : Loop c body o → ExecS (.loop c body) o
+  /-- A `for` runs as a `loop while` does: it may run out at any round. -/
+  | for_ : Loop (Option.some coll) body o → ExecS (.for_ names coll body) o
 
 /-- A loop runs its body until a `break`, a return, or, for `loop while`, its
 condition false. A `continue` or a normal end goes round again. -/
@@ -90,6 +92,7 @@ theorem ExecS.hasBreakS_of_brk : ∀ {s : Stmt}, ExecS s .brk → hasBreakS s = 
   | _, .ifThen h => by simp [hasBreakS, Exec.hasBreak_of_brk h]
   | _, .ifElse h => by simp [hasBreakS, hasBreakElse, Exec.hasBreak_of_brk h]
   | _, .loop h => absurd rfl h.not_brk
+  | _, .for_ h => absurd rfl h.not_brk
 
 end
 
@@ -123,6 +126,7 @@ theorem ExecS.completesS_of_normal : ∀ {s : Stmt}, ExecS s .normal → complet
   | _, .loop (c := Option.some _) _ => rfl
   | _, .loop (c := Option.none) h => by
     simp [completesS, Loop.hasBreak_of_normal h rfl rfl]
+  | _, .for_ _ => rfl
 
 end
 

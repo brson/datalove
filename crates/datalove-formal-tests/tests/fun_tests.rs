@@ -61,6 +61,15 @@ const CORPUS: &[&str] = &[
     // An option with an error bound: F094 after the first body, and the
     // error unbound in the second.
     "fun f(o: ?u8)\n  if o |v|\n    call nope()\n  else |e|\n    debuglog e\n  end if\nend fun\n",
+    // A `for` over a list, a set and a map, with one name and two, and over
+    // what cannot be walked, with something wrong in the body each time.
+    "let l: [u8] = [1]\nfor x in ref l\n  call nope()\nend for\nfor i, x in ref l\n  let a: u8 = i\nend for\n",
+    "let s: #{u8} = #{1}\nfor i, x in ref s\n  call nope()\nend for\nlet m: %{u8 = bool} = %{1 = true}\nfor k in ref m\n  call nope()\nend for\n",
+    "let n: u8 = 1\nfor x in ref n\n  call nope()\nend for\nfor x in ref zz\n  call nope()\nend for\n",
+    "let t: [|u8, 2|] = [| 1 2, 3 4 |]\nfor r in ref t\n  let a: u8 = r\nend for\nbreak\n",
+    // A negated literal with a hint of its own has the hint's type, and is not
+    // range-checked as a bare one is.
+    "let a: i8 = -(: string / 8)\nlet b: i8 = -(: i64 / 8)\nlet c: u8 = -(: int / 8)\nlet d: i8 = -128\nlet e: u8 = -1\n",
     // A `set` of an immutable binding still checks its value.
     "let x: u8 = 1\nset x = true\n",
     "if zz |v|\n  call nope()\nelse\n  call nope()\nend if\nif zz\n  call nope()\nelse\n  call nope()\nend if\n",
@@ -78,9 +87,9 @@ fn config() -> WorldGenConfig {
     config.consts_per_module = (0, 0);
     config.const_probability = 0;
     config.match_probability = 0;
-    config.for_probability = 0;
+    config.for_probability = 15;
     config.param_mode_probability = 0;
-    config.projection_probability = 0;
+    config.projection_probability = 40;
     config.function_call_probability = 50;
     config.arithmetic_probability = 50;
     config
@@ -101,7 +110,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     let indent: String = line.chars().take_while(|c| *c == ' ').collect();
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
     let name = |rng: &mut SeededRng| pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2", "1", "0x10", "1.5", "true"]);
-    let changed = match rng.random_range(0..15) {
+    let changed = match rng.random_range(0..16) {
         // A type named in the line changed.
         0 => {
             let ty = pick(rng, TYPES);
@@ -171,6 +180,12 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             let marker = pick(rng, &["", "", "ref ", "mut "]);
             fmt!("{line}\n{indent}let w = {}({marker}{a}, {b})", pick(rng, &["fn0", "fn1", "fn2"]))
         }
+        // A `for` over something in scope, with one name or two, and a body
+        // that uses them.
+        14 => {
+            let names = pick(rng, &["w", "i, w", "k, w"]);
+            fmt!("{line}\n{indent}for {names} in ref {}\n{indent}  debuglog w\n{indent}  let z: u8 = w\n{indent}end for", name(rng))
+        }
         // A literal at a range's edge, negated.
         _ => fmt!("{line}\n{indent}let w: {} = -{}", pick(rng, &["i8", "u8", "i16", "f32", "int"]), pick(rng, &["5", "128", "129", "300", "1.5"])),
     };
@@ -227,6 +242,11 @@ fn statement_typing_agrees() {
     let mut mismatches = Vec::new();
     for (((what, text), rust), oracle) in cases.iter().zip(&rust).zip(&answers) {
         if let Some(why) = oracle.get("unsupported") {
+            // What the Rust says of a script the model does not take, to see
+            // what widening the slice will have to agree with.
+            if what == "corpus" && std::env::var("FORMAL_FUN_SHOW_SKIPPED").is_ok() {
+                println!("skipped ({why}):\n{text}    rust: {rust:?}");
+            }
             *skipped.entry(why.as_str().X().S()).or_default() += 1;
             continue;
         }

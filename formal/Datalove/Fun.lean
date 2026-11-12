@@ -98,6 +98,8 @@ inductive Stmt where
   | debuglog (e : Expr)
   /-- `call f(...)`, perhaps with `?` or `!` on it. -/
   | call (e : Expr)
+  /-- `for x̄ in ref p ... end for`. -/
+  | for_ (names : List String) (coll : Expr) (body : List Stmt)
   deriving Inhabited
 
 inductive FunDecl where
@@ -673,6 +675,34 @@ def bindChecked (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (hint : Optio
     | Option.some t => pure (Γ.bind x t k)
     | Option.none => pure Γ
 
+/-- What a `for` binds walking a collection, by the doc's table: an element,
+or an index and an element, of a list or tensor; an element of a set; a key
+and a value of a map. Any other count of names is F109, any other type F087. -/
+def walk (c : Ty) (names : List String) : Except Code (List (String × Ty)) :=
+  let elem (t : Ty) (rank : Nat) : Ty := if rank ≤ 1 then t else .tensor t (rank - 1)
+  match c, names with
+  | .list t, [x] => pure [(x, t)]
+  | .list t, [i, x] => pure [(i, .index), (x, t)]
+  | .tensor t r, [x] => pure [(x, elem t r)]
+  | .tensor t r, [i, x] => pure [(i, .index), (x, elem t r)]
+  | .set t, [x] => pure [(x, t)]
+  | .map k v, [a, b] => pure [(a, k), (b, v)]
+  | .list _, _ | .tensor _ _, _ | .set _, _ | .map _ _, _ => throw "F109"
+  | _, _ => throw "F087"
+
+/-- A `for`'s bindings: its collection a place (else F108), of a type it
+walks. With none, the body is left unchecked. -/
+def forBindings (env : InferEnv) (n : Nat) (Γ : Ctx) (names : List String) (coll : Expr) :
+    StateM (Array Code) (Option (List (String × Ty))) :=
+  match coll with
+  | .var _ => runChk (do
+      let t ← synthF env n Γ coll
+      liftE (walk t.expose names))
+  | _ => modify (·.push "F108") >>= fun _ => pure Option.none
+
+def Ctx.bindAll (Γ : Ctx) (Δ : List (String × Ty)) : Ctx :=
+  Δ.foldl (fun Γ (x, t) => Γ.bind x t .let_) Γ
+
 /-- Report `c` when `cond`. -/
 def reportIf (cond : Bool) (c : Code) : StateM (Array Code) Unit :=
   if cond then modify (·.push c) else pure ()
@@ -761,6 +791,14 @@ def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) C
       runChk (synthF env n Γ e) >>= fun r =>
       (match r with
       | Option.some t => reportIf (t != unitTy) "F095"
+      | Option.none => pure ()) >>= fun _ =>
+      pure Γ
+    | .for_ names coll body =>
+      forBindings env n Γ names coll >>= fun r =>
+      (match r with
+      | Option.some Δ => checkBlockF env n ({ Γ with inLoop := true }.bindAll Δ) body
+      -- A collection with nothing to walk binds nothing, and the body is left
+      -- unchecked.
       | Option.none => pure ()) >>= fun _ =>
       pure Γ
 

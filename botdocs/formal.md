@@ -251,11 +251,11 @@ The third part takes datafun: a slice of
 [its typing rules](datafun-typing-rules.md), written from the doc as the
 literal typing was (`formal/Datalove/Fun.lean`). The slice is scripts of
 functions and statements: `let`, `var`, `set` with or without an operator,
-`if` and the binding `if`, `loop` and `loop while`, `break`, `continue`,
-`ret`, `debuglog` and `call`; datalit's literal forms, which datafun types by
+`if` and the binding `if`, `loop` and `loop while`, `for`, `break`,
+`continue`, `ret`, `debuglog` and `call`; datalit's literal forms, which datafun types by
 datalit's rules with a context added; and datafun's variables, operators,
 `?`, `!`, `@` and calls. It leaves out generics, modules and requires,
-consts, type aliases, patterns, projections and indexing, `for` and `match`.
+consts, type aliases, patterns, projections and indexing, and `match`.
 Inference is datalit's, extended by the doc's table: the `@` class lives in
 `Lit.lean`'s unifier, as datafun's lives in datalit's in the Rust.
 
@@ -288,6 +288,13 @@ What it found:
 - **The serde AST dropped `loop while`'s condition.** It is what the parser's
   snapshot tests compare, so a `loop while` lost its condition there with
   none of them noticing. It is now kept.
+- **A negated literal ignored its own hint.** Check-NegLit range-checked
+  `-n` against the expected integer type whether or not `n` carried a hint,
+  so `let a: i8 = -(: string / 8)` was accepted, and ran, the hint never
+  looked at. The rule now applies to a bare literal only, and a hinted one is
+  checked as any negation is: there F016, and F026 for `-(: i64 / 8)`. A
+  mutation that changed a binding's type from `int` to `u8` found it; the
+  error fixture `128_negated_literal_with_a_hint` holds it.
 - **Worldgen could recurse without end.** An argument of a call may itself
   be a call, with no bound, so a function of enough parameters drew calls
   inside calls until the stack overflowed: past one expected call per call,
@@ -311,8 +318,8 @@ Two things are proved of it:
   that finishes normally, against a semantics of control flow in which any
   statement holding an expression may return early, a condition may go either
   way, and a loop runs until a `break`, a return or, for `loop while`, its
-  condition. So a function F063 lets through always returns. Saying a `loop
-  while` cannot complete breaks the proof.
+  condition, as a `for` does. So a function F063 lets through always
+  returns. Saying a `loop while` cannot complete breaks the proof.
 
 To make these provable, checking was made total: it takes inference as a
 parameter (`InferEnv`), which only says what types are and so cannot move an
@@ -383,7 +390,7 @@ In rough order of what to do next:
   expressions, which only datalit's literals have (`Lit.check_sound`).
 - **The rest of datafun.** Generics, whose substitution lemma is what
   monomorphization relies on, modules, consts, patterns, projections,
-  indexing, `for` and `match` are outside the slice. The serde AST already
+  indexing and `match` are outside the slice. The serde AST already
   carries them; the model and the generator's configuration are what widen.
 - **Aliases and type parameters in hints.** The model takes datalit's
   hints, with no aliases or type parameters, so T063 for an alias and the

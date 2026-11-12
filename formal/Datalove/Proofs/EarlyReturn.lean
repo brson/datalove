@@ -499,13 +499,14 @@ def Stmt.exprs : Stmt → List Expr
   | .ret (Option.some e) => [e]
   | .if_ c _ _ _ _ => [c]
   | .loop (Option.some c) _ => [c]
+  | .for_ _ coll _ => [coll]
   | _ => []
 
 /-- The bodies inside a statement. -/
 def Stmt.blocks : Stmt → List (List Stmt)
   | .if_ _ _ _ t (Option.some e) => [t, e]
   | .if_ _ _ _ t Option.none => [t]
-  | .loop _ b => [b]
+  | .loop _ b | .for_ _ _ b => [b]
   | _ => []
 
 /-- Every early return in a statement, in its expressions and in the bodies
@@ -570,6 +571,12 @@ theorem good_trivial_push {α} {c : Code} {f : PUnit → StateM (Array Code) α}
     (hf : ∀ u, Good (f u) P (fun _ => True)) :
     Good (modify (·.push c) >>= f) P Q :=
   good_bind good_push (fun u _ => good_weaken (hf u) (fun _ h => h) (fun _ _ _ h => h.elim))
+
+theorem Ctx.bindAll_ret (Γ : Ctx) (Δ : List (String × Ty)) : (Γ.bindAll Δ).ret = Γ.ret := by
+  unfold Ctx.bindAll
+  induction Δ generalizing Γ with
+  | nil => rfl
+  | cons p Δ ih => simp only [List.foldl]; rw [ih]; rfl
 
 theorem bindOpt_ret (Γ : Ctx) (x : Option String) (t : Ty) : (bindOpt Γ x t).ret = Γ.ret := by
   cases x <;> rfl
@@ -794,6 +801,31 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
           exact checkF_guarded env n Γ c _ #[] hs
       · refine good_bind (blocks { Γ with inLoop := true } rfl body) (fun _ _ => good_pure rfl (fun hb he => ?_))
         exact .of he (by simp [Stmt.blocks]; exact hb)
+    case for_ names coll body =>
+      simp only [checkStmtF]
+      refine good_bind (Px := fun _ => True)
+        (Qx := fun r => r.isSome = true ∧ Guarded Γ.ret.allows coll) ?_ (fun r _ => ?_)
+      · cases coll
+        case var x =>
+          have e : forBindings env n Γ names (.var x) = runChk (do
+              let t ← synthF env n Γ (.var x)
+              liftE (walk t.expose names)) := rfl
+          rw [e]
+          refine good_weaken (good_runChk _) (fun _ h => h) (fun r _ hq => ?_)
+          obtain ⟨_, rfl, hs⟩ := hq
+          exact ⟨rfl, synthF_guarded env n Γ _ #[] (peel hs).1⟩
+        all_goals
+          simp only [forBindings]
+          exact good_bind good_push (fun _ _ => good_pure trivial (fun h => h.elim))
+      · refine good_bind (Px := fun _ => True) (Qx := fun _ => r.isSome →
+            ∀ s ∈ body, GuardedS Γ.ret.allows s) ?_ (fun _ _ => good_pure rfl (fun hb hc => ?_))
+        · cases r with
+          | none => exact good_pure trivial (fun h => by simp at h)
+          | some Δ =>
+            have := checkBlockF_good env n ({ Γ with inLoop := true }.bindAll Δ) body
+            rw [Ctx.bindAll_ret] at this
+            exact good_weaken this (fun _ h => h) (fun _ _ h _ => h)
+        · exact .of (by simp [Stmt.exprs]; exact hc.2) (by simp [Stmt.blocks]; exact hb hc.1)
     case if_ c a b t e =>
       cases a <;> cases b
       case none.none =>

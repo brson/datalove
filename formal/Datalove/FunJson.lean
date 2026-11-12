@@ -212,6 +212,9 @@ partial def stmtFromSerde (j : Json) : Except String Stmt := do
   | "Continue" => pure .cont
   | "DebugLog" => .debuglog <$> exprFromSerde (← field j "value")
   | "ExprStatement" => .call <$> exprFromSerde (← field j "expr")
+  | "For" => do
+    let names ← (← (← field j "bindings").getArr?).toList.mapM (·.getStr?)
+    pure (.for_ names (← exprFromSerde (← field j "iteratee")) (← body (← field j "body")))
   | other => unsupported other
 
 partial def body (j : Json) : Except String (List Stmt) := do
