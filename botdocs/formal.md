@@ -3,7 +3,8 @@
 How datalove's type rules are modelled in Lean, what is proved of the model,
 and how the model is held to the Rust. Explanation and how-to; written
 November 2026, when the first part, the type language of datalit, went in,
-and extended when the second, datalit's literal typing, did.
+and extended as the second, datalit's literal typing, and the third, a slice
+of datafun's statements, did.
 
 ## Contents
 
@@ -14,6 +15,7 @@ and extended when the second, datalit's literal typing, did.
 - [What ties the model to the code](#user-content-what-ties-the-model-to-the-code)
 - [What it found](#user-content-what-it-found)
 - [Literal typing](#user-content-literal-typing)
+- [Statements](#user-content-statements)
 - [Running it](#user-content-running-it)
 - [Keeping it true](#user-content-keeping-it-true)
 - [What is not covered](#user-content-what-is-not-covered)
@@ -241,6 +243,63 @@ did not find this; a case written by hand did, and the code now follows the
 doc. The datalit fixture `79_atom_then_hinted_term_of_its_name` holds it in
 `just test`.
 
+## Statements
+
+The third part takes datafun: a slice of
+[its typing rules](datafun-typing-rules.md), written from the doc as the
+literal typing was (`formal/Datalove/Fun.lean`). The slice is scripts of
+functions and statements: `let`, `var`, `set` with or without an operator,
+`if` and the binding `if`, `loop` and `loop while`, `break`, `continue`,
+`ret`, `debuglog` and `call`; datalit's literal forms, which datafun types by
+datalit's rules with a context added; and datafun's variables, operators,
+`?`, `!`, `@` and calls. It leaves out generics, modules and requires,
+consts, type aliases, patterns, projections and indexing, `for` and `match`.
+Inference is datalit's, extended by the doc's table: the `@` class lives in
+`Lit.lean`'s unifier, as datafun's lives in datalit's in the Rust.
+
+The checker reports what is wrong and goes on, so the model's answer for a
+script is every diagnostic code, in order, and so is what it is held to. That
+holds the model to the Rust's recovery as well as its rules: what is bound
+after a failed `let`, which bodies of a binding `if` are checked, where a
+call stops. The doc said nothing of that, and now says what the tests found
+([Going on after an error](datafun-typing-rules.md#user-content-going-on-after-an-error)).
+
+`fun_tests` holds the Rust to it. Scripts come from worldgen, configured to
+stay inside the slice, as the single module it writes, checked as a script.
+Worldgen's bodies use their bindings little, so each script is changed up to
+three times a line at a time: a type or value changed, an operator swapped,
+`?`, `!` or `@` added, a name unbound, a `ret` dropped, a stray `break`,
+`set` or `call`, or a statement added that computes from the parameters and
+locals in scope, unwraps them, matches on them with a binding `if`, or calls
+with them. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
+the oracle's input, read as it is (`formal/Datalove/FunJson.lean`); a script
+using a form outside the slice is skipped and counted. A corpus of cases
+written by hand runs first. Forty thousand scripts from a random seed agree
+on every diagnostic, about thirty-seven thousand of them inside the slice,
+reaching every statement code the slice has.
+
+What it found:
+
+- **No rule of the slice differs** between the doc and the code. The
+  differences were all recovery, which the doc did not cover, and which the
+  model now follows.
+- **The serde AST dropped `loop while`'s condition.** It is what the parser's
+  snapshot tests compare, so a `loop while` lost its condition there with
+  none of them noticing. It is now kept.
+- **Worldgen could recurse without end.** An argument of a call may itself
+  be a call, with no bound, so a function of enough parameters drew calls
+  inside calls until the stack overflowed: past one expected call per call,
+  which three parameters reach at a call probability of a half. Calls now
+  nest at most six deep, checked after the draw, so that every seed short of
+  the bound writes what it wrote before; three hundred default-configured
+  worlds are byte for byte the same.
+
+Nothing is proved of this part yet. The claims to prove are that every early
+return, from `?`, `!`, the checked and optional operators, carries a value of
+the function's declared return type, and that `completes`, which F063 rests
+on, is sound: a body it says cannot complete never does. Both need checking
+made total, as the literal typing's was, and a semantics of statements.
+
 ## Running it
 
 Lean comes through elan; `formal/lean-toolchain` pins the version, which
@@ -248,8 +307,8 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
 
 - `just formal-build` builds the model and the oracle, checking every proof.
   About twenty seconds from clean.
-- `just test-formal SEED COUNT` builds, then runs `oracle_tests` and
-  `lit_tests` over `COUNT` seeds from `SEED` (`random` draws one), as every generative suite takes its
+- `just test-formal SEED COUNT` builds, then runs `oracle_tests`,
+  `lit_tests` and `fun_tests` over `COUNT` seeds from `SEED` (`random` draws one), as every generative suite takes its
   seeds.
 - `law_tests` runs in `just test`. `FORMAL_LAWS_SEED`, `FORMAL_LAWS_COUNT` and
   `FORMAL_LAWS_SIZE` widen it. Size 8 takes a few seconds in release; size 10
@@ -292,11 +351,12 @@ In rough order of what to do next:
   measure or fuel, and `Lit.lean`'s inference is partial.
 - **Datafun's `@` class in inference**, `Class::Adapt`, which datalit's
   inference carries for datafun. `Lit.lean` has no `@` and leaves it out.
-- **The statement rules.** Datafun's statements, where the early
-  returns of `?`, `!` and the checked operators make an effect system worth a
-  soundness theorem, and generics, whose substitution lemma is what
-  monomorphization relies on. Each needs an encoding of datafun's AST for the
-  oracle, and the worldgen programs are the inputs.
+- **Proofs about statements.** The early-return and `completes` theorems
+  above, on the slice.
+- **The rest of datafun.** Generics, whose substitution lemma is what
+  monomorphization relies on, modules, consts, patterns, projections,
+  indexing, `for` and `match` are outside the slice. The serde AST already
+  carries them; the model and the generator's configuration are what widen.
 - **Aliases and type parameters in hints.** The model takes datalit's
   hints, with no aliases or type parameters, so T063 for an alias and the
   conversion's T066 check are not modelled. `Ty.WF` states T066 for a type

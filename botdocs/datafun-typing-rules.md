@@ -30,6 +30,7 @@ rules that type it.
   - [Control flow](#user-content-control-flow)
   - [Functions](#user-content-functions)
   - [Modules and scripts](#user-content-modules-and-scripts)
+- [Going on after an error](#user-content-going-on-after-an-error)
 - [Diagnostics](#user-content-diagnostics)
 - [Implementation](#user-content-implementation)
 - [References](#user-content-references)
@@ -844,6 +845,33 @@ is P001.
 unqualified. Their errors are F059 and F078 to F084 below. A `require`
 refused is reported where it is written, and calls through its alias are
 not reported again.
+
+## Going on after an error
+
+The checker reports what is wrong and goes on, so that one fault does not
+hide the next. Where it goes on from, and what it takes to be bound
+afterwards, decides which faults after the first are reported:
+
+- **An expression** reports one fault and stops, the first its rules reach.
+  A call is the exception in part: a mode marker that disagrees (F057) is
+  reported and the call goes on to the argument's value, and the first
+  argument not of its parameter's type stops the call.
+- **A `let` or `var`** with a type binds its name at that type, whether or
+  not the value checks. One without a type binds its name only if the value
+  synthesizes, so a later use of the name is F001.
+- **A `set` of an immutable binding** (F055) still checks its value against
+  the binding's type.
+- **An `if`** whose condition is not a `bool` still checks both bodies. A
+  binding `if` checks neither body when its condition has no type, when it
+  is neither an option nor a result (F093), or when it is a result with no
+  error bound (F046). On an option with an error bound, F094 is reported
+  after the first body and before the second, in which the error is not
+  bound.
+- **A failed call** binds nothing, as for any value that does not
+  synthesize.
+
+The Lean model of these rules ([Proving the Type System](formal.md)) does the
+same, and its tests hold the Rust to it.
 
 ## Diagnostics
 

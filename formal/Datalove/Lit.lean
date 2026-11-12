@@ -88,6 +88,10 @@ inductive Class where
   | float
   /-- `atom a` when the payload is `none`, `term a τ` when it is `some τ`. -/
   | variant (a : String) (payload : Option PTy)
+  /-- Datafun's `e@`, with `e` of type `t`: any type `t` adapts to, and `t`
+  if nothing decides. Datalit's own inference never makes one; it is here
+  because datafun's inference is datalit's, extended. -/
+  | adapt (t : Ty)
   deriving Inhabited
 
 inductive VarState where
@@ -139,6 +143,9 @@ partial def Class.admits : Class → PTy → Bool
   | .variant a (some _), .term b _ => a == b
   | .variant _ _, .known (.enum _) => true
   | .variant _ _, .enum _ => true
+  | .adapt f, .known t => f.canAdapt t
+  -- A type with parts undecided: what they must be is worked out on binding.
+  | .adapt _, _ => true
   | _, _ => false
 
 /-- Two classes made one, and payloads to unify then, or `none` if no type is
@@ -153,6 +160,9 @@ def mergeClasses : Class → Class → Option (Class × Option (PTy × PTy))
   | .variant a none, .variant b none => if a == b then some (.variant a none, none) else none
   | .variant a (some p), .variant b (some q) =>
     if a == b then some (.variant a (some p), some (p, q)) else none
+  -- An adapted value meets another class at the type it was taken from, if
+  -- the other admits it.
+  | .adapt f, c | c, .adapt f => if c.admits (.known f) then some (.adapt f, none) else none
   | _, _ => none
 
 def tysP : Tys → List PTy
@@ -262,6 +272,15 @@ partial def bind (v : Nat) (t : PTy) : InferM Unit := do
       | .enum vs => (vs.lookup a).join
       | _ => none
     if let some q := given then unify p q
+  -- `@` converts between types with parts only by cloning, but for an atom
+  -- or term becoming an enum, so a value adapted to a type with undecided
+  -- parts has those parts.
+  if let .adapt f := c then
+    match f, t with
+    | _, .known _ => pure ()
+    | .atom _, .enum _ => pure ()
+    | .term a q, .enum vs => if let some p := (vs.lookup a).join then unify (.known q) p
+    | _, t => unify (.known f) t
 
 end
 
@@ -278,6 +297,7 @@ partial def resolve (t : PTy) : InferM Ty := do
     | .free .float => pure .f64
     | .free (.variant a none) => pure (.atom a)
     | .free (.variant a (some p)) => .term a <$> resolve p
+    | .free (.adapt f) => pure f
     | .free .open_ => throw "T016"
     | _ => panic! "a pruned variable is free"
   | .tuple ts => do

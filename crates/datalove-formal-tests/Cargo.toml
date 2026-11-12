@@ -16,6 +16,10 @@ salsa.workspace = true
 datalove-datalit.workspace = true
 datalove-datafun-tycheck.workspace = true
 datalove-diagnostic.workspace = true
+datalove-worldgen.workspace = true
+datalove-datafun-ast.workspace = true
+datalove-datafun-parser.workspace = true
+datalove-datafun-compiler.workspace = true
 
 [[test]]
 name = "oracle_tests"
@@ -28,3 +32,7 @@ path = "tests/law_tests.rs"
 [[test]]
 name = "lit_tests"
 path = "tests/lit_tests.rs"
+
+[[test]]
+name = "fun_tests"
+path = "tests/fun_tests.rs"

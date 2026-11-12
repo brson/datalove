@@ -11,7 +11,10 @@ line, and writes one answer per line to stdout, in order:
 {"pair": [A, B]} →  {"equiv": b, "meet": b, "adapt": b}
 {"type": T}      →  {"copy": b, "wf": b, "expose": T}
 {"synth": E}     →  {"ok": T} or {"err": code}
+{"fun": S}       →  {"codes": [code, ...]} or {"unsupported": what}
 ```
+
+A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes.
 
 `synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
 asks about both modes.
@@ -52,6 +55,10 @@ def answer (q : Json) : Except String Json := do
     return match Lit.synthesize e with
       | .ok t => Json.mkObj [("ok", t.toJson)]
       | .error c => Json.mkObj [("err", c)]
+  if let .ok script := q.getObjVal? "fun" then
+    return match Fun.scriptFromSerde script with
+      | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str))]
+      | .error e => Json.mkObj [("unsupported", e)]
   throw s!"unknown query: {q.compress}"
 
 def main (args : List String) : IO UInt32 := do

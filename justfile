@@ -96,13 +96,13 @@ test-generative-random COUNT='100':
 formal-build:
     cd formal && lake build --wfail
 
-# The type relations and datalit's literal typing held to the Lean model's
-# oracle, over COUNT seeds from SEED for each. Not in `just test`, which has no
+# The type relations, datalit's literal typing and datafun's statements held
+# to the Lean model's oracle, over COUNT seeds from SEED for each. Not in `just test`, which has no
 # Lean, but in CI's formal job; the laws the model proves are in `law_tests`,
 # without it.
 test-formal SEED='0' COUNT='1000':
     just formal-build
-    FORMAL_ORACLE_TEST=1 FORMAL_ORACLE_SEED={{SEED}} FORMAL_ORACLE_COUNT={{COUNT}} FORMAL_LIT_SEED={{SEED}} FORMAL_LIT_COUNT={{COUNT}} cargo test -p datalove-formal-tests --test oracle_tests --test lit_tests
+    FORMAL_ORACLE_TEST=1 FORMAL_ORACLE_SEED={{SEED}} FORMAL_ORACLE_COUNT={{COUNT}} FORMAL_LIT_SEED={{SEED}} FORMAL_LIT_COUNT={{COUNT}} FORMAL_FUN_SEED={{SEED}} FORMAL_FUN_COUNT={{COUNT}} cargo test -p datalove-formal-tests --test oracle_tests --test lit_tests --test fun_tests
 
 # Break each reach rule in turn, by the faults in scripts/reach-faults.toml,
 # and print what the tests catch of it as the planted-fault table's rows; see
