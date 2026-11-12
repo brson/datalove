@@ -64,7 +64,7 @@ I did not prove correctness.
 - [But what about edits that change which names later units can use?](#user-content-but-what-about-edits-that-change-which-names-later-units-can-use)
 - [A third set of rules: breaks and fixes](#user-content-a-third-set-of-rules-breaks-and-fixes)
 - [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
-- [A complete set of recursive rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-recursive-rules-for-recompiles-and-reruns-for-moves-and-mutations)
+- [A complete set of rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-rules-for-recompiles-and-reruns-for-moves-and-mutations)
 
 **Part 3. Results and Discussion**
 
@@ -678,8 +678,7 @@ so does not rerun,
 and the units after that one see what it wrote,
 so they do not rerun.
 
-_A rerun is an edit that doesn't change the code_,
-so a unit rerun this way gets the edit column too,
+_A rerun is like an edit that doesn't change the code_,
 and triggers the same analysis recursively
 to find the full set of units that must rerun.
 
@@ -1196,10 +1195,12 @@ but it took `a2` the last time it ran,
 so unit 2 reruns first,
 and that took `a`, so unit 1 reruns before it.
 
+The same session, replayed from the Datalove scripting engine:
 
 
 
-## A complete set of recursive rules for recompiles and reruns for moves and mutations
+
+## A complete set of rules for recompiles and reruns for moves and mutations
 
 <!--
 _Therefore_ we propose an algorithm and suggest it is complete.
