@@ -98,7 +98,8 @@ formal-build:
 
 # The type relations and datalit's literal typing held to the Lean model's
 # oracle, over COUNT seeds from SEED for each. Not in `just test`, which has no
-# Lean; the laws the model proves are, in `law_tests`, without it.
+# Lean, but in CI's formal job; the laws the model proves are in `law_tests`,
+# without it.
 test-formal SEED='0' COUNT='1000':
     just formal-build
     FORMAL_ORACLE_TEST=1 FORMAL_ORACLE_SEED={{SEED}} FORMAL_ORACLE_COUNT={{COUNT}} FORMAL_LIT_SEED={{SEED}} FORMAL_LIT_COUNT={{COUNT}} cargo test -p datalove-formal-tests --test oracle_tests --test lit_tests

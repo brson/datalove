@@ -15,8 +15,10 @@ The Rust (`crates/datalove-datalit/src/tycheck/`) is held to this by
 `crates/datalove-formal-tests/tests/lit_tests.rs`, so a disagreement is a
 place where the code and the doc differ.
 
-The definitions are `partial`: unification has no structural measure to
-recurse on. They run as the oracle; nothing is proved of them yet.
+Inference, unification and synthesis are `partial`: unification has no
+structural measure to recurse on. Checking is total (`checkWith`), taking
+synthesis and Check-Subsume as parameters, and `Proofs/LitSound.lean` proves
+it sound: a literal that checks is a value of its type.
 -/
 
 namespace Datalove.Lit
@@ -413,79 +415,151 @@ def fieldsList : Fields → List (String × Ty)
   | .nil => []
   | .cons n t fs => (n, t) :: fieldsList fs
 
+/-- What checking needs from synthesis: to synthesize a `data` or `error`
+payload, and Check-Subsume for a form with no rule for the expected head.
+Given as parameters, so that checking itself is a total function, structural
+on the expression, which `Proofs/LitSound.lean` can reason about. -/
+structure CheckEnv where
+  syn : Expr → Except Code Ty
+  sub : Expr → Except Code Unit
+
 mutual
 
 /-- `⊢ e ⇐ T`, by the doc's rule selection: a hint first (Check-Hinted), the
 expected type unrolled (Check-Roll), the rule for the form and head, `none`
 and `er` against anything else (T032), and Check-Subsume last. -/
-partial def check (e : Expr) (expected : Ty) : Except Code Unit := do
-  let e ← match e with
-    | .hinted h inner => do
-      let hinted ← convertHint h
-      if !hinted.meet expected then throw "T040"
-      pure inner
-    | e => pure e
-  let exposed := expected.expose
-  match e, exposed with
-  | .group inner, _ => check inner expected
-  | .none, .option _ => pure ()
-  | .some p, .option t => check p t
-  | .ok p, .result t => check p t
-  | .er p, .result _ => check p .error
-  | .none, _ | .er _, _ => throw "T032"
-  | .tt, _ | .ff, _ => if Ty.bool == expected then pure () else throw "T022"
-  | .str, _ => if Ty.string == expected then pure () else throw "T022"
-  | .int n, t =>
+def checkWith (env : CheckEnv) : Expr → Ty → Except Code Unit
+  | .hinted h inner, expected => do
+    let hinted ← convertHint h
+    if !hinted.meet expected then throw "T040"
+    checkForm env inner expected
+  | e, expected => checkForm env e expected
+
+/-- The rule for an expression's form and the expected type's head, with the
+expected type unrolled. -/
+def checkForm (env : CheckEnv) : Expr → Ty → Except Code Unit
+  | .group inner, expected => checkWith env inner expected
+  | .none, expected => match expected.expose with
+    | .option _ => pure ()
+    | _ => throw "T032"
+  | .er p, expected => match expected.expose with
+    | .result _ => checkWith env p .error
+    | _ => throw "T032"
+  | .some p, expected => match expected.expose with
+    | .option t => checkWith env p t
+    | _ => env.sub (.some p)
+  | .ok p, expected => match expected.expose with
+    | .result t => checkWith env p t
+    | _ => env.sub (.ok p)
+  | .tt, expected | .ff, expected => if Ty.bool == expected then pure () else throw "T022"
+  | .str, expected => if Ty.string == expected then pure () else throw "T022"
+  | .int n, expected =>
+    let t := expected.expose
     if t == .int then pure ()
     else match intRange t with
-      | some (lo, hi, code) => if lo ≤ n && n ≤ hi then pure () else throw code
-      | none => subsume e expected
-  | .float, .f32 | .float, .f64 => pure ()
-  | .hex n, t =>
+      | Option.some (lo, hi, code) => if lo ≤ n && n ≤ hi then pure () else throw code
+      | Option.none => env.sub (.int n)
+  | .float, expected => match expected.expose with
+    | .f32 | .f64 => pure ()
+    | _ => env.sub .float
+  | .hex n, expected =>
+    let t := expected.expose
     if t == .int then pure ()
     else match hexBits t with
-      | some (bits, code) => if n < 2 ^ bits then pure () else throw code
-      | none => subsume e expected
-  | .tuple es, .tuple ts =>
-    let ts := tysList ts
-    if es.length != ts.length then throw "T038"
-    for (e, t) in es.zip ts do check e t
-  | .struct fs, .struct ts =>
-    let ts := fieldsList ts
-    if fs.length != ts.length then throw "T039"
-    for ((n, e), (m, t)) in fs.zip ts do
-      if n != m then throw "T042"
-      check e t
-  | .list es, .list t | .set es, .set t => for e in es do check e t
-  | .map es, .map k v => for (ke, ve) in es do check ke k; check ve v
-  | .tensor shape es, .tensor t rank =>
-    if shape.length != rank then throw "T048"
-    if es.length != shape.foldl (· * ·) 1 then throw "T049"
-    for e in es do check e t
-  | .table header rows, .table cols =>
-    let cols := fieldsList cols
-    if header.length != cols.length then throw "T054"
-    for (n, (m, _)) in header.zip cols do
-      if n != m then throw "T055"
-    for row in rows do
-      if row.length != cols.length then throw "T056"
-      for (e, (_, t)) in row.zip cols do check e t
-  | .atom a, .atom b => if a == b then pure () else throw "T057"
-  | .atom a, .enum vs => if Variants.atomListed a vs then pure () else throw "T057"
-  | .term a p, .term b t => if a == b then check p t else throw "T057"
-  | .term a p, .enum vs =>
-    match Variants.termPayload a vs with
-    | some t => check p t
-    | none => throw "T057"
-  | .enum inner, .enum _ => check inner expected
-  | .enum _, _ => throw "T058"
-  | .data p, .data | .error p, .error => do let _ ← synthesize p; pure ()
-  | e, _ => subsume e expected
+      | Option.some (bits, code) => if n < 2 ^ bits then pure () else throw code
+      | Option.none => env.sub (.hex n)
+  | .tuple es, expected => match expected.expose with
+    | .tuple ts =>
+      if es.length != (tysList ts).length then throw "T038"
+      else checkPairs env es (tysList ts)
+    | _ => env.sub (.tuple es)
+  | .struct fs, expected => match expected.expose with
+    | .struct ts =>
+      if fs.length != (fieldsList ts).length then throw "T039"
+      else checkFields env fs (fieldsList ts)
+    | _ => env.sub (.struct fs)
+  | .list es, expected => match expected.expose with
+    | .list t => checkAll env es t
+    | _ => env.sub (.list es)
+  | .set es, expected => match expected.expose with
+    | .set t => checkAll env es t
+    | _ => env.sub (.set es)
+  | .map es, expected => match expected.expose with
+    | .map k v => checkEntries env es k v
+    | _ => env.sub (.map es)
+  | .tensor shape es, expected => match expected.expose with
+    | .tensor t rank =>
+      if shape.length != rank then throw "T048"
+      else if es.length != shape.foldl (· * ·) 1 then throw "T049"
+      else checkAll env es t
+    | _ => env.sub (.tensor shape es)
+  | .table header rows, expected => match expected.expose with
+    | .table cols =>
+      let cols := fieldsList cols
+      if header.length != cols.length then throw "T054"
+      else if header != cols.map (·.1) then throw "T055"
+      else checkRows env rows cols
+    | _ => env.sub (.table header rows)
+  | .atom a, expected => match expected.expose with
+    | .atom b => if a == b then pure () else throw "T057"
+    | .enum vs => if Variants.atomListed a vs then pure () else throw "T057"
+    | _ => env.sub (.atom a)
+  | .term a p, expected => match expected.expose with
+    | .term b t => if a == b then checkWith env p t else throw "T057"
+    | .enum vs => match Variants.termPayload a vs with
+      | Option.some t => checkWith env p t
+      | Option.none => throw "T057"
+    | _ => env.sub (.term a p)
+  | .enum inner, expected => match expected.expose with
+    | .enum _ => checkWith env inner expected
+    | _ => throw "T058"
+  | .data p, expected => match expected.expose with
+    | .data => do let _ ← env.syn p; pure ()
+    | _ => env.sub (.data p)
+  | .error p, expected => match expected.expose with
+    | .error => do let _ ← env.syn p; pure ()
+    | _ => env.sub (.error p)
+  | .hinted h e, _ => env.sub (.hinted h e)
+
+/-- A tuple's elements against its types, in order. -/
+def checkPairs (env : CheckEnv) : List Expr → List Ty → Except Code Unit
+  | e :: es, t :: ts => do checkWith env e t; checkPairs env es ts
+  | _, _ => pure ()
+
+/-- A struct's fields against its type's, in order: a name out of place is
+T042. -/
+def checkFields (env : CheckEnv) : List (String × Expr) → List (String × Ty) → Except Code Unit
+  | (n, e) :: fs, (m, t) :: ts => do
+    if n != m then throw "T042"
+    checkWith env e t
+    checkFields env fs ts
+  | _, _ => pure ()
+
+def checkAll (env : CheckEnv) : List Expr → Ty → Except Code Unit
+  | [], _ => pure ()
+  | e :: es, t => do checkWith env e t; checkAll env es t
+
+def checkEntries (env : CheckEnv) : List (Expr × Expr) → Ty → Ty → Except Code Unit
+  | [], _, _ => pure ()
+  | (ke, ve) :: es, k, v => do checkWith env ke k; checkWith env ve v; checkEntries env es k v
+
+/-- A table's rows: each one element per column (else T056), each against
+its column's type. -/
+def checkRows (env : CheckEnv) : List (List Expr) → List (String × Ty) → Except Code Unit
+  | [], _ => pure ()
+  | r :: rs, cols => do
+    if r.length != cols.length then throw "T056"
+    checkPairs env r (cols.map (·.2))
+    checkRows env rs cols
+
+end
+
+mutual
 
 /-- Check-Subsume reached by a form with no rule for the head: it synthesizes
 a type of another head, so it fails (T032), unless inferring what it would
 be finds a malformed hint first. -/
-partial def subsume (e : Expr) (_expected : Ty) : Except Code Unit := do
+partial def subsume (e : Expr) : Except Code Unit := do
   let _ ← (infer e).run #[]
   throw "T032"
 
@@ -501,6 +575,10 @@ partial def synthesize (e : Expr) : Except Code Ty := do
     let (t, _) ← (do let p ← infer e; resolve p).run #[]
     check e t
     pure t
+
+/-- `⊢ e ⇐ T`, with synthesis and Check-Subsume as they are. -/
+partial def check (e : Expr) (expected : Ty) : Except Code Unit :=
+  checkWith ⟨synthesize, subsume⟩ e expected
 
 end
 

@@ -89,3 +89,35 @@ jobs:
 
       - name: Run tests
         run: just ${{ matrix.recipe }}
+
+  # The Lean model of the type system in formal/: its proofs checked, and the
+  # Rust held to its oracle. See botdocs/formal.md. Its own job, since it needs
+  # Lean and none of the rest does, and it builds only the crates the oracle
+  # tests use.
+  formal:
+    name: formal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: formal
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      # elan, with no toolchain of its own: `lake` fetches the one
+      # formal/lean-toolchain pins on first use.
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Check the proofs and run the oracle tests
+        run: just test-formal

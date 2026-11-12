@@ -12,3 +12,4 @@ import Datalove.Proofs.Adapt
 import Datalove.Proofs.Convert
 import Datalove.Lit
 import Datalove.LitJson
+import Datalove.Proofs.LitSound

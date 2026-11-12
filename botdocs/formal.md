@@ -99,6 +99,8 @@ Under `formal/Datalove/Proofs/`:
   `rec X X`; T064 is what rules that out.
 - **A well-formed recursive type does not expose to a number**
   (`Ty.expose_not_numeric`), since its body uses its name.
+- **A literal that checks is a value of its type** (`Lit.check_sound`); see
+  [Literal typing](#user-content-literal-typing).
 - **A recursive type meets its one-step unfolding** (`Ty.meet_unfold`), on
   well-formed types, however many `rec`s it starts with.
 - **`@` is reflexive and transitive** on well-formed types (`Ty.adapt_refl`,
@@ -192,8 +194,21 @@ choice open, the model says which it made. It is not wholly independent of
 the code: it was written by someone who had read the checker first, and its
 structure follows the checker's where the doc allows.
 
-Its definitions are `partial`, since unification has no structural measure,
-so nothing is proved of them yet; the part is an oracle only.
+Inference, unification and synthesis are `partial`, since unification has no
+structural measure, and serve only as the oracle. Checking is total: it
+takes synthesis, for a `data` or `error` payload, and Check-Subsume as
+parameters (`checkWith`), and the oracle's `check` is it given the partial
+ones. Of checking one thing is proved, `Lit.check_sound`: a literal that
+checks against a type denotes a value of that type. What a type's values are
+(`HasType`, in `Proofs/LitSound.lean`) is written from the doc's tables, not
+from the checker: an integer in the type's range, a hex literal that fits its
+bits, a tensor with as many elements as its shape, a table whose header is
+the type's and whose rows have one element per column, an atom or term that
+is a variant of the enum, a recursive type's values its unfolding's. The
+theorem holds for any synthesis, and for any Check-Subsume that never
+succeeds. The real one always ends in T032, but it calls the partial
+inference, so Lean takes that as a premise rather than a fact. Dropping the
+tensor element-count check from the checker breaks the proof, as it should.
 
 `lit_tests` holds the Rust to it. It starts from an expression `ast_gen`
 makes, or from a literal of a type the hint generator above makes, which
@@ -242,7 +257,8 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
   that unfold alike can both be written, which is why the test checks each
   type against its own one-step unfolding rather than looking for such pairs.
 
-Neither Lean step is in `just test` or CI, which have no Lean.
+Neither Lean step is in `just test`, which has no Lean. CI runs both, in a
+job of their own that installs elan (`.github/workflows/ci.yml`).
 
 ## Keeping it true
 
@@ -270,13 +286,10 @@ In rough order of what to do next:
 - **Enum variants are sorted and named once.** The model, like the Rust,
   relies on both and states neither.
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
-- **Proofs about literal typing.** `Lit.lean` is partial, and an oracle only.
-  The claims worth proving are that a literal that checks against a type is a
-  value of it (in range, of the tensor's shape, with the table's columns),
-  and that where unification's constraints all hold, the order of a
-  collection's elements does not change what it synthesizes. The first
-  needs only checking, which is structural; the second needs unification
-  made total, with a measure or fuel.
+- **Inference and unification.** The doc claims that where unification's
+  constraints all hold, the order of a collection's elements does not change
+  what it synthesizes. Proving it needs unification made total, with a
+  measure or fuel, and `Lit.lean`'s inference is partial.
 - **Datafun's `@` class in inference**, `Class::Adapt`, which datalit's
   inference carries for datafun. `Lit.lean` has no `@` and leaves it out.
 - **The statement rules.** Datafun's statements, where the early
