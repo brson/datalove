@@ -170,6 +170,11 @@ pub struct GenContext<'db> {
     /// Current control flow nesting depth.
     pub control_flow_depth: usize,
 
+    /// How many calls the expression being written is inside, as arguments.
+    /// An argument may itself be a call, so without a bound a function of
+    /// enough parameters makes calls inside calls without end.
+    pub call_depth: usize,
+
     /// Name of the current function being generated (to prevent self-recursion).
     pub current_function_name: Option<String>,
 
@@ -209,6 +214,7 @@ impl<'db> GenContext<'db> {
             return_type: None,
             loop_depth: 0,
             control_flow_depth: 0,
+            call_depth: 0,
             current_function_name: None,
             max_callable_function_index: None,
             generic_functions: Vec::new(),

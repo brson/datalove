@@ -10,6 +10,10 @@ use crate::context::{GenContext, FunctionSig, Param, ParamMode, Variable, is_lin
 use crate::gen_type::{gen_bool_type, gen_u32_type};
 use crate::pretty::{pretty_expr, pretty_type_hint};
 
+/// How deep calls may nest inside each other's arguments. Deep enough that a
+/// seed short of it writes what it wrote without a bound.
+const MAX_CALL_DEPTH: usize = 6;
+
 /// Check if a type supports bare arithmetic operators.
 ///
 /// Floats and bigints support bare arithmetic.
@@ -117,8 +121,11 @@ pub fn gen_expr<'db>(
         .filter(|f| can_call(db, f, ctx))
         .cloned()
         .collect();
+    // The depth is asked last, after the roll, so that what is drawn, and so
+    // every expression written short of the bound, is what it was without it.
     let can_call_fn = !matching_fns.is_empty()
-        && config.check_probability(rng, config.function_call_probability);
+        && config.check_probability(rng, config.function_call_probability)
+        && ctx.call_depth < MAX_CALL_DEPTH;
 
     let can_arith = supports_bare_arithmetic(type_hint.C())
         && config.check_probability(rng, config.arithmetic_probability);
@@ -218,7 +225,9 @@ pub fn gen_expr<'db>(
     if !projections.is_empty() && config.check_probability(rng, config.projection_probability) {
         choices.push(Choice::Projection);
     }
-    if !call_projections.is_empty() && config.check_probability(rng, config.projection_probability) {
+    if !call_projections.is_empty() && config.check_probability(rng, config.projection_probability)
+        && ctx.call_depth < MAX_CALL_DEPTH
+    {
         choices.push(Choice::CallProjection);
     }
     if !index_candidates.is_empty() && config.check_probability(rng, config.projection_probability) {
@@ -721,6 +730,7 @@ pub fn gen_function_call<'db>(
             hidden.push((at, ctx.variables.remove(at)));
         }
     }
+    ctx.call_depth += 1;
     let args: Vec<String> = func
         .params
         .iter()
@@ -735,6 +745,7 @@ pub fn gen_function_call<'db>(
             Option::None => gen_expr(db, rng, param.type_hint.C(), config, ctx),
         })
         .collect();
+    ctx.call_depth -= 1;
     for (at, variable) in hidden.into_iter().rev() {
         ctx.variables.insert(at, variable);
     }
