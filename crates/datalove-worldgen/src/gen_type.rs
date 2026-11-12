@@ -27,46 +27,17 @@ pub fn gen_type_hint<'db>(
     ast_gen::gen_type_hint(db, rng, &config.type_config, 0)
 }
 
-/// A recursive type, `rec R ...`, of one of a few shapes, each with its name
-/// inside a list as the language asks (T064), and a leaf type where a shape
-/// carries a value: a list of itself, a list of options of itself, a node with
-/// a value and a list of children, a pair of a value and a list of itself, and
-/// an enum of a leaf and a node.
+/// A recursive type, as datalit's generator writes one, with leaves of the
+/// config's types.
 ///
-/// Always named `R`: the name is no part of the type, and one name lets
-/// `types_match` compare two of them by their bodies.
+/// Always named `R`, which lets `types_match` compare two of them by their
+/// bodies.
 fn gen_rec_type<'db>(
     db: &'db dyn salsa::Database,
     rng: &mut SeededRng,
     config: &WorldGenConfig,
 ) -> TypeHint<'db> {
-    use bct::text::InternedText;
-    use datalove_datalit::ast::{
-        TypeHintAlias, TypeHintAnonStruct, TypeHintAnonTuple, TypeHintEnum, TypeHintEnumVariant,
-        TypeHintList, TypeHintNamedField, TypeHintOption, TypeHintRec,
-    };
-    let name = InternedText::new(db, "R".S());
-    let itself = TypeHint::Alias(TypeHintAlias { name, local_index: None });
-    let list_of = |t: TypeHint<'db>| TypeHint::List(TypeHintList { element_type: Box::new(t) });
-    let leaf = ast_gen::gen_type_hint(db, rng, &config.type_config, config.type_config.max_depth);
-    let body = match rng.random_range(0..5) {
-        0 => list_of(itself),
-        1 => list_of(TypeHint::Option(TypeHintOption { inner_type: Box::new(itself) })),
-        2 => TypeHint::AnonStruct(TypeHintAnonStruct {
-            fields: vec![
-                TypeHintNamedField { name: InternedText::new(db, "value".S()), type_hint: Box::new(leaf) },
-                TypeHintNamedField { name: InternedText::new(db, "kids".S()), type_hint: Box::new(list_of(itself)) },
-            ],
-        }),
-        3 => TypeHint::AnonTuple(TypeHintAnonTuple { fields: vec![leaf, list_of(itself)] }),
-        _ => TypeHint::Enum(TypeHintEnum {
-            variants: vec![
-                TypeHintEnumVariant { name: InternedText::new(db, "Leaf".S()), payload: Some(Box::new(leaf)) },
-                TypeHintEnumVariant { name: InternedText::new(db, "Node".S()), payload: Some(Box::new(list_of(itself))) },
-            ],
-        }),
-    };
-    TypeHint::Rec(TypeHintRec { name, body: Box::new(body), local_index: None })
+    ast_gen::gen_rec_type_hint(db, rng, &config.type_config)
 }
 
 /// Pick a type, and how to write it.

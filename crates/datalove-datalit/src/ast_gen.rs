@@ -76,6 +76,10 @@ pub struct TypeWeights {
     pub data_type: u32,
     pub error_type: u32,
     pub table_type: u32,
+    /// A recursive type, `rec R ...`, of one of the shapes
+    /// [`gen_rec_type_hint`] writes. Picked only at the top of a type, since
+    /// one cannot be a set's element or a map's key (T065).
+    pub rec_type: u32,
 }
 
 impl Default for TypeWeights {
@@ -111,6 +115,7 @@ impl Default for TypeWeights {
             data_type: 2,
             error_type: 2,
             table_type: 2,
+            rec_type: 0,
         }
     }
 }
@@ -149,6 +154,7 @@ impl TypeWeights {
             data_type: 0,
             error_type: 0,
             table_type: 0,
+            rec_type: 0,
         }
     }
 }
@@ -287,6 +293,9 @@ pub fn gen_type_hint<'db>(
     add_choice(weights.usize_type, 24);
     add_choice(weights.isize_type, 25);
     add_choice(weights.table_type, 26);
+    if depth == 0 {
+        add_choice(weights.rec_type, 27);
+    }
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -405,8 +414,45 @@ pub fn gen_type_hint<'db>(
                 .collect();
             TypeHint::Table(TypeHintTable { columns })
         }
+        27 => gen_rec_type_hint(db, rng, config),
         _ => TypeHint::Bool,
     }
+}
+
+/// A recursive type, `rec R ...`, of one of a few shapes, each with its name
+/// inside a list as the language asks (T064), and a leaf type where a shape
+/// carries a value: a list of itself, a list of options of itself, a node with
+/// a value and a list of children, a pair of a value and a list of itself, and
+/// an enum of a leaf and a node.
+///
+/// Always named `R`: the name is no part of the type.
+pub fn gen_rec_type_hint<'db>(
+    db: &'db dyn salsa::Database,
+    rng: &mut SeededRng,
+    config: &AstGenConfig,
+) -> TypeHint<'db> {
+    let name = InternedText::new(db, "R".S());
+    let itself = TypeHint::Alias(TypeHintAlias { name, local_index: None });
+    let list_of = |t: TypeHint<'db>| TypeHint::List(TypeHintList { element_type: Box::new(t) });
+    let leaf = gen_type_hint(db, rng, config, config.max_depth);
+    let body = match rng.random_range(0..5) {
+        0 => list_of(itself),
+        1 => list_of(TypeHint::Option(TypeHintOption { inner_type: Box::new(itself) })),
+        2 => TypeHint::AnonStruct(TypeHintAnonStruct {
+            fields: vec![
+                TypeHintNamedField { name: InternedText::new(db, "value".S()), type_hint: Box::new(leaf) },
+                TypeHintNamedField { name: InternedText::new(db, "kids".S()), type_hint: Box::new(list_of(itself)) },
+            ],
+        }),
+        3 => TypeHint::AnonTuple(TypeHintAnonTuple { fields: vec![leaf, list_of(itself)] }),
+        _ => TypeHint::Enum(TypeHintEnum {
+            variants: vec![
+                TypeHintEnumVariant { name: InternedText::new(db, "Leaf".S()), payload: Some(Box::new(leaf)) },
+                TypeHintEnumVariant { name: InternedText::new(db, "Node".S()), payload: Some(Box::new(list_of(itself))) },
+            ],
+        }),
+    };
+    TypeHint::Rec(TypeHintRec { name, body: Box::new(body), local_index: None })
 }
 
 /// How many elements a collection value has, `depth` down.

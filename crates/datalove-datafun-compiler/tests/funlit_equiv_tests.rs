@@ -1,7 +1,9 @@
 //! Tests for equivalence between datalit and datafun parsing and typechecking.
 //!
 //! These tests verify that datafun's inline literal expressions produce the same
-//! AST structure and typecheck results as datalit for pure datalit expressions.
+//! AST structure and typecheck results as datalit for pure datalit expressions,
+//! one hand-written expression of each kind. Generated ones, and broken ones,
+//! are `literal_equiv_tests`'.
 
 use rmx::prelude::*;
 
@@ -10,7 +12,6 @@ use datalove_datafun_compiler::funlit_equiv::{
     datalit_typecheck_to_serde,
     datafun_unit_typecheck_to_serde,
 };
-use datalove_datalit::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 
 /// Extract expression from a let statement in a ParsedStatements.
 fn extract_let_value<'db>(
@@ -256,167 +257,4 @@ fn test_none() {
     let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "none").X();
     test_typecheck_equiv(&db, "none").X();
-}
-
-// ============================================================================
-// AST-generated tests
-// ============================================================================
-
-/// Create a config for AST generation that produces expressions both parsers can handle.
-fn make_compatible_config() -> AstGenConfig {
-    use datalove_datalit::ast_gen::{TypeWeights, NumericStrategy};
-
-    AstGenConfig {
-        // Type hints work with `: type / expr` syntax.
-        // Type hints work in expression context because function definitions (which also use `:`)
-        // are statements, not expressions. In expression context, `:` unambiguously
-        // starts a type hint.
-        include_type_hints: true,
-        max_depth: 2,
-        // Empty collections now synthesize to unit element type in both typecheckers.
-        min_collection_size: 0,
-        max_collection_size: 3,
-        // Small non-negative values work without type hints (no negative literal issues).
-        numeric_strategy: NumericStrategy::SmallNonNegative,
-        type_weights: TypeWeights {
-            bool_type: 10,
-            u8_type: 5,
-            // Signed ints work - datafun_expr_to_datalit_serde handles UnaryOp(Neg, Int).
-            i8_type: 5,
-            u16_type: 5,
-            i16_type: 5,
-            u32_type: 10,
-            i32_type: 10,
-            // 64-bit ints work with SmallNonNegative strategy (values 0-255).
-            u64_type: 10,
-            i64_type: 10,
-            // usize/isize work with SmallNonNegative strategy.
-            usize_type: 10,
-            isize_type: 10,
-            // Float works after fixing parser to consume dot before checking decimal.
-            f32_type: 10,
-            f64_type: 10,
-            // BigInt works with SmallNonNegative strategy.
-            int_type: 10,
-            string_type: 10,
-            // Lists work with min_collection_size: 1 to avoid empty list type inference issues.
-            list_type: 10,
-            // Map and set work with min_collection_size: 1.
-            map_type: 10,
-            set_type: 10,
-            // Option type works with type hints for none.
-            option_type: 10,
-            // Result type works with type hints for error.
-            result_type: 10,
-            tensor_type: 10, // Works with min_collection_size: 1
-            anon_tuple_type: 10,
-            // Named tuple works with type hints.
-            named_tuple_type: 10,
-            anon_struct_type: 10,
-            // Named struct works with type hints.
-            named_struct_type: 10,
-            // Enums work with type hints.
-            anon_enum_type: 10,
-            named_enum_type: 10,
-            // Data and error types work with type hints.
-            data_type: 10,
-            error_type: 10,
-            table_type: 10,
-        },
-        ..Default::default()
-    }
-}
-
-#[test]
-fn test_funlit_equiv_generated_parse() {
-    let db = datalove_datafun_compiler::Database::default();
-    let config = make_compatible_config();
-
-    let mut failures = vec![];
-
-    for seed in 0..100 {
-        let expr_full = gen_expr_full_seeded(&db, seed, config.C());
-        let expr_text = datalove_datalit::pretty::pretty_print(&db, &expr_full);
-
-        if let Err(e) = test_parse_equiv(&db, &expr_text) {
-            failures.push((seed, expr_text, e));
-        }
-    }
-
-    if !failures.is_empty() {
-        for (seed, text, err) in &failures {
-            eprintln!("Seed {}: {}\n{}\n", seed, text, err);
-        }
-        panic!("{} parse equivalence failures out of 100", failures.len());
-    }
-}
-
-#[test]
-fn test_funlit_equiv_generated_typecheck() {
-    let db = datalove_datafun_compiler::Database::default();
-    let config = make_compatible_config();
-
-    let mut failures = vec![];
-
-    for seed in 0..100 {
-        let expr_full = gen_expr_full_seeded(&db, seed, config.C());
-        let expr_text = datalove_datalit::pretty::pretty_print(&db, &expr_full);
-
-        if let Err(e) = test_typecheck_equiv(&db, &expr_text) {
-            failures.push((seed, expr_text, e));
-        }
-    }
-
-    if !failures.is_empty() {
-        for (seed, text, err) in &failures {
-            eprintln!("Seed {}: {}\n{}\n", seed, text, err);
-        }
-        panic!("{} typecheck equivalence failures out of 100", failures.len());
-    }
-}
-
-#[test]
-fn test_funlit_equiv_roundtrip() {
-    let db = datalove_datafun_compiler::Database::default();
-    let config = make_compatible_config();
-
-    let mut failures = vec![];
-
-    for seed in 0..50 {
-        let expr_full = gen_expr_full_seeded(&db, seed, config.C());
-        let original_text = datalove_datalit::pretty::pretty_print(&db, &expr_full);
-
-        // First pass.
-        if let Err(e) = test_parse_equiv(&db, &original_text) {
-            failures.push((seed, "first pass".S(), original_text.C(), e));
-            continue;
-        }
-
-        // Parse with datafun, pretty-print, then test again.
-        let datafun_text = format!("let _x = {}", original_text);
-        let datafun_source = bct::input::Source::new(&db, datafun_text);
-        let datafun_script = datalove_datafun_parser::parse_integration_test(&db, datafun_source);
-
-        if let Ok(datafun_expr) = extract_let_value(&db, datafun_script.C()) {
-            if let Ok(serde) = datafun_expr_to_datalit_serde(&db, datafun_expr) {
-                // Serialize and deserialize to get a new string representation.
-                let json = rmx::serde_json::to_string(&serde).X();
-                let reparsed: datalove_datalit::ast_serde::ExprFull =
-                    rmx::serde_json::from_str(&json).X();
-
-                // The roundtrip should be identical.
-                if serde != reparsed {
-                    failures.push((seed, "roundtrip json".S(), original_text.C(),
-                        format!("JSON roundtrip changed AST")));
-                }
-            }
-        }
-    }
-
-    if !failures.is_empty() {
-        for (seed, phase, text, err) in &failures {
-            eprintln!("Seed {} ({}): {}\n{}\n", seed, phase, text, err);
-        }
-        panic!("{} roundtrip failures out of 50", failures.len());
-    }
 }

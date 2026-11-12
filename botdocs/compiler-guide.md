@@ -182,7 +182,9 @@ of range for a `u32` rather than merely the wrong type.
 The two languages reach that by different routes - datalit carries a sign
 inside the literal token, datafun parses a negation as an operator over an
 unsigned literal - which is a place they can drift apart, and did.
-`literal_type_equiv_tests` holds them to the same answers.
+`literal_type_equiv_tests` holds them to the same answers on hand-written
+cases, and `literal_equiv_tests` on generated expressions of every kind, as
+they are inferred, as they are checked against a type, and broken.
 
 Neither takes an integer literal where a float is expected, or the reverse.
 There is no implicit conversion between the two families; see
@@ -2088,6 +2090,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
 | `parallel_warm_tests` | That in a parallel compile every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
+| `literal_equiv_tests` (in `datalove-datafun-compiler`) | Generated datalit expressions of every kind, recursive types among them, put to datalit and to datafun: inferred (`expr` against `let _x = expr`: the same tree, type and diagnostic codes), checked (`: T / expr` against `let _x: T = expr`), and broken by datalit's mutations (both refuse, or agree). A failed subsumption is T022 or T032 in datalit and F016 in datafun by design, and what datalit cannot parse datafun's wider grammar may, so long as it refuses it. A difference is shrunk and written out; `LITERAL_EQUIV_TEXT` compares one expression |
 | `coverage_tests` (in `datalove-worldgen`) | What of the AST the worldfiles `worldgen_engine_tests` runs cover. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
 | `worldgen_engine_tests` | Generated worldfiles, a third of them one fragment and the rest cut into units as a session is, through `engine_tests`' checks (`tests/engines/mod.rs`, which both share): every unit compiles, and every engine observes what the IR walker did. Most worlds call the standard library, which worldfile analysis compiles as far as a world requires it when `AnalysisOptions::system` is given (`worldfile_module_compiler`); the AOT backends link a native component built with its riders, in `rider_build::default_work_dir()`. Seeds run in worker processes, so a crash or a hang fails its seed alone. A failing world is written out under the target directory, shrunk, written out again, and run again with `WORLDGEN_ENGINES_WORLD`; on the default seeds, floors ask for loops entered, units ended early and blocked, and AOT runs. See [plan-worldgen-engines.md](plan-worldgen-engines.md) |
 | `generative_reactive_tests` (in `datalove-tests`) | Generated scripts, cut into fragment and expression units that declare and call functions, call modules' qualified and the standard library, and return early with errors, and edited, deleted, reordered and inserted at random, with the modules and data they require edited too, and beside each a dense session of a few units over two names, leave each unit as a fresh run of its code would after every step, in how it ended, what it binds and what it shows, and never crash the engine. The session runs its calls through the chaos JIT, kept across the steps; the fresh run, on the bytecode alone. A few seeds from the test's default in `just test`, 1000 from seed 1000000 in `just test-generative-reactive`; a failing seed is shrunk and written out as a worldfile, and once fixed is kept in `tests/generative_reactive/`, which every run checks first. `just measure-faults` breaks each reach rule in turn, by `scripts/reach-faults.toml`, and says what these tests and the hand-written ones catch of it |
@@ -2106,6 +2109,7 @@ give them, so that a drawn run can be repeated.
 
 | Suite | Prefix | Default | `just` recipe |
 |-------|--------|---------|---------------|
+| `literal_equiv_tests` | `LITERAL_EQUIV` | 500 from 0 | `test-literal-equiv`, 100000 from 1000000 |
 | `coverage_tests` | `WORLDGEN_COVERAGE` | 300 from 1200, 200 for the floors | `test-worldgen-coverage`, 1000 from 1000000 |
 | `worldgen_engine_tests` | `WORLDGEN_ENGINES` | 40 from 0 | `test-worldgen-engines`, 1000 from 1000000 |
 | `generative_reactive_tests` | `GENERATIVE_REACTIVE` | 20 from 20 | `test-generative-reactive`, 1000 from 1000000 |

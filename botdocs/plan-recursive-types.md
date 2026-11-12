@@ -627,9 +627,12 @@ question; the questions are under
 
 **Coverage**
 
-- The program generator writes no `rec` types, so worldgen's dual-engine
-  runs never exercise them; `coverage_tests.rs` lists `Rec` as not yet
-  generated, and `ast_gen.rs` and `funlit_equiv.rs` hold `todo!()`s for them.
+- Generated now (November 2026): datalit's generator writes `rec` types of
+  five shapes, behind a weight (`TypeWeights::rec_type`), and values of them;
+  `worldgen_engine_tests` runs them on every engine, which found that a
+  const of one did not lower, and `literal_equiv_tests` puts them to datalit
+  and datafun alike. Before, the generator wrote none, and `ast_gen.rs` and
+  `funlit_equiv.rs` held `todo!()`s for them.
 - Miri ran the recursive fixtures on the interpreter and the bytecode, which
   covers `IrTyDescTable` and datalit's `TyDescTable`. It cannot run generated
   code, so the Cranelift and C AOT descriptors are tested natively only.

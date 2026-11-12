@@ -307,6 +307,7 @@ fn test_type_weight_configuration() {
             data_type: 0,
             error_type: 0,
             table_type: 0,
+            rec_type: 0,
         },
         max_depth: 1,
         ..Default::default()

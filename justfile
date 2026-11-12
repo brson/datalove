@@ -39,16 +39,16 @@ test-64:
 
 # The slow configuration: the property tests and exhaustive cases, the wasm
 # build and the wasm smoke test, the sys riders built from source, generated
-# programs, and generated script sessions.
+# programs, generated script sessions, and generated literals.
 test-slow:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt --features slow_tests
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt-tests --features slow_tests
-    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun-compiler --features slow_tests
     just check-wasm
     just test-wasm
     just test-sys-riders
     just test-worldgen-engines
     just test-generative-reactive
+    just test-literal-equiv
 
 # The suites that generate what they test from seeds take them alike: COUNT
 # seeds from SEED, which may be `random` to draw the first from the OS. Each
@@ -78,8 +78,16 @@ test-worldgen-coverage SEED='1000000' COUNT='1000':
 test-generative-reactive SEED='1000000' COUNT='1000':
     GENERATIVE_REACTIVE_SEED={{SEED}} GENERATIVE_REACTIVE_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test generative_reactive_tests
 
+# Generated datalit expressions, inferred, checked and broken, put to datalit
+# and to datafun, which must agree. `just test` runs 500 seeds from 0; this
+# runs 100000 from far past them, about two minutes in a debug build. A
+# difference is shrunk and written out; see the test's docs.
+test-literal-equiv SEED='1000000' COUNT='100000':
+    LITERAL_EQUIV_SEED={{SEED}} LITERAL_EQUIV_COUNT={{COUNT}} cargo test -p datalove-datafun-compiler --test literal_equiv_tests
+
 # Every generative suite from seeds drawn from the OS, COUNT of each.
 test-generative-random COUNT='100':
+    just test-literal-equiv random {{COUNT}}
     just test-worldgen-coverage random {{COUNT}}
     just test-worldgen-engines random {{COUNT}}
     just test-generative-reactive random {{COUNT}}

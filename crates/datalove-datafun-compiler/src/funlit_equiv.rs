@@ -367,6 +367,10 @@ pub enum TypeSerde {
     Term { name: String, payload: Box<TypeSerde> },
     Enum { variants: Vec<(String, Option<TypeSerde>)> },
     Table { columns: Vec<(String, TypeSerde)> },
+    /// A recursive type, its body referring back to it by de Bruijn index;
+    /// the name it was written with is no part of the type.
+    Rec { body: Box<TypeSerde> },
+    RecVar { index: u32 },
 }
 
 /// Serializable type error (common subset).
@@ -421,9 +425,8 @@ fn datalit_type_to_serde<'db>(
         // A funlit is a data literal, and a data literal has no enclosing
         // generic function to take a type parameter from.
         Type::Var(name) => unreachable!("type parameter {name:?} in a data literal"),
-        // The literals compared are generated, and the generator writes no
-        // recursive types.
-        Type::Rec(_) | Type::RecVar(_) => todo!("recursive types in funlit equivalence"),
+        Type::Rec(rec) => TypeSerde::Rec { body: Box::new(datalit_type_to_serde(db, (*rec.body).C())) },
+        Type::RecVar(index) => TypeSerde::RecVar { index: *index },
         Type::Bool => TypeSerde::Bool,
         Type::U8 => TypeSerde::U8,
         Type::I8 => TypeSerde::I8,
