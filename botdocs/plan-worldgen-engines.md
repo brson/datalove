@@ -3,7 +3,7 @@
 A plan to hold generated programs to the IR walker on every engine, as the
 hand-written engine fixtures are, and to make the generated programs show
 enough of what they compute for that to mean something. Written November
-2026; phases 1 to 3 are done, the rest is not.
+2026; phases 1 to 3 are done, and phase 4 in part.
 
 ## Contents
 
@@ -203,10 +203,45 @@ what "generated is not exercised" in the compiler guide asks for.
      the second as a function inside the first -- an error -- and lost the
      script's expression counters, failing a debug assertion (parser
      fixture `324`). Function scopes nest now. Found by shrink candidates.
-4. What the generator never writes, each taken off `NOT_YET_GENERATED` in
-   `coverage_tests` as it lands: standard library calls, data files in
-   worldfiles, `rec` types, hex literals, `icall`, a test rider. Then
-   `worldgen_tests` retired.
+4. **Partly done.** What the generator never wrote. `WorldGenConfig::engines`
+   is the suite's config, now in worldgen, and `coverage_tests` measures it
+   rather than the default, expression units included.
+   - Data files: the preset turns on binding access, which writes `require
+     data` with its file, and takes, revives and divisors besides.
+   - Hex literals: `hex_probability`, small or anywhere in the type's range.
+   - The standard library: `std_lib` reads the non-generic functions of
+     fifteen `sys/std` modules from their sources, and `std_modules` has a
+     script call into one to three of them and a module into one, qualified.
+     `int.pow`, `int.factorial` and `string.repeat` are left out: given an
+     argument in the billions, the first ran past two minutes. Worldfile
+     analysis compiles the library when `AnalysisOptions::system` is given,
+     as far as the sections require it, and registers its natives; the
+     oracle gives it to a world that requires `sys/`. The AOT backends do
+     not link its rider, so worlds of one fragment call none of it.
+   - `icall`: every intrinsic but the remainders, whose zero divisor is not
+     defined, as functions named `icall name`.
+   - `worldgen_tests` retired: the suite's compile check is stricter than
+     its typecheck, and `coverage_tests` counts what its text searches
+     looked for. Determinism is a unit test, for the engines' config too.
+
+   Found on the way: a unit that failed at run time -- a stack overflow
+   from recursion a shrink had cut the base case off -- emptied the
+   executor's session, and worldfile analysis compiled the units after it
+   against the old one; the executor's assertion that a unit reads only
+   earlier units failed (`1030`). Analysis starts a new compiler, as the
+   REPL does. And a world that hung made every shrink candidate wait out
+   its timeout, so a shrink is bounded by five minutes now.
+
+   5000 seeds with the library and intrinsics then found two more:
+   - The C backend's shift intrinsics wrote a bare `<<` or `>>`, undefined
+     in C past the width, where the IR walker and Cranelift shift by the
+     amount modulo the width (`1032`).
+   - Dead code elimination, which runs where const inlining does, so in a
+     function with a local `const`, removed an unused read of a copy field
+     and left a drop of the whole struct, freeing what was read after
+     (`1031`). The reference itself was wrong; `noconst` was right.
+
+   Still to do: `rec` types, a test rider, AOT with the standard library.
 
 ## Open questions
 

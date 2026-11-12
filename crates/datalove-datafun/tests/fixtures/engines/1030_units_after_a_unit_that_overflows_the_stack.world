@@ -1,0 +1,36 @@
+----------
+module local/gen/m
+----------
+fun f(n: int): int
+  let r: int = f(n - 1)
+  ret r
+end fun
+----------
+scriptunit-fragment
+----------
+require module local/gen/m
+import m.f
+let before: int = 1
+----------
+scriptunit-fragment
+----------
+
+// This overflows the stack, which fails the unit at run time and frees
+// what every unit bound: the session starts again, as in the REPL.
+
+let v: int = f(3)
+
+----------
+scriptunit-fragment
+----------
+
+// So `v` is unknown here, as is `before`. Compiled against the session as
+// it was, this unit read `v` of a unit the executor had forgotten, and an
+// assertion in the executor failed. Found by worldgen_engine_tests.
+
+debuglog v
+
+----------
+scriptunit-fragment
+----------
+debuglog "after"

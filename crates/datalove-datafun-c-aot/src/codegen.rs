@@ -3525,10 +3525,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} ^ *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} << (*(uint32_t*){} & (sizeof(uint32_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU32 => {
-                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint32_t*){} = *(uint32_t*){} >> (*(uint32_t*){} & (sizeof(uint32_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU32 => {
                 writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint32_t*){});", dest_addr, arg0()).X();
@@ -3567,7 +3567,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(int32_t*){} = -*(int32_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI32 => {
-                writeln!(out, "    *(int32_t*){} = *(int32_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(int32_t*){} = *(int32_t*){} >> (*(uint32_t*){} & (sizeof(int32_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI32 => {
                 writeln!(out, "    *(int32_t*){} = *(int32_t*){} % *(int32_t*){};", dest_addr, arg0(), arg1()).X();
@@ -3728,10 +3728,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} ^ *(uint64_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} << (*(uint32_t*){} & (sizeof(uint64_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} >> (*(uint32_t*){} & (sizeof(uint64_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU64 => {
                 writeln!(out, "    *(uint32_t*){} = (uint32_t)__builtin_popcountll(*(uint64_t*){});", dest_addr, arg0()).X();
@@ -3770,7 +3770,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(int64_t*){} = -*(int64_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI64 => {
-                writeln!(out, "    *(int64_t*){} = *(int64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(int64_t*){} = *(int64_t*){} >> (*(uint32_t*){} & (sizeof(int64_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI64 => {
                 writeln!(out, "    *(int64_t*){} = *(int64_t*){} % *(int64_t*){};", dest_addr, arg0(), arg1()).X();
@@ -3790,10 +3790,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} ^ *(uint8_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} << (*(uint32_t*){} & (sizeof(uint8_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} >> (*(uint32_t*){} & (sizeof(uint8_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU8 => {
                 writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint8_t*){});", dest_addr, arg0()).X();
@@ -3829,7 +3829,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(int8_t*){} = -*(int8_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI8 => {
-                writeln!(out, "    *(int8_t*){} = *(int8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(int8_t*){} = *(int8_t*){} >> (*(uint32_t*){} & (sizeof(int8_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI8 => {
                 writeln!(out, "    *(int8_t*){} = *(int8_t*){} % *(int8_t*){};", dest_addr, arg0(), arg1()).X();
@@ -3849,10 +3849,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} ^ *(uint16_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} << (*(uint32_t*){} & (sizeof(uint16_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} >> (*(uint32_t*){} & (sizeof(uint16_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountU16 => {
                 writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint16_t*){});", dest_addr, arg0()).X();
@@ -3891,7 +3891,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(int16_t*){} = -*(int16_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrI16 => {
-                writeln!(out, "    *(int16_t*){} = *(int16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(int16_t*){} = *(int16_t*){} >> (*(uint32_t*){} & (sizeof(int16_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremI16 => {
                 writeln!(out, "    *(int16_t*){} = *(int16_t*){} % *(int16_t*){};", dest_addr, arg0(), arg1()).X();
@@ -3911,10 +3911,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(index_t*){} = *(index_t*){} ^ *(index_t*){};", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShlIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} << (*(uint32_t*){} & (sizeof(index_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::ShrIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} >> (*(uint32_t*){} & (sizeof(index_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::PopcountIndex => {
                 #[cfg(not(feature = "index-64"))]
@@ -3985,7 +3985,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(offset_t*){} = -*(offset_t*){};", dest_addr, arg0()).X();
             }
             IntrinsicId::SshrOffset => {
-                writeln!(out, "    *(offset_t*){} = *(offset_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).X();
+                writeln!(out, "    *(offset_t*){} = *(offset_t*){} >> (*(uint32_t*){} & (sizeof(offset_t) * 8 - 1));", dest_addr, arg0(), arg1()).X();
             }
             IntrinsicId::SremOffset => {
                 writeln!(out, "    *(offset_t*){} = *(offset_t*){} % *(offset_t*){};", dest_addr, arg0(), arg1()).X();

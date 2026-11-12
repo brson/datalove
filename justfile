@@ -58,16 +58,11 @@ test-slow:
 # drawn seeds.
 
 # Generated programs on every engine, each held to the IR walker, as the
-# engine fixtures are. `just test` runs 20 seeds from 0; this runs 1000 from
-# far past them, about a minute and a half in a debug build. A failing world
-# is written out; see the test's docs.
+# engine fixtures are. `just test` runs 40 seeds from 0; this runs 1000 from
+# far past them, about two minutes in a debug build. A failing world is
+# shrunk and written out; see the test's docs.
 test-worldgen-engines SEED='1000000' COUNT='1000':
     WORLDGEN_ENGINES_SEED={{SEED}} WORLDGEN_ENGINES_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun --test worldgen_engine_tests
-
-# Generated programs typechecked. `just test` runs 50 seeds from 0; this runs
-# 1000 from far past them.
-test-worldgen-typecheck SEED='1000000' COUNT='1000':
-    WORLDGEN_TYPECHECK_SEED={{SEED}} WORLDGEN_TYPECHECK_COUNT={{COUNT}} cargo test -p datalove-worldgen --test worldgen_tests
 
 # What of the language generated programs cover, printed. Over seeds other
 # than the test's default only a kind written down as never generated that
@@ -85,7 +80,6 @@ test-generative-reactive SEED='1000000' COUNT='1000':
 
 # Every generative suite from seeds drawn from the OS, COUNT of each.
 test-generative-random COUNT='100':
-    just test-worldgen-typecheck random {{COUNT}}
     just test-worldgen-coverage random {{COUNT}}
     just test-worldgen-engines random {{COUNT}}
     just test-generative-reactive random {{COUNT}}

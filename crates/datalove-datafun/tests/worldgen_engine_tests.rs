@@ -80,8 +80,10 @@ const SHRINK_TIMEOUT: Duration = Duration::from_secs(30);
 /// breaks them alike, more often than not.
 const MAX_SHRUNK: usize = 3;
 
-/// The most candidates one shrink checks.
-const MAX_SHRINK_RUNS: usize = 2000;
+/// How long one shrink may go on. A world that hangs is shrunk by
+/// candidates that each take [`SHRINK_TIMEOUT`] to fail, so a bound on the
+/// count of them alone allowed hours.
+const SHRINK_BUDGET: Duration = Duration::from_secs(300);
 
 /// What a worker's line starts with, telling it from anything else the
 /// process prints.
@@ -98,10 +100,14 @@ const WORKER: &str = "WORLDGEN_ENGINES_WORKER";
 
 /// The generator's configuration for a seed: [`WorldGenConfig::engines`],
 /// written as one fragment for one seed in [`ONE_FRAGMENT_EVERY`].
+///
+/// A world of one fragment is for the AOT backends, which do not link the
+/// standard library's rider here, so it calls none of the library.
 fn config(seed: u64) -> WorldGenConfig {
-    WorldGenConfig {
-        one_fragment: SeededRng::derive(seed, "one-fragment").random_range(0..ONE_FRAGMENT_EVERY) == 0,
-        ..WorldGenConfig::engines()
+    let engines = WorldGenConfig::engines();
+    match SeededRng::derive(seed, "one-fragment").random_range(0..ONE_FRAGMENT_EVERY) == 0 {
+        true => WorldGenConfig { one_fragment: true, std_modules: (0, 0), ..engines },
+        false => engines,
     }
 }
 
@@ -475,13 +481,13 @@ fn join_lines<'a>(lines: impl Iterator<Item = &'a str>) -> String {
 ///
 /// Whole sections, then whole blocks, then runs of lines, halving the run
 /// down to one line, each dropped where what is left still fails with
-/// `signature_of_failure`; until nothing more can be.
+/// `signature_of_failure`; until nothing more can be, or
+/// [`SHRINK_BUDGET`] is spent.
 fn shrink(world: &str, signature_of_failure: &str, name: &str) -> String {
     let path = out_dir().join(format!("{name}.candidate.world"));
-    let runs = std::cell::Cell::new(0);
+    let deadline = Instant::now() + SHRINK_BUDGET;
     let fails = |candidate: &str| {
-        runs.set(runs.get() + 1);
-        if runs.get() > MAX_SHRINK_RUNS {
+        if Instant::now() > deadline {
             return false;
         }
         std::fs::write(&path, candidate).X();
@@ -544,7 +550,7 @@ fn shrink(world: &str, signature_of_failure: &str, name: &str) -> String {
             run /= 2;
         }
 
-        if world == before || runs.get() > MAX_SHRINK_RUNS {
+        if world == before || Instant::now() > deadline {
             let _ = std::fs::remove_file(&path);
             return world;
         }

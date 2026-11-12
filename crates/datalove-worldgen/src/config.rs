@@ -109,6 +109,11 @@ pub struct WorldGenConfig {
     /// called qualified; see `std_lib`. `(0, 0)` draws nothing.
     pub std_modules: (u32, u32),
 
+    /// Whether the script and the modules may call intrinsics, `icall
+    /// add_wrapping_u32(a, b)`, as any function of the type wanted. Off
+    /// draws nothing.
+    pub intrinsic_calls: bool,
+
     /// Whether a worldfile's script is one fragment rather than a section
     /// for each unit. The AOT backends take only one fragment. A session is
     /// cut into units either way.
@@ -191,6 +196,8 @@ impl WorldGenConfig {
             recursion_probability: 30,
             binding_access_probability: 25,
             hex_probability: 15,
+            std_modules: (1, 3),
+            intrinsic_calls: true,
             script_statements: (4, 12),
             arithmetic_probability: 50,
             ..WorldGenConfig::default()
@@ -239,6 +246,7 @@ impl Default for WorldGenConfig {
             recursion_probability: 0,
             hex_probability: 0,
             std_modules: (0, 0),
+            intrinsic_calls: false,
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,

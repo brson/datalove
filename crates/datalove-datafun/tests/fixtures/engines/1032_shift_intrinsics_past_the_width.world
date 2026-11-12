@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// A shift intrinsic shifts by its amount modulo the width, as the IR walker
+// and Cranelift have it. The C backend wrote a bare `<<`, which C leaves
+// undefined past the width. Found by worldgen_engine_tests.
+
+debuglog icall shl_u16(: u16 / 116, : u32 / 0x4a7f8960)
+debuglog icall shr_u8(: u8 / 200, : u32 / 9)
+debuglog icall shl_u32(: u32 / 3, : u32 / 33)
+debuglog icall shr_u64(: u64 / 0xFF00, : u32 / 72)
+debuglog icall sshr_i32(: i32 / -64, : u32 / 35)
+debuglog icall sshr_i8(: i8 / -100, : u32 / 10)

@@ -90,8 +90,15 @@ pub fn gen_script_items<'db>(
     }
 
     // Some of the standard library's modules, whose functions are called
-    // qualified. Not by `call_every_function`, which would call every one.
+    // qualified, and the intrinsics. Not by `call_every_function`, which
+    // would call every one.
     let mut std_names: LookupSet<String> = LookupSet::default();
+    if config.intrinsic_calls {
+        for func in crate::std_lib::intrinsic_functions() {
+            std_names.insert(func.name.C());
+            ctx.imported_functions.push(func);
+        }
+    }
     let std_modules = crate::std_lib::std_modules();
     if config.std_modules.1 > 0 {
         let count = rng.random_range(config.std_modules.0..=config.std_modules.1) as usize;

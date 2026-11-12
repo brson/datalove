@@ -151,7 +151,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // and `Index`, which are for a base that is not a place. Both pairs are
     // written; the place forms are counted under the two place-step shapes.
     ("expr", "Hinted", "the generator only hints literals, which keep the hint themselves"),
-    ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
 
 
@@ -638,7 +637,9 @@ fn test_core_constructs_are_common() {
         ("shape", "if with an error binding", 4),
         ("expr", "TryOption", 4),
         ("expr", "TryResult", 3),
-        ("statement", "Match", 30),
+        // Under the engines' config, where loops, std calls and binding
+        // access take a share, about 29 over these seeds.
+        ("statement", "Match", 10),
         ("statement", "Continue", 4),
         // Rarer over these seeds than over the roll's: a field off a call
         // wants a callable answering with a tuple or a struct, and how often

@@ -54,6 +54,7 @@ pub struct WorkspaceDescriptor {
 /// declares functions that must be linked into the running binary for the
 /// library to work. A driver that has no stdlib of its own, like a test
 /// compiling from a directory, does not need this type.
+#[derive(Debug)]
 pub struct SystemLibrary {
     /// The packages that make up the library.
     pub library: PackageLibrary,

@@ -55,6 +55,8 @@ index-64 = [
 [dev-dependencies]
 # For generated programs to run on every engine.
 datalove-worldgen.workspace = true
+# For the programs among them that call the standard library.
+datalove-sys-packages.workspace = true
 datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.workspace = true
 datalove-diagnostic.workspace = true

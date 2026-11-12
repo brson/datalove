@@ -1,0 +1,63 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/gen/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn id(p0):
+                      desc0 = param<0>
+                    block0:
+                        v0 = move p0
+                        return v0
+                    
+                    fn f():
+                    block0:
+                        v0 = const "value"
+                        v1 = const 182u32
+                        v2 = pack struct {v0, v1}
+                        v3 = call m0.u0(v2) <struct<s: string, n: u32>>
+                        v4 = const true
+                        branch v4, block1, block2
+                    block1:
+                        goto block3
+                    block2:
+                        goto block3
+                    block3:
+                        debuglog v3
+                        drop v3
+                        return
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u1()
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{s = \"value\", n = 182}\n"),
+        ),
+    ],
+)

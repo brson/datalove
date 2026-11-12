@@ -1,4 +1,5 @@
-//! The standard library's functions, as the generator can call them.
+//! The standard library's functions and the intrinsics, as the generator
+//! can call them.
 //!
 //! Read from the modules' own sources, so that what is generated follows the
 //! library as it changes: a function the generator can call is one of the
@@ -10,6 +11,8 @@
 
 use rmx::prelude::*;
 use datalove_datalit::ast::{TypeHint, TypeHintList, TypeHintOption, TypeHintResult};
+
+use datalove_datafun_intrinsics::{INTRINSICS, IntrinsicType};
 
 use crate::context::{FunctionSig, ModuleInfo, Param, ParamMode};
 
@@ -36,9 +39,10 @@ const SOURCES: &[(&str, &str)] = &[
     ("string", include_str!("../../../sys/std/string.dfm")),
 ];
 
-/// Functions not called, by name: each makes something as large as an
-/// argument says, and an argument may be a `u32` in the billions.
-const NOT_CALLED: &[&str] = &["repeat"];
+/// Functions not called, by module and name: each makes something as large
+/// as an argument says, or takes as long, and an argument may be in the
+/// billions. `int.factorial` of one did not finish in two minutes.
+const NOT_CALLED: &[(&str, &str)] = &[("int", "factorial"), ("int", "pow"), ("string", "repeat")];
 
 /// Every module read, with the functions of it the generator can call.
 pub fn std_modules<'db>() -> Vec<ModuleInfo<'db>> {
@@ -47,7 +51,10 @@ pub fn std_modules<'db>() -> Vec<ModuleInfo<'db>> {
             library: "sys".S(),
             package: "std".S(),
             module: name.S(),
-            functions: source.lines().filter_map(signature).collect(),
+            functions: source.lines()
+                .filter_map(signature)
+                .filter(|f| !NOT_CALLED.contains(&(*name, f.name.as_str())))
+                .collect(),
             type_aliases: Vec::new(),
             enums: Vec::new(),
             consts: Vec::new(),
@@ -56,12 +63,48 @@ pub fn std_modules<'db>() -> Vec<ModuleInfo<'db>> {
         .collect()
 }
 
+/// Every intrinsic, as a function named `icall name`, which a call writes as
+/// `icall name(args)`.
+///
+/// But the remainders: a remainder by zero is not defined for an intrinsic,
+/// which `sys/std` checks for before it calls one.
+pub fn intrinsic_functions<'db>() -> Vec<FunctionSig<'db>> {
+    INTRINSICS.iter()
+        .filter(|def| !def.name.starts_with("rem_") && !def.name.starts_with("srem_"))
+        .map(|def| FunctionSig {
+            name: format!("icall {}", def.name),
+            params: def.params.iter().enumerate()
+                .map(|(i, ty)| Param { name: format!("p{i}"), type_hint: intrinsic_type(*ty), mode: ParamMode::In })
+                .collect(),
+            return_type: Some(intrinsic_type(def.ret)),
+        })
+        .collect()
+}
+
+fn intrinsic_type<'db>(ty: IntrinsicType) -> TypeHint<'db> {
+    match ty {
+        IntrinsicType::U8 => TypeHint::U8,
+        IntrinsicType::I8 => TypeHint::I8,
+        IntrinsicType::U16 => TypeHint::U16,
+        IntrinsicType::I16 => TypeHint::I16,
+        IntrinsicType::U32 => TypeHint::U32,
+        IntrinsicType::I32 => TypeHint::I32,
+        IntrinsicType::U64 => TypeHint::U64,
+        IntrinsicType::I64 => TypeHint::I64,
+        IntrinsicType::Index => TypeHint::Index,
+        IntrinsicType::Offset => TypeHint::Offset,
+        IntrinsicType::F32 => TypeHint::F32,
+        IntrinsicType::F64 => TypeHint::F64,
+        IntrinsicType::Bool => TypeHint::Bool,
+    }
+}
+
 /// The signature a line declares, if it begins a function the generator can
 /// call.
 fn signature<'db>(line: &str) -> Option<FunctionSig<'db>> {
     let rest = line.strip_prefix("fun ")?;
     let (name, rest) = rest.split_once('(')?;
-    if NOT_CALLED.contains(&name) || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return None;
     }
     let (params, rest) = rest.split_once(')')?;

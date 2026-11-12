@@ -1,0 +1,22 @@
+----------
+module local/gen/m
+----------
+
+// A worldfile may require the standard library, which the engines compile
+// only as far as its sections require it, and whose natives they register.
+
+require module sys/std/u8
+
+fun f(a: u8, b: u8): ?u8
+  ret u8.add_checked(a, b)
+end fun
+----------
+scriptunit-fragment
+----------
+require module sys/std/string
+require module local/gen/m
+import m.f
+let s: string = "hello"
+debuglog string.len(ref s)
+debuglog f(: u8 / 200, : u8 / 100)
+debuglog f(: u8 / 20, : u8 / 100)

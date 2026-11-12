@@ -168,6 +168,9 @@ pub fn gen_module<'db>(
     // Build module context.
     let mut ctx = GenContext::new();
     ctx.imported_functions.extend(std_functions);
+    if config.intrinsic_calls {
+        ctx.imported_functions.extend(crate::std_lib::intrinsic_functions());
+    }
     ctx.type_aliases = info.type_aliases.C();
     ctx.functions = info.functions.C();
 

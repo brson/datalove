@@ -50,7 +50,7 @@ use datalove_datafun_compiler::instances::GenericsPolicy;
 use std::path::Path;
 use std::process::Command;
 use std::collections::BTreeSet;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -64,7 +64,7 @@ use datalove_datafun_c_aot::CAotCompiler;
 use datalove_datafun_interp::{Engine, FunctionRegistry};
 use datalove_datafun_ir::{expand_ir_strings, IrCodeUnit};
 use datalove_datafun_pkg::package_load_worldfile::{self, ParsedWorldfile, WorldfileSection};
-use datafun::driver::{CompilerOptions, LoweringResult, OwnershipResult, ScriptExecutor, TypecheckResult};
+use datafun::driver::{CompilerOptions, SystemLibrary, LoweringResult, OwnershipResult, ScriptExecutor, TypecheckResult};
 use datafun::worldfile_analysis::{Analysis, AnalysisOptions, ExecutorHooks, SectionResult};
 
 /// What the engines did, over every program checked here.
@@ -349,6 +349,17 @@ impl ExecutorHooks for Setup {
     }
 }
 
+thread_local! {
+    /// The system library this binary carries, loaded once a thread.
+    static SYSTEM: Arc<SystemLibrary> = Arc::new(datalove_sys_packages::system_library());
+}
+
+/// The system library, for a program that requires any of its modules:
+/// others are compiled from their own sections alone, as they always were.
+fn system_for(source: &str) -> Option<Arc<SystemLibrary>> {
+    source.contains("require module sys/").then(|| SYSTEM.with(|system| system.C()))
+}
+
 /// Run the interpreted analysis under `setup` and render it as the expected
 /// files record it.
 fn analyze(parsed: &ParsedWorldfile, options: AnalysisOptions, setup: Setup) -> Result<(Analysis, String), String> {
@@ -402,7 +413,19 @@ pub fn section_compiled(section: &SectionResult) -> bool {
 /// Whether the AOT backends apply: one fragment, no expressions, nothing but
 /// modules and data beside it, and every unit compiled and run to completion by the
 /// reference.
+///
+/// Nor where the world requires the system library, whose rider the AOT
+/// builds here do not link.
 fn aot_applies(parsed: &ParsedWorldfile, reference: &Analysis) -> bool {
+    let requires_system = parsed.sections.iter().any(|s| match s {
+        WorldfileSection::Module { source, .. } | WorldfileSection::ScriptFragment { source } => {
+            source.contains("require module sys/")
+        }
+        _ => false,
+    });
+    if requires_system {
+        return false;
+    }
     let fragments = parsed.sections.iter()
         .filter(|s| matches!(s, WorldfileSection::ScriptFragment { .. }))
         .count();
@@ -491,7 +514,8 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
     let parsed = package_load_worldfile::parse_worldfile_sections(source.as_bytes())
         .map_err(|e| format!("failed to parse worldfile: {e}"))?;
 
-    let (reference, rendered) = analyze(&parsed, AnalysisOptions::default(), Setup { engine: Engine::IrWalker, dispatcher: None, differential: None })?;
+    let base = AnalysisOptions { system: system_for(source), ..AnalysisOptions::default() };
+    let (reference, rendered) = analyze(&parsed, base.C(), Setup { engine: Engine::IrWalker, dispatcher: None, differential: None })?;
 
     let seed = seed_of(source);
 
@@ -503,10 +527,10 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
             continue;
         }
         let variant = match engine {
-            Differential::NoConst => Some(AnalysisOptions { skip_const_inlining: true, ..AnalysisOptions::default() }),
-            Differential::NoSpec => Some(AnalysisOptions { skip_specialization: true, ..AnalysisOptions::default() }),
-            Differential::Spec => Some(AnalysisOptions { generics: GenericsPolicy::All, ..AnalysisOptions::default() }),
-            Differential::SpecChaos => Some(AnalysisOptions { generics: GenericsPolicy::Chaos { seed: derive_seed(seed, "generics") }, ..AnalysisOptions::default() }),
+            Differential::NoConst => Some(AnalysisOptions { skip_const_inlining: true, ..base.C() }),
+            Differential::NoSpec => Some(AnalysisOptions { skip_specialization: true, ..base.C() }),
+            Differential::Spec => Some(AnalysisOptions { generics: GenericsPolicy::All, ..base.C() }),
+            Differential::SpecChaos => Some(AnalysisOptions { generics: GenericsPolicy::Chaos { seed: derive_seed(seed, "generics") }, ..base.C() }),
             _ => None,
         };
         if let Some(options) = variant {
@@ -555,7 +579,7 @@ pub fn check(source: &str) -> Result<(Analysis, String), String> {
         };
         if let Some(setup) = interpreted {
             TALLY.lock().X().ran[i] += 1;
-            let (_, other) = analyze(&parsed, AnalysisOptions::default(), setup)?;
+            let (_, other) = analyze(&parsed, base.C(), setup)?;
             if other != rendered {
                 return Err(format!("{} differs from the reference {}", engine.name(), first_difference(&rendered, &other)));
             }

@@ -1,0 +1,48 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 116u16
+                        v1 = const 1249872224u32
+                        v2 = intrinsic ShlU16(v0, v1)
+                        debuglog v2
+                        v3 = const 200u8
+                        v4 = const 9u32
+                        v5 = intrinsic ShrU8(v3, v4)
+                        debuglog v5
+                        v6 = const 3u32
+                        v7 = const 33u32
+                        v8 = intrinsic ShlU32(v6, v7)
+                        debuglog v8
+                        v9 = const 65280u64
+                        v10 = const 72u32
+                        v11 = intrinsic ShrU64(v9, v10)
+                        debuglog v11
+                        v12 = const -64i32
+                        v13 = const 35u32
+                        v14 = intrinsic SshrI32(v12, v13)
+                        debuglog v14
+                        v15 = const -100i8
+                        v16 = const 10u32
+                        v17 = intrinsic SshrI8(v15, v16)
+                        debuglog v17
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("116\n100\n6\n255\n-8\n-25\n"),
+        ),
+    ],
+)

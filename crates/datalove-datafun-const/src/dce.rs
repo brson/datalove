@@ -488,7 +488,9 @@ fn remove_dead_instructions(unit: &mut IrCodeUnit, used: &ValueSet) -> bool {
 /// consumes a slot or a parameter that is not copy.
 ///
 /// Reading a value that is not copy consumes it, as the interpreter has it,
-/// except for the instructions that only look: a clone, a copy, a borrow.
+/// except for the instructions that only look: a clone, a copy, a borrow,
+/// and a read of a copy field, which leaves the rest of the value where it
+/// was.
 fn consumed_owned(
     instr: &Instruction,
     value_types: &[IrType],
@@ -499,6 +501,11 @@ fn consumed_owned(
         Instruction::Clone { .. } | Instruction::Copy { .. }
         | Instruction::GetFieldRef { .. } | Instruction::ListElementRef { .. }
         | Instruction::MapValueRef { .. } | Instruction::TensorIndexRef { .. }) {
+        return Some(Vec::new());
+    }
+    if let Instruction::GetField { dest, .. } = instr
+        && value_types.get(dest.0 as usize).is_some_and(|t| t.is_copy())
+    {
         return Some(Vec::new());
     }
     let owned = |ty: Option<&IrType>| !ty.is_some_and(|t| t.is_copy());

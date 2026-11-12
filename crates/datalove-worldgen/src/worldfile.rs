@@ -162,6 +162,17 @@ mod tests {
         assert_eq!(wf1, wf2, "Same seed should produce identical worldfiles");
     }
 
+    /// The engines' worlds too: `worldgen_engine_tests` makes a failing
+    /// world again from its seed to write it out and shrink it.
+    #[test]
+    fn test_gen_worldfile_deterministic_for_engines() {
+        for seed in [0, 42, 1000000] {
+            let wf1 = gen_worldfile_seeded(seed, WorldGenConfig::engines());
+            let wf2 = gen_worldfile_seeded(seed, WorldGenConfig::engines());
+            assert_eq!(wf1, wf2, "seed {seed} should produce identical worldfiles");
+        }
+    }
+
     #[test]
     fn test_gen_worldfile_different_seeds() {
         let config = WorldGenConfig::default();

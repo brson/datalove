@@ -13,10 +13,8 @@ bct.workspace = true
 salsa.workspace = true
 datalove-datalit.workspace = true
 datalove-datafun-ast.workspace = true
+datalove-datafun-intrinsics.workspace = true
 
 [dev-dependencies]
 datalove-datafun.workspace = true
 datalove-datafun-parser.workspace = true
-datalove-datafun-pkg.workspace = true
-datalove-datafun-tycheck.workspace = true
-datalove-datafun-resolve.workspace = true

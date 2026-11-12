@@ -21,10 +21,15 @@ use serde::{Serialize, Deserialize};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
 use crate::driver::{
     ModuleCompiler, CompilerOptions, TypecheckResult, OwnershipResult, LoweringResult,
-    format_ownership_result, format_lowering_result,
+    SystemLibrary, WorkspaceDescriptor, format_ownership_result, format_lowering_result,
 };
+use crate::driver::rider_load::register_natives;
+use crate::incremental::Roots;
 
 // ============================================================================
 // Result Types
@@ -72,6 +77,14 @@ pub struct AnalysisOptions {
     /// Which calls to generics are pointed at instances, in the module graph
     /// and in the scripts alike.
     pub generics: GenericsPolicy,
+    /// A system library the worldfile may require modules of, beside its
+    /// own, and whose natives its units may call.
+    ///
+    /// Only the modules the worldfile requires are compiled, those its own
+    /// modules and units name in a `require module` and what those reach;
+    /// see [`required_system_modules`]. Without one, a world has only its own
+    /// sections, and requiring `sys/std/u8` is an error.
+    pub system: Option<Arc<SystemLibrary>>,
 }
 
 // ============================================================================
@@ -132,17 +145,23 @@ pub fn analyze_worldfile_with_hooks(
     let mut results = Vec::new();
 
     // This function exists to produce fixture output, which includes the IR.
-    let mut module_compiler = ModuleCompiler::from_sections(
-        db,
-        &parsed.sections,
-        CompilerOptions {
-            const_inlining: !options.skip_const_inlining,
-            skip_specialization: options.skip_specialization,
-            generics: options.generics,
-            keep_ir_dumps: true,
-            ..CompilerOptions::default()
-        },
-    );
+    let compiler_options = CompilerOptions {
+        const_inlining: !options.skip_const_inlining,
+        skip_specialization: options.skip_specialization,
+        generics: options.generics.C(),
+        keep_ir_dumps: true,
+        ..CompilerOptions::default()
+    };
+    let (mut module_compiler, natives) = match &options.system {
+        None => (ModuleCompiler::from_sections(db, &parsed.sections, compiler_options), None),
+        Some(system) => {
+            let descriptor = WorkspaceDescriptor::from_system_library(system)
+                .merge(&WorkspaceDescriptor::from_worldfile_sections(&parsed.sections, compiler_options));
+            let (mut module_compiler, natives) = descriptor.to_compiler_with_natives(db, &system.natives);
+            module_compiler.set_roots(Roots::From(required_system_modules(&parsed.sections)));
+            (module_compiler, Some(natives))
+        }
+    };
 
     // Compile modules (typecheck, drop analysis, lower).
     let compiled = module_compiler.compile(db);
@@ -164,35 +183,31 @@ pub fn analyze_worldfile_with_hooks(
     // Collect module results.
     collect_module_results(&parsed.sections, &compiled, &mut results);
 
-    // Create script compiler and executor with Buffer mode for capturing debuglog output.
-    let mut compiler = compiled.script_compiler_default(db);
+    // A script compiler, configured as the module graph was compiled: the
+    // same flags have to reach it, or a differential run would, say,
+    // specialize one half. Made again after a unit fails at run time.
+    let new_compiler = || {
+        let mut compiler = compiled.script_compiler_default(db)?;
+        compiler.set_skip_const_inlining(options.skip_const_inlining);
+        compiler.set_skip_specialization(options.skip_specialization);
+        compiler.set_generics_policy(options.generics.C());
+        Some(compiler)
+    };
+    let mut compiler = new_compiler();
+    // With Buffer mode, for capturing debuglog output.
     let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None);
-
-    // Configure skip_const_inlining on the script compiler if needed.
-    if options.skip_const_inlining {
-        if let Some(ref mut compiler) = compiler {
-            compiler.set_skip_const_inlining(true);
-        }
-    }
-
-    // The same flag the module graph was compiled under has to reach the
-    // script compiler, or the differential run would specialize one half.
-    if options.skip_specialization {
-        if let Some(ref mut compiler) = compiler {
-            compiler.set_skip_specialization(true);
-        }
-    }
-
-    if let Some(ref mut compiler) = compiler {
-        compiler.set_generics_policy(options.generics);
-    }
 
     if let Some(executor) = &mut executor {
         hooks.configure(executor);
     }
+    // After the dispatcher is in, which is told the natives' addresses too.
+    let _registered = match (&natives, &mut executor) {
+        (Some(natives), Some(executor)) => Some(register_natives(natives, &compiled, executor)?),
+        _ => None,
+    };
 
     // Process script sections.
-    process_script_sections(&parsed.sections, &mut compiler, &mut executor, &mut results);
+    process_script_sections(&parsed.sections, &mut compiler, &new_compiler, &mut executor, &mut results);
 
     // Cleanup.
     if let Some(ref mut executor) = executor {
@@ -206,6 +221,26 @@ pub fn analyze_worldfile_with_hooks(
 // ============================================================================
 // Internal Helpers
 // ============================================================================
+
+/// The modules a worldfile's sections are compiled from, as roots: its own,
+/// and the system library's that any section requires by a line of its
+/// own, `require module sys/...`. Their own requires reach the rest.
+fn required_system_modules(sections: &[WorldfileSection]) -> BTreeSet<String> {
+    let own = sections.iter().filter_map(|s| s.module_path()).map(|p| p.to_path_string());
+    let required = sections.iter()
+        .filter_map(|s| match s {
+            WorldfileSection::Module { source, .. }
+            | WorldfileSection::ScriptFragment { source }
+            | WorldfileSection::ScriptExpr { source } => Some(source),
+            _ => None,
+        })
+        .flat_map(|source| source.lines())
+        .filter_map(|line| line.trim().strip_prefix("require module "))
+        .map(|path| path.trim())
+        .filter(|path| path.starts_with("sys/"))
+        .map(|path| path.S());
+    own.chain(required).collect()
+}
 
 use crate::driver::{CompiledModules, ScriptCompiler, ScriptExecutor};
 
@@ -260,13 +295,22 @@ fn collect_module_results(
 }
 
 /// Process script sections (fragment and expr).
-fn process_script_sections(
+///
+/// A unit that fails at run time takes the session with it: the executor
+/// frees what every unit bound and forgets the units (see
+/// `ScriptExecutor::failed`). The units after it are compiled by a new
+/// compiler, from `new_compiler`, as a session started again, which is what
+/// the REPL does; compiled against the old one, they read bindings the
+/// executor no longer has.
+fn process_script_sections<'db>(
     sections: &[WorldfileSection],
-    compiler: &mut Option<ScriptCompiler<'_>>,
+    compiler: &mut Option<ScriptCompiler<'db>>,
+    new_compiler: &dyn Fn() -> Option<ScriptCompiler<'db>>,
     executor: &mut Option<ScriptExecutor>,
     results: &mut Vec<SectionResult>,
 ) {
     for section in sections {
+        let units_before = executor.as_ref().map(|e| e.unit_ids().len());
         match section {
             WorldfileSection::ScriptFragment { source } => {
                 let result = execute_script_fragment(source, compiler, executor);
@@ -277,7 +321,13 @@ fn process_script_sections(
                 results.push(result);
             }
             // Module sections already handled; action sections are for memo tests only.
-            _ => {}
+            _ => continue,
+        }
+        // Every unit is added to the executor's, run or not, but one that
+        // failed, which leaves none.
+        let units_after = executor.as_ref().map(|e| e.unit_ids().len());
+        if let (Some(before), Some(after)) = (units_before, units_after) && after <= before {
+            *compiler = new_compiler();
         }
     }
 }

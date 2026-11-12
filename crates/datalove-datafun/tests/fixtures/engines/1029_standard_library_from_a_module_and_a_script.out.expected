@@ -1,0 +1,64 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/gen/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn f(p0, p1):
+                    block0:
+                        v1, v2 = add.checked p0, p1
+                        branch v2, block2, block1
+                    block1:
+                        v4 = some v1
+                        goto block3(v4)
+                    block2:
+                        v3 = none
+                        goto block3(v3)
+                    block3(v0):
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = call m3.u0(v0)
+                        debuglog v1
+                        v2 = const 200u8
+                        v3 = const 100u8
+                        v4 = call m2.u0(v2, v3)
+                        debuglog v4
+                        v5 = const 20u8
+                        v6 = const 100u8
+                        v7 = call m2.u0(v5, v6)
+                        debuglog v7
+                        unit_end_drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("5\nnone\nsome 120\n"),
+        ),
+    ],
+)

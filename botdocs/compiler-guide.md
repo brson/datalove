@@ -2088,8 +2088,8 @@ Most live in `crates/datalove-datafun/tests`.
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
 | `parallel_warm_tests` | That in a parallel compile every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
-| `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`) | Generated worldfiles typecheck and cover the AST. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
-| `worldgen_engine_tests` | Generated worldfiles, a third of them one fragment and the rest cut into units as a session is, through `engine_tests`' checks (`tests/engines/mod.rs`, which both share): every unit compiles, and every engine observes what the IR walker did. Seeds run in worker processes, so a crash or a hang fails its seed alone. A failing world is written out under the target directory, shrunk, written out again, and run again with `WORLDGEN_ENGINES_WORLD`; on the default seeds, floors ask for loops entered, units ended early and blocked, and AOT runs. See [plan-worldgen-engines.md](plan-worldgen-engines.md) |
+| `coverage_tests` (in `datalove-worldgen`) | What of the AST the worldfiles `worldgen_engine_tests` runs cover. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
+| `worldgen_engine_tests` | Generated worldfiles, a third of them one fragment and the rest cut into units as a session is, through `engine_tests`' checks (`tests/engines/mod.rs`, which both share): every unit compiles, and every engine observes what the IR walker did. Two thirds of the worlds call the standard library, which worldfile analysis compiles as far as a world requires it when `AnalysisOptions::system` is given; the AOT backends do not link its rider, and skip those. Seeds run in worker processes, so a crash or a hang fails its seed alone. A failing world is written out under the target directory, shrunk, written out again, and run again with `WORLDGEN_ENGINES_WORLD`; on the default seeds, floors ask for loops entered, units ended early and blocked, and AOT runs. See [plan-worldgen-engines.md](plan-worldgen-engines.md) |
 | `generative_reactive_tests` (in `datalove-tests`) | Generated scripts, cut into fragment and expression units that declare and call functions, and edited, deleted, reordered and inserted at random, with the modules and data they require edited too, and beside each a dense session of a few units over two names, leave each unit as a fresh run of its code would after every step, in how it ended, what it binds and what it shows, and never crash the engine. A few seeds from the test's default in `just test`, 1000 from seed 1000000 in `just test-generative-reactive`; a failing seed is shrunk and written out as a worldfile, and once fixed is kept in `tests/generative_reactive/`, which every run checks first. `just measure-faults` breaks each reach rule in turn, by `scripts/reach-faults.toml`, and says what these tests and the hand-written ones catch of it |
 | `fun_tests` (in `datalove-formal-tests`) | Scripts in a slice of datafun, from worldgen and mutated, and a corpus, typechecked by the Rust and by the Lean model of the typing rules, which must agree on every diagnostic code in order (`just test-formal`, not in `just test`). See [formal.md](formal.md) |
 | `lit_tests` (in `datalove-formal-tests`) | Datalit expressions, generated and mutated, and every example in the typing rules, synthesized by the Rust and by the Lean model of the rules, which must agree on the type or the first diagnostic's code (`just test-formal`, not in `just test`). See [formal.md](formal.md) |
@@ -2106,7 +2106,6 @@ give them, so that a drawn run can be repeated.
 
 | Suite | Prefix | Default | `just` recipe |
 |-------|--------|---------|---------------|
-| `worldgen_tests`, typecheck tests | `WORLDGEN_TYPECHECK` | 50 from 0 | `test-worldgen-typecheck`, 1000 from 1000000 |
 | `coverage_tests` | `WORLDGEN_COVERAGE` | 300 from 1200, 200 for the floors | `test-worldgen-coverage`, 1000 from 1000000 |
 | `worldgen_engine_tests` | `WORLDGEN_ENGINES` | 40 from 0 | `test-worldgen-engines`, 1000 from 1000000 |
 | `generative_reactive_tests` | `GENERATIVE_REACTIVE` | 20 from 60 | `test-generative-reactive`, 1000 from 1000000 |
@@ -2149,7 +2148,9 @@ to hardcode 32-bit constants, which under `index-64` made `max_value()` and
 ### Worldgen Coverage
 
 `datalove-worldgen` generates random worldfiles that typecheck.
-`coverage_tests.rs` asks whether they cover the language, and takes its
+`coverage_tests.rs` asks whether those of `WorldGenConfig::engines`, the
+ones `worldgen_engine_tests` runs on every engine, cover the language, and
+takes its
 checklist from the compiler rather than from a list: every variant of
 `Statement`, `ExprFunKind`, `BinOp`, `UnaryOp`, `ParamMode` and datalit's
 `TypeHint`, rolled and matched by one macro with an exhaustive match, so a new
@@ -2164,11 +2165,10 @@ and without `else`), and can go stale.
 
 What it does not tell you:
 
-- **Generated is not all observed.** `worldgen_engine_tests` runs every
-  generated world on every engine, and its config has generated code show
-  what it binds, but only where the generator's default config is: other
-  suites' worlds show about one `debuglog` each. See
-  [plan-worldgen-engines.md](plan-worldgen-engines.md).
+- **Generated is not all observed.** The engines' config has generated
+  code `debuglog` what it binds and holds, but a value computed and then
+  given to something that does not show it is compared only by what it led
+  to. See [plan-worldgen-engines.md](plan-worldgen-engines.md).
 - **It counts single node kinds, not combinations.** Every bug the generator
   has found was at an intersection -- a generic over a map at `data`, a tensor
   of a tuple holding a heap value -- and a roll of node kinds calls all of
