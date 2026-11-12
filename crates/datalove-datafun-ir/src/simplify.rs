@@ -471,6 +471,14 @@ fn merge_blocks(unit: &mut IrCodeUnit) -> bool {
     let mut any = false;
     let mut preds = predecessors(unit);
     for b in 0..unit.blocks.len() {
+        // Only into a block the entry reaches. The edges from one it does not
+        // are not counted, so its jump to a block with one way in from where
+        // the entry reaches is not that one way, and taking the block into it
+        // left the way that is to an empty `return`: a function returning a
+        // value returned none.
+        if b != 0 && preds[b] == 0 {
+            continue;
+        }
         loop {
             let Terminator::Goto { target, args } = &unit.blocks[b].terminator else { break };
             let t = target.0 as usize;

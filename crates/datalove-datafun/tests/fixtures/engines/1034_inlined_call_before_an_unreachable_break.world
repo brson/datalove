@@ -1,0 +1,29 @@
+----------
+module local/gen/m
+----------
+fun times(a: i32, b: i32): ?i32
+  inline
+  ret some (a *? b)
+end fun
+
+// The second `break` is unreachable, and its block jumps to the one after
+// the loop, which the inlined call's continuation jumps to as well.
+// Cleaning up after inlining counted only the continuation's way in, as the
+// one, then merged the block after the loop into the unreachable block
+// rather than into it, and the function returned nothing: the JIT refused
+// the return. Found by worldgen_engine_tests.
+
+fun f(): u32
+  loop
+    let v: ?i32 = times(: i32 / 4, : i32 / 3)
+    break
+    break
+  end loop
+  ret : u32 / 1
+end fun
+----------
+scriptunit-fragment
+----------
+require module local/gen/m
+import m.f
+debuglog f()

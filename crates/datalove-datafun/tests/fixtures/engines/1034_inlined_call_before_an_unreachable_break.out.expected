@@ -1,0 +1,68 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/gen/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn times(p0, p1):
+                    block0:
+                        v0, v1 = mul.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn f():
+                    block0:
+                        v0 = const 4i32
+                        v1 = const 3i32
+                        v4, v5 = mul.checked v0, v1
+                        branch v5, block2, block1
+                    block1:
+                        v7 = some v4
+                        goto block3(v7)
+                    block2:
+                        v6 = none
+                        goto block3(v6)
+                    block3(v2):
+                        v3 = const 1u32
+                        return v3
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u1()
+                        debuglog v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1\n"),
+        ),
+    ],
+)
