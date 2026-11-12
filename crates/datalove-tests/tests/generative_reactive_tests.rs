@@ -3,7 +3,10 @@
 //!
 //! A seed makes a session with worldgen: modules, and a script cut into
 //! units, some of them expressions or declaring functions that later units
-//! call, and data files some of them require. The units are entered, then changed a dozen times -- edited,
+//! call, and data files some of them require. Units call module functions
+//! by import and qualified by an alias an earlier unit required, and call
+//! into the standard library's modules; and they return early with an
+//! error, by `!` and checked arithmetic, blocking the units that read them. The units are entered, then changed a dozen times -- edited,
 //! deleted, reordered, or put back after a delete -- and after every change the
 //! session must be what a new engine running its current code from the top
 //! leaves: each unit come to the same end and hold the same bindings. That is
@@ -31,6 +34,12 @@
 //! clone, read, set, update, divide, declare and call a function, import --
 //! and changes made among them alone; see [`dense`]. A unit there may name
 //! what nothing binds yet, and fail when entered.
+//!
+//! The session's calls run through the chaos JIT, which compiles functions
+//! at random points and keeps what it compiled across the changes, so that
+//! code compiled for a function since replaced or reached differently is
+//! the JIT's to let go of; the fresh run it is compared with runs on the
+//! bytecode alone.
 //!
 //! A unit can also take the session with it, by a runtime error, which ends
 //! the case: a fresh run must then reset too, the same way. Or by a crash, the
@@ -71,7 +80,8 @@ use std::cell::RefCell;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
-use bct::random::{SeededRng, env_seeds};
+use bct::random::{SeededRng, derive_seed, env_seeds, seed_of};
+use datalove_datafun_cranelift_jit::{DispatcherConfig, OptimizingDispatcher};
 
 use datalove_repl::Place;
 use datalove_script_engine::Eval;
@@ -83,7 +93,7 @@ use datalove_worldgen::{WorldGenConfig, gen_session_seeded};
 /// The floors are not met by every run of [`DEFAULT_COUNT`] seeds, revives
 /// and blocked units being rare, so this is a start that meets them. It
 /// moves when the generator or its random numbers change.
-const DEFAULT_SEED: u64 = 60;
+const DEFAULT_SEED: u64 = 20;
 const DEFAULT_COUNT: u64 = 20;
 
 /// How many changes a session gets after its units are entered.
@@ -275,6 +285,15 @@ fn generate(seed: u64) -> Case {
     config.script_statements = (6, 14);
     config.binding_access_probability = 50;
     config.expression_unit_probability = 15;
+    // Units that return early, and so block those reading them, by `!` and
+    // checked arithmetic as well as by a divisor zeroed; and units reading
+    // more of what earlier ones bind.
+    config.fallible_script = true;
+    config.compute_from_variables = true;
+    // Calls qualified by an alias a unit before required, and requires of
+    // the standard library's modules, which decide what is compiled.
+    config.qualified_calls = true;
+    config.std_modules = (1, 3);
     let session = gen_session_seeded(seed, config);
     let mut rng = SeededRng::derive(seed, "changes");
 
@@ -842,6 +861,8 @@ struct Tally {
     /// What the units do to earlier units' bindings as they are entered or
     /// inserted, by verb: reads, takes, overwrites, updates, revives.
     uses: [usize; 5],
+    /// Functions the chaos JIT compiled, in the session as it ended.
+    jit_compiled: usize,
 }
 
 const CHANGE_KINDS: [&str; 6] = ["edits", "deletes", "reorders", "inserts", "module edits", "data edits"];
@@ -862,6 +883,7 @@ impl Tally {
         self.functions_declared += other.functions_declared;
         self.functions_called += other.functions_called;
         self.expressions_rerun += other.expressions_rerun;
+        self.jit_compiled += other.jit_compiled;
         for (sum, count) in self.changes.iter_mut().zip(other.changes) {
             *sum += count;
         }
@@ -912,6 +934,9 @@ impl Tally {
         if self.blocked == 0 {
             shortfalls.push("no unit was blocked".S());
         }
+        if self.jit_compiled == 0 {
+            shortfalls.push("the JIT compiled no function".S());
+        }
         for (verb, count) in VERBS.iter().zip(self.uses).skip(1) {
             if count == 0 {
                 shortfalls.push(fmt!("no unit {verb} an earlier unit's binding"));
@@ -934,10 +959,11 @@ impl Tally {
             "{} units entered, {} of them expressions, {} still run of {} after {} ({}), {} sessions reset; \
              expression units ran again {} times; {} units declared functions and {} called an earlier unit's; \
              module edits ran {} units again and data edits {}; after a step, {} units had returned early and {} were blocked; \
-             as entered or inserted, units use earlier units' bindings: {}",
+             as entered or inserted, units use earlier units' bindings: {}; the JIT compiled {} functions",
             self.entered, self.expressions_entered, self.still_running, self.remaining, changes.join(", "),
             aimed.join(", "), self.resets, self.expressions_rerun, self.functions_declared, self.functions_called,
             self.rerun_by_module, self.rerun_by_data, self.returned_early, self.blocked, uses.join(", "),
+            self.jit_compiled,
         )
     }
 }
@@ -1026,6 +1052,14 @@ fn functions_across(entries: &[Entry]) -> (usize, usize) {
 fn run(case: &Case) -> Verdict {
     let workspace = Workspace::from_worldfile(&case.library);
     let mut session = Session::start(workspace.sys, workspace.descriptor, workspace.also_roots);
+    // The calls the session's units make run through the chaos JIT, which
+    // compiles some of them and keeps what it compiled across the changes;
+    // the fresh run each step is compared with has none. Seeded by the
+    // case's library, so that a case written out runs as it did.
+    let chaos_seed = derive_seed(seed_of(&case.library), "dispatcher");
+    session.use_dispatcher(move || {
+        Box::new(OptimizingDispatcher::with_config(DispatcherConfig::chaos(chaos_seed)).expect("the JIT starts"))
+    });
     let mut tally = Tally { aimed: case.aimed, ..Tally::default() };
     let mut failures = Vec::new();
     let mut expressions: Vec<&str> = Vec::new();
@@ -1086,6 +1120,10 @@ fn run(case: &Case) -> Verdict {
         }
         tally.returned_early += session.states().iter().filter(|ran| **ran == Ran::ReturnsEarly).count();
         tally.blocked += session.states().iter().filter(|ran| **ran == Ran::Blocked).count();
+    }
+    if let Some(dispatcher) = session.take_dispatcher() {
+        let chaos = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>().X();
+        tally.jit_compiled = chaos.jit().stats().compiled_count as usize;
     }
     if !failures.is_empty() {
         return Verdict::Disagrees(failures);

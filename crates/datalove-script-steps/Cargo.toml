@@ -14,6 +14,7 @@ rmx.workspace = true
 bct.workspace = true
 datalove-ct.workspace = true
 datalove-datafun.workspace = true
+datalove-datafun-interp.workspace = true
 datalove-repl.workspace = true
 datalove-script-engine.workspace = true
 datalove-vio.workspace = true

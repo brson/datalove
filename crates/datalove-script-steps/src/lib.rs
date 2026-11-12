@@ -196,6 +196,19 @@ impl Session {
         }
     }
 
+    /// Run the session's calls through a dispatcher from `make`, as
+    /// [`Engine::use_dispatcher`] does, before any change is applied. The
+    /// fresh run it is compared with has none.
+    pub fn use_dispatcher(&mut self, make: impl Fn() -> Box<dyn datalove_datafun_interp::CallDispatcher> + 'static) {
+        self.engine.use_dispatcher(make).expect("the session starts again with a dispatcher");
+    }
+
+    /// The dispatcher given by [`Self::use_dispatcher`], taken back, for
+    /// what it says it did.
+    pub fn take_dispatcher(&mut self) -> Option<Box<dyn datalove_datafun_interp::CallDispatcher>> {
+        self.engine.take_dispatcher()
+    }
+
     /// What unit `index` does to earlier units' bindings, as a step table's
     /// `uses` column says it, one entry per binding.
     pub fn uses(&self, index: usize) -> Vec<String> {

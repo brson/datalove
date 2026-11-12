@@ -10,6 +10,7 @@ use crate::{Unit, Eval, EvalBinding, EvalExpr, EnvBinding};
 use datalove_datafun as datafun;
 use datafun::driver::{CompiledModules, ScriptCompiler, ScriptCompilationResult, ScriptExecutor, ScriptSession, ModuleCompiler, PackageLibrary, SystemLibrary, UnitStatus, WorkspaceDescriptor};
 use datafun::driver::rider_load::{RegisteredNatives, RiderNatives, register_natives};
+use datalove_datafun_interp::CallDispatcher;
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 use bct::input::Source;
 use datafun::incremental::Roots;
@@ -80,6 +81,9 @@ struct Shared {
     /// Where `debuglog` goes, kept so every session sends it to the same place.
     debug_output: datafun::DebugOutputMode,
     modules: RefCell<Modules>,
+    /// What makes the dispatcher each session's executor runs calls through,
+    /// one a session, kept across its edits; see [`Engine::use_dispatcher`].
+    dispatcher: Option<Box<dyn Fn() -> Box<dyn CallDispatcher>>>,
 }
 
 /// The modules the sessions compile against, and how they were settled.
@@ -154,7 +158,7 @@ impl Shared {
         let session = compiled.script_compiler_default(&self.db)
             .expect("script_compiler should succeed after error check")
             .into_session();
-        let mut executor = compiled.script_executor(self.debug_output, None)
+        let mut executor = compiled.script_executor(self.debug_output, self.dispatcher.as_ref().map(|make| make()))
             .expect("script_executor should succeed after error check");
         let natives = register_natives(&self.natives, &compiled, &mut executor)?;
 
@@ -570,10 +574,36 @@ impl Engine {
         let errors = settle_roots(&db, &mut module_compiler, &[], &also_roots)?;
 
         let modules = Modules { module_compiler, also_roots, errors, changes: 0 };
-        let shared = Shared { db, workspace, natives, debug_output, modules: RefCell::new(modules) };
+        let shared = Shared { db, workspace, natives, debug_output, modules: RefCell::new(modules), dispatcher: None };
         let first = SessionId(0);
         let sessions = BTreeMap::from([(first, shared.start_session(&[])?)]);
         Ok(Engine { shared, sessions, first, next_session: 1 })
+    }
+
+    /// Run the calls the sessions' units make through a dispatcher from
+    /// `make`, which may compile them, as the JIT does: one for each session,
+    /// made when the session starts and kept across every change to its
+    /// units, so that what it compiled for code since replaced is the
+    /// dispatcher's to drop. A reset starts the session with a new one.
+    ///
+    /// Before any unit is entered, since the sessions start again with it.
+    pub fn use_dispatcher(&mut self, make: impl Fn() -> Box<dyn CallDispatcher> + 'static) -> AnyResult<()> {
+        assert!(
+            self.sessions.values().all(|state| state.session.unit_ids().is_empty()),
+            "a dispatcher is installed before any unit is entered",
+        );
+        self.shared.dispatcher = Some(Box::new(make));
+        for state in self.sessions.values_mut() {
+            *state = self.shared.start_session(&[])?;
+        }
+        Ok(())
+    }
+
+    /// The dispatcher the first session's calls ran through, taken out of
+    /// it, for what it says it did; the session runs on without one.
+    pub fn take_dispatcher(&mut self) -> Option<Box<dyn CallDispatcher>> {
+        let first = self.first;
+        self.sessions.get_mut(&first).X().executor.take_dispatcher()
     }
 
     /// The required modules that do not compile; see [`ModuleErrors`].
