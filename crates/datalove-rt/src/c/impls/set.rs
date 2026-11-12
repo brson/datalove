@@ -144,21 +144,6 @@ unsafe fn leaf_next_ptr_mut(node: *mut SetNode, ty: SetTy) -> *mut *mut SetNode 
 }
 
 /// Allocate and initialize a new internal node.
-/// Make `slot` the separator before `subtree`: a view of the least element in
-/// it, the first of its leftmost leaf.
-///
-/// A separator owns nothing, as in a map (see `btreemap::write_separator`): its
-/// bytes are the element's, it is never cloned or destroyed, and it is kept a
-/// view of the least element of the subtree to its right, renewed where that
-/// element changes.
-unsafe fn write_separator(slot: *mut u8, subtree: *mut SetNode, ty: SetTy) {
-    unsafe {
-        let leaf = leftmost_leaf(subtree, ty);
-        debug_assert!(read_node_len(leaf) > 0, "a separator's subtree is never empty");
-        std::ptr::copy_nonoverlapping(leaf_keys_ptr(leaf, ty), slot, ty.elem.size() as usize);
-    }
-}
-
 unsafe fn alloc_internal_node(
     rt: &mut RtLocal,
     ty: SetTy,
@@ -241,9 +226,11 @@ unsafe fn destroy_tree_recursive(
 
         match tag {
             SetNodeTag::Internal => {
-                // An internal node's keys are views of elements in leaves, and
-                // own nothing to destroy (`write_separator`).
                 let len = read_node_len(node);
+
+                // Destroy all keys in the internal node.
+                let keys_ptr = internal_keys_ptr(node, ty);
+                crate::c::impls::destroy::destroy_array(rt, keys_ptr, len as usize, ty.elem);
 
                 // Recursively destroy children.
                 let children_ptr = internal_child_ptrs_ptr(node, ty);
@@ -293,7 +280,15 @@ unsafe fn clone_tree_recursive(
                 (*new_node).tag = SetNodeTag::Internal;
                 (*new_node).len = len;
 
+                let keys_ptr = internal_keys_ptr(node as *mut SetNode, ty);
                 let new_keys_ptr = internal_keys_ptr(new_node, ty);
+
+                // Clone all keys.
+                let status = crate::c::impls::clone::clone_array(rt, keys_ptr, new_keys_ptr, len as usize, ty.elem);
+                if status != RtStatus::Ok {
+                    free_node(rt, new_node, ty);
+                    return std::ptr::null_mut();
+                }
 
                 // Recursively clone all children.
                 let children_ptr = internal_child_ptrs_ptr(node as *mut SetNode, ty);
@@ -310,6 +305,8 @@ unsafe fn clone_tree_recursive(
                     // Store the cloned child pointer immediately so error handling can access it.
                     *new_children_ptr.add(i) = new_child;
                     if new_child.is_null() && !child.is_null() {
+                        // Destroy all keys.
+                        crate::c::impls::destroy::destroy_array(rt, new_keys_ptr, len as usize, ty.elem);
                         // Destroy already-cloned children (including current one which is null).
                         for j in 0..=i {
                             let cloned_child = *new_children_ptr.add(j);
@@ -318,12 +315,6 @@ unsafe fn clone_tree_recursive(
                         free_node(rt, new_node, ty);
                         return std::ptr::null_mut();
                     }
-                }
-
-                // The separators view the cloned leaves' elements.
-                let element_size = ty.elem.size() as usize;
-                for i in 0..len as usize {
-                    write_separator(new_keys_ptr.add(i * element_size), *new_children_ptr.add(i + 1), ty);
                 }
 
                 new_node
@@ -426,14 +417,11 @@ pub unsafe fn btreeset_build_from_sorted_slice(
         let num_leaves = (num_elements_usize + SET_NODE_CAPACITY as usize - 1) / SET_NODE_CAPACITY as usize;
         let mut leaves: Vec<*mut SetNode> = Vec::with_capacity(num_leaves);
 
-        // Spread evenly, so that every leaf holds at least half its capacity,
-        // as one an insertion split does: filling each in turn left the last
-        // with as few as one, and a removal emptying it left its separator
-        // nothing to view (`write_separator`).
+        let elements_per_leaf = (num_elements_usize + num_leaves - 1) / num_leaves;
         let mut element_idx = 0usize;
 
-        for leaf_idx in 0..num_leaves {
-            let leaf_elements = num_elements_usize / num_leaves + usize::from(leaf_idx < num_elements_usize % num_leaves);
+        for _ in 0..num_leaves {
+            let leaf_elements = elements_per_leaf.min(num_elements_usize - element_idx);
 
             // Allocate leaf node.
             let leaf_node = rt.alloc.alloc(leaf_layout.size, leaf_layout.align, 1);
@@ -493,11 +481,11 @@ pub unsafe fn btreeset_build_from_sorted_slice(
             let num_parents = (num_nodes + capacity_plus_one - 1) / capacity_plus_one;
             let mut parents: Vec<*mut SetNode> = Vec::with_capacity(num_parents);
 
-            // Spread evenly, as the leaves are.
+            let children_per_parent = (num_nodes + num_parents - 1) / num_parents;
             let mut child_idx = 0usize;
 
-            for parent_idx in 0..num_parents {
-                let num_children = num_nodes / num_parents + usize::from(parent_idx < num_nodes % num_parents);
+            for _ in 0..num_parents {
+                let num_children = children_per_parent.min(num_nodes - child_idx);
 
                 // Allocate internal node.
                 let internal_node = rt.alloc.alloc(internal_layout.size, internal_layout.align, 1);
@@ -525,7 +513,20 @@ pub unsafe fn btreeset_build_from_sorted_slice(
                 // second subtree only, and separating by it sent lookups for
                 // everything in its first subtree to the wrong child.
                 for i in 1..num_children {
-                    write_separator(keys_array.add((i - 1) * element_size), current_level[child_idx + i], ty);
+                    let first_key_src = leaf_keys_ptr(leftmost_leaf(current_level[child_idx + i], ty), ty);
+
+                    let key_dest = keys_array.add((i - 1) * element_size);
+                    // Clone the key for the internal node.
+                    let status = crate::c::impls::clone::clone_value(
+                        rt,
+                        first_key_src,
+                        ty.elem.as_ref(),
+                        key_dest,
+                    );
+                    if status != RtStatus::Ok {
+                        // TODO: proper cleanup of partial tree
+                        return RtStatus::Error;
+                    }
                 }
 
                 parents.push(internal_node as *mut SetNode);
@@ -680,13 +681,25 @@ enum LeafInsertResult {
 
 /// Information about a node split.
 struct SplitInfo {
-    /// The separator to insert into the parent, a view of an element in a
-    /// leaf (`write_separator`).
+    /// The separator key to insert into parent.
     separator_key_buf: AlignedBuffer,
     /// The new right sibling node created by the split.
     new_node: *mut SetNode,
     /// The result of inserting the pending element during the split.
     insert_result: LeafInsertResult,
+}
+
+impl SplitInfo {
+    /// Destroy the separator key and clean up.
+    unsafe fn destroy(mut self, rt: &mut RtLocal, element_tydesc: &TyDesc) {
+        unsafe {
+            let _ = crate::c::impls::destroy::any_destroy_local(
+                rt,
+                self.separator_key_buf.as_mut_ptr(),
+                element_tydesc,
+            );
+        }
+    }
 }
 
 /// Try to insert an element in a leaf node.
@@ -774,10 +787,17 @@ unsafe fn split_leaf(
         *new_next = *leaf_next;
         *leaf_next = new_leaf;
 
-        // The separator is a view of the new leaf's first element, which
-        // stays in the leaf.
+        // Clone the separator key (first key of new_leaf).
         let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.elem.as_ref());
-        write_separator(separator_key_buf.as_mut_ptr(), new_leaf, ty);
+        let status = crate::c::impls::clone::clone_value(
+            rt,
+            new_keys_ptr,
+            ty.elem.as_ref(),
+            separator_key_buf.as_mut_ptr(),
+        );
+        if status != RtStatus::Ok {
+            return Err(status);
+        }
 
         // Determine which leaf should receive the new element.
         let cmp_result = ty.ord.cmp(element, separator_key_buf.as_ptr());
@@ -835,6 +855,8 @@ unsafe fn find_leaf_with_path(
 
 /// Insert a separator key and child pointer into an internal node.
 ///
+/// The key is moved in: whichever node it lands in owns it, this one or, if
+/// this one was full and had to split, one of the halves.
 unsafe fn insert_into_internal(
     rt: &mut RtLocal,
     node: *mut SetNode,
@@ -888,7 +910,7 @@ unsafe fn insert_into_internal(
             std::ptr::copy(src_child, dst_child, shift_count);
         }
 
-        // Put the separator into the node.
+        // Move the separator key into the node.
         let key_slot = keys_ptr.add(insert_pos * element_size);
         std::ptr::copy_nonoverlapping(separator_key.as_ptr(), key_slot, element_size);
 
@@ -927,7 +949,7 @@ unsafe fn split_internal_node(
         let new_children_ptr = internal_child_ptrs_ptr(new_internal, ty);
         let element_size = ty.elem.size() as usize;
 
-        // The middle separator is the one to push up.
+        // Move the middle key out as the separator to push up.
         let mut separator_key_buf = AlignedBuffer::for_tydesc(ty.elem.as_ref());
         std::ptr::copy_nonoverlapping(
             keys_ptr.add(split_point * element_size),
@@ -994,13 +1016,14 @@ unsafe fn propagate_split_up(
             // Create new internal root.
             let new_root = alloc_internal_node(rt, ty);
             if new_root.is_null() {
+                split_info.destroy(rt, ty.elem.as_ref());
                 return RtStatus::Error;
             }
 
             let root_keys_ptr = internal_keys_ptr(new_root, ty);
             let root_children_ptr = internal_child_ptrs_ptr(new_root, ty);
 
-            // Put the separator into the new root.
+            // Move separator into new root.
             std::ptr::copy_nonoverlapping(
                 split_info.separator_key_buf.as_ptr(), root_keys_ptr, ty.elem.size() as usize);
 
@@ -1024,7 +1047,7 @@ unsafe fn propagate_split_up(
                 ty,
             );
 
-            // The separator went into the parent, or into one of its halves
+            // The separator moved into the parent, or into one of its halves
             // if it split, and the split goes on up.
             match result {
                 Ok(()) => return RtStatus::Ok,
@@ -1035,6 +1058,7 @@ unsafe fn propagate_split_up(
                         // Parent is root and split, create new root.
                         let new_root = alloc_internal_node(rt, ty);
                         if new_root.is_null() {
+                            split_info.destroy(rt, ty.elem.as_ref());
                             return RtStatus::Error;
                         }
 
@@ -1055,7 +1079,8 @@ unsafe fn propagate_split_up(
             }
         }
 
-        unreachable!("the walk up returns at the root at the latest")
+        split_info.destroy(rt, ty.elem.as_ref());
+        RtStatus::Ok
     }
 }
 
@@ -1272,6 +1297,7 @@ unsafe fn leaf_remove(
 /// Moves the last element of a leaf's left sibling to the front of the leaf,
 /// and makes the leaf's new first element the separator between them.
 unsafe fn borrow_from_left_leaf(
+    rt: &mut RtLocal,
     parent: *mut SetNode,
     parent_key_idx: usize,
     left: *mut SetNode,
@@ -1294,13 +1320,16 @@ unsafe fn borrow_from_left_leaf(
         write_node_len(left, left_len - 1);
         write_node_len(node, node_len + 1);
 
-        write_separator(internal_keys_ptr(parent, ty).add(parent_key_idx * size), node, ty);
+        let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ref());
+        let _ = crate::c::impls::clone::clone_value(rt, node_keys_ptr, ty.elem.as_ref(), parent_key);
     }
 }
 
 /// Moves the first element of a leaf's right sibling to the end of the leaf,
 /// and makes the sibling's new first element the separator between them.
 unsafe fn borrow_from_right_leaf(
+    rt: &mut RtLocal,
     parent: *mut SetNode,
     parent_key_idx: usize,
     node: *mut SetNode,
@@ -1323,7 +1352,9 @@ unsafe fn borrow_from_right_leaf(
         write_node_len(node, node_len + 1);
         write_node_len(right, right_len - 1);
 
-        write_separator(internal_keys_ptr(parent, ty).add(parent_key_idx * size), right, ty);
+        let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
+        let _ = crate::c::impls::destroy::any_destroy_local(rt, parent_key, ty.elem.as_ref());
+        let _ = crate::c::impls::clone::clone_value(rt, right_keys_ptr, ty.elem.as_ref(), parent_key);
     }
 }
 
@@ -1417,8 +1448,8 @@ unsafe fn merge_with_left_internal(
         let node_keys_ptr = internal_keys_ptr(node, ty);
         let node_children_ptr = internal_child_ptrs_ptr(node, ty);
 
-        // Bring the parent's separator down; the caller removes it from the
-        // parent.
+        // Move the parent's separator down; the caller removes its slot from
+        // the parent without destroying it.
         let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
         std::ptr::copy_nonoverlapping(parent_key, left_keys_ptr.add(left_len as usize * size), size);
 
@@ -1465,10 +1496,13 @@ unsafe fn merge_with_left_leaf(
     }
 }
 
-/// Removes a separator and the child to its right from an internal node.
+/// Removes a separator and the child to its right from an internal node,
+/// destroying the separator unless it has been moved out.
 unsafe fn internal_remove_key(
+    rt: &mut RtLocal,
     node: *mut SetNode,
     key_idx: usize,
+    moved_out: bool,
     ty: SetTy,
 ) {
     unsafe {
@@ -1476,6 +1510,10 @@ unsafe fn internal_remove_key(
         let keys_ptr = internal_keys_ptr(node, ty);
         let children_ptr = internal_child_ptrs_ptr(node, ty);
         let size = ty.elem.size() as usize;
+
+        if !moved_out {
+            let _ = crate::c::impls::destroy::any_destroy_local(rt, keys_ptr.add(key_idx * size), ty.elem.as_ref());
+        }
 
         let after = (len - 1) as usize - key_idx;
         if after > 0 {
@@ -1505,7 +1543,7 @@ unsafe fn fix_underflow(
             let left = *children_ptr.add(child_idx - 1);
             if read_node_len(left) > MIN_KEYS {
                 match child_tag {
-                    SetNodeTag::Leaf => borrow_from_left_leaf(parent, child_idx - 1, left, child, ty),
+                    SetNodeTag::Leaf => borrow_from_left_leaf(rt, parent, child_idx - 1, left, child, ty),
                     SetNodeTag::Internal => borrow_from_left_internal(parent, child_idx - 1, left, child, ty),
                 }
                 return RemoveResult::Removed;
@@ -1516,7 +1554,7 @@ unsafe fn fix_underflow(
             let right = *children_ptr.add(child_idx + 1);
             if read_node_len(right) > MIN_KEYS {
                 match child_tag {
-                    SetNodeTag::Leaf => borrow_from_right_leaf(parent, child_idx, child, right, ty),
+                    SetNodeTag::Leaf => borrow_from_right_leaf(rt, parent, child_idx, child, right, ty),
                     SetNodeTag::Internal => borrow_from_right_internal(parent, child_idx, child, right, ty),
                 }
                 return RemoveResult::Removed;
@@ -1530,11 +1568,17 @@ unsafe fn fix_underflow(
         } else {
             (child_idx, child, *children_ptr.add(child_idx + 1))
         };
-        match child_tag {
-            SetNodeTag::Leaf => merge_with_left_leaf(rt, left, right, ty),
-            SetNodeTag::Internal => merge_with_left_internal(rt, parent, left_idx, left, right, ty),
-        }
-        internal_remove_key(parent, left_idx, ty);
+        let moved_out = match child_tag {
+            SetNodeTag::Leaf => {
+                merge_with_left_leaf(rt, left, right, ty);
+                false
+            }
+            SetNodeTag::Internal => {
+                merge_with_left_internal(rt, parent, left_idx, left, right, ty);
+                true
+            }
+        };
+        internal_remove_key(rt, parent, left_idx, moved_out, ty);
 
         if read_node_len(parent) < MIN_KEYS {
             RemoveResult::Underflow
@@ -1557,21 +1601,9 @@ unsafe fn remove_recursive(
             SetNodeTag::Leaf => leaf_remove(rt, node, element, ty),
             SetNodeTag::Internal => {
                 let len = read_node_len(node);
-                let keys_ptr = internal_keys_ptr(node, ty);
-                // An element equal to a separator is the least of the subtree
-                // to its right, and the separator views it.
-                let (child_idx, separator) = match search_elements(keys_ptr, len as usize, element, ty) {
-                    Ok(i) => (i + 1, Some(i)),
-                    Err(i) => (i, None),
-                };
+                let child_idx = child_index(internal_keys_ptr(node, ty), len as usize, element, ty);
                 let child = *internal_child_ptrs_ptr(node, ty).add(child_idx);
-                let result = remove_recursive(rt, child, element, ty);
-                // The element it viewed is gone, so it views the subtree's
-                // new least element, before anything compares against it.
-                if let Some(i) = separator && result != RemoveResult::NotFound {
-                    write_separator(keys_ptr.add(i * ty.elem.size() as usize), child, ty);
-                }
-                match result {
+                match remove_recursive(rt, child, element, ty) {
                     RemoveResult::Underflow => fix_underflow(rt, node, child_idx, ty),
                     other => other,
                 }
