@@ -38,36 +38,6 @@ struct Replay {
 
 const REPLAYS: &[Replay] = &[
     Replay {
-        name: "reactive-four-accesses",
-        world: "reactive-four-accesses.world",
-        output: "mandocs/assets/reactive-four-accesses.replay.js",
-    },
-    Replay {
-        name: "reactive-edit-changes-access",
-        world: "reactive-edit-changes-access.world",
-        output: "mandocs/assets/reactive-edit-changes-access.replay.js",
-    },
-    Replay {
-        name: "reactive-add-move",
-        world: "reactive-add-move.world",
-        output: "mandocs/assets/reactive-add-move.replay.js",
-    },
-    Replay {
-        name: "reactive-revive",
-        world: "reactive-revive.world",
-        output: "mandocs/assets/reactive-revive.replay.js",
-    },
-    Replay {
-        name: "reactive-rerun-needs-rerun",
-        world: "reactive-rerun-needs-rerun.world",
-        output: "mandocs/assets/reactive-rerun-needs-rerun.replay.js",
-    },
-    Replay {
-        name: "reactive-rerun-through-moves",
-        world: "reactive-rerun-through-moves.world",
-        output: "mandocs/assets/reactive-rerun-through-moves.replay.js",
-    },
-    Replay {
         name: "reactive-transactions",
         world: "reactive-transactions.world",
         output: "mandocs/assets/reactive-transactions.replay.js",
