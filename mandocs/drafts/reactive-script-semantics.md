@@ -961,7 +961,17 @@ A reorder is a delete and an add of the same unit,
 made in one step,
 so the session as it would stand between the two never runs.
 
-A modification of a unit `T` calls for more of them.
+The modification table says which halves a modification has.
+The rules below say what each half calls for:
+more modifications,
+first back to the units before `T`,
+then forward to the units after `T`, and after each unit that runs again.
+The backward rules are the access table of
+[the second section](#user-content-but-what-about-edits-that-change-what-a-unit-does),
+except that a restore starts at the nearest unit that set the binding,
+as [the third section](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored) found.
+
+**Backward**, to put earlier bindings back as `T` first found them:
 
 - **Retract.**
   Restore every earlier binding the old code took, overwrote, updated or revived.
@@ -976,6 +986,9 @@ A modification of a unit `T` calls for more of them.
   rerun the nearest unit before `T` that provided, overwrote or revived it.
   That rebuilds it from nothing.
   A binding whose provider no longer runs has nothing to restore.
+
+**Forward**, to the units after `T`, and after each unit that runs again:
+
 - **Undone work.**
   A unit that runs again rebuilds everything it provides and writes,
   which undoes whatever later units took or wrote of it,
