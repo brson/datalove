@@ -58,11 +58,7 @@ I did not prove correctness.
 **Part 2. Experiments**
 
 - [If one unit moves or mutates a binding how does that affect preceding units on replay?](#user-content-if-one-unit-moves-or-mutates-a-binding-how-does-that-affect-preceding-units-on-replay)
-- [A naive set of rerun rules for moves and mutations](#user-content-a-naive-set-of-rerun-rules-for-moves-and-mutations)
 - [But what about edits that change what a unit does?](#user-content-but-what-about-edits-that-change-what-a-unit-does)
-- [A second set of rules: retract and apply](#user-content-a-second-set-of-rules-retract-and-apply)
-- [But what about edits that change which names later units can use?](#user-content-but-what-about-edits-that-change-which-names-later-units-can-use)
-- [A third set of rules: breaks and fixes](#user-content-a-third-set-of-rules-breaks-and-fixes)
 - [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
 - [A complete set of rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-rules-for-recompiles-and-reruns-for-moves-and-mutations)
 
@@ -426,9 +422,7 @@ and runs only if the units it reads from ran to their end.
 
 <!--
 _But_ need a simple clear example that shows the core problem.
-_Therefore_ what we decide to recompile and rerun.
-
-_But...therefore_ modest but succinct elaboration.
+_Therefore_ what we decide to recompile and rerun, as a first set of rules.
 
 Demonstrate read/take/overwrite/update
 -->
@@ -493,26 +487,9 @@ set d = d * 2
 ```
 
 Unit 5 _reads_ `a`, _takes_ `b`, _overwrites_ `c` and _updates_ `d`.
-
-Each change to the session is a _step_,
-and a table says what each unit does in it.
-_Uses from earlier units_ names the unit each binding came from in parentheses.
-_Holds after_ is what a unit's bindings hold at the end of the step,
-whichever unit last changed them:
-unit 3 holds `c` = 30 because unit 5 overwrote it.
-
-**Step 1: all five units are entered.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1` | - | compiles, runs | new | `a` = 1 |
-| 2 | `let b = 2` | - | compiles, runs | new | `b` taken |
-| 3 | `var c = 3` | - | compiles, runs | new | `c` = 30 |
-| 4 | `var d = 4` | - | compiles, runs | new | `d` = 8 |
-| 5 | `let e = a + 10; let f = b; set c = 30; set d = d * 2` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | compiles, runs | new | `e` = 11, `f` = 2 |
-
-Every unit compiles and runs once, in order.
-
+Entering the five units is step 1:
+each compiles and runs once, in order,
+leaving `a` = 1, `b` taken, `c` = 30, `d` = 8, `e` = 11 and `f` = 2.
 
 **Step 2: unit 5 is edited.**
 
@@ -541,6 +518,12 @@ unit 5 _overwrites_ `c` without looking at what it held.
 Unit 1 doesn't either,
 because _reading_ `a` left it as it was.
 
+A table says what each unit does in a step.
+_Uses from earlier units_ names the unit each binding came from in parentheses.
+_Holds after_ is what a unit's bindings hold at the end of the step,
+whichever unit last changed them:
+unit 3 holds `c` = 30 because unit 5 overwrote it.
+
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `let a = 1` | - | untouched | unit 5 only reads `a` | `a` = 1 |
@@ -564,13 +547,11 @@ let a = 2
 
 Unit 5 reads `a`,
 so it reruns.
-But rerunning unit 5 puts it in the same spot as editing it did.
-It would take `b` from the slot it emptied
-and double `d` a second time,
+But rerunning unit 5 puts it in the same spot as editing it did,
 so units 2 and 4 rerun before it,
 just as they did in step 2.
-The edited unit forced a rerun of a subsequent unit,
-then that unit transitively forced a rerun of previous units.
+The edited unit forced a rerun of a later unit,
+and that unit in turn forced reruns of earlier ones.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
@@ -612,35 +593,10 @@ unit 5 won't run to overwrite it.
 | 4 | `var d = 4` | - | reruns | rerun: unit 5 updated `d` when it last ran, and is retracted | `d` = 4 |
 | 5 | `let e = a + 100; ...; let x = y` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompile fails | edited | - |
 
-So a unit's access to an earlier binding decides which earlier units rerun.
-If the access is an overwrite then the nature of the modification
-also matters: if an overwrite is edited the earlier unit does not need to rerun,
-but if an overwrite is broken the earlier unit does need to rerun to restore the value
-that will no longer be overwritten.
-And a unit that reruns because an earlier one changed
-needs the same as one that was edited.
-
-
-
-
-## A naive set of rerun rules for moves and mutations
-
-<!--
-_Therefore_ we propose an algorithm.
--->
-
-Each _modification_ of a unit,
-so far an _edit_ or a _break_,
-makes a step.
-Call the modified unit the _triggering unit_.
-In a step each unit is left untouched,
-reruns,
-recompiles and then runs,
-or fails to compile.
-The triggering unit always recompiles.
-What happens to the earlier units
-depends on what the triggering unit's code did to their bindings
-the last time it ran:
+These steps give a first set of rules.
+Call the unit an edit or a break modifies the _triggering unit_.
+What happens to the units before it
+depends on what its code did to their bindings the last time it ran:
 
 | access    | break   | edit    |
 |-----------|---------|---------|
@@ -653,34 +609,21 @@ A _restore_ puts a binding back as the triggering unit first found it.
 It reruns the binding's provider,
 then, in order, the units between that one and the triggering unit
 that wrote it.
-Units in between that only read it are left alone.
-They would recompute what they already hold.
+Overwrite is the only access where a break and an edit differ:
+an edited unit overwrites the binding again,
+and a broken one doesn't.
 
-Overwrite is the only access that differs between a break and an edit.
-An edit skips the restore for an overwrite
-because the triggering unit runs again and overwrites the binding,
-so what it held before doesn't matter.
-A break has nothing to overwrite it so the binding must be restored.
-
-A rerun runs a whole unit,
-so a triggering unit that touches several bindings
-gets the union of their rows.
-
-Then the units after the triggering unit.
-One that reads, takes or updates a binding
+After the triggering unit,
+a unit that reads, takes or updates a binding
 the triggering unit provided or wrote
 sees a new value,
-so it reruns,
-and so on down the session for whatever the reruns provide or write.
-A later unit that overwrites the binding
-doesn't care what it held,
-so does not rerun,
-and the units after that one see what it wrote,
-so they do not rerun.
+so it reruns.
+A unit that overwrites the binding doesn't care what it held,
+so the change stops there.
 
-_A rerun is like an edit that doesn't change the code_,
-and triggers the same analysis recursively
-to find the full set of units that must rerun.
+A rerun is like an edit that doesn't change the code,
+so each unit rerun triggers the same analysis,
+until no more units need to rerun.
 
 
 
@@ -689,12 +632,15 @@ to find the full set of units that must rerun.
 
 <!--
 _But_ the first rules assume an edit keeps the unit's accesses.
-_Therefore_ an edit retracts the old code and applies the new.
+_Therefore_ an edit retracts the old code and applies the new,
+and changes to accesses can break and fix later units.
 -->
 
 The first rules look up what the triggering unit does,
 and assume an edit doesn't change that.
-It can.
+It can,
+both to the values of earlier bindings
+and to which of them later units can name.
 
 ```datalove
 ----------
@@ -716,14 +662,7 @@ scriptunit-fragment 3
 set b = b + 1
 ```
 
-**Step 1: all three units are entered.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | compiles, runs | new | `b` = 251 |
-| 2 | `set b = b * 2` | updates `b` (1) | compiles, runs | new | - |
-| 3 | `set b = b + 1` | updates `b` (1) | compiles, runs | new | - |
-
+Entered, these leave `b` = 251.
 Edit unit 2 to read `b` instead of updating it.
 
 ```datalove
@@ -752,73 +691,12 @@ and unit 3, which runs after it.
 | 3 | `set b = b + 1` | updates `b` (1) | reruns | rerun: updates `b`, which unit 1 rebuilt | - |
 
 So an edit is two modifications.
-It retracts what the old code did,
-and applies what the new code does.
+It _retracts_ what the old code did,
+and _applies_ what the new code does.
 And applying has to look past the triggering unit,
 at what later units did to the binding since.
 
-
-
-
-## A second set of rules: retract and apply
-
-<!--
-_Therefore_ split every modification into a retract and an apply.
--->
-
-Each modification retracts the old code, applies the new code, or both:
-
-| modification | retract the old code | apply the new code |
-|--------------|----------------------|--------------------|
-| add          | -                    | yes                |
-| fix          | -                    | yes                |
-| break        | yes                  | -                  |
-| delete       | yes                  | -                  |
-| edit         | yes                  | yes                |
-
-Adding covers appending a unit and inserting one.
-Retract looks up what the old code did to each earlier binding,
-and apply what the new code does:
-
-| access    | retract | apply |
-|-----------|---------|-------|
-| read      | nothing | restore if a later unit took or wrote it |
-| take      | restore | restore if a later unit took or wrote it |
-| overwrite | restore | nothing |
-| update    | restore | restore if a later unit took or wrote it |
-
-Retract restores whatever the old code changed.
-Apply restores whatever the new code is going to look at,
-if something after it has changed it since.
-When the new code overwrites a binding,
-what it held before is dead,
-so a restore the retract asks for is skipped.
-The first rules' break column is this retract column,
-and its edit column is what retract and apply give
-when nothing after the triggering unit touched the binding.
-
-A restore undoes what later units did to the binding,
-so the units after the triggering unit that took or wrote it rerun.
-That's unit 3 in step 2.
-
-The forward rule now has two codes to look at.
-A later unit that reads, takes or updates a binding
-that either the old or the new code provided or wrote
-may see a different value,
-so it reruns.
-
-
-
-
-## But what about edits that change which names later units can use?
-
-<!--
-_But_ a take or a revive changes which bindings later units may name.
-_Therefore_ modifications break and fix later units.
--->
-
-Every change so far changed values.
-A take changes more:
+A take changes more than values:
 after it,
 later units can't name the binding at all.
 
@@ -849,16 +727,6 @@ let e = a + 2
 ```
 
 Three units read `a`, and nothing takes it.
-
-**Step 1: all four units are entered.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
-| 2 | `let c = a + 10` | reads `a` (1) | compiles, runs | new | `c` = 1010 |
-| 3 | `let d = a + 1` | reads `a` (1) | compiles, runs | new | `d` = 1001 |
-| 4 | `let e = a + 2` | reads `a` (1) | compiles, runs | new | `e` = 1002 |
-
 Edit unit 3 to take `a` instead of reading it.
 
 ```datalove
@@ -869,14 +737,12 @@ scriptunit-edit 3
 let d = a
 ```
 
-The old code only read `a`,
-so there is nothing to retract from prior units,
-and nothing after unit 3 took or wrote `a`,
-so there is nothing to apply to prior units.
-The impact is on subsequent units.
-Unit 4 reads `a`,
-and `a` was given away before unit 4 gets to it.
-It hasn't been edited,
+There is nothing to retract or apply before unit 3:
+the old code only read `a`,
+and nothing after unit 3 took or wrote it.
+But unit 4 reads `a`,
+and `a` is now given away before unit 4 gets to it.
+Unit 4 hasn't been edited,
 and nothing it uses was recompiled,
 but it no longer compiles:
 
@@ -893,144 +759,38 @@ error[O013]: `a` was given away by an earlier unit
 | 3 | `let d = a` | takes `a` (1) | recompiles, runs | edited | `d` = 1000 |
 | 4 | `let e = a + 2` | reads `a` (1) | recompile fails | `a` was given away by unit 3 | - |
 
-Edit unit 3 back to a read.
-
-```datalove
-----------
-scriptunit-edit 3
-----------
-
-let d = a + 1
-```
-
-Retracting the take restores `a`,
-so unit 1 reruns.
-And unit 4 can name `a` again,
-so it is fixed.
-
-**Step 3: unit 3 is edited back to read `a`.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 3 took `a` when it last ran, and the edit retracts that | `a` = 1000 |
-| 2 | `let c = a + 10` | reads `a` (1) | untouched | unit 1 provided the same `a` | `c` = 1010 |
-| 3 | `let d = a + 1` | reads `a` (1) | recompiles, runs | edited | `d` = 1001 |
-| 4 | `let e = a + 2` | reads `a` (1) | reruns | `a` can be named again, as it could in step 1, whose compile is still memoized | `e` = 1002 |
-
-Unit 4 is fixed without recompiling:
+Editing unit 3 back to a read retracts the take,
+so unit 1 reruns to restore `a`,
+and unit 4 is fixed.
+It reruns without recompiling:
 its compile from step 1 is still memoized.
 
 The opposite of a take is a _revive_,
 an overwrite of a `var` that an earlier unit gave away.
-It gives the name back,
-so later units can use the binding again.
+It gives the name back.
 
 ```datalove
-----------
-scriptunit-fragment 1
-----------
-
-var b = 125
-
-----------
-scriptunit-fragment 2
-----------
-
-let b_moved = b
-
-----------
-scriptunit-fragment 3
-----------
-
-set b = 500
-
-----------
-scriptunit-fragment 4
-----------
-
-let c = b + 1
+var b = 125        // unit 1
+let b_moved = b    // unit 2 takes `b`
+set b = 500        // unit 3 revives it
+let c = b + 1      // unit 4 reads what unit 3 put there
 ```
 
-Unit 2 takes `b`, unit 3 revives it,
-and unit 4 reads what unit 3 put there.
-Without unit 3, unit 4 wouldn't compile.
-
-**Step 1: all four units are entered.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | compiles, runs | new | `b` = 500 |
-| 2 | `let b_moved = b` | takes `b` (1) | compiles, runs | new | `b_moved` = 125 |
-| 3 | `set b = 500` | revives `b` (1) | compiles, runs | new | - |
-| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
-
-Break unit 3.
-
-```datalove
-----------
-scriptunit-edit 3
-----------
-
-set b = 500
-let x = y
-```
-
-Retracting a revive is a restore like any other:
+Break unit 3 and its revive is retracted:
 `b` goes back to what it held before unit 3,
-which is nothing.
-Unit 1 provides `b`,
-so it reruns,
-and unit 2, between it and unit 3, takes `b` again.
-Forward, it's a take added back.
-Unit 4 names `b`,
-which unit 2 gave away and nothing gives back,
-so it breaks.
+so units 1 and 2 rerun,
+and unit 2 takes `b` again.
+Unit 4 now names a binding that is given away,
+so it breaks too.
+Fix unit 3 and unit 4 is fixed with it.
 
-**Step 2: unit 3 is broken.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | reruns | rerun: unit 3 revived `b` when it last ran, and is retracted | `b` taken |
-| 2 | `let b_moved = b` | takes `b` (1) | reruns | rerun: takes `b`, which unit 1 rebuilt | `b_moved` = 125 |
-| 3 | `set b = 500; let x = y` | revives `b` (1) | recompile fails | edited | - |
-| 4 | `let c = b + 1` | reads `b` (1) | recompile fails | `b` was given away by unit 2 | - |
-
-Fix unit 3 again.
-Applying a revive needs nothing,
-as applying an overwrite doesn't,
-and unit 4 can name `b` again.
-
-**Step 3: unit 3 is fixed.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 125` | - | untouched | unit 3 overwrites `b` without reading it | `b` = 500 |
-| 2 | `let b_moved = b` | takes `b` (1) | untouched | nothing it uses changed | `b_moved` = 125 |
-| 3 | `set b = 500` | revives `b` (1) | recompiles, runs | edited | - |
-| 4 | `let c = b + 1` | reads `b` (1) | reruns | `b` can be named again, as it could in step 1, whose compile is still memoized | `c` = 501 |
-
-
-
-
-## A third set of rules: breaks and fixes
-
-<!--
-_Therefore_ a revive joins the accesses, and modifications reach later units' compiles.
--->
-
-Like before, each modification retracts the old code, applies the new code, or both:
-
-| modification | retract the old code | apply the new code |
-|--------------|----------------------|--------------------|
-| add          | -                    | yes                |
-| fix          | -                    | yes                |
-| break        | yes                  | -                  |
-| delete       | yes                  | -                  |
-| edit         | yes                  | yes                |
-
-A revive is a fifth access.
-Backward it is an overwrite.
-Forward it undoes a take.
+So a modification retracts the old code, applies the new code, or both.
+Adding or fixing a unit only applies,
+breaking or deleting it only retracts,
+and editing it does both.
+A revive is a fifth access:
+backward it is an overwrite,
+and forward it undoes a take.
 
 | access    | retract | apply | later units that name the binding |
 |-----------|---------|-------|-----------------------------------|
@@ -1040,15 +800,25 @@ Forward it undoes a take.
 | update    | restore | restore if a later unit took or wrote it | - |
 | revive    | restore | nothing | are fixed; removing the revive breaks them |
 
+Retract restores whatever the old code changed.
+Apply restores whatever the new code is going to look at,
+if something after it has changed it since.
+The first rules' break column is the retract column,
+and their edit column is what retract and apply give
+when nothing after the triggering unit touched the binding.
+
 A restore reruns the binding's provider,
 then, in order, the units between that one and the triggering unit
-that took or wrote it.
-Before revives, nothing between them could have taken it.
+that took or wrote it,
+and then the units after the triggering unit that took or wrote it,
+since the restore undid their work.
+After the triggering unit,
+a unit reruns if it reads, takes or updates a binding
+that either the old or the new code provided or wrote.
 
-A break or a fix of a later unit is a modification in its own right.
-The broken unit retracts what it did,
+A break or a fix of a later unit is a modification in its own right:
+the broken unit retracts what it did,
 and the fixed unit applies what it does.
-A modification can now cause other modifications.
 
 
 
@@ -1064,8 +834,7 @@ The tables work one binding at a time,
 but a rerun runs a whole unit.
 Whatever else it reads has to be as it found it,
 and whatever else it takes or writes is done again.
-Dependent bindings have to be restored,
-but a restore can need a restore too.
+So a restore can need a restore too.
 
 ```datalove
 ----------
@@ -1100,16 +869,7 @@ scriptunit-fragment 5
 set b = 0
 ```
 
-**Step 1: all five units are entered.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 1` | - | compiles, runs | new | `b` = 0 |
-| 2 | `var z = 10` | - | compiles, runs | new | `z` = 11 |
-| 3 | `set b = 500; set z = z + 1` | overwrites `b` (1), updates `z` (2) | compiles, runs | new | - |
-| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
-| 5 | `set b = 0` | overwrites `b` (1) | compiles, runs | new | - |
-
+Entered, these leave `b` = 0, `z` = 11 and `c` = 501.
 Edit unit 4.
 It reads `b`, which unit 5 overwrote after it,
 so `b` has to be restored.
@@ -1133,69 +893,16 @@ though unit 4 never names `z`.
 | 4 | `let c = b + 2` | reads `b` (1) | recompiles, runs | edited | `c` = 502 |
 | 5 | `set b = 0` | overwrites `b` (1) | reruns | rerun: overwrites `b` after unit 4 | - |
 
-A chain of moves walks back one link at a time.
-Here `w` is made from `a2`, which was made from `a`.
+Moves chain the same way, one link at a time.
+If `var w = a2` has to rerun to rebuild `w`,
+it takes `a2` again,
+so the unit that made `a2` with `let a2 = a` reruns first,
+and since that takes `a`,
+the unit that made `a` reruns before it.
 
-```datalove
-----------
-scriptunit-fragment 1
-----------
-
-let a = 1000
-
-----------
-scriptunit-fragment 2
-----------
-
-let a2 = a
-
-----------
-scriptunit-fragment 3
-----------
-
-var w = a2
-
-----------
-scriptunit-fragment 4
-----------
-
-let c = w + 1
-
-----------
-scriptunit-fragment 5
-----------
-
-set w = w * 2
-```
-
-**Step 1: all five units are entered.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | compiles, runs | new | `a` taken |
-| 2 | `let a2 = a` | takes `a` (1) | compiles, runs | new | `a2` taken |
-| 3 | `var w = a2` | takes `a2` (2) | compiles, runs | new | `w` = 2000 |
-| 4 | `let c = w + 1` | reads `w` (3) | compiles, runs | new | `c` = 1001 |
-| 5 | `set w = w * 2` | updates `w` (3) | compiles, runs | new | - |
-
-Edit unit 4, which reads `w` before unit 5 doubles it.
-
-**Step 2: unit 4 is edited.**
-
-| unit | code | uses from earlier units | this step | because | holds after |
-|------|------|-------------------------|-----------|---------|-------------|
-| 1 | `let a = 1000` | - | reruns | rerun: unit 2 reruns and takes `a`, which it took when it last ran | `a` taken |
-| 2 | `let a2 = a` | takes `a` (1) | reruns | rerun: unit 3 reruns and takes `a2`, which it took when it last ran | `a2` taken |
-| 3 | `var w = a2` | takes `a2` (2) | reruns | rerun: unit 4 reads `w`, which unit 5 updated after it | `w` = 2000 |
-| 4 | `let c = w + 2` | reads `w` (3) | recompiles, runs | edited | `c` = 1002 |
-| 5 | `set w = w * 2` | updates `w` (3) | reruns | rerun: updates `w` from unit 3, which reran | - |
-
-Unit 3 reruns to rebuild `w`,
-but it took `a2` the last time it ran,
-so unit 2 reruns first,
-and that took `a`, so unit 1 reruns before it.
-
-The same session, replayed from the Datalove scripting engine:
+So every rerun is a modification of its own,
+and the rules apply to it in turn,
+until nothing more needs to rerun.
 
 
 
