@@ -1,0 +1,3 @@
+// A value of a recursive type, read as data and compiled as a literal.
+mode: valued
+expr: : rec R { value: int, kids: [R] } / {value = 1, kids = [{value = 2, kids = []}, {value = 3, kids = []}]}

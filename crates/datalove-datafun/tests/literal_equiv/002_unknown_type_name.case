@@ -1,0 +1,4 @@
+// A name that is no type is T059 in datalit, which has no type names, and
+// F064 in datafun, which has no such alias: one error under two codes.
+mode: inferred
+expr: : [Nope] / []

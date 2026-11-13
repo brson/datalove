@@ -1,0 +1,4 @@
+// Datalit cannot parse a bare word; datafun reads it as a name that is no
+// binding (F001). Both refuse it.
+mode: mutated
+expr: : !u8 / er e

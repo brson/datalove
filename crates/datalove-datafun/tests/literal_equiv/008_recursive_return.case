@@ -1,0 +1,5 @@
+// A recursive type's unfolding returned as the recursive type, which datafun
+// checks by `Check-Roll` and datalit by its hint.
+mode: return
+type: rec R [?R]
+expr: [none, some []]

@@ -1,0 +1,4 @@
+// Datalit cannot parse `0.>5`; datafun reads the comparison operator `.>`
+// over `: f32 / 0` and refuses that. Both refuse it.
+mode: mutated
+expr: : f32 / 0.>5

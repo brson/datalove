@@ -1,0 +1,4 @@
+// A failed subsumption is T022 for a string in datalit and F016 in datafun:
+// one error under two codes, by the two typing-rule documents.
+mode: inferred
+expr: : [int] / [: int / 0, "wrong"]

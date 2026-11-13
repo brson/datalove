@@ -1,0 +1,5 @@
+// A sign is part of datalit's literal and an operator in datafun, which
+// reads a negated literal against a fixed-width integer as the signed
+// literal (`Check-NegLit`): -128 fits an `i8` though 128 does not.
+mode: valued
+expr: : i8 / -128

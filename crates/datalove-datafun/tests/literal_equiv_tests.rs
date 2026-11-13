@@ -28,8 +28,13 @@
 //!
 //! A difference is shrunk, an element of a list, a set, a map or a table
 //! dropped at a time while it differs the same way, and written out under the
-//! target directory with what each side said. A mutated case is written as
-//! it is: shrinking what was mutated would change what the mutation does.
+//! target directory as a case, with what each side said in comments. A
+//! mutated case is written as it is: shrinking what was mutated would change
+//! what the mutation does.
+//!
+//! The cases in `tests/literal_equiv/` run before any seed: differences
+//! found and fixed, copied in from where they were written out, and cases
+//! written by hand for the rules the two languages state differently.
 //!
 //! Environment:
 //!
@@ -42,6 +47,7 @@
 
 use rmx::prelude::*;
 use rmx::rayon::prelude::*;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use bct::random::{SeededRng, env_seeds};
@@ -118,9 +124,10 @@ enum Differs {
     Value,
 }
 
-/// A difference, and what the two sides said.
+/// A difference, the case that showed it, and what the two sides said.
 struct Difference {
     differs: Differs,
+    written: Written,
     datalit_text: String,
     datafun_text: String,
     detail: String,
@@ -205,16 +212,18 @@ fn datafun_codes(db: &Db, text: &str) -> (bool, Vec<String>) {
     (false, codes(db, diagnostics.iter().map(|d| d.to_diagnostic(db))))
 }
 
-/// How datalit's `datalit_text` and datafun's `datafun_text` differ, if they
-/// do. Their trees are compared only `inferred`, where the two texts write
-/// the same expression the same way.
-fn compare(db: &Db, datalit_text: &str, datafun_text: &str, inferred: bool) -> Option<Difference> {
-    let (datalit, datalit_tree) = datalit_side(db, datalit_text);
-    let (datafun, datafun_tree) = datafun_side(db, datafun_text);
+/// How datalit and datafun differ over `written`'s two texts, if they do.
+/// Their trees are compared only where it is inferred, where the two texts
+/// write the same expression the same way.
+fn compare(db: &Db, written: &Written) -> Option<Difference> {
+    let (datalit_text, datafun_text) = written.texts();
+    let (datalit, datalit_tree) = datalit_side(db, &datalit_text);
+    let (datafun, datafun_tree) = datafun_side(db, &datafun_text);
     let differs = |differs: Differs, detail: String| Some(Difference {
         differs,
-        datalit_text: datalit_text.S(),
-        datafun_text: datafun_text.S(),
+        written: written.C(),
+        datalit_text: datalit_text.C(),
+        datafun_text: datafun_text.C(),
         detail,
     });
     // Every datalit expression is a datafun one, so what datalit parses
@@ -234,7 +243,7 @@ fn compare(db: &Db, datalit_text: &str, datafun_text: &str, inferred: bool) -> O
     if datalit.parse_failed || datafun.parse_failed {
         return None;
     }
-    if inferred && let (Some(datalit_tree), Some(datafun_tree)) = (&datalit_tree, &datafun_tree) {
+    if written.way == Way::Inferred && let (Some(datalit_tree), Some(datafun_tree)) = (&datalit_tree, &datafun_tree) {
         match datafun_tree {
             Ok(datafun_tree) if datafun_tree == datalit_tree => {}
             Ok(datafun_tree) => return differs(Differs::Tree, fmt!("datalit: {datalit_tree:?}\ndatafun: {datafun_tree:?}")),
@@ -251,41 +260,71 @@ fn compare(db: &Db, datalit_text: &str, datafun_text: &str, inferred: bool) -> O
 }
 
 // ============================================================================
-// Cases
+// Written cases
 // ============================================================================
 
-/// A case: an expression, and the type it is checked against when it is.
-#[derive(Clone)]
-struct Case<'db> {
-    expr: ExprFull<'db>,
-    checked_as: Option<TypeHint<'db>>,
+/// Which way an expression is put to the two languages; see the module docs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Way {
+    Inferred,
+    Valued,
+    Checked,
+    Placed(Place),
+    Mutated,
 }
 
-impl<'db> Case<'db> {
-    /// The two texts, datalit's and datafun's.
-    fn texts(&self, db: &'db Db) -> (String, String) {
-        let expr = datalove_datalit::pretty::pretty_print(db, &self.expr);
-        match &self.checked_as {
-            None => (expr.C(), fmt!("let _x = {expr}")),
-            Some(ty) => {
-                let ty = ty.syntax(db);
-                (fmt!(": {ty} / {expr}"), fmt!("let _x: {ty} = {expr}"))
-            }
+impl Way {
+    const NAMES: [(&str, Way); 8] = [
+        ("inferred", Way::Inferred),
+        ("valued", Way::Valued),
+        ("checked", Way::Checked),
+        ("argument", Way::Placed(Place::Argument)),
+        ("return", Way::Placed(Place::Return)),
+        ("set", Way::Placed(Place::Set)),
+        ("var", Way::Placed(Place::Var)),
+        ("mutated", Way::Mutated),
+    ];
+
+    fn name(self) -> &'static str {
+        Way::NAMES.iter().find(|(_, way)| *way == self).X().0
+    }
+}
+
+/// A case as text: a way, the type an expression is checked against where
+/// the way checks it against one, and the expression. What the kept cases
+/// are written as, and what a difference is written out as.
+#[derive(Clone, Debug)]
+struct Written {
+    way: Way,
+    ty: Option<String>,
+    expr: String,
+}
+
+impl Written {
+    /// The two texts, datalit's and datafun's, for the ways that compare two
+    /// texts' typing.
+    fn texts(&self) -> (String, String) {
+        let expr = &self.expr;
+        match (&self.ty, self.way) {
+            (None, _) => (expr.C(), fmt!("let _x = {expr}")),
+            (Some(ty), Way::Placed(place)) => (fmt!(": {ty} / {expr}"), place.script(ty, expr)),
+            (Some(ty), _) => (fmt!(": {ty} / {expr}"), fmt!("let _x: {ty} = {expr}")),
         }
     }
 
-    fn compare(&self, db: &'db Db) -> Option<Difference> {
-        let (datalit, datafun) = self.texts(db);
-        compare(db, &datalit, &datafun, self.checked_as.is_none())
+    /// How the two languages differ over it, put its way.
+    fn check(&self, db: &Db) -> Option<Difference> {
+        match self.way {
+            Way::Inferred | Way::Checked | Way::Mutated => compare(db, self),
+            Way::Placed(_) => self.placed(db),
+            Way::Valued => self.valued(db),
+        }
     }
 
     /// How datafun, checking the expression where it is put, differs from
-    /// datalit checking it against its type; for a checked case.
-    fn placed(&self, db: &'db Db, place: Place) -> Option<Difference> {
-        let expr = datalove_datalit::pretty::pretty_print(db, &self.expr);
-        let ty = self.checked_as.as_ref().X().syntax(db).S();
-        let datalit_text = fmt!(": {ty} / {expr}");
-        let datafun_text = place.script(&ty, &expr);
+    /// datalit checking it against its type.
+    fn placed(&self, db: &Db) -> Option<Difference> {
+        let (datalit_text, datafun_text) = self.texts();
         let (datalit, _) = datalit_side(db, &datalit_text);
         let (parse_failed, codes) = datafun_codes(db, &datafun_text);
         let differs = match () {
@@ -295,6 +334,7 @@ impl<'db> Case<'db> {
         };
         Some(Difference {
             differs,
+            written: self.C(),
             datalit_text,
             datafun_text,
             detail: fmt!("datalit: {:?}\ndatafun: {codes:?}", datalit.codes),
@@ -302,14 +342,14 @@ impl<'db> Case<'db> {
     }
 
     /// How the expression differs read as a data file, by datalit, from the
-    /// same text compiled as a datafun literal, run and shown; for an
-    /// inferred case both languages accept.
+    /// same text compiled as a datafun literal, run and shown, where both
+    /// languages accept it.
     ///
     /// The two are bound at the type datalit finds for it, and shown by one
     /// printer, so what can differ is what each built.
-    fn valued(&self, db: &'db Db) -> Option<Difference> {
-        let text = datalove_datalit::pretty::pretty_print(db, &self.expr);
-        let (datalit, _) = datalit_side(db, &text);
+    fn valued(&self, db: &Db) -> Option<Difference> {
+        let text = &self.expr;
+        let (datalit, _) = datalit_side(db, text);
         let ty = match datalit.spelled {
             Some(ty) if datalit.codes.is_empty() && !datalit.parse_failed => ty,
             _ => return None,
@@ -323,6 +363,7 @@ impl<'db> Case<'db> {
         let analysis = datalove_datafun::worldfile_analysis::analyze_worldfile(&datalove_datafun::Database::default(), parsed);
         let difference = |detail: String| Some(Difference {
             differs: Differs::Value,
+            written: self.C(),
             datalit_text: fmt!("data local/gen/d: {ty} = {text}"),
             datafun_text: fmt!("let v: {ty} = {text}"),
             detail,
@@ -343,6 +384,65 @@ impl<'db> Case<'db> {
             [data, literal] if data == literal => None,
             _ => difference(fmt!("shown, the data file and then the literal:\n{shown}")),
         }
+    }
+
+    /// The case `text` writes: `mode:`, `type:` where the way checks the
+    /// expression against one, and `expr:`, a line each, among `//`
+    /// comments.
+    fn read(text: &str) -> Result<Written, String> {
+        let mut fields = BTreeMap::new();
+        for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("//")) {
+            let (key, value) = line.split_once(':').ok_or_else(|| fmt!("`{line}` is no `key: value`"))?;
+            fields.insert(key.trim(), value.trim().S());
+        }
+        let mode = fields.remove("mode").ok_or("no `mode:`")?;
+        let way = Way::NAMES.iter().find(|(name, _)| *name == mode).ok_or_else(|| fmt!("no mode `{mode}`"))?.1;
+        let ty = fields.remove("type");
+        let expr = fields.remove("expr").ok_or("no `expr:`")?;
+        if let Some(key) = fields.keys().next() {
+            return Err(fmt!("`{key}:` is not a field"));
+        }
+        let checks = matches!(way, Way::Checked | Way::Placed(_));
+        if checks != ty.is_some() {
+            return Err(fmt!("mode `{mode}` {} a `type:`", if checks { "needs" } else { "takes no" }));
+        }
+        Ok(Written { way, ty, expr })
+    }
+
+    /// The case as [`Self::read`] reads it.
+    fn write(&self) -> String {
+        let mut text = fmt!("mode: {}\n", self.way.name());
+        if let Some(ty) = &self.ty {
+            text.push_str(&fmt!("type: {ty}\n"));
+        }
+        text.push_str(&fmt!("expr: {}\n", self.expr));
+        text
+    }
+}
+
+// ============================================================================
+// Cases
+// ============================================================================
+
+/// A case: an expression, and the type it is checked against when it is.
+#[derive(Clone)]
+struct Case<'db> {
+    expr: ExprFull<'db>,
+    checked_as: Option<TypeHint<'db>>,
+}
+
+impl<'db> Case<'db> {
+    /// The case as text, put `way`.
+    fn written(&self, db: &'db Db, way: Way) -> Written {
+        Written {
+            way,
+            ty: self.checked_as.as_ref().map(|ty| ty.syntax(db).S()),
+            expr: datalove_datalit::pretty::pretty_print(db, &self.expr),
+        }
+    }
+
+    fn check(&self, db: &'db Db, way: Way) -> Option<Difference> {
+        self.written(db, way).check(db)
     }
 }
 
@@ -496,16 +596,48 @@ fn shrink<'db>(case: Case<'db>, still: impl Fn(&Case<'db>) -> Option<Difference>
 // Running
 // ============================================================================
 
-/// Write a difference out where it can be read, and say where.
+/// Write a difference out as a case the kept cases can take, with what the
+/// two sides said in comments, and say where.
 fn write_out(label: &str, difference: &Difference) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("literal-equiv");
     std::fs::create_dir_all(&dir).X();
-    let path = dir.join(fmt!("{}.txt", label.replace(' ', "-")));
-    std::fs::write(&path, fmt!(
-        "{label}: {:?}\n\ndatalit:\n{}\n\ndatafun:\n{}\n\n{}\n",
+    let path = dir.join(fmt!("{}.case", label.replace(' ', "-")));
+    let said = fmt!(
+        "{label}: {:?}\n\ndatalit:\n{}\n\ndatafun:\n{}\n\n{}",
         difference.differs, difference.datalit_text, difference.datafun_text, difference.detail,
-    )).X();
+    );
+    let comments: String = said.lines().map(|line| fmt!("// {line}\n")).collect();
+    std::fs::write(&path, fmt!("{comments}\n{}", difference.written.write())).X();
     path
+}
+
+/// Print a difference, written out, and give its label back.
+fn report(label: String, difference: &Difference) -> String {
+    let path = write_out(&label, difference);
+    println!(
+        "\x1b[31mFAIL\x1b[0m {label}: {:?}\n  datalit: {}\n  datafun: {}\n  {}",
+        difference.differs, difference.datalit_text, difference.datafun_text, path.display(),
+    );
+    label
+}
+
+/// The kept cases, by file name, in name order: differences found once,
+/// and fixed, and some cases written by hand. See `literal_equiv/README.md`.
+fn kept() -> Vec<(String, Written)> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/literal_equiv");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir).X()
+        .map(|entry| entry.X().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "case"))
+        .collect();
+    paths.sort();
+    paths.into_iter()
+        .map(|path| {
+            let name = path.file_name().X().to_string_lossy().S();
+            let written = Written::read(&std::fs::read_to_string(&path).X())
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            (name, written)
+        })
+        .collect()
 }
 
 /// Put seed `seed`'s expressions every way, saying how many and which
@@ -521,26 +653,27 @@ fn check_seed(seed: u64) -> (Counts, Vec<(String, Difference)>) {
 
     let case = inferred(&db, seed);
     counts.inferred += 1;
-    match shrunk(case.C(), &|c| c.compare(&db)) {
+    match shrunk(case.C(), &|c| c.check(&db, Way::Inferred)) {
         Some(difference) => report(fmt!("seed {seed} inferred"), Some(difference)),
         None => {
             counts.valued += 1;
-            report(fmt!("seed {seed} valued"), shrunk(case, &|c| c.valued(&db)));
+            report(fmt!("seed {seed} valued"), shrunk(case, &|c| c.check(&db, Way::Valued)));
         }
     }
 
     let case = checked(&db, seed);
     counts.checked += 1;
-    report(fmt!("seed {seed} checked"), shrunk(case.C(), &|c| c.compare(&db)));
+    report(fmt!("seed {seed} checked"), shrunk(case.C(), &|c| c.check(&db, Way::Checked)));
     for place in Place::ALL {
         counts.placed += 1;
         let label = fmt!("seed {seed} {}", fmt!("{place:?}").to_lowercase());
-        report(label, shrunk(case.C(), &|c| c.placed(&db, place)));
+        report(label, shrunk(case.C(), &|c| c.check(&db, Way::Placed(place))));
     }
 
     if let Some((text, description)) = mutated(&db, seed) {
         counts.mutated += 1;
-        let difference = compare(&db, &text, &fmt!("let _x = {text}"), false).map(|mut difference| {
+        let written = Written { way: Way::Mutated, ty: None, expr: text };
+        let difference = written.check(&db).map(|mut difference| {
             difference.detail = fmt!("{description}\n{}", difference.detail);
             difference
         });
@@ -552,7 +685,7 @@ fn check_seed(seed: u64) -> (Counts, Vec<(String, Difference)>) {
 fn main() {
     let db = Db::default();
     if let Ok(text) = std::env::var("LITERAL_EQUIV_TEXT") {
-        match compare(&db, &text, &fmt!("let _x = {text}"), true) {
+        match (Written { way: Way::Inferred, ty: None, expr: text.C() }).check(&db) {
             None => println!("\x1b[32msame\x1b[0m {text}"),
             Some(difference) => {
                 println!("\x1b[31mFAIL\x1b[0m {text}: {:?}\n{}", difference.differs, difference.detail);
@@ -561,6 +694,14 @@ fn main() {
         }
         return;
     }
+    let mut failed = Vec::new();
+    let kept = kept();
+    for (name, written) in &kept {
+        if let Some(difference) = written.check(&db) {
+            failed.push(report(fmt!("kept {name}"), &difference));
+        }
+    }
+
     let seeds = env_seeds("LITERAL_EQUIV", DEFAULT_SEED, DEFAULT_COUNT);
     // Each seed on its own, with its own database, and reported in order.
     let mut checked: Vec<(u64, Counts, Vec<(String, Difference)>)> = seeds.iter().collect::<Vec<_>>()
@@ -572,22 +713,16 @@ fn main() {
         .collect();
     checked.sort_by_key(|(seed, _, _)| *seed);
     let mut counts = Counts::default();
-    let mut failed = Vec::new();
     for (_, seed_counts, differences) in checked {
         counts.add(&seed_counts);
         for (label, difference) in differences {
-            let path = write_out(&label, &difference);
-            println!(
-                "\x1b[31mFAIL\x1b[0m {label}: {:?}\n  datalit: {}\n  datafun: {}\n  {}",
-                difference.differs, difference.datalit_text, difference.datafun_text, path.display(),
-            );
-            failed.push(label);
+            failed.push(report(label, &difference));
         }
     }
     println!(
-        "literal equivalence: {} inferred, {} valued, {} checked, {} placed and {} mutated cases \
+        "literal equivalence: {} kept cases, and {} inferred, {} valued, {} checked, {} placed and {} mutated cases \
          from {} seeds from {}; {} differ",
-        counts.inferred, counts.valued, counts.checked, counts.placed, counts.mutated,
+        kept.len(), counts.inferred, counts.valued, counts.checked, counts.placed, counts.mutated,
         seeds.count, seeds.start, failed.len(),
     );
     if !failed.is_empty() {

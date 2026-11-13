@@ -1,0 +1,5 @@
+// A hinted expression whose check fails is of its hint's type in both.
+// Datafun gave this the literal's own `int`, and datalit gave it no type,
+// until each gave it the hint's.
+mode: inferred
+expr: : f32 / 0
