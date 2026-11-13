@@ -1,5 +1,6 @@
 import Datalove.Hint
 import Datalove.WF
+import Datalove.Proofs.Lift
 
 /-!
 # The conversion makes well-formed types
@@ -165,7 +166,8 @@ theorem collection_sound {key : Bool} {f : ConvM Ty} {s s' : Scope} {t : Ty}
   · intro d hd; exact used d hd
   · simpa [Scope.ctx, Scope.enter, WfCtx.coll] using wf
 
-theorem bind_name_ok {n : String} {s s' : Scope} {u : Unit} (h : (ConvM.bind [] n).run s = .ok (u, s')) :
+theorem bind_name_ok {A : Aliases} {n : String} {s s' : Scope} {u : Unit}
+    (h : (ConvM.bind A n).run s = .ok (u, s')) :
     s.inKey = false ∧ s' = { s with binders := ⟨n, s.colls, false⟩ :: s.binders } := by
   simp only [ConvM.bind] at h
   obtain ⟨g, s₀, hg, k₁⟩ := bind_ok h
@@ -247,6 +249,58 @@ theorem lookup_ok {n : String} {s s' : Scope} {t : Ty} (h : (ConvM.lookup [] n).
         simp [hlt] at hc
         omega
 
+/-- A name's use under aliases: a `rec`'s, as `lookup_ok` says, or an alias's
+type, which the conversion lets through only with no `rec` in it in a key,
+and no type parameter in it under a `rec`. -/
+theorem lookup_ok_aliases {A : Aliases} {n : String} {s s' : Scope} {t : Ty}
+    (h : (ConvM.lookup A n).run s = .ok (t, s')) :
+    (∃ depth b, s.binders[depth]? = some b ∧ s.inKey = false ∧ b.colls < s.colls ∧
+      t = .recvar depth ∧ s' = { s with binders := ConvM.markUsed s.binders depth }) ∨
+    (s' = s ∧ (t, true) ∈ A.map (fun p => (p.2, true)) ∧ (s.inKey = true → t.containsRec = false) ∧
+      (s.binders ≠ [] → t.containsVar = false)) := by
+  have h0 := h
+  simp only [ConvM.lookup] at h
+  obtain ⟨g, s₀, hg, k₁⟩ := bind_ok h
+  obtain ⟨eg, es⟩ := get_ok hg
+  subst eg es
+  split at k₁
+  · rename_i hn
+    split at k₁
+    · exact (fail_ok k₁).elim
+    · rename_i u hu
+      split at k₁
+      · exact (fail_ok k₁).elim
+      · rename_i hrec
+        split at k₁
+        · exact (fail_ok k₁).elim
+        · rename_i hvar
+          have h1 : s₀.inKey = true → u.containsRec = false := fun hk => by simpa [hk] using hrec
+          have h2 : s₀.binders ≠ [] → u.containsVar = false := fun hb => by
+            have : s₀.binders.isEmpty = false := by simpa using hb
+            simpa [this] using hvar
+          have hm : (u, true) ∈ A.map (fun p => (p.2, true)) := by
+            simp only [List.mem_map]
+            exact ⟨(n, u), lookup_mem_of hu, rfl⟩
+          obtain ⟨rfl, rfl⟩ := pure_ok k₁
+          exact .inr ⟨rfl, hm, h1, h2⟩
+  · left
+    rename_i depth hd
+    obtain ⟨hlt, -, -⟩ := List.findIdx?_eq_some_iff_getElem.mp hd
+    obtain ⟨_, s₁, hs, k₂⟩ := bind_ok k₁
+    have es₁ := set_ok hs
+    subst es₁
+    split at k₂
+    · exact (fail_bind_ok k₂).elim
+    · rename_i hk
+      split at k₂
+      · exact (fail_bind_ok k₂).elim
+      · rename_i hc
+        obtain ⟨et, es₂⟩ := pure_ok k₂
+        subst et es₂
+        refine ⟨depth, s₀.binders[depth], by simp [hlt], by simpa using hk, ?_, rfl, rfl⟩
+        simp [hlt] at hc
+        omega
+
 /-! ## Sorting an enum's variants -/
 
 def optAll (c : WfCtx) : String × Option Ty → Bool
@@ -291,47 +345,47 @@ theorem sortByName_mentions (vs : Variants) (d : Nat) : vs.sortByName.mentions d
 
 mutual
 
-theorem Hint.conv_sound : ∀ (h : Hint) (s s' : Scope) (t : Ty), (h.conv []).run s = .ok (t, s') →
+theorem Hint.conv_sound {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) : ∀ (h : Hint) (s s' : Scope) (t : Ty), (h.conv A).run s = .ok (t, s') →
     Sound s s' t.mentions t.wfIn
   | .list e, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := collection_sound (fun s s' t h => Hint.conv_sound e s s' t h) ha
+    have := collection_sound (fun s s' t h => Hint.conv_sound hA e s s' t h) ha
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .set e, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := collection_sound (fun s s' t h => Hint.conv_sound e s s' t h) ha
+    have := collection_sound (fun s s' t h => Hint.conv_sound hA e s s' t h) ha
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .tensor e r, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := collection_sound (fun s s' t h => Hint.conv_sound e s s' t h) ha
+    have := collection_sound (fun s s' t h => Hint.conv_sound hA e s s' t h) ha
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .map k v, s, s', t, h => by
     obtain ⟨a, s₁, h₁, h⟩ := bind_ok h
     obtain ⟨b, s₂, h₂, h⟩ := bind_ok h
     obtain ⟨rfl, rfl⟩ := pure_ok h
-    have sk := collection_sound (fun s s' t h => Hint.conv_sound k s s' t h) h₁
-    have sv := collection_sound (fun s s' t h => Hint.conv_sound v s s' t h) h₂
+    have sk := collection_sound (fun s s' t h => Hint.conv_sound hA k s s' t h) h₁
+    have sv := collection_sound (fun s s' t h => Hint.conv_sound hA v s s' t h) h₂
     have := sk.seq sv
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .option e, s, s', t, h | .result e, s, s', t, h | .term _ e, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := Hint.conv_sound e _ _ _ ha
+    have := Hint.conv_sound hA e _ _ _ ha
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .tuple fs, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := Hints.conv_sound fs _ _ _ ha
+    have := Hints.conv_sound hA fs _ _ _ ha
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .struct fs, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := HFields.conv_sound fs _ _ _ ha
+    have := HFields.conv_sound hA fs _ _ _ ha
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .table cs, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := HFields.convColumns_sound cs _ _ _ ha
+    have := HFields.convColumns_sound hA cs _ _ _ ha
     exact ⟨this.1, this.2.1.mono (by simp [Ty.mentions]), by simpa [Ty.wfIn] using this.2.2⟩
   | .enum vs, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := HVariants.conv_sound vs _ _ _ ha
+    have := HVariants.conv_sound hA vs _ _ _ ha
     refine ⟨this.1, this.2.1.mono ?_, ?_⟩
     · intro d hd; simpa [Ty.mentions, sortByName_mentions] using hd
     · simpa [Ty.wfIn, sortByName_wfIn] using this.2.2
@@ -341,7 +395,7 @@ theorem Hint.conv_sound : ∀ (h : Hint) (s s' : Scope) (t : Ty), (h.conv []).ru
     obtain ⟨b, s₂, h₂, h⟩ := bind_ok h
     obtain ⟨_, s₃, h₃, h⟩ := bind_ok h
     obtain ⟨rfl, rfl⟩ := pure_ok h
-    obtain ⟨same, used, wf⟩ := Hint.conv_sound body _ _ _ h₂
+    obtain ⟨same, used, wf⟩ := Hint.conv_sound hA body _ _ _ h₂
     -- The scope after the body has the binder `bind` pushed, at its head.
     obtain ⟨b₀, bs, hb⟩ : ∃ b₀ bs, s₂.binders = b₀ :: bs := by
       have := congrArg List.length same.names
@@ -366,13 +420,20 @@ theorem Hint.conv_sound : ∀ (h : Hint) (s s' : Scope) (t : Ty), (h.conv []).ru
       simp [Ty.wfIn, Scope.ctx, hk, m0] at wf' ⊢
       exact wf'
   | .name n, s, s', t, h => by
-    obtain ⟨depth, b, hb, hk, hc, rfl, rfl⟩ := lookup_ok h
-    refine ⟨⟨markUsed_names _ _, markUsed_colls _ _, rfl, rfl⟩, ?_, ?_⟩
-    · intro d hd
-      rcases markUsed_used _ _ _ hd with e | e
-      · exact Or.inl e
-      · exact Or.inr (by simp [Ty.mentions, e])
-    · simp [Ty.wfIn, Scope.ctx, hb, hk, hc]
+    rcases lookup_ok_aliases h with ⟨depth, b, hb, hk, hc, rfl, rfl⟩ | ⟨rfl, hm, hk, hv⟩
+    · refine ⟨⟨markUsed_names _ _, markUsed_colls _ _, rfl, rfl⟩, ?_, ?_⟩
+      · intro d hd
+        rcases markUsed_used _ _ _ hd with e | e
+        · exact Or.inl e
+        · exact Or.inr (by simp [Ty.mentions, e])
+      · simp [Ty.wfIn, Scope.ctx, hb, hk, hc]
+    · simp only [List.mem_map] at hm
+      obtain ⟨p, hp, hpe⟩ := hm
+      simp only [Prod.mk.injEq, and_true] at hpe
+      have wf : t.WF := hpe ▸ hA p hp
+      refine ⟨Same.refl _, UsedBy.refl _ _, ?_⟩
+      exact wf.lift _ (fun x => hk (by simpa [Scope.ctx] using x))
+        (fun x => hv (by simpa [Scope.ctx] using x))
   | .bool, s, s', t, h | .u8, s, s', t, h | .i8, s, s', t, h | .u16, s, s', t, h
   | .i16, s, s', t, h | .u32, s, s', t, h | .i32, s, s', t, h | .u64, s, s', t, h
   | .i64, s, s', t, h | .index, s, s', t, h | .offset, s, s', t, h | .f32, s, s', t, h
@@ -381,7 +442,7 @@ theorem Hint.conv_sound : ∀ (h : Hint) (s s' : Scope) (t : Ty), (h.conv []).ru
     obtain ⟨rfl, rfl⟩ := pure_ok h
     exact ⟨Same.refl _, UsedBy.refl _ _, by simp [Ty.wfIn]⟩
 
-theorem Hints.conv_sound : ∀ (h : Hints) (s s' : Scope) (t : Tys), (h.conv []).run s = .ok (t, s') →
+theorem Hints.conv_sound {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) : ∀ (h : Hints) (s s' : Scope) (t : Tys), (h.conv A).run s = .ok (t, s') →
     Sound s s' t.mentions t.wfIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
@@ -390,10 +451,10 @@ theorem Hints.conv_sound : ∀ (h : Hints) (s s' : Scope) (t : Tys), (h.conv [])
     obtain ⟨a, s₁, h₁, h⟩ := bind_ok h
     obtain ⟨as, s₂, h₂, h⟩ := bind_ok h
     obtain ⟨rfl, rfl⟩ := pure_ok h
-    have := (Hint.conv_sound e _ _ _ h₁).seq (Hints.conv_sound es _ _ _ h₂)
+    have := (Hint.conv_sound hA e _ _ _ h₁).seq (Hints.conv_sound hA es _ _ _ h₂)
     exact ⟨this.1, this.2.1.mono (by simp [Tys.mentions]), by simpa [Tys.wfIn] using this.2.2⟩
 
-theorem HFields.conv_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields), (h.conv []).run s = .ok (t, s') →
+theorem HFields.conv_sound {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) : ∀ (h : HFields) (s s' : Scope) (t : Fields), (h.conv A).run s = .ok (t, s') →
     Sound s s' t.mentions t.wfIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
@@ -402,11 +463,11 @@ theorem HFields.conv_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields), (h.c
     obtain ⟨a, s₁, h₁, h⟩ := bind_ok h
     obtain ⟨as, s₂, h₂, h⟩ := bind_ok h
     obtain ⟨rfl, rfl⟩ := pure_ok h
-    have := (Hint.conv_sound e _ _ _ h₁).seq (HFields.conv_sound es _ _ _ h₂)
+    have := (Hint.conv_sound hA e _ _ _ h₁).seq (HFields.conv_sound hA es _ _ _ h₂)
     exact ⟨this.1, this.2.1.mono (by simp [Fields.mentions]), by simpa [Fields.wfIn] using this.2.2⟩
 
-theorem HFields.convColumns_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields),
-    (h.convColumns []).run s = .ok (t, s') → Sound s s' t.mentions t.wfColumnsIn
+theorem HFields.convColumns_sound {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) : ∀ (h : HFields) (s s' : Scope) (t : Fields),
+    (h.convColumns A).run s = .ok (t, s') → Sound s s' t.mentions t.wfColumnsIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
     exact ⟨Same.refl _, UsedBy.refl _ _, by simp [Fields.wfColumnsIn]⟩
@@ -414,25 +475,25 @@ theorem HFields.convColumns_sound : ∀ (h : HFields) (s s' : Scope) (t : Fields
     obtain ⟨a, s₁, h₁, h⟩ := bind_ok h
     obtain ⟨as, s₂, h₂, h⟩ := bind_ok h
     obtain ⟨rfl, rfl⟩ := pure_ok h
-    have := (collection_sound (fun s s' t h => Hint.conv_sound e s s' t h) h₁).seq
-      (HFields.convColumns_sound es _ _ _ h₂)
+    have := (collection_sound (fun s s' t h => Hint.conv_sound hA e s s' t h) h₁).seq
+      (HFields.convColumns_sound hA es _ _ _ h₂)
     exact ⟨this.1, this.2.1.mono (by simp [Fields.mentions]),
       by simpa [Fields.wfColumnsIn] using this.2.2⟩
 
-theorem HVariants.conv_sound : ∀ (h : HVariants) (s s' : Scope) (t : Variants),
-    (h.conv []).run s = .ok (t, s') → Sound s s' t.mentions t.wfIn
+theorem HVariants.conv_sound {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) : ∀ (h : HVariants) (s s' : Scope) (t : Variants),
+    (h.conv A).run s = .ok (t, s') → Sound s s' t.mentions t.wfIn
   | .nil, s, s', t, h => by
     obtain ⟨rfl, rfl⟩ := pure_ok h
     exact ⟨Same.refl _, UsedBy.refl _ _, by simp [Variants.wfIn]⟩
   | .atom _ vs, s, s', t, h => by
     obtain ⟨a, ha, rfl⟩ := map_ok h
-    have := HVariants.conv_sound vs _ _ _ ha
+    have := HVariants.conv_sound hA vs _ _ _ ha
     exact ⟨this.1, this.2.1.mono (by simp [Variants.mentions]), by simpa [Variants.wfIn] using this.2.2⟩
   | .term _ e vs, s, s', t, h => by
     obtain ⟨a, s₁, h₁, h⟩ := bind_ok h
     obtain ⟨as, s₂, h₂, h⟩ := bind_ok h
     obtain ⟨rfl, rfl⟩ := pure_ok h
-    have := (Hint.conv_sound e _ _ _ h₁).seq (HVariants.conv_sound vs _ _ _ h₂)
+    have := (Hint.conv_sound hA e _ _ _ h₁).seq (HVariants.conv_sound hA vs _ _ _ h₂)
     exact ⟨this.1, this.2.1.mono (by simp [Variants.mentions]), by simpa [Variants.wfIn] using this.2.2⟩
 
 end
@@ -445,7 +506,21 @@ theorem Hint.convert_wf {h : Hint} {t : Ty} (ok : h.convert = .ok t) : t.WF := b
   · rename_i r hr
     simp at ok
     subst ok
-    have := (Hint.conv_sound h {} r.2 r.1 (by simpa [StateT.run] using hr)).2.2
+    have := (Hint.conv_sound (A := []) (fun _ h => by cases h) h {} r.2 r.1
+      (by simpa [StateT.run] using hr)).2.2
+    simpa [Ty.WF, Scope.ctx] using this
+
+/-- A type the conversion accepts under aliases that name well-formed types
+is well formed. -/
+theorem Hint.convertWith_wf {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) {h : Hint} {t : Ty}
+    (ok : h.convertWith A = .ok t) : t.WF := by
+  simp only [Hint.convertWith, Except.map] at ok
+  split at ok
+  · simp at ok
+  · rename_i r hr
+    simp at ok
+    subst ok
+    have := (Hint.conv_sound hA h {} r.2 r.1 (by simpa [StateT.run] using hr)).2.2
     simpa [Ty.WF, Scope.ctx] using this
 
 end Datalove

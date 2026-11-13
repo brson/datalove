@@ -363,4 +363,120 @@ theorem checkFun_instance_script {θ : List (String × Ty)} (g : Ground θ) {env
         | .void => false) "F063") () :=
   checkFun_instance g H _ (resolveNames_sigsOk ss) aliases name tps params ret body sig hsig hb tf quiet
 
+/-! ## Signatures are well formed -/
+
+theorem tparamAliases_wf {tps : List (String × Option Bound)} {A : Aliases}
+    (hA : ∀ p ∈ A, p.2.WF) : ∀ p ∈ tparamAliases tps A, p.2.WF := by
+  intro p hp
+  simp only [tparamAliases, List.mem_append, List.mem_map] at hp
+  rcases hp with ⟨⟨n, _⟩, _, rfl⟩ | hp
+  · rfl
+  · exact hA p hp
+
+theorem sigHint_wf {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) {tps : List (String × Option Bound)}
+    {h : Hint} {t : Ty} (e : sigHint A tps h = .ok t) : t.WF := by
+  simp only [sigHint] at e
+  cases hc : convertIn (tparamAliases tps A) h with
+  | error _ => simp [hc, bind, Except.bind] at e
+  | ok u =>
+    simp only [hc, bind, Except.bind] at e
+    split at e
+    · simp [throw, throwThe, MonadExceptOf.throw] at e
+    · simp [pure, Except.pure] at e; subst e
+      simp only [convertIn] at hc
+      split at hc
+      · rename_i v hv; cases hc; exact Hint.convertWith_wf (tparamAliases_wf hA) hv
+      · cases hc
+
+theorem sigOf_wf {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) {f : FunDecl} {sig : Sig}
+    (h : sigOf A f = .ok sig) : (∀ mt ∈ sig.params, mt.2.WF) ∧ (∀ r, sig.ret = .ty r → r.WF) := by
+  obtain ⟨name, tps, params, ret, body⟩ := f
+  simp only [sigOf] at h
+  revert h
+  generalize hp : (List.mapM (m := Except Lit.Code) _ params) = res
+  intro h
+  cases res with
+  | error _ => simp [bind, Except.bind] at h
+  | ok ps =>
+    simp only [bind, Except.bind] at h
+    have hps : ∀ mt ∈ ps, mt.2.WF := by
+      intro mt hmt
+      obtain ⟨⟨m, x, hh⟩, -, he⟩ := mapM_ok_mem hp mt hmt
+      cases hs : sigHint A tps hh with
+      | error _ => simp [hs, bind, Except.bind] at he
+      | ok t =>
+        simp [hs, bind, Except.bind, pure, Except.pure] at he
+        subst he
+        exact sigHint_wf hA hs
+    cases ret with
+    | none =>
+      simp [pure, Except.pure] at h; subst h
+      exact ⟨hps, fun r hr => by cases hr⟩
+    | some hh =>
+      cases hs : sigHint A tps hh with
+      | error _ => simp [hs, Functor.map, Except.map] at h
+      | ok t =>
+        simp [hs, Functor.map, Except.map, pure, Except.pure] at h; subst h
+        exact ⟨hps, fun r hr => by cases hr; exact sigHint_wf hA hs⟩
+
+/-- Signatures whose types are well formed. -/
+def SigsWF (sigs : List (String × Sig)) : Prop :=
+  ∀ f sig, sigs.lookup f = some sig → (∀ mt ∈ sig.params, mt.2.WF) ∧ (∀ r, sig.ret = .ty r → r.WF)
+
+/-- Every signature `resolveNames` builds has well-formed types: the
+recursive-type conditions T062 to T066 hold of them, aliases and all. -/
+theorem resolveNames_wf (ss : List Stmt) : SigsWF (resolveNames ss).1 := by
+  have empty : SigsWF [] := fun _ _ h => by cases h
+  simp only [resolveNames, Id.run, bind, pure]
+  refine (forIn_id_inv
+    (I := fun (st : Aliases × List (String × Sig) × Array Lit.Code) =>
+      (∀ p ∈ st.1, p.2.WF) ∧ SigsWF st.2.1)
+    ⟨fun _ h => absurd h List.not_mem_nil, empty⟩ ?_).2
+  intro s hmem st ⟨hA, hS⟩
+  clear hmem
+  obtain ⟨A, sigs, d⟩ := st
+  cases s
+  case type_ n h =>
+    simp only
+    split
+    · rename_i as hd
+      refine ⟨?_, hS⟩
+      simp only [defineAlias] at hd
+      split at hd
+      · cases hd
+      · cases hc : convertIn A h with
+        | error _ => simp [hc, Functor.map, Except.map] at hd
+        | ok t =>
+          simp [hc, Functor.map, Except.map] at hd
+          subst hd
+          show ∀ p ∈ A ++ [(n, t)], p.2.WF
+          intro p hp
+          simp only [List.mem_append, List.mem_singleton] at hp
+          rcases hp with hp | rfl
+          · exact hA p hp
+          · try simp only [convertIn] at hc
+            split at hc
+            · rename_i v hv; cases hc; exact Hint.convertWith_wf hA hv
+            · cases hc
+    · exact ⟨hA, hS⟩
+  case fun_ f =>
+    simp only
+    split
+    · exact ⟨hA, hS⟩
+    · split
+      · rename_i sig hsig
+        refine ⟨hA, fun g sg hg => ?_⟩
+        change List.lookup g (sigs ++ [(f.name, sig)]) = some sg at hg
+        rw [lookup_append_one] at hg
+        cases hf : sigs.lookup g with
+        | some x =>
+          simp only [hf, Option.some_or, Option.some.injEq] at hg; subst hg; exact hS g x hf
+        | none =>
+          simp only [hf, Option.none_or] at hg
+          split at hg
+          · cases hg; exact sigOf_wf hA hsig
+          · cases hg
+      · exact ⟨hA, hS⟩
+  all_goals exact ⟨hA, hS⟩
+
 end Datalove.Fun

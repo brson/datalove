@@ -23,3 +23,4 @@ import Datalove.Proofs.InstanceCheck
 import Datalove.Proofs.InstanceStmt
 import Datalove.Proofs.Infer
 import Datalove.Proofs.Sigs
+import Datalove.Proofs.Lift

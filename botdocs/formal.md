@@ -94,7 +94,13 @@ Under `formal/Datalove/Proofs/`:
   checks `convert_in` makes as it goes, by name and with a mutable scope, add
   up to the conditions `Ty.WF` states by index. So every theorem below that
   assumes a well-formed type covers every type the checker builds from a
-  hint.
+  hint. It holds with aliases too (`Hint.convertWith_wf`), so long as each
+  names a well-formed type: one is put where the alias is used, which keeps
+  it well formed (`Ty.WF.lift`) because the conversion lets an alias through
+  only with no `rec` in it in a key (T065) and no type parameter in it under
+  a `rec` (T066). A script's aliases are converted that way in turn, so every
+  signature `resolveNames` builds has well-formed types
+  (`Fun.resolveNames_wf`).
 - **`expose` ends** (`Ty.expose_not_mu`): on a well-formed type, unfolding as
   many times as the type has leading `rec`s leaves a head that is not a
   `rec`. The Rust loops until it gets there, and would not stop on
@@ -514,11 +520,6 @@ In rough order of what to do next:
 - **The rest of datafun.** Modules and consts are outside the slice. The
   serde AST already carries them; the model and the generator's
   configuration are what widen.
-- **Aliases in the conversion proof.** Hints convert with aliases and type
-  parameters, and T066 is modelled, but `Hint.convert_wf` is proved of the
-  conversion with no aliases, datalit's; with them, it would need each
-  alias's type well formed, and a recursive one kept out of keys, which the
-  conversion checks (T065) and the proof does not yet use.
 - **The random generator rarely makes a type that starts with two `rec`s**,
   so the transitivity chains in `law_tests` would not have found the third
   hole above; the exhaustive test does.
