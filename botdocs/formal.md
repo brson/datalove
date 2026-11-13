@@ -421,9 +421,11 @@ Four things are proved of it:
   Inference is taken as given, as for the theorems above, and assumed to
   answer under an instance what it answered under the generic, substituted,
   wherever the generic checked quietly (`InstEnv`); `instances_check` holds
-  the Rust to the conclusion, below. Two more assumptions are ones the
-  front end makes true: a signature names only its own type parameters
-  (`SigsOk`), and a body declares no type alias (P074). Making a type
+  the Rust to the conclusion, below. A signature names only its own type
+  parameters (`SigsOk`), which is proved of what `resolveNames` builds
+  (`Fun.resolveNames_sigsOk`, in `Proofs/Sigs.lean`), so
+  `Fun.checkFun_instance_script` states the theorem of a script without it;
+  and a body declares no type alias, which the parser refuses (P074). Making a type
   parameter copyable breaks the proof, as letting a bound satisfy another at
   a call does: each would let a generic through whose instance the Rust
   refuses.
@@ -502,9 +504,12 @@ In rough order of what to do next:
   expressions, which only datalit's literals have (`Lit.check_sound`).
 - **What the check-once theorem assumes.** Inference's answer under an
   instance (`InstEnv`) is assumed and tested, not yet proved of the real
-  inference, which is total now and so open to it. That a
-  signature names only its own type parameters (`SigsOk`) holds of what
-  `resolveNames` builds, but is not proved of it. Recursive type arguments
+  inference, which is total now and so open to it. Inference under a
+  generic and under its instance do not step together: a literal's variable
+  that meets `T` stays free, and one that meets `u8` binds. So the proof
+  needs a soundness of inference against checking: that every constraint
+  left unmet makes a check fail, so that on a quiet run there is none.
+  Recursive type arguments
   are left out, until T065 says whether a recursive key is allowed.
 - **The rest of datafun.** Modules and consts are outside the slice. The
   serde AST already carries them; the model and the generator's

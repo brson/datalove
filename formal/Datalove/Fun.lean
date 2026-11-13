@@ -1620,20 +1620,21 @@ def checkBlock (Γ : Ctx) (ss : List Stmt) : StateM (Array Code) Unit := checkBl
 
 /-! ## Scripts -/
 
+/-- A type in a signature: the hint converted under the aliases and the
+function's type parameters, and held to F061. -/
+def sigHint (aliases : Aliases) (tps : List (String × Option Bound)) (h : Hint) : Except Code Ty := do
+  let t ← convertIn (tparamAliases tps aliases) h
+  if t.unorderedKey (fun p => ((boundsOf tps).lookup p).isSome) then throw "F061"
+  pure t
+
 /-- A function's signature, or the code of what is wrong with it, under the
 aliases declared before it and its type parameters: each parameter's type,
 then the return type, converted and then held to F061. -/
 def sigOf (aliases : Aliases) : FunDecl → Except Code Sig
   | .mk _ tps params ret _ => do
-    let aliases := tparamAliases tps aliases
-    let ordered := fun p => ((boundsOf tps).lookup p).isSome
-    let checked (h : Hint) : Except Code Ty := do
-      let t ← convertIn aliases h
-      if t.unorderedKey ordered then throw "F061"
-      pure t
-    let ps ← params.mapM fun (m, _, h) => do pure (m, ← checked h)
+    let ps ← params.mapM fun (m, _, h) => do pure (m, ← sigHint aliases tps h)
     let r ← match ret with
-      | Option.some h => Ret.ty <$> checked h
+      | Option.some h => Ret.ty <$> sigHint aliases tps h
       | Option.none => pure .void
     pure { tparams := tps, params := ps, ret := r }
 
