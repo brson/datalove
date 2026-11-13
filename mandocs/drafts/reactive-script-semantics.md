@@ -1008,9 +1008,6 @@ is only known once it is compiled,
 so each unit is compiled as it is collected.
 Collect them until nothing new is added,
 then run the collected units in order.
-Each unit joins at most once,
-and there are finitely many units,
-so the step ends.
 
 
 
