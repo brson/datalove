@@ -275,7 +275,11 @@ pattern, `set` with or without an operator and through fields and indexes,
 which datafun types by datalit's rules with a context added; and datafun's
 variables, places with field and index steps, fields and indexes of what is
 not a place, operators, `?`, `!`, `@` and calls, each in a borrowed position
-or not. It leaves out modules and requires, and consts. A function's type
+or not, and consts. It leaves out modules and requires. A const's
+initializer names only consts (F058), a function body sees the consts above
+it, a const argument names one (F076), and in a generic neither a const
+parameter's type (F077) nor a const's (F088) mentions a type parameter. A
+function's type
 parameters are names for themselves, in scope in its signature and body as
 aliases are; one is in a class only by its bound, a set or map over one
 needs an order (F061), and a call infers what each stands for from its
@@ -363,6 +367,14 @@ What it found:
   instance of every generic function in thirty thousand generated scripts
   the Rust checks cleanly, 51279 instances at type arguments their bounds
   admit, and the Rust and the model reported nothing on any of them.
+- **Consts agreed on the first run**, but for the model's own `set`, which
+  refused only a `let`, where the Rust refuses anything that is not a `var`,
+  a const among them. The Rust's way with a const whose initializer fails
+  is followed rather than corrected: it marks whatever binding the name has
+  as a const, an outer `let` of the name if there is one, so that binding
+  may then be passed to a const parameter. F089, a const that depends on
+  itself through a function, cannot arise in a script, where a function
+  sees only the consts above it; it is a module's.
 - **Checking a negation against a float did not borrow its operand.**
   Synthesizing `-e` reads `e` in a borrowed position, but checking it
   against `f32` or `f64` passed the type down to `e` outside one, so
@@ -522,7 +534,7 @@ In rough order of what to do next:
   left unmet makes a check fail, so that on a quiet run there is none.
   Recursive type arguments
   are left out, until T065 says whether a recursive key is allowed.
-- **The rest of datafun.** Modules and consts are outside the slice. The
+- **The rest of datafun.** Modules are outside the slice. The
   serde AST already carries them; the model and the generator's
   configuration are what widen.
 - **The random generator rarely makes a type that starts with two `rec`s**,

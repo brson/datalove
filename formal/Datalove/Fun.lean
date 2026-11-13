@@ -60,6 +60,8 @@ inductive UnOp where
 
 inductive Mode where
   | in_ | out | ref | mut
+  /-- A const parameter: passed as `in` is, and only a const binding. -/
+  | const_
   deriving DecidableEq, Repr, Inhabited
 
 /-- A type parameter's bound. `any`, the bound of one with none written, is
@@ -163,6 +165,8 @@ inductive Stmt where
   | call (e : Expr)
   /-- `for x̄ in ref p ... end for`. -/
   | for_ (names : List String) (coll : Expr) (body : List Stmt)
+  /-- `const x = e` or `const x: h = e`. -/
+  | const_ (x : String) (hint : Option Hint) (e : Expr)
   /-- `type n: h`, an alias, at a script's top level. -/
   | type_ (n : String) (h : Hint)
   /-- `match e ... end match`: its cases in order, and its `case default`. -/
@@ -195,6 +199,9 @@ def Case.body : Case → List Stmt
 
 inductive Kind where
   | let_ | var_
+  /-- A const binding, or a const parameter: immutable, and what a const
+  initializer and a const argument may name. -/
+  | const_
   deriving DecidableEq
 
 /-- What `ret` returns to: a function with a type, or one with none (`void`). A
@@ -226,6 +233,9 @@ structure Ctx where
   aliases : Aliases := []
   /-- The bounds of the enclosing function's type parameters that have one. -/
   bounds : List (String × Bound) := []
+  /-- Whether this is a const initializer, where only const bindings may be
+  named (F058). -/
+  constExpr : Bool := false
 
 /-- A borrowed position: an operand, the operand of `@`, `debuglog`'s
 argument, a compound `set`'s value, a `for`'s collection. -/
@@ -233,7 +243,7 @@ def Ctx.borrow (Γ : Ctx) : Ctx := { Γ with borrowed := true }
 
 /-- An argument's position, by its parameter's mode. -/
 def Ctx.forArg (Γ : Ctx) (m : Mode) : Ctx :=
-  { Γ with borrowed := m != .in_, mutArg := m == .mut || m == .out }
+  { Γ with borrowed := m != .in_ && m != .const_, mutArg := m == .mut || m == .out }
 
 /-- A conversion's error as datafun reports it: a name that names no alias
 nor `rec` is F064, where datalit says T059. -/
@@ -255,6 +265,15 @@ def Ctx.lookup (Γ : Ctx) (x : String) : Option (Ty × Kind) :=
 
 def Ctx.bind (Γ : Ctx) (x : String) (t : Ty) (k : Kind) : Ctx :=
   { Γ with vars := (x, t, k) :: Γ.vars }
+
+/-- What `x` names, a const: as `add_const_binding`, which marks whatever
+binding the name has, an outer one when the const's own failed. -/
+def markConst (x : String) : List (String × Ty × Kind) → List (String × Ty × Kind)
+  | [] => []
+  | (y, t, k) :: vs => if y == x then (y, t, .const_) :: vs else (y, t, k) :: markConst x vs
+
+/-- A name a const initializer may not name: bound, but not a const (F058). -/
+def Ctx.nonConst (Γ : Ctx) (k : Kind) : Bool := Γ.constExpr && k != .const_
 
 /-- A type's bound, if it is a type parameter with one, as `operand_bound`. -/
 def Ctx.boundOf (Γ : Ctx) : Ty → Option Bound
@@ -811,11 +830,22 @@ def fieldsOf : List (String × Ty) → Fields
   | [] => .nil
   | (n, t) :: fs => .cons n t (fieldsOf fs)
 
+/-- Each argument to a const parameter that is not a const binding, reported
+(F076): `const-arg(m, e)`. -/
+def constArgs (Γ : Ctx) : List (Option Mode × Expr) → List (Mode × Ty) → ChkM Unit
+  | (_, e) :: args, (mode, _) :: params => do
+    if mode == .const_ then
+      match e with
+      | .var x => if (Γ.lookup x).map (·.2) != Option.some .const_ then report "F076"
+      | _ => report "F076"
+    constArgs Γ args params
+  | _, _ => pure ()
+
 /-- Each argument whose marker disagrees with its parameter's mode, reported
 (F057), before any argument is checked. -/
 def markers : List (Option Mode × Expr) → List (Mode × Ty) → ChkM Unit
   | (marker, _) :: args, (mode, _) :: params => do
-    let wanted := if mode == .in_ then Option.none else Option.some mode
+    let wanted := if mode == .in_ || mode == .const_ then Option.none else Option.some mode
     if marker != wanted then report "F057"
     markers args params
   | _, _ => pure ()
@@ -837,7 +867,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
       checkForm env n Γ inner t
       pure t
     | .var x => match Γ.lookup x with
-      | Option.some (t, _) => pure t
+      | Option.some (t, k) => if Γ.nonConst k then throw "F058" else pure t
       | Option.none => throw "F001"
     | .binop op a b => do
       let t ← pairF env n Γ a b Option.none
@@ -872,7 +902,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
     | .adapt a => synthF env n Γ.borrow a
     | .call f args => callF env n Γ f args Option.none
     | .place x steps => match Γ.lookup x with
-      | Option.some (t, _) => stepsF env n Γ t steps
+      | Option.some (t, k) => if Γ.nonConst k then throw "F058" else stepsF env n Γ t steps
       | Option.none => throw "F001"
     -- Syn-FieldProj, for what is not a place.
     | .proj b s => do
@@ -1054,6 +1084,7 @@ def callF (env : InferEnv) : Nat → Ctx → String → List (Option Mode × Exp
   | n + 1, Γ, f, args, expected => do
     let Option.some sig := Γ.sigs.lookup f | throw "F002"
     if args.length != sig.params.length then throw "F045"
+    constArgs Γ args sig.params
     markers args sig.params
     let θ ← liftE (decided (env.call Γ f args expected))
     argsF env n Γ args (sig.params.map fun (m, t) => (m, t.inst θ))
@@ -1471,7 +1502,7 @@ def checkSet (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (steps : List St
   match Γ.lookup x with
   | Option.none => modify (·.push "F054")
   | Option.some (t, k) =>
-    reportIf (k == .let_) "F055" >>= fun _ =>
+    reportIf (k != .var_) "F055" >>= fun _ =>
     reportModes Γ (setModes steps) >>= fun _ =>
     setSteps env n Γ t op e steps
 
@@ -1554,6 +1585,16 @@ def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) C
       | Option.some t => reportIf (t != unitTy) "F095"
       | Option.none => pure ()) >>= fun _ =>
       pure Γ
+    -- A const: its initializer may name only consts, and it is checked and
+    -- bound as a `let` is; then whatever binding the name has is a const, and
+    -- one whose type mentions a type parameter is F088.
+    | .const_ x hint e =>
+      bindChecked env n { Γ with constExpr := true } (.name x) hint e .const_ >>= fun Γ' =>
+      let Γ'' : Ctx := { Γ' with constExpr := false, vars := markConst x Γ'.vars }
+      reportIf (match Γ''.lookup x with
+        | Option.some (t, _) => t.containsVar
+        | Option.none => false) "F088" >>= fun _ =>
+      pure Γ''
     -- Reported when the script's names were resolved (`checkScript`); here
     -- the alias only comes into scope.
     | .type_ x h => pure (match defineAlias Γ.aliases x h with
@@ -1641,21 +1682,39 @@ def sigOf (aliases : Aliases) : FunDecl → Except Code Sig
 def kindOf : Mode → Kind
   | .in_ | .ref => .let_
   | .mut | .out => .var_
+  | .const_ => .const_
 
 def FunDecl.name : FunDecl → String
   | .mk n _ _ _ _ => n
+
+/-- In a generic function, each const parameter whose type mentions a type
+parameter (F077). -/
+def reportGenericConsts (tps : List (String × Option Bound)) (ps : List (Mode × Ty)) :
+    StateM (Array Code) Unit :=
+  if tps.isEmpty then pure ()
+  else ps.forM fun (m, t) => reportIf (m == .const_ && t.containsVar) "F077"
+
+/-- The consts a function body sees: the const bindings in scope, a name
+shadowed by another binding not among them. -/
+def constsOf : List (String × Ty × Kind) → List (String × Ty × Kind)
+  | [] => []
+  | (x, t, k) :: vs =>
+    let rest := (constsOf vs).filter (·.1 != x)
+    if k == .const_ then (x, t, k) :: rest else rest
 
 /-- A function's body under its parameters (Fun), and F063 if it has a
 return type and can reach its end. A function whose signature is not well
 formed is not in `sigs`, and its body is not checked. It sees the aliases
 declared before it, and its type parameters with their bounds. -/
-def checkFun (sigs : List (String × Sig)) (aliases : Aliases) : FunDecl → StateM (Array Code) Unit
+def checkFun (sigs : List (String × Sig)) (aliases : Aliases) (consts : List (String × Ty × Kind)) :
+    FunDecl → StateM (Array Code) Unit
   | .mk name tps params _ body =>
     match sigs.lookup name with
     | Option.none => pure ()
     | Option.some sig =>
       let vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m)
-      checkBlock { vars, ret := sig.ret, sigs, aliases := tparamAliases tps aliases,
+      reportGenericConsts tps sig.params >>= fun _ =>
+      checkBlock { vars := vars ++ consts, ret := sig.ret, sigs, aliases := tparamAliases tps aliases,
                    bounds := boundsOf tps } body >>= fun _ =>
       reportIf (match sig.ret with
         | .ty _ => completes body
@@ -1692,7 +1751,7 @@ def checkScript (ss : List Stmt) : Array Code :=
   let run : StateM (Array Code) Unit := do
     let mut Γ : Ctx := { ret := .ty (.result unitTy), sigs }
     for s in ss do
-      if let .fun_ f := s then checkFun sigs Γ.aliases f
+      if let .fun_ f := s then checkFun sigs Γ.aliases (constsOf Γ.vars) f
       else Γ ← checkStmt Γ s
   (run.run diags).2
 

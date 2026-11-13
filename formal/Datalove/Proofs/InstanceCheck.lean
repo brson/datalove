@@ -715,6 +715,26 @@ theorem fieldsList_names_inst (θ : List (String × Ty)) (fs : Fields) :
     (fieldsList (fs.inst θ)).map (·.1) = (fieldsList fs).map (·.1) := by
   simp [fieldsList_inst, Function.comp_def]
 
+/-- Checking const arguments under an instance is the same check:
+substitution keeps every binding's kind. -/
+theorem constArgs_inst_eq {θ : List (String × Ty)} {Γ : Ctx} :
+    ∀ (args : List (Option Mode × Expr)) (ps : List (Mode × Ty)),
+      constArgs (Γ.inst θ) args ps = constArgs Γ args ps
+  | (mk, e) :: args, (m, t) :: ps => by
+    have kinds : ∀ x, ((Γ.inst θ).lookup x).map (·.2) = (Γ.lookup x).map (·.2) := by
+      intro x; rw [Ctx.lookup_inst]; cases Γ.lookup x <;> rfl
+    simp only [constArgs, kinds, constArgs_inst_eq args ps]
+  | [], _ => by simp [constArgs]
+  | _ :: _, [] => by simp [constArgs]
+
+theorem constArgs_inst {θ : List (String × Ty)} {Γ : Ctx} {args : List (Option Mode × Expr)}
+    {ps : List (Mode × Ty)} (h : Quiet (constArgs Γ args ps) ()) :
+    Quiet (constArgs (Γ.inst θ) args ps) () := by
+  rw [constArgs_inst_eq]; exact h
+
+@[simp] theorem Ctx.nonConst_inst {θ : List (String × Ty)} (Γ : Ctx) (e : Expr) (k : Kind) :
+    ((Γ.inst θ).enter e).nonConst k = (Γ.enter e).nonConst k := rfl
+
 /-! ## Checking an expression under an instance -/
 
 section
@@ -743,11 +763,16 @@ theorem synthF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (�
       | none => simp [hl] at h
       | some p =>
         obtain ⟨u, k⟩ := p
-        simp only [hl, Quiet.pure_iff] at h; subst h
-        have : ((Γ.enter (.var x)).inst θ).lookup x = some (u.inst θ, k) := by
-          rw [Ctx.lookup_inst, hl]; rfl
-        simp only [Ctx.inst_enter] at this
-        simp only [this]; exact Quiet.pure _
+        simp only [hl] at h
+        split at h
+        · simp at h
+        · rename_i hk
+          rw [Quiet.pure_iff] at h; subst h
+          have : ((Γ.enter (.var x)).inst θ).lookup x = some (u.inst θ, k) := by
+            rw [Ctx.lookup_inst, hl]; rfl
+          simp only [Ctx.inst_enter] at this
+          simp only [this]
+          exact quiet_ite_false (by simpa using hk) (Quiet.pure _)
     case binop op a b =>
       simp only [synthF] at h ⊢
       obtain ⟨u, hp, hf⟩ := h.bind_inv
@@ -845,7 +870,10 @@ theorem synthF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (�
           rw [Ctx.lookup_inst, hl]; rfl
         simp only [Ctx.inst_enter] at this
         simp only [this]
-        exact stepsF_inst g H n _ u steps t h r sg
+        split at h
+        · simp at h
+        · rename_i hk
+          exact quiet_ite_false (by simpa using hk) (stepsF_inst g H n _ u steps t h r sg)
     case proj b sel =>
       simp only [synthF] at h ⊢
       obtain ⟨bt, hb, h⟩ := h.bind_inv
@@ -1182,6 +1210,7 @@ theorem callF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (Γ
       split at h
       · simp at h
       · rename_i hl
+        obtain ⟨_, hca, h⟩ := h.bind_inv
         obtain ⟨_, hm, h⟩ := h.bind_inv
         obtain ⟨θ', hd, h⟩ := h.bind_inv
         rw [Quiet.liftE_iff] at hd
@@ -1203,6 +1232,7 @@ theorem callF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (Γ
               simp only [Function.comp]
               rw [Ty.inst_inst θ θ' u (Ty.allVars_mono own u ((sg f sig hs).1 _ hmt))]
             refine quiet_ite_false (by simpa using hl) ?_
+            refine Quiet.bind (a := ()) (constArgs_inst hca) ?_
             refine Quiet.bind (a := ()) hm ?_
             refine Quiet.bind (Quiet.liftE_iff.mpr (decided_inst θ _ hd)) ?_
             rw [hps]

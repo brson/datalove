@@ -833,6 +833,14 @@ macro "app_cont" e:term:max n:term:max : tactic => `(tactic| (intro _; repeat' (
   | with_reducible exact checkCases_appends $e $n _ _ _ _
   | stmt_step)))
 
+theorem markConst_map (x : String) {θ : List (String × Ty)} : ∀ (vs : List (String × Ty × Kind)),
+    markConst x (vs.map fun (y, t, k) => (y, t.inst θ, k)) =
+      (markConst x vs).map fun (y, t, k) => (y, t.inst θ, k)
+  | [] => rfl
+  | (y, t, k) :: vs => by
+    simp only [List.map, markConst]
+    split <;> simp [markConst_map x vs]
+
 /-- An enum's variants with type arguments substituted into their payloads. -/
 def instVs (θ : List (String × Ty)) (vs : List (String × Option Ty)) : List (String × Option Ty) :=
   vs.map fun p => (p.1, p.2.map (·.inst θ))
@@ -920,6 +928,34 @@ theorem checkStmtF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat
       simp only [bne_eq_false_iff_eq] at h2 ⊢
       rw [h2]; rfl
     case type_ x hh => simp [Stmt.typeFree] at tf
+    case const_ x hint e =>
+      simp only [checkStmtF] at h ⊢
+      obtain ⟨Γ1, hb, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
+      obtain ⟨_, h88, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
+      rw [SQuiet.pure_iff] at h; subst h
+      obtain ⟨hb', hbd, hsg⟩ := bindChecked_inst g H (Γ := { Γ with constExpr := true }) hb r sg
+      rw [SQuiet.reportIf_iff] at h88
+      refine ⟨SQuiet.bind hb' ?_, hbd, hsg⟩
+      have hvars : markConst x (Γ1.inst θ).vars = (markConst x Γ1.vars).map fun (y, t, k) => (y, t.inst θ, k) :=
+        markConst_map x Γ1.vars
+      refine SQuiet.bind (a := ()) (SQuiet.reportIf_iff.mpr ?_) ?_
+      · rw [hvars]
+        show (match (Ctx.inst θ { Γ1 with constExpr := false, vars := markConst x Γ1.vars }).lookup x with
+          | some (t, _) => t.containsVar
+          | none => false) = false
+        rw [Ctx.lookup_inst]
+        revert h88
+        cases Ctx.lookup { Γ1 with constExpr := false, vars := markConst x Γ1.vars } x with
+        | none => intro _; rfl
+        | some p =>
+          obtain ⟨t, k⟩ := p
+          intro h88
+          simp only [Option.map_some] at h88 ⊢
+          rw [Ty.inst_novar θ t h88]; exact h88
+      · show SQuiet (Pure.pure _) _
+        rw [SQuiet.pure_iff]
+        simp only [Ctx.inst] at hvars ⊢
+        rw [hvars]
     case loop c body =>
       simp only [Stmt.typeFree] at tf
       cases c with
@@ -1108,9 +1144,9 @@ theorem lookup_mem {α β} [BEq α] [LawfulBEq α] {n : α} {b : β} :
       exact List.mem_cons_of_mem _ (lookup_mem h)
 
 /-- The context `checkFun` checks a body under. -/
-def funCtx (sigs : List (String × Sig)) (aliases : Aliases) (tps : List (String × Option Bound))
-    (params : List (Mode × String × Hint)) (sig : Sig) : Ctx :=
-  { vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m),
+def funCtx (sigs : List (String × Sig)) (aliases : Aliases) (consts : List (String × Ty × Kind))
+    (tps : List (String × Option Bound)) (params : List (Mode × String × Hint)) (sig : Sig) : Ctx :=
+  { vars := (params.zip sig.params).reverse.map (fun ((m, x, _), (_, t)) => (x, t, kindOf m)) ++ consts,
     ret := sig.ret, sigs, aliases := tparamAliases tps aliases, bounds := boundsOf tps }
 
 /-- **Checking a generic once is enough.** A generic function whose check
@@ -1127,19 +1163,22 @@ their own type parameters (`SigsOk`), as `resolveNames` makes them, and the
 body declares no type alias, which the parser refuses (P074). -/
 theorem checkFun_instance {θ : List (String × Ty)} (g : Ground θ) {env' : InferEnv}
     (H : InstEnv θ inferEnv env') (sigs : List (String × Sig)) (hsigs : SigsOk sigs)
-    (aliases : Aliases) (name : String) (tps : List (String × Option Bound))
+    (aliases : Aliases) (consts : List (String × Ty × Kind)) (name : String)
+    (tps : List (String × Option Bound))
     (params : List (Mode × String × Hint)) (ret : Option Hint) (body : List Stmt) (sig : Sig)
     (hsig : sigs.lookup name = some sig)
     (hb : ∀ p b, (p, some b) ∈ tps → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true)
     (tf : blockTypeFree body = true)
-    (quiet : SQuiet (checkFun sigs aliases (.mk name tps params ret body)) ()) :
-    SQuiet (checkBlockF env' fuel ((funCtx sigs aliases tps params sig).inst θ) body >>= fun _ =>
+    (quiet : SQuiet (checkFun sigs aliases consts (.mk name tps params ret body)) ()) :
+    SQuiet (checkBlockF env' fuel ((funCtx sigs aliases consts tps params sig).inst θ) body >>= fun _ =>
       reportIf (match sig.ret.inst θ with
         | .ty _ => completes body
         | .void => false) "F063") () := by
   simp only [checkFun, hsig, checkBlock] at quiet
+  obtain ⟨_, -, quiet⟩ := SQuiet.bind_inv
+    (fun _ => Appends.bind (checkBlockF_appends _ _ _ _) (fun _ => Appends.report _ _)) quiet
   obtain ⟨_, hbody, h63⟩ := SQuiet.bind_inv (fun _ => Appends.report _ _) quiet
-  have r : Respects θ (funCtx sigs aliases tps params sig) := by
+  have r : Respects θ (funCtx sigs aliases consts tps params sig) := by
     intro n b hl
     have hm := lookup_mem hl
     simp only [funCtx, boundsOf, List.mem_filterMap, Option.map_eq_some_iff] at hm

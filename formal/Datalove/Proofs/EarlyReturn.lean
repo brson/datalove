@@ -289,7 +289,9 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
     case place x steps =>
       simp only [synthF] at h
       split at h
-      · exact .place (stepsF_guarded env n (Γ.enter _) _ steps h)
+      · split at h
+        · impossible
+        · exact .place (stepsF_guarded env n (Γ.enter _) _ steps h)
       · impossible
     case proj b s =>
       simp only [synthF] at h
@@ -392,6 +394,7 @@ theorem callF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (f : String)
       split at h
       · impossible
       · rename_i hl
+        obtain ⟨-, _, h⟩ := peel h
         obtain ⟨-, _, h⟩ := peel h
         obtain ⟨-, _, h⟩ := peel h
         obtain ⟨hargs, -⟩ := peel h
@@ -638,7 +641,7 @@ end
 
 /-- The expressions a statement holds itself, not in a body inside it. -/
 def Stmt.exprs : Stmt → List Expr
-  | .let_ _ _ e | .debuglog e | .call e => [e]
+  | .let_ _ _ e | .debuglog e | .call e | .const_ _ _ e => [e]
   | .set_ x steps _ e => [.place x steps, e]
   | .var_ _ _ (Option.some e) => [e]
   | .ret (Option.some e) => [e]
@@ -1082,6 +1085,12 @@ theorem checkStmtF_good (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (s : Stmt),
       simp only [checkStmtF]
       exact good_weaken (bindChecked_good env n Γ x hint e .let_) (fun _ h => h)
         (fun _ _ hg => .of (by simp [Stmt.exprs, hg]) (by simp [Stmt.blocks]))
+    case const_ x hint e =>
+      simp only [checkStmtF]
+      refine good_bind (bindChecked_good env n { Γ with constExpr := true } (.name x) hint e .const_)
+        (fun Γ' hΓ' => ?_)
+      exact good_bind reportIf_good (fun _ _ => good_pure (by simpa using hΓ')
+        (fun _ hg => .of (by simp [Stmt.exprs]; exact hg) (by simp [Stmt.blocks])))
     case var_ x hint v =>
       cases v with
       | some e =>
@@ -1283,15 +1292,25 @@ end
 body, from `?`, `!` or a checked or optional operator at any depth, one its
 return type can carry: `none` only where it returns an option, an error only
 where it returns a result. -/
+theorem reportGenericConsts_good (tps : List (String × Option Bound)) (ps : List (Mode × Ty)) :
+    Good (reportGenericConsts tps ps) (fun _ => True) (fun _ => True) := by
+  unfold reportGenericConsts
+  split
+  · exact good_pure trivial trivial
+  · induction ps with
+    | nil => exact good_pure trivial trivial
+    | cons p ps ih =>
+      exact good_bind reportIf_good (fun _ _ => good_weaken ih (fun _ h => h) (fun _ _ _ _ => trivial))
+
 theorem checkFun_early_returns_fit (sigs : List (String × Sig)) (aliases : Aliases)
-    (name : String) (tps : List (String × Option Bound)) (params : List (Mode × String × Hint))
-    (ret : Option Hint) (body : List Stmt) (sig : Sig) (hsig : sigs.lookup name = some sig)
-    (d : Array Code)
-    (quiet : ((checkFun sigs aliases (.mk name tps params ret body)).run d).2.size = d.size) :
+    (consts : List (String × Ty × Kind)) (name : String) (tps : List (String × Option Bound))
+    (params : List (Mode × String × Hint)) (ret : Option Hint) (body : List Stmt) (sig : Sig)
+    (hsig : sigs.lookup name = some sig) (d : Array Code)
+    (quiet : ((checkFun sigs aliases consts (.mk name tps params ret body)).run d).2.size = d.size) :
     ∀ s ∈ body, GuardedS sig.ret.allows s := by
   simp only [checkFun, hsig, checkBlock] at quiet
-  have g := good_bind (checkBlockF_good inferEnv fuel
-      { vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m),
+  have g1 := good_bind (checkBlockF_good inferEnv fuel
+      { vars := (params.zip sig.params).reverse.map (fun ((m, x, _), (_, t)) => (x, t, kindOf m)) ++ consts,
         ret := sig.ret, sigs, aliases := tparamAliases tps aliases, bounds := boundsOf tps } body)
     (fun _ _ => good_weaken (reportIf_good (c := match sig.ret with
         | .ty _ => completes body
@@ -1299,6 +1318,8 @@ theorem checkFun_early_returns_fit (sigs : List (String × Sig)) (aliases : Alia
       (P' := fun _ => True) (Q' := fun _ => (∀ s ∈ body, GuardedS sig.ret.allows s) →
         ∀ s ∈ body, GuardedS sig.ret.allows s)
       (fun _ h => h) (fun _ _ _ hx => hx))
+  have g := good_bind (reportGenericConsts_good tps sig.params)
+    (fun _ _ => good_weaken g1 (fun _ h => h) (fun _ _ h _ => h))
   exact (g d).2.2 quiet
 
 end Datalove.Fun

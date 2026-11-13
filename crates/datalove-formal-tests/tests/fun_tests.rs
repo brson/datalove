@@ -149,6 +149,13 @@ const CORPUS: &[&str] = &[
     "fun mk(): {r: !f32}\n  ret {r = ok 1.5}\nend fun\nlet a: f32 = -(mk().r!)\nlet b = -(mk().r!)\nfun g<T>(x: T): !T where { T is float, }\n  let y: T = -(id(x))\n  ret ok y\nend fun\nfun id<T>(x: T): T\n  ret x\nend fun\n",
     // A parameter bounded to the floats is checked under `-` as a float is.
     "fun f<T>(x: T, y: u8): !T where { T is float, }\n  let a: T = -x\n  let b: T = -(x * x)\n  let c: T = -(-x)\n  let d: T = -y\n  let e: T = -1.5\n  let g: T = -5\n  ret ok a\nend fun\nfun h<T>(x: T): T where { T is ord, }\n  let a: T = -x\n  ret x\nend fun\n",
+    // Consts: an initializer names only consts (F058), a function sees the
+    // consts above it and not those after, a const argument names a const
+    // (F076), and in a generic neither a const parameter (F077) nor a const
+    // (F088) has a type parameter in its type.
+    "let a = 1\nconst b = a + 1\nconst c: u8 = 300\nconst d = 10 / 0\nfun f(const n: u8): u8\n  ret n\nend fun\nfun g(): u8\n  ret c\nend fun\nfun h<T>(const x: T): u8\n  const k: T = x\n  ret 0\nend fun\ndebuglog f(5)\ndebuglog f(c)\n",
+    "fun two(): u8\n  ret 2\nend fun\nconst a: u8 = two()\nconst b: u8 = 1 +! 1\nconst c: ?u8 = none\nconst d: u8 = c?\nfun f(): u8\n  ret a\nend fun\nfun g(): u8\n  ret late\nend fun\nconst late: u8 = 3\ndebuglog f()\n",
+    "fun f(p: u8, const q: u8): u8\n  const x = p\n  let y = 1\n  const z = y\n  const w = q\n  set w = 2\n  ret x\nend fun\nconst k = 1\nlet k = 2\nfun g(): int\n  ret k\nend fun\nlet m = 1\nconst m = zz\nfun h(const v: int): int\n  ret v\nend fun\ndebuglog h(m)\n",
     // Every marker is reported before any argument is checked.
     "fun g(ref a: u8, b: u8)\nend fun\ncall g(1, ref true)\ncall g(ref true, ref 1)\n",
 ];
@@ -162,8 +169,8 @@ fn config() -> WorldGenConfig {
     config.type_aliases_per_module = (0, 0);
     config.type_alias_usage_probability = 0;
     config.enums_per_module = (0, 3);
-    config.consts_per_module = (0, 0);
-    config.const_probability = 0;
+    config.consts_per_module = (0, 2);
+    config.const_probability = 30;
     config.match_probability = 20;
     config.for_probability = 15;
     config.param_mode_probability = 0;
@@ -190,7 +197,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
     let name = |rng: &mut SeededRng| pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2", "1", "0x10", "1.5", "true"]);
     let step = |rng: &mut SeededRng| pick(rng, STEPS);
-    let changed = match rng.random_range(0..21) {
+    let changed = match rng.random_range(0..22) {
         // A type named in the line changed.
         0 => {
             let ty = pick(rng, TYPES);
@@ -339,6 +346,15 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             let hint = if rng.random_bool(0.5) { fmt!(": {}", pick(rng, TYPES)) } else { String::new() };
             fmt!("{line}\n{indent}let w{hint} = gen0_{}({})", rng.random_range(0..3), args.join(", "))
         }
+        // A const bound from what is at hand, or a `let` made one.
+        20 => match rng.random_range(0..3) {
+            0 => fmt!("{line}\n{indent}const w = {}", name(rng)),
+            1 => fmt!("{line}\n{indent}const w: {} = {}", pick(rng, TYPES), pick(rng, VALUES)),
+            _ => match line.trim_start().strip_prefix("let ") {
+                Some(rest) => fmt!("{indent}const {rest}"),
+                None => line,
+            },
+        },
         // A literal at a range's edge, negated.
         _ => fmt!("{line}\n{indent}let w: {} = -{}", pick(rng, &["i8", "u8", "i16", "f32", "int"]), pick(rng, &["5", "128", "129", "300", "1.5"])),
     };

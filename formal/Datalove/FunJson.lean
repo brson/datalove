@@ -275,6 +275,8 @@ partial def stmtFromSerde (j : Json) : Except String Stmt := do
       | Option.none => pure Option.none
       | Option.some d => Option.some <$> body d
     pure (.match_ (← exprFromSerde (← field j "input")) cases dflt)
+  | "Const" => do
+    pure (.const_ (← (← field j "name").getStr?) (← hint) (← exprFromSerde (← field j "value")))
   | "TypeAlias" => .type_ <$> (← field j "name").getStr? <*> hintFromSerde (← field j "type_hint")
   | "For" => do
     let names ← (← (← field j "bindings").getArr?).toList.mapM (·.getStr?)
@@ -298,8 +300,9 @@ partial def funFromSerde (j : Json) : Except String FunDecl := do
         | "FixedInt" => pure (Option.some Bound.fixedint)
         | other => throw s!"unknown bound {other}"
   let params ← (← (← field j "params").getArr?).toList.mapM fun p => do
-    if (← (← field p "is_comptime").getBool?) then unsupported "const parameter"
-    pure (← modeOf (← (← field p "mode").getStr?), ← (← field p "name").getStr?,
+    let mode ← if (← (← field p "is_comptime").getBool?) then pure Mode.const_
+      else modeOf (← (← field p "mode").getStr?)
+    pure (mode, ← (← field p "name").getStr?,
       ← hintFromSerde (← field p "type_hint"))
   let ret ← match optField j "return_type" with
     | Option.none => pure Option.none

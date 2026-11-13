@@ -351,17 +351,18 @@ theorem resolveNames_sigsOk (ss : List Stmt) : SigsOk (resolveNames ss).1 := by
 with its signatures as `resolveNames` builds them, which name only their own
 type parameters. -/
 theorem checkFun_instance_script {θ : List (String × Ty)} (g : Ground θ) {env' : InferEnv}
-    (H : InstEnv θ inferEnv env') (ss : List Stmt) (aliases : Aliases) (name : String)
+    (H : InstEnv θ inferEnv env') (ss : List Stmt) (aliases : Aliases)
+    (consts : List (String × Ty × Kind)) (name : String)
     (tps : List (String × Option Bound)) (params : List (Mode × String × Hint)) (ret : Option Hint)
     (body : List Stmt) (sig : Sig) (hsig : (resolveNames ss).1.lookup name = some sig)
     (hb : ∀ p b, (p, some b) ∈ tps → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true)
     (tf : blockTypeFree body = true)
-    (quiet : SQuiet (checkFun (resolveNames ss).1 aliases (.mk name tps params ret body)) ()) :
-    SQuiet (checkBlockF env' fuel ((funCtx (resolveNames ss).1 aliases tps params sig).inst θ) body
+    (quiet : SQuiet (checkFun (resolveNames ss).1 aliases consts (.mk name tps params ret body)) ()) :
+    SQuiet (checkBlockF env' fuel ((funCtx (resolveNames ss).1 aliases consts tps params sig).inst θ) body
       >>= fun _ => reportIf (match sig.ret.inst θ with
         | .ty _ => completes body
         | .void => false) "F063") () :=
-  checkFun_instance g H _ (resolveNames_sigsOk ss) aliases name tps params ret body sig hsig hb tf quiet
+  checkFun_instance g H _ (resolveNames_sigsOk ss) aliases consts name tps params ret body sig hsig hb tf quiet
 
 /-! ## Signatures are well formed -/
 
