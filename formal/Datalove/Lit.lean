@@ -386,7 +386,7 @@ def liftM {α} (x : Except Code α) : InferM α := StateT.lift x
 mutual
 
 /-- `⊢ e ⇝ τ`, the Inf- rules. Inference reports nothing but malformed
-hints. -/
+hints (`infer_errors`, in `Proofs/Infer.lean`). -/
 def inferF : Nat → Expr → InferM PTy
   | 0, _ => throw "fuel"
   | n + 1, e => match e with

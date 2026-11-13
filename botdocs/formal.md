@@ -103,6 +103,15 @@ Under `formal/Datalove/Proofs/`:
   (`Ty.expose_not_numeric`), since its body uses its name.
 - **A literal that checks is a value of its type** (`Lit.check_sound`); see
   [Literal typing](#user-content-literal-typing).
+- **Inference fails only where its comments say** (`Lit.infer_errors`,
+  `Fun.infer_errors`, in `Proofs/Infer.lean`): datalit's only on a
+  malformed hint, datafun's never, save running out of fuel. Unification
+  panics where a variable it just pruned is not free, which a panic in
+  Lean's logic is an error of; underneath, a variable is never bound to
+  another variable (`Lit.Inv`), which every step of the unifier, `resolve`
+  and inference keeps, so pruning finds a free root or a type that is not a
+  variable, and no panic is reached. Binding one variable to another in
+  place of linking them breaks the proof.
 - **In datafun, every early return fits the function, `completes` is
   sound, a `match` covers its enum, and checking a generic once is
   enough**; see [Statements](#user-content-statements).
@@ -483,9 +492,10 @@ In rough order of what to do next:
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Inference and unification.** The doc claims that where unification's
   constraints all hold, the order of a collection's elements does not change
-  what it synthesizes. Unification is total now, on fuel, so the claim can
-  be stated of it; what is missing is the union-find's invariants (links
-  never form a cycle, a bound variable is never bound again) and the proof.
+  what it synthesizes. Unification is total now, on fuel, and the invariant
+  that keeps its panics unreached is proved; what is missing is the claim's
+  own proof, which needs more of the union-find's behaviour: that it only
+  ever merges and binds, and what a merge does to the classes.
 - **What `ret e` returns.** The early-return theorem covers the returns an
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's

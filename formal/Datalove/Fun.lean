@@ -585,7 +585,8 @@ def sharedVar (empty : Bool) : InferM PTy :=
 mutual
 
 /-- `⊢ e ⇝ τ`: datalit's rules for the literal forms, and the doc's table for
-datafun's. Nothing here fails: what cannot be read is `unknown`. -/
+datafun's. Nothing here fails: what cannot be read is `unknown`
+(`infer_errors`, in `Proofs/Infer.lean`). -/
 def inferF : Nat → Ctx → Expr → InferM PTy
   | 0, _, _ => throw "fuel"
   | n + 1, Γ, e => match e with

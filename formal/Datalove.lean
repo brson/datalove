@@ -21,3 +21,4 @@ import Datalove.Proofs.Exhaustive
 import Datalove.Proofs.Instance
 import Datalove.Proofs.InstanceCheck
 import Datalove.Proofs.InstanceStmt
+import Datalove.Proofs.Infer
