@@ -409,7 +409,9 @@ Four things are proved of it:
   semantics above, and the Rust's `reachable.rs`, give a `match` no way of
   falling through. Taking out F100 or F097 breaks the proof. It finds a
   variant by name, as the Rust does, so "exactly one" rests on an enum's
-  variant names being distinct, which the model does not state.
+  variant names being distinct. The parser refuses an enum that names a
+  variant twice (D038), and the conversion keeps that, under aliases that
+  keep it too (`Hint.convertWith_namesOnce`, in `Proofs/Variants.lean`).
 - **Checking a generic once is enough** (`Fun.checkFun_instance`, in
   `Proofs/InstanceStmt.lean`, on `Proofs/Instance.lean` and
   `Proofs/InstanceCheck.lean`). A generic function whose check reports
@@ -495,8 +497,11 @@ it, as it did not find the atom and term case.
 
 In rough order of what to do next:
 
-- **Enum variants are sorted and named once.** The model, like the Rust,
-  relies on both and states neither.
+- **Enum variants are sorted.** The conversion sorts them by name, and the
+  model relies on it as the Rust does, but does not state it: proving it
+  needs the order on strings to be total and transitive, which the model
+  has not needed until now. That they are named once is proved of the
+  conversion, from the parser's D038.
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Inference and unification.** The doc claims that where unification's
   constraints all hold, the order of a collection's elements does not change
