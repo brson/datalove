@@ -53,6 +53,10 @@ const CORPUS: &[&str] = &[
     "fun f(): ()\n  ret ()\nend fun\nfun g(): u8\n  ret 1\nend fun\ncall f()\ncall g()\n",
     "fun f(): u8\n  ret 1\nend fun\nfun f(): u8\n  ret 2\nend fun\n",
     "var v0: u32 = []\nlet a: u8 = [1]\n",
+    // A value with a hint at its head that does not check binds its name at
+    // the hint's type, as a type on the binding does, so the uses after are
+    // not unbound; one without a hint binds nothing.
+    "let a = : u32 / \"s\"\nlet b: u32 = a\nlet c = 1 + \"s\"\nlet d = c\n",
     // A call stops at its first argument not of its parameter's type, and
     // fails, so what it was to bind is unbound; a wrong marker is reported
     // and checking goes on.

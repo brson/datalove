@@ -781,7 +781,13 @@ theorem bindChecked_good (env : InferEnv) (n : Nat) (Γ : Ctx) (p : Pat) (hint :
     have g : (∃ a, r = some a ∧ Clean (synthF env n Γ e)) → Guarded Γ.ret.allows e :=
       fun ⟨_, _, hs⟩ => synthF_guarded env n Γ e hs
     cases r with
-    | none => exact good_pure rfl (fun hq => g hq)
+    | none =>
+      dsimp only
+      split
+      · split
+        · exact good_weaken (bindPat_good Γ p _ k) (fun _ h => h) (fun _ _ _ hq => g hq)
+        · exact good_pure rfl (fun hq => g hq)
+      · exact good_pure rfl (fun hq => g hq)
     | some t => exact good_weaken (bindPat_good Γ p t k) (fun _ h => h) (fun _ _ _ hq => g hq)
 
 /-- `GuardedS.mk`, for the statements that return early only in what they

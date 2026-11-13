@@ -31,7 +31,8 @@ The checker reports what is wrong and goes on, as the Rust does, so the
 answer for a script is every diagnostic code in order. An expression that
 cannot be typed reports one code and stops (`throw`); a few rules report and
 go on (`report`), as a call goes on to its next argument. A failed `let` with
-a hint binds its name at the hint's type; one without binds nothing.
+a hint binds its name at the hint's type, as does one whose value has a hint
+at its head; any other binds nothing.
 
 Inference runs on fuel, as `Lit`'s does, and so do checking and synthesis,
 which a check that runs out of fails. Checking takes inference as a
@@ -1385,7 +1386,14 @@ def bindChecked (env : InferEnv) (n : Nat) (Γ : Ctx) (p : Pat) (hint : Option H
   | Option.none =>
     match ← runChk (synthF env n Γ e) with
     | Option.some t => bindPat Γ p t k
-    | Option.none => pure Γ
+    -- A hinted value is of its hint's type whether or not it checks, and the
+    -- name is bound at it, as at a type written on the binding. A hint that
+    -- does not convert has been reported, and binds nothing.
+    | Option.none => match e with
+      | .hinted h _ => match Γ.hint h with
+        | .ok t => bindPat Γ p t k
+        | .error _ => pure Γ
+      | _ => pure Γ
 
 /-- What a `for` binds walking a collection, by the doc's table: an element,
 or an index and an element, of a list or tensor; an element of a set; a key

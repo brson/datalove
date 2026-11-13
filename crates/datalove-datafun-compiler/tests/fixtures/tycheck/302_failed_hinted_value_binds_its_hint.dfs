@@ -1,0 +1,9 @@
+// A value with a hint at its head that does not check is of the hint's
+// type, so the name it is bound to is bound at that type, as it would be
+// at a type written on the binding, and the use after it reports nothing.
+// A value with no hint that does not synthesize binds nothing, and its use
+// is F001.
+let a = : u32 / "s"
+let b: u32 = a
+let c = 1 + "s"
+let d = c

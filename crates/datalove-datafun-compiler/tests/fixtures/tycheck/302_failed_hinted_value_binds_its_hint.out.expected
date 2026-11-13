@@ -1,0 +1,74 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            317,
+            328
+          ],
+          "text": ": u32 / \"s\""
+        }
+      ],
+      "message": "mismatched types: expected `u32`, found `string`"
+    },
+    {
+      "code": "F090",
+      "labels": [
+        {
+          "message": "operands must have the same type",
+          "span": [
+            352,
+            359
+          ],
+          "text": "1 + \"s\""
+        }
+      ],
+      "message": "mismatched types: expected `int`, found `string`"
+    },
+    {
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            368,
+            369
+          ],
+          "text": "c"
+        }
+      ],
+      "message": "cannot find value `c` in this scope"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "string",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    },
+    {
+      "actual": "string",
+      "expected": "int",
+      "kind": "TypeMismatch"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "c"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "u32"
+    }
+  ]
+}

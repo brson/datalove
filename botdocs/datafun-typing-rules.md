@@ -882,8 +882,11 @@ afterwards, decides which faults after the first are reported:
   reported and the call goes on to the argument's value, and the first
   argument not of its parameter's type stops the call.
 - **A `let` or `var`** with a type binds its name at that type, whether or
-  not the value checks. One without a type binds its name only if the value
-  synthesizes, so a later use of the name is F001.
+  not the value checks. One without a type binds its name at what the value
+  synthesizes, or, where it does not, at the hint at its head, which is the
+  value's type whether or not it checks: `let a = : u32 / "s"` binds `a` as
+  a `u32`. With neither, it binds nothing, so a later use of the name is
+  F001.
 - **An index's key** that is not of the key type is reported, and the index
   goes on to what it reads.
 - **A `set` of an immutable binding** (F055) still checks its value against

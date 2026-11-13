@@ -55,7 +55,14 @@ fn check_variable_decl<'db>(
                 Ok(ty) => Some(ty),
                 Err(e) => {
                     ctx.add_error(e);
-                    None
+                    // A hinted value is of its hint's type whether or not it
+                    // checks, which synthesis has recorded where the hint
+                    // converted; the name is bound at it, as it would be at a
+                    // type written on the binding.
+                    match value.kind().type_hint() {
+                        Some(_) => ctx.expr_types.get(value).cloned(),
+                        None => None,
+                    }
                 }
             }
         }
