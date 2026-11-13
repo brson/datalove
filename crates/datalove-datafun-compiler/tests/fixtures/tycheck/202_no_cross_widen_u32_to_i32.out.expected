@@ -27,11 +27,6 @@
       "kind": "variable",
       "name": "a",
       "type": "u32"
-    },
-    {
-      "kind": "variable",
-      "name": "b",
-      "type": "u32"
     }
   ]
 }

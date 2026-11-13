@@ -41,11 +41,5 @@
       "return_type": "!()"
     }
   ],
-  "judgements": [
-    {
-      "kind": "variable",
-      "name": "a",
-      "type": "int"
-    }
-  ]
+  "judgements": []
 }

@@ -316,8 +316,9 @@ fn check_unhinted<'db>(
                         return Ok(());
                     }
                     // Otherwise, synthesize and compare.
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
+                    let synthesized = synthesize_for_subsumption(ctx, expr)?;
                     if types_equivalent_at_head(db, &synthesized, expected) {
+                        ctx.store_expr_type(expr, &synthesized);
                         Ok(())
                     } else {
                         let expected_str = type_to_string(db, expected);
@@ -339,7 +340,7 @@ fn check_unhinted<'db>(
                 ctx.store_expr_type(expr, &expected);
                 return Ok(());
             }
-            let synthesized = ctx.synthesize_unhinted(expr)?;
+            let synthesized = synthesize_for_subsumption(ctx, expr)?;
             let expected_str = type_to_string(db, expected);
             let actual_str = type_to_string(db, &synthesized);
             Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
@@ -360,8 +361,9 @@ fn check_unhinted<'db>(
                         return Ok(());
                     }
                     // Otherwise, synthesize and compare.
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
+                    let synthesized = synthesize_for_subsumption(ctx, expr)?;
                     if types_equivalent_at_head(db, &synthesized, expected) {
+                        ctx.store_expr_type(expr, &synthesized);
                         Ok(())
                     } else {
                         let expected_str = type_to_string(db, expected);
@@ -424,8 +426,9 @@ fn check_unhinted<'db>(
             // Anything else is negated as it is synthesized, which takes an
             // int and refuses a fixed-width integer: bare `-` is not defined
             // there, only `-?` and `-!`.
-            let synthesized = ctx.synthesize_unhinted(expr)?;
+            let synthesized = synthesize_for_subsumption(ctx, expr)?;
             if types_equivalent_at_head(db, &synthesized, expected) {
+                ctx.store_expr_type(expr, &synthesized);
                 return Ok(());
             }
             let expected_str = type_to_string(db, expected);
@@ -468,8 +471,9 @@ fn check_unhinted<'db>(
             }
             // Note: Bare arithmetic on fixed ints is a type error - they must use
             // @ to widen first, or use checked/optional operators (+!, +?, etc.).
-            let synthesized = ctx.synthesize_unhinted(expr)?;
+            let synthesized = synthesize_for_subsumption(ctx, expr)?;
             if types_equivalent_at_head(db, &synthesized, expected) {
+                ctx.store_expr_type(expr, &synthesized);
                 return Ok(());
             }
             Err(ctx.error_type_mismatch_with_types(expr, FCode::Mismatch, expected, &synthesized, "type mismatch"))
@@ -611,10 +615,11 @@ fn check_unhinted<'db>(
         }
 
         _ => {
-            let synthesized = ctx.synthesize_unhinted(expr)?;
+            let synthesized = synthesize_for_subsumption(ctx, expr)?;
 
             // Check for exact type match first.
             if types_equivalent_at_head(db, &synthesized, expected) {
+                ctx.store_expr_type(expr, &synthesized);
                 return Ok(());
             }
 
@@ -929,4 +934,14 @@ pub(crate) fn shape_error<'db>(
     let site = crate::ErrorSite::Expr(expr.key());
     ctx.push_coded(site, code, message, S("does not fit the type"), note.map(S));
     error
+}
+
+/// What an expression synthesizes without its hint, for `Check-Subsume` to
+/// compare with what is expected, and not yet its type.
+///
+/// It is its type only where the two agree, which the caller then records.
+/// One that does not has no type, as in datalit, where a check that fails
+/// leaves the expression without one: `: f32 / 0` is no `int`.
+fn synthesize_for_subsumption<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> Result<Type<'db>, TypeError> {
+    crate::synthesize::synthesize_unhinted(ctx, expr)
 }

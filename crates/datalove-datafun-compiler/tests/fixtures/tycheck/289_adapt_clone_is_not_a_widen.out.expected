@@ -27,11 +27,6 @@
       "kind": "variable",
       "name": "c",
       "type": "atom Red"
-    },
-    {
-      "kind": "variable",
-      "name": "d",
-      "type": "atom Red"
     }
   ]
 }

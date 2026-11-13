@@ -202,10 +202,7 @@ fn compare(db: &Db, datalit_text: &str, datafun_text: &str, inferred: bool) -> O
     if datalit.codes != datafun.codes {
         return differs(Differs::Codes, fmt!("datalit: {:?}\ndatafun: {:?}", datalit.codes, datafun.codes));
     }
-    // What an expression that has errors comes to is not a type either
-    // promises: `: f32 / 0` is none in datalit and the literal's `int` in
-    // datafun.
-    if datalit.codes.is_empty() && datalit.root_type != datafun.root_type {
+    if datalit.root_type != datafun.root_type {
         return differs(Differs::Type, fmt!("datalit: {:?}\ndatafun: {:?}", datalit.root_type, datafun.root_type));
     }
     None

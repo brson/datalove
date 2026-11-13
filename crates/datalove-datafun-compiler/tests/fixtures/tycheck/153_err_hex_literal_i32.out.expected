@@ -22,11 +22,5 @@
       "kind": "TypeMismatch"
     }
   ],
-  "judgements": [
-    {
-      "kind": "variable",
-      "name": "x",
-      "type": "int"
-    }
-  ]
+  "judgements": []
 }
