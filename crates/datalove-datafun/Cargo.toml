@@ -98,6 +98,11 @@ path = "tests/engine_tests.rs"
 harness = false
 
 [[test]]
+name = "literal_equiv_tests"
+path = "tests/literal_equiv_tests.rs"
+harness = false
+
+[[test]]
 name = "worldgen_engine_tests"
 path = "tests/worldgen_engine_tests.rs"
 harness = false

@@ -66,6 +66,8 @@ pub enum Mutation {
 
     /// Swap key and value types in map entry.
     SwapMapKeyValue,
+    /// Replace a type's name in a hint with a name that is no type.
+    UnknownTypeName,
 }
 
 impl Mutation {
@@ -84,6 +86,7 @@ impl Mutation {
             Mutation::DuplicateField,
             Mutation::WrongFieldName,
             Mutation::SwapMapKeyValue,
+            Mutation::UnknownTypeName,
         ]
     }
 
@@ -95,6 +98,7 @@ impl Mutation {
             Mutation::DeleteComma,
             Mutation::ExtraClosingBracket,
             Mutation::DeleteClosingBracket,
+            Mutation::UnknownTypeName,
         ]
     }
 
@@ -118,7 +122,8 @@ impl Mutation {
             | Mutation::TruncateSource
             | Mutation::DeleteComma
             | Mutation::ExtraClosingBracket
-            | Mutation::DeleteClosingBracket => MutationKind::Source,
+            | Mutation::DeleteClosingBracket
+            | Mutation::UnknownTypeName => MutationKind::Source,
 
             Mutation::OutOfRangeInt
             | Mutation::WrongElementType
@@ -145,6 +150,7 @@ impl Mutation {
             Mutation::DeleteOpeningBracket => apply_delete_opening_bracket(&source, rng),
             Mutation::TruncateSource => apply_truncate_source(&source, rng),
             Mutation::DeleteComma => apply_delete_comma(&source, rng),
+            Mutation::UnknownTypeName => apply_unknown_type_name(&source, rng),
             Mutation::ExtraClosingBracket => apply_extra_closing_bracket(&source, rng),
             Mutation::OutOfRangeInt => apply_out_of_range_int(db, expr, rng),
             Mutation::WrongElementType => apply_wrong_element_type(db, expr, rng),
@@ -235,6 +241,45 @@ fn apply_delete_comma(source: &str, rng: &mut SeededRng) -> Option<MutationResul
         source: result,
         expected_errors: vec![], // Parse errors vary by context.
         description: format!("Deleted comma at position {}", pos),
+    })
+}
+
+/// Replace one of the scalar types' names, where a hint writes it, with a
+/// name that is no type, outside any string literal.
+fn apply_unknown_type_name(source: &str, rng: &mut SeededRng) -> Option<MutationResult> {
+    const NAMES: &[&str] = &[
+        "bool", "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64",
+        "index", "offset", "f32", "f64", "int", "string",
+    ];
+    let bytes = source.as_bytes();
+    let word_byte = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut found = Vec::new();
+    let mut in_string = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' if in_string => i += 1,
+            b'"' => in_string = !in_string,
+            b if !in_string && word_byte(b) && (i == 0 || !word_byte(bytes[i - 1])) => {
+                let end = (i..bytes.len()).find(|&j| !word_byte(bytes[j])).unwrap_or(bytes.len());
+                if NAMES.contains(&&source[i..end]) {
+                    found.push((i, end));
+                }
+                i = end;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    if found.is_empty() {
+        return None;
+    }
+    let (start, end) = found[rng.random_range(0..found.len())];
+    Some(MutationResult {
+        source: format!("{}Nope{}", &source[..start], &source[end..]),
+        expected_errors: vec![TCode::NamedType.as_str()],
+        description: format!("Replaced type `{}` with `Nope` at position {}", &source[start..end], start),
     })
 }
 
@@ -675,4 +720,22 @@ fn pretty_type_hint<'db>(
     out: &mut String,
 ) {
     out.push_str(&th.syntax(db).S());
+}
+
+#[cfg(test)]
+mod unknown_type_name_tests {
+    use super::*;
+
+    /// Only a type's name is replaced, never the same word in a string.
+    #[test]
+    fn replaces_a_type_and_not_a_string() {
+        for seed in 0..20 {
+            let mut rng = SeededRng::new(seed);
+            let source = r#": [string] / ["int", : string / "u32 \"int\""]"#;
+            let mutated = apply_unknown_type_name(source, &mut rng).expect("a type to rename");
+            assert!(mutated.source.contains("Nope"), "{}", mutated.source);
+            assert!(mutated.source.contains(r#""int""#) && mutated.source.contains(r#""u32 \"int\"""#), "{}", mutated.source);
+        }
+        assert!(apply_unknown_type_name(r#"["int", "u8"]"#, &mut SeededRng::new(0)).is_none());
+    }
 }

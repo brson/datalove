@@ -4,18 +4,27 @@
 //! A datalit expression is a datafun expression too, and the two languages
 //! check it with two parsers and two type checkers, which have drifted apart
 //! before. A seed makes an expression with datalit's generator -- every kind
-//! it writes, recursive types among them -- and checks it three ways:
+//! it writes, recursive types among them -- and puts it these ways:
 //!
 //! - **inferred**: `expr` in datalit against `let _x = expr` in datafun. The
 //!   two parse to the same tree, and the expression comes to the same type
 //!   with the same diagnostics.
+//! - **valued**: an inferred expression both accept, read as a data file by
+//!   datalit and compiled as a literal by datafun, in one program that shows
+//!   both: the two values are shown alike.
 //! - **checked**: a type and a value of it without a hint at its head, as
 //!   `: T / expr` in datalit against `let _x: T = expr` in datafun, which
 //!   reach the expected type by different routes.
+//! - **placed**: the checked expression put where datafun checks it by
+//!   another route still -- a function's argument, what a function returns,
+//!   a `set`, a `var` -- against datalit's `: T / expr`: the same
+//!   diagnostics.
 //! - **mutated**: the expression broken by one of datalit's mutations -- a
-//!   bracket or a comma taken out, a number out of range, a field doubled --
-//!   which both must refuse alike: both fail to parse, or both come to the
-//!   same type with the same diagnostic codes.
+//!   bracket or a comma taken out, a number out of range, a field doubled, a
+//!   type's name made no type's -- which both must refuse alike: both fail
+//!   to parse, or both come to the same type with the same diagnostic codes.
+//!
+//! Seeds are checked in parallel, each with a database of its own.
 //!
 //! A difference is shrunk, an element of a list, a set, a map or a table
 //! dropped at a time while it differs the same way, and written out under the
@@ -32,6 +41,7 @@
 //!   rather than any seed's.
 
 use rmx::prelude::*;
+use rmx::rayon::prelude::*;
 use std::path::PathBuf;
 
 use bct::random::{SeededRng, env_seeds};
@@ -59,12 +69,24 @@ fn config() -> AstGenConfig {
     }
 }
 
-/// Which way an expression is put to the two languages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Mode {
-    Inferred,
-    Checked,
-    Mutated,
+/// How many cases were put each way.
+#[derive(Default)]
+struct Counts {
+    inferred: usize,
+    valued: usize,
+    checked: usize,
+    placed: usize,
+    mutated: usize,
+}
+
+impl Counts {
+    fn add(&mut self, other: &Counts) {
+        self.inferred += other.inferred;
+        self.valued += other.valued;
+        self.checked += other.checked;
+        self.placed += other.placed;
+        self.mutated += other.mutated;
+    }
 }
 
 /// What one language made of an expression.
@@ -77,6 +99,8 @@ struct Side {
     root_type: Option<TypeSerde>,
     /// The codes of its type diagnostics, sorted.
     codes: Vec<String>,
+    /// The expression's type as datalit writes it, where datalit typed it.
+    spelled: Option<String>,
 }
 
 /// How the two languages differed over an expression, the first way they did.
@@ -90,6 +114,8 @@ enum Differs {
     Type,
     /// It came to different diagnostics.
     Codes,
+    /// Read as data and compiled as a literal, it came to different values.
+    Value,
 }
 
 /// A difference, and what the two sides said.
@@ -104,18 +130,21 @@ struct Difference {
 // The two sides
 // ============================================================================
 
-/// The codes of `diagnostics`, sorted, a failed subsumption written alike.
+/// The codes of `diagnostics`, sorted, with the two errors the languages
+/// report under different codes by design written alike:
 ///
-/// That is the one place the two report one error under two codes, by
-/// design: datalit's failed `Check-Subsume` is T022 for `true`, `false` and
-/// a string and T032 for anything else (`datalit-typing-rules.md`), where
-/// datafun's is F016 for all of them, a plain mismatch
-/// (`datafun-typing-rules.md`, Inherited rules).
+/// - A failed `Check-Subsume`: T022 in datalit for `true`, `false` and a
+///   string, and T032 for anything else (`datalit-typing-rules.md`), where
+///   datafun's is F016 for all of them, a plain mismatch
+///   (`datafun-typing-rules.md`, Inherited rules).
+/// - A type named that is no type: T059 in datalit, which has no names for
+///   types at all, and F064 in datafun, which has aliases and no such one.
 fn codes<'db>(db: &'db Db, diagnostics: impl Iterator<Item = bct::diagnostic::Diagnostic<'db>>) -> Vec<String> {
     let mut codes: Vec<String> = diagnostics
         .map(|d| d.code.map_or_else(|| "no code".S(), |c| c.as_str(db).S()))
         .map(|code| match code.as_str() {
             "T022" | "T032" | "F016" => "mismatch".S(),
+            "T059" | "F064" => "unknown type".S(),
             _ => code,
         })
         .collect();
@@ -128,16 +157,17 @@ fn datalit_side(db: &Db, text: &str) -> (Side, Option<datalove_datalit::ast_serd
     let source = bct::input::Source::new(db, text.S());
     let parse_failed = !datalove_datalit::parser::parse_integration_test::accumulated::<ParseDiagnostic>(db, source).is_empty();
     if parse_failed {
-        return (Side { parse_failed, root_type: None, codes: Vec::new() }, None);
+        return (Side { parse_failed, root_type: None, codes: Vec::new(), spelled: None }, None);
     }
     let parsed = datalove_datalit::parser::parse_integration_test(db, source);
     let tree = datalove_datalit::ast_serde::ExprFull::from_ast(db, parsed.C());
     let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.C());
     let result = datalove_datalit::tycheck::type_check(db, parsed.C(), resolved);
+    let spelled = result.root_type(db).as_ref().map(|ty| datalove_datalit::tycheck::type_to_string(db, ty));
     let root_type = datalit_typecheck_to_serde(db, result).root_type;
     let diagnostics = datalove_datalit::tycheck::type_check::accumulated::<TypeDiagnostic>(db, parsed, resolved);
     let codes = codes(db, diagnostics.iter().map(|d| d.to_diagnostic(db)));
-    (Side { parse_failed, root_type, codes }, Some(tree))
+    (Side { parse_failed, root_type, codes, spelled }, Some(tree))
 }
 
 /// What datafun makes of `text`, a `let` binding the expression, and the
@@ -146,7 +176,7 @@ fn datafun_side(db: &Db, text: &str) -> (Side, Option<Result<datalove_datalit::a
     let source = bct::input::Source::new(db, text.S());
     let parse_failed = !datalove_datafun_parser::parse_integration_test::accumulated::<ParseDiagnostic>(db, source).is_empty();
     if parse_failed {
-        return (Side { parse_failed, root_type: None, codes: Vec::new() }, None);
+        return (Side { parse_failed, root_type: None, codes: Vec::new(), spelled: None }, None);
     }
     let parsed = datalove_datafun_parser::parse_integration_test(db, source);
     let statements = parsed.statements(db);
@@ -160,7 +190,19 @@ fn datafun_side(db: &Db, text: &str) -> (Side, Option<Result<datalove_datalit::a
     let (script, env) = datalove_datafun_tycheck::single_fragment_script(db, source);
     let diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<TypeDiagnostic>(db, script, env);
     let codes = codes(db, diagnostics.iter().map(|d| d.to_diagnostic(db)));
-    (Side { parse_failed, root_type, codes }, Some(tree))
+    (Side { parse_failed, root_type, codes, spelled: None }, Some(tree))
+}
+
+/// Whether datafun's `text`, a script, fails to parse, and the codes of its
+/// type diagnostics.
+fn datafun_codes(db: &Db, text: &str) -> (bool, Vec<String>) {
+    let source = bct::input::Source::new(db, text.S());
+    if !datalove_datafun_parser::parse_integration_test::accumulated::<ParseDiagnostic>(db, source).is_empty() {
+        return (true, Vec::new());
+    }
+    let (script, env) = datalove_datafun_tycheck::single_fragment_script(db, source);
+    let diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<TypeDiagnostic>(db, script, env);
+    (false, codes(db, diagnostics.iter().map(|d| d.to_diagnostic(db))))
 }
 
 /// How datalit's `datalit_text` and datafun's `datafun_text` differ, if they
@@ -235,6 +277,100 @@ impl<'db> Case<'db> {
     fn compare(&self, db: &'db Db) -> Option<Difference> {
         let (datalit, datafun) = self.texts(db);
         compare(db, &datalit, &datafun, self.checked_as.is_none())
+    }
+
+    /// How datafun, checking the expression where it is put, differs from
+    /// datalit checking it against its type; for a checked case.
+    fn placed(&self, db: &'db Db, place: Place) -> Option<Difference> {
+        let expr = datalove_datalit::pretty::pretty_print(db, &self.expr);
+        let ty = self.checked_as.as_ref().X().syntax(db).S();
+        let datalit_text = fmt!(": {ty} / {expr}");
+        let datafun_text = place.script(&ty, &expr);
+        let (datalit, _) = datalit_side(db, &datalit_text);
+        let (parse_failed, codes) = datafun_codes(db, &datafun_text);
+        let differs = match () {
+            _ if datalit.parse_failed != parse_failed => Differs::Parse,
+            _ if datalit.codes != codes => Differs::Codes,
+            _ => return None,
+        };
+        Some(Difference {
+            differs,
+            datalit_text,
+            datafun_text,
+            detail: fmt!("datalit: {:?}\ndatafun: {codes:?}", datalit.codes),
+        })
+    }
+
+    /// How the expression differs read as a data file, by datalit, from the
+    /// same text compiled as a datafun literal, run and shown; for an
+    /// inferred case both languages accept.
+    ///
+    /// The two are bound at the type datalit finds for it, and shown by one
+    /// printer, so what can differ is what each built.
+    fn valued(&self, db: &'db Db) -> Option<Difference> {
+        let text = datalove_datalit::pretty::pretty_print(db, &self.expr);
+        let (datalit, _) = datalit_side(db, &text);
+        let ty = match datalit.spelled {
+            Some(ty) if datalit.codes.is_empty() && !datalit.parse_failed => ty,
+            _ => return None,
+        };
+        let world = fmt!(
+            "----------\ndata local/gen/d\n----------\n{text}\n\
+             ----------\nscriptunit-fragment\n----------\n\
+             require data local/gen/d: {ty}\nlet v: {ty} = {text}\ndebuglog d\ndebuglog v\n",
+        );
+        let parsed = datalove_datafun::package_load_worldfile::parse_worldfile_sections(world.as_bytes()).X();
+        let analysis = datalove_datafun::worldfile_analysis::analyze_worldfile(&datalove_datafun::Database::default(), parsed);
+        let difference = |detail: String| Some(Difference {
+            differs: Differs::Value,
+            datalit_text: fmt!("data local/gen/d: {ty} = {text}"),
+            datafun_text: fmt!("let v: {ty} = {text}"),
+            detail,
+        });
+        let analysis = match analysis {
+            Ok(analysis) => analysis,
+            Err(e) => return difference(fmt!("the program did not analyze: {e}")),
+        };
+        let fragment = analysis.sections.iter().find(|s| s.section_type == "scriptunit-fragment").X();
+        if fragment.output != "(fragment executed)" {
+            return difference(fmt!(
+                "the program did not run: {}\n{:?} {:?} {:?}",
+                fragment.output, fragment.typecheck, fragment.ownership, fragment.lowering,
+            ));
+        }
+        let shown = fragment.debug_output.as_deref().unwrap_or("");
+        match shown.lines().collect::<Vec<_>>().as_slice() {
+            [data, literal] if data == literal => None,
+            _ => difference(fmt!("shown, the data file and then the literal:\n{shown}")),
+        }
+    }
+}
+
+/// Where in a datafun script a checked expression is put, each checking it
+/// against its type by its own route.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Place {
+    /// A function's argument, against its parameter.
+    Argument,
+    /// What a function returns, against its return type.
+    Return,
+    /// A `set` of a `var`, against the variable's type.
+    Set,
+    /// A `var`'s value, against its type.
+    Var,
+}
+
+impl Place {
+    const ALL: [Place; 4] = [Place::Argument, Place::Return, Place::Set, Place::Var];
+
+    /// A script putting `expr` here, checked against `ty`.
+    fn script(self, ty: &str, expr: &str) -> String {
+        match self {
+            Place::Argument => fmt!("fun _f(_p: {ty})\nend fun\ncall _f({expr})"),
+            Place::Return => fmt!("fun _f(): {ty}\n  ret {expr}\nend fun"),
+            Place::Set => fmt!("var _x: {ty} = {expr}\nset _x = {expr}"),
+            Place::Var => fmt!("var _x: {ty} = {expr}"),
+        }
     }
 }
 
@@ -340,13 +476,14 @@ fn smaller<'db>(expr: &ExprFull<'db>) -> Vec<ExprFull<'db>> {
     }
 }
 
-/// The smallest case found that differs as `case` does, the same way.
-fn shrink<'db>(db: &'db Db, case: Case<'db>, differs: Differs) -> Case<'db> {
+/// The smallest case found that `still` finds differs as `case` does, the
+/// same way.
+fn shrink<'db>(case: Case<'db>, still: impl Fn(&Case<'db>) -> Option<Difference>, differs: Differs) -> Case<'db> {
     let mut case = case;
     'smaller: loop {
         for expr in smaller(&case.expr) {
             let candidate = Case { expr, ..case.C() };
-            if candidate.compare(db).is_some_and(|d| d.differs == differs) {
+            if still(&candidate).is_some_and(|d| d.differs == differs) {
                 case = candidate;
                 continue 'smaller;
             }
@@ -371,6 +508,47 @@ fn write_out(label: &str, difference: &Difference) -> PathBuf {
     path
 }
 
+/// Put seed `seed`'s expressions every way, saying how many and which
+/// differ, each shrunk by the check that found it.
+fn check_seed(seed: u64) -> (Counts, Vec<(String, Difference)>) {
+    let db = Db::default();
+    let mut counts = Counts::default();
+    let mut differences = Vec::new();
+    let shrunk = |case: Case<'_>, check: &dyn Fn(&Case<'_>) -> Option<Difference>| {
+        check(&case).map(|found| check(&shrink(case, check, found.differs)).X())
+    };
+    let mut report = |label: String, difference: Option<Difference>| differences.extend(difference.map(|d| (label, d)));
+
+    let case = inferred(&db, seed);
+    counts.inferred += 1;
+    match shrunk(case.C(), &|c| c.compare(&db)) {
+        Some(difference) => report(fmt!("seed {seed} inferred"), Some(difference)),
+        None => {
+            counts.valued += 1;
+            report(fmt!("seed {seed} valued"), shrunk(case, &|c| c.valued(&db)));
+        }
+    }
+
+    let case = checked(&db, seed);
+    counts.checked += 1;
+    report(fmt!("seed {seed} checked"), shrunk(case.C(), &|c| c.compare(&db)));
+    for place in Place::ALL {
+        counts.placed += 1;
+        let label = fmt!("seed {seed} {}", fmt!("{place:?}").to_lowercase());
+        report(label, shrunk(case.C(), &|c| c.placed(&db, place)));
+    }
+
+    if let Some((text, description)) = mutated(&db, seed) {
+        counts.mutated += 1;
+        let difference = compare(&db, &text, &fmt!("let _x = {text}"), false).map(|mut difference| {
+            difference.detail = fmt!("{description}\n{}", difference.detail);
+            difference
+        });
+        report(fmt!("seed {seed} mutated"), difference);
+    }
+    (counts, differences)
+}
+
 fn main() {
     let db = Db::default();
     if let Ok(text) = std::env::var("LITERAL_EQUIV_TEXT") {
@@ -384,42 +562,33 @@ fn main() {
         return;
     }
     let seeds = env_seeds("LITERAL_EQUIV", DEFAULT_SEED, DEFAULT_COUNT);
+    // Each seed on its own, with its own database, and reported in order.
+    let mut checked: Vec<(u64, Counts, Vec<(String, Difference)>)> = seeds.iter().collect::<Vec<_>>()
+        .into_par_iter()
+        .map(|seed| {
+            let (counts, differences) = check_seed(seed);
+            (seed, counts, differences)
+        })
+        .collect();
+    checked.sort_by_key(|(seed, _, _)| *seed);
+    let mut counts = Counts::default();
     let mut failed = Vec::new();
-    let mut counts = [0usize; 3];
-    for seed in seeds.iter() {
-        for mode in [Mode::Inferred, Mode::Checked, Mode::Mutated] {
-            let label = fmt!("seed {seed} {}", fmt!("{mode:?}").to_lowercase());
-            let difference = match mode {
-                Mode::Inferred | Mode::Checked => {
-                    let case = if mode == Mode::Inferred { inferred(&db, seed) } else { checked(&db, seed) };
-                    counts[mode as usize] += 1;
-                    case.compare(&db).map(|difference| {
-                        let small = shrink(&db, case, difference.differs);
-                        small.compare(&db).X()
-                    })
-                }
-                Mode::Mutated => {
-                    let Some((text, description)) = mutated(&db, seed) else { continue };
-                    counts[2] += 1;
-                    compare(&db, &text, &fmt!("let _x = {text}"), false).map(|mut difference| {
-                        difference.detail = fmt!("{description}\n{}", difference.detail);
-                        difference
-                    })
-                }
-            };
-            if let Some(difference) = difference {
-                let path = write_out(&label, &difference);
-                println!(
-                    "\x1b[31mFAIL\x1b[0m {label}: {:?}\n  datalit: {}\n  datafun: {}\n  {}",
-                    difference.differs, difference.datalit_text, difference.datafun_text, path.display(),
-                );
-                failed.push(label);
-            }
+    for (_, seed_counts, differences) in checked {
+        counts.add(&seed_counts);
+        for (label, difference) in differences {
+            let path = write_out(&label, &difference);
+            println!(
+                "\x1b[31mFAIL\x1b[0m {label}: {:?}\n  datalit: {}\n  datafun: {}\n  {}",
+                difference.differs, difference.datalit_text, difference.datafun_text, path.display(),
+            );
+            failed.push(label);
         }
     }
     println!(
-        "literal equivalence: {} inferred, {} checked and {} mutated cases from {} seeds from {}; {} differ",
-        counts[0], counts[1], counts[2], seeds.count, seeds.start, failed.len(),
+        "literal equivalence: {} inferred, {} valued, {} checked, {} placed and {} mutated cases \
+         from {} seeds from {}; {} differ",
+        counts.inferred, counts.valued, counts.checked, counts.placed, counts.mutated,
+        seeds.count, seeds.start, failed.len(),
     );
     if !failed.is_empty() {
         std::process::exit(1);

@@ -78,12 +78,13 @@ test-worldgen-coverage SEED='1000000' COUNT='1000':
 test-generative-reactive SEED='1000000' COUNT='1000':
     GENERATIVE_REACTIVE_SEED={{SEED}} GENERATIVE_REACTIVE_COUNT={{COUNT}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test generative_reactive_tests
 
-# Generated datalit expressions, inferred, checked and broken, put to datalit
-# and to datafun, which must agree. `just test` runs 500 seeds from 0; this
-# runs 100000 from far past them, about two minutes in a debug build. A
-# difference is shrunk and written out; see the test's docs.
+# Generated datalit expressions, inferred, valued, checked, placed and broken,
+# put to datalit and to datafun, which must agree. `just test` runs 500 seeds
+# from 0; this runs 100000 from far past them, about two and a half minutes in
+# a debug build on four CPUs. A difference is shrunk and written out; see the
+# test's docs.
 test-literal-equiv SEED='1000000' COUNT='100000':
-    LITERAL_EQUIV_SEED={{SEED}} LITERAL_EQUIV_COUNT={{COUNT}} cargo test -p datalove-datafun-compiler --test literal_equiv_tests
+    LITERAL_EQUIV_SEED={{SEED}} LITERAL_EQUIV_COUNT={{COUNT}} cargo test -p datalove-datafun --test literal_equiv_tests
 
 # Every generative suite from seeds drawn from the OS, COUNT of each.
 test-generative-random COUNT='100':

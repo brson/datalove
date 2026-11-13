@@ -51,11 +51,6 @@ datalove-exampletest.path = "../datalove-exampletest"
 datalove-datafun-pkg.workspace = true
 
 [[test]]
-name = "literal_equiv_tests"
-path = "tests/literal_equiv_tests.rs"
-harness = false
-
-[[test]]
 name = "parser_tests"
 path = "tests/parser_tests.rs"
 harness = false
