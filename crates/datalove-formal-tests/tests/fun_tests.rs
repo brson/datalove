@@ -387,6 +387,98 @@ fn rust_side(text: &str) -> (Vec<String>, Value) {
     (codes, rmx::serde_json::to_value(&script).X())
 }
 
+/// The codes of a module's type diagnostics, in order, checked as the module
+/// of a world of its own, as a library's modules are.
+fn rust_module_side(path: &str, text: &str) -> Vec<String> {
+    let db = datalove_datafun::Database::default();
+    let world = fmt!("----------\nmodule {path}\n----------\n\n{text}");
+    let raw = datalove_datafun::package_load_worldfile::load_world_from_worldfile(world.as_bytes()).X();
+    let package_world = datalove_datafun::package::import_from_loader(&db, raw);
+    let resolution = datalove_datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
+    let pkg_graph = resolution.result(&db).C().ok().X();
+    let graph = datalove_datafun::to_module_graph(&db, package_world, pkg_graph);
+    let parsed = datalove_datafun::module_graph::parse_module_graph(&db, graph.graph, graph.resolved_requires, Vec::new());
+    let names = datalove_datafun_resolve::resolve_all_names(&db, parsed);
+    let _ = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed, names);
+    datalove_datafun_tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, parsed, names)
+        .iter()
+        .map(|d| d.to_diagnostic(&db).code.map(|c| c.as_str(&db).S()).unwrap_or_else(|| "none".S()))
+        .collect()
+}
+
+/// Datafun's module typing held to the model: worldgen's module, changed as
+/// the scripts are, checked as a module, whose top level has no function to
+/// return early from (F105). A module the Rust reports F089 of, a const that
+/// depends on itself through a function, is skipped: the Rust finds those by
+/// what its checker looked up, which the model does not follow.
+#[test]
+fn module_typing_agrees() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the module typing tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let config = config();
+    let mut cases = Vec::new();
+    for t in MODULE_CORPUS {
+        cases.push(("corpus".S(), "local/pkg/m".S(), t.S()));
+    }
+    for seed in seeds.iter() {
+        let session = datalove_worldgen::gen_session_seeded(seed, config.C());
+        let Some((path, text)) = session.modules.first().cloned() else { continue };
+        let mut text = text;
+        let mut rng = SeededRng::derive(seed, "mutate-module");
+        for _ in 0..rng.random_range(0..=MAX_MUTATIONS) {
+            text = mutate(&mut rng, &text);
+        }
+        cases.push((fmt!("seed {seed}"), path, text));
+    }
+    let mut queries = Vec::new();
+    let mut rust = Vec::new();
+    for (_, path, text) in &cases {
+        let (_, script) = rust_side(text);
+        queries.push(json!({ "module": script }));
+        rust.push(rust_module_side(path, text));
+    }
+    let answers = ask_oracle(&queries);
+    let mut agreed = 0;
+    let mut skipped = BTreeMap::<String, usize>::new();
+    let mut mismatches = Vec::new();
+    for (((what, _, text), rust), oracle) in cases.iter().zip(&rust).zip(&answers) {
+        if let Some(why) = oracle.get("unsupported") {
+            *skipped.entry(why.as_str().X().S()).or_default() += 1;
+            continue;
+        }
+        if rust.iter().any(|c| c == "F089") {
+            *skipped.entry("F089".S()).or_default() += 1;
+            continue;
+        }
+        let model: Vec<String> = oracle["codes"].as_array().X().iter().map(|c| c.as_str().X().S()).collect();
+        if *rust == model {
+            agreed += 1;
+        } else {
+            mismatches.push(fmt!("{what}:\n{text}    rust:  {rust:?}\n    model: {model:?}"));
+        }
+    }
+    println!(
+        "{} modules over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(10) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the typing rules disagree on {} modules", mismatches.len());
+}
+
+/// Modules written by hand.
+const MODULE_CORPUS: &[&str] = &[
+    // A module const has no function to return early from (F105).
+    "const a: ?u8 = none\nconst b: u8 = a?\nconst c: !u8 = ok 1\nconst d: u8 = c!\nconst e: u8 = 1 +! 2\nconst f: u8 = 1 +? 2\nconst g: i8 = -!(: i8 / 1)\nconst h: [u8] = [1]\nconst i: u8 = h[0]?\nfun k(): u8\n  ret d\nend fun\n",
+    // A function sees the consts above it, not below (F001), and a const sees
+    // every function.
+    "const a: u8 = 1\nfun f(): u8\n  ret a + b\nend fun\nconst b: u8 = 2\nconst c: u8 = g()\nfun g(): u8\n  ret a\nend fun\n",
+];
+
 #[test]
 fn statement_typing_agrees() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {

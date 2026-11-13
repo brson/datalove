@@ -1467,9 +1467,11 @@ name = "datalove-formal-tests"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-datafun",
  "datalove-datafun-ast",
  "datalove-datafun-compiler",
  "datalove-datafun-parser",
+ "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",

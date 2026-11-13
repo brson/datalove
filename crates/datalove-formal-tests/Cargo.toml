@@ -20,6 +20,8 @@ datalove-worldgen.workspace = true
 datalove-datafun-ast.workspace = true
 datalove-datafun-parser.workspace = true
 datalove-datafun-compiler.workspace = true
+datalove-datafun.workspace = true
+datalove-datafun-resolve.workspace = true
 
 [[test]]
 name = "oracle_tests"

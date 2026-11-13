@@ -275,7 +275,10 @@ pattern, `set` with or without an operator and through fields and indexes,
 which datafun types by datalit's rules with a context added; and datafun's
 variables, places with field and index steps, fields and indexes of what is
 not a place, operators, `?`, `!`, `@` and calls, each in a borrowed position
-or not, and consts. It leaves out modules and requires. A const's
+or not, and consts. A module is in it too, as a list of declarations
+(`checkModule`): its consts are checked as a script's are, but a `?`, `!`
+or other early return in one is F105, not F049, since there is no function
+to return from. Requires and imports are left out. A const's
 initializer names only consts (F058), a function body sees the consts above
 it, a const argument names one (F076), and in a generic neither a const
 parameter's type (F077) nor a const's (F088) mentions a type parameter. A
@@ -384,7 +387,8 @@ What it found:
   other binding (error fixture `130_failed_const_leaves_the_name_alone`).
   F089, a const that depends on
   itself through a function, cannot arise in a script, where a function
-  sees only the consts above it; it is a module's.
+  sees only the consts above it; it is a module's, and the model leaves it
+  out.
 - **Checking a negation against a float did not borrow its operand.**
   Synthesizing `-e` reads `e` in a borrowed position, but checking it
   against `f32` or `f64` passed the type down to `e` outside one, so
@@ -486,7 +490,13 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
   generics, appends an instance of each of its generic functions, its type
   parameters declared as aliases of type arguments their bounds admit, and
   requires the Rust and the model both to report nothing: the check-once
-  theorem's conclusion, held to the Rust and its inference.
+  theorem's conclusion, held to the Rust and its inference. It also
+  includes `module_typing_agrees`, which takes worldgen's first module,
+  changed as the scripts are, checks it as a module of a world of its own
+  through the Rust's module graph, and holds its codes to `checkModule`'s.
+  Over five thousand seeds 3334 modules agree; the rest are skipped, for
+  parse errors or for a mutation that leaves a statement at the top level,
+  where the model takes only declarations.
 - `law_tests` runs in `just test`. `FORMAL_LAWS_SEED`, `FORMAL_LAWS_COUNT` and
   `FORMAL_LAWS_SIZE` widen it. Size 8 takes a few seconds in release; size 10
   runs out of memory, and is also the smallest at which two distinct types
@@ -544,9 +554,11 @@ In rough order of what to do next:
   left unmet makes a check fail, so that on a quiet run there is none.
   Recursive type arguments
   are left out, until T065 says whether a recursive key is allowed.
-- **The rest of datafun.** Modules are outside the slice. The
-  serde AST already carries them; the model and the generator's
-  configuration are what widen.
+- **F089 and modules that require others.** The Rust finds a const that
+  depends on itself through a function by what its checker looked up, and
+  the model does not track that; `module_typing_agrees` skips any module
+  the Rust reports it of, though worldgen has not yet written one. Requires,
+  imports and the names they bring in are outside the slice.
 - **The random generator rarely makes a type that starts with two `rec`s**,
   so the transitivity chains in `law_tests` would not have found the third
   hole above; the exhaustive test does.

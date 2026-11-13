@@ -59,6 +59,12 @@ def answer (q : Json) : Except String Json := do
     return match Fun.scriptFromSerde script with
       | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str))]
       | .error e => Json.mkObj [("unsupported", e)]
+  if let .ok script := q.getObjVal? "module" then
+    return match Fun.scriptFromSerde script with
+      | .ok ss =>
+        if ss.all Fun.Stmt.isDecl then Json.mkObj [("codes", Json.arr ((Fun.checkModule ss).map Json.str))]
+        else Json.mkObj [("unsupported", "a module statement that is not a declaration")]
+      | .error e => Json.mkObj [("unsupported", e)]
   throw s!"unknown query: {q.compress}"
 
 def main (args : List String) : IO UInt32 := do

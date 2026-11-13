@@ -237,6 +237,9 @@ structure Ctx where
   /-- Whether this is a const initializer, where only const bindings may be
   named (F058). -/
   constExpr : Bool := false
+  /-- Whether this is a module's top level, where there is no function to
+  return early from (F105). -/
+  inModule : Bool := false
 
 /-- A borrowed position: an operand, the operand of `@`, `debuglog`'s
 argument, a compound `set`'s value, a `for`'s collection. -/
@@ -260,6 +263,10 @@ def convertIn (aliases : Aliases) (h : Hint) : Except Code Ty :=
 
 /-- A hint as a type, under the aliases in scope. -/
 def Ctx.hint (Γ : Ctx) (h : Hint) : Except Code Ty := convertIn Γ.aliases h
+
+/-- What an early return the function does not fit is: F049, or F105 at a
+module's top level, where there is no function. -/
+def Ctx.earlyCode (Γ : Ctx) : Code := if Γ.inModule then "F105" else "F049"
 
 def Ctx.lookup (Γ : Ctx) (x : String) : Option (Ty × Kind) :=
   (Γ.vars.find? (·.1 == x)).map (·.2)
@@ -801,7 +808,7 @@ def finishBinop (Γ : Ctx) (op : BinOp) (t : Ty) : ChkM Ty := do
     if t == .bool then pure .bool else throw "F026"
   | op =>
     if !arithAdmits op t b then throw "F026"
-    if !fits Γ (needs op) then throw "F049"
+    if !fits Γ (needs op) then throw Γ.earlyCode
     pure t
 
 /-- Whether the function returns what an index's `?` or `!` returns early. -/
@@ -878,22 +885,22 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
     | .unop .negC a => do
       let t ← synthF env n Γ.borrow a
       if !(Γ.boundOf t == Option.some .fixedint || isFixT t) then throw "F026"
-      if !Γ.returnsResult then throw "F049"
+      if !Γ.returnsResult then throw Γ.earlyCode
       pure t
     | .unop .negO a => do
       let t ← synthF env n Γ.borrow a
       if !(Γ.boundOf t == Option.some .fixedint || isFixT t) then throw "F026"
-      if !Γ.returnsOption then throw "F049"
+      if !Γ.returnsOption then throw Γ.earlyCode
       pure t
     | .tryOpt a => do
       let t ← synthF env n Γ a
       match t.expose with
-      | .option p => if Γ.returnsOption then pure p else throw "F049"
+      | .option p => if Γ.returnsOption then pure p else throw Γ.earlyCode
       | _ => throw "F048"
     | .tryRes a => do
       let t ← synthF env n Γ a
       match t.expose with
-      | .result p => if Γ.returnsResult then pure p else throw "F049"
+      | .result p => if Γ.returnsResult then pure p else throw Γ.earlyCode
       | _ => throw "F048"
     | .adapt a => synthF env n Γ.borrow a
     | .call f args => callF env n Γ f args Option.none
@@ -916,7 +923,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
         recover (checkF env n Γ k kt)
         if Γ.mutArg && isView bt then throw "F073"
         if !t.isCopy && !Γ.borrowed then throw "F072"
-        if !Γ.fitsMode m then throw "F049"
+        if !Γ.fitsMode m then throw Γ.earlyCode
         pure t
     -- A literal form: its type is what inference finds for its parts
     -- together, and where it could not read one, what synthesizing them
@@ -954,7 +961,7 @@ def stepF (env : InferEnv) : Nat → Ctx → Ty → Step → ChkM Ty
     recover (checkF env n Γ k kt)
     if Γ.mutArg && isView t then throw "F073"
     if !et.isCopy && !Γ.borrowed then throw "F072"
-    if !Γ.fitsMode m then throw "F049"
+    if !Γ.fitsMode m then throw Γ.earlyCode
     pure et
 
 /-- Pair: the operands' types, which must be one (else F090), and each
@@ -1453,7 +1460,7 @@ def setValue (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (op : Option BinOp) 
   | Option.some op =>
     runChk (checkF env n Γ.borrow e t) >>= fun _ =>
     if !arithAdmits op t (Γ.boundOf t) then modify (·.push "F026")
-    else reportIf (!fits Γ (needs op)) "F049"
+    else reportIf (!fits Γ (needs op)) Γ.earlyCode
 
 /-- A `set` target's last step, an index: with no `?` or `!`, an insertion,
 which only a map takes, and only with a plain `set` (F074); with one, the
@@ -1504,7 +1511,7 @@ where
 /-- Report each way of returning early the function does not fit (F049). -/
 def reportModes (Γ : Ctx) : List IdxMode → StateM (Array Code) Unit
   | [] => pure ()
-  | m :: ms => reportIf (!Γ.fitsMode m) "F049" >>= fun _ => reportModes Γ ms
+  | m :: ms => reportIf (!Γ.fitsMode m) Γ.earlyCode >>= fun _ => reportModes Γ ms
 
 /-- `set p = e`, or `set p ⊕= e`: the root (F054, F055), the early returns its
 indexes make (F049), and its steps to the place written, an immutable root's
@@ -1752,6 +1759,23 @@ def resolveNames (ss : List Stmt) : List (String × Sig) × Array Code := Id.run
         | .error c => diags := diags.push c
     | _ => pure ()
   pure (sigs, diags)
+
+/-- The diagnostics of a module, in order, as of a script but at a top level
+with no function, whose consts cannot return early (F105). Its top level
+holds only declarations; anything else the parser refuses (P077). -/
+def checkModule (ss : List Stmt) : Array Code :=
+  let (sigs, diags) := resolveNames ss
+  let run : StateM (Array Code) Unit := do
+    let mut Γ : Ctx := { ret := .void, sigs, inModule := true }
+    for s in ss do
+      if let .fun_ f := s then checkFun sigs Γ.aliases (constsOf Γ.vars) f
+      else Γ ← checkStmt Γ s
+  (run.run diags).2
+
+/-- Whether a statement may be at a module's top level. -/
+def Stmt.isDecl : Stmt → Bool
+  | .fun_ _ | .const_ _ _ _ | .type_ _ _ => true
+  | _ => false
 
 /-- The diagnostics of a script, in order: its names resolved
 (`resolveNames`), so that functions may call each other in any order, and
