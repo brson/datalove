@@ -103,8 +103,9 @@ Under `formal/Datalove/Proofs/`:
   (`Ty.expose_not_numeric`), since its body uses its name.
 - **A literal that checks is a value of its type** (`Lit.check_sound`); see
   [Literal typing](#user-content-literal-typing).
-- **In datafun, every early return fits the function, and `completes` is
-  sound**; see [Statements](#user-content-statements).
+- **In datafun, every early return fits the function, `completes` is
+  sound, a `match` covers its enum, and checking a generic once is
+  enough**; see [Statements](#user-content-statements).
 - **A recursive type meets its one-step unfolding** (`Ty.meet_unfold`), on
   well-formed types, however many `rec`s it starts with.
 - **`@` is reflexive and transitive** on well-formed types (`Ty.adapt_refl`,
@@ -341,6 +342,10 @@ What it found:
   it: it reported a mode marker that disagreed with its parameter as it
   reached each argument, where the Rust reports every one before checking
   any, so `call g(1, ref true)` lost its second F057.
+- **Instances of clean generics are clean.** `instances_check` appended an
+  instance of every generic function in thirty thousand generated scripts
+  the Rust checks cleanly, 51279 instances at type arguments their bounds
+  admit, and the Rust and the model reported nothing on any of them.
 - **Checking a negation against a float did not borrow its operand.**
   Synthesizing `-e` reads `e` in a borrowed position, but checking it
   against `f32` or `f64` passed the type down to `e` outside one, so
@@ -358,7 +363,7 @@ What it found:
   the bound writes what it wrote before; three hundred default-configured
   worlds are byte for byte the same.
 
-Three things are proved of it:
+Four things are proved of it:
 
 - **Every early return fits the function** (`Fun.checkFun_early_returns_fit`,
   in `Proofs/EarlyReturn.lean`). A function whose check reports nothing has
@@ -388,6 +393,29 @@ Three things are proved of it:
   falling through. Taking out F100 or F097 breaks the proof. It finds a
   variant by name, as the Rust does, so "exactly one" rests on an enum's
   variant names being distinct, which the model does not state.
+- **Checking a generic once is enough** (`Fun.checkFun_instance`, in
+  `Proofs/InstanceStmt.lean`, on `Proofs/Instance.lean` and
+  `Proofs/InstanceCheck.lean`). A generic function whose check reports
+  nothing has instances whose checks report nothing: its body checked with
+  each type parameter an alias for a type argument the parameter's bound
+  admits, no bounds in scope, and its parameter and return types
+  substituted, F063 included. That is what compiling a generic once and
+  running it at the types its calls pick relies on. Under it,
+  `Fun.synthF_inst` and `Fun.checkF_inst` say the same of every expression,
+  at the substituted type, and `Fun.checkStmtF_inst` of every statement.
+  The type arguments have no type parameter and no `rec` in them
+  (`Ground`); with one, `expose` would not commute with substituting it, and
+  an instance spelling a recursive type into a key would be T065, which
+  only refuses the spelling ([the issue](issues.md#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)).
+  Inference is taken as given, as for the theorems above, and assumed to
+  answer under an instance what it answered under the generic, substituted,
+  wherever the generic checked quietly (`InstEnv`); `instances_check` holds
+  the Rust to the conclusion, below. Two more assumptions are ones the
+  front end makes true: a signature names only its own type parameters
+  (`SigsOk`), and a body declares no type alias (P074). Making a type
+  parameter copyable breaks the proof, as letting a bound satisfy another at
+  a call does: each would let a generic through whose instance the Rust
+  refuses.
 
 To make these provable, checking was made total: it takes inference as a
 parameter (`InferEnv`), which only says what types are and so cannot move an
@@ -410,7 +438,12 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
   About twenty seconds from clean.
 - `just test-formal SEED COUNT` builds, then runs `oracle_tests`,
   `lit_tests` and `fun_tests` over `COUNT` seeds from `SEED` (`random` draws one), as every generative suite takes its
-  seeds.
+  seeds. `fun_tests` includes `instances_check`, which takes each generated
+  script the Rust checks cleanly, before and after the mutations that touch
+  generics, appends an instance of each of its generic functions, its type
+  parameters declared as aliases of type arguments their bounds admit, and
+  requires the Rust and the model both to report nothing: the check-once
+  theorem's conclusion, held to the Rust and its inference.
 - `law_tests` runs in `just test`. `FORMAL_LAWS_SEED`, `FORMAL_LAWS_COUNT` and
   `FORMAL_LAWS_SIZE` widen it. Size 8 takes a few seconds in release; size 10
   runs out of memory, and is also the smallest at which two distinct types
@@ -454,16 +487,12 @@ In rough order of what to do next:
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's
   expressions, which only datalit's literals have (`Lit.check_sound`).
-- **Checking a generic once is enough.** Generics are modelled, and agree
-  with the Rust, but the theorem monomorphization relies on is not yet
-  proved: that a generic body that checks quietly checks quietly at any type
-  arguments its bounds admit. It will take inference as given, as the
-  theorems above do, assuming it answers on an instance what it answered on
-  the generic, substituted, and that expecting the type it would find
-  anyway changes nothing. It has to leave out recursive type arguments: the
-  Rust's `ord` admits them, and they run, but an instance that spells one
-  into a set's element or map's key is T065, which only refuses the
-  spelling (an inferred `#{x@}` over a recursive `x` is accepted).
+- **What the check-once theorem assumes.** Inference's answer under an
+  instance (`InstEnv`) is assumed and tested, not proved, for the reason the
+  ordering claim below is: `Lit.lean`'s unifier is partial. That a
+  signature names only its own type parameters (`SigsOk`) holds of what
+  `resolveNames` builds, but is not proved of it. Recursive type arguments
+  are left out, until T065 says whether a recursive key is allowed.
 - **The rest of datafun.** Modules and consts are outside the slice. The
   serde AST already carries them; the model and the generator's
   configuration are what widen.

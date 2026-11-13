@@ -426,6 +426,124 @@ fn statement_typing_agrees() {
     assert!(mismatches.is_empty(), "the Rust and the typing rules disagree on {} scripts", mismatches.len());
 }
 
+/// Type arguments for a parameter with no bound or `ord`, none of them
+/// recursive: the check-once theorem leaves recursive arguments out.
+const ANY_ARGS: &[&str] = &[
+    "u8", "i64", "int", "f32", "f64", "string", "bool", "[u8]", "?u8", "!u8", "(u8, string)",
+    "{a: u8, b: string}", "%{string = u8}", "#{i32}", "[|f64, 2|]", "enum { atom A, term B u8 }",
+];
+const FLOAT_ARGS: &[&str] = &["f32", "f64"];
+const FIXED_ARGS: &[&str] = &["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "index", "offset"];
+
+/// Each generic function of a script, instantiated: the script with its type
+/// parameters declared as aliases of type arguments their bounds admit, and
+/// the function copied after it without them, as `formal/Datalove/Proofs/InstanceStmt.lean`
+/// states an instance.
+fn instances(rng: &mut SeededRng, text: &str) -> Vec<String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        let header = line.strip_prefix("fun ")
+            .and_then(|rest| Some((rest, rest.find('<')?, rest.find('>')?)));
+        let Some((rest, lt, gt)) = header else {
+            i += 1;
+            continue;
+        };
+        let Some(end) = (i + 1..lines.len()).find(|&j| lines[j] == "end fun") else { break };
+        let name = &rest[..lt];
+        let after = &rest[gt + 1..];
+        let (sig, bounds) = match after.find(" where {") {
+            Some(w) => (&after[..w], &after[w..]),
+            None => (after, ""),
+        };
+        let mut aliases = String::new();
+        for p in rest[lt + 1..gt].split(',').map(str::trim) {
+            let pool = if bounds.contains(&fmt!("{p} is float")) {
+                FLOAT_ARGS
+            } else if bounds.contains(&fmt!("{p} is fixedint")) {
+                FIXED_ARGS
+            } else {
+                ANY_ARGS
+            };
+            aliases += &fmt!("type {p}: {}\n", pool[rng.random_range(0..pool.len())]);
+        }
+        let body = lines[i + 1..=end].join("\n");
+        let text = text.trim_end();
+        out.push(fmt!("{aliases}{text}\n\nfun {name}_inst{sig}\n{body}\n"));
+        i = end + 1;
+    }
+    out
+}
+
+/// The check-once theorem held to the Rust: a script the Rust checks without
+/// a diagnostic, with each of its generic functions instantiated and appended,
+/// still checks without one, and the model agrees. The scripts are worldgen's,
+/// and the same changed by the mutations that touch generics, wherever that
+/// leaves them clean.
+#[test]
+fn instances_check() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the instance tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let config = config();
+    let mut cases = Vec::new();
+    for seed in seeds.iter() {
+        let session = datalove_worldgen::gen_session_seeded(seed, config.C());
+        let base = session.modules.first().map(|m| m.1.C()).unwrap_or_default();
+        let mut rng = SeededRng::derive(seed, "instances");
+        let mut mutated = base.C();
+        for _ in 0..rng.random_range(1..=MAX_MUTATIONS) {
+            mutated = mutate(&mut rng, &mutated);
+        }
+        for text in [base, mutated] {
+            // Clean: no type diagnostic, and nothing the parser could not read.
+            let (codes, script) = rust_side(&text);
+            if !codes.is_empty() || script.to_string().contains("ParseError") {
+                continue;
+            }
+            for inst in instances(&mut rng, &text) {
+                cases.push((seed, inst));
+            }
+        }
+    }
+
+    let mut queries = Vec::new();
+    let mut rust = Vec::new();
+    for (_, text) in &cases {
+        let (codes, script) = rust_side(text);
+        queries.push(json!({ "fun": script }));
+        rust.push(codes);
+    }
+    let answers = ask_oracle(&queries);
+    let mut failures = Vec::new();
+    for (((seed, text), rust), oracle) in cases.iter().zip(&rust).zip(&answers) {
+        // Every instance is inside the slice, as the script it was made from
+        // is, so one the model does not take, a parse error among them, is a
+        // failure of the test, not something to skip.
+        if let Some(why) = oracle.get("unsupported") {
+            failures.push(fmt!("seed {seed}: unsupported ({why}):\n{text}"));
+            continue;
+        }
+        let model: Vec<String> = oracle["codes"].as_array().X().iter().map(|c| c.as_str().X().S()).collect();
+        if !rust.is_empty() || !model.is_empty() {
+            failures.push(fmt!("seed {seed}:\n{text}    rust:  {rust:?}\n    model: {model:?}"));
+        }
+    }
+    println!(
+        "{} instances over seeds {}..{}: {} clean, {} not",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count),
+        cases.len() - failures.len(), failures.len(),
+    );
+    for f in failures.iter().take(10) {
+        println!("{f}");
+    }
+    assert!(failures.is_empty(), "{} instances of clean generics are not clean", failures.len());
+}
+
 /// Print the serde AST of `FORMAL_FUN_AST_OF`, a file, with the codes the Rust
 /// and the model give it.
 #[test]
