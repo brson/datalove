@@ -486,3 +486,17 @@ theorem check_sound (env : CheckEnv) (hsub : ∀ e, env.sub e ≠ .ok ()) {e : E
   checkWith_sound env hsub e t h
 
 end Datalove.Lit
+
+namespace Datalove.Lit
+
+/-- The real Check-Subsume never succeeds: whatever inference finds, it ends
+in T032, or in what inference threw first. -/
+theorem subsume_fails (e : Expr) : subsume e ≠ .ok () := by
+  unfold subsume
+  cases (infer e).run #[] <;> simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A literal the real checker accepts against a type is a value of it. -/
+theorem check_sound' {e : Expr} {t : Ty} (h : check e t = .ok ()) : HasType (eval e) t :=
+  check_sound _ subsume_fails h
+
+end Datalove.Lit

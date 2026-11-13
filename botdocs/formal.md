@@ -199,10 +199,11 @@ choice open, the model says which it made. It is not wholly independent of
 the code: it was written by someone who had read the checker first, and its
 structure follows the checker's where the doc allows.
 
-Inference, unification and synthesis are `partial`, since unification has no
-structural measure, and serve only as the oracle. Checking is total: it
+Inference, unification and synthesis run on fuel, since unification has no
+structural measure, each call spending one and running out an error, so
+they are total functions Lean can reason about. Checking is structural: it
 takes synthesis, for a `data` or `error` payload, and Check-Subsume as
-parameters (`checkWith`), and the oracle's `check` is it given the partial
+parameters (`checkWith`), and the oracle's `check` is it given the real
 ones. Of checking one thing is proved, `Lit.check_sound`: a literal that
 checks against a type denotes a value of that type. What a type's values are
 (`HasType`, in `Proofs/LitSound.lean`) is written from the doc's tables, not
@@ -211,9 +212,10 @@ bits, a tensor with as many elements as its shape, a table whose header is
 the type's and whose rows have one element per column, an atom or term that
 is a variant of the enum, a recursive type's values its unfolding's. The
 theorem holds for any synthesis, and for any Check-Subsume that never
-succeeds. The real one always ends in T032, but it calls the partial
-inference, so Lean takes that as a premise rather than a fact. Dropping the
-tensor element-count check from the checker breaks the proof, as it should.
+succeeds, which the real one does not (`Lit.subsume_fails`): it always ends
+in T032, or in what inference threw first. So `Lit.check_sound'` says it of
+the real checker, with no premise. Dropping the tensor element-count check
+from the checker breaks the proof, as it should.
 
 `lit_tests` holds the Rust to it. It starts from an expression `ast_gen`
 makes, or from a literal of a type the hint generator above makes, which
@@ -481,15 +483,16 @@ In rough order of what to do next:
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Inference and unification.** The doc claims that where unification's
   constraints all hold, the order of a collection's elements does not change
-  what it synthesizes. Proving it needs unification made total, with a
-  measure or fuel, and `Lit.lean`'s inference is partial.
+  what it synthesizes. Unification is total now, on fuel, so the claim can
+  be stated of it; what is missing is the union-find's invariants (links
+  never form a cycle, a bound variable is never bound again) and the proof.
 - **What `ret e` returns.** The early-return theorem covers the returns an
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's
   expressions, which only datalit's literals have (`Lit.check_sound`).
 - **What the check-once theorem assumes.** Inference's answer under an
-  instance (`InstEnv`) is assumed and tested, not proved, for the reason the
-  ordering claim below is: `Lit.lean`'s unifier is partial. That a
+  instance (`InstEnv`) is assumed and tested, not yet proved of the real
+  inference, which is total now and so open to it. That a
   signature names only its own type parameters (`SigsOk`) holds of what
   `resolveNames` builds, but is not proved of it. Recursive type arguments
   are left out, until T065 says whether a recursive key is allowed.

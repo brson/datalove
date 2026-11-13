@@ -33,16 +33,17 @@ cannot be typed reports one code and stops (`throw`); a few rules report and
 go on (`report`), as a call goes on to its next argument. A failed `let` with
 a hint binds its name at the hint's type; one without binds nothing.
 
-Inference is `partial`, being `Lit`'s. Checking and synthesis are total:
-they take inference as a parameter (`InferEnv`) and run on fuel, which a
-check that runs out of fails. So `Proofs/EarlyReturn.lean` and
+Inference runs on fuel, as `Lit`'s does, and so do checking and synthesis,
+which a check that runs out of fails. Checking takes inference as a
+parameter (`InferEnv`), so that what is proved of it holds whatever
+inference answers. So `Proofs/EarlyReturn.lean` and
 `Proofs/Completes.lean` can reason about them, and with inference given they
 are the oracle for `crates/datalove-formal-tests/tests/fun_tests.rs`.
 -/
 
 namespace Datalove.Fun
 
-open Datalove.Lit (PTy InferM fresh prune unify resolve Code unknownCode intRange hexBits
+open Datalove.Lit (PTy InferM fresh prune unify resolve Code unknownCode intRange hexBits inferFuel
   tysList fieldsList)
 
 inductive BinOp where
@@ -585,96 +586,107 @@ mutual
 
 /-- `⊢ e ⇝ τ`: datalit's rules for the literal forms, and the doc's table for
 datafun's. Nothing here fails: what cannot be read is `unknown`. -/
-partial def infer (Γ : Ctx) : Expr → InferM PTy
-  | .hinted h _ => match Γ.hint h with
-    | .ok t => pure (.known t)
-    | .error _ => fresh .unknown
-  | .tt | .ff => pure (.known .bool)
-  | .str => pure (.known .string)
-  | .int _ => fresh .int
-  | .hex _ => fresh .hex
-  | .float => fresh .float
-  | .tuple es => .tuple <$> es.mapM (infer Γ)
-  | .struct fs => .struct <$> fs.mapM fun (n, e) => do pure (n, ← infer Γ e)
-  | .list es => .list <$> together Γ es
-  | .set es => .set <$> together Γ es
-  | .tensor shape es => (.tensor · shape.length) <$> together Γ es
-  | .map es => do
-    let k ← together Γ (es.map (·.1))
-    let v ← together Γ (es.map (·.2))
-    pure (.map k v)
-  | .table header rows => do
-    let cols ← (List.range header.length).mapM fun i =>
-      together Γ (rows.filterMap (·[i]?))
-    pure (.table (header.zip cols))
-  | .some_ e => .option <$> infer Γ e
-  | .ok e => .result <$> infer Γ e
-  | .none_ => .option <$> fresh .open_
-  | .er _ => .result <$> fresh .open_
-  | .data _ => pure (.known .data)
-  | .error _ => pure (.known .error)
-  | .atom a => fresh (.variant a Option.none)
-  | .term a e => do fresh (.variant a (Option.some (← infer Γ e)))
-  | .enum _ => fresh .open_
-  | .var x => match Γ.lookup x with
-    | Option.some (t, _) => pure (.known t)
-    | Option.none => fresh .unknown
-  | .binop op a b => do
-    let ta ← infer Γ a
-    let tb ← infer Γ b
-    unify ta tb
-    if yieldsOperand op then pure ta else pure (.known .bool)
-  | .unop .not _ => pure (.known .bool)
-  | .unop _ a => infer Γ a
-  | .index b _ (Option.some _) => do elementOf (← infer Γ b)
-  | .index _ _ Option.none => fresh .unknown
-  | .place x steps => match Γ.lookup x with
-    | Option.none => fresh .unknown
-    | Option.some (t, _) =>
-      steps.foldlM (init := .known t) fun t st => match st with
-        | .field s => inferField t s
-        | .index _ _ => elementOf t
-  | .proj b s => do inferField (← infer Γ b) s
-  | .tryOpt a => do
-    match ← shallow (← infer Γ a) with
-    | .option p => pure p
-    | _ => fresh .unknown
-  | .tryRes a => do
-    match ← shallow (← infer Γ a) with
-    | .result p => pure p
-    | _ => fresh .unknown
-  | .adapt a => do
-    let t ← infer Γ a
-    -- With nothing to say what it converts to, `@` keeps its operand's type.
-    let s ← get
-    match (resolve t).run s with
-    | .ok (from_, s') => set s'; fresh (.adapt from_)
-    | .error _ => pure t
-  | .call f args => match Γ.sigs.lookup f with
-    | Option.some sig => (·.1) <$> inferCall Γ sig args
-    | Option.none => fresh .unknown
+def inferF : Nat → Ctx → Expr → InferM PTy
+  | 0, _, _ => throw "fuel"
+  | n + 1, Γ, e => match e with
+    | .hinted h _ => match Γ.hint h with
+      | .ok t => pure (.known t)
+      | .error _ => fresh .unknown
+    | .tt | .ff => pure (.known .bool)
+    | .str => pure (.known .string)
+    | .int _ => fresh .int
+    | .hex _ => fresh .hex
+    | .float => fresh .float
+    | .tuple es => .tuple <$> es.mapM (inferF n Γ)
+    | .struct fs => .struct <$> fs.mapM fun (k, e) => do pure (k, ← inferF n Γ e)
+    | .list es => .list <$> togetherF n Γ es
+    | .set es => .set <$> togetherF n Γ es
+    | .tensor shape es => (.tensor · shape.length) <$> togetherF n Γ es
+    | .map es => do
+      let k ← togetherF n Γ (es.map (·.1))
+      let v ← togetherF n Γ (es.map (·.2))
+      pure (.map k v)
+    | .table header rows => do
+      let cols ← (List.range header.length).mapM fun i =>
+        togetherF n Γ (rows.filterMap (·[i]?))
+      pure (.table (header.zip cols))
+    | .some_ e => .option <$> inferF n Γ e
+    | .ok e => .result <$> inferF n Γ e
+    | .none_ => .option <$> fresh .open_
+    | .er _ => .result <$> fresh .open_
+    | .data _ => pure (.known .data)
+    | .error _ => pure (.known .error)
+    | .atom a => fresh (.variant a Option.none)
+    | .term a e => do fresh (.variant a (Option.some (← inferF n Γ e)))
+    | .enum _ => fresh .open_
+    | .var x => match Γ.lookup x with
+      | Option.some (t, _) => pure (.known t)
+      | Option.none => fresh .unknown
+    | .binop op a b => do
+      let ta ← inferF n Γ a
+      let tb ← inferF n Γ b
+      unify ta tb
+      if yieldsOperand op then pure ta else pure (.known .bool)
+    | .unop .not _ => pure (.known .bool)
+    | .unop _ a => inferF n Γ a
+    | .index b _ (Option.some _) => do elementOf (← inferF n Γ b)
+    | .index _ _ Option.none => fresh .unknown
+    | .place x steps => match Γ.lookup x with
+      | Option.none => fresh .unknown
+      | Option.some (t, _) =>
+        steps.foldlM (init := .known t) fun t st => match st with
+          | .field s => inferField t s
+          | .index _ _ => elementOf t
+    | .proj b s => do inferField (← inferF n Γ b) s
+    | .tryOpt a => do
+      match ← shallow (← inferF n Γ a) with
+      | .option p => pure p
+      | _ => fresh .unknown
+    | .tryRes a => do
+      match ← shallow (← inferF n Γ a) with
+      | .result p => pure p
+      | _ => fresh .unknown
+    | .adapt a => do
+      let t ← inferF n Γ a
+      -- With nothing to say what it converts to, `@` keeps its operand's type.
+      let s ← get
+      match (resolve t).run s with
+      | .ok (from_, s') => set s'; fresh (.adapt from_)
+      | .error _ => pure t
+    | .call f args => match Γ.sigs.lookup f with
+      | Option.some sig => (·.1) <$> inferCallF n Γ sig args
+      | Option.none => fresh .unknown
 
 /-- A call's type, as `infer_call`: each type parameter a variable of the
 `unknown` class, unified with what each argument in its positions is; and
 the variables. -/
-partial def inferCall (Γ : Ctx) (sig : Sig) (args : List (Option Mode × Expr)) :
-    InferM (PTy × List (String × PTy)) := do
-  let ps ← sig.tparams.mapM fun (p, _) => do pure (p, ← fresh .unknown)
-  for ((_, a), (_, pt)) in args.zip sig.params do
-    let ta ← infer Γ a
-    unify (instantiate ps pt) ta
-  let r := match sig.ret with
-    | .ty r => instantiate ps r
-    | .void => .known unitTy
-  pure (r, ps)
+def inferCallF : Nat → Ctx → Sig → List (Option Mode × Expr) →
+    InferM (PTy × List (String × PTy))
+  | 0, _, _, _ => throw "fuel"
+  | n + 1, Γ, sig, args => do
+    let ps ← sig.tparams.mapM fun (p, _) => do pure (p, ← fresh .unknown)
+    for ((_, a), (_, pt)) in args.zip sig.params do
+      let ta ← inferF n Γ a
+      unify (instantiate ps pt) ta
+    let r := match sig.ret with
+      | .ty r => instantiate ps r
+      | .void => .known unitTy
+    pure (r, ps)
 
 /-- Expressions that must share a type, and that type. -/
-partial def together (Γ : Ctx) (es : List Expr) : InferM PTy := do
-  let t ← sharedVar es.isEmpty
-  for e in es do unify t (← infer Γ e)
-  pure t
+def togetherF : Nat → Ctx → List Expr → InferM PTy
+  | 0, _, _ => throw "fuel"
+  | n + 1, Γ, es => do
+    let t ← sharedVar es.isEmpty
+    for e in es do unify t (← inferF n Γ e)
+    pure t
 
 end
+
+def infer (Γ : Ctx) (e : Expr) : InferM PTy := inferF inferFuel Γ e
+
+def inferCall (Γ : Ctx) (sig : Sig) (args : List (Option Mode × Expr)) :
+    InferM (PTy × List (String × PTy)) := inferCallF inferFuel Γ sig args
 
 /-! ## Checking and synthesis -/
 

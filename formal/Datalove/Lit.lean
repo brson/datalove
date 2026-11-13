@@ -15,10 +15,12 @@ The Rust (`crates/datalove-datalit/src/tycheck/`) is held to this by
 `crates/datalove-formal-tests/tests/lit_tests.rs`, so a disagreement is a
 place where the code and the doc differ.
 
-Inference, unification and synthesis are `partial`: unification has no
-structural measure to recurse on. Checking is total (`checkWith`), taking
-synthesis and Check-Subsume as parameters, and `Proofs/LitSound.lean` proves
-it sound: a literal that checks is a value of its type.
+Inference, unification and synthesis run on fuel (`inferFuel`), since
+unification has no structural measure to recurse on: every call spends one,
+and running out is an error, never an answer. So they are total, and can be
+reasoned about. Checking is structural (`checkWith`), taking synthesis and
+Check-Subsume as parameters, and `Proofs/LitSound.lean` proves it sound: a
+literal that checks is a value of its type.
 -/
 
 namespace Datalove.Lit
@@ -111,10 +113,20 @@ def fresh (c : Class) : InferM PTy := do
   set (s.push (.free c))
   pure (.var s.size)
 
-partial def find (v : Nat) : InferM Nat := do
-  match (← get)[v]! with
-  | .link w => find w
-  | _ => pure v
+/-- How deep inference may recurse before it gives up. Inference is total so
+that it can be reasoned about, and runs on fuel as checking does: every call
+spends one, and running out is an error, never an answer. -/
+def inferFuel : Nat := 1000000
+
+/-- The root of a variable's class, following links. -/
+def findF : Nat → Nat → InferM Nat
+  | 0, _ => throw "fuel"
+  | n + 1, v => do
+    match (← get)[v]! with
+    | .link w => findF n w
+    | _ => pure v
+
+def find (v : Nat) : InferM Nat := findF inferFuel v
 
 /-- A type with a variable at the top replaced by what it is bound to. -/
 def prune (t : PTy) : InferM PTy := do
@@ -132,11 +144,10 @@ def Ty.isUnsigned : Ty → Bool
   | .u8 | .u16 | .u32 | .u64 | .index => true
   | _ => false
 
-/-- Whether a class admits a type, by the type's head (the doc's table). A
-literal's class admits a recursive type when it admits the unfolding. -/
-partial def Class.admits : Class → PTy → Bool
+/-- Whether a class admits a type by its head, a recursive type's taken as
+it is. -/
+def Class.admitsHead : Class → PTy → Bool
   | .open_, _ | .unknown, _ => true
-  | c, .known t@(.mu _) => c.admits (.known t.expose)
   | .int, .known t => t.isFixedInt || t == .int
   | .hex, .known t => Ty.isUnsigned t || t == .int || t.isFloat
   | .float, .known t => t.isFloat
@@ -151,6 +162,12 @@ partial def Class.admits : Class → PTy → Bool
   -- A type with parts undecided: what they must be is worked out on binding.
   | .adapt _, _ => true
   | _, _ => false
+
+/-- Whether a class admits a type, by the type's head (the doc's table). A
+literal's class admits a recursive type when it admits the unfolding. -/
+def Class.admits (c : Class) : PTy → Bool
+  | .known t@(.mu _) => c.admitsHead (.known t.expose)
+  | p => c.admitsHead p
 
 /-- Two classes made one, and payloads to unify then, or `none` if no type is
 of both (the doc's table of merges). -/
@@ -204,90 +221,100 @@ def termPayloadP (a : String) (vs : Variants) : Option PTy :=
 
 /-! ## Unification -/
 
+def rootOf : PTy → InferM (Option Nat)
+  | .var v => some <$> find v
+  | _ => pure none
+
 mutual
 
 /-- `τ ≐ τ'`. A constraint that cannot hold leaves both sides as they are:
 the check after inference reports it. -/
-partial def unify (a b : PTy) : InferM Unit := do
-  let aRoot ← rootOf a
-  let bRoot ← rootOf b
-  let a' ← prune a
-  let b' ← prune b
-  match a', b' with
-  | .var x, .var y => union x y
-  | .var x, t => bind x t
-  | t, .var y => bind y t
-  | .known _, .known _ => pure ()
-  -- A variable holding a literal's parts, unified with a recursive type,
-  -- takes the type, and the parts go along with the unfolding.
-  | .known r@(.mu _), other =>
-    if let some h := bRoot then modify (·.set! h (.bound (.known r)))
-    if let some e := expand r.unfold then unifyParts e other
-  | other, .known r@(.mu _) =>
-    if let some h := aRoot then modify (·.set! h (.bound (.known r)))
-    if let some e := expand r.unfold then unifyParts e other
-  | .known k, other | other, .known k =>
-    if let some e := expand k then unifyParts e other
-  | x, y => unifyParts x y
-
-partial def rootOf : PTy → InferM (Option Nat)
-  | .var v => some <$> find v
-  | _ => pure none
+def unifyF : Nat → PTy → PTy → InferM Unit
+  | 0, _, _ => throw "fuel"
+  | n + 1, a, b => do
+    let aRoot ← rootOf a
+    let bRoot ← rootOf b
+    let a' ← prune a
+    let b' ← prune b
+    match a', b' with
+    | .var x, .var y => unionF n x y
+    | .var x, t => bindF n x t
+    | t, .var y => bindF n y t
+    | .known _, .known _ => pure ()
+    -- A variable holding a literal's parts, unified with a recursive type,
+    -- takes the type, and the parts go along with the unfolding.
+    | .known r@(.mu _), other =>
+      if let some h := bRoot then modify (·.set! h (.bound (.known r)))
+      if let some e := expand r.unfold then unifyPartsF n e other
+    | other, .known r@(.mu _) =>
+      if let some h := aRoot then modify (·.set! h (.bound (.known r)))
+      if let some e := expand r.unfold then unifyPartsF n e other
+    | .known k, other | other, .known k =>
+      if let some e := expand k then unifyPartsF n e other
+    | x, y => unifyPartsF n x y
 
 /-- Two types with no variable at the top, part by part. An enum's variants
 are matched by name, as the doc says. -/
-partial def unifyParts : PTy → PTy → InferM Unit
-  | .tuple xs, .tuple ys => (xs.zip ys).forM fun (x, y) => unify x y
-  | .struct xs, .struct ys | .table xs, .table ys =>
-    (xs.zip ys).forM fun ((xn, x), (yn, y)) => if xn == yn then unify x y else pure ()
-  | .list x, .list y | .set x, .set y | .option x, .option y | .result x, .result y => unify x y
-  | .tensor x xr, .tensor y yr => if xr == yr then unify x y else pure ()
-  | .map xk xv, .map yk yv => do unify xk yk; unify xv yv
-  | .term xn x, .term yn y => if xn == yn then unify x y else pure ()
-  | .enum xs, .enum ys =>
-    xs.forM fun (n, x) =>
-      match x, (ys.lookup n).join with
-      | some x, some y => unify x y
+def unifyPartsF : Nat → PTy → PTy → InferM Unit
+  | 0, _, _ => throw "fuel"
+  | n + 1, .tuple xs, .tuple ys => (xs.zip ys).forM fun (x, y) => unifyF n x y
+  | n + 1, .struct xs, .struct ys | n + 1, .table xs, .table ys =>
+    (xs.zip ys).forM fun ((xn, x), (yn, y)) => if xn == yn then unifyF n x y else pure ()
+  | n + 1, .list x, .list y | n + 1, .set x, .set y | n + 1, .option x, .option y
+  | n + 1, .result x, .result y => unifyF n x y
+  | n + 1, .tensor x xr, .tensor y yr => if xr == yr then unifyF n x y else pure ()
+  | n + 1, .map xk xv, .map yk yv => do unifyF n xk yk; unifyF n xv yv
+  | n + 1, .term xn x, .term yn y => if xn == yn then unifyF n x y else pure ()
+  | n + 1, .enum xs, .enum ys =>
+    xs.forM fun (k, x) =>
+      match x, (ys.lookup k).join with
+      | some x, some y => unifyF n x y
       | _, _ => pure ()
-  | _, _ => pure ()
+  | _ + 1, _, _ => pure ()
 
-partial def union (x y : Nat) : InferM Unit := do
-  if x == y then return
-  let s ← get
-  let .free cx := s[x]! | panic! "a pruned variable is free"
-  let .free cy := s[y]! | panic! "a pruned variable is free"
-  match mergeClasses cx cy with
-  | none => pure ()
-  | some (c, payloads) =>
-    modify fun s => (s.set! y (.link x)).set! x (.free c)
-    if let some (p, q) := payloads then unify p q
+def unionF : Nat → Nat → Nat → InferM Unit
+  | 0, _, _ => throw "fuel"
+  | n + 1, x, y => do
+    if x == y then return
+    let s ← get
+    let .free cx := s[x]! | panic! "a pruned variable is free"
+    let .free cy := s[y]! | panic! "a pruned variable is free"
+    match mergeClasses cx cy with
+    | none => pure ()
+    | some (c, payloads) =>
+      modify fun s => (s.set! y (.link x)).set! x (.free c)
+      if let some (p, q) := payloads then unifyF n p q
 
 /-- A variable binds to a type only if its class admits it. Binding a term
 literal's variable to a type that gives the term a payload unifies the two
 payloads. -/
-partial def bind (v : Nat) (t : PTy) : InferM Unit := do
-  let .free c := (← get)[v]! | panic! "a pruned variable is free"
-  if !c.admits t then return
-  modify (·.set! v (.bound t))
-  if let .variant a (some p) := c then
-    let given : Option PTy := match t with
-      | .term b q => if a == b then some q else none
-      | .known (.term b q) => if a == b then some (.known q) else none
-      | .known (.enum vs) => termPayloadP a vs
-      | .enum vs => (vs.lookup a).join
-      | _ => none
-    if let some q := given then unify p q
-  -- `@` converts between types with parts only by cloning, but for an atom
-  -- or term becoming an enum, so a value adapted to a type with undecided
-  -- parts has those parts.
-  if let .adapt f := c then
-    match f, t with
-    | _, .known _ => pure ()
-    | .atom _, .enum _ => pure ()
-    | .term a q, .enum vs => if let some p := (vs.lookup a).join then unify (.known q) p
-    | _, t => unify (.known f) t
+def bindF : Nat → Nat → PTy → InferM Unit
+  | 0, _, _ => throw "fuel"
+  | n + 1, v, t => do
+    let .free c := (← get)[v]! | panic! "a pruned variable is free"
+    if !c.admits t then return
+    modify (·.set! v (.bound t))
+    if let .variant a (some p) := c then
+      let given : Option PTy := match t with
+        | .term b q => if a == b then some q else none
+        | .known (.term b q) => if a == b then some (.known q) else none
+        | .known (.enum vs) => termPayloadP a vs
+        | .enum vs => (vs.lookup a).join
+        | _ => none
+      if let some q := given then unifyF n p q
+    -- `@` converts between types with parts only by cloning, but for an atom
+    -- or term becoming an enum, so a value adapted to a type with undecided
+    -- parts has those parts.
+    if let .adapt f := c then
+      match f, t with
+      | _, .known _ => pure ()
+      | .atom _, .enum _ => pure ()
+      | .term a q, .enum vs => if let some p := (vs.lookup a).join then unifyF n (.known q) p
+      | _, t => unifyF n (.known f) t
 
 end
+
+def unify (a b : PTy) : InferM Unit := unifyF inferFuel a b
 
 /-! ## Defaults -/
 
@@ -297,41 +324,45 @@ def unknownCode : Code := "unknown"
 
 /-- The type a variable-holding type comes to, each undecided variable taking
 its class's default. A variable with none is T016. -/
-partial def resolve (t : PTy) : InferM Ty := do
-  match ← prune t with
-  | .known k => pure k
-  | .var v =>
-    match (← get)[v]! with
-    | .free .int | .free .hex => pure .int
-    | .free .float => pure .f64
-    | .free (.variant a none) => pure (.atom a)
-    | .free (.variant a (some p)) => .term a <$> resolve p
-    | .free (.adapt f) => pure f
-    | .free .open_ => throw "T016"
-    | .free .unknown => throw unknownCode
-    | _ => panic! "a pruned variable is free"
-  -- Parts in order, so that the first undecided is the one thrown.
-  | .tuple ts => do
-    let rs ← ts.mapM resolve
-    pure (.tuple (rs.foldr .cons .nil))
-  | .struct fs => .struct <$> resolveFields fs
-  | .table fs => .table <$> resolveFields fs
-  | .list t => .list <$> resolve t
-  | .set t => .set <$> resolve t
-  | .map k v => .map <$> resolve k <*> resolve v
-  | .option t => .option <$> resolve t
-  | .result t => .result <$> resolve t
-  | .tensor t r => (.tensor · r) <$> resolve t
-  | .term a t => .term a <$> resolve t
-  | .enum vs => do
-    let rs ← vs.mapM fun (n, p) => do pure (n, ← p.mapM resolve)
-    pure (.enum (rs.foldr (fun (n, p) out => match p with
-      | none => .atom n out
-      | some t => .term n t out) .nil))
+def resolveF : Nat → PTy → InferM Ty
+  | 0, _ => throw "fuel"
+  | n + 1, t => do
+    match ← prune t with
+    | .known k => pure k
+    | .var v =>
+      match (← get)[v]! with
+      | .free .int | .free .hex => pure .int
+      | .free .float => pure .f64
+      | .free (.variant a none) => pure (.atom a)
+      | .free (.variant a (some p)) => .term a <$> resolveF n p
+      | .free (.adapt f) => pure f
+      | .free .open_ => throw "T016"
+      | .free .unknown => throw unknownCode
+      | _ => panic! "a pruned variable is free"
+    -- Parts in order, so that the first undecided is the one thrown.
+    | .tuple ts => do
+      let rs ← ts.mapM (resolveF n)
+      pure (.tuple (rs.foldr .cons .nil))
+    | .struct fs => .struct <$> fields n fs
+    | .table fs => .table <$> fields n fs
+    | .list t => .list <$> resolveF n t
+    | .set t => .set <$> resolveF n t
+    | .map k v => .map <$> resolveF n k <*> resolveF n v
+    | .option t => .option <$> resolveF n t
+    | .result t => .result <$> resolveF n t
+    | .tensor t r => (.tensor · r) <$> resolveF n t
+    | .term a t => .term a <$> resolveF n t
+    | .enum vs => do
+      let rs ← vs.mapM fun (k, p) => do pure (k, ← p.mapM (resolveF n))
+      pure (.enum (rs.foldr (fun (k, p) out => match p with
+        | none => .atom k out
+        | some t => .term k t out) .nil))
 where
-  resolveFields (fs : List (String × PTy)) : InferM Fields := do
-    let rs ← fs.mapM fun (n, t) => do pure (n, ← resolve t)
-    pure (rs.foldr (fun (n, t) out => .cons n t out) .nil)
+  fields (n : Nat) (fs : List (String × PTy)) : InferM Fields := do
+    let rs ← fs.mapM fun (k, t) => do pure (k, ← resolveF n t)
+    pure (rs.foldr (fun (k, t) out => .cons k t out) .nil)
+
+def resolve (t : PTy) : InferM Ty := resolveF inferFuel t
 
 /-! ## Hints -/
 
@@ -350,49 +381,60 @@ def convertHint (h : Hint) : Except Code Ty :=
 
 /-! ## Inference -/
 
+def liftM {α} (x : Except Code α) : InferM α := StateT.lift x
+
+mutual
+
 /-- `⊢ e ⇝ τ`, the Inf- rules. Inference reports nothing but malformed
 hints. -/
-partial def infer : Expr → InferM PTy
-  | .hinted h _ => do pure (.known (← liftM (convertHint h)))
-  | .tt | .ff => pure (.known .bool)
-  | .str => pure (.known .string)
-  | .int _ => fresh .int
-  | .hex _ => fresh .hex
-  | .float => fresh .float
-  | .tuple es => .tuple <$> es.mapM infer
-  | .struct fs => .struct <$> fs.mapM fun (n, e) => do pure (n, ← infer e)
-  | .list es => .list <$> together es
-  | .set es => .set <$> together es
-  | .tensor shape es => (.tensor · shape.length) <$> together es
-  | .map es => do
-    let k ← fresh .open_
-    let v ← fresh .open_
-    for (ke, ve) in es do
-      unify k (← infer ke)
-      unify v (← infer ve)
-    pure (.map k v)
-  | .table header rows => do
-    let cols ← header.mapM fun _ => fresh .open_
-    for row in rows do
-      for (e, col) in row.zip cols do
-        unify col (← infer e)
-    pure (.table (header.zip cols))
-  | .some e => .option <$> infer e
-  | .ok e => .result <$> infer e
-  | .none => .option <$> fresh .open_
-  | .er _ => .result <$> fresh .open_
-  | .data _ => pure (.known .data)
-  | .error _ => pure (.known .error)
-  | .atom a => fresh (.variant a none)
-  | .term a e => do fresh (.variant a (some (← infer e)))
-  | .enum _ => fresh .open_
-  | .group e => infer e
-where
-  liftM {α} (x : Except Code α) : InferM α := StateT.lift x
-  together (es : List Expr) : InferM PTy := do
+def inferF : Nat → Expr → InferM PTy
+  | 0, _ => throw "fuel"
+  | n + 1, e => match e with
+    | .hinted h _ => do pure (.known (← liftM (convertHint h)))
+    | .tt | .ff => pure (.known .bool)
+    | .str => pure (.known .string)
+    | .int _ => fresh .int
+    | .hex _ => fresh .hex
+    | .float => fresh .float
+    | .tuple es => .tuple <$> es.mapM (inferF n)
+    | .struct fs => .struct <$> fs.mapM fun (k, e) => do pure (k, ← inferF n e)
+    | .list es => .list <$> togetherF n es
+    | .set es => .set <$> togetherF n es
+    | .tensor shape es => (.tensor · shape.length) <$> togetherF n es
+    | .map es => do
+      let k ← fresh .open_
+      let v ← fresh .open_
+      for (ke, ve) in es do
+        unify k (← inferF n ke)
+        unify v (← inferF n ve)
+      pure (.map k v)
+    | .table header rows => do
+      let cols ← header.mapM fun _ => fresh .open_
+      for row in rows do
+        for (e, col) in row.zip cols do
+          unify col (← inferF n e)
+      pure (.table (header.zip cols))
+    | .some e => .option <$> inferF n e
+    | .ok e => .result <$> inferF n e
+    | .none => .option <$> fresh .open_
+    | .er _ => .result <$> fresh .open_
+    | .data _ => pure (.known .data)
+    | .error _ => pure (.known .error)
+    | .atom a => fresh (.variant a none)
+    | .term a e => do fresh (.variant a (some (← inferF n e)))
+    | .enum _ => fresh .open_
+    | .group e => inferF n e
+
+def togetherF : Nat → List Expr → InferM PTy
+  | 0, _ => throw "fuel"
+  | n + 1, es => do
     let t ← fresh .open_
-    for e in es do unify t (← infer e)
+    for e in es do unify t (← inferF n e)
     pure t
+
+end
+
+def infer (e : Expr) : InferM PTy := inferF inferFuel e
 
 /-! ## Checking -/
 
@@ -582,32 +624,33 @@ def checkRows (env : CheckEnv) : List (List Expr) → List (String × Ty) → Ex
 
 end
 
-mutual
-
 /-- Check-Subsume reached by a form with no rule for the head: it synthesizes
 a type of another head, so it fails (T032), unless inferring what it would
 be finds a malformed hint first. -/
-partial def subsume (e : Expr) : Except Code Unit := do
+def subsume (e : Expr) : Except Code Unit := do
   let _ ← (infer e).run #[]
   throw "T032"
 
 /-- `⊢ e ⇒ T`: a hint is the type (Syn-TypedExpr); otherwise infer, default,
-and check against the result (Syn-Infer). -/
-partial def synthesize (e : Expr) : Except Code Ty := do
-  match e with
-  | .hinted h _ =>
-    let t ← convertHint h
-    check e t
-    pure t
-  | e =>
-    let (t, _) ← (do let p ← infer e; resolve p).run #[]
-    check e t
-    pure t
+and check against the result (Syn-Infer), synthesizing what checking asks
+for on less fuel. -/
+def synthesizeF : Nat → Expr → Except Code Ty
+  | 0, _ => throw "fuel"
+  | n + 1, e => do
+    match e with
+    | .hinted h _ =>
+      let t ← convertHint h
+      checkWith ⟨synthesizeF n, subsume⟩ e t
+      pure t
+    | e =>
+      let (t, _) ← (do let p ← infer e; resolve p).run #[]
+      checkWith ⟨synthesizeF n, subsume⟩ e t
+      pure t
+
+def synthesize (e : Expr) : Except Code Ty := synthesizeF inferFuel e
 
 /-- `⊢ e ⇐ T`, with synthesis and Check-Subsume as they are. -/
-partial def check (e : Expr) (expected : Ty) : Except Code Unit :=
+def check (e : Expr) (expected : Ty) : Except Code Unit :=
   checkWith ⟨synthesize, subsume⟩ e expected
-
-end
 
 end Datalove.Lit
