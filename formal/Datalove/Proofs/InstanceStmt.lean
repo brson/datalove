@@ -833,13 +833,25 @@ macro "app_cont" e:term:max n:term:max : tactic => `(tactic| (intro _; repeat' (
   | with_reducible exact checkCases_appends $e $n _ _ _ _
   | stmt_step)))
 
-theorem markConst_map (x : String) {θ : List (String × Ty)} : ∀ (vs : List (String × Ty × Kind)),
-    markConst x (vs.map fun (y, t, k) => (y, t.inst θ, k)) =
-      (markConst x vs).map fun (y, t, k) => (y, t.inst θ, k)
-  | [] => rfl
-  | (y, t, k) :: vs => by
-    simp only [List.map, markConst]
-    split <;> simp [markConst_map x vs]
+/-- F088 cannot fire under an instance where it did not under the generic:
+the instance binds as many names, at types with no type parameter but the
+generic's. -/
+theorem constGeneric_inst {θ : List (String × Ty)} {Γ Δ : Ctx} {x : String}
+    (h : constGeneric Γ Δ x = false) : constGeneric (Γ.inst θ) (Δ.inst θ) x = false := by
+  unfold constGeneric at h ⊢
+  rw [Ctx.lookup_inst]
+  have hlen : ∀ (Ε : Ctx), (Ε.inst θ).vars.length = Ε.vars.length := fun Ε => by simp [Ctx.inst]
+  rw [hlen, hlen]
+  revert h
+  cases Δ.lookup x with
+  | none => intro _; simp
+  | some p =>
+    obtain ⟨t, k⟩ := p
+    intro h
+    simp only [Option.map_some, Bool.and_eq_false_iff] at h ⊢
+    rcases h with h | h
+    · exact .inl h
+    · exact .inr (by rw [Ty.inst_novar θ t h]; exact h)
 
 /-- An enum's variants with type arguments substituted into their payloads. -/
 def instVs (θ : List (String × Ty)) (vs : List (String × Option Ty)) : List (String × Option Ty) :=
@@ -936,26 +948,8 @@ theorem checkStmtF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat
       obtain ⟨hb', hbd, hsg⟩ := bindChecked_inst g H (Γ := { Γ with constExpr := true }) hb r sg
       rw [SQuiet.reportIf_iff] at h88
       refine ⟨SQuiet.bind hb' ?_, hbd, hsg⟩
-      have hvars : markConst x (Γ1.inst θ).vars = (markConst x Γ1.vars).map fun (y, t, k) => (y, t.inst θ, k) :=
-        markConst_map x Γ1.vars
-      refine SQuiet.bind (a := ()) (SQuiet.reportIf_iff.mpr ?_) ?_
-      · rw [hvars]
-        show (match (Ctx.inst θ { Γ1 with constExpr := false, vars := markConst x Γ1.vars }).lookup x with
-          | some (t, _) => t.containsVar
-          | none => false) = false
-        rw [Ctx.lookup_inst]
-        revert h88
-        cases Ctx.lookup { Γ1 with constExpr := false, vars := markConst x Γ1.vars } x with
-        | none => intro _; rfl
-        | some p =>
-          obtain ⟨t, k⟩ := p
-          intro h88
-          simp only [Option.map_some] at h88 ⊢
-          rw [Ty.inst_novar θ t h88]; exact h88
-      · show SQuiet (Pure.pure _) _
-        rw [SQuiet.pure_iff]
-        simp only [Ctx.inst] at hvars ⊢
-        rw [hvars]
+      refine SQuiet.bind (a := ()) (SQuiet.reportIf_iff.mpr ?_) (SQuiet.pure _)
+      exact constGeneric_inst h88
     case loop c body =>
       simp only [Stmt.typeFree] at tf
       cases c with

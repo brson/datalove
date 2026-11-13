@@ -1,0 +1,12 @@
+// A const whose value does not check, and that has no type, binds nothing,
+// and what its name meant before stays as it was: the `let` above is not made
+// a const by it, so it is no argument to a const parameter (F076).
+
+let m = 1
+const m = zz
+
+fun h(const v: int): int
+  ret v
+end fun
+
+debuglog h(m)

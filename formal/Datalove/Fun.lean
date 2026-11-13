@@ -266,11 +266,6 @@ def Ctx.lookup (Γ : Ctx) (x : String) : Option (Ty × Kind) :=
 def Ctx.bind (Γ : Ctx) (x : String) (t : Ty) (k : Kind) : Ctx :=
   { Γ with vars := (x, t, k) :: Γ.vars }
 
-/-- What `x` names, a const: as `add_const_binding`, which marks whatever
-binding the name has, an outer one when the const's own failed. -/
-def markConst (x : String) : List (String × Ty × Kind) → List (String × Ty × Kind)
-  | [] => []
-  | (y, t, k) :: vs => if y == x then (y, t, .const_) :: vs else (y, t, k) :: markConst x vs
 
 /-- A name a const initializer may not name: bound, but not a const (F058). -/
 def Ctx.nonConst (Γ : Ctx) (k : Kind) : Bool := Γ.constExpr && k != .const_
@@ -1426,6 +1421,15 @@ def forBindings (env : InferEnv) (n : Nat) (Γ : Ctx) (names : List String) (col
 def Ctx.bindAll (Γ : Ctx) (Δ : List (String × Ty)) : Ctx :=
   Δ.foldl (fun Γ (x, t) => Γ.bind x t .let_) Γ
 
+/-- Whether a const statement bound `x`, under `Γ` it gave `Γ'`, at a type
+mentioning a type parameter (F088). It bound it when there is a binding
+more than there was; one that bound nothing is asked nothing of. -/
+def constGeneric (Γ Γ' : Ctx) (x : String) : Bool :=
+  Γ'.vars.length != Γ.vars.length &&
+    match Γ'.lookup x with
+    | Option.some (t, _) => t.containsVar
+    | Option.none => false
+
 /-- Report `c` when `cond`. -/
 def reportIf (cond : Bool) (c : Code) : StateM (Array Code) Unit :=
   if cond then modify (·.push c) else pure ()
@@ -1586,14 +1590,12 @@ def checkStmtF (env : InferEnv) : Nat → Ctx → Stmt → StateM (Array Code) C
       | Option.none => pure ()) >>= fun _ =>
       pure Γ
     -- A const: its initializer may name only consts, and it is checked and
-    -- bound as a `let` is; then whatever binding the name has is a const, and
-    -- one whose type mentions a type parameter is F088.
+    -- bound as a `let` is, as a const. One that binds nothing touches no other
+    -- binding; one that binds a type mentioning a type parameter is F088.
     | .const_ x hint e =>
       bindChecked env n { Γ with constExpr := true } (.name x) hint e .const_ >>= fun Γ' =>
-      let Γ'' : Ctx := { Γ' with constExpr := false, vars := markConst x Γ'.vars }
-      reportIf (match Γ''.lookup x with
-        | Option.some (t, _) => t.containsVar
-        | Option.none => false) "F088" >>= fun _ =>
+      let Γ'' : Ctx := { Γ' with constExpr := false }
+      reportIf (constGeneric Γ Γ'' x) "F088" >>= fun _ =>
       pure Γ''
     -- Reported when the script's names were resolved (`checkScript`); here
     -- the alias only comes into scope.

@@ -369,10 +369,12 @@ What it found:
   admit, and the Rust and the model reported nothing on any of them.
 - **Consts agreed on the first run**, but for the model's own `set`, which
   refused only a `let`, where the Rust refuses anything that is not a `var`,
-  a const among them. The Rust's way with a const whose initializer fails
-  is followed rather than corrected: it marks whatever binding the name has
-  as a const, an outer `let` of the name if there is one, so that binding
-  may then be passed to a const parameter. F089, a const that depends on
+  a const among them. Writing it down found the Rust marking whatever
+  binding a failed const's name had as a const: an outer `let` of the name
+  became one, could then be passed to a const parameter, and was asked
+  about type parameters for F088. A const that binds nothing now touches no
+  other binding (error fixture `130_failed_const_leaves_the_name_alone`).
+  F089, a const that depends on
   itself through a function, cannot arise in a script, where a function
   sees only the consts above it; it is a module's.
 - **Checking a negation against a float did not borrow its operand.**

@@ -20,13 +20,16 @@ pub use crate::{Type, TypeError};
 ///
 /// If type hint is provided, checks value against it.
 /// Otherwise, synthesizes type from value.
+///
+/// Returns whether the binding was made: it is not when the hint does not
+/// convert, or when there is none and the value does not synthesize.
 fn check_variable_decl<'db>(
     ctx: &mut TypeContext<'db>,
     binding: &Binding<'db>,
     value: ExprFun<'db>,
     type_hint: Option<datalit::ast::TypeHint<'db>>,
     is_mutable: bool,
-) {
+) -> bool {
     let var_type = match type_hint {
         Some(hint) => {
             match ctx.convert_hint(hint) {
@@ -58,9 +61,11 @@ fn check_variable_decl<'db>(
         }
     };
 
+    let bound = var_type.is_some();
     if let Some(ty) = var_type {
         bind_pattern(ctx, binding, value, ty, is_mutable);
     }
+    bound
 }
 
 /// Bind the names a pattern takes out of a value of type `ty`.
@@ -209,13 +214,13 @@ pub fn check_statement<'db>(
 
     match statement {
         Statement::Let(stmt) => {
-            check_variable_decl(ctx, &stmt.binding, ctx.expr(stmt.value), stmt.type_hint.C(), false);
+            let _ = check_variable_decl(ctx, &stmt.binding, ctx.expr(stmt.value), stmt.type_hint.C(), false);
         }
 
         Statement::Var(stmt) => {
             match stmt.value {
                 Some(value) => {
-                    check_variable_decl(ctx, &stmt.binding, ctx.expr(value), stmt.type_hint.C(), true);
+                    let _ = check_variable_decl(ctx, &stmt.binding, ctx.expr(value), stmt.type_hint.C(), true);
                 }
                 None => {
                     // Uninitialized var - type hint is required (parser enforces this).
@@ -643,28 +648,36 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // during lowering.
             let saved_in_const_expr = ctx.in_const_expr;
             ctx.in_const_expr = true;
-            check_variable_decl(ctx, &Binding::Name(stmt.name), ctx.expr(stmt.value), stmt.type_hint.C(), false);
+            let bound = check_variable_decl(ctx, &Binding::Name(stmt.name), ctx.expr(stmt.value), stmt.type_hint.C(), false);
             ctx.in_const_expr = saved_in_const_expr;
-            ctx.mark_top_const(stmt.name);
-            // A const is evaluated once, when its function is compiled, and
-            // not once per binding of the function's type parameters, so it
-            // has no type to be evaluated at if its own mentions one.
-            let generic = matches!(
-                ctx.lookup_variable(stmt.name),
-                Some(Type::Datalit(ty)) if datalove_datafun_common::generics::contains_type_param(&ty));
-            if generic {
-                let error = ctx.error_worded(
-                    crate::ErrorSite::Expr(ctx.expr(stmt.value).key()),
-                    FCode::ConstTypeGeneric,
-                    fmt!("const `{}` has a type that depends on a type parameter", stmt.name.as_str(db)),
-                    "a const's type must be known when its function is compiled",
-                    Some(S("a const is evaluated once, not once per type the function is called at. \
+            // A const whose value did not check and that has no type binds
+            // nothing, which has been reported, and there is nothing more to
+            // say of it. What the name meant before stays as it was: marking
+            // it a const here would make an outer `let` of the name one, to be
+            // passed to a const parameter, and asking its type about type
+            // parameters would report F088 of a binding this is not.
+            if bound {
+                ctx.mark_top_const(stmt.name);
+                // A const is evaluated once, when its function is compiled, and
+                // not once per binding of the function's type parameters, so it
+                // has no type to be evaluated at if its own mentions one.
+                let generic = matches!(
+                    ctx.lookup_variable(stmt.name),
+                    Some(Type::Datalit(ty)) if datalove_datafun_common::generics::contains_type_param(&ty));
+                if generic {
+                    let error = ctx.error_worded(
+                        crate::ErrorSite::Expr(ctx.expr(stmt.value).key()),
+                        FCode::ConstTypeGeneric,
+                        fmt!("const `{}` has a type that depends on a type parameter", stmt.name.as_str(db)),
+                        "a const's type must be known when its function is compiled",
+                        Some(S("a const is evaluated once, not once per type the function is called at. \
 Give the const a concrete type, or make it a `let`.")),
-                );
-                ctx.add_error(error);
+                    );
+                    ctx.add_error(error);
+                }
+                // Track this as a const binding for comptime arg validation.
+                ctx.add_const_binding(stmt.name);
             }
-            // Track this as a const binding for comptime arg validation.
-            ctx.add_const_binding(stmt.name);
         }
 
         Statement::Match(stmt) => {
