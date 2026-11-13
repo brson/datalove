@@ -51,5 +51,8 @@
       "kind": "TypeMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "element_type": "u32",
+    "kind": "Set"
+  }
 }

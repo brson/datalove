@@ -26,5 +26,5 @@
       "kind": "TypeMismatch"
     }
   ],
-  "root_type": null
+  "root_type": "f64"
 }

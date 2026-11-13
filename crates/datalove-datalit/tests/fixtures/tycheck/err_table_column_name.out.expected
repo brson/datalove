@@ -66,5 +66,17 @@
       "kind": "FieldOrderMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "columns": [
+      {
+        "name": "x",
+        "type": "u32"
+      },
+      {
+        "name": "y",
+        "type": "u32"
+      }
+    ],
+    "kind": "Table"
+  }
 }

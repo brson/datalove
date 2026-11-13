@@ -423,10 +423,12 @@ fn literal_typing_agrees() {
                 doc_failures.push(fmt!("{text}: the doc says {expected}, the Rust says {got}"));
             }
         }
+        // A diagnostic decides it: a hinted expression that does not check
+        // still has the hint's type, and its error besides.
         let answer = match (result.root_type(db), codes.first()) {
+            (_, Some(code)) => json!({ "err": code }),
             (Some(ty), None) => json!({ "ok": type_to_json(db, ty) }),
-            (None, Some(code)) => json!({ "err": code }),
-            (ty, code) => panic!("{seed}: a type ({}) and a diagnostic ({code:?}) at once, or neither", ty.is_some()),
+            (None, None) => panic!("{seed}: neither a type nor a diagnostic"),
         };
         queries.push(json!({ "synth": expr_to_json(db, &parsed) }));
         rust.push(answer);

@@ -213,6 +213,14 @@ This is the annotation rule. It is how a term with no synthesizable type,
 such as `none`, gets one, and how a literal gets a width other than its
 default.
 
+Where the premise fails, the failure is reported, and the expression is
+still taken to be of its hint's type: `: f32 / 0` is refused for the
+integer literal, and is an `f32` all the same, which is what the checker
+reports as its type beside the error. Datafun does the same for a hinted
+expression anywhere in a program, as it records each expression's type.
+Nothing goes on from the failure: the checker still stops at the first
+premise that fails.
+
 Any other expression synthesizes in three steps: infer a type for it with
 variables where its parts must agree ([Inference](#user-content-inference)),
 give each variable nothing decided its default, and check the expression

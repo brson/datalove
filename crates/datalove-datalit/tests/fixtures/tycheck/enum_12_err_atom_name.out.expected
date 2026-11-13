@@ -34,5 +34,8 @@
       "kind": "TypeMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "kind": "Atom",
+    "name": "A"
+  }
 }

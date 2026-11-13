@@ -82,5 +82,27 @@
       "kind": "TypeMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "body": {
+      "fields": [
+        {
+          "name": "elt",
+          "type": "int"
+        },
+        {
+          "name": "next",
+          "type": {
+            "element_type": {
+              "index": 0,
+              "kind": "RecVar"
+            },
+            "kind": "List"
+          }
+        }
+      ],
+      "kind": "AnonStruct"
+    },
+    "kind": "Rec",
+    "name": "L"
+  }
 }

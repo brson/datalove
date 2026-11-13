@@ -153,8 +153,12 @@ pub fn synthesize_expr<'db>(
     }
     if let Some(type_hint) = expr.kind().type_hint().cloned() {
         let expected = ctx.convert_hint(type_hint)?;
-        check_expr(ctx, expr, &expected)?;
+        // Of the hint's type whether or not it checks, which is what it says
+        // it is, as datalit has it; a check that fails is reported all the
+        // same.
+        let checked = check_expr(ctx, expr, &expected);
         ctx.store_expr_type(expr, &expected);
+        checked?;
         return Ok(expected);
     }
     // A literal, or a value built of parts, has the type its parts are

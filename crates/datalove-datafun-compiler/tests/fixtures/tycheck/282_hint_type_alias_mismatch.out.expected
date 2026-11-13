@@ -27,6 +27,11 @@
       "kind": "variable",
       "name": "s",
       "type": "string"
+    },
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
     }
   ]
 }

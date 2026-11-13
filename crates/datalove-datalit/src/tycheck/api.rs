@@ -7,7 +7,7 @@ use crate::resolve::ResolvedExpr;
 use super::context::TypeContext;
 use super::check::check;
 use super::synthesize::synthesize;
-use super::types::{Type, TypeError};
+use super::types::{Type, TypeError, convert_type_hint};
 
 /// Type error entry with location info.
 #[salsa::tracked]
@@ -75,7 +75,11 @@ pub fn type_check_with_expected<'db>(
             Ok(ty) => Some(ty),
             Err(e) => {
                 ctx.add_error(e);
-                None
+                // A hinted expression that does not check is still of the
+                // hint's type, which is what it says it is; its error is
+                // reported all the same. Converted quietly: a hint that does
+                // not convert has said so already.
+                expr.type_hint().and_then(|hint| convert_type_hint(db, &hint).ok())
             }
         }
     };

@@ -43,15 +43,34 @@ pub fn check_expr<'db>(
     // Nothing converts on the way from one to the other: a `: u8 / 1` where a
     // `u32` is wanted is a mismatch, as a `u8` variable would be, and not a
     // `u32` with a hint that went unread.
-    if let Some(type_hint) = expr_kind.type_hint().cloned() {
-        let hinted = ctx.convert_hint(type_hint)?;
-        if !types_equivalent_at_head(db, &hinted, expected) {
+    let hinted = match expr_kind.type_hint().cloned() {
+        Some(type_hint) => Some(ctx.convert_hint(type_hint)?),
+        None => None,
+    };
+    let checked = match &hinted {
+        Some(hinted) if !types_equivalent_at_head(db, hinted, expected) => {
             let expected_str = type_to_string(db, expected);
-            let hinted_str = type_to_string(db, &hinted);
-            return Err(ctx.error_type_mismatch(expr, TCode::HintMismatch, &expected_str, &hinted_str, "the type hint disagrees with the expected type"));
+            let hinted_str = type_to_string(db, hinted);
+            Err(ctx.error_type_mismatch(expr, TCode::HintMismatch, &expected_str, &hinted_str, "the type hint disagrees with the expected type"))
         }
+        _ => check_against(ctx, expr, expr_kind, expected),
+    };
+    // A hinted expression that does not check is still of the hint's type,
+    // which is what it says it is, as datalit has it; its error is reported
+    // all the same.
+    if let (Some(hinted), Err(_)) = (&hinted, &checked) {
+        ctx.store_expr_type(expr, hinted);
     }
+    checked
+}
 
+/// Check an expression, its hint, if it has one, agreeing with `expected`.
+fn check_against<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    expr_kind: &'db ExprFunKind<'db>,
+    expected: &Type<'db>,
+) -> Result<(), TypeError> {
     // Rule: Check-Roll - a value of a recursive type is built as a value of
     // its unfolding, and is of the recursive type. Anything else checks
     // against the recursive type as it is.

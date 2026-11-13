@@ -41,5 +41,8 @@
       "kind": "TypeMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "inner_type": "u32",
+    "kind": "Result"
+  }
 }

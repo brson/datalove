@@ -154,7 +154,8 @@ literal out of range is T005 to T015 or T061 by its type, a literal of the
 wrong shape T038, T039, T042, T048, T049 or T054 to T056, a form left open
 with nothing expected T016, an atom or term not the expected variant T057,
 and an enum literal against a type that is not an enum T058. A plain
-mismatch is datafun's F016.
+mismatch is datafun's F016. A hinted expression that does not check is
+recorded with its hint's type, as datalit reports it (`Syn-TypedExpr`).
 
 Datafun adds one checking rule for a negated literal, since datafun has a
 negation operator and datalit has only signed literals:

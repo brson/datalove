@@ -51,5 +51,17 @@
       "kind": "TypeMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "kind": "Enum",
+    "variants": [
+      {
+        "name": "Custom",
+        "payload": "string"
+      },
+      {
+        "name": "Ready",
+        "payload": null
+      }
+    ]
+  }
 }

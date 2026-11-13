@@ -77,5 +77,17 @@
       "kind": "ArityMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "fields": [
+      {
+        "name": "x",
+        "type": "u32"
+      },
+      {
+        "name": "y",
+        "type": "u32"
+      }
+    ],
+    "kind": "AnonStruct"
+  }
 }

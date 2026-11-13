@@ -89,5 +89,9 @@
       "kind": "ArityMismatch"
     }
   ],
-  "root_type": null
+  "root_type": {
+    "element_type": "u32",
+    "kind": "Tensor",
+    "rank": 3
+  }
 }
