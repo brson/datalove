@@ -187,7 +187,10 @@ fn config() -> WorldGenConfig {
     config
 }
 
-const TYPES: &[&str] = &["u8", "i8", "u32", "i64", "int", "f32", "f64", "bool", "string", "index", "?u8", "!u8", "[u8]", "()"];
+const TYPES: &[&str] = &[
+    "u8", "i8", "u32", "i64", "int", "f32", "f64", "bool", "string", "index", "?u8", "!u8", "[u8]", "()",
+    "rec L ?[L]", "rec R ![R]",
+];
 const VALUES: &[&str] = &["0", "1", "-1", "300", "true", "\"s\"", "1.5", "none", "some 1", "ok 1", "()", "[]"];
 const STEPS: &[&str] = &[".0", ".1", ".a", ".zz", "[0]?", "[0]!", "[0]", "[true]?", ".0[0]?", "[0]?.0", "[0]?[0]?", "[0]"];
 const OPS: &[&str] = &["+", "-", "*", "/", "+!", "-!", "*?", "/?", "==", ".<", "and"];
