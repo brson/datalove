@@ -1,0 +1,25 @@
+// A function returning a recursive type whose head is an option or a result
+// returns early into it as into the option or result it unfolds to: `?`, `!`,
+// an index's `?` and `+?` all fit.
+
+type L: rec L ?[L]
+fun f(x: ?u8): L
+  let y = x?
+  ret some [none]
+end fun
+type R: rec R ![R]
+fun g(x: !u8): R
+  let y = x!
+  ret ok []
+end fun
+fun h(l: [u8]): L
+  let a = l[0]?
+  let b = a +? a
+  ret some []
+end fun
+debuglog f(some 1)
+debuglog f(none)
+debuglog g(ok 1)
+debuglog g(er error "no")
+debuglog h([200])
+debuglog h([1])

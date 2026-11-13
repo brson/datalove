@@ -160,6 +160,9 @@ const CORPUS: &[&str] = &[
     "let a = 1\nconst b = a + 1\nconst c: u8 = 300\nconst d = 10 / 0\nfun f(const n: u8): u8\n  ret n\nend fun\nfun g(): u8\n  ret c\nend fun\nfun h<T>(const x: T): u8\n  const k: T = x\n  ret 0\nend fun\ndebuglog f(5)\ndebuglog f(c)\n",
     "fun two(): u8\n  ret 2\nend fun\nconst a: u8 = two()\nconst b: u8 = 1 +! 1\nconst c: ?u8 = none\nconst d: u8 = c?\nfun f(): u8\n  ret a\nend fun\nfun g(): u8\n  ret late\nend fun\nconst late: u8 = 3\ndebuglog f()\n",
     "fun f(p: u8, const q: u8): u8\n  const x = p\n  let y = 1\n  const z = y\n  const w = q\n  set w = 2\n  ret x\nend fun\nconst k = 1\nlet k = 2\nfun g(): int\n  ret k\nend fun\nlet m = 1\nconst m = zz\nfun h(const v: int): int\n  ret v\nend fun\ndebuglog h(m)\n",
+    // A recursive return type whose head is an option or a result is
+    // returned into early as the option or result it unfolds to.
+    "type L: rec L ?[L]\nfun f(x: ?u8, l: [u8]): L\n  let y = x?\n  let a = l[0]?\n  let b = a +? a\n  ret some [none]\nend fun\ntype R: rec R ![R]\nfun g(x: !u8, mut m: [u8]): R\n  let y = x!\n  set m[0]! = 1\n  let z = x?\n  ret ok []\nend fun\n",
     // Every marker is reported before any argument is checked.
     "fun g(ref a: u8, b: u8)\nend fun\ncall g(1, ref true)\ncall g(ref true, ref 1)\n",
 ];

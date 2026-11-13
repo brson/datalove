@@ -91,14 +91,20 @@ fn require_option_return_type<'db>(
             None,
         ));
     };
-    match expected_return {
-        Type::Datalit(datalit::tycheck::Type::Option(_)) => Ok(expected_return),
-        _ => Err(ctx.error_try_return_type_mismatch(
+    // A recursive return type is its unfolding at the head, as everywhere a
+    // value meets the type expected of it: `rec L ?[L]` returns an option.
+    let fits = matches!(
+        expected_return.exposed().as_ref(),
+        Type::Datalit(datalit::tycheck::Type::Option(_)));
+    if fits {
+        Ok(expected_return)
+    } else {
+        Err(ctx.error_try_return_type_mismatch(
             expr,
             op_str,
             Wrapper::Option,
             Some(&type_to_string(db, &expected_return)),
-        )),
+        ))
     }
 }
 
@@ -121,14 +127,20 @@ fn require_result_return_type<'db>(
             None,
         ));
     };
-    match expected_return {
-        Type::Datalit(datalit::tycheck::Type::Result(_)) => Ok(expected_return),
-        _ => Err(ctx.error_try_return_type_mismatch(
+    // A recursive return type is its unfolding at the head, as everywhere a
+    // value meets the type expected of it: `rec R ![R]` returns a result.
+    let fits = matches!(
+        expected_return.exposed().as_ref(),
+        Type::Datalit(datalit::tycheck::Type::Result(_)));
+    if fits {
+        Ok(expected_return)
+    } else {
+        Err(ctx.error_try_return_type_mismatch(
             expr,
             op_str,
             Wrapper::Result,
             Some(&type_to_string(db, &expected_return)),
-        )),
+        ))
     }
 }
 

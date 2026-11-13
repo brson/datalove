@@ -1096,7 +1096,8 @@ fn require_return_type_for<'db>(
 ) -> Result<(), TypeError> {
     let expected_return = ctx.expected_return_type.C()
         .expect("a set statement is always inside a function or a script, which returns `!()`");
-    let (fits, expected) = match (&error_mode, &expected_return) {
+    // A recursive return type is its unfolding at the head.
+    let (fits, expected) = match (&error_mode, expected_return.exposed().as_ref()) {
         (IndexErrorMode::Option, Type::Datalit(datalit::tycheck::Type::Option(_))) => (true, Wrapper::Option),
         (IndexErrorMode::Option, _) => (false, Wrapper::Option),
         (IndexErrorMode::Result, Type::Datalit(datalit::tycheck::Type::Result(_))) => (true, Wrapper::Result),

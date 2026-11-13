@@ -367,6 +367,14 @@ What it found:
   instance of every generic function in thirty thousand generated scripts
   the Rust checks cleanly, 51279 instances at type arguments their bounds
   admit, and the Rust and the model reported nothing on any of them.
+- **An early return did not see through a recursive return type.** `?`,
+  `!`, the checked and optional operators and a `set` target's index asked
+  whether the function returns an option or a result without unfolding a
+  `rec`, so a function returning `rec L ?[L]` could not use `?`, though
+  `ret none` checked against it and the model, which unfolds as the doc's
+  meeting at the head says, let it through. Reading the Rust for modules
+  found it; the generator rarely writes a recursive return type. The backend
+  fixture `46_early_return_into_a_recursive_type` holds it.
 - **Consts agreed on the first run**, but for the model's own `set`, which
   refused only a `let`, where the Rust refuses anything that is not a `var`,
   a const among them. Writing it down found the Rust marking whatever
