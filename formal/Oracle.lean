@@ -59,11 +59,14 @@ def answer (q : Json) : Except String Json := do
     return match Fun.scriptFromSerde script with
       | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str))]
       | .error e => Json.mkObj [("unsupported", e)]
-  if let .ok script := q.getObjVal? "module" then
-    return match Fun.scriptFromSerde script with
-      | .ok ss =>
-        if ss.all Fun.Stmt.isDecl then Json.mkObj [("codes", Json.arr ((Fun.checkModule ss).map Json.str))]
-        else Json.mkObj [("unsupported", "a module statement that is not a declaration")]
+  if let .ok world := q.getObjVal? "world" then
+    let read : Except String (List Fun.ModuleSrc) := do
+      let ms ← (← world.getArr?).toList.mapM fun m => do
+        Fun.moduleFromSerde (← (← m.getObjVal? "path").getStr?) (← m.getObjVal? "script")
+      if !ms.all (·.body.all Fun.Stmt.isDecl) then throw "a module statement that is not a declaration"
+      pure ms
+    return match read >>= Fun.checkWorld with
+      | .ok codes => Json.mkObj [("modules", Json.arr (codes.toArray.map fun cs => Json.arr (cs.map Json.str)))]
       | .error e => Json.mkObj [("unsupported", e)]
   throw s!"unknown query: {q.compress}"
 

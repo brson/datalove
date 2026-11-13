@@ -275,10 +275,17 @@ pattern, `set` with or without an operator and through fields and indexes,
 which datafun types by datalit's rules with a context added; and datafun's
 variables, places with field and index steps, fields and indexes of what is
 not a place, operators, `?`, `!`, `@` and calls, each in a borrowed position
-or not, and consts. A module is in it too, as a list of declarations
-(`checkModule`): its consts are checked as a script's are, but a `?`, `!`
-or other early return in one is F105, not F049, since there is no function
-to return from. Requires and imports are left out. A const's
+or not, and consts. Worlds of modules are in it too (`checkWorld`). A
+module is a list of declarations under its requires and imports: its consts
+are checked as a script's are, but a `?`, `!` or other early return in one
+is F105, not F049, since there is no function to return from. A module
+exports its functions' signatures and nothing else, so an import of a const
+is F002 as an import of a missing function is; one through an alias nothing
+is required under is F078, one of a name the module defines a function by
+F106, and a second of one name F059 if it comes from another module. A
+qualified call `a.f` is a call of the name `a.f`, which every function of a
+required module is in scope under, and `a.` marks the alias as required, so
+that a call through one that is not is F078 rather than F002. A const's
 initializer names only consts (F058), a function body sees the consts above
 it, a const argument names one (F076), and in a generic neither a const
 parameter's type (F077) nor a const's (F088) mentions a type parameter. A
@@ -491,12 +498,15 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
   parameters declared as aliases of type arguments their bounds admit, and
   requires the Rust and the model both to report nothing: the check-once
   theorem's conclusion, held to the Rust and its inference. It also
-  includes `module_typing_agrees`, which takes worldgen's first module,
-  changed as the scripts are, checks it as a module of a world of its own
-  through the Rust's module graph, and holds its codes to `checkModule`'s.
-  Over five thousand seeds 3334 modules agree; the rest are skipped, for
-  parse errors or for a mutation that leaves a statement at the top level,
-  where the model takes only declarations.
+  includes `world_typing_agrees`, which takes worldgen's worlds of up to
+  three modules, each requiring and importing from the ones before it and
+  calling them qualified, changes a module at a time as the scripts are,
+  checks them through the Rust's module graph, and holds each module's codes
+  to `checkWorld`'s. A diagnostic is the module's whose source its first
+  label points into. Over five thousand seeds 3367 worlds agree and none
+  differ; the rest are skipped, for parse errors, for a mutation that leaves
+  a statement at the top level, where the model takes only declarations,
+  or for one that leaves a require or import below a declaration.
 - `law_tests` runs in `just test`. `FORMAL_LAWS_SEED`, `FORMAL_LAWS_COUNT` and
   `FORMAL_LAWS_SIZE` widen it. Size 8 takes a few seconds in release; size 10
   runs out of memory, and is also the smallest at which two distinct types
@@ -554,11 +564,14 @@ In rough order of what to do next:
   left unmet makes a check fail, so that on a quiet run there is none.
   Recursive type arguments
   are left out, until T065 says whether a recursive key is allowed.
-- **F089 and modules that require others.** The Rust finds a const that
-  depends on itself through a function by what its checker looked up, and
-  the model does not track that; `module_typing_agrees` skips any module
-  the Rust reports it of, though worldgen has not yet written one. Requires,
-  imports and the names they bring in are outside the slice.
+- **F089, and requires that fail.** The Rust finds a const that depends on
+  itself through a function by what its checker looked up, and the model
+  does not track that; `world_typing_agrees` skips any world the Rust
+  reports it in, though worldgen has not yet written one. The model takes
+  only worlds whose modules require modules before them, once each under
+  one alias, with every require and import above the declarations: a
+  missing module, a cycle, an alias taken twice, a rider and a name used
+  above its import are the Rust's alone.
 - **The random generator rarely makes a type that starts with two `rec`s**,
   so the transitivity chains in `law_tests` would not have found the third
   hole above; the exhaustive test does.

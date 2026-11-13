@@ -387,11 +387,15 @@ fn rust_side(text: &str) -> (Vec<String>, Value) {
     (codes, rmx::serde_json::to_value(&script).X())
 }
 
-/// The codes of a module's type diagnostics, in order, checked as the module
-/// of a world of its own, as a library's modules are.
-fn rust_module_side(path: &str, text: &str) -> Vec<String> {
+/// The codes of each module's type diagnostics, in order, checked as the
+/// modules of one world, as a library's are. A diagnostic belongs to the module
+/// whose source its first label points into.
+fn rust_world_side(modules: &[(String, String)]) -> Vec<Vec<String>> {
     let db = datalove_datafun::Database::default();
-    let world = fmt!("----------\nmodule {path}\n----------\n\n{text}");
+    let world: Vec<String> = modules.iter()
+        .map(|(path, text)| fmt!("----------\nmodule {path}\n----------\n\n{text}"))
+        .collect();
+    let world = world.join("\n");
     let raw = datalove_datafun::package_load_worldfile::load_world_from_worldfile(world.as_bytes()).X();
     let package_world = datalove_datafun::package::import_from_loader(&db, raw);
     let resolution = datalove_datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
@@ -400,83 +404,115 @@ fn rust_module_side(path: &str, text: &str) -> Vec<String> {
     let parsed = datalove_datafun::module_graph::parse_module_graph(&db, graph.graph, graph.resolved_requires, Vec::new());
     let names = datalove_datafun_resolve::resolve_all_names(&db, parsed);
     let _ = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed, names);
-    datalove_datafun_tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, parsed, names)
-        .iter()
-        .map(|d| d.to_diagnostic(&db).code.map(|c| c.as_str(&db).S()).unwrap_or_else(|| "none".S()))
-        .collect()
+    let mut codes = vec![Vec::new(); modules.len()];
+    for d in datalove_datafun_tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, parsed, names) {
+        let d = d.to_diagnostic(&db);
+        let source = d.labels.first().expect("a type diagnostic points somewhere").source.as_str(&db);
+        let module = modules.iter().position(|(_, text)| text.trim() == source.trim())
+            .expect("a diagnostic points into one of the world's modules");
+        codes[module].push(d.code.map(|c| c.as_str(&db).S()).unwrap_or_else(|| "none".S()));
+    }
+    codes
 }
 
-/// Datafun's module typing held to the model: worldgen's module, changed as
-/// the scripts are, checked as a module, whose top level has no function to
-/// return early from (F105). A module the Rust reports F089 of, a const that
+/// Datafun's module typing held to the model: worldgen's worlds of up to three
+/// modules, which require the ones before them, import their functions and
+/// call them qualified, changed as the scripts are, one module at a time, and
+/// checked as a library's modules are. A module's top level has no function
+/// to return early from (F105). A world the Rust reports F089 in, a const that
 /// depends on itself through a function, is skipped: the Rust finds those by
 /// what its checker looked up, which the model does not follow.
 #[test]
-fn module_typing_agrees() {
+fn world_typing_agrees() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
-        println!("Skipping the module typing tests (set FORMAL_ORACLE_TEST=1 to run)");
+        println!("Skipping the world typing tests (set FORMAL_ORACLE_TEST=1 to run)");
         return;
     }
     let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
-    let config = config();
-    let mut cases = Vec::new();
-    for t in MODULE_CORPUS {
-        cases.push(("corpus".S(), "local/pkg/m".S(), t.S()));
+    let mut config = config();
+    config.module_count = (1, 3);
+    config.qualified_calls = true;
+    let mut cases: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    for world in WORLD_CORPUS {
+        cases.push(("corpus".S(), world.iter().map(|(p, t)| (p.S(), t.S())).collect()));
     }
     for seed in seeds.iter() {
         let session = datalove_worldgen::gen_session_seeded(seed, config.C());
-        let Some((path, text)) = session.modules.first().cloned() else { continue };
-        let mut text = text;
-        let mut rng = SeededRng::derive(seed, "mutate-module");
-        for _ in 0..rng.random_range(0..=MAX_MUTATIONS) {
-            text = mutate(&mut rng, &text);
+        let mut modules = session.modules.C();
+        if modules.is_empty() {
+            continue;
         }
-        cases.push((fmt!("seed {seed}"), path, text));
+        let mut rng = SeededRng::derive(seed, "mutate-world");
+        for _ in 0..rng.random_range(0..=MAX_MUTATIONS) {
+            let m = rng.random_range(0..modules.len());
+            modules[m].1 = mutate(&mut rng, &modules[m].1);
+        }
+        cases.push((fmt!("seed {seed}"), modules));
     }
     let mut queries = Vec::new();
     let mut rust = Vec::new();
-    for (_, path, text) in &cases {
-        let (_, script) = rust_side(text);
-        queries.push(json!({ "module": script }));
-        rust.push(rust_module_side(path, text));
+    for (_, modules) in &cases {
+        let world: Vec<_> = modules.iter()
+            .map(|(path, text)| json!({ "path": path, "script": rust_side(text).1 }))
+            .collect();
+        queries.push(json!({ "world": world }));
+        rust.push(rust_world_side(modules));
     }
     let answers = ask_oracle(&queries);
     let mut agreed = 0;
     let mut skipped = BTreeMap::<String, usize>::new();
     let mut mismatches = Vec::new();
-    for (((what, _, text), rust), oracle) in cases.iter().zip(&rust).zip(&answers) {
+    for (((what, modules), rust), oracle) in cases.iter().zip(&rust).zip(&answers) {
         if let Some(why) = oracle.get("unsupported") {
             *skipped.entry(why.as_str().X().S()).or_default() += 1;
             continue;
         }
-        if rust.iter().any(|c| c == "F089") {
+        if rust.iter().flatten().any(|c| c == "F089") {
             *skipped.entry("F089".S()).or_default() += 1;
             continue;
         }
-        let model: Vec<String> = oracle["codes"].as_array().X().iter().map(|c| c.as_str().X().S()).collect();
+        let model: Vec<Vec<String>> = oracle["modules"].as_array().X().iter()
+            .map(|m| m.as_array().X().iter().map(|c| c.as_str().X().S()).collect())
+            .collect();
         if *rust == model {
             agreed += 1;
         } else {
+            let text: String = modules.iter().map(|(p, t)| fmt!("-- {p}\n{t}\n")).collect();
             mismatches.push(fmt!("{what}:\n{text}    rust:  {rust:?}\n    model: {model:?}"));
         }
     }
     println!(
-        "{} modules over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}",
+        "{} worlds over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(10) {
         println!("{m}");
     }
-    assert!(mismatches.is_empty(), "the Rust and the typing rules disagree on {} modules", mismatches.len());
+    assert!(mismatches.is_empty(), "the Rust and the typing rules disagree on {} worlds", mismatches.len());
 }
 
-/// Modules written by hand.
-const MODULE_CORPUS: &[&str] = &[
+/// Worlds written by hand, each module a path and its text.
+const WORLD_CORPUS: &[&[(&str, &str)]] = &[
     // A module const has no function to return early from (F105).
-    "const a: ?u8 = none\nconst b: u8 = a?\nconst c: !u8 = ok 1\nconst d: u8 = c!\nconst e: u8 = 1 +! 2\nconst f: u8 = 1 +? 2\nconst g: i8 = -!(: i8 / 1)\nconst h: [u8] = [1]\nconst i: u8 = h[0]?\nfun k(): u8\n  ret d\nend fun\n",
+    &[("local/pkg/m", "const a: ?u8 = none\nconst b: u8 = a?\nconst c: !u8 = ok 1\nconst d: u8 = c!\nconst e: u8 = 1 +! 2\nconst f: u8 = 1 +? 2\nconst g: i8 = -!(: i8 / 1)\nconst h: [u8] = [1]\nconst i: u8 = h[0]?\nfun k(): u8\n  ret d\nend fun\n")],
     // A function sees the consts above it, not below (F001), and a const sees
     // every function.
-    "const a: u8 = 1\nfun f(): u8\n  ret a + b\nend fun\nconst b: u8 = 2\nconst c: u8 = g()\nfun g(): u8\n  ret a\nend fun\n",
+    &[("local/pkg/m", "const a: u8 = 1\nfun f(): u8\n  ret a + b\nend fun\nconst b: u8 = 2\nconst c: u8 = g()\nfun g(): u8\n  ret a\nend fun\n")],
+    // Imports: through an alias nothing is required under (F078), of a
+    // function the module lacks (F002), of a name defined here (F106), the
+    // same name from another module (F059) and from the same one (nothing).
+    &[
+        ("local/pkg/a", "fun f(x: u8): u8\n  ret x\nend fun\nfun g(): bool\n  ret true\nend fun\nfun h<T>(x: T): [T]\n  ret [x]\nend fun\nconst c: u8 = 1\n"),
+        ("local/pkg/b", "fun f(x: bool): bool\n  ret x\nend fun\n"),
+        ("local/pkg/c", "require module local/pkg/a\nrequire module local/pkg/b\nimport z.f\nimport a.nope\nimport a.c\nimport a.g\nimport a.f\nimport b.f\nimport a.f\nimport a.h\nfun g(): u8\n  ret f(1)\nend fun\nfun k(): bool\n  let x: [u8] = h(1)\n  ret f(true)\nend fun\n"),
+    ],
+    // Qualified calls: of a function the module has, of one it lacks (F002),
+    // through an alias nothing is required under (F078), of a generic, with
+    // the wrong arguments, and of a function nothing imported.
+    &[
+        ("local/pkg/a", "fun f(x: u8): u8\n  ret x\nend fun\nfun h<T>(x: T): [T]\n  ret [x]\nend fun\n"),
+        ("local/pkg/b", "require module local/pkg/a\nimport a.h\nconst k: u8 = a.f(2)\nfun g(): u8\n  let y: [bool] = a.h(true)\n  let z: [u8] = h(1)\n  let w = a.nope()\n  let v = q.f(1)\n  let u = a.f(true)\n  let t = f(1)\n  ret a.f(1)\nend fun\n"),
+    ],
 ];
 
 #[test]

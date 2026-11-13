@@ -857,6 +857,14 @@ def markers : List (Option Mode × Expr) → List (Mode × Ty) → ChkM Unit
 checker spends one, and running out is an error, never a success. -/
 def fuel : Nat := 1000000
 
+/-- What a call of a function not in scope is: F002, or F078 for a qualified
+call `a.f` whose alias `a` nothing is required under. A module's required
+aliases are in its signatures as `a.`, a name no source can write. -/
+def missingCode (sigs : List (String × Sig)) (f : String) : Code :=
+  match f.splitOn "." with
+  | [a, _] => if (sigs.lookup (a ++ ".")).isSome then "F002" else "F078"
+  | _ => "F002"
+
 mutual
 
 /-- `Γ ⊢ e ⇒ T`. -/
@@ -1076,7 +1084,7 @@ def rowLikeF (env : InferEnv) : Nat → Ctx → List Expr → List Ty → ChkM U
   | _ + 1, _, _, _ => pure ()
 
 /-- A call (Syn-Call, Syn-GenericCall), with the type expected of it if
-that is known (Check-GenericCall): the callee (F002) and the argument count
+that is known (Check-GenericCall): the callee (F002, or F078, `missingCode`) and the argument count
 (F045); each marker that disagrees with its parameter's mode, reported (F057);
 the type arguments inferred, an open one stopping the call (T016); each
 argument checked against its parameter's type with them substituted, the
@@ -1085,7 +1093,7 @@ first that is not stopping the call; a type argument its bound refuses
 def callF (env : InferEnv) : Nat → Ctx → String → List (Option Mode × Expr) → Option Ty → ChkM Ty
   | 0, _, _, _, _ => throw "fuel"
   | n + 1, Γ, f, args, expected => do
-    let Option.some sig := Γ.sigs.lookup f | throw "F002"
+    let Option.some sig := Γ.sigs.lookup f | throw (missingCode Γ.sigs f)
     if args.length != sig.params.length then throw "F045"
     constArgs Γ args sig.params
     markers args sig.params
@@ -1761,16 +1769,84 @@ def resolveNames (ss : List Stmt) : List (String × Sig) × Array Code := Id.run
   pure (sigs, diags)
 
 /-- The diagnostics of a module, in order, as of a script but at a top level
-with no function, whose consts cannot return early (F105). Its top level
-holds only declarations; anything else the parser refuses (P077). -/
-def checkModule (ss : List Stmt) : Array Code :=
-  let (sigs, diags) := resolveNames ss
+with no function, whose consts cannot return early (F105), after `pre`, what
+its imports were found to have wrong. Its own functions are in scope, then
+`extra`, what it imports and calls qualified. Its top level holds only
+declarations; anything else the parser refuses (P077). -/
+def checkModuleWith (extra : List (String × Sig)) (pre : Array Code) (ss : List Stmt) : Array Code :=
+  let (own, diags) := resolveNames ss
+  let sigs := own ++ extra
   let run : StateM (Array Code) Unit := do
     let mut Γ : Ctx := { ret := .void, sigs, inModule := true }
     for s in ss do
       if let .fun_ f := s then checkFun sigs Γ.aliases (constsOf Γ.vars) f
       else Γ ← checkStmt Γ s
-  (run.run diags).2
+  (run.run (pre ++ diags)).2
+
+/-- A module that requires and imports nothing. -/
+def checkModule (ss : List Stmt) : Array Code := checkModuleWith [] #[] ss
+
+/-- A module of a world: its path, the modules it requires, each by the alias
+it calls it through and its path, what it imports, each an alias and a
+function's name, and its declarations. -/
+structure ModuleSrc where
+  path : String
+  requires : List (String × String)
+  imports : List (String × String)
+  body : List Stmt
+
+/-- The names a module defines functions by, whether or not their signatures
+resolve. -/
+def definedFuns (ss : List Stmt) : List String :=
+  ss.filterMap fun | .fun_ f => Option.some f.name | _ => Option.none
+
+/-- One module of a world, given every module's own signatures by path. A
+module exports its functions' signatures and nothing else. Each import whose
+alias nothing is required under is F078, and one its module has no function
+of is F002, in the order written; then, of the rest, one of a name the module
+defines a function by is F106, and a second of one name is F059 if it comes
+from another module and nothing if from the same. A qualified call sees every
+function of the module its alias names. -/
+def checkWorldModule (own : List (String × List (String × Sig))) (m : ModuleSrc) : Array Code := Id.run do
+  let reqSigs := m.requires.filterMap fun (a, p) => (own.lookup p).map (a, ·)
+  let qualified := reqSigs.flatMap fun (a, ss) =>
+    (a ++ ".", ({ params := [], ret := .void } : Sig)) :: ss.map fun (n, sig) => (a ++ "." ++ n, sig)
+  let mut pre : Array Code := #[]
+  for (a, n) in m.imports do
+    match reqSigs.lookup a with
+    | Option.none => pre := pre.push "F078"
+    | Option.some ss => if (ss.lookup n).isNone then pre := pre.push "F002"
+  let defined := definedFuns m.body
+  let mut bound : List (String × String) := []
+  let mut imported : List (String × Sig) := []
+  for (a, n) in m.imports do
+    let Option.some ss := reqSigs.lookup a | continue
+    let Option.some sig := ss.lookup n | continue
+    let source := (m.requires.lookup a).getD ""
+    if defined.contains n then
+      pre := pre.push "F106"
+    else match bound.lookup n with
+      | Option.some first => if first != source then pre := pre.push "F059"
+      | Option.none =>
+        bound := (n, source) :: bound
+        imported := imported ++ [(n, sig)]
+  checkModuleWith (imported ++ qualified) pre m.body
+
+/-- The diagnostics of each module of a world, in order. Only a world whose
+modules each require only modules before them, each once under one alias,
+is modelled: what the Rust makes of a missing module, a cycle or an alias
+taken twice is not. -/
+def checkWorld (ms : List ModuleSrc) : Except String (List (Array Code)) := do
+  let own := ms.map fun m => (m.path, (resolveNames m.body).1)
+  let mut out := []
+  let mut before : List String := []
+  for m in ms do
+    for (a, p) in m.requires do
+      if !before.contains p then throw "a require of a module not before it"
+      if (m.requires.filter (·.1 == a)).length > 1 then throw "an alias required twice"
+    out := out ++ [checkWorldModule own m]
+    before := before ++ [m.path]
+  pure out
 
 /-- Whether a statement may be at a module's top level. -/
 def Stmt.isDecl : Stmt → Bool

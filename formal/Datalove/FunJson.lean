@@ -189,13 +189,15 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
     | "TryResult" => tryFromSerde (← field e "operand") .res .tryRes
     | "CloneCoerce" => .adapt <$> sub "operand"
     | "FunctionCall" => do
-      if (optField e "qualifier").isSome then unsupported "qualified call"
+      let name ← match optField e "qualifier" with
+        | Option.none => (← field e "name").getStr?
+        | Option.some q => do pure s!"{← q.getStr?}.{← (← field e "name").getStr?}"
       let args ← list "args"
       let modes ← match optField e "arg_modes" with
         | Option.none => pure (args.map fun _ => Option.none)
         | Option.some ms => (← ms.getArr?).toList.mapM fun m =>
           if m.isNull then pure Option.none else do pure (Option.some (← modeOf (← m.getStr?)))
-      pure (.call (← (← field e "name").getStr?) (modes.zip args))
+      pure (.call name (modes.zip args))
     | other => unsupported other
   -- A literal carries its own hint; `Hinted` its, around what is inside.
   match optField e "type_hint" with
@@ -314,5 +316,25 @@ end
 
 def scriptFromSerde (j : Json) : Except String (List Stmt) := do
   body (← field j "statements")
+
+/-- A module at `path`, its requires and imports first. -/
+def moduleFromSerde (path : String) (j : Json) : Except String ModuleSrc := do
+  let mut requires := []
+  let mut imports := []
+  let mut rest := []
+  for s in (← (← field j "statements").getArr?).toList do
+    match ← (← field s "kind").getStr? with
+    | "Require" =>
+      if !rest.isEmpty then unsupported "a require below a declaration"
+      if (← (← field s "variant").getStr?) != "Module" then unsupported "a rider"
+      let space ← (← field s "import_space").getStr?
+      let pkg ← (← field s "package_alias").getStr?
+      let alias ← (← field s "module_alias").getStr?
+      requires := requires ++ [(alias, s!"{space}/{pkg}/{alias}")]
+    | "Import" =>
+      if !rest.isEmpty then unsupported "an import below a declaration"
+      imports := imports ++ [(← (← field s "module_name").getStr?, ← (← field s "item_name").getStr?)]
+    | _ => rest := rest ++ [s]
+  pure { path, requires, imports, body := ← rest.mapM stmtFromSerde }
 
 end Datalove.Fun
