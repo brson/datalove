@@ -1392,10 +1392,9 @@ fn evaluate_module_consts_in_order<'db>(
             // type for an early-return operator to check against, and no
             // const parameters for it to name.
             let value = parsed.body(db).arena.get(const_stmt.value);
-            let evaluated = const_type(&env, value).and_then(|ty| {
-                evaluate_const(&mut env, value, &ty, &consts, None, &Default::default())
-                    .map(|value| (ty, value.expect("nothing is deferred at module level")))
-            });
+            let ty = const_type(&env, value);
+            let evaluated = evaluate_const(&mut env, value, &ty, &consts, None, &Default::default())
+                .map(|value| (ty, value.expect("nothing is deferred at module level")));
             match evaluated {
                 Ok((ir_type, value)) => {
                     consts.insert(name, (ir_type, value));

@@ -42,7 +42,6 @@ pub struct ConstEvalEnv<'a, 'db> {
 /// Why a const could not be evaluated.
 #[derive(Debug)]
 pub enum ConstError {
-    MissingType,
     Lowering(LowerError),
     Ctfe(CtfeError),
 }
@@ -50,7 +49,6 @@ pub enum ConstError {
 impl fmt::Display for ConstError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConstError::MissingType => write!(f, "missing type information"),
             ConstError::Lowering(e) => write!(f, "lowering error: {}", e),
             ConstError::Ctfe(e) => write!(f, "CTFE error: {}", e),
         }
@@ -101,10 +99,10 @@ pub fn data_consts<'db>(
 }
 
 /// The type the typechecker gave a const's initializer.
-pub fn const_type(env: &ConstEvalEnv<'_, '_>, init: ExprFun<'_>) -> Result<IrType, ConstError> {
-    env.expr_types.get(init)
-        .map(|ty| IrType::from_tycheck(env.db, ty))
-        .ok_or(ConstError::MissingType)
+pub fn const_type(env: &ConstEvalEnv<'_, '_>, init: ExprFun<'_>) -> IrType {
+    let ty = env.expr_types.get(init)
+        .expect("the typechecker types every const it accepts");
+    IrType::from_tycheck(env.db, ty)
 }
 
 /// Evaluate one const's initializer.
@@ -170,10 +168,9 @@ pub fn evaluate_body_consts<'db>(
         let Statement::Const(const_stmt) = stmt else { continue };
         let name = const_stmt.name.text(db).S();
         let value = body.arena.get(const_stmt.value);
-        let evaluated = const_type(env, value).and_then(|ty| {
-            evaluate_const(env, value, &ty, &scope, func_return_type.C(), &deferred)
-                .map(|value| value.map(|value| (ty, value)))
-        });
+        let ty = const_type(env, value);
+        let evaluated = evaluate_const(env, value, &ty, &scope, func_return_type.C(), &deferred)
+            .map(|value| value.map(|value| (ty, value)));
         match evaluated {
             Ok(Some((ty, value))) => {
                 scope.insert(name.C(), (ty.C(), value.C()));

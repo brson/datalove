@@ -2229,7 +2229,6 @@ impl<'db> ScriptCompiler<'db> {
                     message: e.S(),
                 },
                 ConstError::Ctfe(e) => self.ctfe_error_to_const_eval_error(e, &binding.name),
-                ConstError::MissingType => unreachable!("a script const's type comes from the graph"),
             })?.expect("nothing is deferred at a script's top level");
 
             resolved.insert(binding.stmt_id, binding.name.C(), value.C());
