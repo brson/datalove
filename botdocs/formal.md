@@ -443,8 +443,13 @@ Four things are proved of it:
   falling through. Taking out F100 or F097 breaks the proof. It finds a
   variant by name, as the Rust does, so "exactly one" rests on an enum's
   variant names being distinct. The parser refuses an enum that names a
-  variant twice (D038), and the conversion keeps that, under aliases that
-  keep it too (`Hint.convertWith_namesOnce`, in `Proofs/Variants.lean`).
+  variant twice (D038), and the conversion sorts the variants by name, so
+  under aliases that do the same, every enum it makes names its variants in
+  strictly increasing order, and so each once (`Hint.convertWith_namesOnce`,
+  in `Proofs/Variants.lean`). The order is what lets a type's equality be
+  structural: an enum's variants written in another order sort to the same
+  ones (`Variants.sortByName_perm`). Lean's core now proves the order on
+  strings strict and total, which is all the proof needed of it.
 - **Checking a generic once is enough** (`Fun.checkFun_instance`, in
   `Proofs/InstanceStmt.lean`, on `Proofs/Instance.lean` and
   `Proofs/InstanceCheck.lean`). A generic function whose check reports
@@ -539,11 +544,6 @@ it, as it did not find the atom and term case.
 
 In rough order of what to do next:
 
-- **Enum variants are sorted.** The conversion sorts them by name, and the
-  model relies on it as the Rust does, but does not state it: proving it
-  needs the order on strings to be total and transitive, which the model
-  has not needed until now. That they are named once is proved of the
-  conversion, from the parser's D038.
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Inference and unification.** The doc claims that where unification's
   constraints all hold, the order of a collection's elements does not change
