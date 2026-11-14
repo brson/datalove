@@ -76,7 +76,6 @@ fn prepare(names: &[String]) {
     std::fs::create_dir_all(&out).X();
 
     world.with_compiled(|db, compiled| {
-        assert!(compiled.resolution_error.is_none(), "the standard library does not resolve");
         let registry = compiled.module_registry();
         let registry: &ModuleFunctionRegistry = registry.module_registry();
 

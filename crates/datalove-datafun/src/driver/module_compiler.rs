@@ -589,7 +589,6 @@ impl ModuleCompiler {
 
         CompiledModules {
             shared,
-            resolution_error: None,
             parse_errors: output.parse_errors,
             path_to_errors: output.typecheck_errors,
             ownership_errors: output.ownership_errors,

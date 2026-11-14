@@ -44,7 +44,6 @@ pub struct SharedModuleContext<'db> {
 /// Multiple independent compilers and executors can share the same compilation.
 pub struct CompiledModules<'db> {
     pub shared: Arc<SharedModuleContext<'db>>,
-    pub resolution_error: Option<String>,
     pub parse_errors: BTreeMap<String, Vec<String>>,
     pub path_to_errors: BTreeMap<String, Vec<String>>,
     pub ownership_errors: BTreeMap<String, Vec<String>>,
@@ -59,8 +58,7 @@ pub struct CompiledModules<'db> {
 impl<'db> CompiledModules<'db> {
     /// Check if compilation succeeded.
     pub fn is_successful(&self) -> bool {
-        self.resolution_error.is_none()
-            && self.parse_errors.values().all(|errors| errors.is_empty())
+        self.parse_errors.values().all(|errors| errors.is_empty())
             && self.path_to_errors.values().all(|errors| errors.is_empty())
             && self.ownership_errors.values().all(|errors| errors.is_empty())
             && self.lowering_errors.values().all(|errors| errors.is_empty())
@@ -82,10 +80,6 @@ impl<'db> CompiledModules<'db> {
     /// Collect all errors.
     pub fn all_errors(&self) -> Vec<String> {
         let mut errors = Vec::new();
-
-        if let Some(err) = &self.resolution_error {
-            errors.push(format!("Resolution error: {}", err));
-        }
 
         for error_list in self.parse_errors.values() {
             errors.extend(error_list.iter().cloned());

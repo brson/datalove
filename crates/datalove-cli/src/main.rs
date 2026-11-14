@@ -651,10 +651,6 @@ impl TypecheckStdCommand {
         let (mut module_compiler, _) = descriptor.to_compiler_with_natives(&db, &sys.natives);
         let compiled = module_compiler.compile(&db);
 
-        if let Some(err) = &compiled.resolution_error {
-            bail!("Package resolution failed: {}", err);
-        }
-
         let errors: Vec<(&String, &String)> = compiled.path_to_errors.iter()
             .flat_map(|(path, errors)| errors.iter().map(move |err| (path, err)))
             .collect();

@@ -1063,9 +1063,12 @@ from the typechecker; see
 **A type error is worded once.** Each `PendingDiagnostic` is built into a
 diagnostic in one function, `build` in `datafun-tycheck/src/emit.rs`; emitting
 files it, and `format_pending_diagnostics` writes the same diagnostic as a line
-(`line 3, col 7: error[F016]: ...`). A `TypeError` travels without its
-diagnostic -- as the REPL's report of a unit that did not compile, and as a
-type error with no span to render -- and says itself with its `Display`. Where
+(`line 3, col 7: error[F016]: ...`). A `TypeError` is how checking stops,
+and every one is reported by a diagnostic: a check that ends with errors and
+no diagnostic panics (`assert_errors_reported`), as does a diagnostic whose
+span is missing, so nothing a check refuses goes unsaid. A `TypeError` still
+travels without its diagnostic, as the REPL's report of a unit that did not
+compile, and says itself with its `Display` there. Where
 a report site words an error from the error alone, as `report_place_error`
 does, the message is that `Display`. A message names a type by its syntax, not
 as `Option` or `list`; where there is no type to show, it says what was wrong

@@ -69,9 +69,6 @@ fn describe_sys() -> WorkspaceDescriptor {
 /// A broken library is not one fixture disagreeing with another, so it is not
 /// reported per fixture.
 fn check_library(compiled: &datafun::driver::CompiledModules<'_>) {
-    if let Some(err) = &compiled.resolution_error {
-        panic!("the standard library does not resolve: {}", err);
-    }
     for (path, errors) in &compiled.path_to_errors {
         assert!(errors.is_empty(), "typecheck errors in {}: {:?}", path, errors);
     }

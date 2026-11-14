@@ -537,6 +537,7 @@ pub fn typecheck_script_unit<'db>(
     }
 
     // Emit pending diagnostics with local spans.
+    ctx.assert_errors_reported();
     ctx.emit_pending_diagnostics();
 
     // What this unit asked the environment for, taken before `ctx` is consumed.
@@ -714,6 +715,7 @@ pub fn typecheck_module<'db>(
 
     log_query("typecheck", module_path, QueryPhase::End);
 
+    ctx.assert_errors_reported();
     SingleModuleTypecheckResult::new(
         db,
         module_id,
@@ -1430,5 +1432,6 @@ pub fn report_interface_resolution_errors<'db>(
 ) {
     let mut ctx = TypeContext::new(db, spans);
     ctx.seed_from_collected_names(collected, None);
+    ctx.assert_errors_reported();
     ctx.emit_pending_diagnostics();
 }

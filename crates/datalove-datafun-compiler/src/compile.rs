@@ -246,20 +246,10 @@ fn collect_results<'db>(
         }
         let path = module_id.path(db.as_salsa_db()).C();
 
-        // Format pending diagnostics with location info.
+        // Every error is reported by a diagnostic, so these say them all.
         let pending = result.pending_diagnostics(db.as_salsa_db());
         let span_lookup = datalove_datafun_tycheck::ModuleGraphSpanLookup::new(&parsed_graph, *module_id);
-        let formatted = datalove_datafun_tycheck::format_pending_diagnostics(db.as_salsa_db(), pending, &span_lookup);
-
-        // The diagnostics where there are any, and otherwise the errors as
-        // they say themselves.
-        let error_strings = if !formatted.is_empty() {
-            formatted
-        } else {
-            errors.iter()
-                .map(|e| format!("{}: {}", path, e))
-                .collect()
-        };
+        let error_strings = datalove_datafun_tycheck::format_pending_diagnostics(db.as_salsa_db(), pending, &span_lookup);
         typecheck_errors.insert(path, error_strings);
     }
 

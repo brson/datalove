@@ -358,32 +358,6 @@ fn analyze_worldfile_ir_serial(
         datafun::driver::ModuleCompiler::from_sections(&db, &parsed.sections, CompilerOptions::default());
     let compiled = module_compiler.compile(&db);
 
-    // Check for resolution errors.
-    if let Some(err) = &compiled.resolution_error {
-        results.push(IrSerialSectionResult {
-            section_type: "resolution".S(),
-            name: None,
-            typecheck: datafun::driver::TypecheckResult::Error {
-                errors: vec![err.C()],
-            },
-            lowering: datafun::driver::LoweringResult::Skipped,
-            direct_interp_output: String::new(),
-            direct_aot_output: String::new(),
-            serialized_ir_size: 0,
-            serialized_registry_size: 0,
-            deser_success: false,
-            deser_error: None,
-            deser_interp_output: String::new(),
-            deser_aot_output: String::new(),
-            interp_output_match: false,
-            aot_output_match: false,
-            aot_compile: None,
-            link: None,
-            execution: None,
-        });
-        return IrSerialAnalysis { sections: results };
-    }
-
     // Compile for AOT (includes drops).
     let Some(mut compiler) = compiled.script_compiler_default(&db) else {
         // Module compilation failed (typecheck or ownership errors).

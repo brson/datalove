@@ -37,10 +37,6 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let compiled = module_compiler.compile(&db);
 
     // Check for errors using consolidated helper methods.
-    if let Some(err) = &compiled.resolution_error {
-        return Ok(format!("Resolution error: {}\n", err));
-    }
-
     let all_parse_errors = compiled.all_parse_errors();
     if !all_parse_errors.is_empty() {
         return Ok(format!("Parse error: {}\n", all_parse_errors.join("; ")));

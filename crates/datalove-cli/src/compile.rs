@@ -104,14 +104,9 @@ fn bail_on_module_errors<'db>(
     render::render_module_diagnostics(db, diagnostics, &locate, script_path, &LineOffsets::default(), cwd);
 
     let unrendered = compiled.all_lowering_errors();
+    assert!(rendered || !unrendered.is_empty(), "modules that failed to compile have something to say why");
     for error in &unrendered {
         eprintln!("{error}");
-    }
-    // Nothing above says what went wrong, so the errors say it however they can.
-    if !rendered && unrendered.is_empty() {
-        for error in compiled.all_errors() {
-            eprintln!("{error}");
-        }
     }
     bail!("Module compilation error");
 }
@@ -141,7 +136,7 @@ pub fn check_unit(
         render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, line_offsets, cwd);
         bail!("Parse error");
     }
-    if let TypecheckResult::Error { errors } = &unit.typecheck {
+    if let TypecheckResult::Error { .. } = &unit.typecheck {
         // Typechecking a unit asks of the units before it, so its diagnostics
         // include theirs, which were reported with them. What is this unit's
         // points into its own text, or into a module or data file.
@@ -155,13 +150,8 @@ pub fn check_unit(
             .collect();
         let locate = |source: Source| files.get(&source).cloned();
         let diagnostics = type_diags.iter().map(|d| d.to_diagnostic(compiler.db())).collect();
+        assert!(!type_diags.is_empty(), "a unit that failed to typecheck has a diagnostic of its own");
         render::render_module_diagnostics(compiler.db(), diagnostics, &locate, file_path, line_offsets, cwd);
-        // A diagnostic carries a span and renders itself. An error without
-        // one -- a duplicate import or type alias, say -- renders nothing, and
-        // a bare "type error" is all the user would otherwise get.
-        if type_diags.is_empty() && !errors.is_empty() {
-            bail!("Type error:\n{}", errors.join("\n"));
-        }
         bail!("Type error");
     }
     if let OwnershipResult::Error { message: _ } = &unit.ownership {

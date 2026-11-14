@@ -316,6 +316,20 @@ impl<'db> TypeContext<'db> {
         self.errors.push(error);
     }
 
+    /// Check that a check that failed says why.
+    ///
+    /// A `TypeError` is how checking stops, and a pending diagnostic is how
+    /// it is reported. Every error is reported where it is made, through the
+    /// `error_*` methods, so a check with errors and no diagnostic is a site
+    /// that skipped them, and its failure would reach nobody.
+    pub fn assert_errors_reported(&self) {
+        assert!(
+            self.errors.is_empty() || !self.pending_diagnostics.is_empty(),
+            "type errors with no diagnostic: {:?}",
+            self.errors.iter().map(|e| e.S()).collect::<Vec<_>>(),
+        );
+    }
+
     /// F085: Each cycle of `inline` functions calling each other, at the
     /// first of them to be checked.
     ///

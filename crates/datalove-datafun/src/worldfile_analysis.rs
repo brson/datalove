@@ -158,20 +158,6 @@ pub fn analyze_worldfile_with_hooks(
     // Compile modules (typecheck, drop analysis, lower).
     let compiled = module_compiler.compile(db);
 
-    // Check for resolution errors.
-    if let Some(err) = &compiled.resolution_error {
-        results.push(SectionResult {
-            section_type: "resolution".S(),
-            name: None,
-            typecheck: TypecheckResult::Error { errors: vec![err.C()] },
-            ownership: OwnershipResult::Skipped,
-            lowering: LoweringResult::Skipped,
-            output: String::new(),
-            debug_output: None,
-        });
-        return Ok(Analysis { sections: results });
-    }
-
     // Collect module results.
     collect_module_results(&parsed.sections, &compiled, &mut results);
 
