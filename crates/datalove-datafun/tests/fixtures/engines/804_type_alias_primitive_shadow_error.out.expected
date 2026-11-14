@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "ParseError",
                 errors: [
-                    "`int` cannot be declared here",
+                    "error[P064]: `int` cannot be declared here",
                 ],
             ),
             ownership: OwnershipResult(

@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "error[O007]: cannot move `b` in loop\n  help: use `@` to clone `b` inside the loop",
+                message: "error[O007]: cannot move `b` in loop\n  help: insert `@` to clone:\n        set a = b@\n                 +",
             ),
             lowering: LoweringResult(
                 status: "Skipped",
@@ -26,7 +26,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`a` is bound by unit 1, which did not compile",
+                message: "error: `a` is bound by unit 1, which did not compile",
             ),
             output: "",
         ),

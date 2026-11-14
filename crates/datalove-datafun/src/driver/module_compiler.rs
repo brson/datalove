@@ -590,10 +590,10 @@ impl ModuleCompiler {
 
         CompiledModules {
             shared,
-            parse_errors: output.parse_errors,
-            path_to_errors: output.typecheck_errors,
-            ownership_errors: output.ownership_errors,
-            lowering_errors,
+            parse_diagnostics: output.parse_diagnostics,
+            type_diagnostics: output.type_diagnostics,
+            ownership_diagnostics: output.ownership_diagnostics,
+            lowering_diagnostics: lowering_errors,
             module_ir_dumps,
             natives: self.natives.C(),
             rider_sources: output.rider_sources,

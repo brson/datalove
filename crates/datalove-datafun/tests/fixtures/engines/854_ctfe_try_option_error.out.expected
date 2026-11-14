@@ -11,7 +11,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "evaluating `G` returned early with none",
+                message: "error[C001]: evaluating `G` returned early with none",
             ),
             output: "",
         ),

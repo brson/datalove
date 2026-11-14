@@ -73,7 +73,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "cannot find `v` in this scope",
+                    "error[F001]: cannot find value `v` in this scope",
                 ],
             ),
             ownership: OwnershipResult(

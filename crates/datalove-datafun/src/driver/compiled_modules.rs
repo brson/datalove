@@ -45,12 +45,16 @@ pub struct SharedModuleContext<'db> {
 /// Multiple independent compilers and executors can share the same compilation.
 pub struct CompiledModules<'db> {
     pub shared: Arc<SharedModuleContext<'db>>,
-    pub parse_errors: BTreeMap<String, Vec<String>>,
-    pub path_to_errors: BTreeMap<String, Vec<String>>,
-    pub ownership_errors: BTreeMap<String, Vec<String>>,
+    /// Parse diagnostics by module path, and a rider interface's parse and
+    /// resolution diagnostics under `@rider/<name>`.
+    pub parse_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>>,
+    /// Type diagnostics by module path, from each module's own check.
+    pub type_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>>,
+    /// Ownership diagnostics by module path.
+    pub ownership_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>>,
     /// What lowering refused, by module path: the consts that could not be
     /// evaluated, and the functions that could not be specialized.
-    pub lowering_errors: BTreeMap<String, Vec<StoredDiagnostic>>,
+    pub lowering_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>>,
     pub module_ir_dumps: BTreeMap<String, Vec<String>>,
     /// Where the modules' consts found their natives, and a script's will.
     pub natives: Option<Arc<dyn NativeResolver>>,
@@ -61,10 +65,7 @@ pub struct CompiledModules<'db> {
 impl<'db> CompiledModules<'db> {
     /// Check if compilation succeeded.
     pub fn is_successful(&self) -> bool {
-        self.parse_errors.values().all(|errors| errors.is_empty())
-            && self.path_to_errors.values().all(|errors| errors.is_empty())
-            && self.ownership_errors.values().all(|errors| errors.is_empty())
-            && self.lowering_errors.values().all(|errors| errors.is_empty())
+        self.phases().all(|by_path| by_path.values().all(Vec::is_empty))
     }
 
     /// Check if there are any errors.
@@ -80,59 +81,59 @@ impl<'db> CompiledModules<'db> {
             .collect()
     }
 
-    /// Collect all errors.
+    /// Each phase's diagnostics by module path, in phase order.
+    fn phases(&self) -> impl Iterator<Item = &BTreeMap<String, Vec<StoredDiagnostic>>> {
+        [&self.parse_diagnostics, &self.type_diagnostics, &self.ownership_diagnostics, &self.lowering_diagnostics]
+            .into_iter()
+    }
+
+    /// What each module that did not compile said, by path, in phase order.
+    pub fn diagnostics_by_module(&self) -> BTreeMap<String, Vec<StoredDiagnostic>> {
+        let mut by_module: BTreeMap<String, Vec<StoredDiagnostic>> = BTreeMap::new();
+        for by_path in self.phases() {
+            for (path, diagnostics) in by_path.iter().filter(|(_, diagnostics)| !diagnostics.is_empty()) {
+                by_module.entry(path.C()).or_default().extend(diagnostics.iter().cloned());
+            }
+        }
+        by_module
+    }
+
+    /// Every error's message, in phase order: for a test to say what failed.
     pub fn all_errors(&self) -> Vec<String> {
-        let mut errors = Vec::new();
-
-        for error_list in self.parse_errors.values() {
-            errors.extend(error_list.iter().cloned());
-        }
-
-        for error_list in self.path_to_errors.values() {
-            errors.extend(error_list.iter().cloned());
-        }
-
-        for error_list in self.ownership_errors.values() {
-            errors.extend(error_list.iter().cloned());
-        }
-
-        for error_list in self.lowering_errors.values() {
-            errors.extend(error_list.iter().map(|error| error.message.C()));
-        }
-
-        errors
-    }
-
-    /// Get all parse errors.
-    pub fn all_parse_errors(&self) -> Vec<String> {
-        self.parse_errors.values()
-            .flatten()
-            .cloned()
+        self.phases()
+            .flat_map(|by_path| by_path.values().flatten())
+            .map(|diagnostic| diagnostic.message.C())
             .collect()
     }
 
-    /// Get all typecheck errors.
-    pub fn all_typecheck_errors(&self) -> Vec<String> {
-        self.path_to_errors.values()
-            .flatten()
-            .cloned()
-            .collect()
-    }
-
-    /// Get all ownership analysis errors.
-    pub fn all_ownership_errors(&self) -> Vec<String> {
-        self.ownership_errors.values()
-            .flatten()
-            .cloned()
-            .collect()
-    }
-
-    /// Get all lowering errors.
-    pub fn all_lowering_errors(&self) -> Vec<StoredDiagnostic> {
-        self.lowering_errors.values()
-            .flatten()
-            .cloned()
-            .collect()
+    /// Every diagnostic the compile reported, in phase order, to be rendered
+    /// against `db`.
+    ///
+    /// Those of the data files the modules require too, which the type
+    /// checker files in the graph's check rather than in any module's, and so
+    /// are in no map of this.
+    pub fn diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<StoredDiagnostic> {
+        let graph = self.shared.parsed_graph.graph(db);
+        let riders: Vec<_> = self.rider_sources.iter()
+            .map(|(_, source)| datalove_datafun_compiler::module_graph::rider_interface_diagnostics(db, *source))
+            .collect();
+        let parse = graph.iter_modules(db)
+            .flat_map(|module| {
+                datalove_datafun_parser::parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, module)
+            })
+            .chain(riders.iter().flat_map(|(parse, _)| parse.iter().copied()))
+            .map(|d| d.stored().C());
+        let all_names = resolve_all_names(db, self.shared.parsed_graph);
+        let types = typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph, all_names)
+            .into_iter()
+            .chain(riders.iter().flat_map(|(_, types)| types.iter().copied()))
+            .map(|d| d.stored().C());
+        let ownership = datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
+            db, self.shared.parsed_graph, self.shared.graph_typecheck)
+            .into_iter()
+            .map(|d| d.stored().C());
+        let lowering = self.lowering_diagnostics.values().flatten().cloned();
+        parse.chain(types).chain(ownership).chain(lowering).collect()
     }
 
     /// Collect native function symbols from the module registry.
@@ -147,36 +148,5 @@ impl<'db> CompiledModules<'db> {
             }
         }
         symbols
-    }
-
-    /// Get module parse diagnostics with spans for rendering.
-    pub fn get_module_parse_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::ParseDiagnostic> {
-        let graph = self.shared.parsed_graph.graph(db);
-        let riders = self.rider_sources.iter()
-            .flat_map(|(_, source)| datalove_datafun_compiler::module_graph::rider_interface_diagnostics(db, *source).0);
-        graph.iter_modules(db)
-            .flat_map(|module| {
-                datalove_datafun_parser::parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, module)
-            })
-            .chain(riders)
-            .collect()
-    }
-
-    /// Get module type diagnostics with spans for rendering.
-    pub fn get_module_type_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::TypeDiagnostic> {
-        // Recompute resolve results (memoized, will be cache hits).
-        let all_names = resolve_all_names(db, self.shared.parsed_graph);
-        let riders = self.rider_sources.iter()
-            .flat_map(|(_, source)| datalove_datafun_compiler::module_graph::rider_interface_diagnostics(db, *source).1);
-        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph, all_names)
-            .into_iter()
-            .chain(riders)
-            .collect()
-    }
-
-    /// Get module ownership diagnostics with spans for rendering.
-    pub fn get_module_ownership_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::OwnershipDiagnostic> {
-        datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
-            db, self.shared.parsed_graph, self.shared.graph_typecheck)
     }
 }

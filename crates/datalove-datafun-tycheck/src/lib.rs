@@ -44,7 +44,7 @@ pub mod types;
 
 // Re-export emit infrastructure.
 pub use datafile::{DataFileQuery, DataFiles, data_file_type};
-pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics, format_pending_diagnostics};
+pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics, stored_pending_diagnostics};
 
 /// Hint for how to recover from an @-recoverable error.
 ///

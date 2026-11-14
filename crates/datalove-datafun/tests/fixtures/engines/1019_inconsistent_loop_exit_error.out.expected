@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "error[O014]: `b` is given away on one way out of this loop and not another",
+                message: "error[O014]: `b` is given away on one way out of this loop and not another\n  help: give it away on every way out, or clone it with `@` at the move",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

@@ -4,7 +4,7 @@
 //! that can be used with either local spans or module graph spans.
 
 use datalove_diagnostic_codes::FCode;
-use bct::diagnostic::DiagnosticBuilder;
+use bct::diagnostic::{DiagnosticBuilder, StoredDiagnostic};
 use bct::text::TextSpan;
 use rmx::prelude::*;
 use datalove_diagnostic::DiagnosticBuilderExt;
@@ -223,32 +223,14 @@ pub fn emit_pending_diagnostics<'db>(
     }
 }
 
-/// Format pending diagnostics as human-readable strings with location info.
-///
-/// The same diagnostics [`emit_pending_diagnostics`] files, each as one line
-/// -- `line 3, col 7: error[F016]: ...` -- with its help after it, for test
-/// harnesses and error collection.
-pub fn format_pending_diagnostics<'db>(
+/// The diagnostics [`emit_pending_diagnostics`] files, built and kept rather
+/// than filed.
+pub fn stored_pending_diagnostics<'db>(
     db: &'db dyn crate::Db,
     pending: &[PendingDiagnostic<'db>],
     spans: &dyn SpanLookup<'db>,
-) -> Vec<String> {
-    pending.iter()
-        .map(|diag| build(db, diag, spans))
-        .map(|builder| {
-            let diagnostic = builder.build();
-            let label = diagnostic.labels.iter()
-                .find(|label| label.style == bct::diagnostic::LabelStyle::Primary)
-                .expect("every typecheck diagnostic has a primary label");
-            let loc = format_location(db, &TextSpan::new(label.source, label.span.C()));
-            let code = diagnostic.code.expect("every typecheck diagnostic has a code");
-            let mut line = format!("{}: error[{}]: {}", loc, code.as_str(db), diagnostic.message.as_str(db));
-            for help in &diagnostic.helps {
-                line.push_str(&format!(" (help: {})", help.as_str(db)));
-            }
-            line
-        })
-        .collect()
+) -> Vec<StoredDiagnostic> {
+    pending.iter().map(|diag| build(db, diag, spans).build_stored()).collect()
 }
 
 /// A name's diagnostic, with why it is not in scope when it is declared below.
@@ -522,26 +504,3 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
     builder
 }
 
-/// Format a TextSpan as a location string (e.g., "line 10, col 5").
-fn format_location<'db>(db: &'db dyn crate::Db, ts: &bct::text::TextSpan) -> String {
-    let span = &ts.span;
-    let text = ts.source.text(db);
-
-    // Calculate line and column from byte offset.
-    let start = span.start as usize;
-    let mut line = 1;
-    let mut col = 1;
-    for (i, ch) in text.char_indices() {
-        if i >= start {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 1;
-        } else {
-            col += 1;
-        }
-    }
-
-    format!("line {}, col {}", line, col)
-}

@@ -296,7 +296,7 @@
           "unit": 5,
           "compiled": true,
           "eval": {
-            "NotCompiled": "cannot find `c` in this scope"
+            "NotCompiled": "cannot find value `c` in this scope"
           }
         }
       ]

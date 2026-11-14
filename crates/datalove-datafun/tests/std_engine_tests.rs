@@ -69,8 +69,8 @@ fn describe_sys() -> WorkspaceDescriptor {
 /// A broken library is not one fixture disagreeing with another, so it is not
 /// reported per fixture.
 fn check_library(compiled: &datafun::driver::CompiledModules<'_>) {
-    for (path, errors) in &compiled.path_to_errors {
-        assert!(errors.is_empty(), "typecheck errors in {}: {:?}", path, errors);
+    for (path, diagnostics) in &compiled.type_diagnostics {
+        assert!(diagnostics.is_empty(), "typecheck errors in {}: {:?}", path, diagnostics);
     }
 }
 
@@ -134,13 +134,13 @@ fn run_with_executor(
 
     // Compile and execute the fragment.
     let result = compiler.compile_fragment(script_text);
-    if let TypecheckResult::Error { errors } = &result.typecheck {
+    if let TypecheckResult::Error { .. } = &result.typecheck {
         executor.destroy_live_values();
-        return Err(format!("{} typecheck errors: {:?}", backend_name, errors));
+        return Err(format!("{} typecheck errors: {}", backend_name, result.first_error().expect("a failed typecheck says why")));
     }
-    if let LoweringResult::Error { message, .. } = &result.lowering {
+    if let LoweringResult::Error { .. } = &result.lowering {
         executor.destroy_live_values();
-        return Err(format!("{} lowering error: {}", backend_name, message));
+        return Err(format!("{} lowering error: {}", backend_name, result.first_error().expect("a failed lowering says why")));
     }
     if let Some(ir_unit) = &result.ir_unit {
         let output = executor.execute_fragment(ir_unit);
@@ -152,13 +152,13 @@ fn run_with_executor(
 
     // Evaluate the output variable.
     let output_compiled = compiler.compile_expr("output");
-    if let TypecheckResult::Error { errors } = &output_compiled.typecheck {
+    if let TypecheckResult::Error { .. } = &output_compiled.typecheck {
         executor.destroy_live_values();
-        return Err(format!("{} output typecheck errors: {:?}", backend_name, errors));
+        return Err(format!("{} output typecheck errors: {}", backend_name, output_compiled.first_error().expect("a failed typecheck says why")));
     }
-    if let LoweringResult::Error { message, .. } = &output_compiled.lowering {
+    if let LoweringResult::Error { .. } = &output_compiled.lowering {
         executor.destroy_live_values();
-        return Err(format!("{} output lowering error: {}", backend_name, message));
+        return Err(format!("{} output lowering error: {}", backend_name, output_compiled.first_error().expect("a failed lowering says why")));
     }
     let output = if let Some(ir_unit) = &output_compiled.ir_unit {
         let (_, value) = executor.execute_expr(ir_unit);
@@ -191,11 +191,11 @@ fn run_aot(
         .ok_or("AOT: module compilation failed (compiler)")?;
 
     let result = compiler.compile_fragment(&modified_source);
-    if let TypecheckResult::Error { errors } = &result.typecheck {
-        return Err(format!("AOT typecheck errors: {:?}", errors));
+    if let TypecheckResult::Error { .. } = &result.typecheck {
+        return Err(format!("AOT typecheck errors: {}", result.first_error().expect("a failed typecheck says why")));
     }
-    if let LoweringResult::Error { message, .. } = &result.lowering {
-        return Err(format!("AOT lowering error: {}", message));
+    if let LoweringResult::Error { .. } = &result.lowering {
+        return Err(format!("AOT lowering error: {}", result.first_error().expect("a failed lowering says why")));
     }
 
     let ir_unit = result.ir_unit
@@ -240,11 +240,11 @@ fn run_c_aot(
         .ok_or("C AOT: module compilation failed (compiler)")?;
 
     let result = compiler.compile_fragment(&modified_source);
-    if let TypecheckResult::Error { errors } = &result.typecheck {
-        return Err(format!("C AOT typecheck errors: {:?}", errors));
+    if let TypecheckResult::Error { .. } = &result.typecheck {
+        return Err(format!("C AOT typecheck errors: {}", result.first_error().expect("a failed typecheck says why")));
     }
-    if let LoweringResult::Error { message, .. } = &result.lowering {
-        return Err(format!("C AOT lowering error: {}", message));
+    if let LoweringResult::Error { .. } = &result.lowering {
+        return Err(format!("C AOT lowering error: {}", result.first_error().expect("a failed lowering says why")));
     }
 
     let ir_unit = result.ir_unit.ok_or("C AOT: IR unit not available")?;

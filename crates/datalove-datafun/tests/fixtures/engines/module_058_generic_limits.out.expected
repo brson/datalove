@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "line 12, col 29: error[F016]: mismatched types: expected `u32`, found `string`",
+                    "error[F016]: mismatched types: expected `u32`, found `string`",
                 ],
             ),
             ownership: OwnershipResult(

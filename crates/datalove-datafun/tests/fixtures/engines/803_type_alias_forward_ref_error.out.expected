@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "unknown type `Later`",
+                    "error[F064]: unknown type `Later`",
                 ],
             ),
             ownership: OwnershipResult(

@@ -10,7 +10,7 @@
     },
     "eval": {
       "Unit": {
-        "NotCompiled": "error[O001]: use of moved value: `a`\n  help: use `@` to clone `a` before the earlier use"
+        "NotCompiled": "use of moved value: `a`\n  help: insert `@` to clone:\n    let b = a@\n             +"
       }
     },
     "environment": []

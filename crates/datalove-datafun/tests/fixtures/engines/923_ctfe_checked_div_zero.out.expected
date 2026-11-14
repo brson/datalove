@@ -11,7 +11,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "evaluating `C` returned early with er error \"division by zero\"",
+                message: "error[C001]: evaluating `C` returned early with er error \"division by zero\"",
             ),
             output: "",
         ),

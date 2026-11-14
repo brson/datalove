@@ -71,17 +71,3 @@ pub fn render_module_diagnostics<'db>(
         renderer.located_diagnostic(db, &diagnostic, file_path, locate, cwd);
     }
 }
-
-/// Render ownership diagnostics to stderr.
-pub fn render_ownership_diagnostics<'db>(
-    db: &'db dyn datalove::datafun::Db,
-    diagnostics: &[&datalove::diagnostic::OwnershipDiagnostic],
-    file_path: &Path,
-    line_offsets: &LineOffsets,
-    cwd: &Path,
-) {
-    let mut renderer = Renderer::with_line_offsets(line_offsets.C());
-    for diagnostic in diagnostics {
-        renderer.diagnostic(db, &diagnostic.to_diagnostic(db), file_path, cwd);
-    }
-}

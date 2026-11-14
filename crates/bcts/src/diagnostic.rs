@@ -364,6 +364,11 @@ macro_rules! diagnostics {
                     self.0.to_diagnostic(db)
                 }
 
+                /// The diagnostic this holds, as it is stored.
+                pub fn stored(&self) -> &$crate::diagnostic::StoredDiagnostic {
+                    &self.0
+                }
+
                 /// File a diagnostic that was built and kept rather than
                 /// filed when it was made.
                 pub fn emit_stored(db: &dyn salsa::Database, diagnostic: $crate::diagnostic::StoredDiagnostic) {

@@ -6,8 +6,8 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "ParseError",
                 errors: [
-                    "unclosed \'<\'",
-                    "unexpected token after expression",
+                    "error[D055]: unclosed \'<\'",
+                    "error[P021]: unexpected token after expression",
                 ],
             ),
             ownership: OwnershipResult(

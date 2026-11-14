@@ -6,8 +6,8 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "ParseError",
                 errors: [
-                    "unclosed \'<\'",
-                    "unexpected token after expression",
+                    "error[D055]: unclosed \'<\'",
+                    "error[P021]: unexpected token after expression",
                 ],
             ),
             ownership: OwnershipResult(
@@ -24,7 +24,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "cannot find `lt` in this scope",
+                    "error[F001]: cannot find value `lt` in this scope",
                 ],
             ),
             ownership: OwnershipResult(

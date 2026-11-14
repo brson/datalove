@@ -49,12 +49,13 @@ fn verify_generated_source_compiles() {
 
     let mut report = String::from("benchmark source does not compile:\n");
     let phases = [
-        ("parse", &output.parse_errors),
-        ("typecheck", &output.typecheck_errors),
-        ("ownership", &output.ownership_errors),
+        ("parse", &output.parse_diagnostics),
+        ("typecheck", &output.type_diagnostics),
+        ("ownership", &output.ownership_diagnostics),
     ];
     for (phase, errors) in phases {
-        for (path, messages) in errors.iter().filter(|(_, m)| !m.is_empty()) {
+        for (path, diagnostics) in errors.iter().filter(|(_, d)| !d.is_empty()) {
+            let messages: Vec<&str> = diagnostics.iter().map(|d| d.message.as_str()).collect();
             report.push_str(&format!("  {} {}: {:?}\n", phase, path, messages));
         }
     }

@@ -1525,24 +1525,8 @@ impl<'db> ScriptCompiler<'db> {
         self.last_source
     }
 
-    /// Get parse diagnostics from the last compilation.
-    pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
-        if let Some(src) = self.last_source {
-            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Unit `index`'s diagnostics as they stand, rendered as text in
-    /// `style`, quoting the unit as the file `name`: its parse, type and
-    /// ownership diagnostics, and what lowering refused, as its last compile
-    /// recorded.
-    ///
-    /// A unit's typecheck asks of the units before it, so its diagnostics
-    /// include theirs; only those pointing into this unit, or nowhere, are
-    /// its.
-    pub fn render_unit_diagnostics(&self, index: usize, name: &str, style: bct::render::TextStyle) -> String {
+    /// Unit `index`'s parse diagnostics.
+    fn unit_parse_diagnostics(&self, index: usize) -> Vec<StoredDiagnostic> {
         let unit = self.units[index].unit;
         let source = unit.source(self.db);
         let parse = if unit.is_expr(self.db) {
@@ -1550,48 +1534,52 @@ impl<'db> ScriptCompiler<'db> {
         } else {
             datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
         };
-        let mut diagnostics: Vec<bct::diagnostic::Diagnostic<'db>> = parse.iter()
-            .map(|diagnostic| diagnostic.to_diagnostic(self.db))
-            .collect();
-        if unit_parses(self.db, unit) {
-            let types = typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, unit, self.env);
-            diagnostics.extend(types.iter()
-                .map(|diagnostic| diagnostic.to_diagnostic(self.db))
-                .filter(|diagnostic| {
-                    diagnostic.labels.is_empty() || diagnostic.labels.iter().any(|label| label.source == source)
-                }));
-            diagnostics.extend(self.unit_ownership_diagnostics(index).iter()
-                .map(|diagnostic| diagnostic.to_diagnostic(self.db)));
-            diagnostics.extend(self.unit_records[index].refused.iter()
-                .map(|diagnostic| diagnostic.to_diagnostic(self.db)));
+        parse.iter().map(|diagnostic| diagnostic.stored().C()).collect()
+    }
+
+    /// Unit `index`'s type diagnostics; none if it did not parse.
+    ///
+    /// A unit's typecheck asks of the units before it, so what it files
+    /// includes theirs. Its own are those pointing into it, or into no other
+    /// unit: a module or data file it requires, or nowhere.
+    fn unit_type_diagnostics(&self, index: usize) -> Vec<StoredDiagnostic> {
+        let unit = self.units[index].unit;
+        if !unit_parses(self.db, unit) {
+            return Vec::new();
         }
+        let own = unit.source(self.db);
+        let others: Vec<bct::input::Source> = self.units.iter()
+            .map(|other| other.unit.source(self.db))
+            .filter(|source| *source != own)
+            .collect();
+        typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, unit, self.env)
+            .iter()
+            .map(|diagnostic| diagnostic.stored())
+            .filter(|diagnostic| {
+                diagnostic.labels.is_empty() || !diagnostic.labels.iter().all(|label| others.contains(&label.source))
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Unit `index`'s diagnostics as they stand, rendered as text in
+    /// `style`, quoting the unit as the file `name`: its parse, type and
+    /// ownership diagnostics, and what lowering refused, as its last compile
+    /// recorded. Those pointing into a module or data file it requires are
+    /// left out, there being no file here to quote.
+    pub fn render_unit_diagnostics(&self, index: usize, name: &str, style: bct::render::TextStyle) -> String {
+        let own = self.units[index].unit.source(self.db);
+        let diagnostics = self.unit_parse_diagnostics(index).into_iter()
+            .chain(self.unit_type_diagnostics(index))
+            .chain(self.unit_ownership_diagnostics(index))
+            .chain(self.unit_records[index].refused.iter().cloned())
+            .filter(|diagnostic| {
+                diagnostic.labels.is_empty() || diagnostic.labels.iter().any(|label| label.source == own)
+            })
+            .map(|diagnostic| diagnostic.to_diagnostic(self.db))
+            .collect::<Vec<_>>();
         bct::render::render_diagnostics_to_string(
             self.db, diagnostics, std::path::Path::new(name), std::path::Path::new(""), style)
-    }
-
-    /// Get type diagnostics from the last compilation.
-    ///
-    /// Those of the last unit and whatever its typechecking asked of the units
-    /// before it, which never includes typechecking one that did not parse.
-    pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
-        match self.last_unit {
-            Some(unit) if unit_parses(self.db, unit) => {
-                typecheck_script_unit::accumulated::<datalove_diagnostic::TypeDiagnostic>(
-                    self.db, unit, self.env)
-            }
-            _ => Vec::new(),
-        }
-    }
-
-    /// Ownership diagnostics from the last compilation: those of the last
-    /// unit compiled, if it got as far as ownership analysis.
-    pub fn get_ownership_diagnostics(&self) -> Vec<&datalove_diagnostic::OwnershipDiagnostic> {
-        let Some(last) = self.last_unit else {
-            return Vec::new();
-        };
-        let index = self.units.iter().position(|unit| unit.unit == last)
-            .expect("the last unit compiled is in the script");
-        self.unit_ownership_diagnostics(index)
     }
 
     /// Unit `index`'s ownership diagnostics as they stand; none if it does not
@@ -1603,7 +1591,7 @@ impl<'db> ScriptCompiler<'db> {
     /// unit's position alone. Asked again with what the records say now, it
     /// is the query the unit's compile ran, since an edit that changes what
     /// the unit sees compiles it again.
-    pub fn unit_ownership_diagnostics(&self, index: usize) -> Vec<&datalove_diagnostic::OwnershipDiagnostic> {
+    pub fn unit_ownership_diagnostics(&self, index: usize) -> Vec<StoredDiagnostic> {
         let unit = self.units[index].unit;
         if !unit_parses(self.db, unit) {
             return Vec::new();
@@ -1615,12 +1603,13 @@ impl<'db> ScriptCompiler<'db> {
         }
         let source = unit.source(self.db);
         let (externals, external_consts) = self.ownership_inputs(index, output);
-        match self.parsed_unit_at(index) {
+        let diagnostics = match self.parsed_unit_at(index) {
             ParsedUnit::Fragment { top, .. } => analyze_script_fragment_tracked::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
                 self.db, source, result, top, externals, external_consts),
             ParsedUnit::Expr(parsed) => analyze_script_expr_tracked::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
                 self.db, source, result, parsed, externals, external_consts),
-        }
+        };
+        diagnostics.iter().map(|diagnostic| diagnostic.stored().C()).collect()
     }
 
     /// Get the database reference.
@@ -1738,21 +1727,8 @@ impl<'db> ScriptCompiler<'db> {
 
     /// The result for unit `index`, which did not parse.
     fn parse_failure_at(&self, index: usize) -> ScriptCompilationResult {
-        let unit = self.units[index].unit;
-        let source = unit.source(self.db);
-        let parse_diags = if unit.is_expr(self.db) {
-            datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
-        } else {
-            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, source)
-        };
-        let parse_errors: Vec<String> = parse_diags.iter()
-            .map(|d| {
-                let diag = d.to_diagnostic(self.db);
-                diag.message.as_str(self.db).S()
-            })
-            .collect();
         ScriptCompilationResult {
-            typecheck: TypecheckResult::ParseError { errors: parse_errors },
+            typecheck: TypecheckResult::unparsed(self.unit_parse_diagnostics(index)),
             ownership: OwnershipResult::Skipped,
             lowering: LoweringResult::Skipped,
             ir_unit: None,
@@ -1930,13 +1906,9 @@ impl<'db> ScriptCompiler<'db> {
         let output = typecheck_script_unit(self.db, self.units[index].unit, self.env);
         let result = output.result(self.db);
 
-        // Check for errors.
-        let errors: Vec<_> = result.errors(self.db).into_iter()
-            .map(|e| e.error(self.db).S())
-            .collect();
-        if !errors.is_empty() {
+        if !result.errors(self.db).is_empty() {
             return Err(ScriptCompilationResult {
-                typecheck: TypecheckResult::Error { errors },
+                typecheck: TypecheckResult::refused(self.unit_type_diagnostics(index)),
                 ownership: OwnershipResult::Skipped,
                 lowering: LoweringResult::Skipped,
                 ir_unit: None,
@@ -1995,10 +1967,9 @@ impl<'db> ScriptCompiler<'db> {
                     external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
-                    let error_msg = ownership_result.errors(self.db).join("\n");
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
-                        ownership: OwnershipResult::Error { message: error_msg },
+                        ownership: OwnershipResult::refused(self.unit_ownership_diagnostics(index)),
                         lowering: LoweringResult::Skipped,
                         ir_unit: None,
                     });
@@ -2025,10 +1996,9 @@ impl<'db> ScriptCompiler<'db> {
                     external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
-                    let error_msg = ownership_result.errors(self.db).join("\n");
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
-                        ownership: OwnershipResult::Error { message: error_msg },
+                        ownership: OwnershipResult::refused(self.unit_ownership_diagnostics(index)),
                         lowering: LoweringResult::Skipped,
                         ir_unit: None,
                     });

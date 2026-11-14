@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "`+?` can return early, so the function has to return an option `?T`, and it returns `!()`",
+                    "error[F049]: `+?` can return early, so the function has to return an option `?T`, and it returns `!()`",
                 ],
             ),
             ownership: OwnershipResult(

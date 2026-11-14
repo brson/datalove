@@ -185,9 +185,9 @@ fn a_function_body_may_not_name_an_enclosing_let() {
         "fun apply(n: int): int\n    ret n * scale\nend fun\n",
     ]);
     match result.typecheck {
-        datafun::driver::TypecheckResult::Error { ref errors } => assert!(
-            errors.iter().any(|e| e.contains("scale")),
-            "wrong error for a body naming a `let`: {errors:?}",
+        datafun::driver::TypecheckResult::Error { ref diagnostics } => assert!(
+            diagnostics.iter().any(|d| d.message.contains("scale")),
+            "wrong error for a body naming a `let`: {diagnostics:?}",
         ),
         other => panic!("a body named an enclosing `let` and passed: {other:?}"),
     }

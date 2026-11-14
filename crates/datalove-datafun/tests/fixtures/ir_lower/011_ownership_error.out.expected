@@ -1,2 +1,1 @@
-Ownership error: Ownership error in main: error[O001]: use of moved value: `s`
-  help: use `@` to clone `s` before the earlier use
+Ownership error: use of moved value: `s`

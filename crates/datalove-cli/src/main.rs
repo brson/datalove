@@ -651,7 +651,7 @@ impl TypecheckStdCommand {
         let (mut module_compiler, _) = descriptor.to_compiler_with_natives(&db, &sys.natives);
         let compiled = module_compiler.compile(&db);
 
-        let errors: Vec<(&String, &String)> = compiled.path_to_errors.iter()
+        let errors: Vec<(&String, &datalove::bct::diagnostic::StoredDiagnostic)> = compiled.type_diagnostics.iter()
             .flat_map(|(path, errors)| errors.iter().map(move |err| (path, err)))
             .collect();
 
@@ -661,7 +661,7 @@ impl TypecheckStdCommand {
         } else {
             println!("Found {} typecheck error(s):", errors.len());
             for (path, err) in &errors {
-                println!("  {}: {}", path, err);
+                println!("  {}: [{}] {}", path, err.code.as_deref().unwrap_or("-"), err.message);
             }
             bail!("Typecheck failed with {} error(s)", errors.len());
         }

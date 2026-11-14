@@ -29,7 +29,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "nothing named `helper` is required to import from",
+                    "error[F078]: nothing named `helper` is required to import from",
                 ],
             ),
             ownership: OwnershipResult(
@@ -46,7 +46,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "cannot find `add_one` in this scope",
+                    "error[F002]: cannot find function `add_one` in this scope",
                 ],
             ),
             ownership: OwnershipResult(

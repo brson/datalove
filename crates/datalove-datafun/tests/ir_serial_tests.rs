@@ -26,13 +26,13 @@ use datafun::driver::CompilerOptions;
 // ============================================================================
 
 /// Result of IR serialization analysis.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct IrSerialAnalysis {
     pub sections: Vec<IrSerialSectionResult>,
 }
 
 /// Result of analyzing one section with serialization round-trip.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct IrSerialSectionResult {
     pub section_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -287,61 +287,8 @@ fn analyze_worldfile_ir_serial(
         .filter(|s| matches!(s, WorldfileSection::ScriptExpr { .. }))
         .count();
 
-    if fragment_count != 1 {
-        results.push(IrSerialSectionResult {
-            section_type: "validation".S(),
-            name: None,
-            typecheck: datafun::driver::TypecheckResult::Error {
-                errors: vec![format!(
-                    "Expected 1 scriptunit-fragment, found {}",
-                    fragment_count
-                )],
-            },
-            lowering: datafun::driver::LoweringResult::Skipped,
-            direct_interp_output: String::new(),
-            direct_aot_output: String::new(),
-            serialized_ir_size: 0,
-            serialized_registry_size: 0,
-            deser_success: false,
-            deser_error: None,
-            deser_interp_output: String::new(),
-            deser_aot_output: String::new(),
-            interp_output_match: false,
-            aot_output_match: false,
-            aot_compile: None,
-            link: None,
-            execution: None,
-        });
-        return IrSerialAnalysis { sections: results };
-    }
-
-    if expr_count > 0 {
-        results.push(IrSerialSectionResult {
-            section_type: "validation".S(),
-            name: None,
-            typecheck: datafun::driver::TypecheckResult::Error {
-                errors: vec![format!(
-                    "scriptunit-expr sections not allowed, found {}",
-                    expr_count
-                )],
-            },
-            lowering: datafun::driver::LoweringResult::Skipped,
-            direct_interp_output: String::new(),
-            direct_aot_output: String::new(),
-            serialized_ir_size: 0,
-            serialized_registry_size: 0,
-            deser_success: false,
-            deser_error: None,
-            deser_interp_output: String::new(),
-            deser_aot_output: String::new(),
-            interp_output_match: false,
-            aot_output_match: false,
-            aot_compile: None,
-            link: None,
-            execution: None,
-        });
-        return IrSerialAnalysis { sections: results };
-    }
+    assert_eq!(fragment_count, 1, "an ir_serial fixture has one scriptunit-fragment");
+    assert_eq!(expr_count, 0, "an ir_serial fixture has no scriptunit-expr sections");
 
     // Find the fragment source.
     let fragment_source = parsed

@@ -6,8 +6,8 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "mismatched types: expected `()`, found `u32`",
-                    "mismatched types: expected `()`, found `u32`",
+                    "error[F095]: mismatched types: expected `()`, found `u32`",
+                    "error[F095]: mismatched types: expected `()`, found `u32`",
                 ],
             ),
             ownership: OwnershipResult(

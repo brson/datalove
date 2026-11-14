@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in test_move: error[O016]: cannot move out of const: `MSG`\n  help: use `@` to clone `MSG`\nerror[O016]: cannot move out of const: `LOCAL`\n  help: use `@` to clone `LOCAL`",
+                message: "error[O016]: cannot move out of const: `MSG`\n  help: insert `@` to clone:\n      let a: int = consume(MSG@)\n                              +\nerror[O016]: cannot move out of const: `LOCAL`\n  help: insert `@` to clone:\n      ret (a, LOCAL@)\n                   +",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

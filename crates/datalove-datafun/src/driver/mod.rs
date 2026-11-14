@@ -66,7 +66,7 @@ pub mod c_aot;
 // Re-export main types.
 pub use result::{
     TypecheckResult, OwnershipResult, LoweringResult,
-    format_ownership_result, format_lowering_result,
+    format_ownership_result, format_lowering_result, diagnostic_summary,
     ScriptUnitResult, ScriptCompilationResult,
 };
 pub use compiled_modules::{SharedModuleContext, CompiledModules};

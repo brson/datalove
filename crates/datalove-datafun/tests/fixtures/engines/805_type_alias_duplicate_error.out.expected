@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "`MyInt` is defined twice",
+                    "error[F066]: `MyInt` is defined twice",
                 ],
             ),
             ownership: OwnershipResult(

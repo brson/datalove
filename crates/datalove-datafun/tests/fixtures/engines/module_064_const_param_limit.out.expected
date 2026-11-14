@@ -11,7 +11,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`scale` is given 65 different values for its const parameters, over the limit of 64",
+                message: "error[C004]: `scale` is given 65 different values for its const parameters, over the limit of 64",
             ),
             output: "",
         ),

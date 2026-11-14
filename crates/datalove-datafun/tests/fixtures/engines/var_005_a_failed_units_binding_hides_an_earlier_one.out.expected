@@ -52,7 +52,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`x` is bound by unit 2, which did not compile",
+                message: "error: `x` is bound by unit 2, which did not compile",
             ),
             output: "",
         ),
@@ -67,7 +67,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`x` is bound by unit 2, which did not compile",
+                message: "error: `x` is bound by unit 2, which did not compile",
             ),
             output: "",
         ),
@@ -82,7 +82,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`x` is bound by unit 2, which did not compile",
+                message: "error: `x` is bound by unit 2, which did not compile",
             ),
             output: "",
         ),

@@ -5,6 +5,7 @@
 //! It does not depend on package resolution or the interpreter.
 
 use rmx::prelude::*;
+use bct::diagnostic::StoredDiagnostic;
 use bct::lookup::LookupMap;
 use rmx::std::collections::BTreeMap;
 
@@ -51,12 +52,15 @@ pub struct ModuleCompilationOutput<'db> {
     pub typecheck_result: ModuleGraphTypecheckResult<'db>,
     /// Ownership analysis results per module.
     pub ownership_analysis: ModuleGraphAnalysis<'db>,
-    /// Parse errors by module path.
-    pub parse_errors: BTreeMap<String, Vec<String>>,
-    /// Typecheck errors by module path.
-    pub typecheck_errors: BTreeMap<String, Vec<String>>,
-    /// Ownership analysis errors by module path.
-    pub ownership_errors: BTreeMap<String, Vec<String>>,
+    /// Parse diagnostics by module path, and a rider interface's parse and
+    /// resolution diagnostics under `@rider/<name>`.
+    pub parse_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>>,
+    /// Type diagnostics by module path: those of the module's own check, and
+    /// not those of the data files it requires, which only the graph's
+    /// accumulated diagnostics hold.
+    pub type_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>>,
+    /// Ownership diagnostics by module path.
+    pub ownership_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>>,
     /// The rider interfaces compiled against, by rider name, whose own
     /// diagnostics are asked of `rider_interface_diagnostics`.
     pub rider_sources: Vec<(String, bct::input::Source)>,
@@ -65,9 +69,9 @@ pub struct ModuleCompilationOutput<'db> {
 impl<'db> ModuleCompilationOutput<'db> {
     /// Check if analysis succeeded (no errors).
     pub fn is_successful(&self) -> bool {
-        self.parse_errors.values().all(|e| e.is_empty())
-            && self.typecheck_errors.values().all(|e| e.is_empty())
-            && self.ownership_errors.values().all(|e| e.is_empty())
+        self.parse_diagnostics.values().all(|e| e.is_empty())
+            && self.type_diagnostics.values().all(|e| e.is_empty())
+            && self.ownership_diagnostics.values().all(|e| e.is_empty())
     }
 }
 
@@ -109,12 +113,11 @@ pub fn compile_modules<'db>(
     // module would: its natives are what it failed to say.
     for (name, source) in &rider_sources {
         let (parse, types) = crate::module_graph::rider_interface_diagnostics(db.as_salsa_db(), *source);
-        let messages: Vec<String> = parse.iter().map(|d| d.to_diagnostic(db.as_salsa_db()).message)
-            .chain(types.iter().map(|d| d.to_diagnostic(db.as_salsa_db()).message))
-            .map(|message| message.as_str(db.as_salsa_db()).S())
+        let diagnostics: Vec<StoredDiagnostic> = parse.iter().map(|d| d.stored().C())
+            .chain(types.iter().map(|d| d.stored().C()))
             .collect();
-        if !messages.is_empty() {
-            output.parse_errors.insert(fmt!("@rider/{name}"), messages);
+        if !diagnostics.is_empty() {
+            output.parse_diagnostics.insert(fmt!("@rider/{name}"), diagnostics);
         }
     }
     output.rider_sources = rider_sources;
@@ -219,48 +222,42 @@ fn collect_results<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
 ) -> ModuleCompilationOutput<'db> {
-    // Collect parse errors from accumulated diagnostics.
-    let mut parse_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for module in module_graph.iter_modules(db.as_salsa_db()) {
-        let diags = parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(db.as_salsa_db(), module);
+    let salsa_db = db.as_salsa_db();
+
+    let mut parse_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>> = BTreeMap::new();
+    for module in module_graph.iter_modules(salsa_db) {
+        let diags = parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(salsa_db, module);
         if !diags.is_empty() {
-            let path = module.id(db.as_salsa_db()).path(db.as_salsa_db()).C();
-            let error_strings: Vec<String> = diags.iter()
-                .map(|d| {
-                    let diag = d.to_diagnostic(db.as_salsa_db());
-                    diag.message.as_str(db.as_salsa_db()).S()
-                })
-                .collect();
-            parse_errors.insert(path, error_strings);
+            let path = module.id(salsa_db).path(salsa_db).C();
+            parse_diagnostics.insert(path, diags.iter().map(|d| d.stored().C()).collect());
         }
     }
 
-    // Collect typecheck errors with location info from pending diagnostics.
-    let module_results = typecheck_result.module_results(db.as_salsa_db());
-    let mut typecheck_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-
+    // Every type error is reported by a diagnostic, so these say them all.
+    let module_results = typecheck_result.module_results(salsa_db);
+    let mut type_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>> = BTreeMap::new();
     for (module_id, result) in module_results.iter_unordered() {
-        let errors = result.errors(db.as_salsa_db());
-        if errors.is_empty() {
+        if result.errors(salsa_db).is_empty() {
             continue;
         }
-        let path = module_id.path(db.as_salsa_db()).C();
-
-        // Every error is reported by a diagnostic, so these say them all.
-        let pending = result.pending_diagnostics(db.as_salsa_db());
         let span_lookup = datalove_datafun_tycheck::ModuleGraphSpanLookup::new(&parsed_graph, *module_id);
-        let error_strings = datalove_datafun_tycheck::format_pending_diagnostics(db.as_salsa_db(), pending, &span_lookup);
-        typecheck_errors.insert(path, error_strings);
+        let diagnostics = datalove_datafun_tycheck::stored_pending_diagnostics(
+            salsa_db, result.pending_diagnostics(salsa_db), &span_lookup);
+        type_diagnostics.insert(module_id.path(salsa_db).C(), diagnostics);
     }
 
-    // Collect ownership analysis errors.
-    let mut ownership_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (module_id, result) in ownership_analysis.module_results(db.as_salsa_db()).iter_unordered() {
-        let errors = result.errors(db.as_salsa_db());
-        if !errors.is_empty() {
-            let path = module_id.path(db.as_salsa_db()).C();
-            ownership_errors.insert(path, errors.C());
+    // Filed by the module's own analysis, which is what reads them back.
+    let mut ownership_diagnostics: BTreeMap<String, Vec<StoredDiagnostic>> = BTreeMap::new();
+    for (module_id, result) in ownership_analysis.module_results(salsa_db).iter_unordered() {
+        if result.errors(salsa_db).is_empty() {
+            continue;
         }
+        let module = parsed_graph.get_module(salsa_db, *module_id)
+            .expect("an analyzed module is in its graph");
+        let single = *module_results.get(module_id).expect("an analyzed module was typechecked");
+        let diagnostics = crate::tracked_ownership_analysis::analyze_module::accumulated::<datalove_diagnostic::OwnershipDiagnostic>(
+            salsa_db, module, single);
+        ownership_diagnostics.insert(module_id.path(salsa_db).C(), diagnostics.iter().map(|d| d.stored().C()).collect());
     }
 
     ModuleCompilationOutput {
@@ -269,9 +266,9 @@ fn collect_results<'db>(
         name_resolution,
         typecheck_result,
         ownership_analysis,
-        parse_errors,
-        typecheck_errors,
-        ownership_errors,
+        parse_diagnostics,
+        type_diagnostics,
+        ownership_diagnostics,
         rider_sources: Vec::new(),
     }
 }

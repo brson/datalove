@@ -72,7 +72,7 @@ fn one_cold_compile(
             .collect(),
         ParallelMode::Sequential,
     );
-    assert!(output.is_successful(), "{:?} {:?}", output.typecheck_errors, output.ownership_errors);
+    assert!(output.is_successful(), "{:?} {:?}", output.type_diagnostics, output.ownership_diagnostics);
     split.check = t.elapsed();
 
     let t = Instant::now();

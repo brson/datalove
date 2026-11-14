@@ -37,26 +37,25 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let compiled = module_compiler.compile(&db);
 
     // Check for errors using consolidated helper methods.
-    let all_parse_errors = compiled.all_parse_errors();
-    if !all_parse_errors.is_empty() {
-        return Ok(format!("Parse error: {}\n", all_parse_errors.join("; ")));
+    // The first phase that failed, as its messages.
+    let messages = |by_path: &std::collections::BTreeMap<String, Vec<bct::diagnostic::StoredDiagnostic>>| -> Vec<String> {
+        by_path.values().flatten().map(|d| d.message.clone()).collect()
+    };
+    let parse = messages(&compiled.parse_diagnostics);
+    if !parse.is_empty() {
+        return Ok(format!("Parse error: {}\n", parse.join("; ")));
     }
-
-    let all_typecheck_errors = compiled.all_typecheck_errors();
-    if !all_typecheck_errors.is_empty() {
-        return Ok(format!("Typecheck error: {}\n", all_typecheck_errors.join("; ")));
+    let types = messages(&compiled.type_diagnostics);
+    if !types.is_empty() {
+        return Ok(format!("Typecheck error: {}\n", types.join("; ")));
     }
-
-    let all_ownership_errors = compiled.all_ownership_errors();
-    if !all_ownership_errors.is_empty() {
-        return Ok(format!("Ownership error: {}\n", all_ownership_errors.join("; ")));
+    let ownership = messages(&compiled.ownership_diagnostics);
+    if !ownership.is_empty() {
+        return Ok(format!("Ownership error: {}\n", ownership.join("; ")));
     }
-
-    // Check for lowering errors.
-    let all_lowering_errors = compiled.all_lowering_errors();
-    if !all_lowering_errors.is_empty() {
-        let messages: Vec<&str> = all_lowering_errors.iter().map(|error| error.message.as_str()).collect();
-        return Ok(format!("{}\n", messages.join("\n")));
+    let lowering = messages(&compiled.lowering_diagnostics);
+    if !lowering.is_empty() {
+        return Ok(format!("{}\n", lowering.join("\n")));
     }
 
     // Collect IR dump from all modules.

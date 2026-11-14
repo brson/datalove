@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "mismatched types: expected `error`, found `string`",
+                    "error[F016]: mismatched types: expected `error`, found `string`",
                 ],
             ),
             ownership: OwnershipResult(

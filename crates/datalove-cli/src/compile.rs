@@ -9,7 +9,7 @@ use rmx::std::sync::Arc;
 use datalove::bct::input::Source;
 use datalove::bct::render::LineOffsets;
 use datalove::datafun::driver::{
-    CompiledModules, LoweringResult, ModuleCompiler, OwnershipResult,
+    CompiledModules, ModuleCompiler, OwnershipResult,
     ScriptCompilationResult, ScriptCompiler, TypecheckResult, WorkspaceDescriptor,
 };
 use datalove::datafun::driver::rider_load::RiderNatives;
@@ -96,11 +96,7 @@ fn bail_on_module_errors<'db>(
     let files = descriptor.source_files(module_compiler);
     let locate = |source: Source| files.get(&source).cloned();
 
-    let diagnostics: Vec<_> = compiled.get_module_parse_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db))
-        .chain(compiled.get_module_type_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
-        .chain(compiled.get_module_ownership_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
-        .chain(compiled.all_lowering_errors().iter().map(|d| d.to_diagnostic(db)))
-        .collect();
+    let diagnostics: Vec<_> = compiled.diagnostics(db).iter().map(|d| d.to_diagnostic(db)).collect();
     assert!(!diagnostics.is_empty(), "modules that failed to compile have something to say why");
     render::render_module_diagnostics(db, diagnostics, &locate, script_path, &LineOffsets::default(), cwd);
     bail!("Module compilation error");
@@ -126,39 +122,16 @@ pub fn check_unit(
     line_offsets: &LineOffsets,
     cwd: &Path,
 ) -> AnyResult<()> {
-    if let TypecheckResult::ParseError { errors: _ } = &unit.typecheck {
-        let parse_diags = compiler.get_parse_diagnostics();
-        render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, line_offsets, cwd);
-        bail!("Parse error");
+    let Some(diagnostics) = unit.diagnostics() else {
+        return Ok(());
+    };
+    let locate = |source: Source| files.get(&source).cloned();
+    let diagnostics = diagnostics.iter().map(|d| d.to_diagnostic(compiler.db())).collect();
+    render::render_module_diagnostics(compiler.db(), diagnostics, &locate, file_path, line_offsets, cwd);
+    match (&unit.typecheck, &unit.ownership) {
+        (TypecheckResult::ParseError { .. }, _) => bail!("Parse error"),
+        (TypecheckResult::Error { .. }, _) => bail!("Type error"),
+        (_, OwnershipResult::Error { .. }) => bail!("Ownership error"),
+        _ => bail!("Lowering error"),
     }
-    if let TypecheckResult::Error { .. } = &unit.typecheck {
-        // Typechecking a unit asks of the units before it, so its diagnostics
-        // include theirs, which were reported with them. What is this unit's
-        // points into its own text, or into a module or data file.
-        let own = compiler.last_source().expect("a unit was compiled");
-        let type_diags: Vec<_> = compiler.get_type_diagnostics().into_iter()
-            .filter(|diag| {
-                let diag = diag.to_diagnostic(compiler.db());
-                diag.labels.is_empty()
-                    || diag.labels.iter().any(|label| label.source == own || files.contains_key(&label.source))
-            })
-            .collect();
-        let locate = |source: Source| files.get(&source).cloned();
-        let diagnostics = type_diags.iter().map(|d| d.to_diagnostic(compiler.db())).collect();
-        assert!(!type_diags.is_empty(), "a unit that failed to typecheck has a diagnostic of its own");
-        render::render_module_diagnostics(compiler.db(), diagnostics, &locate, file_path, line_offsets, cwd);
-        bail!("Type error");
-    }
-    if let OwnershipResult::Error { message: _ } = &unit.ownership {
-        let diagnostics = compiler.get_ownership_diagnostics();
-        render::render_ownership_diagnostics(compiler.db(), &diagnostics, file_path, line_offsets, cwd);
-        bail!("Ownership error");
-    }
-    if let LoweringResult::Error { diagnostics, .. } = &unit.lowering {
-        let locate = |source: Source| files.get(&source).cloned();
-        let diagnostics = diagnostics.iter().map(|d| d.to_diagnostic(compiler.db())).collect();
-        render::render_module_diagnostics(compiler.db(), diagnostics, &locate, file_path, line_offsets, cwd);
-        bail!("Lowering error");
-    }
-    Ok(())
 }

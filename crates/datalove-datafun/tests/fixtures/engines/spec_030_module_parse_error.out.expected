@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "ParseError",
                 errors: [
-                    "const parameter cannot be \'ref\', \'out\' or \'mut\'",
+                    "error[P082]: const parameter cannot be \'ref\', \'out\' or \'mut\'",
                 ],
             ),
             ownership: OwnershipResult(

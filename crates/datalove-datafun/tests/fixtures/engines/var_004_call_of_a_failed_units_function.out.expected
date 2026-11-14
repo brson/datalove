@@ -50,7 +50,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`f` is bound by unit 2, which did not compile",
+                message: "error: `f` is bound by unit 2, which did not compile",
             ),
             output: "",
         ),

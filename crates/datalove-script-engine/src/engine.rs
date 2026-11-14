@@ -370,27 +370,12 @@ fn settle_roots(
         // What the first compile said, since it holds every module the
         // later ones hold and the ones they left out.
         if found.is_empty() {
-            let parse = compiled.get_module_parse_diagnostics(db).into_iter()
-                .map(|diagnostic| diagnostic.to_diagnostic(db));
-            let types = compiled.get_module_type_diagnostics(db).into_iter()
-                .map(|diagnostic| diagnostic.to_diagnostic(db));
-            let ownership = compiled.get_module_ownership_diagnostics(db).into_iter()
-                .map(|diagnostic| diagnostic.to_diagnostic(db));
-            found.diagnostics = parse.chain(types).chain(ownership)
-                .map(|diagnostic| diagnostic.to_stored(db))
-                .chain(compiled.all_lowering_errors())
-                .collect();
+            found.diagnostics = compiled.diagnostics(db);
         }
 
-        let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for by_path in [&compiled.parse_errors, &compiled.path_to_errors, &compiled.ownership_errors] {
-            for (path, messages) in by_path.iter().filter(|(_, messages)| !messages.is_empty()) {
-                errors.entry(path.C()).or_default().extend(messages.iter().cloned());
-            }
-        }
-        for (path, refused) in compiled.lowering_errors.iter().filter(|(_, refused)| !refused.is_empty()) {
-            errors.entry(path.C()).or_default().extend(refused.iter().map(|diagnostic| diagnostic.message.C()));
-        }
+        let errors: BTreeMap<String, Vec<String>> = compiled.diagnostics_by_module().into_iter()
+            .map(|(path, diagnostics)| (path, diagnostics.iter().map(datafun::driver::diagnostic_summary).collect()))
+            .collect();
 
         let reach = module_reach(db, &compiled);
         let failing: Vec<String> = roots.iter()

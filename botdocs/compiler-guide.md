@@ -653,7 +653,7 @@ and say nothing, since what they would say follows from the first; each
 evaluator keeps the set of failed names for that. Specialization reports C004
 at the function whose const parameters it could not copy for. The module
 compiler carries these as `StoredDiagnostic`s to `SingleModuleLoweringResult`
-and `CompiledModules::lowering_errors`; the script compiler as
+and `CompiledModules::lowering_diagnostics`; the script compiler as
 `LoweringResult::Error`'s diagnostics, which the unit's record keeps for the
 REPL to render. The one lowering error with no span is a script unit naming
 what a unit that did not compile bound; see
@@ -1078,18 +1078,28 @@ from the typechecker; see
 
 **A type error is worded once.** Each `PendingDiagnostic` is built into a
 diagnostic in one function, `build` in `datafun-tycheck/src/emit.rs`; emitting
-files it, and `format_pending_diagnostics` writes the same diagnostic as a line
-(`line 3, col 7: error[F016]: ...`). A `TypeError` is how checking stops,
-and every one is reported by a diagnostic: a check that ends with errors and
-no diagnostic panics (`assert_errors_reported`), as does a diagnostic whose
-span is missing, so nothing a check refuses goes unsaid. A `TypeError` still
-travels without its diagnostic, as the REPL's report of a unit that did not
-compile, and says itself with its `Display` there. Where
-a report site words an error from the error alone, as `report_place_error`
-does, the message is that `Display`. A message names a type by its syntax, not
+files it, and `stored_pending_diagnostics` keeps it instead, for a module's
+own. A `TypeError` is how checking stops, and every one is reported by a
+diagnostic: a check that ends with errors and no diagnostic panics
+(`assert_errors_reported`), as does a diagnostic whose span is missing, so
+nothing a check refuses goes unsaid. Where a report site words an error from
+the error alone, as `report_place_error` does, the message is that
+`Display`. A message names a type by its syntax, not
 as `Option` or `list`; where there is no type to show, it says what was wrong
 in words (`ctx.error_worded`), rather than putting the words where F016's types
 go.
+
+**Every phase says what it refused as diagnostics, and only so.** A script
+unit's `ScriptCompilationResult` holds the failing phase's diagnostics in
+`TypecheckResult::ParseError`/`Error`, `OwnershipResult::Error` or
+`LoweringResult::Error`, and `diagnostics()` gives them; `first_error` is
+their messages as a line, for the REPL's history. `CompiledModules` holds a
+map of `StoredDiagnostic`s by module path for each phase, which say which
+modules failed and where, and `diagnostics(db)` is every one the compile
+reported, those of the data files the modules require too, which is what is
+rendered. Fixtures serialize a result's diagnostics as
+`diagnostic_summary` writes them, `error[F016]: ...` and the helps, since a
+span names a source in a database.
 
 ## IR Types
 

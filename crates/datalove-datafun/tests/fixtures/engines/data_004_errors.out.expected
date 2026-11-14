@@ -6,8 +6,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "no data `local/app/missing` to require",
-                    "data `local/app/nums` is not a `[string]`",
+                    "error[F079]: no data `local/app/missing` to require",
+                    "error[F084]: data `local/app/nums` is not a `[string]`",
+                    "error[T032]: mismatched types",
                 ],
             ),
             ownership: OwnershipResult(

@@ -9,53 +9,104 @@ use rmx::prelude::*;
 use bct::diagnostic::StoredDiagnostic;
 use datalove_datafun_ir::IrCodeUnit;
 
-/// Typecheck result summary (serializable).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// How a phase failed: what it said, as diagnostics.
+///
+/// Serialized as each diagnostic's code, message and helps, which is what a
+/// fixture compares; its spans name sources in a database, and are left out.
+fn messages<S: serde::Serializer>(diagnostics: &[StoredDiagnostic], serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.collect_seq(diagnostics.iter().map(diagnostic_summary))
+}
+
+/// The same, as one string.
+fn message<S: serde::Serializer>(diagnostics: &[StoredDiagnostic], serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&diagnostics.iter().map(diagnostic_summary).collect::<Vec<_>>().join("\n"))
+}
+
+/// A diagnostic as text without its spans: `error[F016]: ...`, then its helps.
+pub fn diagnostic_summary(diagnostic: &StoredDiagnostic) -> String {
+    let mut text = match &diagnostic.code {
+        Some(code) => format!("error[{code}]: {}", diagnostic.message),
+        None => format!("error: {}", diagnostic.message),
+    };
+    for help in &diagnostic.helps {
+        text.push_str(&format!("\n  help: {help}"));
+    }
+    text
+}
+
+/// How a unit or module typechecked.
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "status")]
 pub enum TypecheckResult {
     Success,
-    ParseError { errors: Vec<String> },
-    Error { errors: Vec<String> },
-    Skipped,
-}
-
-/// Ownership analysis result summary (serializable).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "status")]
-pub enum OwnershipResult {
-    Success,
-    Error { message: String },
-    Skipped,
-}
-
-/// Lowering result summary (serializable).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "status")]
-pub enum LoweringResult {
-    Success { ir: String },
-    /// What lowering refused, as diagnostics, and their messages as one line
-    /// each for what reads it as text. The diagnostics are not serialized:
-    /// their spans name sources in a database.
+    ParseError {
+        #[serde(rename = "errors", serialize_with = "messages")]
+        diagnostics: Vec<StoredDiagnostic>,
+    },
     Error {
-        message: String,
-        #[serde(skip)]
+        #[serde(rename = "errors", serialize_with = "messages")]
         diagnostics: Vec<StoredDiagnostic>,
     },
     Skipped,
 }
 
+/// How a unit or module came through ownership analysis.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "status")]
+pub enum OwnershipResult {
+    Success,
+    Error {
+        #[serde(rename = "message", serialize_with = "message")]
+        diagnostics: Vec<StoredDiagnostic>,
+    },
+    Skipped,
+}
+
+/// How a unit or module lowered.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "status")]
+pub enum LoweringResult {
+    Success { ir: String },
+    Error {
+        #[serde(rename = "message", serialize_with = "message")]
+        diagnostics: Vec<StoredDiagnostic>,
+    },
+    Skipped,
+}
+
+impl TypecheckResult {
+    /// A unit or module that did not parse, as `diagnostics` say.
+    pub fn unparsed(diagnostics: Vec<StoredDiagnostic>) -> TypecheckResult {
+        assert!(!diagnostics.is_empty(), "a parse that failed says why");
+        TypecheckResult::ParseError { diagnostics }
+    }
+
+    /// A unit or module that did not typecheck, as `diagnostics` say.
+    pub fn refused(diagnostics: Vec<StoredDiagnostic>) -> TypecheckResult {
+        assert!(!diagnostics.is_empty(), "a typecheck that failed says why");
+        TypecheckResult::Error { diagnostics }
+    }
+}
+
+impl OwnershipResult {
+    /// A unit or module ownership analysis refused, as `diagnostics` say.
+    pub fn refused(diagnostics: Vec<StoredDiagnostic>) -> OwnershipResult {
+        assert!(!diagnostics.is_empty(), "an ownership analysis that failed says why");
+        OwnershipResult::Error { diagnostics }
+    }
+}
+
 impl LoweringResult {
-    /// A lowering that refused what `diagnostics` say.
+    /// A unit or module lowering refused, as `diagnostics` say.
     pub fn refused(diagnostics: Vec<StoredDiagnostic>) -> LoweringResult {
         assert!(!diagnostics.is_empty(), "a lowering that failed says why");
-        let message = diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>().join("\n");
-        LoweringResult::Error { message, diagnostics }
+        LoweringResult::Error { diagnostics }
     }
 }
 
 /// Format ownership result for display.
 pub fn format_ownership_result(
-    ownership_errors: &[String],
+    ownership_errors: &[StoredDiagnostic],
     has_typecheck_errors: bool,
 ) -> OwnershipResult {
     if has_typecheck_errors {
@@ -63,7 +114,7 @@ pub fn format_ownership_result(
     }
 
     if !ownership_errors.is_empty() {
-        OwnershipResult::Error { message: ownership_errors.join("\n") }
+        OwnershipResult::refused(ownership_errors.to_vec())
     } else {
         OwnershipResult::Success
     }
@@ -114,14 +165,31 @@ pub struct ScriptCompilationResult {
 }
 
 impl ScriptCompilationResult {
-    /// The first error this compilation ran into, in phase order, if any.
-    pub fn first_error(&self) -> Option<String> {
+    /// What the first phase that failed said, if one did.
+    pub fn diagnostics(&self) -> Option<&[StoredDiagnostic]> {
         match (&self.typecheck, &self.ownership, &self.lowering) {
-            (TypecheckResult::ParseError { errors }, _, _) => Some(errors.join("; ")),
-            (TypecheckResult::Error { errors }, _, _) => Some(errors.join("; ")),
-            (_, OwnershipResult::Error { message }, _) => Some(message.C()),
-            (_, _, LoweringResult::Error { message, .. }) => Some(message.C()),
+            (TypecheckResult::ParseError { diagnostics }, _, _)
+            | (TypecheckResult::Error { diagnostics }, _, _)
+            | (_, OwnershipResult::Error { diagnostics }, _)
+            | (_, _, LoweringResult::Error { diagnostics }) => Some(diagnostics),
             _ => None,
         }
+    }
+
+    /// The first error this compilation ran into, in phase order, if any:
+    /// what that phase said, each diagnostic's message and helps.
+    pub fn first_error(&self) -> Option<String> {
+        self.diagnostics().map(|diagnostics| {
+            diagnostics.iter()
+                .map(|diagnostic| {
+                    let mut text = diagnostic.message.C();
+                    for help in &diagnostic.helps {
+                        text.push_str(&format!("\n  help: {help}"));
+                    }
+                    text
+                })
+                .collect::<Vec<_>>()
+                .join("; ")
+        })
     }
 }

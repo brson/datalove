@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in key_moved: error[O001]: use of moved value: `k`\n  help: use `@` to clone `k` before the earlier use\nOwnership error in root_moved: error[O001]: use of moved value: `b`\n  help: use `@` to clone `b` before the earlier use\nOwnership error in compound_root_moved: error[O001]: use of moved value: `x`\n  help: use `@` to clone `x` before the earlier use",
+                message: "error[O001]: use of moved value: `k`\n  help: insert `@` to clone:\n        set b[k]? = k@\n                     +\nerror[O001]: use of moved value: `b`\n  help: insert `@` to clone:\n        set b[(: index / 0)]? = consume(b@)\n                                         +\nerror[O001]: use of moved value: `x`\n  help: insert `@` to clone:\n        set x += take(x@)\n                       +",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

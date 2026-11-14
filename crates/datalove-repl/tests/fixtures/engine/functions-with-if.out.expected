@@ -26,7 +26,7 @@
     },
     "eval": {
       "Unit": {
-        "NotCompiled": "cannot find `abs` in this scope"
+        "NotCompiled": "cannot find function `abs` in this scope"
       }
     },
     "environment": []
@@ -42,7 +42,7 @@
     },
     "eval": {
       "Unit": {
-        "NotCompiled": "cannot find `abs` in this scope"
+        "NotCompiled": "cannot find function `abs` in this scope"
       }
     },
     "environment": []

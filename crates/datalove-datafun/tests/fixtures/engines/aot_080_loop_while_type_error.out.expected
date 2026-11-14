@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "mismatched types: expected `bool`, found `int`",
+                    "error[F016]: mismatched types: expected `bool`, found `int`",
                 ],
             ),
             ownership: OwnershipResult(

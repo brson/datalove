@@ -3083,14 +3083,14 @@ DataloveReplay.register("reactive-transactions", {
             "unit": 7,
             "compiled": true,
             "eval": {
-              "NotCompiled": "cannot find `budget` in this scope"
+              "NotCompiled": "cannot find value `budget` in this scope"
             }
           },
           {
             "unit": 8,
             "compiled": true,
             "eval": {
-              "NotCompiled": "cannot find `over` in this scope"
+              "NotCompiled": "cannot find value `over` in this scope"
             }
           }
         ]
@@ -3291,7 +3291,7 @@ DataloveReplay.register("reactive-transactions", {
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "NotCompiled",
           "outcome": {
-            "NotCompiled": "cannot find `budget` in this scope"
+            "NotCompiled": "cannot find value `budget` in this scope"
           },
           "compiled": true,
           "ran": false,
@@ -3313,7 +3313,7 @@ DataloveReplay.register("reactive-transactions", {
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "NotCompiled",
           "outcome": {
-            "NotCompiled": "cannot find `over` in this scope"
+            "NotCompiled": "cannot find value `over` in this scope"
           },
           "compiled": true,
           "ran": false,

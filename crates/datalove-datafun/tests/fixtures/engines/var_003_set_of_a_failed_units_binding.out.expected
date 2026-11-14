@@ -50,7 +50,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`a` is bound by unit 2, which did not compile",
+                message: "error: `a` is bound by unit 2, which did not compile",
             ),
             output: "",
         ),
@@ -65,7 +65,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`a` is bound by unit 2, which did not compile",
+                message: "error: `a` is bound by unit 2, which did not compile",
             ),
             output: "",
         ),

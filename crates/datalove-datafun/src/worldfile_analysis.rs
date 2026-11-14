@@ -17,7 +17,7 @@
 
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use rmx::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
@@ -36,14 +36,14 @@ use crate::incremental::Roots;
 // ============================================================================
 
 /// Result of analyzing a worldfile with IR interpreter.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct Analysis {
     /// Per-section results.
     pub sections: Vec<SectionResult>,
 }
 
 /// Result of analyzing one section.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct SectionResult {
     /// Section type (e.g., "module", "scriptunit-fragment", "scriptunit-expr").
     pub section_type: String,
@@ -258,14 +258,10 @@ fn collect_module_results(
             // A module that did not parse has nothing to typecheck, and saying
             // so is the only way the refusal reaches anyone: a parse
             // diagnostic is not a typecheck error and used to go unread here.
-            let typecheck = match compiled.parse_errors.get(&module_path) {
-                Some(errors) if !errors.is_empty() => {
-                    TypecheckResult::ParseError { errors: errors.C() }
-                }
-                _ => match compiled.path_to_errors.get(&module_path) {
-                    Some(errors) if !errors.is_empty() => {
-                        TypecheckResult::Error { errors: errors.C() }
-                    }
+            let typecheck = match compiled.parse_diagnostics.get(&module_path) {
+                Some(diagnostics) if !diagnostics.is_empty() => TypecheckResult::unparsed(diagnostics.C()),
+                _ => match compiled.type_diagnostics.get(&module_path) {
+                    Some(diagnostics) if !diagnostics.is_empty() => TypecheckResult::refused(diagnostics.C()),
                     _ => TypecheckResult::Success,
                 },
             };
@@ -273,8 +269,8 @@ fn collect_module_results(
             // Look up analysis results for this module.
             let has_typecheck_errors = !matches!(&typecheck, TypecheckResult::Success);
             let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
-            let ownership_errs = compiled.ownership_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
-            let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let ownership_errs = compiled.ownership_diagnostics.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let lowering_errs = compiled.lowering_diagnostics.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let ownership = format_ownership_result(ownership_errs, has_typecheck_errors);
             let has_ownership_errors = matches!(&ownership, OwnershipResult::Error { .. });
             let lowering = format_lowering_result(ir_dumps, lowering_errs, has_typecheck_errors || has_ownership_errors);

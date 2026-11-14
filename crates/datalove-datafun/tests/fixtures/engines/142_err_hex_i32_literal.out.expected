@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "mismatched types: expected `i32`, found `int`",
+                    "error[F016]: mismatched types: expected `i32`, found `int`",
                 ],
             ),
             ownership: OwnershipResult(

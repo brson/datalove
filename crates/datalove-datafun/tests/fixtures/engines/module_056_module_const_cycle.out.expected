@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "line 10, col 16: error[F089]: const `A` depends on itself",
+                    "error[F089]: const `A` depends on itself",
                 ],
             ),
             ownership: OwnershipResult(

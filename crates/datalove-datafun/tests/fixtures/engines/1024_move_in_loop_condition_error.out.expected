@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "error[O007]: cannot move `v` in loop\n  help: use `@` to clone `v` in the loop\'s condition",
+                message: "error[O007]: cannot move `v` in loop\n  help: insert `@` to clone:\n    loop while v@! != \"b\"\n                +",
             ),
             lowering: LoweringResult(
                 status: "Skipped",
@@ -90,7 +90,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "f: error[O007]: cannot move `v` in loop\n  help: use `@` to clone `v` in the loop\'s condition",
+                message: "error[O007]: cannot move `v` in loop\n  help: insert `@` to clone:\n        loop while v@! != \"b\"\n                    +",
             ),
             lowering: LoweringResult(
                 status: "Skipped",
