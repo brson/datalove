@@ -587,12 +587,19 @@ it, as it did not find the atom and term case.
 In rough order of what to do next:
 
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
-- **Inference and unification.** The doc claims that where unification's
-  constraints all hold, the order of a collection's elements does not change
-  what it synthesizes. Unification is total now, on fuel, and the invariant
-  that keeps its panics unreached is proved; what is missing is the claim's
-  own proof, which needs more of the union-find's behaviour: that it only
-  ever merges and binds, and what a merge does to the classes.
+- **Order independence.** The doc claims that where unification's
+  constraints all hold and no `rec` is involved, the order of a
+  collection's elements does not change what it synthesizes. With `rec` it
+  does not hold ([the issue](issues.md#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
+  Without, it is tested, not proved: `lit_tests`'s `order_does_not_matter`
+  puts generated pairs in a list both ways, holds the Rust to the model on
+  each, and requires that where either order checks both do, to one type;
+  thirty thousand seeds give nearly twenty thousand pairs, eight thousand
+  of which check, and no failure. Removing its `rec` filter finds the issue
+  again. A proof needs that unification computes the unique most general
+  solution of its constraints, since two orders do not step together as a
+  generic and its instance do; it is better left until the canonical form
+  the issue proposes settles what a recursive type's spelling is.
 - **What `ret e` returns.** The early-return theorem covers the returns an
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's

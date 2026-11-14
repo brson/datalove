@@ -468,3 +468,88 @@ fn literal_typing_agrees() {
     assert!(doc_failures.is_empty(), "the Rust differs from the doc's examples on {}", doc_failures.len());
     assert!(total == 0, "the Rust and the typing rules disagree on {total} of {} expressions", rust.len());
 }
+
+/// What the Rust makes of a datalit expression, as the oracle answers: its
+/// type, or the first diagnostic. `None` if it does not parse.
+fn rust_answer(db: &Db, text: &str) -> Option<(Value, Value)> {
+    let source = bct::input::Source::new(db, text.S());
+    let parsed = datalove_datalit::parser::parse_integration_test(db, source);
+    if has_parse_error(&parsed) {
+        return None;
+    }
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.C());
+    let result = datalove_datalit::tycheck::type_check(db, parsed.C(), resolved);
+    let diagnostics = datalove_datalit::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(
+        db, parsed.C(), resolved,
+    );
+    let first = diagnostics.first().map(|d| d.to_diagnostic(db).code.map(|c| c.as_str(db).S()).unwrap_or_else(|| "none".S()));
+    let answer = match (result.root_type(db), first) {
+        (_, Some(code)) => json!({ "err": code }),
+        (Some(ty), None) => json!({ "ok": type_to_json(db, ty) }),
+        (None, None) => panic!("{text}: neither a type nor a diagnostic"),
+    };
+    Some((answer, json!({ "synth": expr_to_json(db, &parsed) })))
+}
+
+/// The typing rules' claim that a collection's type does not depend on the
+/// order of its elements, where no `rec` is involved: generated pairs of
+/// literals, the second a mutation of the first, put in a list both ways.
+/// The Rust and the model agree on each, and where either order checks, both
+/// do, to the same type. With `rec` it does not hold (issues.md, "A list
+/// with a recursive field checks in one order and not the other").
+#[test]
+fn order_does_not_matter() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the order tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_LIT", 0, 300);
+    let db = &Db::default();
+    let mut cases = Vec::new();
+    let mut queries = Vec::new();
+    let mut rust = Vec::new();
+    for seed in seeds.iter() {
+        let mut rng = SeededRng::derive(seed, "order");
+        let a = start(db, &mut rng);
+        let mut b = a.C();
+        for _ in 0..rng.random_range(1..=MAX_MUTATIONS) {
+            b = mutate(db, &mut rng, &b);
+        }
+        let ta = datalove_datalit::pretty::pretty_print(db, &a);
+        let tb = datalove_datalit::pretty::pretty_print(db, &b);
+        if ta.contains("rec ") || tb.contains("rec ") {
+            continue;
+        }
+        let (ab, ba) = (fmt!("[{ta}, {tb}]"), fmt!("[{tb}, {ta}]"));
+        let (Some((r1, q1)), Some((r2, q2))) = (rust_answer(db, &ab), rust_answer(db, &ba)) else { continue };
+        queries.push(q1);
+        queries.push(q2);
+        rust.push(r1);
+        rust.push(r2);
+        cases.push((seed, ab, ba));
+    }
+    let answers = ask_oracle(&queries);
+    let mut typed = 0;
+    let mut failures = Vec::new();
+    for (i, (seed, ab, ba)) in cases.iter().enumerate() {
+        let (m1, m2) = (&answers[2 * i], &answers[2 * i + 1]);
+        for (text, r, m) in [(ab, &rust[2 * i], m1), (ba, &rust[2 * i + 1], m2)] {
+            if r != m {
+                failures.push(fmt!("seed {seed}: {text}\n    rust:  {r}\n    model: {m}"));
+            }
+        }
+        match (m1.get("ok"), m2.get("ok")) {
+            (Some(x), Some(y)) if x == y => typed += 1,
+            (None, None) => {}
+            _ => failures.push(fmt!("seed {seed}: the order matters\n    {ab}: {m1}\n    {ba}: {m2}")),
+        }
+    }
+    println!(
+        "{} pairs over seeds {}..{}: {typed} typed both ways, {} failures",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), failures.len(),
+    );
+    for f in failures.iter().take(10) {
+        println!("{f}");
+    }
+    assert!(failures.is_empty(), "{} pairs fail", failures.len());
+}
