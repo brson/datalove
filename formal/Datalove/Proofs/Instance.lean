@@ -288,11 +288,12 @@ theorem Variants.hasTerm_inst (θ : List (String × Ty)) (a : String) (t : Ty) :
     simp only [Variants.hasTerm, Variants.inst] at h ⊢
     exact Variants.hasTerm_inst θ a t vs h
   | .term n p vs, h => by
-    simp only [Variants.hasTerm, Variants.inst, Bool.or_eq_true, Bool.and_eq_true,
-      Ty.equiv_iff_eq] at h ⊢
-    rcases h with ⟨hn, rfl⟩ | h
-    · exact .inl ⟨hn, rfl⟩
-    · exact .inr (Variants.hasTerm_inst θ a t vs h)
+    simp only [Variants.hasTerm, Variants.inst] at h ⊢
+    by_cases hn : (n == a) = true
+    · simp only [hn, ↓reduceIte, Ty.equiv_iff_eq] at h ⊢
+      rw [h]
+    · simp only [hn, Bool.false_eq_true, ↓reduceIte] at h ⊢
+      exact Variants.hasTerm_inst θ a t vs h
 
 theorem Ty.canWiden_novar {a b : Ty} (h : a.canWiden b = true) :
     a.containsVar = false ∧ b.containsVar = false := by

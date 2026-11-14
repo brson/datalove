@@ -128,6 +128,10 @@ inductive HasType : Val → Ty → Prop where
   | bool : HasType (.bool b) .bool
   | int : inRange t n → HasType (.int n) t
   | hex : hexFits t n → HasType (.hex n) t
+  /-- A hex literal's value is also the integer it spells. Checking keeps
+  hex literals from the signed types, but a value converted by `@`, from
+  `u8` to `i16` say, is there what it is anywhere. -/
+  | hexInt {n : Nat} : HasType (.int (n : Int)) t → HasType (.hex n) t
   | float : t.isFloat = true → HasType .float t
   | str : HasType .str .string
   | tuple : vs.length = (tysList ts).length →

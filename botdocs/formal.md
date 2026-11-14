@@ -498,6 +498,28 @@ Four things are proved of it:
   a call does: each would let a generic through whose instance the Rust
   refuses.
 
+- **A datafun expression that checks evaluates to a value of its type**
+  (`Fun.evalS_sound`, in `Proofs/EvalSound.lean`, of the evaluator in
+  `FunEval.lean`), so far for literals, variables, hints, operators, `?`,
+  `!` and `@`. Where an expression checks quietly in a context whose
+  variables hold values of their types, evaluating it gives a value of its
+  type (`Lit.HasType`, datalit's), or returns early with a value of the
+  function's return type: never an operand of the wrong kind, a checked
+  operator's result outside its type's range, or an early return the
+  function's type does not take. Calls, places, fields and indexes are not
+  evaluated yet. What an operator does depends on its operands' type, as
+  `a +! b` overflows at `u8`'s bounds or `i8`'s, so evaluation follows the
+  checker one function for one and takes the types it gives, as a compiled
+  program carries them; a comparison's answer is not modelled, being only a
+  `bool`. It holds for any inference, since what inference finds is checked
+  before it is used, and of contexts with no type parameter's bound, as an
+  instance's are, so of a generic through the check-once theorem. Proving it
+  changed two things. A hex literal's value is also the integer it spells
+  (`HasType.hexInt`), since `@` takes a `u8` to an `i16`, which no hex
+  literal is of. And an enum takes a term by its first variant of that
+  name, as checking a term against it does, where `@` asked of any
+  (`Variants.hasTerm`); the two differ only for an enum naming a variant
+  twice, which the parser refuses.
 - **Inference under a generic steps with inference under its instances**
   (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
   arguments touches only known types, so a variable keeps its number, and
@@ -600,10 +622,10 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **What `ret e` returns.** The early-return theorem covers the returns an
-  expression makes on its own. A `ret e` is checked against the return type,
-  but that the value is one of the type needs a value semantics for datafun's
-  expressions, which only datalit's literals have (`Lit.check_sound`).
+- **Evaluation of the rest of datafun.** `Fun.evalS_sound` takes literals,
+  variables, operators, `?`, `!` and `@`; places, fields and indexes come
+  next, then calls, which need a function's body evaluated, and then
+  statements, which is what says what `ret e` returns.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.
