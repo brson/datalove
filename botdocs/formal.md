@@ -321,7 +321,13 @@ three times a line at a time: a type or value changed, an operator swapped,
 locals in scope, unwraps them, matches on them with a binding `if`, calls
 with them, reads a field or element of them, borrowed or not, or sets one,
 or changes a generic's bound, uses its type parameters, or calls it with
-what is at hand. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
+what is at hand. One more puts, at the top of a generic's body, a statement
+where inference must decide something of a type parameter's value: a
+literal beside it, a part read off it, it adapted, met by a type with
+parts or passed with a literal, or a `rec` hint holding it. Some of these
+are F110 and some are clean, so the Rust's marking of what depends on a
+type parameter is held to the model's failing; without it worldgen reached
+F110 about once in two thousand scripts. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
 the oracle's input, read as it is (`formal/Datalove/FunJson.lean`); a script
 using a form outside the slice is skipped and counted. A corpus of cases
 written by hand runs first; worldgen's parameters are mostly scalars, so it

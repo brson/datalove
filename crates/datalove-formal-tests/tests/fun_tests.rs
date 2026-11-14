@@ -218,6 +218,30 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
     let name = |rng: &mut SeededRng| pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2", "1", "0x10", "1.5", "true"]);
     let step = |rng: &mut SeededRng| pick(rng, STEPS);
+    // A statement where inference must decide something of a type
+    // parameter's value, put at the top of a generic's body: some decisions
+    // depend on what the parameter stands for (F110), and some do not.
+    if rng.random_range(0..23) == 22 {
+        let Some(j) = lines.iter().position(|l| l.starts_with("fun gen")) else { return text.S() };
+        let a = pick(rng, &["x", "a", "b", "k", "v"]);
+        let lit = pick(rng, &["1", "0x10", "1.5", "true", "\"s\"", "atom A", "term B 1", "none", "[]", "(1,)"]);
+        let stmt = match rng.random_range(0..12) {
+            0 => fmt!("let w = [{a}, {lit}]"),
+            1 => fmt!("let w = ({a}, {lit})"),
+            2 => fmt!("let w = {a} {} {lit}", pick(rng, &["==", ".<", "+?", "*"])),
+            3 => fmt!("let w = [{a}{}]", pick(rng, &[".0", ".a", "[0]?", "?", "!", "[0]!"])),
+            4 => fmt!("let w = [{a}@, {}]", pick(rng, &[lit.as_str(), a.as_str(), ": u8 / 1", ": [T] / []"])),
+            5 => fmt!("let w = [{a}@]"),
+            6 => fmt!("let w = [{a}, {}]", pick(rng, &[a.as_str(), "[1]", "some 1", "none", "(1, 2)", "%{1 = 2}"])),
+            7 => fmt!("let w = gen0_{}({a}, {lit})", rng.random_range(0..3)),
+            8 => fmt!("let w = [: rec L ({}, [L]) / ({a}, [])]", pick(rng, &["T", "u8"])),
+            9 => fmt!("let w: {} = {lit}", pick(rng, &["T", "?T", "[T]"])),
+            10 => fmt!("let w = {a} == {a}"),
+            _ => fmt!("debuglog [{a}, {lit}]"),
+        };
+        lines.insert(j + 1, fmt!("  {stmt}"));
+        return lines.join("\n") + "\n";
+    }
     let changed = match rng.random_range(0..22) {
         // A type named in the line changed.
         0 => {
