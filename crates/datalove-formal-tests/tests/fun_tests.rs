@@ -36,6 +36,17 @@ const MAX_MUTATIONS: usize = 3;
 
 /// Scripts written by hand, each a case worth keeping.
 const CORPUS: &[&str] = &[
+    // What inference decides by what a type parameter stands for is F110: a
+    // literal meeting `T` in a collection, beside it as an operand and as a
+    // generic call's argument; a part read off a `T`; a value adapted from
+    // `T` meeting a literal or a type; `T` meeting a type with parts.
+    "fun g<U>(a: U, b: U): U\n  ret a\nend fun\nfun f<T>(x: T): T where { T is fixedint, }\n  let a = [x, 1]\n  let b = x == 1\n  let c = g(x, 1)\n  let d = [x.0]\n  let e = [x[0]?]\n  let h = [x@, 1]\n  let i = [x@, : u8 / 1]\n  let j = [x, [1]]\n  ret x\nend fun\n",
+    // A hint with a type parameter inside a recursive type would be no error
+    // under an instance: in a list it is F110, where inference reads it, and
+    // alone T066, where checking does.
+    "fun f<T>(x: T): T\n  let a = [: rec L (T, [L]) / (x, [])]\n  let b = : rec L (T, [L]) / (x, [])\n  ret x\nend fun\n",
+    // A type parameter meeting itself decides nothing by what it stands for.
+    "fun g<U>(a: U, b: U): U\n  ret a\nend fun\nfun f<T>(x: T, y: [T]): ?[T] where { T is fixedint, }\n  let a: [T] = [x, x]\n  let b = x == x\n  let c = g(x, x)\n  let d = [x@]\n  let e = [y@, [x]]\n  let h = [y[0]?@]\n  ret some a\nend fun\n",
     "let a: i8 = -5\n",
     "let a: u8 = true\nlet b: u8 = none\nlet c: ?u8 = 1\n",
     "let a = not 1\nlet b = true + 1\nlet c = 1 and 2\n",

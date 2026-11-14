@@ -221,11 +221,28 @@ pub(crate) fn inferred_type<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Type<'db>, TypeError> {
+    crate::infer::infer(ctx, expr);
+    if crate::infer::depends_on_type_param(ctx, &[expr]) {
+        return Err(report_depends_on_type_param(ctx, expr));
+    }
     match crate::infer::resolve(ctx, expr) {
         Ok(ty) => Ok(ty),
         Err(crate::infer::Undecided::Open(open)) => Err(report_open(ctx, open)),
         Err(crate::infer::Undecided::Unknown) => synthesize_unhinted(ctx, expr),
     }
+}
+
+/// Report an expression whose inference depends on what a type parameter
+/// stands for (F110): a literal meeting a value of a type parameter's type,
+/// a value adapted to or from one, or a part read off one.
+fn report_depends_on_type_param<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> TypeError {
+    ctx.error_worded(
+        crate::ErrorSite::Expr(expr.key()),
+        FCode::DependsOnTypeParam,
+        S("the type here depends on what a type parameter stands for"),
+        "typed one way in the generic and another in an instance",
+        Some(S("a literal is never of a type parameter's type, nor is the part of one known; pass such a value in, or give it a type that does not mention the parameter")),
+    )
 }
 
 /// Report an expression that leaves a type open with nothing to decide it.
@@ -630,6 +647,9 @@ fn synthesize_binop<'db>(
     //
     // Operands are borrowed, not moved, so they are checked in ref context.
     crate::infer::infer(ctx, expr);
+    if crate::infer::depends_on_type_param(ctx, &[expr, expr.at(lhs), expr.at(rhs)]) {
+        return Err(report_depends_on_type_param(ctx, expr));
+    }
     let lhs_ty = inferred_operand_type(ctx, expr.at(lhs))?;
     let rhs_ty = inferred_operand_type(ctx, expr.at(rhs))?;
     if types_equivalent(db, &lhs_ty, &rhs_ty) {
@@ -953,7 +973,11 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
         crate::infer::expect(ctx, expr, expected);
     }
     let mut bindings: TypeParamBindings<'db> = TypeParamBindings::new();
-    for (param, bound_to) in crate::infer::call_type_args(ctx, expr) {
+    let type_args = crate::infer::call_type_args(ctx, expr);
+    if !type_args.is_empty() && crate::infer::depends_on_type_param(ctx, &[expr]) {
+        return Err(report_depends_on_type_param(ctx, expr));
+    }
+    for (param, bound_to) in type_args {
         match bound_to {
             Ok(bound_to) => {
                 bindings.insert(param, bound_to);

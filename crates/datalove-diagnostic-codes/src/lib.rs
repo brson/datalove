@@ -594,6 +594,8 @@ codes! {
         ForOverTemporary = 108,
         /// A `for` binding the wrong number of names for its collection.
         ForNameCount = 109,
+        /// Inference that depends on what a type parameter stands for.
+        DependsOnTypeParam = 110,
     }
     retired = [11, 60, 65, 75];
 }

@@ -83,8 +83,33 @@ impl LiteralKind {
     }
 }
 
+/// Whether a known type is a type parameter, once a recursive type is opened.
+fn is_type_param(ty: &Type<'_>) -> bool {
+    matches!(&*expose(ty), Type::Var(_))
+}
+
 impl<'db> Class<'db> {
-    /// Whether a value of this class could be of the type, by the type's
+    /// Whether whether this class admits the type depends on what a type
+    /// parameter stands for: a literal's class against a type parameter, and
+    /// a value adapted from one type to another that it does not adapt to,
+    /// where either holds one. One that adapts under the generic adapts under
+    /// every instance.
+    ///
+    /// Under an instance the answer could be another, so inference that asks
+    /// is marked as depending on the type parameter (F110); see
+    /// [`Unifier::depends_on_type_param`].
+    fn depends_on(&self, db: &'db dyn crate::Db, ty: &PType<'db>) -> bool {
+        match (self, ty) {
+            (Class::Open, _) => false,
+            (Class::Adapt(from), PType::Known(to)) => {
+                (contains_var(from) || contains_var(to)) && !self.admits(db, ty)
+            }
+            (_, PType::Known(known)) => is_type_param(known),
+            _ => false,
+        }
+    }
+
+    /// Whether this class could be of the type, by the type's
     /// head: whether the value is out of its range is for checking to say.
     fn admits(&self, db: &'db dyn crate::Db, ty: &PType<'db>) -> bool {
         match (self, ty) {
@@ -134,6 +159,10 @@ enum VarState<'db> {
 pub struct Unifier<'db> {
     db: &'db dyn crate::Db,
     vars: Vec<VarState<'db>>,
+    /// Whether anything unified since this was last taken decided what it
+    /// did by what a type parameter stands for; see
+    /// [`Unifier::depends_on_type_param`].
+    depends: bool,
 }
 
 /// A variable that resolution reached with nothing to decide it.
@@ -143,7 +172,26 @@ pub struct Unresolved<'db> {
 
 impl<'db> Unifier<'db> {
     pub fn new(db: &'db dyn crate::Db) -> Self {
-        Unifier { db, vars: Vec::new() }
+        Unifier { db, vars: Vec::new(), depends: false }
+    }
+
+    /// Whether anything unified since the last call made a decision that
+    /// depends on what a type parameter stands for, and start again.
+    ///
+    /// Whether a literal is of `T`, whether a value adapts to `T`, and what
+    /// `T`'s parts are each depend on the type `T` stands for, so a generic
+    /// that asks would be typed one way and its instances another. The
+    /// unifier goes on as it did, keeping the two types apart, and whoever
+    /// asked for the inference reports it (F110). That is what lets a generic
+    /// be checked once: inference under it steps with inference under any
+    /// instance.
+    pub fn depends_on_type_param(&mut self) -> bool {
+        std::mem::take(&mut self.depends)
+    }
+
+    /// Note that what is being decided depends on a type parameter.
+    pub fn note_depends(&mut self) {
+        self.depends = true;
     }
 
     pub fn fresh(&mut self, class: Class<'db>, origin: Origin<'db>) -> PType<'db> {
@@ -221,6 +269,9 @@ impl<'db> Unifier<'db> {
             // literal's parts, it would resolve to the unfolding, which is
             // not the type.
             (PType::Known(known @ Type::Rec(rec)), other) | (other, PType::Known(known @ Type::Rec(rec))) => {
+                if matches!(rec.unfold(), Type::Var(_)) {
+                    self.depends = true;
+                }
                 let holder = if matches!(&*a, PType::Known(_)) { b_root } else { a_root };
                 if let Some(holder) = holder {
                     self.vars[holder as usize] = VarState::Bound(PType::Known(known.C()));
@@ -230,6 +281,9 @@ impl<'db> Unifier<'db> {
                 }
             }
             (PType::Known(known), other) | (other, PType::Known(known)) => {
+                if matches!(known, Type::Var(_)) {
+                    self.depends = true;
+                }
                 if let Some(expanded) = expand(known) {
                     self.unify_parts(&expanded, other);
                 }
@@ -287,6 +341,9 @@ impl<'db> Unifier<'db> {
             VarState::Free { class, .. } => class.C(),
             _ => unreachable!("a pruned variable is free"),
         };
+        if merge_depends(self.db, &class_of(&self.vars[x as usize]), &class_of(&self.vars[y as usize])) {
+            self.depends = true;
+        }
         // Two variables whose classes no one type could satisfy stay apart.
         // Each goes on to its own type, and the expressions that must agree
         // are reported as disagreeing where they are checked.
@@ -314,6 +371,9 @@ impl<'db> Unifier<'db> {
         // disagree, and the variable keeps its class: if it came first, the
         // other type is the one checking reports.
         let VarState::Free { class, .. } = &self.vars[var as usize] else { unreachable!("a pruned variable is free") };
+        if class.depends_on(self.db, &ty) {
+            self.depends = true;
+        }
         if !class.admits(self.db, &ty) {
             return;
         }
@@ -359,8 +419,15 @@ impl<'db> Unifier<'db> {
     /// A type's outermost part, with a variable at the top replaced by what it
     /// is bound to and a known type opened up one level, for reading off what
     /// is inside: the payload of an option, a field of a struct.
+    ///
+    /// A type parameter's parts are what it stands for, so reading them
+    /// depends on it (F110).
     pub fn shallow(&mut self, ty: &PType<'db>) -> PType<'db> {
         match self.prune(ty).into_owned() {
+            PType::Known(known) if is_type_param(&known) => {
+                self.depends = true;
+                PType::Known(known)
+            }
             // What is read off a recursive type is read off its unfolding.
             PType::Known(known) => expand(&expose(&known)).unwrap_or(PType::Known(known)),
             other => other,
@@ -465,6 +532,17 @@ impl<'db> Unifier<'db> {
         fields.iter()
             .map(|(name, ty)| (Cow::Borrowed(name.as_str(db)), self.syntax(db, ty)))
             .collect()
+    }
+}
+
+/// Whether making two classes one depends on what a type parameter stands
+/// for, as [`merge_classes`] asks whether one admits what the other was
+/// adapted from.
+fn merge_depends<'db>(db: &'db dyn crate::Db, first: &Class<'db>, second: &Class<'db>) -> bool {
+    match (first, second) {
+        (Class::Open, _) | (_, Class::Open) => false,
+        (Class::Adapt(from), other) | (other, Class::Adapt(from)) => other.depends_on(db, &PType::Known(from.C())),
+        _ => false,
     }
 }
 

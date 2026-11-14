@@ -14,7 +14,10 @@
 //!
 //! Inference reports nothing. It reads what it needs leniently, and where it
 //! cannot tell a type it leaves a variable no one decides; checking, which
-//! comes after, is what reports what is wrong.
+//! comes after, is what reports what is wrong. It does note each expression
+//! whose inference made a decision that depends on what a type parameter
+//! stands for (`Unifier::depends_on_type_param`), for checking to report
+//! where it asks for that inference (F110).
 
 use rmx::prelude::*;
 use bct::text::InternedText;
@@ -38,6 +41,10 @@ pub struct Inference<'db> {
     /// The expressions that leave a type open, by the index their variables
     /// carry as their origin.
     open_exprs: Vec<ExprFun<'db>>,
+    /// The expressions whose inference, or unifying them with what is
+    /// expected of them, decided something by what a type parameter stands
+    /// for.
+    depends: datalove_datafun_sema::BodyTable<'db, ()>,
 }
 
 impl<'db> Inference<'db> {
@@ -47,6 +54,7 @@ impl<'db> Inference<'db> {
             types: Default::default(),
             call_params: Default::default(),
             open_exprs: Vec::new(),
+            depends: Default::default(),
         }
     }
 }
@@ -61,10 +69,18 @@ pub enum Undecided<'db> {
 }
 
 /// The type inferred for an expression, inferring it now if nothing has yet.
+///
+/// An expression whose inference depends on a type parameter makes whatever
+/// is being inferred around it depend on one too.
 pub fn infer<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<'db> {
     if let Some(ty) = ctx.inference.types.get(expr) {
-        return ty.C();
+        let ty = ty.C();
+        if ctx.inference.depends.get(expr).is_some() {
+            ctx.inference.uni.note_depends();
+        }
+        return ty;
     }
+    let outer = ctx.inference.uni.depends_on_type_param();
     // Inference reads names and hints the way checking does, and the lookups
     // report what they do not find. Checking will report it again where it
     // belongs, so nothing said here is kept.
@@ -73,14 +89,37 @@ pub fn infer<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<'db> 
     let ty = infer_expr(ctx, expr);
     ctx.errors.truncate(errors);
     ctx.pending_diagnostics.truncate(diagnostics);
+    note_depends(ctx, expr, outer);
     ty
+}
+
+/// Mark an expression as depending on a type parameter if what was unified
+/// since `outer` was taken did, and carry it to what is around.
+fn note_depends<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>, outer: bool) {
+    let depends = ctx.inference.uni.depends_on_type_param();
+    if depends {
+        ctx.inference.depends.insert(expr, ());
+    }
+    if outer || depends {
+        ctx.inference.uni.note_depends();
+    }
+}
+
+/// Whether inferring any of these expressions, or unifying one with what is
+/// expected of it, decided something by what a type parameter stands for:
+/// under the generic it is typed one way, and under an instance it could be
+/// another (F110).
+pub fn depends_on_type_param<'db>(ctx: &TypeContext<'db>, exprs: &[ExprFun<'db>]) -> bool {
+    exprs.iter().any(|e| ctx.inference.depends.get(*e).is_some())
 }
 
 /// Unify an expression's inferred type with a known type.
 pub fn expect<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>, expected: &Type<'db>) {
     let Type::Datalit(expected) = expected else { return };
+    let outer = ctx.inference.uni.depends_on_type_param();
     let inferred = infer(ctx, expr);
     ctx.inference.uni.unify(&inferred, &PType::Known(expected.C()));
+    note_depends(ctx, expr, outer);
 }
 
 /// The type an expression comes to, with defaults for whatever nothing
@@ -103,9 +142,14 @@ fn resolve_ptype<'db>(ctx: &mut TypeContext<'db>, ty: &PType<'db>) -> Result<Typ
 pub fn describe_unhinted<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> String {
     let errors = ctx.errors.len();
     let diagnostics = ctx.pending_diagnostics.len();
+    let outer = ctx.inference.uni.depends_on_type_param();
     let ty = infer_unhinted(ctx, expr);
     ctx.errors.truncate(errors);
     ctx.pending_diagnostics.truncate(diagnostics);
+    ctx.inference.uni.depends_on_type_param();
+    if outer {
+        ctx.inference.uni.note_depends();
+    }
     let db = ctx.db;
     ctx.inference.uni.describe(db, &ty)
 }
@@ -151,6 +195,13 @@ fn infer_expr<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<'db>
                 let known = PType::Known(hinted);
                 ctx.inference.uni.unify(&known, &inner);
                 known
+            }
+            // A type parameter inside a recursive type would be no error
+            // under an instance, so reading the hint depends on what it
+            // stands for.
+            Err(TypeError::Rec(error)) if error.kind == datalit::tycheck::RecErrorKind::Generic => {
+                ctx.inference.uni.note_depends();
+                unknown(ctx)
             }
             _ => unknown(ctx),
         },

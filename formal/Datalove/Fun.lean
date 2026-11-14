@@ -536,10 +536,13 @@ end
 
 /-! ## Inference -/
 
-/-- A type's outermost part, with a known type opened one level. -/
+/-- A type's outermost part, with a known type opened one level. A type
+parameter's parts are what it stands for, so reading them is F110. -/
 def shallow (t : PTy) : InferM PTy := do
   match ← prune t with
-  | .known k => pure ((Lit.expand k.expose).getD (.known k))
+  | .known k =>
+    if Lit.headVar k then throw Lit.rigidCode
+    pure ((Lit.expand k.expose).getD (.known k))
   | other => pure other
 
 /-- A field's type, as far as inference can read it. -/
@@ -607,14 +610,17 @@ def sharedVar (empty : Bool) : InferM PTy :=
 mutual
 
 /-- `⊢ e ⇝ τ`: datalit's rules for the literal forms, and the doc's table for
-datafun's. Nothing here fails: what cannot be read is `unknown`
+datafun's. Nothing here fails but a decision that depends on what a type
+parameter stands for (F110): what cannot be read is `unknown`
 (`infer_errors`, in `Proofs/Infer.lean`). -/
 def inferF : Nat → Ctx → Expr → InferM PTy
   | 0, _, _ => throw "fuel"
   | n + 1, Γ, e => match e with
+    -- A type parameter inside a recursive type (T066) would be no error under
+    -- an instance, so reading the hint depends on what it stands for.
     | .hinted h _ => match Γ.hint h with
       | .ok t => pure (.known t)
-      | .error _ => fresh .unknown
+      | .error c => if c == "T066" then throw Lit.rigidCode else fresh .unknown
     | .tt | .ff => pure (.known .bool)
     | .str => pure (.known .string)
     | .int _ => fresh .int
@@ -675,7 +681,7 @@ def inferF : Nat → Ctx → Expr → InferM PTy
       let s ← get
       match (resolve t).run s with
       | .ok (from_, s') => set s'; fresh (.adapt from_)
-      | .error _ => pure t
+      | .error c => if c == unknownCode || c == "T016" then pure t else throw c
     | .call f args => match Γ.sigs.lookup f with
       | Option.some sig => (·.1) <$> inferCallF n Γ sig args
       | Option.none => fresh .unknown

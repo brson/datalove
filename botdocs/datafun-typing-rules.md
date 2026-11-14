@@ -562,6 +562,23 @@ its first, so the fault reported is the part's own (F001, F067, F048, F002)
 rather than T016. A literal left open that such a variable meets still is
 T016: `(none, x)` with `x` unbound is T016, and `(x, none)` is F001.
 
+Inside a generic, some of what inference decides would come out otherwise
+under an instance: whether a literal's class admits `T`, whether a value
+adapted from one type adapts to another where either holds `T` and it does
+not adapt under the generic (one that does adapts under every instance),
+what the parts of a `T` are, read by `.ℓ`, `[k]`, `?` or `!`, or met by a
+literal with parts, and whether a hint with `T` inside a `rec`, which is
+T066, converts. Each such
+decision is F110, reported where the inference is asked for: a literal
+form's type, an operator's operands together, or a generic call's type
+arguments. So `[x, 1]`, `x == 1`, `g(x, 1)`, `[x.0]` and `[x@, 1]` with
+`x : T` are each F110, whatever `T`'s bound. None of them could check
+anyway, for a literal is never of a type parameter's type, but F110 says
+why. `T` meeting `T` decides nothing by what it stands for: `[x, x]`,
+`x == x` and `[x@]` are as they are under any instance. That is what lets a
+generic be checked once: on a generic that checks, inference under it steps
+with inference under each instance (`formal.md`).
+
 An expression is inferred once, when something first asks for its type, with
 everything inside it. The inferred type of each part is kept, and checking
 reads it rather than inferring again, so a statement is inferred in one pass
@@ -985,6 +1002,7 @@ same, and its tests hold the Rust to it.
 | F107 | A `require data` given no type, of a file that has none of its own |
 | F108 | A `for` over something that is not a place |
 | F109 | A `for` binding the wrong number of names for its collection |
+| F110 | Inference that depends on what a type parameter stands for |
 | T005-T015, T061 | A literal out of range for its type, as in datalit |
 | T016 | `none`, `er e`, an enum literal or an empty collection with nothing expected |
 | T017 | An expression that holds a parse error |

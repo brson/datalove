@@ -6,8 +6,10 @@ import Datalove.Fun
 Inference runs on fuel, so it is a total function, and what it does can be
 proved. The first thing proved of it is what the comments in `Lit.lean` and
 `Fun.lean` say: datalit's inference reports nothing but a malformed hint
-(`Lit.infer_errors`), and datafun's reports nothing at all
-(`Fun.infer_errors`), save for running out of fuel.
+(`Lit.infer_errors`), and datafun's nothing but a decision that depends on
+what a type parameter stands for (F110, `Fun.infer_errors`), save for
+running out of fuel. Datalit's types hold no type parameter, so it never
+meets F110 either, though that is not proved here.
 
 The unifier's `panic!`s are where that could go wrong: in Lean's logic a
 panic is an error, with an empty code. Each says a variable just pruned is
@@ -219,16 +221,40 @@ theorem prune_spec' (s0 : State) (inv : Inv s0) (t : PTy) :
     Spec (· = s0) (prune t) (fun t' s => s = s0 ∧ Pruned s0 t t') (· = "fuel") :=
   Spec.weaken (prune_spec s0 t) (fun _ h => ⟨h, inv⟩) (fun _ _ h => ⟨h.1, h.2⟩) (fun _ h => h)
 
+/-- What unification can fail with: running out of fuel, or a decision that
+depends on what a type parameter stands for (F110). -/
+def UErr (c : Code) : Prop := c = "fuel" ∨ c = rigidCode
+
+theorem Spec.fuel {α} {pre : State → Prop} {m : InferM α} {post : α → State → Prop}
+    (h : Spec pre m post (· = "fuel")) : Spec pre m post UErr :=
+  Spec.weaken h (fun _ h => h) (fun _ _ h => h) (fun _ h => .inl h)
+
+theorem knownOther_spec {parts : PTy → PTy → InferM Unit}
+    (hp : ∀ a b, Spec Inv (parts a b) (fun _ => Inv) UErr) (k : Ty) (other : PTy) (root : Option Nat) :
+    Spec Inv (knownOther parts k other root) (fun _ => Inv) UErr := by
+  unfold knownOther
+  split
+  all_goals
+    repeat' (first
+      | with_reducible exact Spec.pure' (fun _ h => h)
+      | with_reducible exact hp _ _
+      | exact Spec.throw' (.inr rfl)
+      | exact Spec.modify' (fun _ h => Inv.set_bound h (fun _ hv => by cases hv))
+      | with_reducible apply Spec.bind'
+      | split
+      | intro _)
+  all_goals exact Spec.modify' (fun _ h => Inv.set_bound h (fun _ hv => by cases hv))
+
 mutual
 
-theorem unifyF_spec : ∀ (n : Nat) (a b : PTy), Spec Inv (unifyF n a b) (fun _ => Inv) (· = "fuel")
-  | 0, _, _ => ⟨fun _ _ => rfl⟩
+theorem unifyF_spec : ∀ (n : Nat) (a b : PTy), Spec Inv (unifyF n a b) (fun _ => Inv) UErr
+  | 0, _, _ => ⟨fun _ _ => .inl rfl⟩
   | n + 1, a, b => Spec.at fun s0 inv => by
     simp only [unifyF]
-    refine Spec.bind' (rootOf_spec s0 a) (fun aRoot => ?_)
-    refine Spec.bind' (rootOf_spec s0 b) (fun bRoot => ?_)
-    refine Spec.bind' (prune_spec' s0 inv a) (fun a' => Spec.fact fun pa => ?_)
-    refine Spec.bind' (prune_spec' s0 inv b) (fun b' => Spec.fact fun pb => ?_)
+    refine Spec.bind' (rootOf_spec s0 a).fuel (fun aRoot => ?_)
+    refine Spec.bind' (rootOf_spec s0 b).fuel (fun bRoot => ?_)
+    refine Spec.bind' (prune_spec' s0 inv a).fuel (fun a' => Spec.fact fun pa => ?_)
+    refine Spec.bind' (prune_spec' s0 inv b).fuel (fun b' => Spec.fact fun pb => ?_)
     have toInv : ∀ s, s = s0 → Inv s := fun s h => h ▸ inv
     split
     · rename_i x y
@@ -245,6 +271,8 @@ theorem unifyF_spec : ∀ (n : Nat) (a b : PTy), Spec Inv (unifyF n a b) (fun _ 
       repeat' (first
         | with_reducible exact Spec.pure' (fun _ h => h)
         | with_reducible exact unifyPartsF_spec n _ _
+        | with_reducible exact knownOther_spec (unifyPartsF_spec n) _ _ _
+        | exact Spec.throw' (.inr rfl)
         | exact Spec.modify' (fun _ h => Inv.set_bound h (fun _ hv => by cases hv))
         | with_reducible apply Spec.bind'
         | split
@@ -252,8 +280,8 @@ theorem unifyF_spec : ∀ (n : Nat) (a b : PTy), Spec Inv (unifyF n a b) (fun _ 
       all_goals exact Spec.modify' (fun _ h => Inv.set_bound h (fun _ hv => by cases hv))
 
 theorem unifyPartsF_spec : ∀ (n : Nat) (a b : PTy),
-    Spec Inv (unifyPartsF n a b) (fun _ => Inv) (· = "fuel")
-  | 0, _, _ => ⟨fun _ _ => rfl⟩
+    Spec Inv (unifyPartsF n a b) (fun _ => Inv) UErr
+  | 0, _, _ => ⟨fun _ _ => .inl rfl⟩
   | n + 1, a, b => by
     cases a <;> cases b <;> simp only [unifyPartsF]
     all_goals
@@ -266,8 +294,8 @@ theorem unifyPartsF_spec : ∀ (n : Nat) (a b : PTy),
         | intro _)
 
 theorem unionF_spec : ∀ (n x y : Nat),
-    Spec (fun s => Inv s ∧ IsFree s x ∧ IsFree s y) (unionF n x y) (fun _ => Inv) (· = "fuel")
-  | 0, _, _ => ⟨fun _ _ => rfl⟩
+    Spec (fun s => Inv s ∧ IsFree s x ∧ IsFree s y) (unionF n x y) (fun _ => Inv) UErr
+  | 0, _, _ => ⟨fun _ _ => .inl rfl⟩
   | n + 1, x, y => Spec.at fun s0 ⟨inv, ⟨cx, hx⟩, ⟨cy, hy⟩⟩ => by
     simp only [unionF]
     split
@@ -277,6 +305,8 @@ theorem unionF_spec : ∀ (n x y : Nat),
       subst hst
       simp only [hx, hy]
       split
+      · exact Spec.throw' (.inr rfl)
+      split
       · exact Spec.pure' (fun s h => h ▸ inv)
       · refine Spec.bind' (Spec.modify' (post := fun _ => Inv)
           (fun s h => h ▸ Inv.set_free (Inv.set_link inv))) (fun _ => ?_)
@@ -285,14 +315,16 @@ theorem unionF_spec : ∀ (n x y : Nat),
         · exact Spec.pure' (fun _ h => h)
 
 theorem bindF_spec : ∀ (n v : Nat) (t : PTy),
-    Spec (fun s => Inv s ∧ IsFree s v ∧ NotVar t) (bindF n v t) (fun _ => Inv) (· = "fuel")
-  | 0, _, _ => ⟨fun _ _ => rfl⟩
+    Spec (fun s => Inv s ∧ IsFree s v ∧ NotVar t) (bindF n v t) (fun _ => Inv) UErr
+  | 0, _, _ => ⟨fun _ _ => .inl rfl⟩
   | n + 1, v, t => Spec.at fun s0 ⟨inv, ⟨c, hv⟩, nt⟩ => by
     simp only [bindF]
     refine Spec.bind' (Spec.get' (post := fun st s => s = s0 ∧ st = s0) (fun s h => ⟨h, h⟩))
       (fun st => Spec.fact fun hst => ?_)
     subst hst
     simp only [hv]
+    split
+    · exact Spec.throw' (.inr rfl)
     split
     · exact Spec.pure' (fun s h => h ▸ inv)
     · refine Spec.bind' (Spec.modify' (post := fun _ => Inv)
@@ -353,7 +385,7 @@ theorem Spec.mapM_same {α β} {s0 : State} {l : List α} {f : α → InferM β}
     exact Spec.bind' (h a List.mem_cons_self) (fun _ =>
       Spec.bind' (ih (fun b hb => h b (List.mem_cons_of_mem _ hb))) (fun _ => Spec.pure' (fun _ h => h)))
 
-theorem unify_spec (a b : PTy) : Spec Inv (unify a b) (fun _ => Inv) (· = "fuel") :=
+theorem unify_spec (a b : PTy) : Spec Inv (unify a b) (fun _ => Inv) UErr :=
   unifyF_spec inferFuel a b
 
 /-- What `resolve` can fail with: an open variable (T016), one inference
@@ -405,9 +437,9 @@ theorem resolveF_spec (s0 : State) (inv : Inv s0) : ∀ (n : Nat) (t : PTy),
 
 /-! ## Datalit's inference -/
 
-/-- What datalit's inference can fail with: a malformed hint's code, or
-running out of fuel. -/
-def LitErr (c : Code) : Prop := c = "fuel" ∨ ∃ h, convertHint h = .error c
+/-- What datalit's inference can fail with: running out of fuel, F110, or a
+malformed hint's code. -/
+def LitErr (c : Code) : Prop := c = "fuel" ∨ c = rigidCode ∨ ∃ h, convertHint h = .error c
 
 mutual
 
@@ -422,7 +454,7 @@ theorem inferF_spec : ∀ (n : Nat) (e : Expr), Spec Inv (inferF n e) (fun _ => 
       cases hc : convertHint h with
       | error c =>
         simp [StateT.lift, StateT.run, bind, StateT.bind, Except.bind, LitErr]
-        exact .inr ⟨h, hc⟩
+        exact .inr (.inr ⟨h, hc⟩)
       | ok t =>
         simp [StateT.lift, StateT.run, bind, StateT.bind, Except.bind, pure, StateT.pure,
           Except.pure, hs]
@@ -441,7 +473,7 @@ theorem inferF_spec : ∀ (n : Nat) (e : Expr), Spec Inv (inferF n e) (fun _ => 
         | intro _)
       all_goals first
         | exact Spec.pure' (fun _ h => h)
-        | exact Spec.weaken (unify_spec _ _) (fun _ h => h) (fun _ _ h => h) (fun _ h => .inl h)
+        | exact Spec.weaken (unify_spec _ _) (fun _ h => h) (fun _ _ h => h) (fun _ h => h.elim .inl (.inr ∘ .inl))
 
 theorem togetherF_spec : ∀ (n : Nat) (es : List Expr), Spec Inv (togetherF n es) (fun _ => Inv) LitErr
   | 0, _ => ⟨fun _ _ => by rw [togetherF.eq_def]; exact (Or.inl rfl : LitErr "fuel")⟩
@@ -450,15 +482,15 @@ theorem togetherF_spec : ∀ (n : Nat) (es : List Expr), Spec Inv (togetherF n e
     refine Spec.bind' (fresh_spec _) (fun t => ?_)
     refine Spec.bind' (Spec.forIn_inv fun e _ _ => ?_) (fun _ => Spec.pure' (fun _ h => h))
     exact Spec.bind' (inferF_spec n e) (fun p =>
-      Spec.bind' (Spec.weaken (unify_spec _ _) (fun _ h => h) (fun _ _ h => h) (fun _ h => .inl h))
+      Spec.bind' (Spec.weaken (unify_spec _ _) (fun _ h => h) (fun _ _ h => h) (fun _ h => h.elim .inl (.inr ∘ .inl)))
         (fun _ => Spec.pure' (fun _ h => h)))
 
 end
 
 /-- Datalit's inference reports nothing but a malformed hint, as its comment
-says, or running out of fuel. -/
+says, or running out of fuel, or F110. -/
 theorem infer_errors {e : Expr} {c : Code} (h : (infer e).run #[] = .error c) :
-    c = "fuel" ∨ ∃ hint, convertHint hint = .error c := by
+    c = "fuel" ∨ c = rigidCode ∨ ∃ hint, convertHint hint = .error c := by
   have := (inferF_spec inferFuel e).run #[] Inv.empty
   simp only [infer] at h
   rw [h] at this
@@ -470,9 +502,9 @@ namespace Datalove.Fun
 
 open Datalove.Lit (State Spec Inv fresh_spec prune_spec' unify_spec resolveF_spec inferFuel)
 
-/-- What datafun's inference can fail with: running out of fuel, and
-nothing else. -/
-def FunErr (c : Lit.Code) : Prop := c = "fuel"
+/-- What datafun's inference can fail with: running out of fuel, or a
+decision that depends on what a type parameter stands for (F110). -/
+def FunErr (c : Lit.Code) : Prop := c = "fuel" ∨ c = Lit.rigidCode
 
 theorem unify_spec' (a b : Lit.PTy) : Spec Inv (Lit.unify a b) (fun _ => Inv) FunErr :=
   unify_spec a b
@@ -480,8 +512,11 @@ theorem unify_spec' (a b : Lit.PTy) : Spec Inv (Lit.unify a b) (fun _ => Inv) Fu
 theorem shallow_spec (t : Lit.PTy) : Spec Inv (shallow t) (fun _ => Inv) FunErr :=
   Spec.at fun s0 inv => by
     simp only [shallow]
-    refine Spec.bind' (prune_spec' s0 inv t) (fun t' => Spec.fact fun _ => ?_)
-    split <;> exact Spec.pure' (fun s h => h ▸ inv)
+    refine Spec.bind' (prune_spec' s0 inv t).fuel (fun t' => Spec.fact fun _ => ?_)
+    repeat' (first
+      | exact Spec.pure' (fun s h => h ▸ inv)
+      | exact Spec.throw' (.inr rfl)
+      | split)
 
 theorem inferField_spec (b : Lit.PTy) (sel : Sel) : Spec Inv (inferField b sel) (fun _ => Inv) FunErr := by
   simp only [inferField]
@@ -507,7 +542,8 @@ theorem adapt_step (t : Lit.PTy) :
       let s ← get
       match (Lit.resolve t).run s with
       | .ok (from_, s') => set s' >>= fun _ => Lit.fresh (.adapt from_)
-      | .error _ => pure t : Lit.InferM Lit.PTy) (fun _ => Inv) FunErr := by
+      | .error c => if c == Lit.unknownCode || c == "T016" then pure t else throw c : Lit.InferM Lit.PTy)
+        (fun _ => Inv) FunErr := by
   refine Spec.bind' (Spec.get' (post := fun st s => s = st ∧ Inv st) (fun s h => ⟨rfl, h⟩))
     (fun st => ?_)
   constructor
@@ -518,7 +554,12 @@ theorem adapt_step (t : Lit.PTy) :
   revert hr
   generalize (Lit.resolveF inferFuel t).run s = R
   cases R with
-  | error c => intro _; exact inv
+  | error c =>
+    intro hc
+    rcases hc with rfl | rfl | rfl
+    · exact inv
+    · exact inv
+    · exact (.inl rfl : FunErr "fuel")
   | ok r =>
     obtain ⟨from_, s'⟩ := r
     intro hr
@@ -530,7 +571,7 @@ theorem adapt_step (t : Lit.PTy) :
 mutual
 
 theorem inferF_spec : ∀ (n : Nat) (Γ : Ctx) (e : Expr), Spec Inv (inferF n Γ e) (fun _ => Inv) FunErr
-  | 0, _, _ => ⟨fun _ _ => by rw [inferF.eq_def]; exact (rfl : FunErr "fuel")⟩
+  | 0, _, _ => ⟨fun _ _ => by rw [inferF.eq_def]; exact (.inl rfl : FunErr "fuel")⟩
   | n + 1, Γ, e => by
     cases e
     case adapt a =>
@@ -555,6 +596,7 @@ theorem inferF_spec : ∀ (n : Nat) (Γ : Ctx) (e : Expr), Spec Inv (inferF n Γ
         | with_reducible exact shallow_spec _
         | with_reducible exact inferField_spec _ _
         | with_reducible exact elementOf_spec _
+        | exact Spec.throw' (.inr rfl)
         | (with_reducible apply Spec.mapM_inv; intro _ _)
         | (with_reducible apply Spec.foldlM_inv; intro _ _ _)
         | with_reducible apply Spec.bind'
@@ -568,7 +610,7 @@ theorem inferF_spec : ∀ (n : Nat) (Γ : Ctx) (e : Expr), Spec Inv (inferF n Γ
 
 theorem inferCallF_spec : ∀ (n : Nat) (Γ : Ctx) (sig : Sig) (args : List (Option Mode × Expr)),
     Spec Inv (inferCallF n Γ sig args) (fun _ => Inv) FunErr
-  | 0, _, _, _ => ⟨fun _ _ => by rw [inferCallF.eq_def]; exact (rfl : FunErr "fuel")⟩
+  | 0, _, _, _ => ⟨fun _ _ => by rw [inferCallF.eq_def]; exact (.inl rfl : FunErr "fuel")⟩
   | n + 1, Γ, sig, args => by
     simp only [inferCallF]
     refine Spec.bind' (Spec.mapM_inv fun _ _ => Spec.bind' (fresh_spec _)
@@ -579,7 +621,7 @@ theorem inferCallF_spec : ∀ (n : Nat) (Γ : Ctx) (sig : Sig) (args : List (Opt
 
 theorem togetherF_spec : ∀ (n : Nat) (Γ : Ctx) (es : List Expr),
     Spec Inv (togetherF n Γ es) (fun _ => Inv) FunErr
-  | 0, _, _ => ⟨fun _ _ => by rw [togetherF.eq_def]; exact (rfl : FunErr "fuel")⟩
+  | 0, _, _ => ⟨fun _ _ => by rw [togetherF.eq_def]; exact (.inl rfl : FunErr "fuel")⟩
   | n + 1, Γ, es => by
     simp only [togetherF, sharedVar]
     refine Spec.bind' (fresh_spec _) (fun t => ?_)
@@ -590,9 +632,10 @@ theorem togetherF_spec : ∀ (n : Nat) (Γ : Ctx) (es : List Expr),
 end
 
 /-- Datafun's inference fails at nothing, as its comment says, save running
-out of fuel: what it cannot read is `unknown`. -/
+out of fuel and a decision that depends on what a type parameter stands for
+(F110): what it cannot read is `unknown`. -/
 theorem infer_errors {Γ : Ctx} {e : Expr} {c : Lit.Code} (h : (infer Γ e).run #[] = .error c) :
-    c = "fuel" := by
+    c = "fuel" ∨ c = Lit.rigidCode := by
   have := (inferF_spec inferFuel Γ e).run #[] Lit.Inv.empty
   simp only [infer] at h
   rw [h] at this

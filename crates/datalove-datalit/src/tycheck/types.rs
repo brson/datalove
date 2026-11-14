@@ -736,7 +736,7 @@ impl<'db> RecScope<'db> {
 }
 
 /// Whether a type parameter is anywhere in a type.
-fn contains_var(ty: &Type<'_>) -> bool {
+pub(crate) fn contains_var(ty: &Type<'_>) -> bool {
     let named = |fs: &[TypeNamedField<'_>]| fs.iter().any(|f| contains_var(&f.ty));
     match ty {
         Type::Var(_) => true,

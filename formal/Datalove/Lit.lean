@@ -169,6 +169,40 @@ def Class.admits (c : Class) : PTy → Bool
   | .known t@(.mu _) => c.admitsHead (.known t.expose)
   | p => c.admitsHead p
 
+/-- What inference throws where what it would decide depends on what a type
+parameter stands for (F110): whether a literal is of `T`, whether `T`
+adapts to a type, what `T`'s parts are. Under an instance it would decide
+otherwise, so a generic is refused there, and inference under one steps with
+inference under each of its instances. Datalit's own types hold no type
+parameter, so it never throws it. -/
+def rigidCode : Code := "F110"
+
+/-- Whether a known type is a type parameter, once a recursive type is
+opened. -/
+def headVar (k : Ty) : Bool :=
+  match k.expose with
+  | .var _ => true
+  | _ => false
+
+/-- Whether whether a class admits a type depends on what a type parameter
+stands for: a literal's class against a type parameter, by its head, and a
+value adapted from one type to another that it does not adapt to, either
+holding one. One that adapts under the generic adapts under every instance
+(`Ty.canAdapt_inst`). -/
+def Class.dependsOn : Class → PTy → Bool
+  | .open_, _ | .unknown, _ => false
+  | c@(.adapt f), .known k => (f.containsVar || k.containsVar) && !c.admits (.known k)
+  | _, .known k => headVar k
+  | _, _ => false
+
+/-- Whether making two classes one depends on what a type parameter stands
+for, as `mergeClasses` asks whether the one admits what the other was
+adapted from. -/
+def Class.mergeDepends : Class → Class → Bool
+  | .unknown, _ | _, .unknown | .open_, _ | _, .open_ => false
+  | .adapt f, c | c, .adapt f => c.dependsOn (.known f)
+  | _, _ => false
+
 /-- Two classes made one, and payloads to unify then, or `none` if no type is
 of both (the doc's table of merges). -/
 def mergeClasses : Class → Class → Option (Class × Option (PTy × PTy))
@@ -225,10 +259,27 @@ def rootOf : PTy → InferM (Option Nat)
   | .var v => some <$> find v
   | _ => pure none
 
+/-- A known type `k` unified with `other`, a type with parts and no
+variable at the top, their parts unified by `parts`. A recursive type is
+unfolded, and the variable holding a literal's parts, `root`, takes the
+type, so the parts go along with the unfolding. A type parameter's parts are
+what it stands for, so unifying them is F110. -/
+def knownOther (parts : PTy → PTy → InferM Unit) (k : Ty) (other : PTy) (root : Option Nat) :
+    InferM Unit :=
+  match k with
+  | r@(.mu _) => do
+    if let .var _ := r.unfold then throw rigidCode
+    if let some h := root then modify (·.set! h (.bound (.known r)))
+    if let some e := expand r.unfold then parts e other
+  | k => do
+    if let .var _ := k then throw rigidCode
+    if let some e := expand k then parts e other
+
 mutual
 
 /-- `τ ≐ τ'`. A constraint that cannot hold leaves both sides as they are:
-the check after inference reports it. -/
+the check after inference reports it. One whose outcome depends on what a
+type parameter stands for is F110 (`rigidCode`). -/
 def unifyF : Nat → PTy → PTy → InferM Unit
   | 0, _, _ => throw "fuel"
   | n + 1, a, b => do
@@ -241,16 +292,8 @@ def unifyF : Nat → PTy → PTy → InferM Unit
     | .var x, t => bindF n x t
     | t, .var y => bindF n y t
     | .known _, .known _ => pure ()
-    -- A variable holding a literal's parts, unified with a recursive type,
-    -- takes the type, and the parts go along with the unfolding.
-    | .known r@(.mu _), other =>
-      if let some h := bRoot then modify (·.set! h (.bound (.known r)))
-      if let some e := expand r.unfold then unifyPartsF n e other
-    | other, .known r@(.mu _) =>
-      if let some h := aRoot then modify (·.set! h (.bound (.known r)))
-      if let some e := expand r.unfold then unifyPartsF n e other
-    | .known k, other | other, .known k =>
-      if let some e := expand k then unifyPartsF n e other
+    | .known k, other => knownOther (unifyPartsF n) k other bRoot
+    | other, .known k => knownOther (unifyPartsF n) k other aRoot
     | x, y => unifyPartsF n x y
 
 /-- Two types with no variable at the top, part by part. An enum's variants
@@ -279,6 +322,7 @@ def unionF : Nat → Nat → Nat → InferM Unit
     let s ← get
     let .free cx := s[x]! | panic! "a pruned variable is free"
     let .free cy := s[y]! | panic! "a pruned variable is free"
+    if cx.mergeDepends cy then throw rigidCode
     match mergeClasses cx cy with
     | none => pure ()
     | some (c, payloads) =>
@@ -292,6 +336,7 @@ def bindF : Nat → Nat → PTy → InferM Unit
   | 0, _, _ => throw "fuel"
   | n + 1, v, t => do
     let .free c := (← get)[v]! | panic! "a pruned variable is free"
+    if c.dependsOn t then throw rigidCode
     if !c.admits t then return
     modify (·.set! v (.bound t))
     if let .variant a (some p) := c then
@@ -306,11 +351,11 @@ def bindF : Nat → Nat → PTy → InferM Unit
     -- or term becoming an enum, so a value adapted to a type with undecided
     -- parts has those parts.
     if let .adapt f := c then
-      match f, t with
-      | _, .known _ => pure ()
-      | .atom _, .enum _ => pure ()
-      | .term a q, .enum vs => if let some p := (vs.lookup a).join then unifyF n (.known q) p
-      | _, t => unifyF n (.known f) t
+      match t, f with
+      | .known _, _ => pure ()
+      | .enum _, .atom _ => pure ()
+      | .enum vs, .term a q => if let some p := (vs.lookup a).join then unifyF n (.known q) p
+      | t, _ => unifyF n (.known f) t
 
 end
 
@@ -386,7 +431,8 @@ def liftM {α} (x : Except Code α) : InferM α := StateT.lift x
 mutual
 
 /-- `⊢ e ⇝ τ`, the Inf- rules. Inference reports nothing but malformed
-hints (`infer_errors`, in `Proofs/Infer.lean`). -/
+hints, and F110, which needs a type parameter, so datalit never meets it
+(`infer_errors`, in `Proofs/Infer.lean`). -/
 def inferF : Nat → Expr → InferM PTy
   | 0, _ => throw "fuel"
   | n + 1, e => match e with

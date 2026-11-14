@@ -1,0 +1,11 @@
+// A literal beside a value of a type parameter's type would be of whatever
+// type the parameter stands for, so a generic and its instances would type it
+// differently. That is F110, where inference is asked for the list's type.
+// Checked against `[T]` instead, the `1` is simply not a `T` (F016).
+
+fun pair<T>(x: T): [T] where { T is fixedint, }
+  debuglog [x, 1]
+  ret [x]
+end fun
+
+debuglog pair(: u8 / 2)
