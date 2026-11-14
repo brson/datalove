@@ -32,7 +32,6 @@ use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{Body, ParsedExpr, Statement, StmtFun, TopLevel};
 use datalove_datafun_ast::spans::DatafunSpans;
-use datalove_diagnostic_codes::CCode;
 use datalove_datafun_compiler::lower::{
     lower_script_fragment_raw, lower_script_expr, lower_script_functions,
 };
@@ -367,6 +366,7 @@ impl<'db> CompiledModules<'db> {
             unit_records: Vec::new(),
             last_source: None,
             ctfe_evaluator: RefCell::new(ctfe_evaluator),
+            ctfe_units: RefCell::default(),
             skip_const_inlining: false,
             skip_specialization: false,
             generics: GenericsPolicy::Off,
@@ -672,6 +672,9 @@ pub struct ScriptCompiler<'db> {
     ///
     /// In a `RefCell` because the phases that evaluate consts take `&self`.
     ctfe_evaluator: RefCell<Box<dyn CtfeEvaluator>>,
+    /// The record of each unit whose functions the evaluator has, by the
+    /// unit's id, to give it a unit's again only once the unit recompiles.
+    ctfe_units: RefCell<LookupMap<u32, Arc<UnitLowerRecord>>>,
     /// When true, const bindings in functions are lowered as let bindings.
     skip_const_inlining: bool,
     /// When true, comptime calls are left naming the original function.
@@ -1668,36 +1671,6 @@ impl<'db> ScriptCompiler<'db> {
             .build_stored()
     }
 
-    /// The diagnostic for const `const_name` of unit `index`, whose
-    /// initializer `init` names `name`, which lowering cannot find.
-    ///
-    /// Either an earlier unit bound it and did not compile, as for any name,
-    /// or it is a function an earlier unit defines, which a const's code
-    /// cannot call yet: it is evaluated with this unit's functions only.
-    fn const_unbound_diagnostic(
-        &self,
-        index: usize,
-        const_name: &str,
-        init: datalove_datafun_ast::ast::ExprFun<'db>,
-        name: &str,
-    ) -> StoredDiagnostic {
-        if self.failed_provider(index, name).is_some() {
-            return self.unbound_diagnostic(index, name);
-        }
-        let unit = (0..index).rev()
-            .find(|unit| self.unit_records[*unit].provides.iter().any(|provided| provided == name))
-            .map(|unit| self.units[unit].id)
-            .unwrap_or_else(|| panic!("`{name}` is named by const `{const_name}` and bound by no unit before it"));
-        let at = self.unit_spans(index).lookup_key(init.key())
-            .expect("a const's initializer was parsed with a span");
-        DiagnosticBuilder::error(self.db, &format!(
-            "`{const_name}` calls `{name}`, which unit {unit} defines, and a const cannot call into an earlier unit yet"))
-            .code(CCode::ConstCallsEarlierUnit.as_str())
-            .primary_label(at, "this cannot be evaluated")
-            .help(&format!("define `{name}` in this unit, beside the const"))
-            .build_stored()
-    }
-
     /// The id of the unit before `index` that bound `name` and did not
     /// compile, if one did.
     fn failed_provider(&self, index: usize, name: &str) -> Option<u32> {
@@ -2228,10 +2201,12 @@ impl<'db> ScriptCompiler<'db> {
         // is an order the graph's dependencies allow.
         let mut bindings: Vec<_> = const_graph.bindings.iter().collect();
         bindings.sort_by_key(|binding| binding.stmt_id.0);
+        let earlier_functions = self.earlier_functions(waiting.index);
         let mut evaluator = self.ctfe_evaluator.borrow_mut();
         for binding in bindings {
             let expr = const_exprs[binding.stmt_id.0 as usize];
-            let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
+            let mut env = self.const_env(
+                &mut **evaluator, expr_types, call_targets, lowered_funcs, &earlier_functions);
 
             // A script unit returns `!()`, so a script-level const may use `!`;
             // if it does return early, evaluation reports it.
@@ -2239,8 +2214,8 @@ impl<'db> ScriptCompiler<'db> {
                 &mut env, expr, &binding.ir_type, &resolved_consts_map,
                 Some(IrType::Result(Box::new(IrType::Unit))), &Default::default(),
             ).map_err(|error| match error {
-                ConstError::Unbound(missing) => self.lowering_refused(vec![
-                    self.const_unbound_diagnostic(waiting.index, &binding.name, expr, &missing)]),
+                ConstError::Unbound(missing) =>
+                    self.lowering_refused(vec![self.unbound_diagnostic(waiting.index, &missing)]),
                 ConstError::Ctfe(error) => self.lowering_refused(vec![ctfe_diagnostic(
                     self.db, &self.unit_spans(waiting.index), &binding.name, expr, &error)]),
             })?.expect("nothing is deferred at a script's top level");
@@ -2279,8 +2254,9 @@ impl<'db> ScriptCompiler<'db> {
         script_level_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
         lowered_funcs: &LoweredFunctions,
     ) -> (LookupMap<String, (IrType, Arc<ConstValue>)>, Vec<StoredDiagnostic>) {
+        let earlier_functions = self.earlier_functions(index);
         let mut evaluator = self.ctfe_evaluator.borrow_mut();
-        let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
+        let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs, &earlier_functions);
         let mut consts = LookupMap::default();
         let mut errors = Vec::new();
 
@@ -2302,8 +2278,7 @@ impl<'db> ScriptCompiler<'db> {
                 consts.insert(format!("{}::{}", func_name, name), (ir_type, value));
             }
             errors.extend(failures.into_iter().map(|failure| match &failure.error {
-                ConstError::Unbound(missing) =>
-                    self.const_unbound_diagnostic(index, &failure.name, failure.init, missing),
+                ConstError::Unbound(missing) => self.unbound_diagnostic(index, missing),
                 ConstError::Ctfe(_) => failure.diagnostic(self.db, &self.unit_spans(index)),
             }));
         }
@@ -2423,6 +2398,7 @@ impl<'db> ScriptCompiler<'db> {
         values: &[ConstValue],
         lowered: &[std::sync::Arc<IrCodeUnit>],
         func_name_to_id: &LookupMap<String, datalove_datafun_ir::FuncId>,
+        earlier_functions: &LookupMap<String, (u32, datalove_datafun_ir::FuncId)>,
     ) -> (LookupMap<String, Arc<ConstValue>>, Vec<StoredDiagnostic>) {
         let Some(func_stmt) = statements.iter().find_map(|stmt| match stmt {
             Statement::Fun(f) if f.name().text(self.db) == func_name => Some(f),
@@ -2439,6 +2415,7 @@ impl<'db> ScriptCompiler<'db> {
             lowered,
             func_name_to_id,
             func_id_map: self.shared_context.func_id_map,
+            earlier_functions,
             data_files: self.env.data(self.db),
         };
         let (consts, failures) =
@@ -2453,6 +2430,7 @@ impl<'db> ScriptCompiler<'db> {
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
         lowered_funcs: &'a LoweredFunctions,
+        earlier_functions: &'a LookupMap<String, (u32, datalove_datafun_ir::FuncId)>,
     ) -> ConstEvalEnv<'a, 'db> {
         ConstEvalEnv {
             db: self.db,
@@ -2462,8 +2440,27 @@ impl<'db> ScriptCompiler<'db> {
             lowered: &lowered_funcs.functions,
             func_name_to_id: &lowered_funcs.func_name_to_id,
             func_id_map: self.shared_context.func_id_map,
+            earlier_functions,
             data_files: self.env.data(self.db),
         }
+    }
+
+    /// The functions the units before `index` define, by name, as each
+    /// unit's id and the function's id there, for its consts to call.
+    ///
+    /// The CTFE evaluator is given those units' code first, each unit's
+    /// again only if it has recompiled since.
+    fn earlier_functions(&self, index: usize) -> LookupMap<String, (u32, datalove_datafun_ir::FuncId)> {
+        let mut given = self.ctfe_units.borrow_mut();
+        let mut evaluator = self.ctfe_evaluator.borrow_mut();
+        for (unit, record) in self.units[..index].iter().zip(&self.unit_records[..index]) {
+            if given.get(&unit.id).is_some_and(|had| Arc::ptr_eq(had, record)) {
+                continue;
+            }
+            evaluator.set_script_unit(unit.id, record.functions.iter().map(|f| (**f).C()).collect());
+            given.insert(unit.id, record.C());
+        }
+        lower_context_over(&self.unit_ids()[..index], &self.unit_records[..index]).functions
     }
 
     fn phase_instantiate(&self, mut ir_unit: IrCodeUnit) -> IrCodeUnit {
@@ -2501,6 +2498,7 @@ impl<'db> ScriptCompiler<'db> {
             ParsedUnit::Fragment { body, .. } => &body.statements,
             ParsedUnit::Expr(_) => &[],
         };
+        let earlier_functions = self.earlier_functions(index);
         let instantiation_consts = |callee: CalleeKey, indices: &[usize], values: &[ConstValue]| {
             match callee {
                 CalleeKey::Local(id) => {
@@ -2514,7 +2512,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.instantiation_consts_from(
                         script_stmts, &self.unit_spans(index), &name, typecheck.expr_types, typecheck.call_targets,
                         consts.script_consts.C(), indices, values,
-                        &lowered_funcs.functions, &lowered_funcs.func_name_to_id,
+                        &lowered_funcs.functions, &lowered_funcs.func_name_to_id, &earlier_functions,
                     )
                 }
                 CalleeKey::Module(module, id) => {
@@ -2552,7 +2550,7 @@ impl<'db> ScriptCompiler<'db> {
                         parsed.statements(self.db), datalove_datafun_parser::module_spans(self.db, source_module), &name,
                         single.expr_types(self.db), single.call_targets(self.db),
                         self.shared_context.module_consts.get(&module).cloned().unwrap_or_default(),
-                        indices, values, &funcs, &names,
+                        indices, values, &funcs, &names, &LookupMap::default(),
                     )
                 }
             }

@@ -22,7 +22,6 @@ home here.
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [A name bound by a unit that did not compile is found only by lowering](#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering)
-  - [A const cannot call a function an earlier unit defines](#user-content-a-const-cannot-call-a-function-an-earlier-unit-defines)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
@@ -209,17 +208,6 @@ What it would take: the typechecker reporting the use, with its span, or not
 offering the name. Either makes a unit's typecheck depend on the earlier
 units' later phases, which it does not now; see
 [script-reactivity-architecture.md](script-reactivity-architecture.md).
-
-### A const cannot call a function an earlier unit defines
-
-**Reproduced.** A script const is evaluated with its own unit's functions, and
-the earlier units' are not reachable from it, so `fun one()` in one REPL unit
-and `const R: u32 = one()` in the next is refused (C005), though a function
-in the second unit calls `one` without trouble. The same const beside `one`
-in one unit evaluates.
-
-What it would take: handing const evaluation the earlier units' compiled
-functions, as `ScriptEnvironment` holds them for running.
 
 ### An edit to a module no unit requires reports nothing
 

@@ -28,6 +28,9 @@ use datalove_datafun_sema::{ExprTypes, CallTargets};
 ///
 /// The `lowered_functions` parameter provides already-lowered function IR for CTFE calls.
 /// The `module_func_id_map` parameter enables cross-module function calls in const expressions.
+/// The `earlier_functions` parameter names the functions earlier script units
+/// define, by the unit and id each has there, for a script const to call; a
+/// function of the const's own unit by the same name shadows one.
 pub fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
@@ -38,6 +41,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &LookupMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db crate::FuncIdTable<'db>>,
+    earlier_functions: &LookupMap<String, (u32, datalove_datafun_ir::FuncId)>,
     data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
     use datalove_datafun_ir::{CodeRef, FuncId};
@@ -62,6 +66,14 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
 
     // Mark as script unit so early-return uses UnitEarlyReturn terminator.
     ctx.is_script_unit = true;
+
+    // An earlier unit's function is called where that unit's code is, unless
+    // this unit defines one by the same name, lowered or not.
+    for (func_name, &(unit, func_id)) in earlier_functions.iter_unordered() {
+        if !func_name_to_id.contains_key(func_name) {
+            ctx.register_external_func(func_name, unit, func_id);
+        }
+    }
 
     // Pre-register all functions using the name-to-id map so call resolution works.
     for (func_name, &func_id) in func_name_to_id.iter_unordered() {
@@ -159,6 +171,7 @@ pub fn lower_const_binding<'db>(
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &LookupMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db crate::FuncIdTable<'db>>,
+    earlier_functions: &LookupMap<String, (u32, datalove_datafun_ir::FuncId)>,
     data_files: &'db DataFiles,
 ) -> Result<(Option<IrCodeUnit>, Option<Arc<ConstValue>>), LowerError> {
     // Try simple literal extraction first.
@@ -182,7 +195,7 @@ pub fn lower_const_binding<'db>(
     // Lower to IR unit for CTFE evaluation.
     let unit = lower_const_expr_to_unit_standalone(
         db, expr, expr_types, call_targets, resolved_consts, return_type,
-        lowered_functions, func_name_to_id, func_id_map, data_files,
+        lowered_functions, func_name_to_id, func_id_map, earlier_functions, data_files,
     )?;
 
     Ok((Some(unit), None))

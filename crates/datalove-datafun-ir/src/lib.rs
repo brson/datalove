@@ -3318,6 +3318,14 @@ pub trait CtfeEvaluator {
     /// This allows const expressions to call functions from other modules.
     /// The registry is built from already-lowered module functions.
     fn set_module_registry(&mut self, registry: std::sync::Arc<ModuleFunctionRegistry>);
+
+    /// Put script unit `unit`'s functions in place of whatever it had, for a
+    /// later unit's const to call through `CodeRef::External`.
+    ///
+    /// A unit's id may be given again, after the unit is taken out of its
+    /// session, so whatever was compiled from the functions it had before is
+    /// forgotten.
+    fn set_script_unit(&mut self, unit: u32, functions: Vec<IrCodeUnit>);
 }
 
 // ============================================================================

@@ -1003,15 +1003,28 @@ fn a_unit_s_failed_const_renders_as_a_diagnostic() {
     assert_eq!(value_of(&mut engine, "R"), "1");
 }
 
-/// A const calling a function an earlier unit defines cannot be evaluated
-/// yet, and says so at the const.
+/// A const may call a function an earlier unit defines, which may call that
+/// unit's others, and is evaluated again with the new one when the earlier
+/// unit is edited.
 #[test]
-fn a_const_calling_an_earlier_unit_s_function_says_it_cannot() {
+fn a_const_calls_a_function_an_earlier_unit_defines() {
     let mut engine = engine();
-    run(&mut engine, "fun one(): u32\n  ret 1\nend fun\n---\nconst R: u32 = one()");
+    let one = "fun base(): u32\n  ret 1\nend fun\nfun one(): u32\n  ret base()\nend fun\n";
+    run(&mut engine, &format!("{one}---\nconst R: u32 = one()"));
+    assert_eq!(engine.unit_diagnostics(2, "unit 2", TextStyle::Plain), "");
+    assert_eq!(value_of(&mut engine, "R"), "1");
 
-    let refused = engine.unit_diagnostics(2, "unit 2", TextStyle::Plain);
-    assert!(refused.contains("[C005]") && refused.contains("unit 2:1:16") && refused.contains("unit 1 defines"), "{refused}");
+    engine.edit_unit(1, "fun base(): u32\n  ret 10\nend fun\nfun one(): u32\n  ret base()\nend fun\n");
+    assert_eq!(value_of(&mut engine, "R"), "10");
+}
+
+/// A function a unit defines is the one its const calls, over an earlier
+/// unit's by the same name.
+#[test]
+fn a_const_calls_its_own_unit_s_function_over_an_earlier_one() {
+    let mut engine = engine();
+    run(&mut engine, "fun one(): u32\n  ret 1\nend fun\n---\nfun one(): u32\n  ret 5\nend fun\nconst R: u32 = one()");
+    assert_eq!(value_of(&mut engine, "R"), "5");
 }
 
 /// Ownership errors are a unit's diagnostics too, for a fragment and for an
@@ -1063,3 +1076,4 @@ fn module_errors_come_in_dependency_order() {
     assert!(m < n, "{said}");
     assert_eq!(engine.module_errors().broken["local/test/n"], ["local/test/m", "local/test/n"]);
 }
+

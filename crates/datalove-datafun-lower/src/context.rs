@@ -452,6 +452,11 @@ impl<'db> LowerCtx<'db> {
         self.func_scope.insert(name.S(), CodeRef::Local(CodeUnitId(func_id.0)));
     }
 
+    /// Let `name` call function `func_id` of earlier script unit `unit`.
+    pub fn register_external_func(&mut self, name: &str, unit: u32, func_id: FuncId) {
+        self.func_scope.insert(name.S(), CodeRef::External { unit, id: CodeUnitId(func_id.0) });
+    }
+
     /// Define a function in the current scope.
     ///
     /// If the function was pre-registered via `pre_register_func`, returns the

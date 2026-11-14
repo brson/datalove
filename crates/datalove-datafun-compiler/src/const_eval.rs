@@ -37,6 +37,10 @@ pub struct ConstEvalEnv<'a, 'db> {
     pub func_name_to_id: &'a LookupMap<String, FuncId>,
     /// For calls into other modules.
     pub func_id_map: &'db FuncIdLookup<'db>,
+    /// For a script const's calls into earlier units: each function they
+    /// define, by name, as the unit's id and the function's id there. Empty
+    /// for a module's.
+    pub earlier_functions: &'a LookupMap<String, (u32, FuncId)>,
     /// The data files a `require data` const may name, by path.
     pub data_files: &'db lower::DataFiles,
 }
@@ -44,9 +48,8 @@ pub struct ConstEvalEnv<'a, 'db> {
 /// Why a const could not be evaluated.
 #[derive(Debug)]
 pub enum ConstError {
-    /// It names something with no value here: a const that failed, a
-    /// binding of an earlier script unit that did not compile, or a function
-    /// an earlier script unit defines, which evaluation cannot reach yet.
+    /// It names something with no value here: a const that failed, or a
+    /// binding of an earlier script unit that did not compile.
     Unbound(String),
     /// Running it gave no value.
     Ctfe(CtfeError),
@@ -184,7 +187,7 @@ pub fn evaluate_const<'db>(
 ) -> Result<Option<Arc<ConstValue>>, ConstError> {
     let lowered = lower::lower_const_binding(
         env.db, init, ty, env.expr_types, env.call_targets, resolved, func_return_type,
-        env.lowered, env.func_name_to_id, Some(env.func_id_map), env.data_files,
+        env.lowered, env.func_name_to_id, Some(env.func_id_map), env.earlier_functions, env.data_files,
     );
     let (unit, value) = match lowered {
         Ok(pair) => pair,

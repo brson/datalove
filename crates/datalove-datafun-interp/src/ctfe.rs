@@ -6,14 +6,21 @@
 use rmx::prelude::*;
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstF32, ConstF64, ConstValue, CtfeError, CtfeEvaluator, IrCodeUnit, IrType};
-use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry, NativeResolver};
+use crate::{
+    FrameStore, FunctionRegistry, IrInterpreter, ScriptEnvironment, UnitCompletion, Destination,
+    ModuleFunctionRegistry, NativeResolver,
+};
 use datalove_rtdt::AnyOwned;
 
 /// CTFE evaluator backed by the IR interpreter.
 pub struct InterpCtfeEvaluator {
     interp: IrInterpreter,
-    /// Module function registry for cross-module CTFE calls.
-    module_registry: Option<Arc<ModuleFunctionRegistry>>,
+    /// The functions a const may call outside its own unit: the modules', and
+    /// the earlier script units' by each unit's id.
+    ///
+    /// Kept between evaluations, and lent to each one's environment, so that a
+    /// unit's functions are copied in once rather than per const.
+    registry: FunctionRegistry,
 }
 
 impl InterpCtfeEvaluator {
@@ -21,7 +28,7 @@ impl InterpCtfeEvaluator {
     pub fn new() -> Self {
         Self {
             interp: IrInterpreter::new(),
-            module_registry: None,
+            registry: FunctionRegistry::new(),
         }
     }
 
@@ -31,7 +38,7 @@ impl InterpCtfeEvaluator {
     pub fn with_module_registry(module_registry: Arc<ModuleFunctionRegistry>) -> Self {
         Self {
             interp: IrInterpreter::new(),
-            module_registry: Some(module_registry),
+            registry: FunctionRegistry::with_module_registry(module_registry),
         }
     }
 
@@ -57,10 +64,11 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         // unit it is for; the last evaluation's were other functions under
         // the same identities.
         self.interp.forget_unit_bodies(0);
-        // Create environment with module registry if available (for cross-module CTFE).
-        let mut env = match &self.module_registry {
-            Some(registry) => ScriptEnvironment::with_module_registry(registry.C()),
-            None => ScriptEnvironment::new(),
+        // The registry is lent to the environment for this evaluation and
+        // taken back below; the frames are this evaluation's alone.
+        let mut env = ScriptEnvironment {
+            registry: std::mem::take(&mut self.registry),
+            frames: FrameStore::new(),
         };
 
         // Allocate space for the result.
@@ -84,15 +92,20 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
 
         // Execute the unit.
         let completion = self.interp
-            .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest))
-            .map_err(|e| match e {
-                crate::InterpError::StackOverflow => CtfeError::StackOverflow,
-                crate::InterpError::RuntimeError(message) => CtfeError::Failed(message),
-            })?;
+            .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest));
 
-        // Clean up the environment (frames from executed units).
-        // This must happen before env is dropped to free any heap allocations.
-        env.destroy_live_values(self.interp.runtime_handle());
+        // Clean up the environment (frames from executed units), if the unit
+        // finished. This must happen before env is dropped to free any heap
+        // allocations. The registry comes back either way.
+        if completion.is_ok() {
+            env.destroy_live_values(self.interp.runtime_handle());
+        }
+        self.registry = env.registry;
+
+        let completion = completion.map_err(|e| match e {
+            crate::InterpError::StackOverflow => CtfeError::StackOverflow,
+            crate::InterpError::RuntimeError(message) => CtfeError::Failed(message),
+        })?;
 
         let result = match completion {
             UnitCompletion::Normal => {
@@ -127,8 +140,14 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
     }
 
     fn set_module_registry(&mut self, registry: Arc<ModuleFunctionRegistry>) {
-        self.module_registry = Some(registry);
+        self.registry.set_module_registry(registry);
         self.interp.forget_compiled_bodies();
+    }
+
+    fn set_script_unit(&mut self, unit: u32, functions: Vec<IrCodeUnit>) {
+        assert_ne!(unit, 0, "unit 0 is the one each const runs as");
+        self.registry.set_unit_code_units(unit, functions);
+        self.interp.forget_unit_bodies(unit);
     }
 }
 

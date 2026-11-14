@@ -1398,7 +1398,6 @@ different values is an error too, since each is a copy of the function.
 | C002 | ConstStackOverflow | Evaluating the const overflowed the stack |
 | C003 | ConstFailed | Evaluating the const failed some other way, as running it would have |
 | C004 | TooManyInstantiations | A function's const parameters given more than 64 different values |
-| C005 | ConstCallsEarlierUnit | A const in a script unit calls a function an earlier unit defines, which evaluation cannot reach yet |
 
 ### 8.3 Set
 

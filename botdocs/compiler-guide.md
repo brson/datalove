@@ -611,7 +611,12 @@ waiting on a module const (a cycle). Each binding takes one of three routes:
 3. **Complex expressions** - lower to a minimal script code unit, execute via CTFE, extract result
 
 The unit for a complex expression carries every local function it can reach, so that a
-function it calls can call another. A const naming a const parameter has a value per
+function it calls can call another. A script const may also call a function an earlier
+unit defines, which it names by `CodeRef::External` as the unit's own code would
+(`ConstEvalEnv::earlier_functions`, from `lower_context_over`); the evaluator holds
+those units' functions, given each unit's again only when its record changes
+(`ScriptCompiler::earlier_functions`). A function of the const's own unit by the same
+name shadows the earlier one. A const naming a const parameter has a value per
 instantiation rather than one; `evaluate_body_consts` defers it, and
 `evaluate_instantiation_consts` evaluates it with the parameter's value and the
 enclosing module's or script's consts in scope.
@@ -1592,7 +1597,8 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   Native rider calls are checked before the dispatcher.
 - **CTFE** (`interp/src/ctfe.rs`) is the interpreter used at compile time.
   `InterpCtfeEvaluator::with_module_registry` gives const expressions access to
-  cross-module function calls.
+  cross-module function calls, and `CtfeEvaluator::set_script_unit` to an earlier
+  script unit's. Each const runs as unit 0, which no script unit is numbered.
 - **JIT** (`datalove-datafun-cranelift-jit`) tiers by call count, and enters a
   loop's compiled code partway through a call once the loop has run often
   enough (on-stack replacement; see [Tuning the JIT](plan-jit-tuning.md#user-content-osr)).

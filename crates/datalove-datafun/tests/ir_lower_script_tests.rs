@@ -191,6 +191,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                             &lowered_functions.iter().cloned().map(std::sync::Arc::new).collect::<Vec<_>>(),
                             &func_name_to_id,
                             None, // No module functions for script tests
+                            &LookupMap::default(),
                             &no_data,
                         );
 

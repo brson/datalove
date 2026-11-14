@@ -1100,7 +1100,7 @@ pub fn evaluate_all_module_consts<'db>(
         // wait for the copies.
         let mut env = ConstEvalEnv {
             db, expr_types, call_targets, evaluator, lowered: funcs,
-            func_name_to_id: &func_map, func_id_map,
+            func_name_to_id: &func_map, func_id_map, earlier_functions: &LookupMap::default(),
             data_files: single_typecheck.data_files(db),
         };
         let spans = datalove_datafun_parser::module_spans(db, parsed_graph.get_module(db, *module_id)
@@ -1322,6 +1322,7 @@ fn evaluate_module_consts_in_order<'db>(
                 lowered: funcs,
                 func_name_to_id: &func_map,
                 func_id_map: func_ids,
+                earlier_functions: &LookupMap::default(),
                 data_files: single_typecheck.data_files(db),
             };
             // A module const is outside any function, so there is no return
@@ -1988,6 +1989,7 @@ fn specialize_comptime_functions<'db>(
                             lowered: &module_funcs.functions,
                             func_name_to_id: &func_name_to_id,
                             func_id_map,
+                            earlier_functions: &LookupMap::default(),
                             data_files: single_typecheck.data_files(db),
                         };
                         let (evaluated, failures) = evaluate_instantiation_consts(

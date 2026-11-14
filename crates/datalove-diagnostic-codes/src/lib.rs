@@ -615,9 +615,6 @@ codes! {
         /// A function's const parameters given more values than it may be
         /// copied for.
         TooManyInstantiations = 4,
-        /// A const in a script unit calling a function an earlier unit
-        /// defines, which evaluation cannot reach yet.
-        ConstCallsEarlierUnit = 5,
     }
-    retired = [];
+    retired = [5];
 }
