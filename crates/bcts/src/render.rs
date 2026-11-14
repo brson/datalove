@@ -105,7 +105,7 @@ impl Renderer {
         file_path: &Path,
         cwd: &Path,
     ) {
-        render_one_multi_source(db, diag, file_path, &|_| None, cwd, &mut self.colors, &self.line_offsets);
+        render_one_multi_source(db, diag, file_path, &|_| None, cwd, &mut self.colors, &self.line_offsets, Sink::Stderr);
     }
 
     /// Print one diagnostic whose labels may point into several files.
@@ -121,7 +121,23 @@ impl Renderer {
         locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
         cwd: &Path,
     ) {
-        render_one_multi_source(db, diag, file_path, locate, cwd, &mut self.colors, &self.line_offsets);
+        render_one_multi_source(db, diag, file_path, locate, cwd, &mut self.colors, &self.line_offsets, Sink::Stderr);
+    }
+
+    /// The same diagnostic as text in `style`; see [`Renderer::to_string`].
+    pub fn located_to_text<'db>(
+        &mut self,
+        db: &'db dyn crate::Db,
+        diag: &Diagnostic<'db>,
+        file_path: &Path,
+        locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
+        cwd: &Path,
+        style: TextStyle,
+    ) -> String {
+        let mut out = String::new();
+        render_one_multi_source(
+            db, diag, file_path, locate, cwd, &mut self.colors, &self.line_offsets, Sink::Text(&mut out, style));
+        out
     }
 }
 
@@ -182,6 +198,23 @@ pub fn render_located_diagnostics<'db>(
     for diagnostic in diagnostics {
         renderer.located_diagnostic(db, &diagnostic, file_path, locate, cwd);
     }
+}
+
+/// The same run as one string in `style`, for a caller that is not stderr.
+pub fn render_located_diagnostics_to_string<'db>(
+    db: &'db dyn crate::Db,
+    diagnostics: impl IntoIterator<Item = Diagnostic<'db>>,
+    file_path: &Path,
+    locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
+    cwd: &Path,
+    style: TextStyle,
+) -> String {
+    let mut renderer = Renderer::new();
+    let mut out = String::new();
+    for diagnostic in diagnostics {
+        out.push_str(&renderer.located_to_text(db, &diagnostic, file_path, locate, cwd, style));
+    }
+    out
 }
 
 /// Print diagnostics whose labels may point into more than one source.
@@ -348,6 +381,7 @@ fn render_one_multi_source<'db>(
     cwd: &Path,
     colors: &mut ColorGenerator,
     line_offsets: &LineOffsets,
+    sink: Sink<'_>,
 ) {
     let base_file_name = display_path(file_path, cwd);
 
@@ -402,7 +436,7 @@ fn render_one_multi_source<'db>(
         .unwrap_or(0);
 
     let mut builder = Report::build(report_kind(diag.severity), (primary_file_id.C(), offset..offset))
-        .with_config(byte_config())
+        .with_config(sink.config())
         .with_message(diag.message.as_str(db));
 
     if let Some(code) = &diag.code {
@@ -429,7 +463,7 @@ fn render_one_multi_source<'db>(
         builder = builder.with_help(help.as_str(db));
     }
 
-    builder.finish().eprint(MultiSourceCache { sources, names }).I();
+    sink.emit(builder.finish(), MultiSourceCache { sources, names });
 }
 
 /// A source's text as ariadne is given it: after `lines` empty lines.

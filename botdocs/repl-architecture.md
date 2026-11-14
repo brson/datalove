@@ -195,19 +195,22 @@ The units already lowered are left alone, which is sound because a module's
 **A required module that does not compile is left out**, with every required
 module that reaches it, and the rest of the roots stay (`settle_roots` in
 `crates/datalove-script-engine/src/engine.rs`). The unit that requires it fails on its
-`require`, and the engine replaces that error with the module's own. One
+`require`, and the engine replaces that error with one naming the module, or
+the modules it requires that are the ones broken (`explain`). One
 broken module costs only the units that require it, as one failed unit costs
 only the units that read it. So the engine holds modules with errors outside
 the compile, and keeps what they said in `Engine::module_errors`. It starts
 whatever its modules do. The one error no root's leaving can fix is a rider
 interface's, and that still stops it starting.
 
-`ModuleErrors` has the failing modules' messages by path (`broken`), the
-lowering errors, and the type and ownership diagnostics in their stored form,
-`StoredDiagnostic`. That form names its `Source`s but holds no database
-lifetime, so a caller in the same process renders them against `Engine::db`.
-A caller across a thread, as the interactive REPL is, has only the messages,
-for now.
+`ModuleErrors` has, for each required module left out, the modules it reaches
+that do not compile (`broken`), and every diagnostic of the compile in its
+stored form, `StoredDiagnostic`, in dependency order: by the module each
+points into, those required before those requiring them, so the cause comes
+first. That form names its `Source`s but holds no database lifetime, so a
+caller in the same process renders them against `Engine::db`. A caller across
+a thread, as the interactive REPL is, has `Engine::render_module_errors`, which
+renders them as text, each at the file its module was read from.
 
 **Values come from the executor, types from the typechecker.** The executor
 holds every binding's value, but knows only how the IR lays it out: its
@@ -649,6 +652,12 @@ selected unit -- a new unit appended, or a step that ran or reported it -- and
 leaves it failed, returned early or blocked, the Detail tab is shown, and the
 focus stays where it was.
 
+**A module that does not compile has a tab while it does not.** The worker
+sends the module errors, rendered with ANSI escapes, with every answer, and the
+Modules tab is there while they are not empty. An answer whose module errors
+differ from the last shows the tab, since the module is then why whatever
+failed with it failed; one saying the same leaves the tab alone.
+
 **Help is found by asking for it.** `/help` or F1 adds the Help tab, shows it,
 and focuses the bottom panel, so the scroll keys move through it. Until then
 the panel shows only what the session has. The help is `help.md`, at the root
@@ -811,10 +820,10 @@ setup and the loop together.
   the sigil is a command on its first line. Only a replay, or an edit from
   the code panel, gives one over several lines.
 - An edit cannot change a unit from a fragment to an expression unit or back.
-- Errors are plain messages in the History tab. The Detail tab renders parse,
-  type and ownership diagnostics, but a lowering error shows only as its
-  message, having no location; see
-  [issues.md](issues.md#user-content-lowering-errors-say-what-never-where).
+- Errors are plain messages in the History tab. The Detail tab renders the
+  unit's diagnostics, and the Modules tab the modules'; a name bound by a unit
+  that did not compile has no location; see
+  [issues.md](issues.md#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering).
 - A type is shown expanded, never by its alias; see
   [issues.md](issues.md#user-content-a-printed-type-loses-its-alias).
 - Mouse capture is enabled while only key events are read, which disables

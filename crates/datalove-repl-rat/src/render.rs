@@ -65,6 +65,10 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
             let view = render_detail(f, &app.repl, chunks[2], bottom_block);
             app.repl.record_detail_view(view.pane_rows, view.scroll_limit);
         }
+        Tab::Modules => {
+            let view = render_modules(f, &app.repl, chunks[2], bottom_block);
+            app.repl.record_modules_view(view.pane_rows, view.scroll_limit);
+        }
     }
 
     // Each over the one before: a crash over the exit dialog, a bug in the
@@ -542,6 +546,12 @@ fn render_help<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, bl
 fn render_detail<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> ScrollDownView {
     let width = area.width.saturating_sub(BORDERS + 2) as usize;
     render_document(f, crate::detail::lines(repl, width), repl.detail_scroll(), area, block)
+}
+
+/// Render the modules tab: the diagnostics of the required modules that do
+/// not compile, scrolled down from their top.
+fn render_modules<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect, block: Block) -> ScrollDownView {
+    render_document(f, crate::ansi::lines(repl.modules()), repl.modules_scroll(), area, block)
 }
 
 /// Render lines flowed for the pane, with a margin either side, scrolled

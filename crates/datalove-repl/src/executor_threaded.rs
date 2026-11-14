@@ -112,16 +112,20 @@ fn worker_thread(
     rx: Receiver<WorkerRequest>,
     tx: Sender<WorkerResponse>,
 ) {
+    // Where the module files are shown relative to.
+    let cwd = std::env::current_dir().expect("the REPL runs in a directory");
     // The requests end when the executor is dropped, and the thread with
     // them. A send fails only once the executor is gone too.
     while let Ok(WorkerRequest { id, command }) = rx.recv() {
         let eval = session.eval(command);
+        let modules = session.engine().render_module_errors(script::TextStyle::Ansi, &cwd);
         let _ = tx.send(WorkerResponse::EvalResult {
             id,
             eval,
             environment: session.engine().get_environment(),
             session: session.units().to_vec(),
             step: session.last_step().to_vec(),
+            modules,
         });
     }
 }

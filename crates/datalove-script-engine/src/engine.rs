@@ -306,12 +306,18 @@ struct Compiling<'a> {
 /// until the module compiles again.
 #[derive(Debug, Default)]
 pub struct ModuleErrors {
-    /// Each required module left out, by path, with the errors of the modules
-    /// it reaches that explain why.
+    /// Each required module left out, by path, with the modules it reaches
+    /// that do not compile, itself among them if it does not, in dependency
+    /// order: those it requires before those that require them.
     pub broken: BTreeMap<String, Vec<String>>,
     /// The diagnostics of the compile that found them -- parse, type,
-    /// ownership, and what lowering refused -- in the order it reported them,
-    /// which a caller renders against [`Engine::db`].
+    /// ownership, and what lowering refused -- which a caller renders against
+    /// [`Engine::db`].
+    ///
+    /// In dependency order, by the module each points into: a data file or
+    /// rider interface first, then each module after those it requires, and
+    /// within one in the order they are written. What a module requires is
+    /// what is wrong with it as often as not, so the cause comes first.
     pub diagnostics: Vec<StoredDiagnostic>,
 }
 
@@ -369,13 +375,14 @@ fn settle_roots(
 
         // What the first compile said, since it holds every module the
         // later ones hold and the ones they left out.
+        let order: Vec<String> = compiled.shared.parsed_graph.graph(db).iter_modules(db)
+            .map(|module| module.id(db).path(db).C())
+            .collect();
         if found.is_empty() {
-            found.diagnostics = compiled.diagnostics(db);
+            found.diagnostics = in_dependency_order(compiled.diagnostics(db), &order, module_compiler);
         }
 
-        let errors: BTreeMap<String, Vec<String>> = compiled.diagnostics_by_module().into_iter()
-            .map(|(path, diagnostics)| (path, diagnostics.iter().map(datafun::driver::diagnostic_summary).collect()))
-            .collect();
+        let errors = compiled.diagnostics_by_module();
 
         let reach = module_reach(db, &compiled);
         let failing: Vec<String> = roots.iter()
@@ -387,16 +394,56 @@ fn settle_roots(
         }
 
         for root in &failing {
-            let messages = reach[root].iter()
-                .filter_map(|m| errors.get(m))
-                .flatten()
+            let modules = order.iter()
+                .filter(|module| reach[root].contains(*module) && errors.contains_key(*module))
                 .cloned()
                 .collect();
-            found.broken.insert(root.C(), messages);
+            found.broken.insert(root.C(), modules);
         }
         let kept = roots.into_iter().filter(|root| !failing.contains(root)).collect();
         module_compiler.set_roots(Roots::From(kept));
     }
+}
+
+/// Why a unit requiring module `path` failed, which reaches the modules
+/// `broken` that do not compile.
+///
+/// It names them and says no more: their diagnostics are the engine's
+/// [`ModuleErrors`], which say it at the module.
+fn broken_module_reason(path: &str, broken: &[String]) -> String {
+    let others: Vec<String> = broken.iter()
+        .filter(|module| *module != path)
+        .map(|module| fmt!("`{module}`"))
+        .collect();
+    let itself = broken.iter().any(|module| module == path);
+    match (itself, others.as_slice()) {
+        (true, []) => fmt!("module `{path}` does not compile"),
+        (true, others) => fmt!("module `{path}` does not compile, nor do {}, which it requires", others.join(", ")),
+        (false, [one]) => fmt!("module `{path}` requires {one}, which does not compile"),
+        (false, others) => fmt!("module `{path}` requires {}, which do not compile", others.join(", ")),
+    }
+}
+
+/// `diagnostics` in dependency order; see [`ModuleErrors::diagnostics`].
+///
+/// `order` is the modules' paths, those required before those requiring
+/// them. A diagnostic is placed by the source its first label points into,
+/// and one pointing nowhere goes last.
+fn in_dependency_order(
+    mut diagnostics: Vec<StoredDiagnostic>,
+    order: &[String],
+    module_compiler: &ModuleCompiler,
+) -> Vec<StoredDiagnostic> {
+    let rank: bct::lookup::LookupMap<Source, usize> = order.iter().enumerate()
+        .filter_map(|(rank, path)| Some((module_compiler.module_source(path)?, rank + 1)))
+        .collect();
+    diagnostics.sort_by_key(|diagnostic| match diagnostic.labels.first() {
+        // A source that is no module's is a data file's or a rider
+        // interface's, which nothing is required by.
+        Some(label) => (rank.get(&label.source).copied().unwrap_or(0), label.span.start),
+        None => (usize::MAX, 0),
+    });
+    diagnostics
 }
 
 /// Every module and rider each module of a compile reaches by `require`,
@@ -598,6 +645,25 @@ impl Engine {
     /// all of them.
     pub fn module_errors(&self) -> Ref<'_, ModuleErrors> {
         Ref::map(self.shared.modules.borrow(), |modules| &modules.errors)
+    }
+
+    /// The diagnostics of [`Self::module_errors`] rendered as text in
+    /// `style`, each framed against the file its module was read from, or
+    /// named by its path, as `local/app/m.dfm`, for one read from no file;
+    /// empty when every required module compiles.
+    ///
+    /// Paths are shown relative to `cwd`.
+    pub fn render_module_errors(&self, style: bct::render::TextStyle, cwd: &std::path::Path) -> String {
+        let modules = self.shared.modules.borrow();
+        if modules.errors.is_empty() {
+            return String::new();
+        }
+        let files = self.shared.workspace.source_files(&modules.module_compiler);
+        let locate = |source: Source| files.get(&source).cloned();
+        let db = &self.shared.db;
+        let diagnostics = modules.errors.diagnostics.iter().map(|d| d.to_diagnostic(db));
+        bct::render::render_located_diagnostics_to_string(
+            db, diagnostics, std::path::Path::new("modules"), &locate, cwd, style)
     }
 
     /// The database the sessions are compiled in, which is what the stored
@@ -1298,9 +1364,7 @@ impl Compiling<'_> {
         };
         let modules = self.shared.modules.borrow();
         let reasons: Vec<String> = modules.module_compiler.required_modules(&self.shared.db, unit).into_iter()
-            .filter_map(|path| modules.errors.broken.get(&path).map(|errors| {
-                fmt!("module `{path}` does not compile: {}", errors.join("; "))
-            }))
+            .filter_map(|path| modules.errors.broken.get(&path).map(|broken| broken_module_reason(&path, broken)))
             .collect();
         if reasons.is_empty() {
             Eval::NotCompiled(error)

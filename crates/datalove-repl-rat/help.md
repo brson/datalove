@@ -11,7 +11,8 @@ number it keeps for as long as the session lasts.
 - **Input** -- where a new unit is typed, or a unit is edited.
 - **The tabs below** -- **Environment**, the bindings the session has;
   **History**, everything entered and what it came to; **Detail**, all about
-  the selected unit; and this **Help**.
+  the selected unit; **Modules**, while a module the session requires does
+  not compile, what is wrong with it; and this **Help**.
 
 The bar beside each unit says how it fared the last time it was compiled or
 run:
@@ -34,6 +35,14 @@ know about it -- how it fared and what the last change did to it, its errors,
 what its bindings hold now, the functions it defines, and how it uses earlier
 units' bindings: which it reads, takes, overwrites, updates and revives. A change that leaves the selected unit broken shows the Detail
 tab.
+
+## Modules
+
+A unit that requires a module that does not compile fails, saying which
+module. The **Modules** tab, there only while one does not compile, shows
+what is wrong, at the module's own lines: the modules a broken one requires
+first, since what a module requires is as often as not what is wrong with
+it. It is shown when what is wrong changes.
 
 ## Typing
 

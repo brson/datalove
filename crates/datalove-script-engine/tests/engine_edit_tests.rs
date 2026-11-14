@@ -593,7 +593,7 @@ fn a_module_edit_that_does_not_compile_fails_its_units_until_fixed() {
     let Some(Eval::NotCompiled(error)) = &reports[0].eval else {
         panic!("the importing unit fails: {reports:?}");
     };
-    assert!(error.starts_with("module `local/test/m` does not compile: "), "{error}");
+    assert_eq!(error, "module `local/test/m` does not compile");
     assert!(engine.module_errors().broken.contains_key("local/test/m"));
     assert!(!bound(&mut engine, "a"), "its binding goes with it");
     assert_eq!(value_of(&mut engine, "b"), "20", "the other unit is untouched");
@@ -738,7 +738,8 @@ fn breaking_a_module_fails_the_units_of_the_modules_requiring_it() {
     let Some(Eval::NotCompiled(error)) = &reports[0].eval else {
         panic!("the unit importing from `n` fails: {reports:?}");
     };
-    assert!(error.starts_with("module `local/test/n` does not compile: "), "{error}");
+    // Named by the module that is broken, which `n` only requires.
+    assert_eq!(error, "module `local/test/n` requires `local/test/m`, which does not compile");
     assert!(!bound(&mut engine, "a"));
 
     edit_module(&mut engine, "fun f(): int\n    ret 3\nend fun\n");
@@ -832,10 +833,10 @@ fn a_broken_module_fails_only_the_units_that_require_it() {
     let Eval::NotCompiled(error) = eval else {
         panic!("the requiring unit fails: {eval:?}");
     };
-    assert!(
-        error.starts_with("module `local/test/m` does not compile: ") && error.contains("F016"),
-        "it says the module is why, and what is wrong with it: {error}",
-    );
+    assert_eq!(error, "module `local/test/m` does not compile", "it says the module is why");
+    // What is wrong with it is the engine's module errors, at the module.
+    let said = engine.render_module_errors(TextStyle::Plain, std::path::Path::new(""));
+    assert!(said.contains("[F016]") && said.contains("local/test/m.dfm:2:9"), "{said}");
     run(&mut engine, "let c = a + 1");
     assert_eq!(value_of(&mut engine, "c"), "2", "the session goes on without the module");
     assert!(!bound(&mut engine, "b"));
@@ -1043,4 +1044,22 @@ fn edit_data(engine: &mut Engine, text: &str) -> Vec<UnitStep> {
 fn edit_module(engine: &mut Engine, source: &str) -> Vec<UnitStep> {
     let first = engine.first_session();
     engine.edit_module("local", "test", "m", source).remove(&first).expect("the first session is reported")
+}
+
+/// A broken module's diagnostics come after those of the broken modules it
+/// requires, whatever order the modules were given in: what a module
+/// requires is as often as not what is wrong with it.
+#[test]
+fn module_errors_come_in_dependency_order() {
+    let mut engine = engine_with_modules(&[
+        ("n", "require module local/test/m\nimport m.f\nfun g(): int\n    ret \"no\"\nend fun\n"),
+        ("m", "fun f(): int\n    ret \"nope\"\nend fun\n"),
+    ]);
+    run(&mut engine, "require module local/test/n\nlet a = 1");
+
+    let said = engine.render_module_errors(TextStyle::Plain, std::path::Path::new(""));
+    let m = said.find("local/test/m.dfm").unwrap_or_else(|| panic!("m is reported: {said}"));
+    let n = said.find("local/test/n.dfm").unwrap_or_else(|| panic!("n is reported: {said}"));
+    assert!(m < n, "{said}");
+    assert_eq!(engine.module_errors().broken["local/test/n"], ["local/test/m", "local/test/n"]);
 }

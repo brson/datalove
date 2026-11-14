@@ -68,6 +68,9 @@ pub enum Tab {
     History,
     /// What there is to know about the selected unit, while there are units.
     Detail,
+    /// Why the modules the session requires do not compile, while one does
+    /// not.
+    Modules,
     /// How the REPL is used, once it has been asked for.
     Help,
 }
@@ -78,6 +81,7 @@ impl Tab {
             Tab::Environment => "Environment",
             Tab::History => "History",
             Tab::Detail => "Detail",
+            Tab::Modules => "Modules",
             Tab::Help => "Help",
         }
     }
@@ -289,6 +293,10 @@ pub enum WorkerResponse {
         session: Vec<repl::NumberedUnit>,
         /// What the last step to change the session did to its units.
         step: Vec<repl::UnitStep>,
+        /// The diagnostics of the required modules that do not compile, as
+        /// the engine renders them with ANSI escapes; empty when every one
+        /// compiles.
+        modules: String,
     },
 }
 
@@ -373,6 +381,12 @@ pub struct ReplApp<E: ReplExecutor> {
     help_scroll: ScrollState,
     /// How far down from the top of the detail the view is scrolled, in lines.
     detail_scroll: ScrollState,
+    /// The diagnostics of the modules the session requires that do not
+    /// compile, rendered with ANSI escapes, as the engine last reported them;
+    /// empty when every one compiles.
+    modules: String,
+    /// How far down from the top of the modules the view is scrolled, in lines.
+    modules_scroll: ScrollState,
     /// What the session last said about the selected unit.
     detail: Option<repl::UnitDetail>,
     /// The id the detail is next asked for under.
@@ -454,6 +468,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             help_shown: false,
             help_scroll: ScrollState::default(),
             detail_scroll: ScrollState::default(),
+            modules: String::new(),
+            modules_scroll: ScrollState::default(),
             detail: None,
             next_describe: DESCRIBE_IDS,
             described: None,
@@ -900,11 +916,12 @@ impl<E: ReplExecutor> ReplApp<E> {
                         _ => None,
                     };
                 }
-                WorkerResponse::EvalResult { id, eval, environment, session, step } => {
+                WorkerResponse::EvalResult { id, eval, environment, session, step, modules } => {
                     self.answers += 1;
                     self.handle_eval_result(id, eval, environment);
                     self.check_session(session);
                     self.last_step = step;
+                    self.take_modules(modules);
                     if !self.tabs().contains(&self.tab) {
                         self.tab = Tab::Environment;
                     }
@@ -963,6 +980,25 @@ impl<E: ReplExecutor> ReplApp<E> {
         if reached && broken {
             self.tab = Tab::Detail;
         }
+    }
+
+    /// Take what the engine says of the modules, and show it if it changed
+    /// and says something is wrong: a module that broke, or one that broke
+    /// differently, is why whatever failed with this answer failed.
+    fn take_modules(&mut self, modules: String) {
+        if modules != self.modules {
+            self.modules_scroll = ScrollState::default();
+            if !modules.is_empty() {
+                self.tab = Tab::Modules;
+            }
+        }
+        self.modules = modules;
+    }
+
+    /// The diagnostics of the modules the session requires that do not
+    /// compile, with ANSI escapes; empty when every one compiles.
+    pub fn modules(&self) -> &str {
+        &self.modules
     }
 
     /// Show what a command will change: code changes the environment, and
@@ -1499,6 +1535,9 @@ impl<E: ReplExecutor> ReplApp<E> {
         if !self.units.is_empty() {
             tabs.push(Tab::Detail);
         }
+        if !self.modules.is_empty() {
+            tabs.push(Tab::Modules);
+        }
         if self.help_shown {
             tabs.push(Tab::Help);
         }
@@ -1539,6 +1578,10 @@ impl<E: ReplExecutor> ReplApp<E> {
                 let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
                 self.detail_scroll.step(scroll, !up);
             }
+            Tab::Modules => {
+                let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
+                self.modules_scroll.step(scroll, !up);
+            }
         }
     }
 
@@ -1577,6 +1620,16 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Tell the app the shape of the detail the renderer just laid out.
     pub fn record_detail_view(&mut self, pane_lines: usize, scroll_limit: usize) {
         self.detail_scroll.record(pane_lines, scroll_limit);
+    }
+
+    /// How far down from the top the modules are scrolled.
+    pub fn modules_scroll(&self) -> usize {
+        self.modules_scroll.offset
+    }
+
+    /// Tell the app the shape of the modules the renderer just laid out.
+    pub fn record_modules_view(&mut self, pane_lines: usize, scroll_limit: usize) {
+        self.modules_scroll.record(pane_lines, scroll_limit);
     }
 
     /// How far down from the top the help is scrolled.

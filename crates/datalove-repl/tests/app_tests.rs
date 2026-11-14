@@ -130,6 +130,7 @@ fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
         environment: vec![binding(name, "int", "1")],
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     }
 }
 
@@ -197,6 +198,7 @@ fn multiline_mode_spans_one_submission() {
         environment: vec![binding("f", "fun(): int", "-")],
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     app.poll_results();
 
@@ -315,6 +317,7 @@ fn reset_command_clears_history_and_environment() {
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     app.poll_results();
 
@@ -390,6 +393,7 @@ fn save_writes_the_history_up_to_itself() {
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     app.poll_results();
 
@@ -450,6 +454,7 @@ fn input_after_a_crash_runs_in_the_new_session() {
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     app.poll_results();
 
@@ -486,6 +491,7 @@ fn a_runtime_error_reset_clears_the_session() {
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     app.poll_results();
 
@@ -667,7 +673,7 @@ fn submitting_returns_to_the_newest_entry() {
 }
 
 fn evaluated(id: u64, eval: repl::script::Eval) -> WorkerResponse {
-    WorkerResponse::EvalResult { id, eval: repl::Outcome::Unit(eval), environment: Vec::new(), session: Vec::new(), step: Vec::new() }
+    WorkerResponse::EvalResult { id, eval: repl::Outcome::Unit(eval), environment: Vec::new(), session: Vec::new(), step: Vec::new(), modules: String::new() }
 }
 
 /// The code panel is the session's units, without the REPL commands, each
@@ -884,6 +890,7 @@ fn a_reset_loses_the_selection() {
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     executor.queue(evaluated_let(2, "b"));
     app.poll_results();
@@ -970,6 +977,7 @@ repl-command
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     executor.queue(evaluated_let(3, "a"));
     app.poll_results();
@@ -1034,7 +1042,7 @@ fn a_session_the_history_does_not_hold_is_reported() {
         unreachable!();
     };
     let b = repl::NumberedUnit { number: 2, unit: repl::script::Unit::Fragment("let b = 2".S()) };
-    executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![b], step: Vec::new() });
+    executor.queue_raw(WorkerResponse::EvalResult { id: 1, eval, environment, session: vec![b], step: Vec::new(), modules: String::new() });
     app.poll_results();
 
     let message = app.session_mismatch_message().expect("the mismatch is reported");
@@ -1059,6 +1067,7 @@ fn edited(id: u64, reports: Vec<(u32, repl::script::Eval)>, session: Vec<repl::N
         environment: Vec::new(),
         session,
         step: Vec::new(),
+        modules: String::new(),
     }
 }
 
@@ -1214,7 +1223,7 @@ fn the_code_shows_what_the_last_step_did() {
         repl::UnitStep { unit: 1, compiled: true, eval: Some(repl::script::Eval::Ran(Vec::new())) },
         repl::UnitStep { unit: 2, compiled: false, eval: Some(repl::script::Eval::Ran(Vec::new())) },
     ];
-    executor.queue_raw(WorkerResponse::EvalResult { id, eval, environment, session, step });
+    executor.queue_raw(WorkerResponse::EvalResult { id, eval, environment, session, step, modules: String::new() });
     app.poll_results();
     assert_eq!(marks(&app), vec![(Some(1), true, true), (Some(2), false, true), (Some(3), false, false)]);
 
@@ -1477,6 +1486,7 @@ fn described(id: u64, unit: u32) -> WorkerResponse {
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     }
 }
 
@@ -1501,6 +1511,7 @@ fn the_detail_tab_is_there_while_there_are_units() {
         environment: Vec::new(),
         session: Vec::new(),
         step: Vec::new(),
+        modules: String::new(),
     });
     app.poll_results();
     assert_eq!(app.tabs(), vec![Tab::Environment, Tab::History]);
@@ -1556,4 +1567,45 @@ fn the_detail_is_of_the_selected_unit() {
     // Asking takes none of the entries' ids.
     app.submit_input("let c = 3".S());
     assert_eq!(executor.evals(), vec![0, 1, 2]);
+}
+
+/// `evaluated_let`, with the engine saying the required modules do not
+/// compile, as `modules` renders it.
+fn evaluated_let_with_modules(id: u64, name: &str, said: &str) -> WorkerResponse {
+    let mut response = evaluated_let(id, name);
+    let WorkerResponse::EvalResult { modules, .. } = &mut response else { unreachable!() };
+    *modules = said.S();
+    response
+}
+
+/// The Modules tab is there while a required module does not compile, is
+/// shown when what the engine says of the modules changes, and goes when
+/// they compile.
+#[test]
+fn the_modules_tab_shows_while_a_module_does_not_compile() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.C());
+    assert!(!app.tabs().contains(&Tab::Modules));
+
+    app.submit_input("let a = 1".S());
+    executor.queue(evaluated_let_with_modules(0, "a", "m is broken"));
+    app.poll_results();
+    assert!(app.tabs().contains(&Tab::Modules));
+    assert_eq!(app.tab(), Tab::Modules);
+    assert_eq!(app.modules(), "m is broken");
+
+    // Saying the same again leaves the tab that is being looked at alone.
+    app.submit_input("let b = 1".S());
+    executor.queue(evaluated_let_with_modules(1, "b", "m is broken"));
+    app.poll_results();
+    assert_eq!(app.tab(), Tab::Environment);
+
+    // Once they compile the tab goes, and the one shown with it.
+    app.select_tab(Tab::Modules);
+    app.submit_input("let c = 1".S());
+    app.select_tab(Tab::Modules);
+    executor.queue(evaluated_let(2, "c"));
+    app.poll_results();
+    assert!(!app.tabs().contains(&Tab::Modules));
+    assert_eq!(app.tab(), Tab::Environment);
 }

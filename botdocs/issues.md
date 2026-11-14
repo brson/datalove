@@ -21,7 +21,6 @@ home here.
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
-  - [The REPL shows a broken module only as a message](#user-content-the-repl-shows-a-broken-module-only-as-a-message)
   - [A name bound by a unit that did not compile is found only by lowering](#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering)
   - [A const cannot call a function an earlier unit defines](#user-content-a-const-cannot-call-a-function-an-earlier-unit-defines)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
@@ -195,14 +194,6 @@ Making it a refusal needs to know the `JITModule` is still usable after a
 failed definition. Dropping the engine and starting a fresh one is the
 heavier alternative. The CLI's REPL does not use the JIT, so a long session
 does not reach this today.
-
-### The REPL shows a broken module only as a message
-
-**Reproduced.** A unit that requires a module that does not compile fails with
-``module `x` does not compile: ...``, the module's errors as messages. The
-module's diagnostics, framed against its source, are what the engine keeps in
-`ModuleErrors`, and only the CLI renders them; the REPL's Detail tab shows the
-unit's own diagnostics, which say nothing of the module's.
 
 ### A name bound by a unit that did not compile is found only by lowering
 
