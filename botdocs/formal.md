@@ -405,6 +405,19 @@ What it found:
   was accepted and its instance refused. Working out what the check-once
   theorem below would need found it. The operand is now borrowed either way;
   the backend fixture `45_borrowed_part_of_a_temporary` holds it.
+- **Inference decided some things by what a type parameter stands for.**
+  A literal beside a `T`, as in `[x, 1]` or `x == 1`, stayed a free
+  variable under the generic, where under an instance at `u8` it became a
+  `u8`; reading a `T`'s field or element, and a `rec` hint holding `T`, went
+  likewise. Each such generic was refused anyway, with F016, F048, F090 or
+  T066, for a literal is never of a type parameter's type: across twelve
+  thousand scripts and twenty thousand instances none was accepted. But
+  that made the check-once theorem rest on a claim about checking as a
+  whole. Inference now reports such a decision itself (F110), in the Rust
+  by marking what was inferred and in the model by failing, so the generic
+  is refused where inference is asked, and on a generic that checks,
+  inference steps with inference under every instance. The error fixture
+  `131_literal_meets_a_type_parameter` holds it.
 - **Worldgen could recurse without end.** An argument of a call may itself
   be a call, with no bound, so a function of enough parameters drew calls
   inside calls until the stack overflowed: past one expected call per call,
@@ -464,17 +477,40 @@ Four things are proved of it:
   (`Ground`); with one, `expose` would not commute with substituting it, and
   an instance spelling a recursive type into a key would be T065, which
   only refuses the spelling ([the issue](issues.md#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)).
-  Inference is taken as given, as for the theorems above, and assumed to
-  answer under an instance what it answered under the generic, substituted,
-  wherever the generic checked quietly (`InstEnv`); `instances_check` holds
-  the Rust to the conclusion, below. A signature names only its own type
-  parameters (`SigsOk`), which is proved of what `resolveNames` builds
-  (`Fun.resolveNames_sigsOk`, in `Proofs/Sigs.lean`), so
-  `Fun.checkFun_instance_script` states the theorem of a script without it;
+  The theorem takes inference as a parameter, as the theorems above do, and
+  asks of it that under an instance it answer what it answered under the
+  generic, substituted, wherever the generic checked quietly (`InstEnv`).
+  That is proved of the real inference (`Fun.inferEnv_inst`, in
+  `Proofs/Lockstep.lean`), so `Fun.checkFun_instance_real` states the
+  theorem with nothing assumed of inference; `instances_check` holds the
+  Rust to its conclusion, below. A signature names only its own type
+  parameters and is well formed (`SigsOk`), which is proved of what
+  `resolveNames` builds (`Fun.resolveNames_sigsOk`, in `Proofs/Sigs.lean`),
+  so the theorem holds of a script without assuming it;
   and a body declares no type alias, which the parser refuses (P074). Making a type
   parameter copyable breaks the proof, as letting a bound satisfy another at
   a call does: each would let a generic through whose instance the Rust
   refuses.
+
+- **Inference under a generic steps with inference under its instances**
+  (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
+  arguments touches only known types, so a variable keeps its number, and
+  a state is substituted variable by variable. Run from a substituted state,
+  inference under an instance ends in the substituted state with the
+  substituted answer, or fails as the generic's did, unless the generic's
+  failed with F110 or ran out of fuel (`Lit.Lock`). Each decision either
+  comes out the same, since a ground type argument keeps the head of a type
+  whose head is no type parameter, or is one that depends on what a type
+  parameter stands for, which is F110 under the generic: a literal's class
+  against `T`, a value adapted to or from a type holding one that does not
+  adapt, `T` met by a type with parts or read for its parts, and a hint with
+  `T` inside a `rec` (T066). A generic that checks quietly met neither F110
+  nor running out, which is how the theorem's assumption is discharged. A
+  hint reads the same under the substituted aliases, failures included
+  (`Fun.convertIn_inst`), and a call's signature instantiates the same,
+  being well formed, so that no `rec` in it holds a type parameter
+  (`Fun.instantiate_inst`). Nothing is assumed: `#print axioms` shows only
+  Lean's three.
 
 To make these provable, checking was made total: it takes inference as a
 parameter (`InferEnv`), which only says what types are and so cannot move an
@@ -555,15 +591,9 @@ In rough order of what to do next:
   expression makes on its own. A `ret e` is checked against the return type,
   but that the value is one of the type needs a value semantics for datafun's
   expressions, which only datalit's literals have (`Lit.check_sound`).
-- **What the check-once theorem assumes.** Inference's answer under an
-  instance (`InstEnv`) is assumed and tested, not yet proved of the real
-  inference, which is total now and so open to it. Inference under a
-  generic and under its instance do not step together: a literal's variable
-  that meets `T` stays free, and one that meets `u8` binds. So the proof
-  needs a soundness of inference against checking: that every constraint
-  left unmet makes a check fail, so that on a quiet run there is none.
-  Recursive type arguments
-  are left out, until T065 says whether a recursive key is allowed.
+- **Recursive type arguments.** The check-once theorem takes type arguments
+  with no `rec` in them (`Ground`), until T065 says whether a recursive key
+  is allowed.
 - **F089, and requires that fail.** The Rust finds a const that depends on
   itself through a function by what its checker looked up, and the model
   does not track that; `world_typing_agrees` skips any world the Rust

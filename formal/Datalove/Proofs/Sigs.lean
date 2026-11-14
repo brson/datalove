@@ -305,10 +305,10 @@ theorem lookup_append_one {β} (l : List (String × β)) (n f : String) (b : β)
     · have : (f == m) = false := by simpa using h
       simp only [List.cons_append, List.lookup, this, ih]
 
-theorem SigsOk.append {sigs : List (String × Sig)} (h : SigsOk sigs) {n : String} {sig : Sig}
+theorem SigsOwn.append {sigs : List (String × Sig)} (h : SigsOwn sigs) {n : String} {sig : Sig}
     (hs : (∀ mt ∈ sig.params, mt.2.allVars (fun x => sig.tparams.any (·.1 == x)) = true) ∧
       (∀ r, sig.ret = .ty r → r.allVars (fun x => sig.tparams.any (·.1 == x)) = true)) :
-    SigsOk (sigs ++ [(n, sig)]) := by
+    SigsOwn (sigs ++ [(n, sig)]) := by
   intro f sig' hl
   rw [lookup_append_one] at hl
   cases hf : sigs.lookup f with
@@ -324,11 +324,11 @@ theorem SigsOk.append {sigs : List (String × Sig)} (h : SigsOk sigs) {n : Strin
 
 /-- Every signature `resolveNames` builds names only its own type
 parameters. -/
-theorem resolveNames_sigsOk (ss : List Stmt) : SigsOk (resolveNames ss).1 := by
-  have empty : SigsOk [] := fun _ _ h => by cases h
+theorem resolveNames_sigsOwn (ss : List Stmt) : SigsOwn (resolveNames ss).1 := by
+  have empty : SigsOwn [] := fun _ _ h => by cases h
   simp only [resolveNames, Id.run, bind, pure]
   refine (forIn_id_inv
-    (I := fun (st : Aliases × List (String × Sig) × Array Lit.Code) => AliasOk st.1 ∧ SigsOk st.2.1)
+    (I := fun (st : Aliases × List (String × Sig) × Array Lit.Code) => AliasOk st.1 ∧ SigsOwn st.2.1)
     ⟨fun _ h => absurd h List.not_mem_nil, empty⟩ ?_).2
   intro s _ st ⟨hA, hS⟩
   obtain ⟨A, sigs, d⟩ := st
@@ -346,23 +346,6 @@ theorem resolveNames_sigsOk (ss : List Stmt) : SigsOk (resolveNames ss).1 := by
       · rename_i sig hsig; exact ⟨hA, hS.append (sigOf_ok hA hsig)⟩
       · exact ⟨hA, hS⟩
   all_goals exact ⟨hA, hS⟩
-
-/-- **Checking a generic once is enough**, of a script: `checkFun_instance`
-with its signatures as `resolveNames` builds them, which name only their own
-type parameters. -/
-theorem checkFun_instance_script {θ : List (String × Ty)} (g : Ground θ) {env' : InferEnv}
-    (H : InstEnv θ inferEnv env') (ss : List Stmt) (aliases : Aliases)
-    (consts : List (String × Ty × Kind)) (name : String)
-    (tps : List (String × Option Bound)) (params : List (Mode × String × Hint)) (ret : Option Hint)
-    (body : List Stmt) (sig : Sig) (hsig : (resolveNames ss).1.lookup name = some sig)
-    (hb : ∀ p b, (p, some b) ∈ tps → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true)
-    (tf : blockTypeFree body = true)
-    (quiet : SQuiet (checkFun (resolveNames ss).1 aliases consts (.mk name tps params ret body)) ()) :
-    SQuiet (checkBlockF env' fuel ((funCtx (resolveNames ss).1 aliases consts tps params sig).inst θ) body
-      >>= fun _ => reportIf (match sig.ret.inst θ with
-        | .ty _ => completes body
-        | .void => false) "F063") () :=
-  checkFun_instance g H _ (resolveNames_sigsOk ss) aliases consts name tps params ret body sig hsig hb tf quiet
 
 /-! ## Signatures are well formed -/
 
@@ -420,10 +403,6 @@ theorem sigOf_wf {A : Aliases} (hA : ∀ p ∈ A, p.2.WF) {f : FunDecl} {sig : S
         simp [hs, Functor.map, Except.map, pure, Except.pure] at h; subst h
         exact ⟨hps, fun r hr => by cases hr; exact sigHint_wf hA hs⟩
 
-/-- Signatures whose types are well formed. -/
-def SigsWF (sigs : List (String × Sig)) : Prop :=
-  ∀ f sig, sigs.lookup f = some sig → (∀ mt ∈ sig.params, mt.2.WF) ∧ (∀ r, sig.ret = .ty r → r.WF)
-
 /-- Every signature `resolveNames` builds has well-formed types: the
 recursive-type conditions T062 to T066 hold of them, aliases and all. -/
 theorem resolveNames_wf (ss : List Stmt) : SigsWF (resolveNames ss).1 := by
@@ -479,5 +458,27 @@ theorem resolveNames_wf (ss : List Stmt) : SigsWF (resolveNames ss).1 := by
           · cases hg
       · exact ⟨hA, hS⟩
   all_goals exact ⟨hA, hS⟩
+
+/-- Every signature `resolveNames` builds names only its own type parameters
+and is well formed. -/
+theorem resolveNames_sigsOk (ss : List Stmt) : SigsOk (resolveNames ss).1 :=
+  ⟨resolveNames_sigsOwn ss, resolveNames_wf ss⟩
+
+/-- **Checking a generic once is enough**, of a script: `checkFun_instance`
+with its signatures as `resolveNames` builds them, which name only their own
+type parameters. -/
+theorem checkFun_instance_script {θ : List (String × Ty)} (g : Ground θ) {env' : InferEnv}
+    (H : InstEnv θ inferEnv env') (ss : List Stmt) (aliases : Aliases)
+    (consts : List (String × Ty × Kind)) (name : String)
+    (tps : List (String × Option Bound)) (params : List (Mode × String × Hint)) (ret : Option Hint)
+    (body : List Stmt) (sig : Sig) (hsig : (resolveNames ss).1.lookup name = some sig)
+    (hb : ∀ p b, (p, some b) ∈ tps → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true)
+    (tf : blockTypeFree body = true)
+    (quiet : SQuiet (checkFun (resolveNames ss).1 aliases consts (.mk name tps params ret body)) ()) :
+    SQuiet (checkBlockF env' fuel ((funCtx (resolveNames ss).1 aliases consts tps params sig).inst θ) body
+      >>= fun _ => reportIf (match sig.ret.inst θ with
+        | .ty _ => completes body
+        | .void => false) "F063") () :=
+  checkFun_instance g H _ (resolveNames_sigsOk ss) aliases consts name tps params ret body sig hsig hb tf quiet
 
 end Datalove.Fun

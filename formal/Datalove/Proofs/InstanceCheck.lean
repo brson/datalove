@@ -443,11 +443,20 @@ theorem _root_.Datalove.Variants.allVars_mono {P Q : String → Bool}
 end
 
 /-- Signatures whose types name only their own type parameters. -/
-def SigsOk (sigs : List (String × Sig)) : Prop :=
+def SigsOwn (sigs : List (String × Sig)) : Prop :=
   ∀ f sig, sigs.lookup f = some sig →
     let own := fun n => sig.tparams.any (·.1 == n)
     (∀ mt ∈ sig.params, mt.2.allVars own = true) ∧
     (∀ r, sig.ret = .ty r → r.allVars own = true)
+
+/-- Signatures whose types are well formed. -/
+def SigsWF (sigs : List (String × Sig)) : Prop :=
+  ∀ f sig, sigs.lookup f = some sig → (∀ mt ∈ sig.params, mt.2.WF) ∧ (∀ r, sig.ret = .ty r → r.WF)
+
+/-- Signatures as resolution builds them: their types name only their own
+type parameters, and are well formed, so that no type parameter is inside a
+`rec` (T066). -/
+def SigsOk (sigs : List (String × Sig)) : Prop := SigsOwn sigs ∧ SigsWF sigs
 
 theorem allDecided_covers {tps : List (String × Option Bound)} {θ' : List (String × Ty)}
     (h : allDecided tps θ' = true) (n : String) (hn : tps.any (·.1 == n) = true) :
@@ -1230,7 +1239,7 @@ theorem callF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (Γ
               apply List.map_congr_left
               intro ⟨m, u⟩ hmt
               simp only [Function.comp]
-              rw [Ty.inst_inst θ θ' u (Ty.allVars_mono own u ((sg f sig hs).1 _ hmt))]
+              rw [Ty.inst_inst θ θ' u (Ty.allVars_mono own u ((sg.1 f sig hs).1 _ hmt))]
             refine quiet_ite_false (by simpa using hl) ?_
             refine Quiet.bind (a := ()) (constArgs_inst hca) ?_
             refine Quiet.bind (a := ()) hm ?_
@@ -1244,7 +1253,7 @@ theorem callF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (Γ
               simp only [hr, Quiet.pure_iff] at h ⊢; subst h; rfl
             | ty rt =>
               simp only [hr, Quiet.pure_iff] at h ⊢; subst h
-              rw [Ty.inst_inst θ θ' rt (Ty.allVars_mono own rt ((sg f sig hs).2 rt hr))]
+              rw [Ty.inst_inst θ θ' rt (Ty.allVars_mono own rt ((sg.1 f sig hs).2 rt hr))]
 
 theorem argsF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (Γ : Ctx)
     (args : List (Option Mode × Expr)) (ps : List (Mode × Ty)), Quiet (argsF env n Γ args ps) () →
