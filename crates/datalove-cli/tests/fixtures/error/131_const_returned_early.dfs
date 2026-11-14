@@ -1,0 +1,9 @@
+// A const that returns early is an error at its initializer, which says what
+// it returned.
+
+fun ratio(a: u32, b: u32): !u32
+  ret ok (a /! b)
+end fun
+
+const R: u32 = ratio(1, 0)!
+debuglog R

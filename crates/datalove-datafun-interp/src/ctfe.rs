@@ -71,8 +71,10 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             tydesc: result_tydesc,
         };
 
-        // Allocate space for early return (Result<(), Error>).
-        let ret_type = IrType::Result(Box::new(IrType::Unit));
+        // Allocate space for an early return, of whatever the unit returns
+        // early with: an error from `!` or a checked operator, `none` from
+        // `?`. A unit that cannot return early writes nothing here.
+        let ret_type = early_return_type(unit).unwrap_or(IrType::Result(Box::new(IrType::Unit)));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
         let mut ret_buffer = datalove_rt::rust::AlignedBuffer::for_tydesc(unsafe { &*ret_tydesc });
         let ret_dest = Destination {
@@ -83,7 +85,10 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         // Execute the unit.
         let completion = self.interp
             .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest))
-            .map_err(|e| CtfeError::InterpError(e.S()))?;
+            .map_err(|e| match e {
+                crate::InterpError::StackOverflow => CtfeError::StackOverflow,
+                crate::InterpError::RuntimeError(message) => CtfeError::Failed(message),
+            })?;
 
         // Clean up the environment (frames from executed units).
         // This must happen before env is dropped to free any heap allocations.
@@ -91,13 +96,14 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
 
         let result = match completion {
             UnitCompletion::Normal => {
-                // Extract the result value into a ConstValue.
-                extract_const_value(result_buffer.as_ptr(), result_type)
+                Ok(extract_const_value(result_buffer.as_ptr(), result_type)
+                    .unwrap_or_else(|Unreadable(why)| panic!("a const's value cannot be read back: {why}")))
             }
             UnitCompletion::EarlyReturn => {
-                Err(CtfeError::EarlyReturn(
-                    "const expression returned early via ! or ?".S()
-                ))
+                let returned = crate::Value { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+                let printed = self.interp.pretty_print_value(&returned)
+                    .expect("what a const returned early with can be printed");
+                Err(CtfeError::EarlyReturn(printed))
             }
         };
 
@@ -126,6 +132,27 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
     }
 }
 
+/// The type of what `unit` returns early with, if it can.
+///
+/// Every early return in a unit returns the same type, the enclosing
+/// function's, or a script's `!()`.
+fn early_return_type(unit: &IrCodeUnit) -> Option<IrType> {
+    unit.blocks.iter().find_map(|block| match &block.terminator {
+        datalove_datafun_ir::Terminator::UnitEarlyReturn { value: datalove_datafun_ir::Operand::Value(id) } => {
+            Some(unit.value_types[id.0 as usize].C())
+        }
+        datalove_datafun_ir::Terminator::UnitEarlyReturn { value } => {
+            panic!("a const returns early with a value of its own, not {value:?}")
+        }
+        _ => None,
+    })
+}
+
+/// Why a value a const's code produced could not be read back: a fault in
+/// the compiler, or in the runtime's layout, never in the const.
+#[derive(Debug)]
+struct Unreadable(String);
+
 /// Alignment of an IR type.
 fn align_of_ir_type(ir_type: &IrType) -> u32 {
     datalove_datafun_ir::layout::layout_of(ir_type).align
@@ -144,7 +171,7 @@ fn compute_tuple_field_offsets(field_types: &[IrType]) -> Vec<u32> {
 /// Extract a ConstValue from raw memory.
 ///
 /// Reads bytes from the given pointer and converts to a ConstValue based on type.
-fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, CtfeError> {
+fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, Unreadable> {
     unsafe {
         match ir_type {
             IrType::Unit => Ok(ConstValue::Unit),
@@ -229,7 +256,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                         let inner_value = extract_const_value(payload_ptr, inner)?;
                         Ok(ConstValue::OptionSome(Box::new(inner_value)))
                     }
-                    _ => Err(CtfeError::InterpError(format!(
+                    _ => Err(Unreadable(format!(
                         "invalid option tag: {}", tag
                     ))),
                 }
@@ -269,7 +296,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 let variant_index = discriminant as usize;
 
                 if variant_index >= variants.len() {
-                    return Err(CtfeError::InterpError(format!(
+                    return Err(Unreadable(format!(
                         "invalid enum discriminant: {} (max {})",
                         discriminant,
                         variants.len() - 1
@@ -350,7 +377,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                             })))
                         }
                     }
-                    _ => Err(CtfeError::InterpError(format!(
+                    _ => Err(Unreadable(format!(
                         "invalid result tag: {}", tag
                     ))),
                 }
@@ -507,7 +534,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
             // it; what is inside comes back here as it recurs.
             IrType::Rec(_) => extract_const_value(ptr, &ir_type.exposed()),
 
-            _ => Err(CtfeError::UnsupportedType(format!("{}", ir_type))),
+            _ => Err(Unreadable(format!("no const is of type {}", ir_type))),
         }
     }
 }
@@ -521,7 +548,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
 /// because the caller extracts before returning.
 unsafe fn borrow_packed(
     ptr: *const u8,
-) -> Result<(*const u8, datalove_rtdt::TyDescRef<'static>), CtfeError> {
+) -> Result<(*const u8, datalove_rtdt::TyDescRef<'static>), Unreadable> {
     unsafe {
         let mut scratch = datalove_rt::rust::DataScratch::default();
         let mut value_ptr: *const u8 = std::ptr::null();
@@ -533,7 +560,7 @@ unsafe fn borrow_packed(
             &mut tydesc_ptr as *mut *const datalove_rtdt::TyDesc,
         );
         if status != datalove_rt::c::RtStatus::Ok || tydesc_ptr.is_null() {
-            return Err(CtfeError::UnsupportedType(
+            return Err(Unreadable(
                 "a `data` with nothing in it".S()));
         }
         // The value may point into `scratch`, which is this frame's. Reading it
@@ -556,7 +583,7 @@ unsafe fn borrow_packed(
 /// Convert a runtime type descriptor back to an IrType.
 ///
 /// This is used for extracting dynamically-typed values like Error contents.
-fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeError> {
+fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, Unreadable> {
     use datalove_rtdt::TyTag;
 
     match tydesc.type_tag() {
@@ -634,7 +661,7 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
             let info = tydesc.enum_info();
             let mut variants = Vec::new();
             for i in 0..info.num_variants() as usize {
-                let variant = info.variant(i).ok_or_else(|| CtfeError::UnsupportedType(
+                let variant = info.variant(i).ok_or_else(|| Unreadable(
                     "enum variant out of bounds".S()))?;
                 let payload = match variant.payload() {
                     core::option::Option::Some(ty) => Some(ir_type_from_tydesc(ty)?),
@@ -654,7 +681,7 @@ unsafe fn extract_set_elements(
     root: *const datalove_rtdt::SetNode,
     element_type: &IrType,
     out: &mut Vec<ConstValue>,
-) -> Result<(), CtfeError> {
+) -> Result<(), Unreadable> {
     if root.is_null() {
         return Ok(());
     }
@@ -683,7 +710,7 @@ unsafe fn extract_set_elements(
                 break;
             }
             _ => {
-                return Err(CtfeError::InterpError(format!("invalid SetNodeTag: {}", tag)));
+                return Err(Unreadable(format!("invalid SetNodeTag: {}", tag)));
             }
         }
     }
@@ -692,7 +719,7 @@ unsafe fn extract_set_elements(
     loop {
         let tag = unsafe { *(node as *const u8) };
         if tag != 2 {
-            return Err(CtfeError::InterpError("expected leaf node".S()));
+            return Err(Unreadable("expected leaf node".S()));
         }
 
         let len = unsafe { *((node as *const u8).add(4) as *const u32) };
@@ -726,7 +753,7 @@ unsafe fn extract_map_entries(
     key_type: &IrType,
     value_type: &IrType,
     out: &mut Vec<(ConstValue, ConstValue)>,
-) -> Result<(), CtfeError> {
+) -> Result<(), Unreadable> {
     if root.is_null() {
         return Ok(());
     }
@@ -759,7 +786,7 @@ unsafe fn extract_map_entries(
                 break;
             }
             _ => {
-                return Err(CtfeError::InterpError(format!("invalid MapNodeTag: {}", tag)));
+                return Err(Unreadable(format!("invalid MapNodeTag: {}", tag)));
             }
         }
     }
@@ -768,7 +795,7 @@ unsafe fn extract_map_entries(
     loop {
         let tag = unsafe { *(node as *const u8) };
         if tag != 2 {
-            return Err(CtfeError::InterpError("expected leaf node".S()));
+            return Err(Unreadable("expected leaf node".S()));
         }
 
         let len = unsafe { *((node as *const u8).add(4) as *const u32) };

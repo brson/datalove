@@ -5,7 +5,9 @@
 //! incremental recompilation and parallel execution.
 
 use rmx::prelude::*;
+use bct::diagnostic::StoredDiagnostic;
 use bct::lookup::{LookupMap, LookupSet};
+use std::collections::BTreeSet;
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
@@ -26,7 +28,7 @@ use datalove_datafun_const::{
 use crate::const_cache::ConstCache;
 use crate::const_eval::{
     const_type, evaluate_body_consts, evaluate_const, evaluate_instantiation_consts, ConstEvalEnv,
-    NamedConstError,
+    ConstError, ConstFailure,
 };
 use crate::lower;
 use crate::specialize::{
@@ -327,8 +329,9 @@ pub struct ModulePreResolvedConsts<'db> {
     /// `SharedConst`.
     pub consts: Vec<(String, IrType, SharedConst)>,
 
-    /// Errors encountered during const evaluation.
-    pub errors: Vec<String>,
+    /// The consts that could not be evaluated, and the functions that could
+    /// not be specialized.
+    pub errors: Vec<StoredDiagnostic>,
 }
 
 impl<'db> ModulePreResolvedConsts<'db> {
@@ -338,7 +341,7 @@ impl<'db> ModulePreResolvedConsts<'db> {
     }
 
     /// Create with errors.
-    pub fn with_errors(module_id: ModuleId<'db>, consts: Vec<(String, IrType, SharedConst)>, errors: Vec<String>) -> Self {
+    pub fn with_errors(module_id: ModuleId<'db>, consts: Vec<(String, IrType, SharedConst)>, errors: Vec<StoredDiagnostic>) -> Self {
         Self { module_id, consts, errors }
     }
 
@@ -369,9 +372,10 @@ pub struct SingleModuleLoweringResult<'db> {
     #[returns(ref)]
     pub functions: Vec<Arc<IrCodeUnit>>,
 
-    /// Lowering errors (IR generation only, not ownership analysis).
+    /// What lowering refused: the consts that could not be evaluated, and the
+    /// functions that could not be specialized.
     #[returns(ref)]
-    pub errors: Vec<String>,
+    pub errors: Vec<StoredDiagnostic>,
 
     /// Function name to FuncId mapping for this module.
     #[returns(ref)]
@@ -424,7 +428,7 @@ impl<'db> ModuleGraphLoweringResult<'db> {
     }
 
     /// Get all lowering errors across all modules, by module path.
-    pub fn all_errors(&self, db: &'db dyn salsa::Database) -> Vec<String> {
+    pub fn all_errors(&self, db: &'db dyn salsa::Database) -> Vec<StoredDiagnostic> {
         self.module_results(db)
             .sorted_by_key(|module| module.path(db))
             .into_iter()
@@ -453,10 +457,10 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// If `pre_resolved_consts` is provided, those values are used for function-level
 /// const inlining (when `skip_const_inlining` is false).
 ///
-/// If `lowered` is provided, those functions are reused instead of being
-/// re-lowered from the AST, and have had their consts inlined already, in
-/// phase 5b'. It arrives as a handle rather than as the IR, so this query's
-/// memo key holds a word rather than a module's instructions.
+/// `lowered` is the module's functions, as phases 5a to 5c left them, with
+/// their consts inlined already; it is `None` only for a module with none.
+/// It arrives as a handle rather than as the IR, so this query's memo key
+/// holds a word rather than a module's instructions.
 ///
 /// Every function is finished here, with the bodies of its `inline` callees
 /// found in `inline_modules`; see `optimize::finish`.
@@ -469,9 +473,6 @@ pub fn lower_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module<'db>,
     ir_module_id: IrModuleId,
-    typecheck_result: SingleModuleTypecheckResult<'db>,
-    ownership_analysis: SingleModuleAnalysis<'db>,
-    func_ids: ReachableFuncIds<'db>,
     pre_resolved_consts: Option<ModulePreResolvedConsts<'db>>,
     inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
@@ -485,34 +486,20 @@ pub fn lower_module<'db>(
 
     log_query("lower", module_path, QueryPhase::Start);
 
-    let expr_types = typecheck_result.expr_types(db);
-    let call_targets = typecheck_result.call_targets(db);
-    let reachable = func_ids;
-
-    // Get pre-computed ownership analysis results.
-    let function_analyses = ownership_analysis.function_analyses(db);
-
-    // The resolved signatures, which have the type aliases in parameter and
-    // return types resolved.
-    let signatures = export_signatures(db, typecheck_result);
-
-    let mut functions;
     let mut errors = Vec::new();
-    let mut func_ids = Vec::new();
 
-    // Assign module-local FuncIds (0, 1, 2, ...).
-    let mut next_func_id: u32 = 0;
-    for item in &datalove_datafun_parser::module_items(db, module).items {
-        if let Item::Fun(func) = item {
-            let func_name = func.name.text(db).S();
-            let func_id = FuncId(next_func_id);
-            next_func_id += 1;
-            func_ids.push((func_name, func_id));
-        }
-    }
+    // Module-local FuncIds (0, 1, 2, ...), by statement position.
+    let func_ids: Vec<(String, FuncId)> = datalove_datafun_parser::module_items(db, module).items.iter()
+        .filter_map(|item| match item {
+            Item::Fun(func) => Some(func.name.text(db).S()),
+            _ => None,
+        })
+        .enumerate()
+        .map(|(index, name)| (name, FuncId(index as u32)))
+        .collect();
 
-    // Module-level consts, for the from-scratch path below. They are stored
-    // under a bare name; a function-level one is qualified with its function.
+    // Module-level consts are stored under a bare name; a function-level one
+    // is qualified with its function.
     let module_level_consts: LookupMap<String, (IrType, Arc<ConstValue>)> = pre_resolved_consts
         .as_ref()
         .map(|c| c.consts.iter()
@@ -521,86 +508,21 @@ pub fn lower_module<'db>(
             .collect())
         .unwrap_or_default();
 
-    // If lowered functions are provided, use them directly.
-    let from_scratch = lowered.is_none();
-    if let Some(lowered) = lowered {
-        functions = lowered.functions(db).functions.C();
-        // func_ids was already computed above, and should match lf.func_name_to_id.
-    } else {
-        // Lower functions from scratch.
-        functions = Vec::new();
-        let mut func_idx = 0;
-        let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-        for statement in parsed.statements(db).iter() {
-            if let Statement::Fun(func) = statement {
-                let func_name = func.name().text(db).S();
-                let func_id = func_ids[func_idx].1;
-                func_idx += 1;
-
-                // Get resolved types for this function.
-                let signature = signatures.get(&func.name());
-                let resolved_params = signature.map(|f| f.param_types(db).as_slice());
-                let resolved_return = signature.map(|f| f.return_type(db));
-
-                // Get pre-computed ownership analysis for this function.
-                let Some(single_analysis) = function_analyses.get(&func_name) else {
-                    errors.push(format!("Lowering error in {}: missing ownership analysis", func_name));
-                    continue;
-                };
-
-                // Skip functions that had ownership analysis errors.
-                let Some(analysis) = single_analysis.analysis(db).C() else {
-                    // Drop analysis errors are already captured separately.
-                    continue;
-                };
-
-                // Lower to IR with module-level consts.
-                // Note: ctfe_evaluator is None because tracked functions can't take trait objects.
-                // Function-level consts are pre-evaluated via evaluate_all_module_consts() when
-                // using lower_module_graph_with_evaluator(), supporting full CTFE expressions.
-                match lower::lower_function_for_module(
-                    db,
-                    expr_types,
-                    call_targets,
-                    reachable.modules(db),
-                    func,
-                    func_id,
-                    analysis,
-                    resolved_params,
-                    resolved_return,
-                    &module_level_consts,
-                    typecheck_result.data_files(db),
-                ) {
-                    Ok(ir_func) => {
-                        functions.push(Arc::new(ir_func));
-                    }
-                    Err(e) => {
-                        errors.push(format!("Lowering error in {}: {}", func_name, e));
-                    }
-                }
-            }
+    // Phase 5a records every module with a function, so a module with none
+    // is the only one that comes without its lowered functions.
+    let mut functions = match lowered {
+        Some(lowered) => lowered.functions(db).functions.C(),
+        None => {
+            assert!(func_ids.is_empty(), "module {module_path} has functions and none were lowered");
+            Vec::new()
         }
-    }
+    };
 
-    // Inline evaluated const values into the lowered functions.
-    // Skip inlining in skip_const_inlining test mode (when no pre_resolved_consts provided
-    // and skip_const_inlining flag is true, we want consts evaluated at runtime).
-    if !skip_const_inlining {
-        if let Some(ref pre_resolved) = pre_resolved_consts {
-            // Include any CTFE errors from const evaluation.
-            errors.extend(pre_resolved.errors.iter().cloned());
-
-            // Build const values map from pre-resolved consts.
-            // Pre-resolved consts have qualified names like "func_name::const_name".
-            let const_values: LookupMap<String, Arc<ConstValue>> = pre_resolved.consts
-                .iter()
-                .map(|(name, _ir_type, value)| (name.C(), Arc::clone(value)))
-                .collect();
-            // Inline const values directly into the functions.
-            if from_scratch {
-                inline_module_functions(&mut functions, &const_values);
-            }
-        }
+    // The consts that could not be evaluated, and the functions that could
+    // not be specialized, in the order they are written.
+    if let Some(pre_resolved) = &pre_resolved_consts {
+        errors.extend(pre_resolved.errors.iter().cloned());
+        errors.sort_by_key(|error| error.labels.first().map(|label| label.span.start));
     }
 
     let resolve = |func: &CodeRef| match func {
@@ -1115,7 +1037,7 @@ pub fn evaluate_all_module_consts<'db>(
     lowered_functions: &LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &LookupMap<ModuleId<'db>, LookupMap<String, (IrType, Arc<ConstValue>)>>,
-    module_level_errors: &LookupMap<ModuleId<'db>, Vec<String>>,
+    module_level_errors: &LookupMap<ModuleId<'db>, Vec<StoredDiagnostic>>,
     mut cache: Option<&mut ConstCache>,
 ) -> LookupMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
     let typecheck_module_results = typecheck_result.module_results(db);
@@ -1163,6 +1085,16 @@ pub fn evaluate_all_module_consts<'db>(
             None => (&[], LookupMap::default()),
         };
 
+        // The module-level consts that could not be evaluated, which a
+        // function-level one naming them fails with, unreported.
+        let failed: BTreeSet<String> = parsed.statements(db).iter()
+            .filter_map(|statement| match statement {
+                Statement::Const(binding) => Some(binding.name.text(db).S()),
+                _ => None,
+            })
+            .filter(|name| !module_level.contains_key(name))
+            .collect();
+
         // Evaluate function-level consts. A function's const parameters have a
         // value per instantiation rather than one, so the consts naming them
         // wait for the copies.
@@ -1171,6 +1103,8 @@ pub fn evaluate_all_module_consts<'db>(
             func_name_to_id: &func_map, func_id_map,
             data_files: single_typecheck.data_files(db),
         };
+        let spans = datalove_datafun_parser::module_spans(db, parsed_graph.get_module(db, *module_id)
+            .expect("a parsed module is in its graph"));
         let mut body = Vec::new();
         for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func_stmt) = statement {
@@ -1179,13 +1113,13 @@ pub fn evaluate_all_module_consts<'db>(
                     .filter(|p| p.is_comptime)
                     .map(|p| p.name.text(db).S())
                     .collect();
-                let (body_consts, body_errors) =
-                    evaluate_body_consts(&mut env, func_stmt, module_level.C(), const_params);
+                let (body_consts, failures) =
+                    evaluate_body_consts(&mut env, func_stmt, module_level.C(), const_params, failed.C());
                 for (name, ir_type, value) in body_consts {
                     // Stored under a qualified name: func_name::const_name.
                     body.push((format!("{}::{}", func_name, name), ir_type, SharedConst(value)));
                 }
-                errors.extend(body_errors.iter().map(|e| format!("{}::{}", func_name, e)));
+                errors.extend(failures.iter().map(|failure| failure.diagnostic(db, spans)));
             }
         }
         body.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1297,7 +1231,7 @@ fn evaluate_module_consts_in_order<'db>(
     lowered_modules: &mut LoweredModules<'db>,
     deferred: &LookupMap<ModuleId<'db>, Vec<String>>,
     rest: &mut LookupMap<ModuleId<'db>, Vec<String>>,
-    errors_out: &mut LookupMap<ModuleId<'db>, Vec<String>>,
+    errors_out: &mut LookupMap<ModuleId<'db>, Vec<StoredDiagnostic>>,
     mut cache: Option<&mut ConstCache>,
 ) -> LookupMap<ModuleId<'db>, LookupMap<String, (IrType, Arc<ConstValue>)>> {
     let graph = parsed_graph.graph(db);
@@ -1354,7 +1288,9 @@ fn evaluate_module_consts_in_order<'db>(
 
         let parsed = datalove_datafun_parser::parse_module_ast(db, module);
         let mut consts: LookupMap<String, (IrType, Arc<ConstValue>)> = LookupMap::default();
-        let mut failed = false;
+        // The consts that could not be evaluated. One naming another of them
+        // fails with it, unreported: what it would say follows from the first.
+        let mut failed: BTreeSet<String> = BTreeSet::new();
         let mut index = 0;
         for statement in parsed.statements(db).iter() {
             let Statement::Const(const_stmt) = statement else { continue };
@@ -1399,10 +1335,14 @@ fn evaluate_module_consts_in_order<'db>(
                 Ok((ir_type, value)) => {
                     consts.insert(name, (ir_type, value));
                 }
+                Err(ConstError::Unbound(missing)) if failed.contains(&missing) => {
+                    failed.insert(name);
+                }
                 Err(error) => {
-                    failed = true;
+                    failed.insert(name.C());
+                    let failure = ConstFailure { name, init: value, error };
                     errors_out.entry(module_id).or_default()
-                        .push(NamedConstError { name, error }.S());
+                        .push(failure.diagnostic(db, datalove_datafun_parser::module_spans(db, module)));
                 }
             }
             let ready: Vec<String> = waiting.iter()
@@ -1413,12 +1353,12 @@ fn evaluate_module_consts_in_order<'db>(
             index += 1;
         }
 
-        for name in &batches.unlowerable {
-            errors_out.entry(module_id).or_default().push(format!(
-                "function '{}' names a module const that could not be evaluated",
-                name
-            ));
-        }
+        // A function still waiting names a const that could not be
+        // evaluated, which says why the module does not compile.
+        assert!(
+            batches.unlowerable.is_empty() || errors_out.contains_key(&module_id),
+            "functions {:?} of {path} wait on consts that did not fail", batches.unlowerable,
+        );
 
         if let Some(cache) = cache.as_deref_mut().filter(|_| reuse.is_none()) {
             match cached {
@@ -1428,7 +1368,7 @@ fn evaluate_module_consts_in_order<'db>(
                 }
                 None => {
                     cache.note_evaluated(path);
-                    if !failed {
+                    if failed.is_empty() {
                         cache.store_module_level(path, consts.C());
                     }
                 }
@@ -1579,7 +1519,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // const inlining is skipped, since a module const is resolved when its
     // reference is lowered rather than by a later pass, so there is nothing
     // for that flag to skip.
-    let mut module_const_errors: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
+    let mut module_const_errors: LookupMap<ModuleId<'db>, Vec<StoredDiagnostic>> = LookupMap::new();
     let mut rest: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
     let module_consts = if deferred.is_empty() && !module_graph_has_module_consts(db_salsa, parsed_graph) {
         LookupMap::new()
@@ -1599,13 +1539,13 @@ pub fn lower_module_graph_with_evaluator<'db>(
             db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
             &module_consts, &mut still_waiting, Some(&rest), mode,
         );
+        // A function still waiting names a const that could not be
+        // evaluated, which says why its module does not compile.
         for (module_id, names) in still_waiting.iter_unordered() {
-            for name in names {
-                module_const_errors.entry(*module_id).or_default().push(format!(
-                    "function '{}' names a module const that could not be evaluated",
-                    name
-                ));
-            }
+            assert!(
+                module_const_errors.contains_key(module_id),
+                "functions {names:?} of {} wait on consts that did not fail", module_id.path(db_salsa),
+            );
         }
         for (module_id, batch) in last {
             if !rest.contains_key(&module_id) {
@@ -1715,7 +1655,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let lowered_modules: LookupMap<ModuleId<'db>, ModuleLowered<'db>> =
         lowered_modules.into_iter().collect();
     let work = assembly_work(
-        db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules,
+        db_salsa, parsed_graph, typecheck_result, &resolved_consts, &lowered_modules,
         inline_modules, skip_const_inlining,
     );
     warm(db, mode, || work.iter().cloned(), |db, item| {
@@ -1858,7 +1798,7 @@ fn specialize_module_graph<'db>(
     module_consts: &LookupMap<ModuleId<'db>, LookupMap<String, (IrType, Arc<ConstValue>)>>,
     callable_modules: LoweredModules<'db>,
     modules: LoweredModules<'db>,
-) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<String>)>) {
+) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<StoredDiagnostic>)>) {
     if !modules.iter().any(|(_, lowered)| module_has_comptime_calls(db, *lowered)) {
         return (modules, Vec::new());
     }
@@ -1936,7 +1876,7 @@ fn specialize_comptime_functions<'db>(
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &LookupMap<ModuleId<'db>, LookupMap<String, (IrType, Arc<ConstValue>)>>,
     mut lowered_functions: LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-) -> (LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<String>)>) {
+) -> (LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<StoredDiagnostic>)>) {
     // Modules paired with their `IrModuleId`, which is also the order the copies
     // are numbered in. Taken from `ir_module_ids` rather than from a position in
     // the graph, so that this cannot disagree with what a call site was compiled
@@ -1972,7 +1912,9 @@ fn specialize_comptime_functions<'db>(
     // to another one once its own const parameters have been substituted, so
     // copying can uncover instantiations the scan before it could not see.
     let mut plan = MonomorphizationPlan::default();
-    let mut errors: Vec<(ModuleId<'db>, Vec<String>)> = Vec::new();
+    let mut errors: Vec<(ModuleId<'db>, Vec<StoredDiagnostic>)> = Vec::new();
+    let spans = |module_id: ModuleId<'db>| datalove_datafun_parser::module_spans(
+        db, parsed_graph.get_module(db, module_id).expect("a module being specialized is in its graph"));
 
     for _ in 0..MAX_ROUNDS {
         for (module_id, _) in &modules {
@@ -2012,8 +1954,11 @@ fn specialize_comptime_functions<'db>(
                     continue;
                 };
 
-                if let Some(error) = over_limit(&original.name, mono) {
-                    module_errors.push(error);
+                if over_limit(mono) {
+                    let func_stmt = func_asts.get(&(*module_id, original.name.C()))
+                        .expect("a function with const parameters is in its module's source");
+                    module_errors.push(crate::const_eval::too_many_instantiations(
+                        db, spans(*module_id), func_stmt, mono.instantiations.len()));
                     continue;
                 }
 
@@ -2045,14 +1990,21 @@ fn specialize_comptime_functions<'db>(
                             func_id_map,
                             data_files: single_typecheck.data_files(db),
                         };
-                        let (evaluated, const_errors) = evaluate_instantiation_consts(
+                        let (evaluated, failures) = evaluate_instantiation_consts(
                             &mut env,
                             func_stmt,
                             module_consts.get(module_id).cloned().unwrap_or_default(),
                             &mono.comptime_param_indices,
                             values,
                         );
-                        module_errors.extend(const_errors);
+                        // Each instantiation fails the same way at the same
+                        // const as often as not, which says it once.
+                        for failure in failures {
+                            let diagnostic = failure.diagnostic(db, spans(*module_id));
+                            if !module_errors.contains(&diagnostic) {
+                                module_errors.push(diagnostic);
+                            }
+                        }
                         inline_function_consts(&mut copy, &evaluated);
                     }
 
@@ -2098,9 +2050,6 @@ fn specialize_comptime_functions<'db>(
 struct AssemblyItem<'db> {
     module: Module<'db>,
     ir_module_id: IrModuleId,
-    typecheck: SingleModuleTypecheckResult<'db>,
-    ownership: SingleModuleAnalysis<'db>,
-    func_ids: ReachableFuncIds<'db>,
     consts: Option<ModulePreResolvedConsts<'db>>,
     inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
@@ -2110,8 +2059,7 @@ struct AssemblyItem<'db> {
 impl<'db> AssemblyItem<'db> {
     fn lower(self, db: &'db dyn salsa::Database) -> SingleModuleLoweringResult<'db> {
         lower_module(
-            db, self.module, self.ir_module_id, self.typecheck, self.ownership, self.func_ids,
-            self.consts, self.inline_modules, self.skip_const_inlining, self.lowered,
+            db, self.module, self.ir_module_id, self.consts, self.inline_modules, self.skip_const_inlining, self.lowered,
         )
     }
 }
@@ -2127,17 +2075,13 @@ fn assembly_work<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    ownership_analysis: ModuleGraphAnalysis<'db>,
     resolved_consts: &LookupMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
     lowered_modules: &LookupMap<ModuleId<'db>, ModuleLowered<'db>>,
     inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
 ) -> Vec<AssemblyItem<'db>> {
     let graph = parsed_graph.graph(db);
-    let func_id_map = compute_func_id_map(db, parsed_graph);
     let typecheck_errors = typecheck_result.module_errors(db);
-    let typecheck_module_results = typecheck_result.module_results(db);
-    let ownership_analysis_results = ownership_analysis.module_results(db);
     let module_ids = ir_module_ids(db, parsed_graph);
 
     graph.iter_modules(db)
@@ -2147,11 +2091,6 @@ fn assembly_work<'db>(
             AssemblyItem {
                 module,
                 ir_module_id: *module_ids.get(&module_id).expect("every parsed module is numbered"),
-                typecheck: *typecheck_module_results.get(&module_id)
-                    .expect("module should have typecheck result"),
-                ownership: *ownership_analysis_results.get(&module_id)
-                    .expect("module should have ownership analysis result"),
-                func_ids: reachable_func_ids(db, graph, func_id_map, module_id),
                 consts: resolved_consts.get(&module_id).cloned(),
                 inline_modules,
                 skip_const_inlining,

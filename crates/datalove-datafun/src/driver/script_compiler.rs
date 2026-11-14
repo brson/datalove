@@ -26,17 +26,21 @@ use rmx::prelude::*;
 use salsa::Setter as _;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use bct::diagnostic::{DiagnosticBuilder, StoredDiagnostic};
 use bct::lookup::LookupMap;
 use std::sync::Arc;
 
-use datalove_datafun_ast::ast::{Body, ParsedExpr, Statement, TopLevel};
+use datalove_datafun_ast::ast::{Body, ParsedExpr, Statement, StmtFun, TopLevel};
+use datalove_datafun_ast::spans::DatafunSpans;
+use datalove_diagnostic_codes::CCode;
 use datalove_datafun_compiler::lower::{
     lower_script_fragment_raw, lower_script_expr, lower_script_functions,
 };
 use datalove_datafun_compiler::const_eval::{
-    evaluate_body_consts, evaluate_const, evaluate_instantiation_consts, ConstError, ConstEvalEnv,
+    ctfe_diagnostic, evaluate_body_consts, evaluate_const, evaluate_instantiation_consts, too_many_instantiations,
+    ConstError, ConstEvalEnv,
 };
-use datalove_datafun_const::{inline_script_consts, ScriptFunctionConstsResult};
+use datalove_datafun_const::inline_script_consts;
 use datalove_datafun_compiler::tracked_script_lower::{
     UnitLowerRecord, collect_const_graph, external_consts_over, externals_over, lower_context_over,
     script_consts_over,
@@ -45,7 +49,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData, ExternalBinding,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, ExportBinding, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError, Terminator};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, ExportBinding, IrCodeUnit, IrType, ResolvedConsts, Terminator};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_tycheck::{
@@ -1530,12 +1534,14 @@ impl<'db> ScriptCompiler<'db> {
         }
     }
 
-    /// Unit `index`'s parse, type and ownership diagnostics as they stand,
-    /// rendered as text in `style`, quoting the unit as the file `name`.
+    /// Unit `index`'s diagnostics as they stand, rendered as text in
+    /// `style`, quoting the unit as the file `name`: its parse, type and
+    /// ownership diagnostics, and what lowering refused, as its last compile
+    /// recorded.
     ///
     /// A unit's typecheck asks of the units before it, so its diagnostics
     /// include theirs; only those pointing into this unit, or nowhere, are
-    /// its. Lowering errors are not diagnostics, and are not rendered.
+    /// its.
     pub fn render_unit_diagnostics(&self, index: usize, name: &str, style: bct::render::TextStyle) -> String {
         let unit = self.units[index].unit;
         let source = unit.source(self.db);
@@ -1555,6 +1561,8 @@ impl<'db> ScriptCompiler<'db> {
                     diagnostic.labels.is_empty() || diagnostic.labels.iter().any(|label| label.source == source)
                 }));
             diagnostics.extend(self.unit_ownership_diagnostics(index).iter()
+                .map(|diagnostic| diagnostic.to_diagnostic(self.db)));
+            diagnostics.extend(self.unit_records[index].refused.iter()
                 .map(|diagnostic| diagnostic.to_diagnostic(self.db)));
         }
         bct::render::render_diagnostics_to_string(
@@ -1654,27 +1662,78 @@ impl<'db> ScriptCompiler<'db> {
     fn lowering_failure(
         &self,
         index: usize,
-        context: &str,
         error: datalove_datafun_compiler::lower::LowerError,
     ) -> ScriptCompilationResult {
         let datalove_datafun_compiler::lower::LowerError::BindingNotAvailable(name) = &error;
+        self.lowering_refused(vec![self.unbound_diagnostic(index, name)])
+    }
+
+    /// The diagnostic for unit `index` naming `name`, which the typechecker
+    /// found and lowering cannot; see [`Self::lowering_failure`].
+    ///
+    /// It has no span: lowering knows the name and not where it is written.
+    fn unbound_diagnostic(&self, index: usize, name: &str) -> StoredDiagnostic {
+        let unit = self.failed_provider(index, name)
+            .unwrap_or_else(|| panic!("`{name}` is named at position {index} and bound by no unit before it that failed"));
+        DiagnosticBuilder::error(self.db, &format!("`{name}` is bound by unit {unit}, which did not compile"))
+            .build_stored()
+    }
+
+    /// The diagnostic for const `const_name` of unit `index`, whose
+    /// initializer `init` names `name`, which lowering cannot find.
+    ///
+    /// Either an earlier unit bound it and did not compile, as for any name,
+    /// or it is a function an earlier unit defines, which a const's code
+    /// cannot call yet: it is evaluated with this unit's functions only.
+    fn const_unbound_diagnostic(
+        &self,
+        index: usize,
+        const_name: &str,
+        init: datalove_datafun_ast::ast::ExprFun<'db>,
+        name: &str,
+    ) -> StoredDiagnostic {
+        if self.failed_provider(index, name).is_some() {
+            return self.unbound_diagnostic(index, name);
+        }
+        let unit = (0..index).rev()
+            .find(|unit| self.unit_records[*unit].provides.iter().any(|provided| provided == name))
+            .map(|unit| self.units[unit].id)
+            .unwrap_or_else(|| panic!("`{name}` is named by const `{const_name}` and bound by no unit before it"));
+        let at = self.unit_spans(index).lookup_key(init.key())
+            .expect("a const's initializer was parsed with a span");
+        DiagnosticBuilder::error(self.db, &format!(
+            "`{const_name}` calls `{name}`, which unit {unit} defines, and a const cannot call into an earlier unit yet"))
+            .code(CCode::ConstCallsEarlierUnit.as_str())
+            .primary_label(at, "this cannot be evaluated")
+            .help(&format!("define `{name}` in this unit, beside the const"))
+            .build_stored()
+    }
+
+    /// The id of the unit before `index` that bound `name` and did not
+    /// compile, if one did.
+    fn failed_provider(&self, index: usize, name: &str) -> Option<u32> {
         let outputs = self.unit_typecheck_outputs();
-        let failed_provider = (0..index).rev()
+        (0..index).rev()
             .find(|unit| {
-                outputs[*unit].is_some_and(|output| self.unit_provides_names(output).contains(name))
+                outputs[*unit].is_some_and(|output| self.unit_provides_names(output).iter().any(|provided| provided == name))
             })
             .filter(|unit| self.unit_records[*unit].provides.is_empty())
-            .map(|unit| (name, self.units[unit].id));
-        let message = match failed_provider {
-            Some((name, unit)) => format!("`{name}` is bound by unit {unit}, which did not compile"),
-            None => format!("{context}{error}"),
-        };
+            .map(|unit| self.units[unit].id)
+    }
+
+    /// The result for a unit lowering refused, saying why.
+    fn lowering_refused(&self, diagnostics: Vec<StoredDiagnostic>) -> ScriptCompilationResult {
         ScriptCompilationResult {
             typecheck: TypecheckResult::Success,
             ownership: OwnershipResult::Success,
-            lowering: LoweringResult::Error { message },
+            lowering: LoweringResult::refused(diagnostics),
             ir_unit: None,
         }
+    }
+
+    /// The spans of unit `index`'s statements, for a diagnostic to point into.
+    fn unit_spans(&self, index: usize) -> DatafunSpans<'db> {
+        datalove_datafun_parser::datafun_spans(self.db, self.units[index].unit.source(self.db))
     }
 
     /// The result for unit `index`, which did not parse.
@@ -1742,7 +1801,11 @@ impl<'db> ScriptCompiler<'db> {
                 let typechecked = self.unit_typecheck_outputs()[index]
                     .map(|output| self.unit_provides_names(output))
                     .unwrap_or_default();
-                self.unit_records[index] = Arc::new(UnitLowerRecord { typechecked, ..UnitLowerRecord::default() });
+                let refused = match &result.lowering {
+                    LoweringResult::Error { diagnostics, .. } => diagnostics.C(),
+                    _ => Vec::new(),
+                };
+                self.unit_records[index] = Arc::new(UnitLowerRecord { typechecked, refused, ..UnitLowerRecord::default() });
             }
             Some(ir_unit) => {
                 ir_unit.script_context_mut()
@@ -1821,7 +1884,7 @@ impl<'db> ScriptCompiler<'db> {
         let ir_unit = self.phase_const_inline(ir_unit, &consts);
 
         // Phase 5: Const parameter specialization.
-        let ir_unit = match self.phase_specialize(ir_unit, unit, &typecheck, &lowered_funcs, &consts) {
+        let ir_unit = match self.phase_specialize(index, ir_unit, unit, &typecheck, &lowered_funcs, &consts) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
@@ -2057,7 +2120,7 @@ impl<'db> ScriptCompiler<'db> {
                     deferred: lowered.deferred,
                 })
             }
-            Err(e) => Err(self.lowering_failure(index, "function lowering error: ", e)),
+            Err(e) => Err(self.lowering_failure(index, e)),
         }
     }
 
@@ -2102,25 +2165,13 @@ impl<'db> ScriptCompiler<'db> {
         let resolved_consts = if const_graph.is_empty() {
             ResolvedConsts::new()
         } else {
-            match self.evaluate_script_consts(
+            self.evaluate_script_consts(
                 &earlier_consts,
                 &const_graph,
                 body,
                 Waiting { index, unit, typecheck, ownership },
                 lowered_funcs,
-            ) {
-                Ok(resolved) => resolved,
-                Err(e) => {
-                    return Err(ScriptCompilationResult {
-                        typecheck: TypecheckResult::Success,
-                        ownership: OwnershipResult::Success,
-                        lowering: LoweringResult::Error {
-                            message: format!("const evaluation error: {}", e),
-                        },
-                        ir_unit: None,
-                    });
-                }
-            }
+            )?
         };
 
         // Build the script-level consts map, over the earlier units' consts,
@@ -2138,32 +2189,26 @@ impl<'db> ScriptCompiler<'db> {
 
         // Evaluate function-level consts.
         // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
-        let func_consts_result = if !self.skip_const_inlining {
-            self.evaluate_function_consts(
+        let func_consts = if !self.skip_const_inlining {
+            let (func_consts, errors) = self.evaluate_function_consts(
+                index,
                 &body.statements,
                 typecheck.expr_types,
                 typecheck.call_targets,
                 &script_consts,
                 lowered_funcs,
-            )
+            );
+            if !errors.is_empty() {
+                return Err(self.lowering_refused(errors));
+            }
+            func_consts
         } else {
-            ScriptFunctionConstsResult::empty()
+            LookupMap::default()
         };
-
-        if !func_consts_result.errors.is_empty() {
-            return Err(ScriptCompilationResult {
-                typecheck: TypecheckResult::Success,
-                ownership: OwnershipResult::Success,
-                lowering: LoweringResult::Error {
-                    message: format!("const evaluation errors:\n  {}", func_consts_result.errors.join("\n  ")),
-                },
-                ir_unit: None,
-            });
-        }
 
         Ok(ConstEvalOutput {
             resolved_consts,
-            func_consts: func_consts_result.consts,
+            func_consts,
             script_consts,
             declared_consts,
         })
@@ -2178,7 +2223,7 @@ impl<'db> ScriptCompiler<'db> {
         body: &'db Body<'db>,
         waiting: Waiting<'_, 'db>,
         lowered_funcs: &mut LoweredFunctions,
-    ) -> Result<ResolvedConsts, ConstEvalError> {
+    ) -> Result<ResolvedConsts, ScriptCompilationResult> {
         let mut resolved = ResolvedConsts::new();
         let expr_types = waiting.typecheck.expr_types;
         let call_targets = waiting.typecheck.call_targets;
@@ -2223,12 +2268,11 @@ impl<'db> ScriptCompiler<'db> {
             let value = evaluate_const(
                 &mut env, expr, &binding.ir_type, &resolved_consts_map,
                 Some(IrType::Result(Box::new(IrType::Unit))), &Default::default(),
-            ).map_err(|e| match e {
-                ConstError::Lowering(e) => ConstEvalError::LoweringFailed {
-                    binding_name: binding.name.C(),
-                    message: e.S(),
-                },
-                ConstError::Ctfe(e) => self.ctfe_error_to_const_eval_error(e, &binding.name),
+            ).map_err(|error| match error {
+                ConstError::Unbound(missing) => self.lowering_refused(vec![
+                    self.const_unbound_diagnostic(waiting.index, &binding.name, expr, &missing)]),
+                ConstError::Ctfe(error) => self.lowering_refused(vec![ctfe_diagnostic(
+                    self.db, &self.unit_spans(waiting.index), &binding.name, expr, &error)]),
             })?.expect("nothing is deferred at a script's top level");
 
             resolved.insert(binding.stmt_id, binding.name.C(), value.C());
@@ -2253,14 +2297,18 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     /// Evaluate function-level const bindings using "lower then evaluate" pattern.
+    ///
+    /// Returns them under qualified names, `func_name::const_name`, and what
+    /// could not be evaluated, as diagnostics.
     fn evaluate_function_consts(
         &self,
+        index: usize,
         statements: &[Statement<'db>],
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
         script_level_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
         lowered_funcs: &LoweredFunctions,
-    ) -> ScriptFunctionConstsResult {
+    ) -> (LookupMap<String, (IrType, Arc<ConstValue>)>, Vec<StoredDiagnostic>) {
         let mut evaluator = self.ctfe_evaluator.borrow_mut();
         let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
         let mut consts = LookupMap::default();
@@ -2275,40 +2323,22 @@ impl<'db> ScriptCompiler<'db> {
                 .filter(|p| p.is_comptime)
                 .map(|p| p.name.text(self.db).S())
                 .collect();
-            let (body_consts, body_errors) =
-                evaluate_body_consts(&mut env, func_stmt, script_level_consts.C(), const_params);
+            // Every script-level const has a value here: one that failed
+            // stopped the unit before its functions' consts.
+            let (body_consts, failures) = evaluate_body_consts(
+                &mut env, func_stmt, script_level_consts.C(), const_params, BTreeSet::new());
             for (name, ir_type, value) in body_consts {
                 // Stored under a qualified name: func_name::const_name.
                 consts.insert(format!("{}::{}", func_name, name), (ir_type, value));
             }
-            errors.extend(body_errors.iter().map(|e| format!("{}::{}", func_name, e)));
+            errors.extend(failures.into_iter().map(|failure| match &failure.error {
+                ConstError::Unbound(missing) =>
+                    self.const_unbound_diagnostic(index, &failure.name, failure.init, missing),
+                ConstError::Ctfe(_) => failure.diagnostic(self.db, &self.unit_spans(index)),
+            }));
         }
 
-        ScriptFunctionConstsResult { consts, errors }
-    }
-
-    /// Convert a CtfeError to a ConstEvalError.
-    fn ctfe_error_to_const_eval_error(&self, e: CtfeError, binding_name: &str) -> ConstEvalError {
-        match e {
-            CtfeError::InterpError(msg) => {
-                ConstEvalError::LoweringFailed {
-                    binding_name: binding_name.S(),
-                    message: msg,
-                }
-            }
-            CtfeError::EarlyReturn(msg) => {
-                ConstEvalError::EarlyReturn {
-                    binding_name: binding_name.S(),
-                    message: msg,
-                }
-            }
-            CtfeError::UnsupportedType(ty) => {
-                ConstEvalError::UnsupportedType {
-                    binding_name: binding_name.S(),
-                    type_name: ty,
-                }
-            }
-        }
+        (consts, errors)
     }
 
     // ========================================================================
@@ -2372,7 +2402,7 @@ impl<'db> ScriptCompiler<'db> {
                     Some(&func_param_types),
                     Some(&func_return_types),
                     lowered_funcs_arg,
-                ).map_err(|e| self.lowering_failure(index, "", e))
+                ).map_err(|e| self.lowering_failure(index, e))
             }
             ParsedUnit::Expr(parsed) => {
                 lower_script_expr(
@@ -2383,7 +2413,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.env.data(self.db),
                     script_ctx,
                     parsed.expr(self.db),
-                ).map_err(|e| self.lowering_failure(index, "", e))
+                ).map_err(|e| self.lowering_failure(index, e))
             }
         }
     }
@@ -2414,6 +2444,7 @@ impl<'db> ScriptCompiler<'db> {
     fn instantiation_consts_from(
         &self,
         statements: &[Statement<'db>],
+        spans: &DatafunSpans<'db>,
         func_name: &str,
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
@@ -2422,7 +2453,7 @@ impl<'db> ScriptCompiler<'db> {
         values: &[ConstValue],
         lowered: &[std::sync::Arc<IrCodeUnit>],
         func_name_to_id: &LookupMap<String, datalove_datafun_ir::FuncId>,
-    ) -> (LookupMap<String, Arc<ConstValue>>, Vec<String>) {
+    ) -> (LookupMap<String, Arc<ConstValue>>, Vec<StoredDiagnostic>) {
         let Some(func_stmt) = statements.iter().find_map(|stmt| match stmt {
             Statement::Fun(f) if f.name().text(self.db) == func_name => Some(f),
             _ => None,
@@ -2440,7 +2471,9 @@ impl<'db> ScriptCompiler<'db> {
             func_id_map: self.shared_context.func_id_map,
             data_files: self.env.data(self.db),
         };
-        evaluate_instantiation_consts(&mut env, func_stmt, scope, comptime_param_indices, values)
+        let (consts, failures) =
+            evaluate_instantiation_consts(&mut env, func_stmt, scope, comptime_param_indices, values);
+        (consts, failures.iter().map(|failure| failure.diagnostic(self.db, spans)).collect())
     }
 
     /// What this unit's consts are evaluated against.
@@ -2475,6 +2508,7 @@ impl<'db> ScriptCompiler<'db> {
 
     fn phase_specialize(
         &self,
+        index: usize,
         ir_unit: IrCodeUnit,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
@@ -2508,7 +2542,7 @@ impl<'db> ScriptCompiler<'db> {
                     };
                     // A script function's consts may name the script's.
                     self.instantiation_consts_from(
-                        script_stmts, &name, typecheck.expr_types, typecheck.call_targets,
+                        script_stmts, &self.unit_spans(index), &name, typecheck.expr_types, typecheck.call_targets,
                         consts.script_consts.C(), indices, values,
                         &lowered_funcs.functions, &lowered_funcs.func_name_to_id,
                     )
@@ -2545,7 +2579,7 @@ impl<'db> ScriptCompiler<'db> {
                         .collect();
                     // A module function's consts may name its module's.
                     self.instantiation_consts_from(
-                        parsed.statements(self.db), &name,
+                        parsed.statements(self.db), datalove_datafun_parser::module_spans(self.db, source_module), &name,
                         single.expr_types(self.db), single.call_targets(self.db),
                         self.shared_context.module_consts.get(&module).cloned().unwrap_or_default(),
                         indices, values, &funcs, &names,
@@ -2554,16 +2588,41 @@ impl<'db> ScriptCompiler<'db> {
             }
         };
 
+        // A callee given more values for its const parameters than it may be
+        // copied for, reported at its declaration.
+        let too_many = |callee: CalleeKey, count: usize| {
+            let (func_stmt, spans) = match callee {
+                CalleeKey::Local(id) => {
+                    let name = lowered_funcs.func_name_to_id.iter_unordered()
+                        .find(|(_, func_id)| func_id.0 == id.0)
+                        .map(|(name, _)| name.C())
+                        .expect("a local callee is one of the unit's functions");
+                    (named_fun(script_stmts, &name, self.db), self.unit_spans(index))
+                }
+                CalleeKey::Module(module, id) => {
+                    let original = registry.get_module_function_as_unit(module, id)
+                        .expect("a module callee is in the registry");
+                    let parsed_graph = self.shared_context.parsed_graph;
+                    let module_id = datalove_datafun_compiler::tracked_lower::ir_module_ids(self.db, parsed_graph)
+                        .iter_unordered()
+                        .find(|(_, ir_id)| **ir_id == module)
+                        .map(|(module_id, _)| *module_id)
+                        .expect("a module callee's module is in the graph");
+                    let source_module = parsed_graph.get_module(self.db, module_id)
+                        .expect("a module callee's module is in the graph");
+                    let parsed = datalove_datafun_parser::parse_module_ast(self.db, source_module);
+                    (named_fun(parsed.statements(self.db), &original.name, self.db),
+                     datalove_datafun_parser::module_spans(self.db, source_module).C())
+                }
+            };
+            too_many_instantiations(self.db, &spans, func_stmt, count)
+        };
+
         let (ir_unit, errors) = datalove_datafun_compiler::specialize::specialize_script_unit(
-            &ir_unit, &module_unit, &instantiation_consts);
+            &ir_unit, &module_unit, &instantiation_consts, &too_many);
 
         if !errors.is_empty() {
-            return Err(ScriptCompilationResult {
-                typecheck: TypecheckResult::Success,
-                ownership: OwnershipResult::Success,
-                lowering: LoweringResult::Error { message: errors.join("; ") },
-                ir_unit: None,
-            });
+            return Err(self.lowering_refused(errors));
         }
 
         Ok(ir_unit)
@@ -2691,6 +2750,7 @@ impl<'db> ScriptCompiler<'db> {
                 }
                 ParsedUnit::Fragment { .. } => None,
             },
+            refused: Vec::new(),
         });
     }
 
@@ -2706,4 +2766,14 @@ impl<'db> ScriptCompiler<'db> {
             });
         vars.chain(functions).collect()
     }
+}
+
+/// The function named `name` among `statements`.
+fn named_fun<'db>(statements: &'db [Statement<'db>], name: &str, db: &'db dyn salsa::Database) -> &'db StmtFun<'db> {
+    statements.iter()
+        .find_map(|statement| match statement {
+            Statement::Fun(func) if func.name().text(db) == name => Some(func),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no function `{name}` among the statements it was lowered from"))
 }

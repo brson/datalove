@@ -309,12 +309,10 @@ pub struct ModuleErrors {
     /// Each required module left out, by path, with the errors of the modules
     /// it reaches that explain why.
     pub broken: BTreeMap<String, Vec<String>>,
-    /// The parse, type and ownership diagnostics of the compile that found
-    /// them, in the order it reported them, which a caller renders against
-    /// [`Engine::db`].
+    /// The diagnostics of the compile that found them -- parse, type,
+    /// ownership, and what lowering refused -- in the order it reported them,
+    /// which a caller renders against [`Engine::db`].
     pub diagnostics: Vec<StoredDiagnostic>,
-    /// The lowering errors of that compile, which carry no spans.
-    pub lowering_errors: Vec<String>,
 }
 
 impl ModuleErrors {
@@ -380,16 +378,18 @@ fn settle_roots(
                 .map(|diagnostic| diagnostic.to_diagnostic(db));
             found.diagnostics = parse.chain(types).chain(ownership)
                 .map(|diagnostic| diagnostic.to_stored(db))
+                .chain(compiled.all_lowering_errors())
                 .collect();
-            found.lowering_errors = compiled.all_lowering_errors();
         }
 
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for by_path in [&compiled.parse_errors, &compiled.path_to_errors,
-                        &compiled.ownership_errors, &compiled.lowering_errors] {
+        for by_path in [&compiled.parse_errors, &compiled.path_to_errors, &compiled.ownership_errors] {
             for (path, messages) in by_path.iter().filter(|(_, messages)| !messages.is_empty()) {
                 errors.entry(path.C()).or_default().extend(messages.iter().cloned());
             }
+        }
+        for (path, refused) in compiled.lowering_errors.iter().filter(|(_, refused)| !refused.is_empty()) {
+            errors.entry(path.C()).or_default().extend(refused.iter().map(|diagnostic| diagnostic.message.C()));
         }
 
         let reach = module_reach(db, &compiled);

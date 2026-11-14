@@ -48,6 +48,7 @@
 
 use rmx::prelude::*;
 use std::collections::BTreeMap;
+use bct::diagnostic::StoredDiagnostic;
 use bct::lookup::LookupMap;
 
 use datalove_datafun_const::{eliminate_dead_code_unit, inline_function_consts};
@@ -366,12 +367,16 @@ pub fn rewrite_comptime_calls(
 /// callee without the module it came from having to change.
 ///
 /// `module_unit` reads a module function out of the registry, which is where a
-/// script's callee usually lives. Returns the unit and any errors.
+/// script's callee usually lives. `instantiation_consts` evaluates a copy's
+/// consts, and `too_many` reports a callee given more values for its const
+/// parameters than it may be copied for. Returns the unit and what was
+/// reported.
 pub fn specialize_script_unit(
     unit: &IrCodeUnit,
     module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
-    instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (LookupMap<String, std::sync::Arc<ConstValue>>, Vec<String>),
-) -> (IrCodeUnit, Vec<String>) {
+    instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (LookupMap<String, std::sync::Arc<ConstValue>>, Vec<StoredDiagnostic>),
+    too_many: &dyn Fn(CalleeKey, usize) -> StoredDiagnostic,
+) -> (IrCodeUnit, Vec<StoredDiagnostic>) {
     let mut unit = unit.C();
     let mut plan = MonomorphizationPlan::default();
     let mut errors = Vec::new();
@@ -397,8 +402,8 @@ pub fn specialize_script_unit(
                 continue;
             };
 
-            if let Some(error) = over_limit(&original.name, mono) {
-                errors.push(error);
+            if over_limit(mono) {
+                errors.push(too_many(*callee, mono.instantiations.len()));
                 continue;
             }
 
@@ -443,19 +448,13 @@ pub fn specialize_script_unit(
     (unit, errors)
 }
 
-/// Report a function that wants more copies than it may have.
+/// Whether a function wants more copies than it may have.
 ///
 /// Leaving `copies` short of `instantiations` is what stops the call sites it
-/// could not be copied for being pointed at copies that were never built.
-pub fn over_limit(name: &str, mono: &FuncMonomorphization) -> Option<String> {
-    if mono.instantiations.len() <= MAX_INSTANTIATIONS {
-        return None;
-    }
-    Some(format!(
-        "`{}` has {} const parameter instantiations, over the limit of {}; \
-         each one is a copy of the function",
-        name, mono.instantiations.len(), MAX_INSTANTIATIONS,
-    ))
+/// could not be copied for being pointed at copies that were never built. The
+/// caller reports it, with `const_eval::too_many_instantiations`.
+pub fn over_limit(mono: &FuncMonomorphization) -> bool {
+    mono.instantiations.len() > MAX_INSTANTIATIONS
 }
 
 /// The const argument values at a call site, or `None` if any is not a constant.

@@ -11,7 +11,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "const evaluation errors:\n  compute::const \'G\': CTFE error: early return: const expression returned early via ! or ?",
+                message: "evaluating `G` returned early with none",
             ),
             output: "",
         ),

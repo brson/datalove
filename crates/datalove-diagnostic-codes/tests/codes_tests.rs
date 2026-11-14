@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use datalove_diagnostic_codes::{DCode, FCode, OCode, PCode, TCode};
+use datalove_diagnostic_codes::{CCode, DCode, FCode, OCode, PCode, TCode};
 use enum_iterator::all;
 
 fn workspace_root() -> PathBuf {
@@ -23,6 +23,7 @@ fn family(prefix: char) -> Vec<(String, u16)> {
         'P' => live(PCode::as_str, PCode::number),
         'T' => live(TCode::as_str, TCode::number),
         'F' => live(FCode::as_str, FCode::number),
+        'C' => live(CCode::as_str, CCode::number),
         _ => unreachable!(),
     }
 }
@@ -34,6 +35,7 @@ fn retired(prefix: char) -> &'static [u16] {
         'P' => PCode::RETIRED,
         'T' => TCode::RETIRED,
         'F' => FCode::RETIRED,
+        'C' => CCode::RETIRED,
         _ => unreachable!(),
     }
 }
@@ -43,7 +45,7 @@ fn parse_code(text: &str) -> Option<(char, u16)> {
     let mut chars = text.chars();
     let prefix = chars.next()?;
     let digits = chars.as_str();
-    if !"DOPTF".contains(prefix) || digits.len() != 3 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+    if !"DOPTFC".contains(prefix) || digits.len() != 3 || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     Some((prefix, digits.parse().ok()?))
@@ -84,7 +86,7 @@ fn check_table(doc: &str, prefix: char, range: std::ops::RangeInclusive<u16>) {
 
 #[test]
 fn a_code_shows_its_prefix_and_number() {
-    for prefix in ['D', 'O', 'P', 'T', 'F'] {
+    for prefix in ['D', 'O', 'P', 'T', 'F', 'C'] {
         for (text, number) in family(prefix) {
             assert_eq!(text, format!("{prefix}{number:03}"));
         }
@@ -93,7 +95,7 @@ fn a_code_shows_its_prefix_and_number() {
 
 #[test]
 fn no_live_code_is_retired() {
-    for prefix in ['D', 'O', 'P', 'T', 'F'] {
+    for prefix in ['D', 'O', 'P', 'T', 'F', 'C'] {
         for (text, number) in family(prefix) {
             assert!(!retired(prefix).contains(&number), "{text} is retired");
         }
@@ -108,6 +110,7 @@ fn the_docs_table_every_code() {
     check_table("datafun-ebnf.md", 'P', 1..=999);
     check_table("datalit-typing-rules.md", 'T', 1..=999);
     check_table("datafun-typing-rules.md", 'F', 1..=999);
+    check_table("botspec.md", 'C', 1..=999);
 }
 
 /// The code a line of source writes as a string literal, as `"P088"` or

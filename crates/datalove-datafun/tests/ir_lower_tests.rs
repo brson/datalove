@@ -55,7 +55,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Check for lowering errors.
     let all_lowering_errors = compiled.all_lowering_errors();
     if !all_lowering_errors.is_empty() {
-        return Ok(format!("{}\n", all_lowering_errors.join("\n")));
+        let messages: Vec<&str> = all_lowering_errors.iter().map(|error| error.message.as_str()).collect();
+        return Ok(format!("{}\n", messages.join("\n")));
     }
 
     // Collect IR dump from all modules.

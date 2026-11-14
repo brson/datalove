@@ -11,7 +11,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "`scale` has 65 const parameter instantiations, over the limit of 64; each one is a copy of the function",
+                message: "`scale` is given 65 different values for its const parameters, over the limit of 64",
             ),
             output: "",
         ),

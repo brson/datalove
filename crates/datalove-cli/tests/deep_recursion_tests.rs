@@ -200,5 +200,5 @@ fn a_failed_const_frees_what_it_built() {
     let output = run_checking_leaks(&script, &[], &[]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{:?}\n{stderr}", output.status);
-    assert!(stderr.trim().ends_with("failed to lower const 'C': stack overflow"), "{stderr}");
+    assert!(stderr.contains("[C002]") && stderr.contains("evaluating `C` overflowed the stack"), "{stderr}");
 }

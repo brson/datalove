@@ -643,6 +643,22 @@ functions that name a const are never called by one, most lowering stays
 there. Modules form a DAG under `require` (a cycle is F083), so a module's walk
 needs only the modules it requires to be finished.
 
+**A const that cannot be evaluated is a diagnostic at its initializer.** The
+evaluators give back a `ConstFailure` -- the const's name, its initializer and
+why -- and `ConstFailure::diagnostic` makes it a C-code diagnostic against the
+spans of the module or unit it is written in: C001 for an early return, with
+the error it returned, C002 for a stack overflow, C003 for another failure.
+A const naming one that failed, and a function waiting on one, fail with it
+and say nothing, since what they would say follows from the first; each
+evaluator keeps the set of failed names for that. Specialization reports C004
+at the function whose const parameters it could not copy for. The module
+compiler carries these as `StoredDiagnostic`s to `SingleModuleLoweringResult`
+and `CompiledModules::lowering_errors`; the script compiler as
+`LoweringResult::Error`'s diagnostics, which the unit's record keeps for the
+REPL to render. The one lowering error with no span is a script unit naming
+what a unit that did not compile bound; see
+[issues.md](issues.md#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering).
+
 ## Generics
 
 A generic function is compiled once. Inside it, a value whose type mentions a

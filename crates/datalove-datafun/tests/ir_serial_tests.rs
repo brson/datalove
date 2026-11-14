@@ -447,9 +447,7 @@ fn analyze_worldfile_ir_serial(
                 section_type: "scriptunit-fragment".S(),
                 name: None,
                 typecheck: compiled_unit.typecheck,
-                lowering: datafun::driver::LoweringResult::Error {
-                    message: "No IR unit produced".S(),
-                },
+                lowering: compiled_unit.lowering,
                 direct_interp_output: String::new(),
                 direct_aot_output: String::new(),
                 serialized_ir_size: 0,

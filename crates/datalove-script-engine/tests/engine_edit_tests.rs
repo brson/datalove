@@ -986,6 +986,33 @@ fn an_expression_unit_s_diagnostics_point_into_it() {
     assert!(type_error.contains("unit 2:1:5") && type_error.contains("a + nope"), "{type_error}");
 }
 
+/// A const that could not be evaluated is a unit's diagnostic too, at its
+/// initializer, and goes when an edit lets it evaluate.
+#[test]
+fn a_unit_s_failed_const_renders_as_a_diagnostic() {
+    let ratio = "fun ratio(a: u32, b: u32): !u32\n  ret ok (a /! b)\nend fun\n";
+    let mut engine = engine();
+    run(&mut engine, &format!("let a = 1\n---\n{ratio}const R: u32 = ratio(1, 0)!"));
+
+    let failed = engine.unit_diagnostics(2, "unit 2", TextStyle::Plain);
+    assert!(failed.contains("[C001]") && failed.contains("unit 2:4:27") && failed.contains("division by zero"), "{failed}");
+
+    engine.edit_unit(2, &format!("{ratio}const R: u32 = ratio(1, 1)!"));
+    assert_eq!(engine.unit_diagnostics(2, "unit 2", TextStyle::Plain), "");
+    assert_eq!(value_of(&mut engine, "R"), "1");
+}
+
+/// A const calling a function an earlier unit defines cannot be evaluated
+/// yet, and says so at the const.
+#[test]
+fn a_const_calling_an_earlier_unit_s_function_says_it_cannot() {
+    let mut engine = engine();
+    run(&mut engine, "fun one(): u32\n  ret 1\nend fun\n---\nconst R: u32 = one()");
+
+    let refused = engine.unit_diagnostics(2, "unit 2", TextStyle::Plain);
+    assert!(refused.contains("[C005]") && refused.contains("unit 2:1:16") && refused.contains("unit 1 defines"), "{refused}");
+}
+
 /// Ownership errors are a unit's diagnostics too, for a fragment and for an
 /// expression, and each unit keeps its own while the others change.
 #[test]

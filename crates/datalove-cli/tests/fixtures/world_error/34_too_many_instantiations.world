@@ -1,0 +1,150 @@
+// A function's const parameters given more different values than it may be
+// copied for is an error at the function.
+----------
+module local/test/main
+----------
+
+fun scale(const factor: u32): u32
+    ret factor
+end fun
+
+fun many(): u32
+    const C1: u32 = 1
+    let x1 = scale(C1)
+    const C2: u32 = 2
+    let x2 = scale(C2)
+    const C3: u32 = 3
+    let x3 = scale(C3)
+    const C4: u32 = 4
+    let x4 = scale(C4)
+    const C5: u32 = 5
+    let x5 = scale(C5)
+    const C6: u32 = 6
+    let x6 = scale(C6)
+    const C7: u32 = 7
+    let x7 = scale(C7)
+    const C8: u32 = 8
+    let x8 = scale(C8)
+    const C9: u32 = 9
+    let x9 = scale(C9)
+    const C10: u32 = 10
+    let x10 = scale(C10)
+    const C11: u32 = 11
+    let x11 = scale(C11)
+    const C12: u32 = 12
+    let x12 = scale(C12)
+    const C13: u32 = 13
+    let x13 = scale(C13)
+    const C14: u32 = 14
+    let x14 = scale(C14)
+    const C15: u32 = 15
+    let x15 = scale(C15)
+    const C16: u32 = 16
+    let x16 = scale(C16)
+    const C17: u32 = 17
+    let x17 = scale(C17)
+    const C18: u32 = 18
+    let x18 = scale(C18)
+    const C19: u32 = 19
+    let x19 = scale(C19)
+    const C20: u32 = 20
+    let x20 = scale(C20)
+    const C21: u32 = 21
+    let x21 = scale(C21)
+    const C22: u32 = 22
+    let x22 = scale(C22)
+    const C23: u32 = 23
+    let x23 = scale(C23)
+    const C24: u32 = 24
+    let x24 = scale(C24)
+    const C25: u32 = 25
+    let x25 = scale(C25)
+    const C26: u32 = 26
+    let x26 = scale(C26)
+    const C27: u32 = 27
+    let x27 = scale(C27)
+    const C28: u32 = 28
+    let x28 = scale(C28)
+    const C29: u32 = 29
+    let x29 = scale(C29)
+    const C30: u32 = 30
+    let x30 = scale(C30)
+    const C31: u32 = 31
+    let x31 = scale(C31)
+    const C32: u32 = 32
+    let x32 = scale(C32)
+    const C33: u32 = 33
+    let x33 = scale(C33)
+    const C34: u32 = 34
+    let x34 = scale(C34)
+    const C35: u32 = 35
+    let x35 = scale(C35)
+    const C36: u32 = 36
+    let x36 = scale(C36)
+    const C37: u32 = 37
+    let x37 = scale(C37)
+    const C38: u32 = 38
+    let x38 = scale(C38)
+    const C39: u32 = 39
+    let x39 = scale(C39)
+    const C40: u32 = 40
+    let x40 = scale(C40)
+    const C41: u32 = 41
+    let x41 = scale(C41)
+    const C42: u32 = 42
+    let x42 = scale(C42)
+    const C43: u32 = 43
+    let x43 = scale(C43)
+    const C44: u32 = 44
+    let x44 = scale(C44)
+    const C45: u32 = 45
+    let x45 = scale(C45)
+    const C46: u32 = 46
+    let x46 = scale(C46)
+    const C47: u32 = 47
+    let x47 = scale(C47)
+    const C48: u32 = 48
+    let x48 = scale(C48)
+    const C49: u32 = 49
+    let x49 = scale(C49)
+    const C50: u32 = 50
+    let x50 = scale(C50)
+    const C51: u32 = 51
+    let x51 = scale(C51)
+    const C52: u32 = 52
+    let x52 = scale(C52)
+    const C53: u32 = 53
+    let x53 = scale(C53)
+    const C54: u32 = 54
+    let x54 = scale(C54)
+    const C55: u32 = 55
+    let x55 = scale(C55)
+    const C56: u32 = 56
+    let x56 = scale(C56)
+    const C57: u32 = 57
+    let x57 = scale(C57)
+    const C58: u32 = 58
+    let x58 = scale(C58)
+    const C59: u32 = 59
+    let x59 = scale(C59)
+    const C60: u32 = 60
+    let x60 = scale(C60)
+    const C61: u32 = 61
+    let x61 = scale(C61)
+    const C62: u32 = 62
+    let x62 = scale(C62)
+    const C63: u32 = 63
+    let x63 = scale(C63)
+    const C64: u32 = 64
+    let x64 = scale(C64)
+    const C65: u32 = 65
+    let x65 = scale(C65)
+    ret x1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+debuglog main.many()

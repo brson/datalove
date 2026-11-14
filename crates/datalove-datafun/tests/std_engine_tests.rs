@@ -138,7 +138,7 @@ fn run_with_executor(
         executor.destroy_live_values();
         return Err(format!("{} typecheck errors: {:?}", backend_name, errors));
     }
-    if let LoweringResult::Error { message } = &result.lowering {
+    if let LoweringResult::Error { message, .. } = &result.lowering {
         executor.destroy_live_values();
         return Err(format!("{} lowering error: {}", backend_name, message));
     }
@@ -156,7 +156,7 @@ fn run_with_executor(
         executor.destroy_live_values();
         return Err(format!("{} output typecheck errors: {:?}", backend_name, errors));
     }
-    if let LoweringResult::Error { message } = &output_compiled.lowering {
+    if let LoweringResult::Error { message, .. } = &output_compiled.lowering {
         executor.destroy_live_values();
         return Err(format!("{} output lowering error: {}", backend_name, message));
     }
@@ -194,7 +194,7 @@ fn run_aot(
     if let TypecheckResult::Error { errors } = &result.typecheck {
         return Err(format!("AOT typecheck errors: {:?}", errors));
     }
-    if let LoweringResult::Error { message } = &result.lowering {
+    if let LoweringResult::Error { message, .. } = &result.lowering {
         return Err(format!("AOT lowering error: {}", message));
     }
 
@@ -243,7 +243,7 @@ fn run_c_aot(
     if let TypecheckResult::Error { errors } = &result.typecheck {
         return Err(format!("C AOT typecheck errors: {:?}", errors));
     }
-    if let LoweringResult::Error { message } = &result.lowering {
+    if let LoweringResult::Error { message, .. } = &result.lowering {
         return Err(format!("C AOT lowering error: {}", message));
     }
 

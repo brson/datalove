@@ -9,11 +9,13 @@
 
 use rmx::prelude::*;
 use std::collections::BTreeSet;
+use bct::diagnostic::{DiagnosticBuilder, StoredDiagnostic};
 use bct::lookup::LookupMap;
-use std::fmt;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{Body, ExprFun, ExprFunKind, Statement, StmtFun};
+use datalove_datafun_ast::spans::DatafunSpans;
+use datalove_diagnostic_codes::CCode;
 use datalove_datafun_const::evaluate_const_unit;
 use datalove_datafun_ir::{
     ConstValue, CtfeError, CtfeEvaluator, FuncId, IrCodeUnit, IrType,
@@ -42,30 +44,89 @@ pub struct ConstEvalEnv<'a, 'db> {
 /// Why a const could not be evaluated.
 #[derive(Debug)]
 pub enum ConstError {
-    Lowering(LowerError),
+    /// It names something with no value here: a const that failed, a
+    /// binding of an earlier script unit that did not compile, or a function
+    /// an earlier script unit defines, which evaluation cannot reach yet.
+    Unbound(String),
+    /// Running it gave no value.
     Ctfe(CtfeError),
 }
 
-impl fmt::Display for ConstError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ConstError::Lowering(e) => write!(f, "lowering error: {}", e),
-            ConstError::Ctfe(e) => write!(f, "CTFE error: {}", e),
-        }
-    }
-}
-
-/// A const that could not be evaluated, by name.
+/// A const that could not be evaluated, for want of anything but another
+/// const that could not be.
 #[derive(Debug)]
-pub struct NamedConstError {
+pub struct ConstFailure<'db> {
     pub name: String,
+    pub init: ExprFun<'db>,
     pub error: ConstError,
 }
 
-impl fmt::Display for NamedConstError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "const '{}': {}", self.name, self.error)
+impl<'db> ConstFailure<'db> {
+    /// The diagnostic for a const that could not be evaluated, at its
+    /// initializer in `spans`.
+    ///
+    /// A name with no value is reported where the name is known to be
+    /// missing, which a module never is: everything its consts see is its
+    /// own, so the only const it names with no value is one that failed.
+    pub fn diagnostic(&self, db: &'db dyn salsa::Database, spans: &DatafunSpans<'db>) -> StoredDiagnostic {
+        let ConstError::Ctfe(error) = &self.error else {
+            panic!("`{}` names a binding with no value, which only a script unit can", self.name);
+        };
+        ctfe_diagnostic(db, spans, &self.name, self.init, error)
     }
+}
+
+/// The diagnostic for running `name`'s initializer `init` failing with `error`.
+pub fn ctfe_diagnostic<'db>(
+    db: &'db dyn salsa::Database,
+    spans: &DatafunSpans<'db>,
+    name: &str,
+    init: ExprFun<'db>,
+    error: &CtfeError,
+) -> StoredDiagnostic {
+    let at = spans.lookup_key(init.key())
+        .expect("a const's initializer was parsed with a span");
+    let builder = match error {
+        CtfeError::EarlyReturn(returned) => {
+            DiagnosticBuilder::error(db, &fmt!("evaluating `{name}` returned early with {returned}"))
+                .code(CCode::ConstReturnedEarly.as_str())
+                .primary_label(at, "this returned early")
+        }
+        CtfeError::StackOverflow => {
+            DiagnosticBuilder::error(db, &fmt!("evaluating `{name}` overflowed the stack"))
+                .code(CCode::ConstStackOverflow.as_str())
+                .primary_label(at, "this recursed too deeply")
+        }
+        CtfeError::Failed(message) => {
+            DiagnosticBuilder::error(db, &fmt!("evaluating `{name}` failed: {message}"))
+                .code(CCode::ConstFailed.as_str())
+                .primary_label(at, "this failed")
+        }
+    };
+    builder
+        .note("a const is evaluated as the program is compiled, by running it")
+        .build_stored()
+}
+
+/// The diagnostic for function `func` being given more values for its const
+/// parameters than it may be copied for.
+pub fn too_many_instantiations<'db>(
+    db: &'db dyn salsa::Database,
+    spans: &DatafunSpans<'db>,
+    func: &'db StmtFun<'db>,
+    count: usize,
+) -> StoredDiagnostic {
+    let at = spans.lookup_fun(func.key().local_index)
+        .expect("a function was parsed with a span")
+        .C();
+    let limit = crate::specialize::MAX_INSTANTIATIONS;
+    DiagnosticBuilder::error(db, &fmt!(
+        "`{}` is given {count} different values for its const parameters, over the limit of {limit}",
+        func.name().text(db),
+    ))
+        .code(CCode::TooManyInstantiations.as_str())
+        .primary_label(at, "each is a copy of this function")
+        .build_stored()
 }
 
 /// The consts these statements bind to data files, with their values.
@@ -127,10 +188,10 @@ pub fn evaluate_const<'db>(
     );
     let (unit, value) = match lowered {
         Ok(pair) => pair,
-        Err(LowerError::BindingNotAvailable(ref missing)) if deferred.contains(missing) => {
+        Err(LowerError::BindingNotAvailable(missing)) if deferred.contains(&missing) => {
             return Ok(None);
         }
-        Err(e) => return Err(ConstError::Lowering(e)),
+        Err(LowerError::BindingNotAvailable(missing)) => return Err(ConstError::Unbound(missing)),
     };
     match (unit, value) {
         (None, Some(value)) => Ok(Some(value)),
@@ -153,36 +214,45 @@ pub fn evaluate_const<'db>(
 /// parameters; a const naming one, or naming such a const, is left out. An
 /// instantiation gives its parameters values in `scope` instead and defers
 /// nothing.
+///
+/// `failed` is the consts outside the body that could not be evaluated. A
+/// const naming one of those, or one of the body's that could not be, fails
+/// with it and is not reported: what it would say follows from the first.
 pub fn evaluate_body_consts<'db>(
     env: &mut ConstEvalEnv<'_, 'db>,
     func_stmt: &'db StmtFun<'db>,
     mut scope: LookupMap<String, (IrType, Arc<ConstValue>)>,
     mut deferred: BTreeSet<String>,
-) -> (Vec<(String, IrType, Arc<ConstValue>)>, Vec<NamedConstError>) {
+    mut failed: BTreeSet<String>,
+) -> (Vec<(String, IrType, Arc<ConstValue>)>, Vec<ConstFailure<'db>>) {
     let db = env.db;
     let func_return_type = func_stmt.return_type().map(|ty| IrType::from_type_hint(db, &ty));
     let mut consts = Vec::new();
-    let mut errors = Vec::new();
+    let mut failures = Vec::new();
     let body = func_stmt.body();
     for stmt in &body.statements {
         let Statement::Const(const_stmt) = stmt else { continue };
         let name = const_stmt.name.text(db).S();
-        let value = body.arena.get(const_stmt.value);
-        let ty = const_type(env, value);
-        let evaluated = evaluate_const(env, value, &ty, &scope, func_return_type.C(), &deferred)
-            .map(|value| value.map(|value| (ty, value)));
-        match evaluated {
-            Ok(Some((ty, value))) => {
+        let init = body.arena.get(const_stmt.value);
+        let ty = const_type(env, init);
+        match evaluate_const(env, init, &ty, &scope, func_return_type.C(), &deferred) {
+            Ok(Some(value)) => {
                 scope.insert(name.C(), (ty.C(), value.C()));
                 consts.push((name, ty, value));
             }
             Ok(None) => {
                 deferred.insert(name);
             }
-            Err(error) => errors.push(NamedConstError { name, error }),
+            Err(ConstError::Unbound(missing)) if failed.contains(&missing) => {
+                failed.insert(name);
+            }
+            Err(error) => {
+                failed.insert(name.C());
+                failures.push(ConstFailure { name, init, error });
+            }
         }
     }
-    (consts, errors)
+    (consts, failures)
 }
 
 /// Evaluate a comptime function's consts for one instantiation.
@@ -197,14 +267,14 @@ pub fn evaluate_body_consts<'db>(
 /// is an error.
 ///
 /// Returns the values under their local names, which is how the copy's
-/// `const_values` records them, and the errors, each naming the function.
+/// `const_values` records them, and the consts that could not be evaluated.
 pub fn evaluate_instantiation_consts<'db>(
     env: &mut ConstEvalEnv<'_, 'db>,
     func_stmt: &'db StmtFun<'db>,
     mut scope: LookupMap<String, (IrType, Arc<ConstValue>)>,
     comptime_param_indices: &[usize],
     values: &[ConstValue],
-) -> (LookupMap<String, Arc<ConstValue>>, Vec<String>) {
+) -> (LookupMap<String, Arc<ConstValue>>, Vec<ConstFailure<'db>>) {
     let db = env.db;
     let params = func_stmt.params();
     for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
@@ -213,10 +283,6 @@ pub fn evaluate_instantiation_consts<'db>(
             (datalove_datafun_ir::ir_type_of_const_value(value), Arc::new(value.C())),
         );
     }
-    let (consts, errors) = evaluate_body_consts(env, func_stmt, scope, BTreeSet::new());
-    let func_name = func_stmt.name().text(db);
-    (
-        consts.into_iter().map(|(name, _, value)| (name, value)).collect(),
-        errors.iter().map(|e| format!("{}::{}", func_name, e)).collect(),
-    )
+    let (consts, failures) = evaluate_body_consts(env, func_stmt, scope, BTreeSet::new(), BTreeSet::new());
+    (consts.into_iter().map(|(name, _, value)| (name, value)).collect(), failures)
 }

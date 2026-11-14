@@ -822,9 +822,12 @@ functions and references hold it.
 coupling the IR to AST types. It coupled it to something worse, for the reason
 given in Section 2.
 
-Two error types: `CtfeError` for interpreter-level failures, and
-`ConstEvalError` for the phase above -- gas expiry, a failed dependency, a
-lowering failure, an early return, an unsupported type.
+`CtfeError` is what running a const's code can come to instead of a value:
+an early return, with the error printed; a stack overflow; or another
+failure, as the interpreter said it. A value that ran to its end and cannot be
+read back is the compiler's fault, and panics. The compiler turns each into a
+C-code diagnostic at the const; see
+[the compiler guide](compiler-guide.md#user-content-const-evaluation).
 
 ## 11. Generics and Descriptors
 

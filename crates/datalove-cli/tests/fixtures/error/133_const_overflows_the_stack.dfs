@@ -1,0 +1,9 @@
+// A const whose evaluation recurses without end overflows the stack, which is
+// an error at its initializer.
+
+fun down(n: u32): u32
+  ret down(n)
+end fun
+
+const D: u32 = down(1)
+debuglog D

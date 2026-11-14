@@ -11,6 +11,7 @@
 //! - [`PCode`]: datafun's own parse faults.
 //! - [`TCode`]: datalit's type faults.
 //! - [`FCode`]: datafun's type faults.
+//! - [`CCode`]: faults in evaluating a const at compile time.
 //!
 //! A new fault takes the next number after the family's highest. A number
 //! no longer reported goes in the family's `RETIRED` list rather than being
@@ -598,4 +599,25 @@ codes! {
         DependsOnTypeParam = 110,
     }
     retired = [11, 60, 65, 75];
+}
+
+codes! {
+    /// Faults in evaluating a const, which the compiler does by running it.
+    ///
+    /// Tabled in `botdocs/botspec.md` (8.2).
+    pub enum CCode = b'C' {
+        /// A const returned early, through `!`, `?` or a checked operator.
+        ConstReturnedEarly = 1,
+        /// Evaluating a const overflowed the stack.
+        ConstStackOverflow = 2,
+        /// Evaluating a const failed some other way, at run time.
+        ConstFailed = 3,
+        /// A function's const parameters given more values than it may be
+        /// copied for.
+        TooManyInstantiations = 4,
+        /// A const in a script unit calling a function an earlier unit
+        /// defines, which evaluation cannot reach yet.
+        ConstCallsEarlierUnit = 5,
+    }
+    retired = [];
 }

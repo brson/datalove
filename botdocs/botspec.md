@@ -1387,6 +1387,19 @@ end fun
 Consts are evaluated in source order, and each function is compiled once the
 last const it names has its value.
 
+A const that cannot be evaluated is an error at its initializer, and a const
+or a function that names it is left at that: what it would have said follows
+from the first. A function whose const parameters are given more than 64
+different values is an error too, since each is a copy of the function.
+
+| Code | Name | Description |
+|------|------|-------------|
+| C001 | ConstReturnedEarly | The const returned early, through `!`, `?` or a checked operator; the error it returned is shown |
+| C002 | ConstStackOverflow | Evaluating the const overflowed the stack |
+| C003 | ConstFailed | Evaluating the const failed some other way, as running it would have |
+| C004 | TooManyInstantiations | A function's const parameters given more than 64 different values |
+| C005 | ConstCallsEarlierUnit | A const in a script unit calls a function an earlier unit defines, which evaluation cannot reach yet |
+
 ### 8.3 Set
 
 **Set** mutates a `var` binding, a `mut` or `out` parameter, or an

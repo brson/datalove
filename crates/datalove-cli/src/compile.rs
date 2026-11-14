@@ -80,7 +80,7 @@ pub fn compile_script<'db>(
 /// Report what stopped the modules compiling, and fail, if anything did.
 ///
 /// Parse, type and ownership errors are framed against the file each module
-/// was read from. Lowering errors carry no spans and are printed as they are.
+/// was read from.
 fn bail_on_module_errors<'db>(
     db: &'db datalove::datafun::Database,
     compiled: &CompiledModules<'db>,
@@ -99,15 +99,10 @@ fn bail_on_module_errors<'db>(
     let diagnostics: Vec<_> = compiled.get_module_parse_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db))
         .chain(compiled.get_module_type_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
         .chain(compiled.get_module_ownership_diagnostics(db).into_iter().map(|d| d.to_diagnostic(db)))
+        .chain(compiled.all_lowering_errors().iter().map(|d| d.to_diagnostic(db)))
         .collect();
-    let rendered = !diagnostics.is_empty();
+    assert!(!diagnostics.is_empty(), "modules that failed to compile have something to say why");
     render::render_module_diagnostics(db, diagnostics, &locate, script_path, &LineOffsets::default(), cwd);
-
-    let unrendered = compiled.all_lowering_errors();
-    assert!(rendered || !unrendered.is_empty(), "modules that failed to compile have something to say why");
-    for error in &unrendered {
-        eprintln!("{error}");
-    }
     bail!("Module compilation error");
 }
 
@@ -159,8 +154,11 @@ pub fn check_unit(
         render::render_ownership_diagnostics(compiler.db(), &diagnostics, file_path, line_offsets, cwd);
         bail!("Ownership error");
     }
-    if let LoweringResult::Error { message } = &unit.lowering {
-        bail!("Lowering error: {}", message);
+    if let LoweringResult::Error { diagnostics, .. } = &unit.lowering {
+        let locate = |source: Source| files.get(&source).cloned();
+        let diagnostics = diagnostics.iter().map(|d| d.to_diagnostic(compiler.db())).collect();
+        render::render_module_diagnostics(compiler.db(), diagnostics, &locate, file_path, line_offsets, cwd);
+        bail!("Lowering error");
     }
     Ok(())
 }

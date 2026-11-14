@@ -6,6 +6,7 @@
 //! - [`ScriptUnitResult`]: Combined compile+execute result for tests.
 
 use rmx::prelude::*;
+use bct::diagnostic::StoredDiagnostic;
 use datalove_datafun_ir::IrCodeUnit;
 
 /// Typecheck result summary (serializable).
@@ -32,8 +33,24 @@ pub enum OwnershipResult {
 #[serde(tag = "status")]
 pub enum LoweringResult {
     Success { ir: String },
-    Error { message: String },
+    /// What lowering refused, as diagnostics, and their messages as one line
+    /// each for what reads it as text. The diagnostics are not serialized:
+    /// their spans name sources in a database.
+    Error {
+        message: String,
+        #[serde(skip)]
+        diagnostics: Vec<StoredDiagnostic>,
+    },
     Skipped,
+}
+
+impl LoweringResult {
+    /// A lowering that refused what `diagnostics` say.
+    pub fn refused(diagnostics: Vec<StoredDiagnostic>) -> LoweringResult {
+        assert!(!diagnostics.is_empty(), "a lowering that failed says why");
+        let message = diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>().join("\n");
+        LoweringResult::Error { message, diagnostics }
+    }
 }
 
 /// Format ownership result for display.
@@ -55,7 +72,7 @@ pub fn format_ownership_result(
 /// Format lowering result for display.
 pub fn format_lowering_result(
     ir_dumps: &[String],
-    lowering_errors: &[String],
+    lowering_errors: &[StoredDiagnostic],
     has_prior_errors: bool,
 ) -> LoweringResult {
     if has_prior_errors {
@@ -63,7 +80,7 @@ pub fn format_lowering_result(
     }
 
     if !lowering_errors.is_empty() {
-        LoweringResult::Error { message: lowering_errors.join("\n") }
+        LoweringResult::refused(lowering_errors.to_vec())
     } else if ir_dumps.is_empty() {
         LoweringResult::Skipped
     } else {
@@ -103,7 +120,7 @@ impl ScriptCompilationResult {
             (TypecheckResult::ParseError { errors }, _, _) => Some(errors.join("; ")),
             (TypecheckResult::Error { errors }, _, _) => Some(errors.join("; ")),
             (_, OwnershipResult::Error { message }, _) => Some(message.C()),
-            (_, _, LoweringResult::Error { message }) => Some(message.C()),
+            (_, _, LoweringResult::Error { message, .. }) => Some(message.C()),
             _ => None,
         }
     }

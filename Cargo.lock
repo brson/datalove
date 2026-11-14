@@ -1136,6 +1136,7 @@ dependencies = [
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
+ "datalove-diagnostic-codes",
  "datalove-exampletest",
  "datalove-rider-sys-std",
  "datalove-rt",

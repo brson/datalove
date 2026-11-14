@@ -6,6 +6,7 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
+use bct::diagnostic::StoredDiagnostic;
 use bct::lookup::LookupMap;
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstValue, IrModuleId, IrType};
@@ -47,7 +48,9 @@ pub struct CompiledModules<'db> {
     pub parse_errors: BTreeMap<String, Vec<String>>,
     pub path_to_errors: BTreeMap<String, Vec<String>>,
     pub ownership_errors: BTreeMap<String, Vec<String>>,
-    pub lowering_errors: BTreeMap<String, Vec<String>>,
+    /// What lowering refused, by module path: the consts that could not be
+    /// evaluated, and the functions that could not be specialized.
+    pub lowering_errors: BTreeMap<String, Vec<StoredDiagnostic>>,
     pub module_ir_dumps: BTreeMap<String, Vec<String>>,
     /// Where the modules' consts found their natives, and a script's will.
     pub natives: Option<Arc<dyn NativeResolver>>,
@@ -94,7 +97,7 @@ impl<'db> CompiledModules<'db> {
         }
 
         for error_list in self.lowering_errors.values() {
-            errors.extend(error_list.iter().cloned());
+            errors.extend(error_list.iter().map(|error| error.message.C()));
         }
 
         errors
@@ -125,7 +128,7 @@ impl<'db> CompiledModules<'db> {
     }
 
     /// Get all lowering errors.
-    pub fn all_lowering_errors(&self) -> Vec<String> {
+    pub fn all_lowering_errors(&self) -> Vec<StoredDiagnostic> {
         self.lowering_errors.values()
             .flatten()
             .cloned()

@@ -22,7 +22,8 @@ home here.
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [The REPL shows a broken module only as a message](#user-content-the-repl-shows-a-broken-module-only-as-a-message)
-  - [Lowering errors say what, never where](#user-content-lowering-errors-say-what-never-where)
+  - [A name bound by a unit that did not compile is found only by lowering](#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering)
+  - [A const cannot call a function an earlier unit defines](#user-content-a-const-cannot-call-a-function-an-earlier-unit-defines)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
@@ -169,17 +170,15 @@ What is left:
 **Reproduced.** CTFE runs the ordinary interpreter (`InterpCtfeEvaluator`) with
 no step limit and no allocation limit. A const calling a function that never
 terminates hangs `datalove script-ir`, which only compiles. Unbounded
-recursion is caught, by the IR walker's stack check, and reported as `const
-evaluation error: failed to lower const 'C': stack overflow`.
+recursion is caught, by the IR walker's stack check, and reported as C002 at
+the const.
 
-Errors are reported thinly too. A const whose expression early-returns says
-`h::X: early return: const expression returned early via ! or ?` as a lowering
-error: the error value is discarded, and there is no span and no evaluation call
-stack.
+A failed const's diagnostic says what it returned, but not the calls that got
+there: the IR has no spans, so an evaluation call stack could only be names.
 
-What it would take: a step budget in the interpreter, checked
-only when evaluating a const, each failing as a diagnostic on the const; and
-carrying the returned error and the call chain into that diagnostic.
+What it would take: a step budget in the interpreter, checked only when
+evaluating a const, failing as a C-code diagnostic on the const; and the
+interpreter's frames carried into the diagnostic as a chain of calls.
 
 ### The JIT has no way back from a full arena
 
@@ -205,37 +204,31 @@ module's diagnostics, framed against its source, are what the engine keeps in
 `ModuleErrors`, and only the CLI renders them; the REPL's Detail tab shows the
 unit's own diagnostics, which say nothing of the module's.
 
-### Lowering errors say what, never where
+### A name bound by a unit that did not compile is found only by lowering
 
-**Mostly reproduced; which variants are dead was reasoned about.** No error
-raised after ownership analysis -- in lowering, const evaluation or
-specialization -- carries a span or a source. The most one has is a name: a
-binding, a function, or a `func::const` prefix. The CLI prints a script's as
-`Lowering error: {message}` and a module's bare, without even the module's
-path, and the REPL's Detail tab shows only the message.
+**Reproduced.** The typechecker offers later units the names of a unit that
+typechecked, and lowering only those of a unit that compiled, so a unit that
+failed in ownership analysis or later leaves its names to the one and not the
+other. A use of one is found by lowering, which reports ``"`t` is bound by
+unit 0, which did not compile"`` as a diagnostic with no span and no code:
+lowering knows the name and not where it is written. It is the one lowering
+error left that is not at a span.
 
-They should mostly not be lowering errors at all. What reaches users:
+What it would take: the typechecker reporting the use, with its span, or not
+offering the name. Either makes a unit's typecheck depend on the earlier
+units' later phases, which it does not now; see
+[script-reactivity-architecture.md](script-reactivity-architecture.md).
 
-- **A name bound by a unit that did not compile.** `BindingNotAvailable`,
-  which the script compiler words as ``"`t` is bound by unit 0, which did not
-  compile"``. The typechecker offers later units the names of a unit that
-  failed ownership analysis; it should report the use, with its span, or not
-  offer the name.
-- **A const that returns early through `!` or `?`**, reported as `const 'C'
-  early-returned` or `CTFE error: early return`. A real compile-time failure,
-  but it belongs at the const's span.
-- **A const that overflows the stack**, reported as `failed to lower const
-  'C': stack overflow` -- the label is wrong too.
-- **Over 64 instantiations of a function's const parameters**, an
-  implementation limit, which names the function and not the call that went
-  over.
+### A const cannot call a function an earlier unit defines
 
-`LowerError` has only `BindingNotAvailable` left. The lowering crate also has
-about a hundred panicking checks, some saying "typechecker should catch this".
+**Reproduced.** A script const is evaluated with its own unit's functions, and
+the earlier units' are not reachable from it, so `fun one()` in one REPL unit
+and `const R: u32 = one()` in the next is refused (C005), though a function
+in the second unit calls `one` without trouble. The same const beside `one`
+in one unit evaluates.
 
-The fix is per error, in the phase that should have caught it, with a span;
-what is left in lowering then is the compiler's own bugs, for which a message
-with no span is fine.
+What it would take: handing const evaluation the earlier units' compiled
+functions, as `ScriptEnvironment` holds them for running.
 
 ### An edit to a module no unit requires reports nothing
 

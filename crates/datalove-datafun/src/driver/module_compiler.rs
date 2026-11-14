@@ -19,6 +19,7 @@
 //! ```
 
 use rmx::prelude::*;
+use bct::diagnostic::StoredDiagnostic;
 use rmx::std::collections::BTreeMap;
 use bct::lookup::LookupMap;
 use std::sync::Arc;
@@ -530,7 +531,7 @@ impl ModuleCompiler {
                 let registry = Arc::clone(
                     module_function_registry(db_salsa, *lowering, output.parsed_graph));
 
-                let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+                let mut lowering_errors: BTreeMap<String, Vec<StoredDiagnostic>> = BTreeMap::new();
                 let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
                 let mut module_consts = LookupMap::default();
 

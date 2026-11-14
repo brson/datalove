@@ -825,10 +825,6 @@ impl ScriptWorldCommand {
         if !module_errors.is_empty() {
             render::render_stored_module_diagnostics(
                 engine.db(), &module_errors.diagnostics, &self.file_path, &line_offsets, cwd);
-            // Lowering errors have no spans yet, so they are printed as they are.
-            for error in &module_errors.lowering_errors {
-                eprintln!("{}", error);
-            }
             bail!("Module compilation error");
         }
         drop(module_errors);

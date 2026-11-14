@@ -94,6 +94,11 @@ pub struct UnitLowerRecord {
     pub types: Vec<(String, String)>,
     /// An expression unit's type, as datalove writes it.
     pub value_type: Option<String>,
+    /// What lowering refused, for a unit that got that far and no further:
+    /// the consts it could not evaluate, and the like. The other phases'
+    /// diagnostics are worked out again when asked for; these come out of
+    /// const evaluation, which is not memoized, and are kept instead.
+    pub refused: Vec<bct::diagnostic::StoredDiagnostic>,
 }
 
 impl UnitLowerRecord {

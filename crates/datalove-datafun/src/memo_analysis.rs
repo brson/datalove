@@ -421,7 +421,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             })
             .collect();
 
-        let lowering_errors: BTreeMap<String, Vec<String>> = lowering_result.module_results(&db)
+        let lowering_errors: BTreeMap<String, Vec<bct::diagnostic::StoredDiagnostic>> = lowering_result.module_results(&db)
             .iter_unordered()
             .map(|(id, result)| {
                 let path = id.path(&db).C();

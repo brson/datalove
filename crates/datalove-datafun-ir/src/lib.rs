@@ -3274,23 +3274,28 @@ impl IrCodeUnit {
 // Compile-Time Function Evaluation (CTFE)
 // ============================================================================
 
-/// Error during compile-time const expression evaluation.
+/// Why running a const's code at compile time gave no value.
+///
+/// Each is something the const's code did, as it would have at run time. A
+/// value that ran to its end and cannot be read back is the compiler's fault,
+/// and panics rather than coming back as one of these.
 #[derive(Debug, Clone)]
 pub enum CtfeError {
-    /// Interpreter execution error.
-    InterpError(String),
-    /// Type extraction not supported.
-    UnsupportedType(String),
-    /// Early return via `!` or `?` operator.
+    /// It returned early, through `!`, `?` or a checked operator, with this
+    /// error, as the runtime prints it.
     EarlyReturn(String),
+    /// It recursed until the stack ran out.
+    StackOverflow,
+    /// It failed some other way, as the interpreter said.
+    Failed(String),
 }
 
 impl std::fmt::Display for CtfeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CtfeError::InterpError(msg) => write!(f, "interpreter error: {}", msg),
-            CtfeError::UnsupportedType(ty) => write!(f, "unsupported type for extraction: {}", ty),
-            CtfeError::EarlyReturn(msg) => write!(f, "early return: {}", msg),
+            CtfeError::EarlyReturn(error) => write!(f, "returned early with {}", error),
+            CtfeError::StackOverflow => write!(f, "overflowed the stack"),
+            CtfeError::Failed(message) => write!(f, "failed: {}", message),
         }
     }
 }
@@ -3470,37 +3475,6 @@ impl ResolvedConsts {
     }
 }
 
-/// Error during const evaluation in Phase 2.
-///
-/// Distinct from `CtfeError` which is for interpreter-level errors.
-/// These are higher-level errors that can occur during the evaluation phase.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConstEvalError {
-    /// Lowering the const expression to IR failed.
-    LoweringFailed { binding_name: String, message: String },
-    /// Early return in const expression (e.g., `?` on none, `!` on error).
-    EarlyReturn { binding_name: String, message: String },
-    /// Unsupported type for const extraction.
-    UnsupportedType { binding_name: String, type_name: String },
-}
-
-impl std::fmt::Display for ConstEvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConstEvalError::LoweringFailed { binding_name, message } => {
-                write!(f, "failed to lower const '{}': {}", binding_name, message)
-            }
-            ConstEvalError::EarlyReturn { binding_name, message } => {
-                write!(f, "const '{}' early-returned: {}", binding_name, message)
-            }
-            ConstEvalError::UnsupportedType { binding_name, type_name } => {
-                write!(f, "const '{}' has unsupported type for CTFE: {}", binding_name, type_name)
-            }
-        }
-    }
-}
-
-impl std::error::Error for ConstEvalError {}
 
 #[cfg(test)]
 mod const_value_tests {
