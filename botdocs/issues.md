@@ -38,6 +38,7 @@ home here.
   - [A printed type loses its alias](#user-content-a-printed-type-loses-its-alias)
   - [`(T)` is read as a tuple of one](#user-content-t-is-read-as-a-tuple-of-one)
   - [T065 refuses a recursive key only where it is written](#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)
+  - [A list with a recursive field checks in one order and not the other](#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)
 
 - [The typecheckers: cost and limits](#user-content-the-typecheckers-cost-and-limits)
   - [Deeply nested literals overflow the stack](#user-content-deeply-nested-literals-overflow-the-stack)
@@ -521,6 +522,31 @@ meant to be allowed, in which case T065 can go, or refused, in which case
 inference and `ord` have to refuse them too. It is also why the check-once
 theorem in [formal.md](formal.md) leaves recursive type arguments out: an
 instance that spells one into a key is T065 where its generic was not.
+
+### A list with a recursive field checks in one order and not the other
+
+**Reproduced.** `[: { next: rec L [L] } / { next = [] }, { next = [] }]`
+is a `[{ next: rec L [L] }]`, but `[{ next = [] }, : { next: rec L [L] } /
+{ next = [] }]` is T040. A struct's field holds its parts with no variable
+between, so the first element's field comes to `rec L [L]`'s unfolding,
+`[rec L [L]]`, and the list's element type is `{ next: [rec L [L]] }`. The
+second element's hint is then compared with that by `≈`, which unfolds a
+`rec` at the head only, and `{ next: rec L [L] }` and `{ next: [rec L [L]]
+}` differ inside a field. With the hint on the field itself, as in the
+datalit typing rules' example, the head is the field and `≈` accepts it,
+though the list's type still depends on the order. A comparison of the two
+orders over twenty thousand generated pairs found nothing else that
+depended on order.
+
+So the typing rules' claim that the solution does not depend on order holds
+only without `rec`, and is proved only for that (`formal.md`). The fix that
+keeps equality simple is a canonical form: fold every type, when it is
+built, to one spelling of each recursive type, so that `==` is equivalence
+up to unfolding and the two lists have one type. The cost is one
+normalization per type, near linear; the backend's layout of the two
+spellings is what to check first. Deep equivalence in `≈` alone would leave
+derived `Eq` and `Hash`, and the runtime's descriptors, telling the
+spellings apart.
 
 ## The typecheckers: cost and limits
 

@@ -341,7 +341,10 @@ variable between, so there the first type in source order still wins:
 the first tuple's field to `L`'s unfolding, and the second element's hint is
 accepted against it by `≈`. Written the other way round, the list is a
 `[(rec L { next: [L] }, int)]`. Either checks; which of the two equivalent
-types the field takes depends on the order.
+types the field takes depends on the order. With the hint on a part around
+the field, `≈` compares the field without unfolding it, and the order where
+the hint comes second is T040: `[{ next = [] }, : { next: rec L [L] } / {
+next = [] }]` ([the issue](issues.md#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
 
 The shared variable of an empty collection, or of an empty table's columns,
 is `open`; with elements it is decided by them. The variable is what the
@@ -372,9 +375,9 @@ A constraint that cannot hold is not an error here. The two sides are left
 as they are and each goes on to its own type, the first in source order
 keeping the variable it shares with what came before. Checking then finds the
 later one does not fit: in `[1, 2, "three"]` the list is a `[int]`, and
-`"three"` is reported against `int` (T022). Where the constraints do hold, the
-solution does not depend on order, so `[1, : u8 / 2]` and `[: u8 / 2, 1]` are
-both `[u8]`.
+`"three"` is reported against `int` (T022). Where the constraints do hold, and no
+`rec` is involved, the solution does not depend on order, so `[1, : u8 / 2]`
+and `[: u8 / 2, 1]` are both `[u8]`.
 
 Every node is inferred once and every unification is union-find, so inference
 is linear in the expression, up to the inverse-Ackermann factor and the size

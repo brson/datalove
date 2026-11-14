@@ -366,6 +366,10 @@ const CORPUS: &[(&str, &str)] = &[
     // the list's type, so the hint is what is reported.
     ("[atom A, : term A int / term A 1]", "T040"),
     ("[term A 1, : atom A / atom A]", "T040"),
+    // A hint around a recursive field is compared without unfolding the
+    // field, so the order with the hint second is refused; see issues.md.
+    ("[: { next: rec L [L] } / { next = [] }, { next = [] }]", "[{ next: rec L [L] }]"),
+    ("[{ next = [] }, : { next: rec L [L] } / { next = [] }]", "T040"),
 ];
 
 #[test]
