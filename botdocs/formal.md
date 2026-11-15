@@ -500,8 +500,8 @@ Four things are proved of it:
 
 - **A datafun expression that checks evaluates to a value of its type**
   (`Fun.evalS_sound`, in `Proofs/EvalSound.lean`, of the evaluator in
-  `FunEval.lean`), so far for every form but calls: literals, variables,
-  places, hints, operators, `?`, `!`, `@`, fields and indexes. Where an expression checks quietly in a context whose
+  `FunEval.lean`), for every form: literals, variables, places, hints,
+  operators, `?`, `!`, `@`, fields, indexes and calls. Where an expression checks quietly in a context whose
   variables hold values of their types, evaluating it gives a value of its
   type (`Lit.HasType`, datalit's), or returns early with a value of the
   function's return type: never an operand of the wrong kind, a checked
@@ -509,7 +509,8 @@ Four things are proved of it:
   function's type does not take, or an index or field read off the wrong
   kind of value. An index with nothing at its key returns early as its `?`
   or `!` says, and a tensor's of rank above one is a slice, of the size its
-  shape says. Calls are not evaluated yet. What an operator does depends on its operands' type, as
+  shape says. A call goes to whatever runs calls, and the theorem holds for
+  any that do what calls may (`CallOk`), below. What an operator does depends on its operands' type, as
   `a +! b` overflows at `u8`'s bounds or `i8`'s, so evaluation follows the
   checker one function for one and takes the types it gives, as a compiled
   program carries them; a comparison's answer, and whether two map keys are
@@ -524,21 +525,46 @@ Four things are proved of it:
   twice, which the parser refuses.
 - **A datafun block that checks keeps its variables at their types**
   (`Fun.execBlock_sound`, in `Proofs/ExecSound.lean`, of the statements run
-  in `FunExec.lean`), for every statement, with calls not run. Where a block
+  in `FunExec.lean`), for every statement. Where a block
   checks quietly in a context with no type parameter's bound, and its
   variables line up with the context's, each that is set holding a value of
   its type (`Agree`), running it leaves its scope's variables so, with more
   bound. Otherwise it breaks or continues inside a loop; or it returns early with a value
   of the return type, or with none from a function that returns nothing.
   It may also stop where the model has not
-  gone: a call; a read of a variable declared with no value, which
+  gone: a call with a `mut` or `out` parameter, or with a type argument
+  that has a `rec` in it; a read of a variable declared with no value, which
   the ownership analysis refuses (O005); a `set` through a tensor's slice; a
   `for` with an index over more elements than `index` counts; and a loop run
-  more often than it was given. As with expressions, running follows the checker
+  more often than it was given, or calls nested deeper than they were given.
+  It breaks only where the block has a `break` of its own (`hasBreak`), and
+  ends normally only where control can reach its end (`completes`). As with expressions, running follows the checker
   one function for one, asking it for the context after each statement, and
   a `match` walks its cases as `checkCases` does, each at one less fuel. A
   scope is a prefix of the variables, so leaving a block drops what it bound
   and keeps what it set.
+- **Calls into a checked program are sound** (`Fun.runCall_ok`, in
+  `Proofs/CallSound.lean`, of `runCall` in `FunCall.lean`). A call runs the
+  function's body as an instance, in the context the check-once theorem
+  checks it in, with its parameters bound to the arguments and the consts in
+  scope to their values; what `ret e` gives is the call's value, and a
+  `ret`, or a body that ends, gives the unit. Where every function's body
+  checks quietly at any ground type arguments its bounds admit, F063
+  included, and its consts' values are of their types (`ProgOk`), calls do
+  what the two theorems above ask of them: give a value of the function's
+  return type, or stop at what is not run yet, at a variable read before it
+  is set, or nested deeper than they were given. A function that returns a
+  value cannot end without `ret`: its body is checked not to complete
+  (F063), and a block that ends normally completes. A body runs outside any
+  loop, so no `break` escapes it. What `ProgOk` asks of a body follows from
+  its declaration checking quietly in a script (`Fun.body_checks`, by the
+  check-once theorem), where the body declares no type alias and its
+  signature's type parameters are its declaration's; that a script's consts
+  hold values of their types is left to running a script, which is next.
+  Calls that write back, through `mut` or `out`, are not run: they make
+  evaluating an expression change variables, which the evaluator would
+  have to thread through.
+
 - **Inference under a generic steps with inference under its instances**
   (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
   arguments touches only known types, so a variable keeps its number, and
@@ -641,9 +667,13 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **Calls.** `Fun.evalS_sound` and `Fun.execBlock_sound` take every
-  expression and statement but calls, which come next. A call runs its
-  function's body with the arguments bound, and returns what `ret e` gives.
+- **Calls that write back, and whole scripts.** A call with a `mut` or
+  `out` parameter stops as unsupported; running it writes into the caller's
+  places, so evaluating an expression changes variables, and the evaluator
+  and its proof would thread them through. Running a script, its top-level
+  statements in order, would give its consts' values and so discharge the
+  rest of `ProgOk`. A call with a recursive type argument stops as well,
+  until the check-once theorem takes one.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

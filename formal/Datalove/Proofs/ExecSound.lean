@@ -1,6 +1,7 @@
 import Datalove.FunExec
 import Datalove.Proofs.EvalSound
 import Datalove.Proofs.InstanceStmt
+import Datalove.Proofs.Completes
 
 /-!
 # A block that checks keeps its variables at their types
@@ -10,10 +11,14 @@ type parameter's bound, with its variables lined up with the context's,
 each that is set holding a value of its type (`Agree`), running it leaves
 them so, or breaks or continues inside a loop, or returns early with a value
 of the function's return type, or with none from a function returning
-nothing; or reaches a call, which is not run yet, or reads a variable before
-it is set, which the ownership analysis refuses, or runs a loop as often as
-it was given. Never an operand of the wrong kind, and never out of fuel. It
-holds for any inference, as `Fun.evalS_sound` does.
+nothing; or reaches what is not run yet, or reads a variable before it is
+set, which the ownership analysis refuses, or runs a loop as often as it
+was given, or calls as deep. Never an operand of the wrong kind, and never
+out of fuel. It holds for any inference, and any calls that are sound
+(`CallOk`), as `Fun.evalS_sound` does. It breaks only where the block has a
+`break` of its own, and ends normally only where control can reach its end
+(`completes`), which is what lets `Proofs/CallSound.lean` show a function
+that returns a value returns one.
 -/
 
 namespace Datalove.Fun
@@ -38,44 +43,59 @@ inductive Fits : List (String × Ty) → List (String × Option Val) → Prop wh
 def Ext (vars : List (String × Ty × Kind)) (ρ : VEnv) : Prop :=
   ∃ δ ρ1, ρ = δ ++ ρ1 ∧ Agree vars ρ1
 
-/-- Why running a checked block may not end normally. -/
-def StopOkS (Γ : Ctx) : Stop → Prop
+/-- Why running a checked block may not end normally: a `break` only where
+`B`, which says the block has one of its own. -/
+def StopOkS (Γ : Ctx) (B : Prop) : Stop → Prop
   | .early r => EarlyOk Γ.ret r
   | .retVoid => Γ.ret = .void
-  | .brk ρ | .cont ρ => Γ.inLoop = true ∧ Ext Γ.vars ρ
+  | .brk ρ => Γ.inLoop = true ∧ Ext Γ.vars ρ ∧ B
+  | .cont ρ => Γ.inLoop = true ∧ Ext Γ.vars ρ
   | .unsupported | .uninit | .diverge => True
   | .fuel | .wrong => False
 
 /-- What running gives meets `P`, or stops as a checked block may. -/
-def SoundS {α} (Γ : Ctx) (P : α → Prop) (m : EvalM α) : Prop :=
+def SoundS {α} (Γ : Ctx) (B : Prop) (P : α → Prop) (m : EvalM α) : Prop :=
   match m with
   | .ok a => P a
-  | .error s => StopOkS Γ s
+  | .error s => StopOkS Γ B s
 
 namespace SoundS
 
-variable {α β : Type} {Γ : Ctx} {P : α → Prop} {Q : β → Prop}
+variable {α β : Type} {Γ : Ctx} {B : Prop} {P : α → Prop} {Q : β → Prop}
 
-theorem pure' {a : α} (h : P a) : SoundS Γ P (Pure.pure a) := h
+theorem pure' {a : α} (h : P a) : SoundS Γ B P (Pure.pure a) := h
 
-theorem bind' {x : EvalM α} {f : α → EvalM β} (hx : SoundS Γ P x) (hf : ∀ a, P a → SoundS Γ Q (f a)) :
-    SoundS Γ Q (x >>= f) := by
+theorem bind' {x : EvalM α} {f : α → EvalM β} (hx : SoundS Γ B P x) (hf : ∀ a, P a → SoundS Γ B Q (f a)) :
+    SoundS Γ B Q (x >>= f) := by
   cases x with
   | error s => exact hx
   | ok a => exact hf a hx
 
-theorem weaken {x : EvalM α} {P' : α → Prop} (h : SoundS Γ P x) (hp : ∀ a, P a → P' a) : SoundS Γ P' x := by
+theorem weaken {x : EvalM α} {P' : α → Prop} (h : SoundS Γ B P x) (hp : ∀ a, P a → P' a) : SoundS Γ B P' x := by
   cases x with
   | error s => exact h
   | ok a => exact hp a h
 
 /-- An expression's soundness, as a statement's. -/
-theorem of_sound {x : EvalM α} (h : Sound Γ.ret P x) : SoundS Γ P x := by
+theorem of_sound {x : EvalM α} (h : Sound Γ.ret P x) : SoundS Γ B P x := by
   cases x with
   | ok a => exact h
   | error s => cases s <;> first | exact h | exact h.elim | trivial
 
+theorem weakenB {x : EvalM α} {B' : Prop} (h : SoundS Γ B P x) (hb : B → B') : SoundS Γ B' P x := by
+  cases x with
+  | ok a => exact h
+  | error s => cases s <;> first | exact h | exact ⟨h.1, h.2.1, hb h.2.2⟩
+
+theorem map' {x : EvalM α} {f : α → β} (hx : SoundS Γ B P x) (hf : ∀ a, P a → Q (f a)) :
+    SoundS Γ B Q (f <$> x) := by
+  cases x with
+  | error s => exact hx
+  | ok a => exact hf a hx
+
 end SoundS
+
+variable {B : Prop}
 
 theorem Agree.length {vars : List (String × Ty × Kind)} {ρ : VEnv} (h : Agree vars ρ) :
     ρ.length = vars.length := by
@@ -534,17 +554,19 @@ theorem finishBinop_quiet {Γ : Ctx} (hb : Γ.bounds = []) {op : BinOp} {t : Ty}
      · exact Quiet.pure _)
 
 section
-variable (env : InferEnv)
+variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallOk sigs call)
+include hcall
+set_option linter.unusedSectionVars false
 
 theorem execSetValue_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {t : Ty} {old : Option Val} {op : Option BinOp}
     {e : Expr} (h : SQuiet (setValue env n Γ t op e) ()) (hold : ∀ v, old = some v → HasType v t)
-    (hb : Γ.bounds = []) (hρ : EnvOk Γ ρ) : Sound Γ.ret (HasType · t) (execSetValue env n Γ ρ t old op e) := by
+    (hb : Γ.Runs sigs) (hρ : EnvOk Γ ρ) : Sound Γ.ret (HasType · t) (execSetValue env call n Γ ρ t old op e) := by
   unfold setValue at h
   cases op with
   | none =>
     obtain ⟨_, hc, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
     obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
-    exact evalC_sound env n Γ ρ e t hc hb hρ
+    exact evalC_sound env sigs call hcall n Γ ρ e t hc hb hρ
   | some op =>
     dsimp only at h
     obtain ⟨_, hc, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
@@ -554,17 +576,17 @@ theorem execSetValue_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {t : Ty} {old : Opti
     rename_i ha
     rw [SQuiet.reportIf_iff] at h
     simp only [execSetValue]
-    refine Sound.bind' (evalC_sound env n _ ρ e t hc hb hρ.borrow) (fun r hr => ?_)
+    refine Sound.bind' (evalC_sound env sigs call hcall n _ ρ e t hc hb hρ.borrow) (fun r hr => ?_)
     cases old with
     | none => trivial
     | some o =>
-      exact binOp_sound hb (finishBinop_quiet hb (by simpa using ha) (by simpa using h)) (hold o rfl) hr
+      exact binOp_sound hb.1 (finishBinop_quiet hb.1 (by simpa using ha) (by simpa using h)) (hold o rfl) hr
 
 theorem execSetIndex_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {t : Ty} {k : Expr} {mode : Option IdxMode}
     {op : Option BinOp} {e : Expr} {old : Option Val} (h : SQuiet (setIndex env n Γ t k mode op e) ())
-    (hold : ∀ v, old = some v → HasType v t) (hb : Γ.bounds = []) (hρ : EnvOk Γ ρ)
+    (hold : ∀ v, old = some v → HasType v t) (hb : Γ.Runs sigs) (hρ : EnvOk Γ ρ)
     (hm : ∀ m, mode = some m → Γ.fitsMode m = true) :
-    Sound Γ.ret (HasType · t) (execSetIndex env n Γ ρ t k mode op e old) := by
+    Sound Γ.ret (HasType · t) (execSetIndex env call n Γ ρ t k mode op e old) := by
   unfold setIndex at h
   cases mode with
   | none =>
@@ -579,8 +601,8 @@ theorem execSetIndex_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {t : Ty} {k : Expr} 
         obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
         obtain ⟨_, -, hv⟩ := SQuiet.chk_inv hv
         simp only [execSetIndex, hx]
-        refine Sound.bind' (evalC_sound env n Γ ρ k kt hk hb hρ) (fun kv hkv => ?_)
-        refine Sound.bind' (evalC_sound env n Γ ρ e vt hv hb hρ) (fun nv hnv => ?_)
+        refine Sound.bind' (evalC_sound env sigs call hcall n Γ ρ k kt hk hb hρ) (fun kv hkv => ?_)
+        refine Sound.bind' (evalC_sound env sigs call hcall n Γ ρ e vt hv hb hρ) (fun nv hnv => ?_)
         cases old with
         | none => trivial
         | some o =>
@@ -603,25 +625,25 @@ theorem execSetIndex_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {t : Ty} {k : Expr} 
       obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => setValue_appends _ _ _ _ _ _) h
       obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
       simp only [execSetIndex, hi, hview, Bool.false_eq_true, ↓reduceIte]
-      refine Sound.bind' (evalC_sound env n Γ ρ k kt hk hb hρ) (fun kv hkv => ?_)
+      refine Sound.bind' (evalC_sound env sigs call hcall n Γ ρ k kt hk hb hρ) (fun kv hkv => ?_)
       cases old with
       | none => trivial
       | some o =>
         refine Sound.bind' (indexVal_sound (hold o rfl) hi hkv (missing_ok (hm m rfl))) (fun part hp => ?_)
-        refine Sound.bind' (execSetValue_sound env h (fun v hv => by cases hv; exact hp) hb hρ) (fun w hw => ?_)
+        refine Sound.bind' (execSetValue_sound env sigs call hcall h (fun v hv => by cases hv; exact hp) hb hρ) (fun w hw => ?_)
         exact putIndex_sound (hold o rfl) hi hkv hw
 
 theorem execSetSteps_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {op : Option BinOp} {e : Expr}
-    (hb : Γ.bounds = []) (hρ : EnvOk Γ ρ) :
+    (hb : Γ.Runs sigs) (hρ : EnvOk Γ ρ) :
     ∀ (t : Ty) (old : Option Val) (steps : List Step), SQuiet (setSteps env n Γ t op e steps) () →
       (∀ v, old = some v → HasType v t) → (∀ k m, Step.index k (some m) ∈ steps → Γ.fitsMode m = true) →
-      Sound Γ.ret (HasType · t) (execSetSteps env n Γ ρ op e t old steps)
+      Sound Γ.ret (HasType · t) (execSetSteps env call n Γ ρ op e t old steps)
   | t, old, [], h, hold, _ => by
     simp only [setSteps] at h; simp only [execSetSteps]
-    exact execSetValue_sound env h hold hb hρ
+    exact execSetValue_sound env sigs call hcall h hold hb hρ
   | t, old, [.index k mode], h, hold, hm => by
     simp only [setSteps] at h; simp only [execSetSteps]
-    exact execSetIndex_sound env h hold hb hρ (fun m e => hm k m (by simp [e]))
+    exact execSetIndex_sound env sigs call hcall h hold hb hρ (fun m e => hm k m (by simp [e]))
   | t, old, .field s :: rest, h, hold, hm => by
     simp only [setSteps] at h
     split at h
@@ -644,7 +666,7 @@ theorem execSetSteps_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {op : Option BinOp} 
     obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => setSteps_appends _ _ _ _ _ _ _) h
     obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
     simp only [execSetSteps, hi]
-    refine Sound.bind' (evalC_sound env n Γ ρ k kt hk hb hρ) (fun kv hkv => ?_)
+    refine Sound.bind' (evalC_sound env sigs call hcall n Γ ρ k kt hk hb hρ) (fun kv hkv => ?_)
     cases old with
     | none => trivial
     | some v =>
@@ -658,19 +680,25 @@ end
 /-! ## Statements' contexts -/
 
 /-- What a statement's context keeps of the one before it: the return type,
-whether it is in a loop, the bounds, and the variables, with more bound. -/
+whether it is in a loop, the bounds, the functions, and the variables, with
+more bound. -/
 def Grows (Γ Γ' : Ctx) : Prop :=
-  Γ'.ret = Γ.ret ∧ Γ'.inLoop = Γ.inLoop ∧ Γ'.bounds = Γ.bounds ∧ ∃ D, Γ'.vars = D ++ Γ.vars
+  Γ'.ret = Γ.ret ∧ Γ'.inLoop = Γ.inLoop ∧ Γ'.bounds = Γ.bounds ∧ Γ'.sigs = Γ.sigs ∧
+    ∃ D, Γ'.vars = D ++ Γ.vars
 
-theorem Grows.refl (Γ : Ctx) : Grows Γ Γ := ⟨rfl, rfl, rfl, [], rfl⟩
+theorem Grows.refl (Γ : Ctx) : Grows Γ Γ := ⟨rfl, rfl, rfl, rfl, [], rfl⟩
 
 theorem Grows.trans {Γ Γ1 Γ2 : Ctx} (h1 : Grows Γ Γ1) (h2 : Grows Γ1 Γ2) : Grows Γ Γ2 := by
-  obtain ⟨r1, l1, b1, D1, v1⟩ := h1
-  obtain ⟨r2, l2, b2, D2, v2⟩ := h2
-  exact ⟨r2.trans r1, l2.trans l1, b2.trans b1, D2 ++ D1, by rw [v2, v1, List.append_assoc]⟩
+  obtain ⟨r1, l1, b1, s1, D1, v1⟩ := h1
+  obtain ⟨r2, l2, b2, s2, D2, v2⟩ := h2
+  exact ⟨r2.trans r1, l2.trans l1, b2.trans b1, s2.trans s1, D2 ++ D1, by rw [v2, v1, List.append_assoc]⟩
 
 theorem Grows.bind (Γ : Ctx) (x : String) (t : Ty) (k : Kind) : Grows Γ (Γ.bind x t k) :=
-  ⟨rfl, rfl, rfl, [(x, t, k)], rfl⟩
+  ⟨rfl, rfl, rfl, rfl, [(x, t, k)], rfl⟩
+
+theorem Grows.runs {sigs : List (String × Sig)} {Γ Γ' : Ctx} (g : Grows Γ Γ') (h : Γ.Runs sigs) :
+    Γ'.Runs sigs :=
+  ⟨g.2.2.1.trans h.1, g.2.2.2.1.trans h.2⟩
 
 theorem Grows.bindAllAs (Γ : Ctx) (k : Kind) : ∀ (Δ : List (String × Ty)), Grows Γ (Γ.bindAllAs Δ k)
   | [] => Grows.refl Γ
@@ -683,17 +711,17 @@ theorem Grows.bindOpt (Γ : Ctx) (x : Option String) (t : Ty) : Grows Γ (Fun.bi
 
 theorem bindAll_eq (Γ : Ctx) (Δ : List (String × Ty)) : Γ.bindAll Δ = Γ.bindAllAs Δ .let_ := rfl
 
-theorem StopOkS.lift {Γ Γ' : Ctx} (g : Grows Γ Γ') {s : Stop} (h : StopOkS Γ' s) : StopOkS Γ s := by
-  obtain ⟨hr, hl, -, D, hv⟩ := g
+theorem StopOkS.lift {Γ Γ' : Ctx} (g : Grows Γ Γ') {s : Stop} (h : StopOkS Γ' B s) : StopOkS Γ B s := by
+  obtain ⟨hr, hl, -, -, D, hv⟩ := g
   cases s with
   | early r => show EarlyOk Γ.ret r; rw [← hr]; exact h
   | retVoid => show Γ.ret = .void; rw [← hr]; exact h
-  | brk ρ => exact ⟨by rw [← hl]; exact h.1, Ext.of_append (hv ▸ h.2)⟩
+  | brk ρ => exact ⟨by rw [← hl]; exact h.1, Ext.of_append (hv ▸ h.2.1), h.2.2⟩
   | cont ρ => exact ⟨by rw [← hl]; exact h.1, Ext.of_append (hv ▸ h.2)⟩
   | _ => exact h
 
-theorem SoundS.lift {α} {Γ Γ' : Ctx} {P : α → Prop} {m : EvalM α} (g : Grows Γ Γ') (h : SoundS Γ' P m) :
-    SoundS Γ P m := by
+theorem SoundS.lift {α} {Γ Γ' : Ctx} {P : α → Prop} {m : EvalM α} (g : Grows Γ Γ') (h : SoundS Γ' B P m) :
+    SoundS Γ B P m := by
   cases m with
   | ok a => exact h
   | error s => exact StopOkS.lift g h
@@ -727,18 +755,20 @@ theorem bindPat_sound {Γ : Ctx} {p : Pat} {t : Ty} {k : Kind} {Γ' : Ctx} (h : 
 /-- Binding a pattern to a value of the type it takes apart. -/
 theorem bindPat_vals {Γ : Ctx} {ρ : VEnv} (hρ : Agree Γ.vars ρ) {p : Pat} {t : Ty} {k : Kind} {Δ : List (String × Ty)}
     (hp : patBindings p t = .ok Δ) {v : Val} (hv : HasType v t) :
-    SoundS Γ (Agree (Γ.bindAllAs Δ k).vars)
+    SoundS Γ B (Agree (Γ.bindAllAs Δ k).vars)
       (patValues p v >>= fun vals => pure (bindVals ρ (vals.map fun (x, w) => (x, some w)))) := by
   obtain ⟨vals, he, hf⟩ := patValues_fits hp hv
   rw [he]
   exact bindAllAs_agree hρ k hf
 
 section
-variable (env : InferEnv)
+variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallOk sigs call)
+include hcall
+set_option linter.unusedSectionVars false
 
 theorem bindChecked_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {p : Pat} {hint : Option Hint} {e : Expr} {k : Kind}
-    {Γ' : Ctx} (h : SQuiet (bindChecked env n Γ p hint e k) Γ') (hb : Γ.bounds = []) (hρ : Agree Γ.vars ρ) :
-    SoundS Γ (Agree Γ'.vars) (execBind env n Γ ρ p hint e) ∧ Grows Γ Γ' := by
+    {Γ' : Ctx} (h : SQuiet (bindChecked env n Γ p hint e k) Γ') (hb : Γ.Runs sigs) (hρ : Agree Γ.vars ρ) :
+    SoundS Γ B (Agree Γ'.vars) (execBind env call n Γ ρ p hint e) ∧ Grows Γ Γ' := by
   cases hint with
   | some hh =>
     simp only [bindChecked, convertReporting] at h
@@ -753,7 +783,7 @@ theorem bindChecked_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {p : Pat} {hint : Opt
     obtain ⟨Δ, hp, rfl⟩ := bindPat_sound h
     refine ⟨?_, Grows.bindAllAs Γ k Δ⟩
     simp only [execBind, hq]
-    exact SoundS.bind' (SoundS.of_sound (evalC_sound env n Γ ρ e t hc hb hρ.envOk))
+    exact SoundS.bind' (SoundS.of_sound (evalC_sound env sigs call hcall n Γ ρ e t hc hb hρ.envOk))
       (fun v hv => bindPat_vals hρ hp hv)
   | none =>
     simp only [bindChecked] at h
@@ -762,7 +792,7 @@ theorem bindChecked_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {p : Pat} {hint : Opt
     obtain ⟨Δ, hp, rfl⟩ := bindPat_sound h
     refine ⟨?_, Grows.bindAllAs Γ k Δ⟩
     simp only [execBind]
-    exact SoundS.bind' (SoundS.of_sound (evalS_sound env n Γ ρ e t hq hb hρ.envOk))
+    exact SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n Γ ρ e t hq hb hρ.envOk))
       (fun v hv => bindPat_vals hρ hp hv)
 
 end
@@ -851,11 +881,13 @@ theorem reportModes_fits {Γ : Ctx} : ∀ {ms : List IdxMode}, SQuiet (reportMod
     · exact reportModes_fits h m e
 
 section
-variable (env : InferEnv)
+variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallOk sigs call)
+include hcall
+set_option linter.unusedSectionVars false
 
 theorem execSet_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {x : String} {steps : List Step} {op : Option BinOp}
-    {e : Expr} (h : SQuiet (checkSet env n Γ x steps op e) ()) (hb : Γ.bounds = []) (hρ : Agree Γ.vars ρ) :
-    SoundS Γ (Agree Γ.vars) (execSet env n Γ ρ x steps op e) := by
+    {e : Expr} (h : SQuiet (checkSet env n Γ x steps op e) ()) (hb : Γ.Runs sigs) (hρ : Agree Γ.vars ρ) :
+    SoundS Γ B (Agree Γ.vars) (execSet env call n Γ ρ x steps op e) := by
   unfold checkSet at h
   cases hl : Γ.lookup x with
   | none => simp only [hl] at h; simp at h
@@ -867,13 +899,13 @@ theorem execSet_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {x : String} {steps : Lis
     obtain ⟨_, h2, h⟩ := SQuiet.bind_inv (fun _ => setSteps_appends _ _ _ _ _ _ _) h
     obtain ⟨o, ho, hot⟩ := hρ.lookup x t k hl
     simp only [execSet, hl, ho]
-    refine SoundS.bind' (SoundS.of_sound (execSetSteps_sound env hb hρ.envOk t o steps h hot
+    refine SoundS.bind' (SoundS.of_sound (execSetSteps_sound env sigs call hcall hb hρ.envOk t o steps h hot
       (fun k m hk => reportModes_fits h2 m (setModes_mem steps [] m (.inr ⟨k, hk⟩))))) (fun w hw => ?_)
     exact setVar_agree hρ hl hw
 
 theorem execRet_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {e : Option Expr} {P : VEnv → Prop}
-    (h : SQuiet (checkRet env n Γ e) ()) (hb : Γ.bounds = []) (hρ : Agree Γ.vars ρ) :
-    SoundS Γ P (execRet env n Γ ρ e) := by
+    (h : SQuiet (checkRet env n Γ e) ()) (hb : Γ.Runs sigs) (hρ : Agree Γ.vars ρ) :
+    SoundS Γ B P (execRet env call n Γ ρ e) := by
   unfold checkRet at h
   cases hr : Γ.ret <;> cases e <;> simp only [hr] at h
   · simp only [execRet, hr]; exact hr
@@ -883,21 +915,21 @@ theorem execRet_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {e : Option Expr} {P : VE
     obtain ⟨_, hc, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
     obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
     simp only [execRet, hr]
-    exact SoundS.bind' (SoundS.of_sound (evalC_sound env n Γ ρ e t hc hb hρ.envOk))
+    exact SoundS.bind' (SoundS.of_sound (evalC_sound env sigs call hcall n Γ ρ e t hc hb hρ.envOk))
       (fun v hv => ⟨t, hr, hv⟩)
 
 end
 
-theorem execLoop_sound {Γ : Ctx} {cond : VEnv → EvalM Bool} {body : VEnv → EvalM VEnv}
-    (hc : ∀ ρ, Agree Γ.vars ρ → SoundS Γ (fun _ => True) (cond ρ))
-    (hb : ∀ ρ, Agree Γ.vars ρ → SoundS { Γ with inLoop := true } (Ext Γ.vars) (body ρ)) :
-    ∀ k ρ, Agree Γ.vars ρ → SoundS Γ (Agree Γ.vars) (execLoop cond body k ρ)
+theorem execLoop_sound {Γ : Ctx} {Bb Q : Prop} {cond : VEnv → EvalM Bool} {body : VEnv → EvalM VEnv}
+    (hc : ∀ ρ, Agree Γ.vars ρ → SoundS Γ False (fun b => b = false → Q) (cond ρ))
+    (hb : ∀ ρ, Agree Γ.vars ρ → SoundS { Γ with inLoop := true } Bb (Ext Γ.vars) (body ρ)) :
+    ∀ k ρ, Agree Γ.vars ρ → SoundS Γ B (fun ρ' => Agree Γ.vars ρ' ∧ (Q ∨ Bb)) (execLoop cond body k ρ)
   | 0, _, _ => trivial
   | k + 1, ρ, hρ => by
     rw [execLoop]
-    refine SoundS.bind' (hc ρ hρ) (fun c _ => ?_)
+    refine SoundS.bind' ((hc ρ hρ).weakenB False.elim) (fun c hq => ?_)
     cases c
-    · exact hρ
+    · exact ⟨hρ, .inl (hq rfl)⟩
     · have hbody := hb ρ hρ
       simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte]
       generalize body ρ = r at hbody ⊢
@@ -905,15 +937,16 @@ theorem execLoop_sound {Γ : Ctx} {cond : VEnv → EvalM Bool} {body : VEnv → 
       | ok ρ' => exact execLoop_sound hc hb k _ (restore_agree hρ hbody)
       | error s =>
         cases s with
-        | brk ρ' => exact restore_agree hρ hbody.2
+        | brk ρ' => exact ⟨restore_agree hρ hbody.2.1, .inr hbody.2.2⟩
         | cont ρ' => exact execLoop_sound hc hb k _ (restore_agree hρ hbody.2)
         | _ => exact hbody
 
-theorem execFor_sound {Γ : Ctx} {Δ : List (String × Ty)} {body : VEnv → EvalM VEnv} {names : List String}
+theorem execFor_sound {Γ : Ctx} {Bb : Prop} {Δ : List (String × Ty)} {body : VEnv → EvalM VEnv}
+    {names : List String}
     (hb : ∀ ρ vals, Agree Γ.vars ρ → Fits Δ vals →
-      SoundS { Γ with inLoop := true } (Ext Γ.vars) (body (bindVals ρ vals))) :
+      SoundS { Γ with inLoop := true } Bb (Ext Γ.vars) (body (bindVals ρ vals))) :
     ∀ (items : List (List Val)), (∀ item ∈ items, Fits Δ ((names.zip item).map fun (x, w) => (x, some w))) →
-      ∀ ρ, Agree Γ.vars ρ → SoundS Γ (Agree Γ.vars) (execFor body names items ρ)
+      ∀ ρ, Agree Γ.vars ρ → SoundS Γ B (Agree Γ.vars) (execFor body names items ρ)
   | [], _, _, hρ => hρ
   | item :: rest, hi, ρ, hρ => by
     rw [execFor]
@@ -924,26 +957,50 @@ theorem execFor_sound {Γ : Ctx} {Δ : List (String × Ty)} {body : VEnv → Eva
     | ok ρ' => exact hrest _ (restore_agree hρ hbody)
     | error s =>
       cases s with
-      | brk ρ' => exact restore_agree hρ hbody.2
+      | brk ρ' => exact restore_agree hρ hbody.2.1
       | cont ρ' => exact hrest _ (restore_agree hρ hbody.2)
       | _ => exact hbody
 
 theorem typeOf_pure {m : ChkM Ty} {t : Ty} (h : Quiet m t) : typeOf m = pure t := typeOf_quiet h
 
 theorem Ext.of_grows {Γ Γ' : Ctx} (g : Grows Γ Γ') {ρ : VEnv} (h : Ext Γ'.vars ρ) : Ext Γ.vars ρ := by
-  obtain ⟨-, -, -, D, hv⟩ := g
+  obtain ⟨-, -, -, -, D, hv⟩ := g
   rw [hv] at h
   exact Ext.of_append h
 
-theorem SoundS.map' {α β} {Γ : Ctx} {P : α → Prop} {Q : β → Prop} {x : EvalM α} {f : α → β}
-    (hx : SoundS Γ P x) (hf : ∀ a, P a → Q (f a)) : SoundS Γ Q (f <$> x) := by
-  cases x with
-  | error s => exact hx
-  | ok a => exact hf a hx
+/-! ## What reaches the end, and what breaks -/
+
+theorem casesBreak_of_mem' {c : Case} {cs : List Case} (h : casesBreak cs = true) :
+    casesBreak (c :: cs) = true := by
+  cases c <;> simp [casesBreak, h]
+
+theorem if_completes_then {c : Expr} {a b : Option String} {t : List Stmt} {e : Option (List Stmt)}
+    (h : completes t = true) : completesS (.if_ c a b t e) = true := by
+  cases e <;> simp [completesS, h]
+
+theorem if_completes_else {c : Expr} {a b : Option String} {t : List Stmt} {e : Option (List Stmt)}
+    (h : e = none ∨ completesElse e = true) : completesS (.if_ c a b t e) = true := by
+  rcases h with rfl | h
+  · simp [completesS]
+  · cases e <;> simp_all [completesS, completesElse]
+
+theorem lookup_some_mem {α β} [BEq α] [LawfulBEq α] {a : α} {b : β} :
+    ∀ {l : List (α × β)}, l.lookup a = some b → (a, b) ∈ l
+  | [], h => by simp at h
+  | (x, y) :: l, h => by
+    simp only [List.lookup] at h
+    split at h
+    · rename_i e; simp only [beq_iff_eq] at e; subst e; simp only [Option.some.injEq] at h; subst h; simp
+    · exact List.mem_cons_of_mem _ (lookup_some_mem h)
 
 section
-variable (env : InferEnv)
+variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallOk sigs call)
+include hcall
+-- The mutual theorems use `hcall` through one another and the expression
+-- theorems, which the linter does not follow.
+set_option linter.unusedSectionVars false
 
+omit hcall in
 theorem forBindings_sound {n : Nat} {Γ : Ctx} {names : List String} {coll : Expr}
     {r0 : Option (List (String × Ty))} (h : SQuiet (forBindings env n Γ names coll) r0) :
     ∃ Δ t, r0 = some Δ ∧ Quiet (synthF env n Γ.borrow coll) t ∧ walk t.expose names = .ok Δ := by
@@ -955,28 +1012,51 @@ theorem forBindings_sound {n : Nat} {Γ : Ctx} {names : List String} {coll : Exp
     exact ⟨Δ, t, rfl, ht, hw⟩
   · exact (SQuiet.push_bind (fun _ => Appends.pure _) h).elim
 
+omit hcall in
+/-- The names a `match`'s cases cover, as `checkCases` gives them. -/
+theorem checkCases_cov : ∀ (n : Nat) (Γ : Ctx) (vs : List (String × Option Ty)) (cs : List Case)
+    (cov cov' : List String), SQuiet (checkCases env n Γ vs cs cov) cov' → cov' = cov ++ cs.map (·.name)
+  | 0, _, _, _, _, _, h => by
+    rw [checkCases.eq_def] at h; exact (SQuiet.push_bind (fun _ => Appends.pure _) h).elim
+  | _ + 1, _, _, [], cov, cov', h => by
+    rw [checkCases.eq_def] at h; simp only [SQuiet.pure_iff] at h; simp [h]
+  | n + 1, Γ, vs, c :: cs, cov, cov', h => by
+    rw [checkCases.eq_def] at h
+    dsimp only at h
+    split at h
+    · exact (SQuiet.push_bind (by app_cont env n) h).elim
+    obtain ⟨_, -, h⟩ := SQuiet.bind_inv (by app_cont env n) h
+    rw [checkCases_cov n Γ vs cs _ cov' h]
+    simp
+
 mutual
 
 /-- A statement that checks runs soundly, into the context the checker gives
-after it. -/
+after it: it breaks only if it has a `break` of its own, and ends normally
+only if control can reach its end. -/
 theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' : Ctx),
-    SQuiet (checkStmtF env n Γ s) Γ' → Γ.bounds = [] → Agree Γ.vars ρ →
-    SoundS Γ (Agree Γ'.vars) (execStmt env n k Γ ρ s) ∧ Grows Γ Γ'
+    SQuiet (checkStmtF env n Γ s) Γ' → Γ.Runs sigs → Agree Γ.vars ρ →
+    SoundS Γ (hasBreakS s = true) (fun ρ' => Agree Γ'.vars ρ' ∧ completesS s = true)
+      (execStmt env call n k Γ ρ s) ∧ Grows Γ Γ'
   | 0, _, _, _, _, _, h, _, _ => by
     simp only [checkStmtF] at h; exact (SQuiet.push_bind (fun _ => Appends.pure _) h).elim
   | n + 1, k, Γ, ρ, s, Γ', h, hb, hρ => by
     cases s
     case let_ p hint e =>
       simp only [checkStmtF] at h; simp only [execStmt]
-      exact bindChecked_sound env h hb hρ
+      obtain ⟨h1, g⟩ := bindChecked_sound env sigs call hcall h hb hρ
+      exact ⟨h1.weaken (fun _ h => ⟨h, rfl⟩), g⟩
     case var_ p hint v =>
       cases v with
-      | some e => simp only [checkStmtF] at h; simp only [execStmt]; exact bindChecked_sound env h hb hρ
+      | some e =>
+        simp only [checkStmtF] at h; simp only [execStmt]
+        obtain ⟨h1, g⟩ := bindChecked_sound env sigs call hcall h hb hρ
+        exact ⟨h1.weaken (fun _ h => ⟨h, rfl⟩), g⟩
       | none =>
         cases hint with
         | none =>
           simp only [checkStmtF, SQuiet.pure_iff] at h; subst h; simp only [execStmt]
-          exact ⟨hρ, Grows.refl Γ⟩
+          exact ⟨⟨hρ, rfl⟩, Grows.refl Γ⟩
         | some hh =>
           simp only [checkStmtF, convertReporting] at h
           obtain ⟨rt, hrt, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
@@ -986,23 +1066,30 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
           obtain ⟨_, -, h⟩ := SQuiet.bind_inv (fun _ => bindPat_appends _ _ _ _) h
           obtain ⟨Δ, hp, rfl⟩ := bindPat_sound h
           simp only [execStmt, hq, hp]
-          exact ⟨bindAllAs_agree hρ _ (fits_none Δ), Grows.bindAllAs Γ _ Δ⟩
+          exact ⟨⟨bindAllAs_agree hρ _ (fits_none Δ), rfl⟩, Grows.bindAllAs Γ _ Δ⟩
     case set_ x steps op e =>
       simp only [checkStmtF] at h
       obtain ⟨_, hs, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
       rw [SQuiet.pure_iff] at h; subst h
       simp only [execStmt]
-      exact ⟨execSet_sound env hs hb hρ, Grows.refl Γ⟩
+      exact ⟨(execSet_sound env sigs call hcall hs hb hρ).weaken (fun _ h => ⟨h, rfl⟩), Grows.refl Γ⟩
     case fun_ f =>
       simp only [checkStmtF, SQuiet.pure_iff] at h; subst h; simp only [execStmt]
-      exact ⟨hρ, Grows.refl Γ⟩
+      exact ⟨⟨hρ, rfl⟩, Grows.refl Γ⟩
     case ret e =>
       simp only [checkStmtF] at h
       obtain ⟨_, hs, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
       rw [SQuiet.pure_iff] at h; subst h
       simp only [execStmt]
-      exact ⟨execRet_sound env hs hb hρ, Grows.refl Γ⟩
-    case brk | cont =>
+      exact ⟨execRet_sound env sigs call hcall hs hb hρ, Grows.refl Γ⟩
+    case brk =>
+      simp only [checkStmtF] at h
+      obtain ⟨_, h1, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
+      rw [SQuiet.pure_iff] at h; subst h
+      rw [SQuiet.reportIf_iff] at h1
+      simp only [execStmt]
+      exact ⟨⟨by simpa using h1, Ext.of_agree hρ, rfl⟩, Grows.refl Γ⟩
+    case cont =>
       simp only [checkStmtF] at h
       obtain ⟨_, h1, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
       rw [SQuiet.pure_iff] at h; subst h
@@ -1015,8 +1102,8 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
       rw [SQuiet.pure_iff] at h; subst h
       obtain ⟨t, rfl, hq⟩ := SQuiet.chk_inv h1
       simp only [execStmt]
-      exact ⟨SoundS.bind' (SoundS.of_sound (evalS_sound env n _ ρ e t hq hb hρ.envOk.borrow))
-        (fun _ _ => hρ), Grows.refl Γ⟩
+      exact ⟨SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n _ ρ e t hq hb hρ.envOk.borrow))
+        (fun _ _ => ⟨hρ, rfl⟩), Grows.refl Γ⟩
     case call e =>
       simp only [checkStmtF] at h
       obtain ⟨_, h1, h⟩ := SQuiet.bind_inv (by app_cont env n) h
@@ -1025,21 +1112,23 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
       obtain ⟨_, -, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
       rw [SQuiet.pure_iff] at h; subst h
       simp only [execStmt]
-      exact ⟨SoundS.bind' (SoundS.of_sound (evalS_sound env n Γ ρ e t hq hb hρ.envOk))
-        (fun _ _ => hρ), Grows.refl Γ⟩
+      exact ⟨SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n Γ ρ e t hq hb hρ.envOk))
+        (fun _ _ => ⟨hρ, rfl⟩), Grows.refl Γ⟩
     case const_ x hint e =>
       simp only [checkStmtF] at h
       obtain ⟨Γ1, hb1, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
       obtain ⟨_, -, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
       rw [SQuiet.pure_iff] at h; subst h
-      obtain ⟨hs, g⟩ := bindChecked_sound env (Γ := { Γ with constExpr := true }) hb1 hb hρ
+      obtain ⟨hs, g⟩ := bindChecked_sound env sigs call hcall (Γ := { Γ with constExpr := true }) hb1 hb hρ
       simp only [execStmt]
       refine ⟨?_, g⟩
-      first | exact hs | exact SoundS.bind' hs (fun _ h' => h')
+      first
+        | exact hs.weaken (fun _ h => ⟨h, rfl⟩)
+        | exact SoundS.bind' hs (fun _ h' => ⟨h', rfl⟩)
     case type_ x hh =>
       simp only [checkStmtF, SQuiet.pure_iff] at h; subst h
       simp only [execStmt]
-      split <;> exact ⟨hρ, Grows.refl Γ⟩
+      split <;> exact ⟨⟨hρ, rfl⟩, Grows.refl Γ⟩
     case loop c body =>
       cases c with
       | none =>
@@ -1048,8 +1137,13 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
         obtain ⟨_, hbody, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
         rw [SQuiet.pure_iff] at h; subst h
         simp only [execStmt]
-        exact ⟨execLoop_sound (fun _ _ => SoundS.pure' (P := fun _ => True) trivial)
-          (fun ρ hρ => execBlock_sound n k { Γ with inLoop := true } ρ body hbody hb hρ) k ρ hρ, Grows.refl Γ⟩
+        refine ⟨(execLoop_sound (Γ := Γ) (Q := False)
+          (fun _ _ => SoundS.pure' (P := fun b => b = false → False) (fun e => by cases e))
+          (fun ρ hρ => (execBlock_sound n k { Γ with inLoop := true } ρ body hbody hb hρ).weaken
+            (fun _ h => h.1)) k ρ hρ).weaken (fun _ h => ⟨h.1, ?_⟩), Grows.refl Γ⟩
+        rcases h.2 with h | h
+        · exact h.elim
+        · simpa [completesS] using h
       | some c =>
         simp only [checkStmtF] at h
         obtain ⟨_, hc, h⟩ := SQuiet.bind_inv (by app_cont env n) h
@@ -1058,11 +1152,12 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
         obtain ⟨_, hc, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) hc
         obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
         simp only [execStmt]
-        refine ⟨execLoop_sound (fun ρ hρ => SoundS.bind' (SoundS.of_sound
-            (evalC_sound env n Γ ρ c .bool hc hb hρ.envOk)) (fun v hv => ?_))
-          (fun ρ hρ => execBlock_sound n k { Γ with inLoop := true } ρ body hbody hb hρ) k ρ hρ, Grows.refl Γ⟩
+        refine ⟨(execLoop_sound (Γ := Γ) (Q := True) (fun ρ hρ => SoundS.bind' (SoundS.of_sound
+            (evalC_sound env sigs call hcall n Γ ρ c .bool hc hb hρ.envOk)) (fun v hv => ?_))
+          (fun ρ hρ => (execBlock_sound n k { Γ with inLoop := true } ρ body hbody hb hρ).weaken
+            (fun _ h => h.1)) k ρ hρ).weaken (fun _ h => ⟨h.1, rfl⟩), Grows.refl Γ⟩
         obtain ⟨b, rfl⟩ := hv.bool_inv
-        trivial
+        exact SoundS.pure' (fun _ => trivial)
     case if_ c a b t e =>
       cases a <;> cases b
       case none.none =>
@@ -1073,15 +1168,17 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
         rw [SQuiet.pure_iff] at h; subst h
         obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
         simp only [execStmt]
-        refine ⟨SoundS.bind' (SoundS.of_sound (evalC_sound env n Γ ρ c .bool hc hb hρ.envOk))
+        refine ⟨SoundS.bind' (SoundS.of_sound (evalC_sound env sigs call hcall n Γ ρ c .bool hc hb hρ.envOk))
           (fun v hv => ?_), Grows.refl Γ⟩
         obtain ⟨b, rfl⟩ := hv.bool_inv
         simp only [boolOf, pure_bind]
         cases b
         · simp only [Bool.false_eq_true, ↓reduceIte]
-          exact execElse_sound n k Γ ρ e he hb hρ
+          exact ((execElse_sound n k Γ ρ e he hb hρ).weakenB (fun h => by simp [hasBreakS, h])).weaken
+            (fun _ h => ⟨h.1, if_completes_else h.2⟩)
         · simp only [↓reduceIte]
-          exact SoundS.bind' (execBlock_sound n k Γ ρ t ht hb hρ) (fun ρ' h' => restore_agree hρ h')
+          exact SoundS.bind' ((execBlock_sound n k Γ ρ t ht hb hρ).weakenB (fun h => by simp [hasBreakS, h]))
+            (fun ρ' h' => ⟨restore_agree hρ h'.1, if_completes_then h'.2⟩)
       all_goals
         simp only [checkStmtF] at h
         obtain ⟨_, hc, h⟩ := SQuiet.bind_inv (by app_cont env n) h
@@ -1091,7 +1188,8 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
         rw [SQuiet.pure_iff] at h; subst h
         refine ⟨?_, Grows.refl Γ⟩
         simp only [execStmt, typeOf_pure hq, pure_bind]
-        refine SoundS.bind' (SoundS.of_sound (evalS_sound env n Γ ρ c ct hq hb hρ.envOk)) (fun v hv => ?_)
+        refine SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n Γ ρ c ct hq hb hρ.envOk))
+          (fun v hv => ?_)
         have hve := hv.expose
         try dsimp only at hm
         split at hm
@@ -1101,11 +1199,14 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
           obtain ⟨_, -, he⟩ := SQuiet.bind_inv (by app_cont env n) hm
           rcases hve.option_inv with rfl | ⟨w, rfl, hw⟩
           · simp only [hp]
-            exact execElse_sound n k Γ ρ e he hb hρ
+            exact ((execElse_sound n k Γ ρ e he hb hρ).weakenB (fun h => by simp [hasBreakS, h])).weaken
+              (fun _ h => ⟨h.1, if_completes_else h.2⟩)
           · simp only [hp]
-            exact SoundS.bind' (SoundS.lift (Grows.bindOpt Γ _ p) (execBlock_sound n k _ _ t hbt
-              ((Grows.bindOpt Γ _ p).2.2.1.trans hb) (bindOpt_agree hρ _ hw)))
-              (fun ρ' h' => restore_agree hρ (Ext.of_grows (Grows.bindOpt Γ _ p) h'))
+            exact SoundS.bind' ((SoundS.lift (Grows.bindOpt Γ _ p) (execBlock_sound n k _ _ t hbt
+              ((Grows.bindOpt Γ _ p).runs hb) (bindOpt_agree hρ _ hw))).weakenB
+                (fun h => by simp [hasBreakS, h]))
+              (fun ρ' h' => ⟨restore_agree hρ (Ext.of_grows (Grows.bindOpt Γ _ p) h'.1),
+                if_completes_then h'.2⟩)
         · rename_i p hp
           rw [hp] at hve
           try dsimp only at hm
@@ -1114,13 +1215,17 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
           obtain ⟨_, hbt, he⟩ := SQuiet.bind_inv (by app_cont env n) hm
           rcases hve.result_inv with ⟨w, rfl, hw⟩ | ⟨w, rfl, hw⟩
           · simp only [hp]
-            exact SoundS.bind' (SoundS.lift (Grows.bindOpt Γ _ p) (execBlock_sound n k _ _ t hbt
-              ((Grows.bindOpt Γ _ p).2.2.1.trans hb) (bindOpt_agree hρ _ hw)))
-              (fun ρ' h' => restore_agree hρ (Ext.of_grows (Grows.bindOpt Γ _ p) h'))
+            exact SoundS.bind' ((SoundS.lift (Grows.bindOpt Γ _ p) (execBlock_sound n k _ _ t hbt
+              ((Grows.bindOpt Γ _ p).runs hb) (bindOpt_agree hρ _ hw))).weakenB
+                (fun h => by simp [hasBreakS, h]))
+              (fun ρ' h' => ⟨restore_agree hρ (Ext.of_grows (Grows.bindOpt Γ _ p) h'.1),
+                if_completes_then h'.2⟩)
           · simp only [hp]
-            exact SoundS.bind' (SoundS.lift (Grows.bindOpt Γ _ .error) (execElse_sound n k _ _ e he
-              ((Grows.bindOpt Γ _ .error).2.2.1.trans hb) (bindOpt_agree hρ _ hw)))
-              (fun ρ' h' => restore_agree hρ (Ext.of_grows (Grows.bindOpt Γ _ .error) (Ext.of_agree h')))
+            exact SoundS.bind' ((SoundS.lift (Grows.bindOpt Γ _ .error) (execElse_sound n k _ _ e he
+              ((Grows.bindOpt Γ _ .error).runs hb) (bindOpt_agree hρ _ hw))).weakenB
+                (fun h => by simp [hasBreakS, h]))
+              (fun ρ' h' => ⟨restore_agree hρ (Ext.of_grows (Grows.bindOpt Γ _ .error) (Ext.of_agree h'.1)),
+                if_completes_else h'.2⟩)
         · simp at hm
     case match_ e cs dflt =>
       simp only [checkStmtF] at h
@@ -1131,28 +1236,49 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
       rw [SQuiet.pure_iff] at h; subst h
       refine ⟨?_, Grows.refl Γ⟩
       simp only [execStmt, typeOf_pure hq, pure_bind]
-      refine SoundS.bind' (SoundS.of_sound (evalS_sound env n Γ ρ e t hq hb hρ.envOk)) (fun v hv => ?_)
+      refine SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n Γ ρ e t hq hb hρ.envOk))
+        (fun v hv => ?_)
       try dsimp only at hm
       split at hm
       · rename_i vs hvs
         try dsimp only at hm
         obtain ⟨cov, hcs, hm⟩ := SQuiet.bind_inv (by app_cont env n) hm
-        obtain ⟨_, hd, -⟩ := SQuiet.bind_inv (by app_cont env n) hm
+        obtain ⟨_, hd, h100⟩ := SQuiet.bind_inv (by app_cont env n) hm
+        rw [SQuiet.reportIf_iff] at h100
+        have hcov := checkCases_cov env n Γ vs.toList cs [] cov hcs
         have hve := hv.expose
         rw [hvs] at hve
         simp only [hvs]
-        have finish : ∀ a, ((v = .atom a ∧ vs.toList.lookup a = some none) ∨
+        have finish : ∀ a, (∃ o, vs.toList.lookup a = some o) → ((v = .atom a ∧ vs.toList.lookup a = some none) ∨
             (∃ w p, v = .term a w ∧ vs.toList.lookup a = some (some p) ∧ HasType w p)) →
-            SoundS Γ (Agree Γ.vars) (execCases env n k Γ ρ vs.toList a v cs >>= fun o => match o with
-              | some ρ' => pure (restore ρ ρ')
-              | none => execElse env n k Γ ρ dflt) := fun a ha =>
-          SoundS.bind' (execCases_sound n k Γ ρ vs.toList a v cs [] cov hcs hb hρ ha) (fun o ho => by
-            cases o with
-            | some ρ' => exact restore_agree hρ (ho ρ' rfl)
-            | none => exact execElse_sound n k Γ ρ dflt hd hb hρ)
+            SoundS Γ (hasBreakS (.match_ e cs dflt) = true)
+              (fun ρ' => Agree Γ.vars ρ' ∧ completesS (.match_ e cs dflt) = true)
+              (execCases env call n k Γ ρ vs.toList a v cs >>= fun o => match o with
+                | some ρ' => pure (restore ρ ρ')
+                | none => execElse env call n k Γ ρ dflt) := fun a ⟨o, hl⟩ ha =>
+          SoundS.bind' ((execCases_sound n k Γ ρ vs.toList a v cs [] cov hcs hb hρ ha).weakenB
+              (fun h => by simp [hasBreakS, h])) (fun r ⟨hsome, hnone⟩ => by
+            cases r with
+            | some ρ' =>
+              obtain ⟨h1, h2⟩ := hsome ρ' rfl
+              exact ⟨restore_agree hρ h1, by simp [completesS, h2]⟩
+            | none =>
+              refine ((execElse_sound n k Γ ρ dflt hd hb hρ).weakenB (fun h => by simp [hasBreakS, h])).weaken
+                (fun _ h => ⟨h.1, ?_⟩)
+              rcases h.2 with hn | hc
+              · exfalso
+                subst hn
+                simp only [Option.isNone_none, Bool.true_and, List.any_eq_false, Bool.not_eq_eq_eq_not,
+                  Bool.not_true, Bool.not_eq_false] at h100
+                have := h100 (a, o) (lookup_some_mem hl)
+                rw [hcov] at this
+                simp only [List.nil_append, List.contains_iff_mem, List.mem_map] at this
+                obtain ⟨c, hc, hn'⟩ := this
+                exact hnone rfl c hc hn'
+              · simp [completesS, hc])
         rcases hve.enum_inv with ⟨a, rfl, hl⟩ | ⟨a, w, p, rfl, hl, hw⟩
-        · exact finish a (.inl ⟨rfl, hl⟩)
-        · exact finish a (.inr ⟨w, p, rfl, hl, hw⟩)
+        · exact finish a ⟨_, hl⟩ (.inl ⟨rfl, hl⟩)
+        · exact finish a ⟨_, hl⟩ (.inr ⟨w, p, rfl, hl, hw⟩)
       · simp at hm
     case for_ names coll body =>
       simp only [checkStmtF] at h
@@ -1164,8 +1290,8 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
       refine ⟨?_, Grows.refl Γ⟩
       have hrun : (forBindings env n Γ names coll).run #[] = (some Δ, #[]) := hf
       simp only [execStmt, hrun, typeOf_pure ht, pure_bind]
-      refine SoundS.bind' (SoundS.of_sound (evalS_sound env n Γ.borrow ρ coll t ht hb hρ.envOk.borrow))
-        (fun v hv => ?_)
+      refine SoundS.bind' (SoundS.of_sound
+        (evalS_sound env sigs call hcall n Γ.borrow ρ coll t ht hb hρ.envOk.borrow)) (fun v hv => ?_)
       have hi := walkItems_fits hw hv.expose
       cases hwi : walkItems t.expose names v with
       | error s => rw [hwi] at hi; subst hi; trivial
@@ -1173,23 +1299,30 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
         rw [hwi] at hi
         refine SoundS.bind' (P := (· = items)) rfl (fun _ e => ?_)
         rw [e]
-        refine execFor_sound (Δ := Δ) (fun ρ' vals hρ' hv' => ?_) items hi ρ hρ
+        refine (execFor_sound (Bb := hasBreak body = true) (Δ := Δ) (fun ρ' vals hρ' hv' => ?_) items hi ρ hρ).weaken
+          (fun _ h => ⟨h, rfl⟩)
         have g := Grows.bindAllAs { Γ with inLoop := true } .let_ Δ
         have := execBlock_sound n k ({ Γ with inLoop := true }.bindAll Δ) _ body hbody
-          ((Ctx.bindAll_bounds { Γ with inLoop := true } Δ).1.trans hb) (bindAllAs_agree (Γ := { Γ with inLoop := true }) hρ' .let_ hv')
-        exact SoundS.weaken (SoundS.lift g this) (fun _ h => Ext.of_grows g h)
+          (g.runs hb) (bindAllAs_agree (Γ := { Γ with inLoop := true }) hρ' .let_ hv')
+        exact SoundS.weaken (SoundS.lift g this) (fun _ h => Ext.of_grows g h.1)
 
-/-- The case a `match` takes runs soundly, as `checkCases` checks it. -/
+/-- The case a `match` takes runs soundly, as `checkCases` checks it; there
+is none only if no case is of the variant. -/
 theorem execCases_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (vs : List (String × Option Ty)) (a : String)
     (v : Val) (cs : List Case) (cov cov' : List String), SQuiet (checkCases env n Γ vs cs cov) cov' →
-    Γ.bounds = [] → Agree Γ.vars ρ →
+    Γ.Runs sigs → Agree Γ.vars ρ →
     ((v = .atom a ∧ vs.lookup a = some none) ∨
       (∃ w p, v = .term a w ∧ vs.lookup a = some (some p) ∧ HasType w p)) →
-    SoundS Γ (fun o => ∀ ρ', o = some ρ' → Ext Γ.vars ρ') (execCases env n k Γ ρ vs a v cs)
+    SoundS Γ (casesBreak cs = true)
+      (fun o => (∀ ρ', o = some ρ' → Ext Γ.vars ρ' ∧ casesComplete cs = true) ∧
+        (o = none → ∀ c ∈ cs, c.name ≠ a))
+      (execCases env call n k Γ ρ vs a v cs)
   | 0, _, _, _, _, _, _, _, _, _, h, _, _, _ => by
     rw [checkCases.eq_def] at h; exact (SQuiet.push_bind (fun _ => Appends.pure _) h).elim
   | _ + 1, _, _, _, _, _, _, [], _, _, _, _, _, _ => by
-    rw [execCases.eq_def]; intro ρ' h; cases h
+    rw [execCases.eq_def]
+    exact And.intro (fun ρ' (h : (none : Option VEnv) = some ρ') => by cases h)
+      (fun _ c (hc : c ∈ ([] : List Case)) => by simp at hc)
   | n + 1, k, Γ, ρ, vs, a, v, c :: cs, cov, cov', h, hb, hρ, hv => by
     rw [checkCases.eq_def] at h
     dsimp only at h
@@ -1197,6 +1330,7 @@ theorem execCases_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (vs : List (Str
     · exact (SQuiet.push_bind (by app_cont env n) h).elim
     obtain ⟨_, hbk, h⟩ := SQuiet.bind_inv (by app_cont env n) h
     rw [execCases.eq_def]; dsimp only
+    have mem : c ∈ c :: cs := List.mem_cons_self
     by_cases hn : c.name = a
     · simp only [hn, beq_self_eq_true, ↓reduceIte]
       cases c with
@@ -1207,7 +1341,10 @@ theorem execCases_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (vs : List (Str
         | some p =>
           simp only [Case.name, hl] at hbk
           obtain ⟨_, -, hbk⟩ := SQuiet.bind_inv (by app_cont env n) hbk
-          exact SoundS.map' (execBlock_sound n k Γ ρ b hbk hb hρ) (fun ρ' h' ρ'' e => by cases e; exact h')
+          exact SoundS.map' ((execBlock_sound n k Γ ρ b hbk hb hρ).weakenB
+              (fun h => casesBreak_of_mem mem h))
+            (fun ρ' h' => ⟨fun ρ'' e => by cases e; exact ⟨h'.1, casesComplete_of_mem mem h'.2⟩,
+              fun e => by cases e⟩)
       | term name x b =>
         simp only [Case.name] at hn; subst hn
         cases hl : vs.lookup name with
@@ -1222,27 +1359,42 @@ theorem execCases_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (vs : List (Str
             · rw [hl] at hl'; cases hl'
             · rw [hl] at hl'; cases hl'
               have g := Grows.bind Γ x p .let_
-              exact SoundS.map' (SoundS.lift g (execBlock_sound n k _ _ b hbk hb
-                (.cons (fun u e => by cases e; exact hw) hρ))) (fun ρ' h' ρ'' e => by cases e; exact Ext.of_grows g h')
+              exact SoundS.map' ((SoundS.lift g (execBlock_sound n k _ _ b hbk (g.runs hb)
+                (.cons (fun u e => by cases e; exact hw) hρ))).weakenB (fun h => casesBreak_of_mem mem h))
+                (fun ρ' h' => ⟨fun ρ'' e => by
+                  cases e; exact ⟨Ext.of_grows g h'.1, casesComplete_of_mem mem h'.2⟩, fun e => by cases e⟩)
     · simp only [beq_false_of_ne hn, Bool.false_eq_true, ↓reduceIte]
-      exact execCases_sound n k Γ ρ vs a v cs _ cov' h hb hρ hv
+      refine ((execCases_sound n k Γ ρ vs a v cs _ cov' h hb hρ hv).weakenB
+        (fun h => casesBreak_of_mem' h)).weaken (fun o ⟨hs, hnone⟩ => ⟨fun ρ' e => ?_, fun e c' hc' => ?_⟩)
+      · obtain ⟨h1, h2⟩ := hs ρ' e
+        exact ⟨h1, by cases c <;> simp [casesComplete, h2]⟩
+      · rcases List.mem_cons.mp hc' with rfl | hc'
+        · exact hn
+        · exact hnone e c' hc'
 
 /-- An `else` that checks runs soundly, its scope left behind. -/
 theorem execElse_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (e : Option (List Stmt)),
-    SQuiet (checkElse env n Γ e) () → Γ.bounds = [] → Agree Γ.vars ρ →
-    SoundS Γ (Agree Γ.vars) (execElse env n k Γ ρ e)
+    SQuiet (checkElse env n Γ e) () → Γ.Runs sigs → Agree Γ.vars ρ →
+    SoundS Γ (hasBreakElse e = true) (fun ρ' => Agree Γ.vars ρ' ∧ (e = none ∨ completesElse e = true))
+      (execElse env call n k Γ ρ e)
   | n, k, Γ, ρ, some e, h, hb, hρ => by
     rw [checkElse.eq_def] at h; rw [execElse.eq_def]; dsimp only
-    exact SoundS.bind' (execBlock_sound n k Γ ρ e h hb hρ) (fun ρ' h' => restore_agree hρ h')
-  | _, _, _, ρ, none, _, _, hρ => by rw [execElse.eq_def]; exact hρ
+    exact SoundS.bind' (execBlock_sound n k Γ ρ e h hb hρ)
+      (fun ρ' h' => ⟨restore_agree hρ h'.1, .inr h'.2⟩)
+  | _, _, _, ρ, none, _, _, hρ => by rw [execElse.eq_def]; exact ⟨hρ, .inl rfl⟩
 
 /-- A block that checks runs soundly: what it leaves is its scope's
-variables with more bound, each that is set of its type. -/
+variables with more bound, each that is set of its type; it breaks only if
+it has a `break` of its own, and ends normally only if control can reach its
+end. -/
 theorem execBlock_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (ss : List Stmt),
-    SQuiet (checkBlockF env n Γ ss) () → Γ.bounds = [] → Agree Γ.vars ρ →
-    SoundS Γ (Ext Γ.vars) (execBlock env n k Γ ρ ss)
+    SQuiet (checkBlockF env n Γ ss) () → Γ.Runs sigs → Agree Γ.vars ρ →
+    SoundS Γ (hasBreak ss = true) (fun ρ' => Ext Γ.vars ρ' ∧ completes ss = true)
+      (execBlock env call n k Γ ρ ss)
   | 0, _, _, _, _, h, _, _ => by rw [checkBlockF.eq_def] at h; simp at h
-  | _ + 1, _, _, ρ, [], _, _, hρ => by rw [execBlock.eq_def]; exact Ext.of_agree hρ
+  | _ + 1, _, Γ, ρ, [], _, _, hρ => by
+    rw [execBlock.eq_def]
+    exact (⟨Ext.of_agree hρ, rfl⟩ : Ext Γ.vars ρ ∧ completes [] = true)
   | n + 1, k, Γ, ρ, s :: ss, h, hb, hρ => by
     rw [checkBlockF.eq_def] at h; dsimp only at h
     obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkBlockF_appends _ _ _ _) h
@@ -1250,9 +1402,10 @@ theorem execBlock_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (ss : List Stmt
     rw [execBlock.eq_def]; dsimp only
     have hrun : ((checkStmtF env n Γ s).run #[]).1 = Γ' := by unfold SQuiet at hs; rw [hs]
     rw [hrun]
-    refine SoundS.bind' hs' (fun ρ' h' => ?_)
-    exact SoundS.weaken (SoundS.lift g (execBlock_sound n k Γ' ρ' ss h (g.2.2.1.trans hb) h'))
-      (fun _ h => Ext.of_grows g h)
+    refine SoundS.bind' (hs'.weakenB (fun h => by simp [hasBreak, h])) (fun ρ' h' => ?_)
+    exact ((SoundS.lift g (execBlock_sound n k Γ' ρ' ss h (g.runs hb) h'.1)).weakenB
+      (fun h => by simp [hasBreak, h])).weaken
+      (fun _ h => ⟨Ext.of_grows g h.1, by simp [completes, h'.2, h.2]⟩)
 
 end
 

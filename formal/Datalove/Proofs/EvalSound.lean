@@ -7,13 +7,16 @@ import Datalove.Proofs.InstanceCheck
 
 `Fun.evalS_sound`: where an expression checks quietly in a context whose
 variables hold values of their types, evaluating it gives a value of its
-type, or returns early with a value of the function's return type, or
-reaches a call, which the evaluator does not yet take (`Stop.unsupported`); never
-an operand of the wrong kind, and never running out of fuel, which the
-evaluator spends as the checker does. It holds whatever inference says,
-since what inference finds is checked before it is used. It is of contexts
-with no type parameter's bound in them, as an instance's are, so it holds of
-a generic through the check-once theorem.
+type, or returns early with a value of the function's return type, or stops
+where a call may: at what is not run yet, a variable read before it is set,
+or calls nested as deep as they were given. Never an operand of the wrong
+kind, and never running out of fuel, which the evaluator spends as the
+checker does. It holds whatever inference says, since what inference finds
+is checked before it is used, and for any calls that do what calls may
+(`CallOk`), which `Proofs/CallSound.lean` shows of running a checked
+program's bodies. It is of contexts with no type parameter's bound in them,
+as an instance's are, so it holds of a generic through the check-once
+theorem.
 -/
 
 namespace Datalove.Lit
@@ -326,12 +329,13 @@ def EnvOk (Γ : Ctx) (ρ : VEnv) : Prop :=
 def EarlyOk (R : Ret) (r : Val) : Prop := ∃ T, R = .ty T ∧ HasType r T
 
 /-- Why evaluating a checked expression may give no value: an early return
-the function's type allows, a call, not evaluated yet, or a variable read
-before it was set, which the ownership analysis refuses. -/
+the function's type allows, what is not evaluated yet, a variable read
+before it was set, which the ownership analysis refuses, or calls nested as
+deep as they were given. -/
 def StopOk (R : Ret) : Stop → Prop
   | .early r => EarlyOk R r
-  | .unsupported | .uninit => True
-  | .fuel | .wrong | .retVoid | .brk _ | .cont _ | .diverge => False
+  | .unsupported | .uninit | .diverge => True
+  | .fuel | .wrong | .retVoid | .brk _ | .cont _ => False
 
 /-- What evaluation gives meets `P`, or stops as a checked expression may. -/
 def Sound {α} (R : Ret) (P : α → Prop) (m : EvalM α) : Prop :=
@@ -469,6 +473,44 @@ theorem binOp_sound {Γ : Ctx} (hb : Γ.bounds = []) {op : BinOp} {t r : Ty} {va
 
 theorem EnvOk.enter {Γ : Ctx} {ρ : VEnv} (h : EnvOk Γ ρ) (e : Expr) : EnvOk (Γ.enter e) ρ := h
 theorem EnvOk.borrow {Γ : Ctx} {ρ : VEnv} (h : EnvOk Γ ρ) : EnvOk Γ.borrow ρ := h
+theorem EnvOk.forArg {Γ : Ctx} {ρ : VEnv} (h : EnvOk Γ ρ) (m : Mode) : EnvOk (Γ.forArg m) ρ := h
+
+/-- A context evaluation runs in: no type parameter's bound, and the
+program's functions. -/
+def Ctx.Runs (sigs : List (String × Sig)) (Γ : Ctx) : Prop := Γ.bounds = [] ∧ Γ.sigs = sigs
+
+/-- What a call gives: the function's return type, or the unit for one that
+returns nothing. -/
+def Sig.retTy (sig : Sig) (θ : List (String × Ty)) : Ty :=
+  match sig.ret with
+  | .ty r => r.inst θ
+  | .void => unitTy
+
+/-- What a call may do: give a value of the type it returns, or stop at what
+is not run yet, at a variable read before it was set, or out of calls. -/
+def CallRes (T : Ty) (m : EvalM Val) : Prop :=
+  match m with
+  | .ok v => HasType v T
+  | .error s => s = .unsupported ∨ s = .uninit ∨ s = .diverge
+
+/-- Calls that do what calls may, for each function of the program called
+as a checked call calls it: with ground type arguments its bounds admit,
+none of its parameters writing back, and arguments of its parameters'
+types. -/
+def CallOk (sigs : List (String × Sig)) (call : CallFn) : Prop :=
+  ∀ f sig θ vals, sigs.lookup f = some sig → writesBack sig.params = false → groundArgs θ = true →
+    (∀ p b, (p, some b) ∈ sig.tparams → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true) →
+    vals.length = sig.params.length → (∀ q ∈ vals.zip sig.params, HasType q.1 (q.2.2.inst θ)) →
+    CallRes (sig.retTy θ) (call f θ vals)
+
+theorem CallRes.sound {R : Ret} {T : Ty} {m : EvalM Val} (h : CallRes T m) : Sound R (HasType · T) m := by
+  cases m with
+  | ok v => exact h
+  | error s => rcases h with rfl | rfl | rfl <;> trivial
+
+theorem Ctx.admits_nil {Γ : Ctx} (hb : Γ.bounds = []) {b : Bound} {t : Ty} (h : Γ.admits b t = true) :
+    b.admitsTy t = true := by
+  cases t <;> cases b <;> simp_all [Ctx.admits, Bound.admitsTy]
 
 theorem typeOf_quiet {m : ChkM Ty} {t : Ty} (h : Quiet m t) : typeOf m = .ok t := by
   simp only [typeOf]; rw [h]; rfl
@@ -605,16 +647,20 @@ theorem litBody_checks {env : InferEnv} {n : Nat} {Γ : Ctx} {e : Expr} {t : Ty}
   exact hc
 
 section
-variable (env : InferEnv)
+variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallOk sigs call)
+include hcall
+-- Only `evalCall_sound` uses `hcall` itself, the rest through it, which the
+-- linter does not see across a mutual block.
+set_option linter.unusedSectionVars false
 
 mutual
 
 /-- **A datafun expression that checks evaluates to a value of its type**,
-or returns early with a value of the function's return type, or reaches a
-call, which is not evaluated yet: in a context with no type parameter's
-bound, whose variables hold values of their types, and for any inference. -/
+or returns early with a value of the function's return type, or stops where
+a call may: in a context with no type parameter's bound, whose variables
+hold values of their types, for any inference and any sound calls. -/
 theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), Quiet (synthF env n Γ e) t →
-    Γ.bounds = [] → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalS env n Γ ρ e)
+    Γ.Runs sigs → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalS env call n Γ ρ e)
   | 0, _, _, _, _, h, _, _ => by simp [synthF] at h
   | n + 1, Γ, ρ, e, t, h, hb, hρ => by
     have h0 := h
@@ -649,7 +695,7 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
       exact Sound.bind' (evalPair_sound n _ ρ a b none u hp hb (hρ.enter _)) (fun r ⟨hr, ha, hb'⟩ => by
         obtain ⟨_, va, vb⟩ := r
         simp only at hr; subst hr
-        exact binOp_sound (Γ := Γ.enter _) hb hf ha hb')
+        exact binOp_sound (Γ := Γ.enter _) hb.1 hf ha hb')
     case tryOpt a =>
       simp only [synthF] at h
       obtain ⟨u, ha, h⟩ := h.bind_inv
@@ -688,7 +734,10 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
       simp only [synthF] at h
       simp only [evalS]
       exact evalS_sound n _ ρ a t h hb (hρ.enter _).borrow
-    case call => simp only [evalS]; exact Sound.unsupported
+    case call f args =>
+      simp only [synthF] at h
+      simp only [evalS]
+      exact evalCall_sound n _ ρ f args none t h hb (hρ.enter _)
     case place x steps =>
       simp only [synthF] at h
       cases hl : (Γ.enter (.place x steps)).lookup x with
@@ -742,7 +791,7 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
           Sound.bind' (evalC_sound n _ ρ key kt hk hb (hρ.enter _)) (fun kv hkv =>
             indexVal_sound hv hi hkv (missing_ok (by simpa using hfit))))
     case unop op a =>
-      have hb0 : (Γ.enter (.unop op a)).bounds = [] := hb
+      have hb0 : (Γ.enter (.unop op a)).bounds = [] := hb.1
       cases op
       case neg =>
         simp only [synthF] at h
@@ -826,7 +875,7 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
       exact Sound.bind' (P := (· = t)) rfl (fun _ e => e ▸ evalForm_sound n _ ρ _ t hc hb (hρ.enter _))
 
 theorem evalC_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), Quiet (checkF env n Γ e t) () →
-    Γ.bounds = [] → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalC env n Γ ρ e t)
+    Γ.Runs sigs → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalC env call n Γ ρ e t)
   | 0, _, _, _, _, h, _, _ => by simp [checkF] at h
   | n + 1, Γ, ρ, e, t, h, hb, hρ => by
     cases e
@@ -843,7 +892,7 @@ theorem evalC_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
       exact evalForm_sound n _ ρ _ t h hb (hρ.enter _)
 
 theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), Quiet (checkForm env n Γ e t) () →
-    Γ.bounds = [] → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalForm env n Γ ρ e t)
+    Γ.Runs sigs → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalForm env call n Γ ρ e t)
   | 0, _, _, _, _, h, _, _ => by simp [checkForm] at h
   | n + 1, Γ, ρ, e, t, h, hb, hρ => by
     cases e
@@ -1042,7 +1091,7 @@ theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty
         exact Sound.bind' (evalPair_sound n Γ ρ a b _ u hp hb hρ) (fun q ⟨hq, ha, hb'⟩ => by
           obtain ⟨_, va, vb⟩ := q
           simp only at hq; subst hq
-          exact binOp_sound hb hf ha hb')
+          exact binOp_sound hb.1 hf ha hb')
       · rename_i hy
         simp only [hy, Bool.false_eq_true, ↓reduceIte]
         exact evalSub_sound n Γ ρ _ t h hb hρ
@@ -1053,11 +1102,19 @@ theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty
       · simp at h
       rename_i hc
       exact (evalS_sound n _ ρ a u hu hb hρ.borrow).weaken (fun v hv => hv.adapt (by simpa using hc))
-    case call => simp only [evalForm]; exact Sound.unsupported
+    case call f args =>
+      simp only [checkForm] at h
+      obtain ⟨u, hu, h⟩ := h.bind_inv
+      split at h
+      · simp at h
+      rename_i hm
+      simp only [evalForm]
+      exact (evalCall_sound n Γ ρ f args _ u hu hb hρ).weaken
+        (fun v hv => roll_of (Ty.meet_iff.mp (by simpa using hm)).symm hv.expose)
     case unop op a =>
       cases op
       case neg =>
-        have hb0 : Γ.boundOf t.expose = Option.none := boundOf_nil hb _
+        have hb0 : Γ.boundOf t.expose = Option.none := boundOf_nil hb.1 _
         have floatCase : ∀ v, HasType v t.expose →
             (isFloatT t.expose || Γ.boundOf t.expose == Option.some .float) = true →
             Sound Γ.ret (HasType · t) (unOp .neg t.expose v) := by
@@ -1104,8 +1161,8 @@ theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty
       exact evalSub_sound n Γ ρ _ t h hb hρ
 
 theorem evalSteps_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (v : Val) (steps : List Step) (u : Ty),
-    Quiet (stepsF env n Γ t steps) u → HasType v t → Γ.bounds = [] → EnvOk Γ ρ →
-    Sound Γ.ret (HasType · u) (evalSteps env n Γ ρ t v steps)
+    Quiet (stepsF env n Γ t steps) u → HasType v t → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (HasType · u) (evalSteps env call n Γ ρ t v steps)
   | 0, _, _, _, _, _, _, h, _, _, _ => by simp [stepsF] at h
   | n + 1, Γ, ρ, t, v, [], u, h, hv, hb, hρ => by
     simp only [stepsF, Quiet.pure_iff] at h; subst h
@@ -1124,8 +1181,8 @@ theorem evalSteps_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (v : Val
       evalSteps_sound n Γ ρ w x (st' :: rest) u h hx hb hρ)
 
 theorem evalStep_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (v : Val) (st : Step) (u : Ty),
-    Quiet (stepF env n Γ t st) u → HasType v t → Γ.bounds = [] → EnvOk Γ ρ →
-    Sound Γ.ret (HasType · u) (evalStep env n Γ ρ t v st)
+    Quiet (stepF env n Γ t st) u → HasType v t → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (HasType · u) (evalStep env call n Γ ρ t v st)
   | 0, _, _, _, _, _, _, h, _, _, _ => by simp [stepF] at h
   | n + 1, Γ, ρ, t, v, .field sel, u, h, hv, hb, hρ => by
     simp only [stepF] at h
@@ -1158,7 +1215,7 @@ theorem evalStep_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (v : Val)
       indexVal_sound hv hi hkv (missing_ok (by simpa using hfit)))
 
 theorem evalSub_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), Quiet (subsumeF env n Γ e t) () →
-    Γ.bounds = [] → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalSub env n Γ ρ e)
+    Γ.Runs sigs → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalSub env call n Γ ρ e)
   | 0, _, _, _, _, h, _, _ => by simp [subsumeF] at h
   | n + 1, Γ, ρ, e, t, h, hb, hρ => by
     simp only [subsumeF] at h
@@ -1171,9 +1228,9 @@ theorem evalSub_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty)
         (fun v hv => roll_of (Ty.meet_iff.mp (by simpa using hm)).symm hv.expose)
 
 theorem evalPairs_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (es : List Expr) (ts : List Ty),
-    Quiet (pairsF env n Γ es ts) () → Γ.bounds = [] → EnvOk Γ ρ →
+    Quiet (pairsF env n Γ es ts) () → Γ.Runs sigs → EnvOk Γ ρ →
     Sound Γ.ret (fun vs => vs.length = min es.length ts.length ∧ ∀ p ∈ vs.zip ts, HasType p.1 p.2)
-      (evalPairs env n Γ ρ es ts)
+      (evalPairs env call n Γ ρ es ts)
   | 0, _, _, _, _, h, _, _ => by simp [pairsF] at h
   | n + 1, Γ, ρ, e :: es, t :: ts, h, hb, hρ => by
     simp only [pairsF] at h
@@ -1191,9 +1248,9 @@ theorem evalPairs_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (es : List Expr) 
   | n + 1, Γ, ρ, _ :: _, [], h, hb, hρ => by simp only [evalPairs]; exact Sound.pure' ⟨by simp, by simp⟩
 
 theorem evalFields_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (fs : List (String × Expr)) (ts : List (String × Ty)),
-    Quiet (fieldsF env n Γ fs ts) () → Γ.bounds = [] → EnvOk Γ ρ →
+    Quiet (fieldsF env n Γ fs ts) () → Γ.Runs sigs → EnvOk Γ ρ →
     Sound Γ.ret (fun vs => vs.map (·.1) = (fs.zip ts).map (·.2.1) ∧ ∀ p ∈ vs.zip ts, HasType p.1.2 p.2.2)
-      (evalFields env n Γ ρ fs ts)
+      (evalFields env call n Γ ρ fs ts)
   | 0, _, _, _, _, h, _, _ => by simp [fieldsF] at h
   | n + 1, Γ, ρ, (m, e) :: fs, (k, t) :: ts, h, hb, hρ => by
     simp only [fieldsF] at h
@@ -1214,8 +1271,8 @@ theorem evalFields_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (fs : List (Stri
   | n + 1, Γ, ρ, _ :: _, [], h, hb, hρ => by simp only [evalFields]; exact Sound.pure' ⟨by simp, by simp⟩
 
 theorem evalAll_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (es : List Expr) (t : Ty),
-    Quiet (allF env n Γ es t) () → Γ.bounds = [] → EnvOk Γ ρ →
-    Sound Γ.ret (fun vs => vs.length = es.length ∧ ∀ v ∈ vs, HasType v t) (evalAll env n Γ ρ es t)
+    Quiet (allF env n Γ es t) () → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (fun vs => vs.length = es.length ∧ ∀ v ∈ vs, HasType v t) (evalAll env call n Γ ρ es t)
   | 0, _, _, _, _, h, _, _ => by simp [allF] at h
   | n + 1, Γ, ρ, [], t, h, hb, hρ => by simp only [evalAll]; exact Sound.pure' ⟨rfl, by simp⟩
   | n + 1, Γ, ρ, e :: es, t, h, hb, hρ => by
@@ -1232,8 +1289,8 @@ theorem evalAll_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (es : List Expr) (t
           · exact hvs w hw⟩))
 
 theorem evalEntries_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (es : List (Expr × Expr)) (k v : Ty),
-    Quiet (entriesF env n Γ es k v) () → Γ.bounds = [] → EnvOk Γ ρ →
-    Sound Γ.ret (fun ps => ∀ p ∈ ps, HasType p.1 k ∧ HasType p.2 v) (evalEntries env n Γ ρ es k v)
+    Quiet (entriesF env n Γ es k v) () → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (fun ps => ∀ p ∈ ps, HasType p.1 k ∧ HasType p.2 v) (evalEntries env call n Γ ρ es k v)
   | 0, _, _, _, _, _, h, _, _ => by simp [entriesF] at h
   | n + 1, Γ, ρ, [], k, v, h, hb, hρ => by simp only [evalEntries]; exact Sound.pure' (by simp)
   | n + 1, Γ, ρ, (ke, ve) :: es, k, v, h, hb, hρ => by
@@ -1252,9 +1309,9 @@ theorem evalEntries_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (es : List (Exp
             · exact hr p hp))))
 
 theorem evalRows_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (rows : List (List Expr)) (cols : List (String × Ty)),
-    Quiet (rowsF env n Γ rows cols) () → Γ.bounds = [] → EnvOk Γ ρ →
+    Quiet (rowsF env n Γ rows cols) () → Γ.Runs sigs → EnvOk Γ ρ →
     Sound Γ.ret (fun rs => ∀ r ∈ rs, r.length = cols.length ∧ ∀ p ∈ r.zip cols, HasType p.1 p.2.2)
-      (evalRows env n Γ ρ rows cols)
+      (evalRows env call n Γ ρ rows cols)
   | 0, _, _, _, _, h, _, _ => by simp [rowsF] at h
   | n + 1, Γ, ρ, [], cols, h, hb, hρ => by simp only [evalRows]; exact Sound.pure' (by simp)
   | n + 1, Γ, ρ, r :: rs, cols, h, hb, hρ => by
@@ -1280,9 +1337,83 @@ theorem evalRows_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (rows : List (List
               exact this
           · exact hrest w hw)))
 
+/-- A checked call gives a value of its type, or stops as a call may. -/
+theorem evalCall_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (f : String) (args : List (Option Mode × Expr))
+    (exp : Option Ty) (t : Ty), Quiet (callF env n Γ f args exp) t → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (HasType · t) (evalCall env call n Γ ρ f args exp)
+  | 0, _, _, _, _, _, _, h, _, _ => by simp [callF] at h
+  | n + 1, Γ, ρ, f, args, exp, t, h, hb, hρ => by
+    simp only [callF] at h
+    cases hs : Γ.sigs.lookup f with
+    | none => simp only [hs] at h; simp at h
+    | some sig =>
+      simp only [hs] at h
+      split at h
+      · simp at h
+      rename_i hlen
+      obtain ⟨_, -, h⟩ := h.bind_inv
+      obtain ⟨_, -, h⟩ := h.bind_inv
+      obtain ⟨θ, hθ, h⟩ := h.bind_inv
+      rw [Quiet.liftE_iff] at hθ
+      obtain ⟨_, ha, h⟩ := h.bind_inv
+      split at h
+      · simp at h
+      rename_i h92
+      split at h
+      · simp at h
+      rename_i h101
+      have ht : t = sig.retTy θ := by
+        unfold Sig.retTy; split <;> (rename_i hr; simp only [hr, Quiet.pure_iff] at h; exact h.symm)
+      subst ht
+      simp only [evalCall, hs, hθ]
+      split
+      · exact Sound.unsupported
+      rename_i hw
+      simp only [Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, not_or] at hw
+      refine Sound.bind' (evalArgs_sound n Γ ρ args _ ha hb hρ) (fun vals ⟨hl, hv⟩ => ?_)
+      have hlen' : args.length = sig.params.length := by simpa using hlen
+      have hbd : ∀ p b, (p, some b) ∈ sig.tparams → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true := by
+        intro p b hp
+        simp only [allDecided, List.all_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,
+          Bool.not_eq_false] at h101
+        simp only [boundsHold, List.all_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,
+          Bool.not_eq_false] at h92
+        obtain ⟨u, hu⟩ := Option.isSome_iff_exists.mp (h101 _ hp)
+        have := h92 _ hp
+        simp only [hu] at this
+        exact ⟨u, hu, Ctx.admits_nil hb.1 this⟩
+      refine (hcall f sig θ vals (hb.2 ▸ hs) (by simpa using hw.1) (by simpa using hw.2) hbd
+        (by simp [hl, hlen']) (fun q hq => ?_)).sound
+      have := hv (q.1, (q.2.1, q.2.2.inst θ)) (by
+        rw [List.zip_map_right]
+        exact List.mem_map.mpr ⟨q, hq, rfl⟩)
+      exact this
+
+/-- A call's checked arguments evaluate to values of their parameters'
+types. -/
+theorem evalArgs_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (args : List (Option Mode × Expr))
+    (params : List (Mode × Ty)), Quiet (argsF env n Γ args params) () → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (fun vs => vs.length = min args.length params.length ∧ ∀ q ∈ vs.zip params, HasType q.1 q.2.2)
+      (evalArgs env call n Γ ρ args params)
+  | 0, _, _, _, _, h, _, _ => by simp [argsF] at h
+  | n + 1, Γ, ρ, (_, e) :: args, (mode, t) :: params, h, hb, hρ => by
+    simp only [argsF] at h
+    obtain ⟨_, hc, h⟩ := h.bind_inv
+    simp only [evalArgs]
+    refine Sound.bind' (evalC_sound n _ ρ e t hc hb (hρ.forArg mode)) (fun v hv => ?_)
+    refine Sound.bind' (evalArgs_sound n Γ ρ args params h hb hρ) (fun vs ⟨hl, hvs⟩ => ?_)
+    refine Sound.pure' ⟨by simp [hl, Nat.succ_min_succ], ?_⟩
+    intro q hq
+    simp only [List.zip_cons_cons, List.mem_cons] at hq
+    rcases hq with rfl | hq
+    · exact hv
+    · exact hvs q hq
+  | n + 1, Γ, ρ, [], _, _, _, _ => by simp only [evalArgs]; exact ⟨by simp, by simp⟩
+  | n + 1, Γ, ρ, _ :: _, [], _, _, _ => by simp only [evalArgs]; exact ⟨by simp, by simp⟩
+
 theorem evalPair_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (a b : Expr) (exp : Option Ty) (t : Ty),
-    Quiet (pairF env n Γ a b exp) t → Γ.bounds = [] → EnvOk Γ ρ →
-    Sound Γ.ret (fun r => r.1 = t ∧ HasType r.2.1 t ∧ HasType r.2.2 t) (evalPair env n Γ ρ a b exp)
+    Quiet (pairF env n Γ a b exp) t → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (fun r => r.1 = t ∧ HasType r.2.1 t ∧ HasType r.2.2 t) (evalPair env call n Γ ρ a b exp)
   | 0, _, _, _, _, _, _, h, _, _ => by simp [pairF] at h
   | n + 1, Γ, ρ, a, b, exp, t, h, hb, hρ => by
     simp only [evalPair, typeOf_quiet h]
@@ -1296,8 +1427,8 @@ theorem evalPair_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (a b : Expr) (exp 
     rw [Quiet.pure_iff] at h; subst h
     refine Sound.bind' (P := (· = _)) rfl (fun t' ht => ?_)
     subst ht
-    exact Sound.bind' (evalC_sound n _ ρ a _ ha (by simpa using hb) hρ.borrow) (fun va hva =>
-      Sound.bind' (evalC_sound n _ ρ b _ hb' (by simpa using hb) hρ.borrow) (fun vb hvb =>
+    exact Sound.bind' (evalC_sound n _ ρ a _ ha ⟨by simpa using hb.1, by simpa using hb.2⟩ hρ.borrow) (fun va hva =>
+      Sound.bind' (evalC_sound n _ ρ b _ hb' ⟨by simpa using hb.1, by simpa using hb.2⟩ hρ.borrow) (fun vb hvb =>
         Sound.pure' ⟨rfl, hva, hvb⟩))
 
 end
