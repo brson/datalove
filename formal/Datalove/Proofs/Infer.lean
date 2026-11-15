@@ -11,10 +11,12 @@ what a type parameter stands for (F110, `Fun.infer_errors`), save for
 running out of fuel. Datalit's types hold no type parameter, so it never
 meets F110 either, though that is not proved here.
 
-The unifier's `panic!`s are where that could go wrong: in Lean's logic a
-panic is an error, with an empty code. Each says a variable just pruned is
-free, which holds because a variable is never bound to another variable
-(`Inv`), so pruning one finds a free root or a type that is not a variable.
+The unifier's `panic!`s are where that could go wrong. In Lean's logic a
+panic is not an error but the monad's default, which here succeeds and
+changes nothing, so what errors can occur says nothing of it: the proofs
+show no panic is reached. Each says a variable just pruned is free, which
+holds because a variable is never bound to another variable (`Inv`), so
+pruning one finds a free root or a type that is not a variable.
 -/
 
 namespace Datalove.Lit

@@ -111,13 +111,17 @@ Under `formal/Datalove/Proofs/`:
   [Literal typing](#user-content-literal-typing).
 - **Inference fails only where its comments say** (`Lit.infer_errors`,
   `Fun.infer_errors`, in `Proofs/Infer.lean`): datalit's only on a
-  malformed hint, datafun's never, save running out of fuel. Unification
-  panics where a variable it just pruned is not free, which a panic in
-  Lean's logic is an error of; underneath, a variable is never bound to
-  another variable (`Lit.Inv`), which every step of the unifier, `resolve`
-  and inference keeps, so pruning finds a free root or a type that is not a
-  variable, and no panic is reached. Binding one variable to another in
-  place of linking them breaks the proof.
+  malformed hint or a decision that depends on what a type parameter stands
+  for (F110), datafun's only on F110, each save running out of fuel.
+  Datalit's types hold no type parameter, so it never meets F110, but that
+  is not proved. Unification panics where a variable it just pruned is not
+  free. In Lean's logic a panic is not an error: it is the monad's default,
+  which here succeeds and changes nothing, so a theorem about which errors
+  can occur says nothing of it, and the proofs show instead that no panic is
+  reached. A variable is never bound to another variable (`Lit.Inv`), which
+  every step of the unifier, `resolve` and inference keeps, so pruning finds
+  a free root or a type that is not a variable. Binding one variable to
+  another in place of linking them breaks the proof.
 - **In datafun, every early return fits the function, `completes` is
   sound, a `match` covers its enum, and checking a generic once is
   enough**; see [Statements](#user-content-statements).
