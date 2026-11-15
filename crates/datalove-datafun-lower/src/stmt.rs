@@ -715,19 +715,23 @@ fn lower_set<'db>(
             Operand::Value(value_id)
         }
     };
-    let keys = lower_place_keys(ctx, place)?;
+    // A root an earlier unit bound and did not compile is missing, and the
+    // `set` is where it is written; a key's own missing name is already at
+    // its expression.
+    let at_set = |error: LowerError| error.at(|| crate::WrittenAt::Set(set_stmt.local_index));
+    let keys = lower_place_keys(ctx, place).map_err(at_set)?;
 
-    if let Some(op) = set_stmt.op {
+    let written = if let Some(op) = set_stmt.op {
         let aliased = place_root(ctx, ctx.expr(value_expr)) == Some(place.root.text(ctx.db).as_ref());
-        lower_set_compound(ctx, place, &keys, op, value, aliased, expr_temp_mark)?;
+        lower_set_compound(ctx, place, &keys, op, value, aliased, expr_temp_mark)
     } else if place.steps.is_empty() {
         lower_set_simple(ctx, place, value)
-            .map_err(|error| error.at(|| crate::WrittenAt::Set(set_stmt.local_index)))?;
     } else if place_contains_index(place) {
-        lower_set_indexed(ctx, place, &keys, value)?;
+        lower_set_indexed(ctx, place, &keys, value)
     } else {
-        lower_set_field_path(ctx, place, value)?;
-    }
+        lower_set_field_path(ctx, place, value)
+    };
+    written.map_err(at_set)?;
     // A key looked up through `[k]?` or `[k]!` is only borrowed, and is a
     // temporary to drop once the write is done. The early return drops it on
     // its own way out.
@@ -1108,8 +1112,10 @@ fn navigate_place<'db>(
     step_count: usize,
 ) -> Result<Operand, LowerError> {
     let root_name_str = place.root.text(ctx.db).S();
+    // Not found, it is bound by an earlier unit that typechecked and did not
+    // compile.
     let mut current_op = ctx.lookup_var(&root_name_str)
-        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+        .ok_or_else(|| LowerError::missing(&root_name_str))?;
 
     let mut keys = keys.iter();
     for step in &place.steps[..step_count] {
@@ -1164,8 +1170,10 @@ pub(super) fn collect_field_path_from_place<'db>(
     place: &ast::Place<'db>,
 ) -> Result<Vec<u32>, LowerError> {
     let root_name_str = place.root.text(ctx.db).S();
+    // Not found, it is bound by an earlier unit that typechecked and did not
+    // compile.
     let root_type = ctx.var_type_by_name(&root_name_str)
-        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+        .ok_or_else(|| LowerError::missing(&root_name_str))?;
 
     let mut path = Vec::new();
     let mut current_type = root_type.C();

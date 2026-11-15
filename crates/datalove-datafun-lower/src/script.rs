@@ -478,8 +478,10 @@ fn lower_statement_for_script<'db>(
                 // under the ID this statement already has.
                 lower_numbered_statement(ctx, stmt, stmt_idx)
             } else {
-                // Pure field projections.
-                let field_path = collect_field_path_from_place(ctx, place)?;
+                // Pure field projections. A root not found is bound by an
+                // earlier unit that did not compile, written at this `set`.
+                let field_path = collect_field_path_from_place(ctx, place)
+                    .map_err(|error| error.at(|| crate::WrittenAt::Set(set_stmt.local_index)))?;
                 let value_id = lower_expression(ctx, ctx.expr(set_stmt.value))?;
                 match ctx.lookup_var(&root_name_str) {
                     Some(Operand::Slot(slot)) => {
