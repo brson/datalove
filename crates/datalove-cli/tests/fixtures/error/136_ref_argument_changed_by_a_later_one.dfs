@@ -1,0 +1,15 @@
+// A `ref` argument is read by the callee once every argument has run, so a
+// later one may not take its variable `mut`: the callee would read what that
+// left, not what was passed (O017).
+
+fun inc(mut x: int): int
+  set x = x + 1
+  ret 0
+end fun
+
+fun first(ref x: int, y: int): int
+  ret x@
+end fun
+
+var a: int = 1
+debuglog first(ref a, inc(mut a))

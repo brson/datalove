@@ -1,0 +1,13 @@
+// An index's base is read through a reference once its key has run, so the
+// key may not take the collection `mut` (O017).
+
+require module sys/std/list
+
+fun grow(mut l: [int]): index
+  call list.push(mut l, 0)
+  ret : index / 0
+end fun
+
+var xs: [int] = [1, 2]
+debuglog xs[grow(mut xs)]!
+ret ok ()

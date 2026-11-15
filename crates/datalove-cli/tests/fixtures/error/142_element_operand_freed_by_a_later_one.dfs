@@ -1,0 +1,14 @@
+// An operand that is an element of a list, not a copy, is read through a
+// reference into the list's buffer once the other operand has run, so the
+// other may not grow the list (O017): the buffer would have moved.
+
+require module sys/std/list
+
+fun grow(mut l: [int]): int
+  call list.push(mut l, 0)
+  ret 0
+end fun
+
+var xs: [int] = [100000000000000000000, 5]
+let y = xs[(: index / 0)]! + grow(mut xs)
+ret ok ()

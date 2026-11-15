@@ -30,6 +30,8 @@
 //! - O007 MoveInLoop: moving outer-scoped value inside loop body
 //! - O015 WalkedCollectionChanged: changing a collection a `for` walks
 //! - O016 CannotMoveConst: moving out of a const without `@`
+//! - O017 HeldByEarlierOperand: taking `mut`, `out` or moving what an
+//!   earlier operand of the expression still reads through a reference
 //!
 //! # Drop scheduling
 //!
@@ -149,8 +151,27 @@ struct AnalysisCtx<'a, 'db> {
     /// Each is frozen for its loop's body: its cursor and its element bindings
     /// point into it.
     walked: Vec<Walked>,
+    /// What earlier operands of the expressions being analyzed still read
+    /// through a reference, innermost last: an argument passed `ref`, `mut` or
+    /// `out` until its call is made, an operand an operator borrows while the
+    /// other is evaluated, an index's base while its keys are, a compound
+    /// `set`'s value while its keys are. Taking one `mut` or `out`, or
+    /// moving it, before then is O017, where it would change, or free, what
+    /// the reference reaches.
+    held: Vec<Held<'db>>,
+    /// The call a bare place being analyzed is an argument of, whose own
+    /// arguments O010 compares instead.
+    direct_arg_of: Option<ExprKey<'db>>,
     /// The expressions of the body being analyzed.
     arena: Option<&'db ExprArena<'db>>,
+}
+
+/// A place an earlier operand reads through a reference.
+#[derive(Clone, Debug)]
+struct Held<'db> {
+    root: Walked,
+    /// The call it is an argument of, if it is one.
+    call: Option<ExprKey<'db>>,
 }
 
 /// The root of a collection a `for` walks.
@@ -285,6 +306,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             maybe_held: Default::default(),
             loop_exits: Vec::new(),
             walked: Vec::new(),
+            held: Vec::new(),
+            direct_arg_of: None,
             arena: None,
         }
     }
@@ -741,9 +764,52 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         })
     }
 
+    /// Refuse taking `mut` or `out`, or moving, what an earlier operand
+    /// still reads through a reference, saying whether it was. An argument
+    /// beside another of the same call is O010's to compare.
+    fn check_not_held(&mut self, root: Walked, expr_key: ExprKey<'db>, call: Option<ExprKey<'db>>) -> bool {
+        let held = self.held.iter().any(|h| h.root == root && (h.call.is_none() || h.call != call));
+        if !held {
+            return false;
+        }
+        let name = match root {
+            Walked::Binding(id) => self.bindings[id.0 as usize].name.C(),
+            Walked::Earlier(name) => name,
+        };
+        self.errors.push(AnalysisError::HeldByEarlierOperand { expr_key, name });
+        true
+    }
+
+    /// What an operand an operator borrows reads through, if it reads a place.
+    fn borrowed_root(&self, expr: ExprFun<'db>) -> Option<Walked> {
+        match expr.kind() {
+            ExprFunKind::Place(_) | ExprFunKind::FieldProj(_) => self.place_root(expr),
+            ExprFunKind::Index(idx) => self.borrowed_root(self.expr(idx.base)),
+            ExprFunKind::TryOption(t) => self.borrowed_root(self.expr(t.operand)),
+            ExprFunKind::TryResult(t) => self.borrowed_root(self.expr(t.operand)),
+            _ => None,
+        }
+    }
+
+    /// Analyze `f` with `root`, if there is one, held by an earlier operand.
+    fn holding<T>(&mut self, root: Option<Walked>, f: impl FnOnce(&mut Self) -> T) -> T {
+        let pushed = root.is_some();
+        if let Some(root) = root {
+            self.held.push(Held { root, call: None });
+        }
+        let r = f(self);
+        if pushed {
+            self.held.pop();
+        }
+        r
+    }
+
     /// Mark a binding as moved at the given expression.
     fn mark_moved(&mut self, id: BindingId, expr_key: ExprKey<'db>) {
         if self.check_not_walked(Walked::Binding(id), expr_key) {
+            return;
+        }
+        if self.check_not_held(Walked::Binding(id), expr_key, self.direct_arg_of) {
             return;
         }
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
@@ -932,7 +998,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// the argument denotes. That must be a place the caller may assign to,
     /// otherwise `let` bindings are mutable in fact while immutable by
     /// declaration, and writes through a temporary are silently discarded.
-    fn check_mutable_argument(&mut self, arg: ExprFun<'db>) {
+    fn check_mutable_argument(&mut self, arg: ExprFun<'db>, call: ExprKey<'db>) {
         let expr_key = arg.key();
 
         let ExprFunKind::Place(place) = arg.kind() else {
@@ -940,6 +1006,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             return;
         };
         if self.check_not_walked(self.walked_root(place.root.text(self.db)), expr_key) {
+            return;
+        }
+        if self.check_not_held(self.walked_root(place.root.text(self.db)), expr_key, Some(call)) {
             return;
         }
         let Some(root) = self.expr_to_place_root(arg) else {
@@ -1087,9 +1156,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         let expr_key = expr.key();
         match expr.kind() {
             ExprFunKind::BinOp(binop) => {
-                // Binary ops read their operands, not consume them.
-                self.analyze_expr_moves(self.expr(binop.lhs), false);
-                self.analyze_expr_moves(self.expr(binop.rhs), false);
+                // Binary ops read their operands, not consume them. A left
+                // operand that is not copied is read through a reference
+                // after the right one runs.
+                let lhs = self.expr(binop.lhs);
+                self.analyze_expr_moves(lhs, false);
+                let held = if self.expr_type(lhs).is_copy() { None } else { self.borrowed_root(lhs) };
+                self.holding(held, |ctx| ctx.analyze_expr_moves(ctx.expr(binop.rhs), false));
                 None
             }
             ExprFunKind::UnaryOp(unary) => {
@@ -1119,16 +1192,26 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     .collect();
 
                 // Analyze args with appropriate consumption based on param mode.
+                // One passed `ref`, `mut` or `out` is a reference the callee
+                // reads once every argument is evaluated, so it is held until
+                // the call.
+                let call_key = expr_key;
+                let held_before = self.held.len();
                 for (i, arg) in args.iter().enumerate() {
                     if callee_comptime[i] {
                         continue;
                     }
                     let callee_mode = callee_modes.get(i).copied();
+                    if matches!(callee_mode, Some(ParamMode::Ref | ParamMode::Mut | ParamMode::Out)) {
+                        if let Some(root) = self.place_root(*arg) {
+                            self.held.push(Held { root, call: Some(call_key) });
+                        }
+                    }
 
                     // The callee writes through a mut or out parameter, so the
                     // argument has to be something the caller can mutate.
                     if matches!(callee_mode, Some(ParamMode::Mut) | Some(ParamMode::Out)) {
-                        self.check_mutable_argument(*arg);
+                        self.check_mutable_argument(*arg, call_key);
                     }
 
                     // For Out params: the callee writes to the arg, so this is NOT a read.
@@ -1156,8 +1239,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     let is_consumed = callee_mode
                         .map(|mode| !matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out))
                         .unwrap_or(true);
+                    let direct = if self.expr_to_binding(*arg).is_some() { Some(call_key) } else { None };
+                    let outer = std::mem::replace(&mut self.direct_arg_of, direct);
                     self.analyze_expr_moves(*arg, is_consumed);
+                    self.direct_arg_of = outer;
                 }
+                self.held.truncate(held_before);
                 None
             }
             ExprFunKind::IntrinsicCall(icall) => {
@@ -1296,9 +1383,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 None
             }
             ExprFunKind::Index(idx) => {
-                // Index borrows base (like field projection), borrows index.
-                self.analyze_expr_moves(self.expr(idx.base), false);
-                self.analyze_expr_moves(self.expr(idx.index), false);
+                // Index borrows base (like field projection), borrows index;
+                // the base is read through a reference after the key runs.
+                let base = self.expr(idx.base);
+                self.analyze_expr_moves(base, false);
+                let held = self.borrowed_root(base);
+                self.holding(held, |ctx| ctx.analyze_expr_moves(ctx.expr(idx.index), false));
                 None
             }
             ExprFunKind::Place(place) => {
@@ -1352,11 +1442,16 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                             self.check_not_moved(id, expr_key);
                         }
                     }
-                    for step in &place.steps {
-                        if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-                            self.analyze_expr_moves(self.expr(idx.index), false);
+                    // The place is reached through a reference to its root once
+                    // its keys have run.
+                    let held = Some(self.walked_root(root_name));
+                    self.holding(held, |ctx| {
+                        for step in &place.steps {
+                            if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
+                                ctx.analyze_expr_moves(ctx.expr(idx.index), false);
+                            }
                         }
-                    }
+                    });
                     None
                 }
             }
@@ -1890,9 +1985,16 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     }
 
     // The value comes first. A plain `set` moves it into the place; a compound
-    // one reads it as an operand, which borrows.
+    // one reads it as an operand, which borrows: read through a reference if
+    // it is not copied, so it is held while the keys run. The place is reached
+    // only once both have run, so they may change its root.
     let live_before_value = ctx.live_bindings_for_return();
     ctx.analyze_expr_moves(expr, !compound);
+    let value_held = if compound && !ctx.expr_type(expr).is_copy() { ctx.borrowed_root(expr) } else { None };
+    let value_pushed = value_held.is_some();
+    if let Some(root) = value_held {
+        ctx.held.push(Held { root, call: None });
+    }
 
     // Then the keys, left to right. A bare index (upsert) consumes its key,
     // which goes into the map if it is absent; with `?` or `!` the key is
@@ -1925,6 +2027,9 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
             ctx.analyze_expr_moves(ctx.expr(idx.index), idx.error_mode.is_none());
         }
+    }
+    if value_pushed {
+        ctx.held.pop();
     }
 
     // Only then is the place reached, so only now does its root have to be

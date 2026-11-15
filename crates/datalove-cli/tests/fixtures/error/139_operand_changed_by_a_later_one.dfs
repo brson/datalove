@@ -1,0 +1,11 @@
+// An operand that is not a copy is read through a reference once the other
+// has run, so the other may not take its variable `mut` (O017). A copy one is
+// read where it is written.
+
+fun inc(mut x: int): int
+  set x = x + 1
+  ret 0
+end fun
+
+var a: int = 1
+debuglog a + inc(mut a)

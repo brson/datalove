@@ -24,7 +24,6 @@ home here.
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
-  - [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
   - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
   - [A non-copy part of a temporary can only be borrowed](#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
   - [A `let` with no type that fails to typecheck leaves its name undefined](#user-content-a-let-with-no-type-that-fails-to-typecheck-leaves-its-name-undefined)
@@ -215,33 +214,6 @@ yet, so nothing calls `edit_module` but the tests.
 ## The language and its checks
 
 Missing features, and the checker refusing what it should accept or accepting what it should refuse.
-
-### A borrow into a collection outlives a later `mut` of it
-
-**Reproduced.** An operand that names an element of a collection is read
-through a reference into it, taken when the operand is evaluated, and nothing
-stops a later operand of the same expression from taking the collection
-`mut` and reallocating it:
-
-```datalove
-var xs = [100000000000000000000, 5]
-let y = xs[(: index / 0)]? + grow(mut xs)   // grow pushes until xs moves
-```
-
-The addition reads the element through the dangling reference, and gives a
-garbage number rather than failing. The same holds for any pair of operands,
-call arguments aside (which `check_argument_aliasing` covers): a reference
-taken by an earlier operand, then a `mut` or consuming use of its root by a
-later one. `set` no longer has a case of it, since it runs all of its own code
-before it reaches its place, but `set xs[f(mut xs)]? += xs[1]?` still does:
-the value's reference into the list is taken, then the key's call grows it.
-Its IR shows the order; run, it read the freed buffer, which happened still
-to hold the right number.
-
-The fix is an ownership rule: within an expression, a binding an earlier
-operand borrows by reference can't be taken `mut` or moved by a later one, as
-Rust's borrow checker refuses it. The alternative, reading such an operand by
-copy, would cost a clone of every linear element an operator reads.
 
 ### The loop check asks where a binding ended up, not whether its move repeats
 

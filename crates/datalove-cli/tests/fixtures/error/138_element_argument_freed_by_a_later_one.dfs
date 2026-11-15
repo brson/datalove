@@ -1,0 +1,18 @@
+// A `mut` argument that is an element of a list is a reference into its
+// buffer, and a later argument that grows the list would move the buffer out
+// from under it (O017).
+
+require module sys/std/list
+
+fun grow(mut l: [int]): int
+  call list.push(mut l, 0)
+  ret 0
+end fun
+
+fun set77(mut x: int, y: int)
+  set x = 77
+end fun
+
+var a: [int] = [1, 2]
+call set77(mut a[(: index / 0)]!, grow(mut a))
+ret ok ()

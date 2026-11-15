@@ -164,6 +164,15 @@ pub fn ownership_diagnostic<'db>(
             .code(code)
             .primary_label(TextSpan::new(text, span), "ref parameter cannot be passed as mut")
         }
+        AnalysisError::HeldByEarlierOperand { expr_key, name } => {
+            let (text, span) = error_span(spans, *expr_key);
+            DiagnosticBuilder::error(db, &fmt!("`{name}` is still read by an earlier operand"))
+                .code(code)
+                .primary_label(TextSpan::new(text, span), "changes or moves what an earlier operand reads")
+                .note("an earlier argument passed `ref`, `mut` or `out`, an operator's operand, an index's \
+base or a compound `set`'s value is read through a reference after the rest of the expression runs; \
+clone it with `@` first, or compute this part in a statement before")
+        }
         AnalysisError::AliasedMutableArgument { expr_key, name } => {
             let (text, span) = error_span(spans, *expr_key);
             DiagnosticBuilder::error(db, &fmt!("aliased mutable argument: `{name}`"))

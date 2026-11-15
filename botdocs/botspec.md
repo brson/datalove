@@ -2334,6 +2334,7 @@ from Datafun through literals and data files.
 | O015 | WalkedCollectionChanged | Moving the collection a `for` walks, or passing it `mut`/`out` |
 | O015 | WalkedCollectionAssigned | A `set` to or through the collection a `for` walks |
 | O016 | CannotMoveConst | Moving out of a const or const parameter without `@` |
+| O017 | HeldByEarlierOperand | Taking `mut`, `out` or moving what an earlier operand reads by reference |
 
 ### 11.2 Mutable Arguments
 
@@ -2386,6 +2387,44 @@ let n = mul_checked(b, b)            // ok: both consume a copy type
 Arguments are compared by the binding their place is rooted at. Distinct
 fields (`f(mut p.x, ref p.y)`) and distinct indexes (`f(mut a[i]?, ref a[j]?)`)
 share a root and are rejected, even where they do not overlap in fact.
+
+### 11.3a Operands Held by Reference
+
+An expression's operands are evaluated left to right. A copy operand, or a
+copy argument to an `in` parameter, is read where it is written, as a
+tuple's element is, so what runs after it cannot change what it read:
+
+```datalove
+var a: u8 = : u8 / 1
+let x = a +! set9(mut a)          // 1 + 0: `a` was read first
+let y = first(a, set9(mut a))     // 9 is written, but `first` gets 1
+```
+
+Some operands are read through a reference once the rest of the expression
+has run: an argument passed `ref`, `mut` or `out`, until its call is made;
+an operator's operand that is not a copy, while the other is evaluated; an
+index's base, while its key is; and a compound `set`'s value that is not a
+copy, while the keys are. Taking the variable such an operand
+reads `mut` or `out`, or moving it, before then is an error, since it would
+change what the reference reads, or free it:
+
+```datalove
+call add(mut a, inc(mut a))            // error (O017)
+let b = n + inc(mut n)                 // error (O017): n: int is not a copy
+call set77(mut xs[0]!, grow(mut xs))   // error (O017): grow may move the buffer
+let c = xs[grow(mut xs)]!              // error (O017)
+set xs[k(mut xs)]! += xs[1]!           // error (O017): the value is read after the key
+set xs[0]! = grow(mut xs)              // ok: the value runs before the place is reached
+```
+
+A `set` runs its value, then its keys, left to right, and only then reaches
+its place, so either may change the place's variable: the write goes to
+the place as they left it.
+
+This is what Rust's borrow checker refuses for an expression, a reference
+being live from its operand to its use. Two arguments of one call are O010
+above; a call's arguments one after another (`f(mut a) + f(mut a)`) borrow
+in turn, and are allowed.
 
 ### 11.4 Loop Restrictions
 

@@ -1,0 +1,13 @@
+// A compound `set` reads its value, not a copy, through a reference into the
+// list once its keys have run, so a key may not grow the list (O017).
+
+require module sys/std/list
+
+fun grow(mut l: [int]): index
+  call list.push(mut l, 0)
+  ret : index / 0
+end fun
+
+var xs: [int] = [1, 2]
+set xs[grow(mut xs)]! += xs[(: index / 1)]!
+ret ok ()

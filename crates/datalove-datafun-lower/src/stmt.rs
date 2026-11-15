@@ -708,7 +708,13 @@ fn lower_set<'db>(
     // which a failed lookup on the way to the place drops.
     let expr_temp_mark = ctx.expr_temps_mark();
     let value = match set_stmt.op {
-        Some(_) => lower_operand(ctx, ctx.expr(value_expr))?,
+        Some(_) => {
+            let later_writes = place.steps.iter().any(|s| match s {
+                ast::PlaceStep::Index(idx) => crate::expr::writes_back(ctx, ctx.expr(idx.index)),
+                _ => false,
+            });
+            crate::expr::lower_operand_now(ctx, ctx.expr(value_expr), later_writes)?
+        }
         None => {
             let value_id = lower_expression(ctx, ctx.expr(value_expr))?;
             ctx.record_expr_temp(value_id, ctx.expr_type(ctx.expr(value_expr)));

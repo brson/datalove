@@ -435,6 +435,31 @@ debuglog (a, b, c, d)
 ```
 
 
+### Evaluation order
+
+An expression's operands are evaluated left to right.
+A copy value is read where it is written,
+so a call after it that changes the variable
+does not change what was read:
+
+```datalove
+fun set9(mut x: u8): u8
+  set x = : u8 / 9
+  ret : u8 / 0
+end fun
+
+var a: u8 = : u8 / 1
+debuglog a +! set9(mut a)   // 1: `a` was read before set9 ran
+```
+
+An argument passed `ref`, `mut` or `out`,
+and an operand that is not a copy,
+is read through a reference when it is used,
+after the rest of the expression has run.
+Changing or moving its variable in the meantime is an error (O017).
+Clone it with `@` first,
+or call the function that changes it in a statement of its own.
+
 ### Borrows are second-class
 
 Borrowed values in Datalove are not first-class types.

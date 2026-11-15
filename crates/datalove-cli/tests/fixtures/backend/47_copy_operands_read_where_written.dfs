@@ -1,0 +1,30 @@
+// A copy operand or `in` argument is read where it is written, left to right,
+// so a call after it that writes the same variable through `mut` does not
+// change what it read: as a tuple's elements were already.
+
+fun set9(mut x: u8): u8
+  set x = : u8 / 9
+  ret : u8 / 0
+end fun
+
+fun first(x: u8, y: u8): u8
+  ret x
+end fun
+
+var a: u8 = : u8 / 1
+debuglog first(a, set9(mut a))
+debuglog a
+
+var b: u8 = : u8 / 1
+debuglog b +! set9(mut b)
+debuglog b
+
+var c: u8 = : u8 / 1
+debuglog (c, set9(mut c))
+debuglog c
+
+var d: u8 = : u8 / 1
+debuglog icall add_wrapping_u8(d, set9(mut d))
+debuglog d
+
+ret ok ()

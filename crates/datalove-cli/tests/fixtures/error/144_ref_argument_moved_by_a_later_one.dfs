@@ -1,0 +1,14 @@
+// A later argument may not move what an earlier `ref` argument reads either:
+// the callee would read what was given away (O017). Nothing reads `a` after
+// the call, so it is not O001; a clone, `consume(a@)`, is fine.
+
+fun consume(x: int): int
+  ret 0
+end fun
+
+fun first(ref x: int, y: int): int
+  ret x@
+end fun
+
+let a: int = 1
+debuglog first(ref a, consume(a))

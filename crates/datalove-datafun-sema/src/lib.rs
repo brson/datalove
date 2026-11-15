@@ -717,6 +717,16 @@ pub enum AnalysisError<'db> {
         expr_key: ExprKey<'db>,
         name: String,
     },
+    /// A variable taken `mut` or `out`, or moved, while an earlier operand
+    /// of the expression still reads it through a reference: an argument
+    /// passed `ref`, `mut` or `out`, an operator's operand that is not copied,
+    /// an index's base, or a compound `set`'s value.
+    /// O017
+    HeldByEarlierOperand {
+        /// Location of the later use.
+        expr_key: ExprKey<'db>,
+        name: String,
+    },
     /// Two arguments of one call name the same binding, and at least one of
     /// them is passed to a `mut` or `out` parameter.
     /// O010
@@ -758,6 +768,7 @@ impl AnalysisError<'_> {
             AnalysisError::InconsistentLoopExit { .. } => OCode::InconsistentLoopExit,
             AnalysisError::OutParamPartialWrite { .. } => OCode::OutParamPartialWrite,
             AnalysisError::AliasedMutableArgument { .. } => OCode::AliasedMutableArgument,
+            AnalysisError::HeldByEarlierOperand { .. } => OCode::HeldByEarlierOperand,
             AnalysisError::CannotMutateImmutable { .. } => OCode::CannotMutateImmutable,
             AnalysisError::CannotMutateTemporary { .. } => OCode::CannotMutateTemporary,
         }
@@ -812,6 +823,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         AnalysisError::WalkedCollectionChanged { expr_key: _, name }
         | AnalysisError::WalkedCollectionAssigned { set_index: _, name } => {
             format!("error[{code}]: cannot change `{}` while a `for` walks it", name)
+        }
+        AnalysisError::HeldByEarlierOperand { expr_key: _, name } => {
+            format!("error[{code}]: `{}` is still read by an earlier operand", name)
         }
         AnalysisError::ReadUninitialized { expr_key: _, name } => {
             format!("error[{code}]: read of uninitialized binding: `{}`", name)

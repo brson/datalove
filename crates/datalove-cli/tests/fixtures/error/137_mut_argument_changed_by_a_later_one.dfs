@@ -1,0 +1,15 @@
+// A `mut` argument is a reference held until the call, so a later argument's
+// call may not take the same variable `mut` too (O017). Two `mut` arguments of
+// one call naming it are O010.
+
+fun inc(mut x: int): int
+  set x = x + 1
+  ret 0
+end fun
+
+fun add(mut x: int, y: int)
+  set x = x + 100
+end fun
+
+var a: int = 1
+call add(mut a, inc(mut a))

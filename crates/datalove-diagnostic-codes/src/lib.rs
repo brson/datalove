@@ -142,6 +142,9 @@ codes! {
         WalkedCollectionChanged = 15,
         /// Moving out of a const or const parameter without `@`.
         CannotMoveConst = 16,
+        /// Taking a variable `mut` or `out`, or moving it, while an earlier
+        /// operand of the expression still reads it through a reference.
+        HeldByEarlierOperand = 17,
     }
     retired = [];
 }

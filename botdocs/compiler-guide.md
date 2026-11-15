@@ -1533,6 +1533,7 @@ gives each its `OCode`.
 | O014 | `InconsistentLoopExit` | Moved on one way out of a loop and not another |
 | O015 | `WalkedCollectionChanged`, `WalkedCollectionAssigned` | The collection a `for` walks moved, passed `mut`/`out`, or assigned to or through |
 | O016 | `CannotMoveConst` | Moving out of a const or const parameter without `@` |
+| O017 | `HeldByEarlierOperand` | Taking `mut`, `out` or moving what an earlier operand reads by reference |
 
 O001, O002, O007 and O013 carry an `OwnershipRecoveryHint` suggesting an `@`,
 as O016 does for a move out of a const. The parse codes are datalit's D-codes
@@ -1653,7 +1654,11 @@ rather than the runtime taking a bare pointer on trust.
 
 A value a function changes, takes over or writes overlaps no other value it
 is handed, as a `&mut` overlaps nothing; only `AnyRef`s may share one. For
-the arguments of a call the ownership checker sees to it (O010). The one way
+the arguments of a call the ownership checker sees to it (O010), and for an
+operand read through a reference after the rest of an expression runs, which
+a later one may not change or move (O017). A copy operand, and a copy `in`
+argument, is lowered as a `Copy` where it is evaluated (`read_copy_now`), so
+it is not held. The one way
 the language has of naming a place twice in a runtime call is `set x += x`,
 which lowering turns into the operator and a store, keeping the update in
 place for a value rooted elsewhere. An export handed such a value beside

@@ -157,6 +157,80 @@ fn lower_operand_here<'db>(
     }
 }
 
+/// Whether evaluating `expr` may write to a variable: whether it holds a call
+/// with a `mut` or `out` argument, which writes back to it.
+pub fn writes_back<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> bool {
+    let any = |ids: &mut dyn Iterator<Item = ast::ExprId>| {
+        for id in ids {
+            if writes_back(ctx, expr.at(id)) {
+                return true;
+            }
+        }
+        false
+    };
+    match expr.kind() {
+        ExprFunKind::FunctionCall(call) => {
+            call.arg_modes.iter().any(|m| matches!(m, Some(ParamMode::Mut | ParamMode::Out)))
+                || any(&mut call.args.iter().copied())
+        }
+        ExprFunKind::IntrinsicCall(icall) => any(&mut icall.args.iter().copied()),
+        ExprFunKind::BinOp(binop) => any(&mut [binop.lhs, binop.rhs].into_iter()),
+        ExprFunKind::UnaryOp(unary) => writes_back(ctx, ctx.expr(unary.operand)),
+        ExprFunKind::TryOption(t) => writes_back(ctx, ctx.expr(t.operand)),
+        ExprFunKind::TryResult(t) => writes_back(ctx, ctx.expr(t.operand)),
+        ExprFunKind::Tuple(tuple) => any(&mut tuple.elements.iter().copied()),
+        ExprFunKind::List(list) => any(&mut list.elements.iter().copied()),
+        ExprFunKind::Set(set) => any(&mut set.elements.iter().copied()),
+        ExprFunKind::Map(map) => any(&mut map.entries.iter().flat_map(|entry| [entry.key, entry.value])),
+        ExprFunKind::Tensor(tensor) => any(&mut tensor.elements.iter().copied()),
+        ExprFunKind::Table(table) => any(&mut table.rows.iter().flat_map(|row| row.elements.iter().copied())),
+        ExprFunKind::AnonTuple(tuple) => any(&mut tuple.elements.iter().copied()),
+        ExprFunKind::AnonStruct(s) => any(&mut s.fields.iter().map(|f| f.value)),
+        ExprFunKind::Some(s) => writes_back(ctx, ctx.expr(s.payload)),
+        ExprFunKind::Ok(o) => writes_back(ctx, ctx.expr(o.payload)),
+        ExprFunKind::Er(e) => writes_back(ctx, ctx.expr(e.payload)),
+        ExprFunKind::Data(d) => writes_back(ctx, ctx.expr(d.value)),
+        ExprFunKind::Error(e) => writes_back(ctx, ctx.expr(e.value)),
+        ExprFunKind::Term(t) => writes_back(ctx, ctx.expr(t.payload)),
+        ExprFunKind::EnumLiteral(lit) => writes_back(ctx, ctx.expr(lit.variant)),
+        ExprFunKind::FieldProj(proj) => writes_back(ctx, ctx.expr(proj.base)),
+        ExprFunKind::Index(idx) => any(&mut [idx.base, idx.index].into_iter()),
+        ExprFunKind::Place(place) => any(&mut place.steps.iter().filter_map(|s| match s {
+            ast::PlaceStep::Index(idx) => Some(idx.index),
+            _ => None,
+        })),
+        ExprFunKind::CloneCoerce(cc) => writes_back(ctx, ctx.expr(cc.operand)),
+        ExprFunKind::Hinted(h) => writes_back(ctx, ctx.expr(h.inner)),
+        _ => false,
+    }
+}
+
+/// A copy operand read where it is evaluated, rather than left a reference
+/// to its place that the operation reads once the operands after it have run,
+/// which may have changed it: `a + f(mut a)` adds what `a` was. Only where
+/// what runs after it may write back (`later_writes`) is there a difference to
+/// make; a value already is one.
+pub fn read_copy_now(ctx: &mut LowerCtx, operand: Operand, ty: &IrType, later_writes: bool) -> Operand {
+    if !later_writes || !ty.is_copy() || matches!(operand, Operand::Value(_)) {
+        return operand;
+    }
+    let dest = ctx.fresh_value(ty.C());
+    ctx.emit(Instruction::Copy { dest, src: operand });
+    Operand::Value(dest)
+}
+
+/// Lower an operand that the operands after it run before it is read, read
+/// now if it is a copy and they may write back (`read_copy_now`).
+pub fn lower_operand_now<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    later_writes: bool,
+) -> Result<Operand, LowerError> {
+    let operand = lower_operand(ctx, expr)?;
+    let ty = ctx.expr_type(expr);
+    Ok(read_copy_now(ctx, operand, &ty, later_writes))
+}
+
 /// Lower an argument for a function call, considering the parameter mode.
 ///
 /// For ref/mut/out params with field projection args, emits GetFieldRef instead
@@ -176,6 +250,7 @@ fn lower_call_arg<'db>(
     mode: ParamMode,
     arg_type: Option<&IrType>,
     out_drops: &mut Vec<Instruction>,
+    later_writes: bool,
 ) -> Result<Operand, LowerError> {
     // Check if this is a ref context AND the arg is a field projection or index.
     if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
@@ -246,7 +321,10 @@ fn lower_call_arg<'db>(
                 }
                 return Ok(Operand::Value(dest));
             }
-            Ok(operand)
+            // A copy is passed as what it is now: the arguments after it may
+            // change the place before the callee reads it.
+            let ty = ctx.expr_type(arg);
+            Ok(read_copy_now(ctx, operand, &ty, later_writes))
         }
         _ => {
             // Compound expression: lower to a value without recording temps.
@@ -622,7 +700,8 @@ fn lower_expression_here<'db>(
             let mut out_drops = Vec::new();
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i), &mut out_drops)?;
+                let later_writes = call_args[i + 1..].iter().any(|a| writes_back(ctx, expr.at(*a)));
+                let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i), &mut out_drops, later_writes)?;
                 // Track in-mode args as pending intermediate, a binding handed
                 // over as well as a value: a later argument's `?` returns
                 // before the call takes either.
@@ -957,7 +1036,11 @@ fn lower_expression_here<'db>(
             let expr_temp_mark = ctx.expr_temps_mark();
             let args: Result<Vec<_>, _> = icall.args
                 .iter()
-                .map(|arg| lower_operand(ctx, ctx.expr(*arg)))
+                .enumerate()
+                .map(|(i, arg)| {
+                    let later_writes = icall.args[i + 1..].iter().any(|a| writes_back(ctx, ctx.expr(*a)));
+                    lower_operand_now(ctx, ctx.expr(*arg), later_writes)
+                })
                 .collect();
             let args = args?;
 
@@ -1065,7 +1148,8 @@ fn lower_binop<'db>(
 
     // Use lower_operand for borrowing semantics - operands are read by
     // reference, not consumed.
-    let lhs = lower_operand(ctx, ctx.expr(binop.lhs))?;
+    let later_writes = writes_back(ctx, ctx.expr(binop.rhs));
+    let lhs = lower_operand_now(ctx, ctx.expr(binop.lhs), later_writes)?;
     let rhs = lower_operand(ctx, ctx.expr(binop.rhs))?;
 
     let result_type = ctx.expr_type(expr);
