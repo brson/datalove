@@ -949,24 +949,6 @@ simplified since their values can't be mutated or moved.
 On each step the engine just needs to track where these
 are used and apply the same rules as `let` and `var`.
 
-This does suggest a constraint for future design directions though.
-It needs to continue to be easy to track the flow of data through bindings.
-Any language features that hide the flow of values through bindings
-will complicate the reactive architecture.
-First-class references are an example.
-If references to values could outlive the current statement
-then the analysis would have to track their lifetimes as well.
-Interior mutability is another.
-I/O presents more problems.
-
-These kinds of concerns are why one of [Datalove's principles](../principles.md)
-is to establish broad architectural capabilities early,
-develop the language later.
-Discover the big constraints now,
-and add comprehensive test suites to preserve them,
-so I don't accidentally add
-incompatible semantics to the surface language later.
-
 
 
 
@@ -1057,23 +1039,11 @@ The "because" column is documentation for the reader.
 The tables are hand-written and could be wrong though.
 Every step is also held to an additional rule:
 the session must end up as a fresh run of the current code would leave it.
+This is the same key invariant maintained by reactive notebooks
+and explored in the Lu, et. al paper.
 After each step the test starts a new engine,
 runs the units as they now stand from the top,
-and compares how each unit ended and what it holds.
-That check doesn't trust the tables at all.
-
-I don't want to say more about the specifics of the test suite.
-What I do want to say is that I love thorough testing.
-Designing an entire test suite to fit a single subsystem and purpose is powerful.
-They can express ideas that stock unit tests cannot.
-But they take outsized effort to write and maintain.
-In the past I have made elaborate and bespoke test suites when paid to do it,
-when I deemed the subsystem important enough to warrant maintaining it,
-and when I had the motivation to spend weeks writing it.
-LLMs can write and maintain this easily.
-LLMs also need thoughtful guiderails to help them maintain software in the direction I want.
-This test suite contains both the specification and its validation in a form that is easy for LLMs to maintain.
-This test suite is also in a form that is easy and useful for humans to read.
+and compares the final state of each unit and their bindings.
 
 The content of this document presents a consice narrative for readers.
 It includes the minimum description and cases to present the ideas.
@@ -1094,49 +1064,27 @@ Prefer this last because I want to experiment on my own,
 then do the upstream research and refine based on the literature.
 -->
 
-This work has precedent.
-The obvious is from functional reactive programming (FRP).
-I have only little experience and knowledge of FRP
-and did not want to change that _prior_ to doing this work.
-I prefer to discover for myself.
+This work has precedent in reactive notebooks,
+dependence analysis in compilers and build systems,
+and functional reactive programing.
 
-I'm mostly familiar with FRP through its popularity
-in the UI domain, React and similar.
-My use case here is different.
-I want the interactive coding experience to be reactive,
-so when I make changes to the code or its input I see the results immediately,
-and the results are deterministic.
-
-This turns out to be significantly different from FRP
-in that FRP is entirely concerned with runtime reactivity to changes in data.
-I do care about that as well, and I think that for my purposes
-changes in data can be treated as a subset of changes to code
-(imagine that a variable binding changes value at compile time vs. runtime -
-both conceptually have the same effect on the interpreter).
-
-Datalove's reactivity is coarse-grained, script units,
-where FRP research typically seeks to produce granular recomputation.
-Differential dataflow for example is deeply focused on not reprocessing entire lists
-during streaming workloads.
-I'm not sure the extent to which Datalove will care about that,
-though I think the current architecture is a reasonable foundation for future work.
-
-Datalove's rerun rules concern themselves primarily
-with repairing the effects of moves and mutations,
-tractable because of its linear typesystem.
+I initially suspected that FRP was the nearest precedent,
+but it is not.
+FRP as about responding to changes to values at runtime.
+This work is primarily about responding to changes to code at runtime
+(though it will also apply to changes in values).
+And Datalove's rerun rules concern themselves
+with repairing the effects of moves and mutations.
 FRP nodes don't mutate each other's values so those systems
 don't have backward analysis like Datalove.
 
-So while FRP research does apply to Datalove,
-and will moreso in the future when Datalove gets real I/O,
-the more useful comparison today is to compiler optimization,
+The more useful comparison today is to compiler optimization,
 deterministic incremental build systems,
 and live record-and-replay debuggers.
-Elm has something like this.
 Datalove's rerun rules are a dependence analysis,
 bread and butter compiler stuff.
-Dependence analysis is mostly used for optimization.
-Here we are using it to determine when to rerun surrounding units.
+Dependence analysis is most used for optimization.
+Here it determines when to rerun surrounding units.
 
 Some of the vocabulary in my rules has established terminology:
 
@@ -1162,9 +1110,6 @@ replay behavior is unsound compared to a fresh run.
 They developed a language and testing methodology.
 I adopted their technique of comparing every step to a fresh run.
 The rules developed here appear to pass all their cases and more.
-They did identify cases that I had not made explicit,
-particularly related to mutating functions and reordering script units.
-I added them to my test suite.
 
 
 
@@ -1191,3 +1136,16 @@ run `BLESS=1 cargo test -p datalove-doc-fixtures` to record it again.
 <div class="datalove-replay" data-replay="reactive-transactions"></div>
 <script src="../assets/datalove-replay.js"></script>
 <script src="../assets/reactive-transactions.replay.js"></script>
+
+
+
+
+## Conclusions
+
+These rules work because all data moves through bindings
+that the compiler can follow.
+That is a core constraint on the future design of the language.
+Any language features that hide the flow of values through bindings
+will complicate the reactive architecture.
+Examples include first-class references,
+interior mutability, and I/O.
