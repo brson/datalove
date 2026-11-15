@@ -30,7 +30,6 @@ to rerun that always produces the same result as a fresh run of all cells.
 **Part 1. Background**
 
 - [What is a reactive notebook?](#user-content-what-is-a-reactive-notebook)
-- [Datalove's design for reactivity](#user-content-dataloves-design-for-reactivity)
 
 **Part 2. Experiments**
 
@@ -112,15 +111,17 @@ The transactions live in a data file, `local/home/transactions.dlt`:
 ]
 ```
 
-And the script reads them, in eight cells:
+And the script reads them,
+separated into cells,
+which Datalove calls _script units_.
 
 ```datalove
-// cell 1
+// unit 1
 require module sys/std/list
 require module sys/std/map
 require module sys/std/string
 
-// cell 2
+// unit 2
 require data local/home/transactions: [
   {
     day: u32,
@@ -129,7 +130,7 @@ require data local/home/transactions: [
   }
 ]
 
-// cell 3
+// unit 3
 fun category(ref payee: string): string
   if (
     string.starts_with(ref payee, ref "TRADER JOES")
@@ -150,7 +151,7 @@ fun category(ref payee: string): string
   ret "other"
 end fun
 
-// cell 4
+// unit 4
 let budget: %{string = int} = %{
   "groceries" = 25000,
   "dining" = 15000,
@@ -159,17 +160,17 @@ let budget: %{string = int} = %{
   "other" = 5000
 }
 
-// cell 5
+// unit 5
 var spent: %{string = int} = %{}
 
-// cell 6
+// unit 6
 for t in ref transactions
   let c = category(ref t.payee)
   let so_far = map.get_or(ref spent, ref c, 0)
   call map.insert(mut spent, c, so_far + t.cents)
 end for
 
-// cell 7
+// unit 7
 var over: [string] = []
 for c, amount in ref spent
   if amount .> budget[c]!
@@ -177,7 +178,7 @@ for c, amount in ref spent
   end if
 end for
 
-// cell 8
+// unit 8
 let output = {
   spent = spent,
   over = over
@@ -198,7 +199,7 @@ impose I/O on a script.
 > [treats `<` and `>` as matched brackets in the lexer](../datafun.md#user-content-comparison-and-equality).
 > The remaining Datalove syntax in this example is similar to other common languages.
 
-Run in order, the cells produce `output`:
+Run in order, the script units produce `output`:
 
 ```datalove
 {
@@ -216,7 +217,7 @@ Run in order, the cells produce `output`:
 Nothing is over budget,
 but Bi-Rite is a grocery store,
 and its $33.15 is landing in "other".
-So I teach cell 3 about it by editing the `category` function:
+So I teach unit 3 about it by editing the `category` function:
 
 ```datalove
 fun category(ref payee: string): string
@@ -229,10 +230,10 @@ fun category(ref payee: string): string
   ...
 ```
 
-Which cells rerun?
-The naive answer is the cells that depend on the one I edited:
-cell 6 calls `category` to build `spent`,
-and cells 7 and 8 use what cell 6 computed.
+Which units rerun?
+The naive answer is the unit that depend on the one I edited:
+unit 6 calls `category` to build `spent`,
+and unit 7 and 8 use what unit 6 computed.
 Rerun those and the output is:
 
 ```datalove
@@ -251,9 +252,9 @@ Rerun those and the output is:
 This result is wrong.
 Everything doubled,
 and I'm suddenly over budget on nearly everything.
-Cell 6 doesn't rebuild `spent` from scratch, it adds to it.
+Unit 6 doesn't rebuild `spent` from scratch, it adds to it.
 The `spent` it found was the one it had already filled the last time it ran.
-`spent` itself is created in an earlier cell that doesn't mention `category`.
+`spent` itself is created in an earlier unit that doesn't mention `category`.
 A fresh run gives:
 
 ```datalove
@@ -269,69 +270,33 @@ A fresh run gives:
 ```
 
 To get the correct answer,
-cell 5 has to rerun before cell 6,
+unit 5 has to rerun before unit 6,
 receating `spent`.
-The edit was to cell 3,
-the cell it forced to rerun was cell 6,
-and cell 6 reached backwards to mutate `spent` in cell 5.
+The edit was to unit 3,
+the unit it forced to rerun was unit 6,
+and unit 6 reached backwards to mutate `spent` in unit 5.
 
 _This is the problem at hand_.
-When cells are edited we must follow
-the mutations to discover which other cells must rerun.
+When units are edited we must follow
+the mutations to discover which other units must rerun.
 The typical way to avoid this is to keep the declaration of `spent`
-in the same cell as the code that fills it.
+in the same unit as the code that fills it.
 Reactive notebooks generally make that a rule.
 
 Linear moves complicate the problem by invalidating bindings.
-Cell 8 _moves_ `spent` and `over` into `output`,
+Unit 8 _moves_ `spent` and `over` into `output`,
 leaving the two bindings empty.
-Now raise the dining budget in cell 4.
-Cell 7 reads `budget`, so it reruns
+Now raise the dining budget in unit 4.
+Unit 7 reads `budget`, so it reruns
 but `spent` doesn't exist, etc.
 
-In both cases the cells to rerun appear before the edit as well as after it.
-Which ones depends on how each cell accessed the bindings of the cells before it:
+In both cases the units to rerun appear before the edit as well as after it.
+Which ones depends on how each unit accessed the bindings of the units before it:
 read them, moved them, overwrote them or updated them.
 In Datalove the type checker knows these facts.
 The rest of this post builds the rerun rules from those accesses.
 It ends with this script running live in the Datalove engine,
 making these same edits.
-
-
-
-
-## Datalove's design for reactivity
-
-There are two pillars to Datalove's design that make the goal
-of interactive deterministic reexecution feasible:
-
-_Language restrictions_.
-Datalove has a linear type system and its functions are side-effect free.
-At the moment there is not even any way to do I/O,
-which would complicate determinism greatly.
-The compiler tracks data dependencies statically and precisely,
-and knows exactly which code can mutate which data.
-
-_Fast incremental recompilation_.
-The compiler's analyses are memoized,
-and modules are compiled in parallel.
-Editing code recompiles only what depends on it.
-The compiler design is aided by and informs the restrictions of the language design.
-
-Code in Datalove comes in two forms, modules and script units.
-A single script unit, executed once, is just a script.
-Scripts are the entry points to Datalove programs.
-Multiple script units, chained together,
-are the basis of interactive Datalove.
-A single REPL input is a script unit.
-Interactive Datalove is intended for REPL, scientific notebook,
-and rapid application development use cases.
-
-In most respects script units are like a function,
-except that they accept no arguments and are not required to return a result.
-At run time they have the same layout as a function's stack frame.
-Script units can be chained together in a list dynamically at run time.
-New script units inherit the type checking and execution environment of previous script units.
 
 
 
