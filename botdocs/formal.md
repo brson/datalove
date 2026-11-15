@@ -578,6 +578,21 @@ Four things are proved of it:
   evaluating an expression change variables, which the evaluator would
   have to thread through.
 
+- **A script that checks runs soundly** (`Fun.runScript_sound`, in
+  `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by
+  statement as `checkScript` checks them, each top-level `debuglog` logs a
+  value of the type the checker gives it, and the script ends, or returns
+  early with a value of its type `!()`, or stops at what is not run yet, at a
+  variable read before it is set, or where a loop or calls ran as long as
+  they were given. It puts the theorems above together: each function goes
+  into the table calls run as its declaration is reached, with the values of
+  the consts it sees, and is as `ProgOk` asks, by the check-once theorem and
+  since F088 keeps a top-level const's type free of type parameters. A call
+  of a function declared below it is not run yet. A function goes into the
+  table only where its signature's type parameters are its declaration's, its
+  parameters as many as its signature's, and its body declares no type alias;
+  `resolveNames` and the parser make that so, which is not yet proved, so the
+  runner checks it.
 - **Inference under a generic steps with inference under its instances**
   (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
   arguments touches only known types, so a variable keeps its number, and
@@ -680,13 +695,12 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **Calls that write back, and whole scripts.** A call with a `mut` or
-  `out` parameter stops as unsupported; running it writes into the caller's
-  places, so evaluating an expression changes variables, and the evaluator
-  and its proof would thread them through. Running a script, its top-level
-  statements in order, would give its consts' values and so discharge the
-  rest of `ProgOk`. A call with a recursive type argument stops as well,
-  until the check-once theorem takes one.
+- **Calls that write back.** A call with a `mut` or `out` parameter stops
+  as unsupported; running it writes into the caller's places, so evaluating
+  an expression changes variables, and the evaluator and its proof would
+  thread them through. A call with a recursive type argument stops as well,
+  until the check-once theorem takes one, and so does a call of a function
+  a script declares below it.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

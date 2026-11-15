@@ -9,7 +9,9 @@ function's body, as an instance, under the context the check-once theorem
 checks it in (`funCtx`, with the type arguments substituted), with the
 parameters bound to the arguments' values and the consts in scope to
 theirs. A `ret e` is what the call gives, a `ret` or a body that ends gives
-the unit. Calls nest at most as deep as they are given (`Stop.diverge`).
+the unit. Calls nest at most as deep as they are given (`Stop.diverge`). A
+function not in the table, as one a script declares below the call is not
+yet, is not run (`Stop.unsupported`).
 
 It takes `funCtx` and `Ctx.inst` from the proofs, so that the context a body
 runs in is by definition the one it was checked in.
@@ -54,6 +56,9 @@ def runCall (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String 
       | .error (.early v) => pure v
       | .error .retVoid => pure unitVal
       | .error s => throw s
-    | _, _ => throw .wrong
+    -- A function a script declares below where it is called is not in the
+    -- table yet.
+    | some _, none => throw .unsupported
+    | none, _ => throw .wrong
 
 end Datalove.Fun

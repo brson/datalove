@@ -23,12 +23,12 @@ namespace Datalove.Fun
 
 open Lit (Val HasType)
 
-/-- A program whose functions' bodies check: each function its signatures
-name has a body, with as many parameters as its signature, that checks
-quietly as an instance at any ground type arguments its bounds admit, F063
-included; and its consts' values are of their types there. -/
+/-- A program whose functions' bodies check: each function of the table that
+its signatures name has as many parameters as its signature, and a body that
+checks quietly as an instance at any ground type arguments its bounds admit,
+F063 included; and its consts' values are of their types there. -/
 def ProgOk (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String × FunInfo)) : Prop :=
-  ∀ f sig, sigs.lookup f = some sig → ∃ fi, funs.lookup f = some fi ∧ fi.params.length = sig.params.length ∧
+  ∀ f sig fi, sigs.lookup f = some sig → funs.lookup f = some fi → fi.params.length = sig.params.length ∧
     ∀ θ, groundArgs θ = true →
       (∀ p b, (p, some b) ∈ sig.tparams → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true) →
       SQuiet (checkBlockF env fuel ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ) fi.body
@@ -85,7 +85,10 @@ theorem runCall_ok (h : ProgOk env sigs funs) (k : Nat) : ∀ d, CallOk sigs (ru
   | 0 => fun _ _ _ _ _ _ _ _ _ _ => .inr (.inr rfl)
   | d + 1 => by
     intro f sig θ vals hs _ hg hbd hl hv
-    obtain ⟨fi, hfi, hpl, hq⟩ := h f sig hs
+    cases hfi : funs.lookup f with
+    | none => simp only [runCall, hs, hfi]; exact .inl rfl
+    | some fi =>
+    obtain ⟨hpl, hq⟩ := h f sig fi hs hfi
     obtain ⟨hq, hc⟩ := hq θ hg hbd
     obtain ⟨_, hbody, h63⟩ := SQuiet.bind_inv (fun _ => Appends.report _ _) hq
     rw [SQuiet.reportIf_iff] at h63
