@@ -1341,8 +1341,16 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     // Non-zero steps: root is borrowed, index sub-expressions are borrowed.
                     let root_name = place.root.text(self.db);
                     if let Some(id) = self.lookup(root_name) {
-                        self.note_external_read(id);
-                        self.check_not_moved(id, expr_key);
+                        // A part of a binding with no value is as unset as the
+                        // whole of it.
+                        if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized)
+                            && !self.note_external_read(id)
+                        {
+                            let name = self.bindings[id.0 as usize].name.C();
+                            self.errors.push(AnalysisError::ReadUninitialized { expr_key, name });
+                        } else {
+                            self.check_not_moved(id, expr_key);
+                        }
                     }
                     for step in &place.steps {
                         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {

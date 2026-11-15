@@ -1,0 +1,8 @@
+[31m[O005] Error:[0m read of uninitialized binding: `p`
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/134_read_a_field_of_an_uninitialized_var.dfs:4:12 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m4 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mp[0m[38;5;201m.[0m[38;5;201m0[0m
+ [38;5;240m  │[0m            [38;5;201m─[0m[38;5;201m┬[0m  
+ [38;5;240m  │[0m             [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m used before initialization
+[38;5;246m───╯[0m
+Error: Ownership error

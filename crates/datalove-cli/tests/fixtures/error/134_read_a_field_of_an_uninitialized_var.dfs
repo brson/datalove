@@ -1,0 +1,7 @@
+// Reading a field of a var with no value is O005, as reading the whole of it is.
+fun f(): u8
+  var p: (u8, u8)
+  let a = p.0
+  ret a
+end fun
+debuglog f()

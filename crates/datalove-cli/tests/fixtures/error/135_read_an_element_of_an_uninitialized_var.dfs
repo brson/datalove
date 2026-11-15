@@ -1,0 +1,7 @@
+// Reading an element of a var with no value is O005, as reading the whole of it is.
+fun f(): !string
+  var l: [string]
+  let a = l[0]!@
+  ret ok a
+end fun
+debuglog f()
