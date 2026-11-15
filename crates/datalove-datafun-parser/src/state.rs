@@ -451,7 +451,10 @@ impl<'db> Parser<'db> {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
         builder.emit_parse();
-        self.push_expr(ast::ExprFunKind::ParseError(ast::ExprFunParseError { source: ts.source, span: ts.span, message: message_text }))
+        // Filed with its span, as every expression is: the type checker reports
+        // T017 at it.
+        let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError { source: ts.source, span: ts.span.C(), message: message_text });
+        self.create_expr(kind, ts)
     }
 
     /// Check if looking at a colon type hint.
