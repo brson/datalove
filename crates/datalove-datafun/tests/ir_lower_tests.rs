@@ -36,7 +36,6 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Compile modules (typecheck, drop analysis, lower).
     let compiled = module_compiler.compile(&db);
 
-    // Check for errors using consolidated helper methods.
     // The first phase that failed, as its messages.
     let messages = |by_path: &std::collections::BTreeMap<String, Vec<bct::diagnostic::StoredDiagnostic>>| -> Vec<String> {
         by_path.values().flatten().map(|d| d.message.clone()).collect()

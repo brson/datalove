@@ -24,10 +24,15 @@ fn message<S: serde::Serializer>(diagnostics: &[StoredDiagnostic], serializer: S
 
 /// A diagnostic as text without its spans: `error[F016]: ...`, then its helps.
 pub fn diagnostic_summary(diagnostic: &StoredDiagnostic) -> String {
-    let mut text = match &diagnostic.code {
-        Some(code) => format!("error[{code}]: {}", diagnostic.message),
-        None => format!("error: {}", diagnostic.message),
-    };
+    match &diagnostic.code {
+        Some(code) => format!("error[{code}]: {}", message_and_helps(diagnostic)),
+        None => format!("error: {}", message_and_helps(diagnostic)),
+    }
+}
+
+/// A diagnostic's message, then a `help:` line for each of its helps.
+fn message_and_helps(diagnostic: &StoredDiagnostic) -> String {
+    let mut text = diagnostic.message.C();
     for help in &diagnostic.helps {
         text.push_str(&format!("\n  help: {help}"));
     }
@@ -181,13 +186,7 @@ impl ScriptCompilationResult {
     pub fn first_error(&self) -> Option<String> {
         self.diagnostics().map(|diagnostics| {
             diagnostics.iter()
-                .map(|diagnostic| {
-                    let mut text = diagnostic.message.C();
-                    for help in &diagnostic.helps {
-                        text.push_str(&format!("\n  help: {help}"));
-                    }
-                    text
-                })
+                .map(message_and_helps)
                 .collect::<Vec<_>>()
                 .join("; ")
         })

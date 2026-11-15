@@ -27,7 +27,7 @@ use std::sync::Arc;
 use datalove_datafun as datafun;
 use datalove_datafun_interp::{Engine, ModuleFunctionRegistry};
 use datalove_datafun_ir::{CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
-use datafun::driver::{LoweringResult, ScriptExecutor, TypecheckResult, WorkspaceDescriptor};
+use datafun::driver::{ScriptExecutor, WorkspaceDescriptor};
 
 /// What one fixture compiled to.
 #[derive(Serialize, Deserialize)]
@@ -137,11 +137,10 @@ fn reachable(registry: &ModuleFunctionRegistry, roots: &[&IrCodeUnit]) -> Module
 }
 
 fn compiled_unit(result: datafun::driver::ScriptCompilationResult) -> Option<IrCodeUnit> {
-    if matches!(result.typecheck, TypecheckResult::Error { .. })
-        || matches!(result.lowering, LoweringResult::Error { .. }) {
-        return None;
+    match result.diagnostics() {
+        Some(_) => None,
+        None => Some(result.ir_unit.expect("a unit that compiled has its IR")),
     }
-    result.ir_unit
 }
 
 /// Run each prepared fixture on each engine, returning the failures.
