@@ -305,24 +305,6 @@ making these same edits.
 
 ## Datalove's design for reactivity
 
-<!--
-
-_And_ these are the properties that will help us solve the problem.
-
-_Therefore_ about the hidden state problem.
-
-_But_ what about I/O?
-_Therefore_ here is how we model it.
-
-_But_ what about FRP?
-_Therefore_ here is how we compare.
-
-Refine the motivating example to a datalove worldfile,
-introducing the concept.
-We'll show a version of it live at the end.
-
--->
-
 There are two pillars to Datalove's design that make the goal
 of interactive deterministic reexecution feasible:
 
@@ -339,23 +321,14 @@ and modules are compiled in parallel.
 Editing code recompiles only what depends on it.
 The compiler design is aided by and informs the restrictions of the language design.
 
-A language that doesn't do any I/O is limited in utility.
-Datalove will have I/O.
-One of my [principles](../principles.md) in Datalove is to start with a severely
-restricted language design, build out the desired compiler capabilities,
-then slowly loosen those language restrictions while designing
-within the established restrictions of the compiler architecture.
-Even while Datalove remains a pure-functional language I have
-secret plans to add simple I/O facilities in a way that will preserve
-the unique properties we are building here.
-
 Code in Datalove comes in two forms, modules and script units.
 A single script unit, executed once, is just a script.
 Scripts are the entry points to Datalove programs.
 Multiple script units, chained together,
 are the basis of interactive Datalove.
 A single REPL input is a script unit.
-Interactive Datalove is intended for the REPL and scientific notebook use cases.
+Interactive Datalove is intended for REPL, scientific notebook,
+and rapid application development use cases.
 
 In most respects script units are like a function,
 except that they accept no arguments and are not required to return a result.
@@ -363,56 +336,10 @@ At run time they have the same layout as a function's stack frame.
 Script units can be chained together in a list dynamically at run time.
 New script units inherit the type checking and execution environment of previous script units.
 
-In this example of a self-contained Datalove _worldfile_ we have three sequential script units.
-
-```datalove
-----------
-scriptunit-fragment 1
-----------
-
-let a = 1000
-
-----------
-scriptunit-fragment 2
-----------
-
-let b = 100
-
-----------
-scriptunit-fragment 3
-----------
-
-let a_moved = a
-let b_moved = b
-let c = a_moved + b_moved
-```
-
-> Worldfiles are sections of text delimited by headers between `----------` lines.
-> Each section is interpreted as determined by the header.
-> There are many section types.
-> Worldfiles can fully describe all input to the compiler and are the base format of the Datalove test suite.
-
-In this example the integers are type `int`, bigints.
-They are linear types allocated on the heap,
-so the assignment `let a_moved = a` moves `a` into `a_moved`, leaving `a` empty.
-
-In this example all three units compile and execute successfully.
-The third binds `c` to 1100.
-Each unit compiles and runs before the next.
-A later unit compiles against the bindings earlier units provide,
-and runs only if the units it reads from ran to their end.
-
 
 
 
 ## If one unit moves or mutates a binding how does that affect preceding units on replay?
-
-<!--
-_But_ need a simple clear example that shows the core problem.
-_Therefore_ what we decide to recompile and rerun, as a first set of rules.
-
-Demonstrate read/take/overwrite/update
--->
 
 Whatever we rerun,
 the session must end up as a fresh run of the current code
@@ -435,7 +362,7 @@ Integer literals are `int`, a bigint,
 which is linear,
 so `let f = b` moves `b` rather than copying it.
 
-The first four units each make one binding.
+In the initial example the first four units each make one binding.
 The fifth does something different to each of them.
 
 ```datalove
@@ -472,6 +399,12 @@ let f = b
 set c = 30
 set d = d * 2
 ```
+
+> This is a Datalove _worldfile_.
+> Worldfiles are sections of text delimited by headers between `----------` lines.
+> Each section is interpreted as determined by the header.
+> There are many section types.
+> Worldfiles can fully describe all input to the compiler and are the base format of the Datalove test suite.
 
 Unit 5 _reads_ `a`, _takes_ `b`, _overwrites_ `c` and _updates_ `d`.
 Entering the five units is step 1:
