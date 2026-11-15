@@ -513,14 +513,20 @@ def hexBits : Ty → Option (Nat × Code)
   | .f64 => some (64, "T014")
   | _ => none
 
+/-- Whether an enum's variant `a`, the first of that name, is an atom. The
+Rust asks whether any atom has the name, which is the same of an enum naming
+each variant once (D038, `Hint.conv_namesOnce`); asked of the first, it is
+the variant a `match` finds by the name. -/
 def Variants.atomListed (a : String) : Variants → Bool
   | .nil => false
-  | .atom n vs => n == a || Variants.atomListed a vs
-  | .term _ _ vs => Variants.atomListed a vs
+  | .atom n vs => if n == a then true else Variants.atomListed a vs
+  | .term n _ vs => if n == a then false else Variants.atomListed a vs
 
+/-- The payload of an enum's variant `a`, the first of that name, if it is a
+term. -/
 def Variants.termPayload (a : String) : Variants → Option Ty
   | .nil => none
-  | .atom _ vs => Variants.termPayload a vs
+  | .atom n vs => if n == a then none else Variants.termPayload a vs
   | .term n t vs => if n == a then some t else Variants.termPayload a vs
 
 def tysList : Tys → List Ty

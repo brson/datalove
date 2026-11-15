@@ -542,7 +542,9 @@ theorem atomListed_inst (θ : List (String × Ty)) (a : String) : ∀ (vs : Vari
 theorem termPayload_inst (θ : List (String × Ty)) (a : String) : ∀ (vs : Variants),
     Lit.Variants.termPayload a (vs.inst θ) = (Lit.Variants.termPayload a vs).map (·.inst θ)
   | .nil => rfl
-  | .atom _ vs => by simp [Variants.inst, Lit.Variants.termPayload, termPayload_inst θ a vs]
+  | .atom n vs => by
+    simp only [Variants.inst, Lit.Variants.termPayload]
+    split <;> simp [termPayload_inst θ a vs]
   | .term n t vs => by
     simp only [Variants.inst, Lit.Variants.termPayload]
     split <;> simp [termPayload_inst θ a vs]

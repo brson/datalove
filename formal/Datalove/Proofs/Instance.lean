@@ -274,19 +274,22 @@ namespace Datalove
 theorem Variants.hasAtom_inst (θ : List (String × Ty)) (a : String) :
     ∀ (vs : Variants), vs.hasAtom a = true → (vs.inst θ).hasAtom a = true
   | .nil, h => by simp [Variants.hasAtom] at h
-  | .atom n vs, h => by
-    simp only [Variants.hasAtom, Variants.inst, Bool.or_eq_true] at h ⊢
-    exact h.imp id (Variants.hasAtom_inst θ a vs)
-  | .term _ _ vs, h => by
+  | .atom n vs, h | .term n _ vs, h => by
     simp only [Variants.hasAtom, Variants.inst] at h ⊢
-    exact Variants.hasAtom_inst θ a vs h
+    by_cases hn : (n == a) = true
+    · simp_all
+    · simp only [hn, Bool.false_eq_true, ↓reduceIte] at h ⊢
+      exact Variants.hasAtom_inst θ a vs h
 
 theorem Variants.hasTerm_inst (θ : List (String × Ty)) (a : String) (t : Ty) :
     ∀ (vs : Variants), vs.hasTerm a t = true → (vs.inst θ).hasTerm a (t.inst θ) = true
   | .nil, h => by simp [Variants.hasTerm] at h
-  | .atom _ vs, h => by
+  | .atom n vs, h => by
     simp only [Variants.hasTerm, Variants.inst] at h ⊢
-    exact Variants.hasTerm_inst θ a t vs h
+    by_cases hn : (n == a) = true
+    · simp_all
+    · simp only [hn, Bool.false_eq_true, ↓reduceIte] at h ⊢
+      exact Variants.hasTerm_inst θ a t vs h
   | .term n p vs, h => by
     simp only [Variants.hasTerm, Variants.inst] at h ⊢
     by_cases hn : (n == a) = true

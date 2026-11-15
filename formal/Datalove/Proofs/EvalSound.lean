@@ -196,19 +196,22 @@ theorem HasType.float_hex {k : Nat} {t : Ty} (h : HasType (.hex k) t) (ht : t = 
 theorem Variants.atomListed_of_hasAtom {a : String} : ∀ {vs : Variants}, vs.hasAtom a = true →
     Variants.atomListed a vs = true
   | .nil, h => by simp [Variants.hasAtom] at h
-  | .atom n vs, h => by
-    simp only [Variants.hasAtom, Bool.or_eq_true, Variants.atomListed] at h ⊢
-    exact h.imp id atomListed_of_hasAtom
-  | .term _ _ vs, h => by
+  | .atom n vs, h | .term n _ vs, h => by
     simp only [Variants.hasAtom, Variants.atomListed] at h ⊢
-    exact atomListed_of_hasAtom h
+    by_cases hn : (n == a) = true
+    · simp_all
+    · simp only [hn, Bool.false_eq_true, ↓reduceIte] at h ⊢
+      exact atomListed_of_hasAtom h
 
 theorem Variants.termPayload_of_hasTerm {a : String} {t : Ty} : ∀ {vs : Variants},
     vs.hasTerm a t = true → Variants.termPayload a vs = some t
   | .nil, h => by simp [Variants.hasTerm] at h
-  | .atom _ vs, h => by
+  | .atom n vs, h => by
     simp only [Variants.hasTerm, Variants.termPayload] at h ⊢
-    exact termPayload_of_hasTerm h
+    by_cases hn : (n == a) = true
+    · simp_all
+    · simp only [hn, Bool.false_eq_true, ↓reduceIte] at h ⊢
+      exact termPayload_of_hasTerm h
   | .term n p vs, h => by
     simp only [Variants.hasTerm, Variants.termPayload] at h ⊢
     split at h
@@ -314,19 +317,21 @@ namespace Datalove.Fun
 
 open Lit (Val HasType inRange roll_of)
 
-/-- Every variable in scope holds a value of its type. -/
+/-- Every variable in scope holds a value of its type, or none yet. -/
 def EnvOk (Γ : Ctx) (ρ : VEnv) : Prop :=
-  ∀ x t k, Γ.lookup x = Option.some (t, k) → ∃ v, ρ.lookup x = Option.some v ∧ HasType v t
+  ∀ x t k, Γ.lookup x = Option.some (t, k) →
+    ∃ o, ρ.lookup x = Option.some o ∧ ∀ v, o = Option.some v → HasType v t
 
 /-- A value the function may return early: one of its return type. -/
 def EarlyOk (R : Ret) (r : Val) : Prop := ∃ T, R = .ty T ∧ HasType r T
 
 /-- Why evaluating a checked expression may give no value: an early return
-the function's type allows, or a call, not evaluated yet. -/
+the function's type allows, a call, not evaluated yet, or a variable read
+before it was set, which the ownership analysis refuses. -/
 def StopOk (R : Ret) : Stop → Prop
   | .early r => EarlyOk R r
-  | .unsupported => True
-  | .fuel | .wrong => False
+  | .unsupported | .uninit => True
+  | .fuel | .wrong | .retVoid | .brk _ | .cont _ | .diverge => False
 
 /-- What evaluation gives meets `P`, or stops as a checked expression may. -/
 def Sound {α} (R : Ret) (P : α → Prop) (m : EvalM α) : Prop :=
@@ -632,9 +637,11 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
         split at h
         · simp at h
         rw [Quiet.pure_iff] at h; subst h
-        obtain ⟨v, hv, hvt⟩ := hρ x u k hl
+        obtain ⟨o, hv, hvt⟩ := hρ x u k hl
         simp only [evalS, hv]
-        exact Sound.pure' hvt
+        cases o with
+        | none => trivial
+        | some v => exact Sound.pure' (hvt v rfl)
     case binop op a b =>
       simp only [synthF] at h
       obtain ⟨u, hp, hf⟩ := h.bind_inv
@@ -691,9 +698,12 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
         simp only [hl] at h
         split at h
         · simp at h
-        obtain ⟨v, hv, hvt⟩ := hρ x u k hl
-        simp only [evalS, hv, hl]
-        exact evalSteps_sound n _ ρ u v steps t h hvt hb (hρ.enter _)
+        obtain ⟨o, hv, hvt⟩ := hρ x u k hl
+        cases o with
+        | none => simp only [evalS, hv]; trivial
+        | some v =>
+          simp only [evalS, hv, hl]
+          exact evalSteps_sound n _ ρ u v steps t h (hvt v rfl) hb (hρ.enter _)
     case proj b sel =>
       simp only [synthF] at h
       obtain ⟨u, hu, h⟩ := h.bind_inv

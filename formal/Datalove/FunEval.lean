@@ -39,13 +39,25 @@ inductive Stop where
   /-- An operation met an operand of the wrong kind, or a form a checked
   expression never has. -/
   | wrong
-  /-- A form not evaluated yet: a call. -/
+  /-- A form not evaluated yet: a call, or a `set` through a tensor's
+  slice. -/
   | unsupported
+  /-- A variable read before it was set, which the ownership analysis refuses
+  (O005), not the checker. -/
+  | uninit
+  /-- `ret` with no value. -/
+  | retVoid
+  /-- `break` and `continue`, with the variables as they were. -/
+  | brk (ρ : List (String × Option Val))
+  | cont (ρ : List (String × Option Val))
+  /-- A loop that ran as many times as it was given. -/
+  | diverge
 
 abbrev EvalM := Except Stop
 
-/-- The values of the variables in scope. -/
-abbrev VEnv := List (String × Val)
+/-- The variables in scope, innermost first, each with its value, or none
+before it is set. -/
+abbrev VEnv := List (String × Option Val)
 
 /-- What a comparison answers. Not modelled: it is a `bool`. -/
 opaque compareOp : BinOp → Ty → Val → Val → Bool
@@ -187,7 +199,8 @@ def evalS (env : InferEnv) : Nat → Ctx → VEnv → Expr → EvalM Val
         | .error _ => throw .wrong
       evalForm env n Γ ρ inner t
     | .var x => match ρ.lookup x with
-      | some v => pure v
+      | some (some v) => pure v
+      | some none => throw .uninit
       | none => throw .wrong
     | .binop op a b => do
       let (t, va, vb) ← evalPair env n Γ ρ a b none
@@ -209,7 +222,8 @@ def evalS (env : InferEnv) : Nat → Ctx → VEnv → Expr → EvalM Val
     | .adapt a => evalS env n Γ.borrow ρ a
     | .call _ _ => throw .unsupported
     | .place x steps => match ρ.lookup x, Γ.lookup x with
-      | some v, some (t, _) => evalSteps env n Γ ρ t v steps
+      | some (some v), some (t, _) => evalSteps env n Γ ρ t v steps
+      | some none, _ => throw .uninit
       | _, _ => throw .wrong
     | .proj b s => do fieldVal (← evalS env n Γ ρ b) s
     | .index b k mode => match mode with

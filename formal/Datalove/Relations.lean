@@ -76,11 +76,12 @@ def canWiden : Ty → Ty → Bool
 
 end Ty
 
-/-- Whether an enum lists the atom `a`. -/
+/-- Whether an enum's variant `a`, the first of that name, is an atom, as
+`Lit.Variants.atomListed`. -/
 def Variants.hasAtom (a : String) : Variants → Bool
   | .nil => false
-  | .atom n vs => n == a || vs.hasAtom a
-  | .term _ _ vs => vs.hasAtom a
+  | .atom n vs => if n == a then true else vs.hasAtom a
+  | .term n _ vs => if n == a then false else vs.hasAtom a
 
 /-- Whether an enum's term `a` has a payload equivalent to `t`: the first
 of that name, as checking a term against an enum finds it. The Rust asks of
@@ -88,7 +89,7 @@ any variant of the name, which is the same, an enum naming each variant once
 (D038, and `Hint.conv_namesOnce`). -/
 def Variants.hasTerm (a : String) (t : Ty) : Variants → Bool
   | .nil => false
-  | .atom _ vs => vs.hasTerm a t
+  | .atom n vs => if n == a then false else vs.hasTerm a t
   | .term n p vs => if n == a then t.equiv p else vs.hasTerm a t
 
 namespace Ty
