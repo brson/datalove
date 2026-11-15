@@ -500,18 +500,20 @@ Four things are proved of it:
 
 - **A datafun expression that checks evaluates to a value of its type**
   (`Fun.evalS_sound`, in `Proofs/EvalSound.lean`, of the evaluator in
-  `FunEval.lean`), so far for literals, variables, hints, operators, `?`,
-  `!` and `@`. Where an expression checks quietly in a context whose
+  `FunEval.lean`), so far for every form but calls: literals, variables,
+  places, hints, operators, `?`, `!`, `@`, fields and indexes. Where an expression checks quietly in a context whose
   variables hold values of their types, evaluating it gives a value of its
   type (`Lit.HasType`, datalit's), or returns early with a value of the
   function's return type: never an operand of the wrong kind, a checked
   operator's result outside its type's range, or an early return the
-  function's type does not take. Calls, places, fields and indexes are not
-  evaluated yet. What an operator does depends on its operands' type, as
+  function's type does not take, or an index or field read off the wrong
+  kind of value. An index with nothing at its key returns early as its `?`
+  or `!` says, and a tensor's of rank above one is a slice, of the size its
+  shape says. Calls are not evaluated yet. What an operator does depends on its operands' type, as
   `a +! b` overflows at `u8`'s bounds or `i8`'s, so evaluation follows the
   checker one function for one and takes the types it gives, as a compiled
-  program carries them; a comparison's answer is not modelled, being only a
-  `bool`. It holds for any inference, since what inference finds is checked
+  program carries them; a comparison's answer, and whether two map keys are
+  one, are not modelled, being only a `bool`. It holds for any inference, since what inference finds is checked
   before it is used, and of contexts with no type parameter's bound, as an
   instance's are, so of a generic through the check-once theorem. Proving it
   changed two things. A hex literal's value is also the integer it spells
@@ -622,10 +624,9 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **Evaluation of the rest of datafun.** `Fun.evalS_sound` takes literals,
-  variables, operators, `?`, `!` and `@`; places, fields and indexes come
-  next, then calls, which need a function's body evaluated, and then
-  statements, which is what says what `ret e` returns.
+- **Evaluation of the rest of datafun.** `Fun.evalS_sound` takes every
+  form but calls; calls come next, which need a function's body evaluated,
+  and with them statements, which is what says what `ret e` returns.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

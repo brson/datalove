@@ -8,7 +8,7 @@ import Datalove.Proofs.InstanceCheck
 `Fun.evalS_sound`: where an expression checks quietly in a context whose
 variables hold values of their types, evaluating it gives a value of its
 type, or returns early with a value of the function's return type, or
-reaches a form the evaluator does not yet take (`Stop.unsupported`); never
+reaches a call, which the evaluator does not yet take (`Stop.unsupported`); never
 an operand of the wrong kind, and never running out of fuel, which the
 evaluator spends as the checker does. It holds whatever inference says,
 since what inference finds is checked before it is used. It is of contexts
@@ -245,6 +245,69 @@ theorem HasType.adapt {v : Val} {s d : Ty} (h : HasType v s) (ha : s.canAdapt d 
       obtain ⟨n, -, hr, hv⟩ := he.int_inv (by simp [Ty.isFixedInt])
       exact HasType.of_num hv (by simp_all [inRange] <;> omega)
 
+
+theorem HasType.tuple_inv {v : Val} {ts : Tys} (h : HasType v (.tuple ts)) :
+    ∃ vs, v = .tuple vs ∧ vs.length = (tysList ts).length ∧ ∀ p ∈ vs.zip (tysList ts), HasType p.1 p.2 := by
+  generalize ht : Ty.tuple ts = t at h
+  induction h with
+  | tuple hl hz => cases ht; exact ⟨_, rfl, hl, hz⟩
+  | hexInt _ ih => obtain ⟨_, h, -⟩ := ih ht; cases h
+  | roll _ ih => subst ht; exact ih rfl
+  | int hr => subst ht; simp [inRange] at hr
+  | hex hr => subst ht; simp [hexFits] at hr
+  | float hr => subst ht; simp [Ty.isFloat] at hr
+  | _ => cases ht
+
+theorem HasType.struct_inv {v : Val} {ts : Fields} (h : HasType v (.struct ts)) :
+    ∃ fs, v = .struct fs ∧ fs.map (·.1) = (fieldsList ts).map (·.1) ∧
+      ∀ p ∈ fs.zip (fieldsList ts), HasType p.1.2 p.2.2 := by
+  generalize ht : Ty.struct ts = t at h
+  induction h with
+  | struct hl hz => cases ht; exact ⟨_, rfl, hl, hz⟩
+  | hexInt _ ih => obtain ⟨_, h, -⟩ := ih ht; cases h
+  | roll _ ih => subst ht; exact ih rfl
+  | int hr => subst ht; simp [inRange] at hr
+  | hex hr => subst ht; simp [hexFits] at hr
+  | float hr => subst ht; simp [Ty.isFloat] at hr
+  | _ => cases ht
+
+theorem HasType.list_inv {v : Val} {e : Ty} (h : HasType v (.list e)) :
+    ∃ vs, v = .list vs ∧ ∀ w ∈ vs, HasType w e := by
+  generalize ht : Ty.list e = t at h
+  induction h with
+  | list hw => cases ht; exact ⟨_, rfl, hw⟩
+  | hexInt _ ih => obtain ⟨_, h, -⟩ := ih ht; cases h
+  | roll _ ih => subst ht; exact ih rfl
+  | int hr => subst ht; simp [inRange] at hr
+  | hex hr => subst ht; simp [hexFits] at hr
+  | float hr => subst ht; simp [Ty.isFloat] at hr
+  | _ => cases ht
+
+theorem HasType.map_inv {v : Val} {k w : Ty} (h : HasType v (.map k w)) :
+    ∃ es, v = .map es ∧ (∀ p ∈ es, HasType p.1 k) ∧ (∀ p ∈ es, HasType p.2 w) := by
+  generalize ht : Ty.map k w = t at h
+  induction h with
+  | map hk hv => cases ht; exact ⟨_, rfl, hk, hv⟩
+  | hexInt _ ih => obtain ⟨_, h, -⟩ := ih ht; cases h
+  | roll _ ih => subst ht; exact ih rfl
+  | int hr => subst ht; simp [inRange] at hr
+  | hex hr => subst ht; simp [hexFits] at hr
+  | float hr => subst ht; simp [Ty.isFloat] at hr
+  | _ => cases ht
+
+theorem HasType.tensor_inv {v : Val} {e : Ty} {r : Nat} (h : HasType v (.tensor e r)) :
+    ∃ shape vs, v = .tensor shape vs ∧ shape.length = r ∧ vs.length = shape.foldl (· * ·) 1 ∧
+      ∀ w ∈ vs, HasType w e := by
+  generalize ht : Ty.tensor e r = t at h
+  induction h with
+  | tensor hs hl hw => cases ht; exact ⟨_, _, rfl, hs, hl, hw⟩
+  | hexInt _ ih => obtain ⟨_, _, h, -⟩ := ih ht; cases h
+  | roll _ ih => subst ht; exact ih rfl
+  | int hr => subst ht; simp [inRange] at hr
+  | hex hr => subst ht; simp [hexFits] at hr
+  | float hr => subst ht; simp [Ty.isFloat] at hr
+  | _ => cases ht
+
 end Datalove.Lit
 
 namespace Datalove.Fun
@@ -259,7 +322,7 @@ def EnvOk (Γ : Ctx) (ρ : VEnv) : Prop :=
 def EarlyOk (R : Ret) (r : Val) : Prop := ∃ T, R = .ty T ∧ HasType r T
 
 /-- Why evaluating a checked expression may give no value: an early return
-the function's type allows, or a form this stage does not take. -/
+the function's type allows, or a call, not evaluated yet. -/
 def StopOk (R : Ret) : Stop → Prop
   | .early r => EarlyOk R r
   | .unsupported => True
@@ -405,6 +468,128 @@ theorem EnvOk.borrow {Γ : Ctx} {ρ : VEnv} (h : EnvOk Γ ρ) : EnvOk Γ.borrow 
 theorem typeOf_quiet {m : ChkM Ty} {t : Ty} (h : Quiet m t) : typeOf m = .ok t := by
   simp only [typeOf]; rw [h]; rfl
 
+theorem foldl_mul (l : List Nat) (a : Nat) : l.foldl (· * ·) a = a * l.foldl (· * ·) 1 := by
+  induction l generalizing a with
+  | nil => simp
+  | cons x xs ih => simp only [List.foldl_cons]; rw [ih (a * x), ih (1 * x)]; simp [Nat.mul_assoc]
+
+theorem struct_lookup : ∀ {fs : List (String × Val)} {ts : List (String × Ty)} {n : String} {u : Ty},
+    fs.map (·.1) = ts.map (·.1) → (∀ p ∈ fs.zip ts, HasType p.1.2 p.2.2) → ts.lookup n = some u →
+    ∃ w, fs.lookup n = some w ∧ HasType w u
+  | [], [], _, _, _, _, h => by simp at h
+  | [], _ :: _, _, _, hn, _, _ => by simp at hn
+  | _ :: _, [], _, _, hn, _, _ => by simp at hn
+  | (m, w) :: fs, (k, t) :: ts, n, u, hn, hz, hl => by
+    simp only [List.map_cons, List.cons.injEq] at hn
+    obtain ⟨rfl, hn⟩ := hn
+    simp only [List.lookup] at hl ⊢
+    by_cases e : n = m
+    · subst e
+      simp only [beq_self_eq_true, Option.some.injEq] at hl ⊢
+      subst hl
+      exact ⟨w, rfl, hz ((n, w), (n, t)) (by simp)⟩
+    · have : (n == m) = false := by simpa using e
+      simp only [this] at hl ⊢
+      exact struct_lookup hn (fun p hp => hz p (by simp [hp])) hl
+
+theorem fieldVal_sound {R : Ret} {v : Val} {t u : Ty} {s : Sel} (h : HasType v t) (hf : fieldType t s = .ok u) :
+    Sound R (HasType · u) (fieldVal v s) := by
+  have he := h.expose
+  unfold fieldType at hf
+  generalize t.expose = T at he hf
+  cases T <;> cases s <;> simp at hf
+  case tuple.pos ts i =>
+    split at hf
+    · rename_i u' hu
+      simp [pure, Except.pure] at hf; subst hf
+      obtain ⟨vs, rfl, hl, hz⟩ := he.tuple_inv
+      obtain ⟨hi2, hu'⟩ := List.getElem?_eq_some_iff.mp hu
+      have hi : i < vs.length := by rw [hl]; exact hi2
+      simp only [fieldVal, List.getElem?_eq_getElem hi]
+      have hmem : (vs[i], (Lit.tysList ts)[i]) ∈ vs.zip (Lit.tysList ts) := by
+        rw [List.mem_iff_getElem]
+        exact ⟨i, by simp only [List.length_zip]; omega, by simp⟩
+      rw [hu'] at hmem
+      exact Sound.pure' (hz _ hmem)
+    · simp [throw, throwThe, MonadExceptOf.throw] at hf
+  case struct.name fs nm =>
+    split at hf
+    · rename_i u' hu
+      simp [pure, Except.pure] at hf; subst hf
+      obtain ⟨vs, rfl, hn, hz⟩ := he.struct_inv
+      obtain ⟨w, hw, hwt⟩ := struct_lookup hn hz hu
+      simp only [fieldVal, hw]
+      exact Sound.pure' hwt
+    · simp [throw, throwThe, MonadExceptOf.throw] at hf
+
+theorem missing_ok {Γ : Ctx} {m : IdxMode} (h : Γ.fitsMode m = true) : StopOk Γ.ret (missing m) := by
+  cases m
+  · exact EarlyOk.none_of h
+  · exact EarlyOk.er_of h .error
+
+theorem indexVal_sound {R : Ret} {m : IdxMode} {v kv : Val} {t et kt : Ty} (h : HasType v t)
+    (hi : indexTypes t = .ok (et, kt)) (hk : HasType kv kt) (hm : StopOk R (missing m)) :
+    Sound R (HasType · et) (indexVal m v kv) := by
+  have he := h.expose
+  unfold indexTypes at hi
+  generalize t.expose = T at he hi
+  cases T <;> simp [pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hi
+  case list e =>
+    obtain ⟨rfl, rfl⟩ := hi
+    obtain ⟨vs, rfl, hvs⟩ := he.list_inv
+    obtain ⟨i, hn, -, -⟩ := hk.int_inv (.inl rfl)
+    simp only [indexVal, hn]
+    split
+    · exact hm
+    · split
+      · rename_i w hw; exact Sound.pure' (hvs w (List.mem_of_getElem? hw))
+      · exact hm
+  case map k w =>
+    obtain ⟨rfl, rfl⟩ := hi
+    obtain ⟨es, rfl, -, hvs⟩ := he.map_inv
+    simp only [indexVal]
+    split
+    · rename_i p hp; exact Sound.pure' (hvs p (List.mem_of_find?_eq_some hp))
+    · exact hm
+  case tensor e r =>
+    obtain ⟨rfl, rfl⟩ := hi
+    obtain ⟨shape, vs, rfl, hs, hl, hvs⟩ := he.tensor_inv
+    obtain ⟨i, hn, -, -⟩ := hk.int_inv (.inl rfl)
+    simp only [indexVal, hn]
+    by_cases hneg : i < 0
+    · simp only [hneg, ↓reduceIte]; exact hm
+    simp only [hneg, ↓reduceIte]
+    have elem : ∀ (r : Nat), r ≤ 1 →
+        Sound R (HasType · (if r ≤ 1 then e else .tensor e (r - 1)))
+          (match vs[i.toNat]? with
+            | some w => pure w
+            | none => throw (missing m)) := by
+      intro r hr
+      simp only [hr, ↓reduceIte]
+      split
+      · rename_i w hw; exact Sound.pure' (hvs w (List.mem_of_getElem? hw))
+      · exact hm
+    rcases shape with _ | ⟨s0, _ | ⟨s1, rest⟩⟩
+    · subst hs; exact elem 0 (by omega)
+    · subst hs; exact elem 1 (by simp)
+    · subst hs
+      simp only [List.length_cons]
+      have hr : ¬ (rest.length + 1 + 1 ≤ 1) := by omega
+      simp only [hr, ↓reduceIte]
+      split
+      · rename_i hlt
+        let p := shapeSize (s1 :: rest)
+        have hlen : vs.length = s0 * p := by rw [hl, List.foldl_cons, foldl_mul, Nat.one_mul]; rfl
+        have h1 : (i.toNat + 1) * p ≤ s0 * p := Nat.mul_le_mul_right _ hlt
+        rw [Nat.succ_mul] at h1
+        refine Sound.pure' (.tensor (by simp) ?_ ?_)
+        · simp only [List.length_take, List.length_drop, hlen]
+          show min p (s0 * p - i.toNat * p) = shapeSize (s1 :: rest)
+          omega
+        · intro w hw
+          exact hvs w (List.mem_of_mem_drop (List.mem_of_mem_take hw))
+      · exact hm
+
 theorem litBody_checks {env : InferEnv} {n : Nat} {Γ : Ctx} {e : Expr} {t : Ty} (hl : e.isLit = true)
     (h : Quiet (synthF env (n + 1) Γ e) t) : Quiet (checkForm env n (Γ.enter e) e t) () := by
   rw [synthF_lit hl] at h
@@ -421,7 +606,7 @@ mutual
 
 /-- **A datafun expression that checks evaluates to a value of its type**,
 or returns early with a value of the function's return type, or reaches a
-form this stage does not evaluate: in a context with no type parameter's
+call, which is not evaluated yet: in a context with no type parameter's
 bound, whose variables hold values of their types, and for any inference. -/
 theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), Quiet (synthF env n Γ e) t →
     Γ.bounds = [] → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalS env n Γ ρ e)
@@ -496,7 +681,56 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), 
       simp only [synthF] at h
       simp only [evalS]
       exact evalS_sound n _ ρ a t h hb (hρ.enter _).borrow
-    case call | place | proj | index => simp only [evalS]; exact Sound.unsupported
+    case call => simp only [evalS]; exact Sound.unsupported
+    case place x steps =>
+      simp only [synthF] at h
+      cases hl : (Γ.enter (.place x steps)).lookup x with
+      | none => simp [hl] at h
+      | some p =>
+        obtain ⟨u, k⟩ := p
+        simp only [hl] at h
+        split at h
+        · simp at h
+        obtain ⟨v, hv, hvt⟩ := hρ x u k hl
+        simp only [evalS, hv, hl]
+        exact evalSteps_sound n _ ρ u v steps t h hvt hb (hρ.enter _)
+    case proj b sel =>
+      simp only [synthF] at h
+      obtain ⟨u, hu, h⟩ := h.bind_inv
+      obtain ⟨w, hw, h⟩ := h.bind_inv
+      split at h
+      · simp at h
+      rw [Quiet.pure_iff] at h; subst h
+      rw [Quiet.liftE_iff] at hw
+      simp only [evalS]
+      exact Sound.bind' (evalS_sound n _ ρ b u hu hb (hρ.enter _)) (fun v hv => fieldVal_sound hv hw)
+    case index b key mode =>
+      cases mode with
+      | none => simp [synthF] at h
+      | some m =>
+        simp only [synthF] at h
+        obtain ⟨u, hu, h⟩ := h.bind_inv
+        obtain ⟨⟨et, kt⟩, hi, h⟩ := h.bind_inv
+        obtain ⟨_, hk, h⟩ := h.bind_inv
+        rw [Quiet.liftE_iff] at hi
+        rw [Quiet.recover_iff] at hk
+        split at h
+        · simp at h
+        split at h
+        · simp at h
+        split at h
+        · simp at h
+        rename_i hfit
+        rw [Quiet.pure_iff] at h; subst h
+        simp only [evalS, typeOf_quiet hu]
+        refine Sound.bind' (P := (u = ·)) rfl (fun _ e => ?_)
+        subst e
+        simp only [hi]
+        refine Sound.bind' (P := ((et, kt) = ·)) rfl (fun _ e => ?_)
+        subst e
+        exact Sound.bind' (evalS_sound n _ ρ b u hu hb (hρ.enter _)) (fun v hv =>
+          Sound.bind' (evalC_sound n _ ρ key kt hk hb (hρ.enter _)) (fun kv hkv =>
+            indexVal_sound hv hi hkv (missing_ok (by simpa using hfit))))
     case unop op a =>
       have hb0 : (Γ.enter (.unop op a)).bounds = [] := hb
       cases op
@@ -858,6 +1092,60 @@ theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty
     all_goals
       simp only [checkForm] at h; simp only [evalForm]
       exact evalSub_sound n Γ ρ _ t h hb hρ
+
+theorem evalSteps_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (v : Val) (steps : List Step) (u : Ty),
+    Quiet (stepsF env n Γ t steps) u → HasType v t → Γ.bounds = [] → EnvOk Γ ρ →
+    Sound Γ.ret (HasType · u) (evalSteps env n Γ ρ t v steps)
+  | 0, _, _, _, _, _, _, h, _, _, _ => by simp [stepsF] at h
+  | n + 1, Γ, ρ, t, v, [], u, h, hv, hb, hρ => by
+    simp only [stepsF, Quiet.pure_iff] at h; subst h
+    simp only [evalSteps]; exact Sound.pure' hv
+  | n + 1, Γ, ρ, t, v, [st], u, h, hv, hb, hρ => by
+    simp only [stepsF] at h
+    simp only [evalSteps]
+    exact evalStep_sound n Γ ρ t v st u h hv hb hρ
+  | n + 1, Γ, ρ, t, v, st :: st' :: rest, u, h, hv, hb, hρ => by
+    simp only [stepsF] at h
+    obtain ⟨w, hw, h⟩ := h.bind_inv
+    simp only [evalSteps, typeOf_quiet hw]
+    refine Sound.bind' (P := (w = ·)) rfl (fun _ e => ?_)
+    subst e
+    exact Sound.bind' (evalStep_sound n Γ.through ρ t v st w hw hv hb hρ) (fun x hx =>
+      evalSteps_sound n Γ ρ w x (st' :: rest) u h hx hb hρ)
+
+theorem evalStep_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (v : Val) (st : Step) (u : Ty),
+    Quiet (stepF env n Γ t st) u → HasType v t → Γ.bounds = [] → EnvOk Γ ρ →
+    Sound Γ.ret (HasType · u) (evalStep env n Γ ρ t v st)
+  | 0, _, _, _, _, _, _, h, _, _, _ => by simp [stepF] at h
+  | n + 1, Γ, ρ, t, v, .field sel, u, h, hv, hb, hρ => by
+    simp only [stepF] at h
+    obtain ⟨w, hw, h⟩ := h.bind_inv
+    split at h
+    · simp at h
+    rw [Quiet.pure_iff] at h; subst h
+    rw [Quiet.liftE_iff] at hw
+    simp only [evalStep]
+    exact fieldVal_sound hv hw
+  | n + 1, Γ, ρ, t, v, .index k none, u, h, hv, hb, hρ => by simp [stepF] at h
+  | n + 1, Γ, ρ, t, v, .index k (some m), u, h, hv, hb, hρ => by
+    simp only [stepF] at h
+    obtain ⟨⟨et, kt⟩, hi, h⟩ := h.bind_inv
+    obtain ⟨_, hk, h⟩ := h.bind_inv
+    rw [Quiet.liftE_iff] at hi
+    rw [Quiet.recover_iff] at hk
+    split at h
+    · simp at h
+    split at h
+    · simp at h
+    split at h
+    · simp at h
+    rename_i hfit
+    rw [Quiet.pure_iff] at h; subst h
+    simp only [evalStep, hi]
+    refine Sound.bind' (P := ((et, kt) = ·)) rfl (fun _ e => ?_)
+    subst e
+    exact Sound.bind' (evalC_sound n Γ ρ k kt hk hb hρ) (fun kv hkv =>
+      indexVal_sound hv hi hkv (missing_ok (by simpa using hfit)))
 
 theorem evalSub_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Expr) (t : Ty), Quiet (subsumeF env n Γ e t) () →
     Γ.bounds = [] → EnvOk Γ ρ → Sound Γ.ret (HasType · t) (evalSub env n Γ ρ e)

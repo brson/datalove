@@ -19,8 +19,8 @@ types are kept at run time: a value is in its type's range, an early return
 is a value of the function's return type, and no operation meets an operand
 of the wrong kind (`Stop.wrong`).
 
-This first stage evaluates literals, variables, hints, operators, `?`, `!`
-and `@`. Calls, places, fields and indexes are `Stop.unsupported`. `@`
+It evaluates literals, variables, places, hints, operators, `?`, `!`, `@`,
+fields and indexes. Calls are `Stop.unsupported`. `@`
 converts between types whose values are the same: a wider number, an atom or
 term into an enum, a clone. A comparison's answer is not modelled
 (`compareOp`), since soundness needs only that it is a `bool`.
@@ -39,8 +39,7 @@ inductive Stop where
   /-- An operation met an operand of the wrong kind, or a form a checked
   expression never has. -/
   | wrong
-  /-- A form this stage does not evaluate: a call, a place, a field or an
-  index. -/
+  /-- A form not evaluated yet: a call. -/
   | unsupported
 
 abbrev EvalM := Except Stop
@@ -121,6 +120,53 @@ def unOp (op : UnOp) (t : Ty) (v : Val) : EvalM Val :=
     | none => throw .wrong
   | _, _ => throw .wrong
 
+/-- Whether two keys are one. Not modelled: a map lookup finds some entry,
+or none. -/
+opaque keyEq : Val → Val → Bool
+
+/-- How many elements a tensor of a shape holds. -/
+def shapeSize (shape : List Nat) : Nat := shape.foldl (· * ·) 1
+
+/-- A field of a tuple or struct value. -/
+def fieldVal (v : Val) (s : Sel) : EvalM Val :=
+  match v, s with
+  | .tuple vs, .pos i => match vs[i]? with
+    | some w => pure w
+    | none => throw .wrong
+  | .struct fs, .name n => match fs.lookup n with
+    | some w => pure w
+    | none => throw .wrong
+  | _, _ => throw .wrong
+
+/-- What an index with nothing at its key returns early. -/
+def missing : IdxMode → Stop
+  | .opt => .early .none
+  | .res => .early (.er .error)
+
+/-- What `v[k]?` or `v[k]!` reads: a list's element, a map's value, a
+tensor's element or, of rank above one, its slice along the first axis. -/
+def indexVal (m : IdxMode) (v k : Val) : EvalM Val :=
+  match v with
+  | .list vs => match numOf k with
+    | some i => if i < 0 then throw (missing m) else match vs[i.toNat]? with
+      | some w => pure w
+      | none => throw (missing m)
+    | none => throw .wrong
+  | .map es => match es.find? (fun e => keyEq k e.1) with
+    | some e => pure e.2
+    | none => throw (missing m)
+  | .tensor shape vs => match numOf k with
+    | some i => if i < 0 then throw (missing m) else match shape with
+      | [] | [_] => match vs[i.toNat]? with
+        | some w => pure w
+        | none => throw (missing m)
+      | s0 :: rest =>
+        if i.toNat < s0 then
+          pure (.tensor rest ((vs.drop (i.toNat * shapeSize rest)).take (shapeSize rest)))
+        else throw (missing m)
+    | none => throw .wrong
+  | _ => throw .wrong
+
 /-- The value of a checker's answer, or `wrong` where it has none. -/
 def typeOf (m : ChkM Ty) : EvalM Ty :=
   match m.run.val with
@@ -161,7 +207,21 @@ def evalS (env : InferEnv) : Nat → Ctx → VEnv → Expr → EvalM Val
       | .ok v => pure v
       | _ => throw .wrong
     | .adapt a => evalS env n Γ.borrow ρ a
-    | .call _ _ | .place _ _ | .proj _ _ | .index _ _ _ => throw .unsupported
+    | .call _ _ => throw .unsupported
+    | .place x steps => match ρ.lookup x, Γ.lookup x with
+      | some v, some (t, _) => evalSteps env n Γ ρ t v steps
+      | _, _ => throw .wrong
+    | .proj b s => do fieldVal (← evalS env n Γ ρ b) s
+    | .index b k mode => match mode with
+      | none => throw .wrong
+      | some m => do
+        let bt ← typeOf (synthF env n Γ b)
+        let (_, kt) ← match indexTypes bt with
+          | .ok p => pure p
+          | .error _ => throw .wrong
+        let v ← evalS env n Γ ρ b
+        let kv ← evalC env n Γ ρ k kt
+        indexVal m v kv
     | e => do
       let t ← typeOf (synthF env (n + 1) Γ₀ e)
       evalForm env n Γ ρ e t
@@ -241,6 +301,28 @@ def evalForm (env : InferEnv) : Nat → Ctx → VEnv → Expr → Ty → EvalM V
     | .call _ _ => throw .unsupported
     | .unop _ _ | .var _ | .tryOpt _ | .tryRes _ | .hinted _ _
     | .place _ _ | .proj _ _ | .index _ _ _ => evalSub env n Γ ρ e
+
+/-- A place's steps from a value of type `t`, as `stepsF` types them. -/
+def evalSteps (env : InferEnv) : Nat → Ctx → VEnv → Ty → Val → List Step → EvalM Val
+  | 0, _, _, _, _, _ => throw .fuel
+  | _ + 1, _, _, _, v, [] => pure v
+  | n + 1, Γ, ρ, t, v, [st] => evalStep env n Γ ρ t v st
+  | n + 1, Γ, ρ, t, v, st :: rest => do
+    let u ← typeOf (stepF env n Γ.through t st)
+    let w ← evalStep env n Γ.through ρ t v st
+    evalSteps env n Γ ρ u w rest
+
+/-- A step from a value of type `t`, as `stepF` types it. -/
+def evalStep (env : InferEnv) : Nat → Ctx → VEnv → Ty → Val → Step → EvalM Val
+  | 0, _, _, _, _, _ => throw .fuel
+  | _ + 1, _, _, _, v, .field s => fieldVal v s
+  | _ + 1, _, _, _, _, .index _ none => throw .wrong
+  | n + 1, Γ, ρ, t, v, .index k (some m) => do
+    let (_, kt) ← match indexTypes t with
+      | .ok p => pure p
+      | .error _ => throw .wrong
+    let kv ← evalC env n Γ ρ k kt
+    indexVal m v kv
 
 /-- What `e` evaluates to, as `subsumeF` synthesizes it. -/
 def evalSub (env : InferEnv) : Nat → Ctx → VEnv → Expr → EvalM Val
