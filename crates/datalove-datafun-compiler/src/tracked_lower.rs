@@ -909,7 +909,7 @@ pub fn lower_module_functions<'db>(
                 Ok(ir_func) => {
                     functions.push(Arc::new(ir_func));
                 }
-                Err(lower::LowerError::BindingNotAvailable(_)) => {
+                Err(lower::LowerError::BindingNotAvailable { .. }) => {
                     // Names a module const that has not been evaluated yet.
                     // Recorded so the caller can lower it once it has.
                     deferred.push(func_name);
@@ -1336,7 +1336,7 @@ fn evaluate_module_consts_in_order<'db>(
                 Ok((ir_type, value)) => {
                     consts.insert(name, (ir_type, value));
                 }
-                Err(ConstError::Unbound(missing)) if failed.contains(&missing) => {
+                Err(ConstError::Unbound { name: missing, .. }) if failed.contains(&missing) => {
                     failed.insert(name);
                 }
                 Err(error) => {

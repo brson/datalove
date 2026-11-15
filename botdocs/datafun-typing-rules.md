@@ -1003,6 +1003,7 @@ same, and its tests hold the Rust to it.
 | F108 | A `for` over something that is not a place |
 | F109 | A `for` binding the wrong number of names for its collection |
 | F110 | Inference that depends on what a type parameter stands for |
+| F111 | A name an earlier script unit binds, which typechecked and did not compile |
 | T005-T015, T061 | A literal out of range for its type, as in datalit |
 | T016 | `none`, `er e`, an enum literal or an empty collection with nothing expected |
 | T017 | An expression that holds a parse error |

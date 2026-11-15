@@ -50,7 +50,11 @@ pub struct ConstEvalEnv<'a, 'db> {
 pub enum ConstError {
     /// It names something with no value here: a const that failed, or a
     /// binding of an earlier script unit that did not compile.
-    Unbound(String),
+    Unbound {
+        name: String,
+        /// Where the initializer writes it; see `LowerError::BindingNotAvailable`.
+        at: Option<lower::WrittenAt>,
+    },
     /// Running it gave no value.
     Ctfe(CtfeError),
 }
@@ -191,10 +195,10 @@ pub fn evaluate_const<'db>(
     );
     let (unit, value) = match lowered {
         Ok(pair) => pair,
-        Err(LowerError::BindingNotAvailable(missing)) if deferred.contains(&missing) => {
+        Err(LowerError::BindingNotAvailable { name, .. }) if deferred.contains(&name) => {
             return Ok(None);
         }
-        Err(LowerError::BindingNotAvailable(missing)) => return Err(ConstError::Unbound(missing)),
+        Err(LowerError::BindingNotAvailable { name, at }) => return Err(ConstError::Unbound { name, at }),
     };
     match (unit, value) {
         (None, Some(value)) => Ok(Some(value)),
@@ -246,7 +250,7 @@ pub fn evaluate_body_consts<'db>(
             Ok(None) => {
                 deferred.insert(name);
             }
-            Err(ConstError::Unbound(missing)) if failed.contains(&missing) => {
+            Err(ConstError::Unbound { name: missing, .. }) if failed.contains(&missing) => {
                 failed.insert(name);
             }
             Err(error) => {

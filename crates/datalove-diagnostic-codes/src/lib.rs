@@ -597,6 +597,9 @@ codes! {
         ForNameCount = 109,
         /// Inference that depends on what a type parameter stands for.
         DependsOnTypeParam = 110,
+        /// A name an earlier script unit binds, which typechecked and did not
+        /// compile.
+        BoundByUnitThatFailed = 111,
     }
     retired = [11, 60, 65, 75];
 }

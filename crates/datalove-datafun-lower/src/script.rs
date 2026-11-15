@@ -290,7 +290,7 @@ pub fn lower_script_functions<'db>(
 
             match lowered {
                 Ok(unit) => lowered_units.push(unit),
-                Err(LowerError::BindingNotAvailable(_)) if defer_missing_consts => {
+                Err(LowerError::BindingNotAvailable { .. }) if defer_missing_consts => {
                     deferred.push(func_name);
                 }
                 Err(e) => return Err(e),
@@ -447,7 +447,8 @@ fn lower_statement_for_script<'db>(
                 // Not found, it is bound by an earlier unit that typechecked
                 // and did not compile.
                 let operand = ctx.lookup_var(&root_name_str)
-                    .ok_or_else(|| LowerError::BindingNotAvailable(root_name_str.C()))?;
+                    .ok_or_else(|| LowerError::missing(&root_name_str)
+                        .at(|| crate::WrittenAt::Set(set_stmt.local_index)))?;
                 match operand {
                     Operand::Slot(slot) => {
                         let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);

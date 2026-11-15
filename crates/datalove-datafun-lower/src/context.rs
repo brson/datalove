@@ -513,7 +513,7 @@ impl<'db> LowerCtx<'db> {
             None => {
                 let resolved_func_name = target.func().name.text(self.db).S();
                 self.lookup_func(&resolved_func_name)
-                    .ok_or(crate::LowerError::BindingNotAvailable(resolved_func_name))
+                    .ok_or_else(|| crate::LowerError::missing(resolved_func_name))
             }
         }
     }

@@ -660,9 +660,20 @@ at the function whose const parameters it could not copy for. The module
 compiler carries these as `StoredDiagnostic`s to `SingleModuleLoweringResult`
 and `CompiledModules::lowering_diagnostics`; the script compiler as
 `LoweringResult::Error`'s diagnostics, which the unit's record keeps for the
-REPL to render. The one lowering error with no span is a script unit naming
-what a unit that did not compile bound; see
-[issues.md](issues.md#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering).
+REPL to render.
+
+**A name a failed unit bound is found by lowering.** The typechecker offers
+later units the names of a unit that typechecked, and lowering only those of
+a unit that compiled, so a unit that failed in ownership analysis or later
+leaves its names to the one and not the other. Having the typechecker report
+the use instead would make a unit's typecheck depend on the earlier units'
+later phases, which it does not now (see
+[script-reactivity-architecture.md](script-reactivity-architecture.md)). So
+lowering finds it, as `LowerError::BindingNotAvailable`, which carries where
+the name is written (`WrittenAt`): `lower_expression`, `lower_operand` and
+`lower_expression_for_ref` stamp the innermost expression on an error leaving
+them without one, and a `set` its own index. The script compiler reports it
+as F111 at that span.
 
 ## Generics
 

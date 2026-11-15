@@ -21,7 +21,6 @@ home here.
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
-  - [A name bound by a unit that did not compile is found only by lowering](#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering)
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
@@ -193,21 +192,6 @@ Making it a refusal needs to know the `JITModule` is still usable after a
 failed definition. Dropping the engine and starting a fresh one is the
 heavier alternative. The CLI's REPL does not use the JIT, so a long session
 does not reach this today.
-
-### A name bound by a unit that did not compile is found only by lowering
-
-**Reproduced.** The typechecker offers later units the names of a unit that
-typechecked, and lowering only those of a unit that compiled, so a unit that
-failed in ownership analysis or later leaves its names to the one and not the
-other. A use of one is found by lowering, which reports ``"`t` is bound by
-unit 0, which did not compile"`` as a diagnostic with no span and no code:
-lowering knows the name and not where it is written. It is the one lowering
-error left that is not at a span.
-
-What it would take: the typechecker reporting the use, with its span, or not
-offering the name. Either makes a unit's typecheck depend on the earlier
-units' later phases, which it does not now; see
-[script-reactivity-architecture.md](script-reactivity-architecture.md).
 
 ### An edit to a module no unit requires reports nothing
 

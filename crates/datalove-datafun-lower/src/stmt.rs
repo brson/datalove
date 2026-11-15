@@ -721,7 +721,8 @@ fn lower_set<'db>(
         let aliased = place_root(ctx, ctx.expr(value_expr)) == Some(place.root.text(ctx.db).as_ref());
         lower_set_compound(ctx, place, &keys, op, value, aliased, expr_temp_mark)?;
     } else if place.steps.is_empty() {
-        lower_set_simple(ctx, place, value)?;
+        lower_set_simple(ctx, place, value)
+            .map_err(|error| error.at(|| crate::WrittenAt::Set(set_stmt.local_index)))?;
     } else if place_contains_index(place) {
         lower_set_indexed(ctx, place, &keys, value)?;
     } else {
@@ -773,7 +774,7 @@ fn lower_set_simple<'db>(
             Ok(())
         }
         // Bound by an earlier unit that typechecked and did not compile.
-        None => Err(LowerError::BindingNotAvailable(root_name_str)),
+        None => Err(LowerError::missing(root_name_str)),
         _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
     }
 }

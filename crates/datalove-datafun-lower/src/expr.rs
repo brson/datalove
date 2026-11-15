@@ -53,7 +53,7 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), 
     // const that has not been evaluated yet. The caller lowers this function
     // again once it has.
     let op = ctx.lookup_var(name)
-        .ok_or_else(|| LowerError::BindingNotAvailable(name.S()))?;
+        .ok_or_else(|| LowerError::missing(name))?;
 
     Ok((op, false))
 }
@@ -65,6 +65,18 @@ fn record_fresh_const_temp(ctx: &mut LowerCtx, operand: &Operand) {
     };
     let ty = ctx.body.value_types[vid.0 as usize].C();
     ctx.record_expr_temp(vid, ty);
+}
+
+/// Where `expr` is written, for an error raised while lowering it.
+///
+/// The key's module is left out: a script unit's has none, and a module's
+/// lowering only defers on the error and never says where it was.
+fn written_at(ctx: &LowerCtx<'_>, expr: ExprFun<'_>) -> crate::WrittenAt {
+    let key = expr.key();
+    crate::WrittenAt::Expr {
+        fn_name: key.fn_name.map(|name| name.as_str(ctx.db).S()),
+        local_index: key.local_index,
+    }
 }
 
 /// Lower an operand for borrowing contexts (binop, unaryop, `@`).
@@ -80,6 +92,13 @@ fn record_fresh_const_temp(ctx: &mut LowerCtx, operand: &Operand) {
 /// which is not the same thing here as it is for a `ref` argument, and the
 /// index fixtures say so.
 pub fn lower_operand<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<Operand, LowerError> {
+    lower_operand_here(ctx, expr).map_err(|error| error.at(|| written_at(ctx, expr)))
+}
+
+fn lower_operand_here<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Operand, LowerError> {
@@ -388,6 +407,13 @@ pub fn lower_expression_for_ref<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Operand, LowerError> {
+    lower_expression_for_ref_here(ctx, expr).map_err(|error| error.at(|| written_at(ctx, expr)))
+}
+
+fn lower_expression_for_ref_here<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<Operand, LowerError> {
     match expr.kind() {
         ExprFunKind::FieldProj(proj) => {
             // Field projections use GetFieldRef to borrow without copying.
@@ -440,6 +466,13 @@ pub fn lower_expression_for_ref<'db>(
 
 /// Lower an expression, returning the ValueId holding the result.
 pub fn lower_expression<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<ValueId, LowerError> {
+    lower_expression_here(ctx, expr).map_err(|error| error.at(|| written_at(ctx, expr)))
+}
+
+fn lower_expression_here<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<ValueId, LowerError> {

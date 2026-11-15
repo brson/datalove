@@ -28,6 +28,8 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use bct::diagnostic::{DiagnosticBuilder, StoredDiagnostic};
 use bct::lookup::LookupMap;
+use bct::text::InternedText;
+use datalove_diagnostic_codes::FCode;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{Body, ParsedExpr, Statement, StmtFun, TopLevel};
@@ -1656,18 +1658,34 @@ impl<'db> ScriptCompiler<'db> {
         index: usize,
         error: datalove_datafun_compiler::lower::LowerError,
     ) -> ScriptCompilationResult {
-        let datalove_datafun_compiler::lower::LowerError::BindingNotAvailable(name) = &error;
-        self.lowering_refused(vec![self.unbound_diagnostic(index, name)])
+        let datalove_datafun_compiler::lower::LowerError::BindingNotAvailable { name, at } = &error;
+        self.lowering_refused(vec![self.unbound_diagnostic(index, name, at.as_ref())])
     }
 
-    /// The diagnostic for unit `index` naming `name`, which the typechecker
-    /// found and lowering cannot; see [`Self::lowering_failure`].
-    ///
-    /// It has no span: lowering knows the name and not where it is written.
-    fn unbound_diagnostic(&self, index: usize, name: &str) -> StoredDiagnostic {
+    /// The diagnostic for unit `index` naming `name` `at`, which the
+    /// typechecker found and lowering cannot; see [`Self::lowering_failure`].
+    fn unbound_diagnostic(
+        &self,
+        index: usize,
+        name: &str,
+        at: Option<&datalove_datafun_compiler::lower::WrittenAt>,
+    ) -> StoredDiagnostic {
+        use datalove_datafun_compiler::lower::WrittenAt;
         let unit = self.failed_provider(index, name)
             .unwrap_or_else(|| panic!("`{name}` is named at position {index} and bound by no unit before it that failed"));
+        let spans = self.unit_spans(index);
+        let span = match at.unwrap_or_else(|| panic!("lowering says where `{name}` is written")) {
+            WrittenAt::Expr { fn_name, local_index } => {
+                let fn_name = fn_name.as_ref().map(|fn_name| InternedText::new(self.db, fn_name.C()));
+                spans.lookup_key(datalove_datafun_ast::ast::ExprKey::new(None, fn_name, *local_index))
+            }
+            WrittenAt::Set(local_index) => spans.lookup_set(*local_index).cloned(),
+        };
+        let span = span.unwrap_or_else(|| panic!("where `{name}` is written has a span"));
         DiagnosticBuilder::error(self.db, &format!("`{name}` is bound by unit {unit}, which did not compile"))
+            .code(FCode::BoundByUnitThatFailed.as_str())
+            .primary_label(span, &format!("unit {unit}'s `{name}` has no value"))
+            .help(&format!("fix unit {unit}, and this unit compiles with it"))
             .build_stored()
     }
 
@@ -1693,9 +1711,15 @@ impl<'db> ScriptCompiler<'db> {
         }
     }
 
-    /// The spans of unit `index`'s statements, for a diagnostic to point into.
+    /// The spans of unit `index`'s expressions and statements, from the parse
+    /// it was given as a fragment or as an expression, for a diagnostic to
+    /// point into.
     fn unit_spans(&self, index: usize) -> DatafunSpans<'db> {
-        datalove_datafun_parser::datafun_spans(self.db, self.units[index].unit.source(self.db))
+        let unit = self.units[index].unit;
+        match unit.is_expr(self.db) {
+            true => datalove_datafun_parser::datafun_expr_spans(self.db, unit.source(self.db)),
+            false => datalove_datafun_parser::datafun_spans(self.db, unit.source(self.db)),
+        }
     }
 
     /// The result for unit `index`, which did not parse.
@@ -2214,8 +2238,8 @@ impl<'db> ScriptCompiler<'db> {
                 &mut env, expr, &binding.ir_type, &resolved_consts_map,
                 Some(IrType::Result(Box::new(IrType::Unit))), &Default::default(),
             ).map_err(|error| match error {
-                ConstError::Unbound(missing) =>
-                    self.lowering_refused(vec![self.unbound_diagnostic(waiting.index, &missing)]),
+                ConstError::Unbound { name, at } =>
+                    self.lowering_refused(vec![self.unbound_diagnostic(waiting.index, &name, at.as_ref())]),
                 ConstError::Ctfe(error) => self.lowering_refused(vec![ctfe_diagnostic(
                     self.db, &self.unit_spans(waiting.index), &binding.name, expr, &error)]),
             })?.expect("nothing is deferred at a script's top level");
@@ -2278,7 +2302,7 @@ impl<'db> ScriptCompiler<'db> {
                 consts.insert(format!("{}::{}", func_name, name), (ir_type, value));
             }
             errors.extend(failures.into_iter().map(|failure| match &failure.error {
-                ConstError::Unbound(missing) => self.unbound_diagnostic(index, missing),
+                ConstError::Unbound { name, at } => self.unbound_diagnostic(index, name, at.as_ref()),
                 ConstError::Ctfe(_) => failure.diagnostic(self.db, &self.unit_spans(index)),
             }));
         }

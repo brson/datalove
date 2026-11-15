@@ -98,13 +98,50 @@ pub enum LowerError {
     /// Reached for a module-level const, whose value is only known once it has
     /// been evaluated, which needs the functions it calls to be lowered first.
     /// The caller defers the function and lowers it again after evaluation.
-    BindingNotAvailable(String),
+    ///
+    /// In a script unit it is also a binding of an earlier unit that
+    /// typechecked and did not compile, which the unit cannot lower against.
+    BindingNotAvailable {
+        name: String,
+        /// Where the name is written: the innermost expression being lowered
+        /// when it was found missing, or the `set` writing it. Filled in as
+        /// the error leaves the expression or statement.
+        at: Option<WrittenAt>,
+    },
+}
+
+/// Where in a unit or module a name is written, as its span table finds it.
+///
+/// Owned rather than an `ExprKey`, whose function name is interned, so that
+/// `LowerError` need not carry the database's lifetime.
+#[derive(Debug, Clone, PartialEq)]
+pub enum WrittenAt {
+    /// An expression, by the parts of its `ExprKey` but the module.
+    Expr { fn_name: Option<String>, local_index: u32 },
+    /// A `set`, by its `local_index`.
+    Set(u32),
+}
+
+impl LowerError {
+    /// A missing binding, `name`, with where it is written still to come.
+    pub fn missing(name: impl Into<String>) -> LowerError {
+        LowerError::BindingNotAvailable { name: name.into(), at: None }
+    }
+
+    /// This error, written at `at` unless it already says where it is.
+    pub fn at(self, at: impl FnOnce() -> WrittenAt) -> LowerError {
+        match self {
+            LowerError::BindingNotAvailable { name, at: None } =>
+                LowerError::BindingNotAvailable { name, at: Some(at()) },
+            located => located,
+        }
+    }
 }
 
 impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LowerError::BindingNotAvailable(name) => write!(f, "binding not available yet: {}", name),
+            LowerError::BindingNotAvailable { name, .. } => write!(f, "binding not available yet: {}", name),
         }
     }
 }

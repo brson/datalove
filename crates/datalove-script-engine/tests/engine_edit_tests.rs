@@ -1135,3 +1135,34 @@ fn module_errors_come_in_dependency_order() {
     assert_eq!(engine.module_errors().broken["local/test/n"], ["local/test/m", "local/test/n"]);
 }
 
+
+/// A name an earlier unit binds that typechecked and did not compile is
+/// reported where this unit writes it: read, called, set at the top level or
+/// in a block, in a const's initializer, and in a function body.
+#[test]
+fn a_failed_unit_s_name_is_reported_where_it_is_used() {
+    // Unit 2 typechecks and fails ownership analysis, moving out of `d` again.
+    let failed = "var d: int = 1\nlet e: int = d\n---\ndebuglog d\nvar a: int = 2\nfun f(): int\n  ret 2\nend fun";
+    let cases = [
+        ("let g: int = a", "a", "unit 3:1:14"),
+        ("let g: int = f()", "f", "unit 3:1:14"),
+        ("set a = 3", "a", "unit 3:1:5"),
+        ("if true\n  set a = 4\nend if", "a", "unit 3:2:7"),
+        ("const K: int = f()", "f", "unit 3:1:16"),
+        ("fun h(): int\n  ret f()\nend fun", "f", "unit 3:2:7"),
+    ];
+    for (unit, name, at) in cases {
+        let mut engine = engine();
+        run(&mut engine, &format!("{failed}\n---\n{unit}"));
+        let refused = engine.unit_diagnostics(3, "unit 3", TextStyle::Plain);
+        assert!(refused.contains(&format!("[F111] Error: `{name}` is bound by unit 2, which did not compile")), "{unit}: {refused}");
+        assert!(refused.contains(at), "{unit}: wanted {at} in {refused}");
+    }
+
+    // And from an expression unit.
+    let mut engine = engine();
+    run(&mut engine, failed);
+    engine.eval(Unit::Expression("a".S()));
+    let refused = engine.unit_diagnostics(3, "unit 3", TextStyle::Plain);
+    assert!(refused.contains("[F111]") && refused.contains("unit 3:1:1"), "{refused}");
+}

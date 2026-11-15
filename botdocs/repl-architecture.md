@@ -821,9 +821,7 @@ setup and the loop together.
   the code panel, gives one over several lines.
 - An edit cannot change a unit from a fragment to an expression unit or back.
 - Errors are plain messages in the History tab. The Detail tab renders the
-  unit's diagnostics, and the Modules tab the modules'; a name bound by a unit
-  that did not compile has no location; see
-  [issues.md](issues.md#user-content-a-name-bound-by-a-unit-that-did-not-compile-is-found-only-by-lowering).
+  unit's diagnostics, and the Modules tab the modules'.
 - A type is shown expanded, never by its alias; see
   [issues.md](issues.md#user-content-a-printed-type-loses-its-alias).
 - Mouse capture is enabled while only key events are read, which disables

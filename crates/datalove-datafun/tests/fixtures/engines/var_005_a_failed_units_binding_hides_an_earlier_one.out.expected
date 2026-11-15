@@ -52,7 +52,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "error: `x` is bound by unit 2, which did not compile",
+                message: "error[F111]: `x` is bound by unit 2, which did not compile\n  help: fix unit 2, and this unit compiles with it",
             ),
             output: "",
         ),
@@ -67,7 +67,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "error: `x` is bound by unit 2, which did not compile",
+                message: "error[F111]: `x` is bound by unit 2, which did not compile\n  help: fix unit 2, and this unit compiles with it",
             ),
             output: "",
         ),
@@ -82,7 +82,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "error: `x` is bound by unit 2, which did not compile",
+                message: "error[F111]: `x` is bound by unit 2, which did not compile\n  help: fix unit 2, and this unit compiles with it",
             ),
             output: "",
         ),

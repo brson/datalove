@@ -30,6 +30,7 @@ datalove-rtdt.workspace = true
 datalove-rti.workspace = true
 datalove-rt.workspace = true
 datalove-diagnostic.workspace = true
+datalove-diagnostic-codes.workspace = true
 
 # Wasm has no shared libraries to load, nor a linker to hand AOT output to,
 # so neither AOT backend is built there.
