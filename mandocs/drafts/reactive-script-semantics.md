@@ -14,11 +14,13 @@ subsequent dependent cells are rerun to recalculate the results.
 The recalculated results should be equal to the results
 produced by a fresh run of all code cells.
 
-If we allow a cell to mutate a prior cell's bindings then after an edit
-we cannot simply rerun subsequent cells and still produce the same results as a fresh run,
-as prior cells may be in a mutated state different from what a fresh run would have produced
-at the point of edit.
-Therefore we also must rerun prior cells to restore their state before reruning subsequent cells.
+If we allow a cell to mutate a prior cell's bindings,
+then after an edit we cannot simply rerun subsequent cells
+to produce the same results as a fresh run.
+Prior cells may be in a mutated state different from what a fresh run
+would have produced at the edited cell.
+Therefore we also must rerun prior cells
+to restore their state before reruning subsequent cells.
 
 Within a linear type system we can precisely identify all reads and writes of prior cells.
 By analyzing five kinds of data accesses we can select a subset of prior and subsequent cells
@@ -60,17 +62,16 @@ In Jupyter one can edit and run arbitrary cells on demand.
 Jupyter does not track dependencies between cells
 and does not rerun subsequent cells after edits.
 The results across the notebook can become unsynchronized
-and disagree with each other.
+and disagree with each other:
 
-You edit cell 3, causing it to produce a different result,
-but cell 10 which depends on cell 3 still reflects the earlier result.
-You delete the cell that defined variable `foo` but the variable
-`foo` continues to exist in the environment at its previously-evaluated value.
-You run cells out of order and it produces a state that no fresh in-order
-run could possibly reproduce.
-This general confusion is sometimes called a "hidden state" problem.
+- You edit cell 3, causing it to produce a different result,
+  but cell 10 which depends on cell 3 still reflects the earlier result.
+- You delete the cell that defined variable `foo` but the variable
+  `foo` continues to exist in the environment at its previously-evaluated value.
+- You run cells out of order and it produces a state that no fresh in-order
+  run could possibly reproduce.
 
-_Reactive notebooks_ attempt to eliminate this confusion
+Reactive notebooks attempt to eliminate this confusion
 by tracking data dependencies between cells and rerunning dependents after edits.
 They attempt to maintain the key invariant:
 _The results presented always equal what a fresh run of the whole notebook would produce_.
@@ -229,11 +230,10 @@ fun category(ref payee: string): string
 ```
 
 Which cells rerun?
-The obvious answer is the cells that depend on the one I edited:
-cell 6 calls `category`,
+The naive answer is the cells that depend on the one I edited:
+cell 6 calls `category` to build `spent`,
 and cells 7 and 8 use what cell 6 computed.
-Cells 4 and 5 don't mention `category` at all.
-Rerun cells 6 through 8 and the output is:
+Rerun those and the output is:
 
 ```datalove
 {
@@ -248,10 +248,12 @@ Rerun cells 6 through 8 and the output is:
 }
 ```
 
+This result is wrong.
 Everything doubled,
 and I'm suddenly over budget on nearly everything.
-Cell 6 doesn't rebuild `spent`, it adds to it,
-as the `spent` it found was the one it had already filled the last time it ran.
+Cell 6 doesn't rebuild `spent` from scratch, it adds to it.
+The `spent` it found was the one it had already filled the last time it ran.
+`spent` itself is created in an earlier cell that doesn't mention `category`.
 A fresh run gives:
 
 ```datalove
@@ -268,35 +270,30 @@ A fresh run gives:
 
 To get the correct answer,
 cell 5 has to rerun before cell 6,
-emptying `spent` again,
-though cell 5 does not mention the `category` function we edited.
+receating `spent`.
 The edit was to cell 3,
 the cell it forced to rerun was cell 6,
-and cell 6 reached back to cell 5.
+and cell 6 reached backwards to mutate `spent` in cell 5.
 
 _This is the problem at hand_.
 When cells are edited we must follow
 the mutations to discover which other cells must rerun.
-
 The typical way to avoid this is to keep the declaration of `spent`
 in the same cell as the code that fills it.
 Reactive notebooks generally make that a rule.
 
-Linear moves complicate the problem by completely invalidating bindings.
+Linear moves complicate the problem by invalidating bindings.
 Cell 8 _moves_ `spent` and `over` into `output`,
 leaving the two bindings empty.
 Now raise the dining budget in cell 4.
-Cell 7 reads `budget`, so it reruns,
-and goes to read `spent`,
-which cell 8 already gave away.
-Cell 7 can only rerun once cells 5 and 6 rerun before it to rebuild `spent`,
-though neither refers to the budget.
+Cell 7 reads `budget`, so it reruns
+but `spent` doesn't exist, etc.
 
 In both cases the cells to rerun appear before the edit as well as after it.
 Which ones depends on how each cell accessed the bindings of the cells before it:
 read them, moved them, overwrote them or updated them.
-In Datalove the type checker already knows these facts,
-and the rest of this post builds the rerun rules from those accesses.
+In Datalove the type checker knows these facts.
+The rest of this post builds the rerun rules from those accesses.
 It ends with this script running live in the Datalove engine,
 making these same edits.
 
