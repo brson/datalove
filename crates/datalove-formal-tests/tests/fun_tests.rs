@@ -891,6 +891,7 @@ const RUN_CORPUS: &[&str] = &[
     "fun add(a: u8, b: u8): !u8\n  ret ok (a +! b)\nend fun\nfun addq(a: i8, b: i8): ?i8\n  ret some (a +? b)\nend fun\nfun div(a: i32, b: i32): !i32\n  ret ok (a /! b)\nend fun\ndebuglog add(: u8 / 100, : u8 / 155)\ndebuglog add(: u8 / 100, : u8 / 156)\ndebuglog addq(: i8 / -100, : i8 / -28)\ndebuglog addq(: i8 / -100, : i8 / -29)\ndebuglog div(: i32 / -7, : i32 / 2)\ndebuglog div(: i32 / 7, : i32 / -2)\ndebuglog div(: i32 / 7, : i32 / 0)\ndebuglog div(: i32 / -2147483648, : i32 / -1)\n",
     "fun at(l: [u8], i: index): ?u8\n  ret some l[i]?\nend fun\nfun sum(l: [u32]): int\n  var s: int = 0\n  for x in ref l\n    set s += x@\n  end for\n  ret s\nend fun\nfun fact(n: int): int\n  if n .< 2\n    ret 1\n  end if\n  ret n * fact(n - 1)\nend fun\nfun count(n: int): int\n  var i: int = 0\n  loop while i .< n\n    set i += 1\n    if i == 7\n      break\n    end if\n  end loop\n  ret i\nend fun\ndebuglog at([1, 2, 3], : index / 1)\ndebuglog at([1, 2, 3], : index / 3)\ndebuglog sum([1, 2, 4294967295])\ndebuglog fact(20)\ndebuglog count(3)\ndebuglog count(100)\n",
     "type E: enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
+    "fun seti(mut i: index): index\n  set i = : index / 1\n  ret : index / 0\nend fun\nvar xss: [[u32]] = [[: u32 / 1, : u32 / 2], [: u32 / 3, : u32 / 4]]\nvar i: index = : index / 0\nset xss[i]![seti(mut i)]! = : u32 / 99\ndebuglog xss\nvar j: index = : index / 0\nset xss[j]![seti(mut j)]! +!= : u32 / 50\ndebuglog xss\nvar k: index = : index / 0\ndebuglog xss[k]![seti(mut k)]!\nvar xs: [int] = [1000000000000000000000000000001, 2]\ndebuglog (: [int] / xs)[(: index / 1)]!\ndebuglog xs\nvar s: string = \"a-long-heap-string-0123456789-abcdefghij\"\ndebuglog (: string / s) == \"x\"\ndebuglog s\nlet t = (: string / s)@\ndebuglog t\ndebuglog s\n",
 ];
 
 /// Literals of the types a driver can pass, each written with its type.
@@ -913,8 +914,14 @@ const ARG_LITERALS: &[(&str, &[&str])] = &[
 /// parameters all take a literal, a top-level call with literals of their
 /// types, a few times over, logged. A `mut` argument is a variable set to a
 /// literal, an `out` one a variable with none; the call is then a binding's
-/// value, the one place a call that writes back runs, and the variables are
-/// logged after it.
+/// value, and the variables are logged after it.
+///
+/// A call whose one argument written back is `mut` is also run where the
+/// variable is read before and after it in the same expression, by a tuple
+/// and by `==`, hinted too, and twice in one; and where the variable is an
+/// `index`, as (or as giving) the inner key of a `set` that reads the variable
+/// as its outer key, plain and compound. What each sees of the variable is
+/// the evaluation order.
 fn driver(rng: &mut SeededRng, text: &str) -> String {
     let mut out = String::new();
     let mut fresh = 0;
@@ -927,6 +934,7 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
         }
         let Some(close) = rest.rfind(')') else { continue };
         let params = &rest[open + 1..close];
+        let ret = rest[close + 1..].strip_prefix(": ").map(str::trim);
         let mut parsed = Vec::new();
         let mut ok = true;
         if !params.trim().is_empty() {
@@ -977,6 +985,52 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
                 }
             } else {
                 out += &fmt!("debuglog {name}({})\n", args.join(", "));
+            }
+        }
+        let Some(m) = parsed.iter().position(|(mode, _)| *mode == "mut") else { continue };
+        if parsed.iter().filter(|(mode, _)| !mode.is_empty()).count() != 1 {
+            continue;
+        }
+        let t = parsed[m].1.0;
+        let lit_of = |rng: &mut SeededRng, lits: &[&str]| lits[rng.random_range(0..lits.len())].S();
+        let call_with = |rng: &mut SeededRng, v: &str| {
+            let args: Vec<String> = parsed.iter().enumerate().map(|(i, (mode, (t, lits)))| match *mode {
+                _ if i == m => fmt!("mut {v}"),
+                "" => fmt!(": {t} / {}", lit_of(rng, lits)),
+                _ => unreachable!(),
+            }).collect();
+            fmt!("{name}({})", args.join(", "))
+        };
+        fresh += 1;
+        let v = fmt!("w{fresh}");
+        out += &fmt!("var {v}: {t} = : {t} / {}\n", lit_of(rng, parsed[m].1.1));
+        let (c1, c2) = (call_with(rng, &v), call_with(rng, &v));
+        out += &fmt!("debuglog ({v}@, (: {t} / {v})@, {c1}, {v}@)\ndebuglog {v}\n");
+        out += &fmt!("debuglog ({c1}, {c2})\ndebuglog {v}\n");
+        if ret == Some(t) {
+            let c3 = call_with(rng, &v);
+            out += &fmt!("debuglog {v} == {c1}\ndebuglog (: {t} / {v}) == {c2}\ndebuglog {c3} == {v}\ndebuglog {v}\n");
+        }
+        if let (Some(ret), "index") = (ret, t) {
+            // Keys a `set` can fail at return early, so in a function of its
+            // own, which writes back what it did.
+            let row = |r: u32| (0..4).map(|c| fmt!(": u8 / {}", r * 4 + c)).collect::<Vec<_>>().join(", ");
+            let grid = (0..4).map(|r| fmt!("[{}]", row(r))).collect::<Vec<_>>().join(", ");
+            for op in ["=", "+!="] {
+                fresh += 1;
+                let f = fmt!("w{fresh}");
+                let c = call_with(rng, "k");
+                // The call's value, whatever its type, as an index.
+                let key = if ret == "index" {
+                    c
+                } else {
+                    out += &fmt!("fun {f}k(x: {ret}): index\n  ret : index / 2\nend fun\n");
+                    fmt!("{f}k({c})")
+                };
+                out += &fmt!("fun {f}(mut ls: [[u8]], mut k: index): !()\n  set ls[k]![{key}]! {op} : u8 / 50\n  ret ok ()\nend fun\n");
+                let k0 = lit_of(rng, &["0", "1", "3"]);
+                out += &fmt!("var {f}a: [[u8]] = [{grid}]\nvar {f}b: index = : index / {k0}\n");
+                out += &fmt!("let {f}c = {f}(mut {f}a, mut {f}b)\ndebuglog {f}c\ndebuglog {f}a\ndebuglog {f}b\n");
             }
         }
     }

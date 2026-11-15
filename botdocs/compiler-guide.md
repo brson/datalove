@@ -1526,7 +1526,7 @@ gives each its `OCode`.
 | O007 | `MoveInLoop` | Moving outer-scoped value in loop |
 | O008 | `InconsistentBranchMove` | Value moved, or `set` again after a move, in one merging branch only |
 | O009 | `OutParamPartialWrite` | Field write to `out` param |
-| O010 | `AliasedMutableArgument` | Two arguments share a place root, one is `mut`/`out` |
+| O010 | `AliasedMutableArgument` | Two arguments share a place root, one is `mut`/`out`, or a `ref` one is followed by a move |
 | O011 | `CannotMutateImmutable` | `let` binding or `in` param passed as `mut`/`out` |
 | O012 | `CannotMutateTemporary` | Non-place argument passed as `mut`/`out` |
 | O013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
@@ -1657,8 +1657,9 @@ is handed, as a `&mut` overlaps nothing; only `AnyRef`s may share one. For
 the arguments of a call the ownership checker sees to it (O010), and for an
 operand read through a reference after the rest of an expression runs, which
 a later one may not change or move (O017). A copy operand, and a copy `in`
-argument, is lowered as a `Copy` where it is evaluated (`read_copy_now`), so
-it is not held. The one way
+argument, or a copy key of a `set`'s place, is lowered as a `Copy` where it
+is evaluated (`read_copy_now`), so it is not held. Both passes see through a
+type hint (`peel_hints`, `peel`), which has no semantics of its own. The one way
 the language has of naming a place twice in a runtime call is `set x += x`,
 which lowering turns into the operator and a store, keeping the update in
 place for a value rooted elsewhere. An export handed such a value beside

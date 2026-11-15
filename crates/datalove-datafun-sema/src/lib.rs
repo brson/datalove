@@ -735,6 +735,14 @@ pub enum AnalysisError<'db> {
         expr_key: ExprKey<'db>,
         name: String,
     },
+    /// A binding passed `ref` to a call and given away by a later argument of
+    /// it, to an `in` parameter: the callee would read what it took.
+    /// O010
+    BorrowedArgumentMoved {
+        /// Location of the later argument.
+        expr_key: ExprKey<'db>,
+        name: String,
+    },
     /// Passing an immutable binding to a `mut` or `out` parameter.
     /// O011. Applies to `let` bindings and `in` parameters; a `ref` parameter
     /// reports O004 instead.
@@ -768,6 +776,7 @@ impl AnalysisError<'_> {
             AnalysisError::InconsistentLoopExit { .. } => OCode::InconsistentLoopExit,
             AnalysisError::OutParamPartialWrite { .. } => OCode::OutParamPartialWrite,
             AnalysisError::AliasedMutableArgument { .. } => OCode::AliasedMutableArgument,
+            AnalysisError::BorrowedArgumentMoved { .. } => OCode::AliasedMutableArgument,
             AnalysisError::HeldByEarlierOperand { .. } => OCode::HeldByEarlierOperand,
             AnalysisError::CannotMutateImmutable { .. } => OCode::CannotMutateImmutable,
             AnalysisError::CannotMutateTemporary { .. } => OCode::CannotMutateTemporary,
@@ -848,6 +857,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::AliasedMutableArgument { expr_key: _, name } => {
             format!("error[{code}]: aliased mutable argument: `{}`", name)
+        }
+        AnalysisError::BorrowedArgumentMoved { expr_key: _, name } => {
+            format!("error[{code}]: `{}` is passed by reference and given away in the same call", name)
         }
         AnalysisError::CannotMutateImmutable { expr_key: _, name } => {
             format!("error[{code}]: cannot pass immutable binding as mutable: `{}`", name)

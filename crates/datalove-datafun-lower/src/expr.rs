@@ -98,10 +98,21 @@ pub fn lower_operand<'db>(
     lower_operand_here(ctx, expr).map_err(|error| error.at(|| written_at(ctx, expr)))
 }
 
+/// The expression under any type hints. A hint says what to check against
+/// and nothing about what runs, so a hinted place is passed and borrowed as
+/// the place is.
+pub fn peel_hints<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> ExprFun<'db> {
+    match expr.kind() {
+        ExprFunKind::Hinted(h) => peel_hints(ctx, ctx.expr(h.inner)),
+        _ => expr,
+    }
+}
+
 fn lower_operand_here<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Operand, LowerError> {
+    let expr = peel_hints(ctx, expr);
     match expr.kind() {
         ExprFunKind::Place(place) if place.steps.is_empty() => {
             ctx.note_place_lowered(expr);
@@ -252,6 +263,7 @@ fn lower_call_arg<'db>(
     out_drops: &mut Vec<Instruction>,
     later_writes: bool,
 ) -> Result<Operand, LowerError> {
+    let arg = peel_hints(ctx, arg);
     // Check if this is a ref context AND the arg is a field projection or index.
     if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
         // Index expression: a[i]? or a[i]!
@@ -414,7 +426,7 @@ pub fn lower_field_proj_as_ref<'db>(
 
     // When the base is a Place (with or without steps), build an extended
     // Place with the field step appended and delegate to lower_place_as_ref.
-    if let ExprFunKind::Place(place) = ctx.expr(proj.base).kind() {
+    if let ExprFunKind::Place(place) = peel_hints(ctx, ctx.expr(proj.base)).kind() {
         let mut extended = place.C();
         extended.steps.push(ast::PlaceStep::Field(proj.field.C()));
         return lower_place_as_ref(ctx, &extended);
@@ -492,6 +504,7 @@ fn lower_expression_for_ref_here<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Operand, LowerError> {
+    let expr = peel_hints(ctx, expr);
     match expr.kind() {
         ExprFunKind::FieldProj(proj) => {
             // Field projections use GetFieldRef to borrow without copying.

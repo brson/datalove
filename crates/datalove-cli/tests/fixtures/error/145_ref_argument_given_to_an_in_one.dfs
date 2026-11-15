@@ -1,0 +1,15 @@
+// A variable passed `ref` may not be given away to a later `in` parameter of
+// the same call: the callee would read what it took (O010). A copy, or a
+// clone, `f(ref s, s@)`, is fine.
+
+fun eat(y: [int]): u8
+  ret : u8 / 1
+end fun
+
+fun f(ref x: [int], y: [int]): [int]
+  let n = eat(y)
+  ret x@
+end fun
+
+var s: [int] = [1, 2, 3]
+debuglog f(ref s, s)

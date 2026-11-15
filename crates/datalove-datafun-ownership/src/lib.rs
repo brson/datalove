@@ -317,6 +317,15 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         self.arena.expect("an expression is analyzed inside a body").get(id)
     }
 
+    /// The expression under any type hints, which say nothing about what runs:
+    /// a hinted place is the place.
+    fn peel(&self, expr: ExprFun<'db>) -> ExprFun<'db> {
+        match expr.kind() {
+            ExprFunKind::Hinted(h) => self.peel(self.expr(h.inner)),
+            _ => expr,
+        }
+    }
+
     /// Bind the earlier units' bindings this unit names, in the scope just
     /// entered.
     ///
@@ -728,6 +737,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// What a place is rooted in: the binding of the name it starts from,
     /// or that name, where an earlier script unit made the binding.
     fn place_root(&self, expr: ExprFun<'db>) -> Option<Walked> {
+        let expr = self.peel(expr);
         match expr.kind() {
             ExprFunKind::Place(place) => Some(self.walked_root(place.root.text(self.db))),
             ExprFunKind::FieldProj(proj) => self.place_root(self.expr(proj.base)),
@@ -782,6 +792,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// What an operand an operator borrows reads through, if it reads a place.
     fn borrowed_root(&self, expr: ExprFun<'db>) -> Option<Walked> {
+        let expr = self.peel(expr);
         match expr.kind() {
             ExprFunKind::Place(_) | ExprFunKind::FieldProj(_) => self.place_root(expr),
             ExprFunKind::Index(idx) => self.borrowed_root(self.expr(idx.base)),
@@ -963,6 +974,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// If the expression is a simple name, return its binding ID.
     fn expr_to_binding(&self, expr: ExprFun<'db>) -> Option<BindingId> {
+        let expr = self.peel(expr);
         if let ExprFunKind::Place(place) = expr.kind() {
             if place.steps.is_empty() {
                 let name: &str = place.root.text(self.db).as_ref();
@@ -977,6 +989,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// Unlike `expr_to_binding` this answers for projections and indexes too:
     /// `a.x` and `a[i]?` are both rooted at `a`.
     fn expr_to_place_root(&self, expr: ExprFun<'db>) -> Option<BindingId> {
+        let expr = self.peel(expr);
         if let ExprFunKind::Place(place) = expr.kind() {
             let name: &str = place.root.text(self.db).as_ref();
             return self.name_to_binding.get(name).copied();
@@ -1000,6 +1013,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// declaration, and writes through a temporary are silently discarded.
     fn check_mutable_argument(&mut self, arg: ExprFun<'db>, call: ExprKey<'db>) {
         let expr_key = arg.key();
+        let arg = self.peel(arg);
 
         let ExprFunKind::Place(place) = arg.kind() else {
             self.errors.push(AnalysisError::CannotMutateTemporary { expr_key });
@@ -1029,7 +1043,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     }
 
     /// Reject calls where two arguments share a place root and at least one of
-    /// them is passed to a `mut` or `out` parameter.
+    /// them is passed to a `mut` or `out` parameter, or a `ref` one is followed
+    /// by one given away to an `in` parameter.
     ///
     /// Every parameter is passed by reference, so two such arguments hand the
     /// callee two references to one object with at least one of them mutable.
@@ -1058,12 +1073,22 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     continue;
                 }
                 let modes = (callee_modes.get(i).copied(), callee_modes.get(j).copied());
-                if !is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) {
+                // A `ref` the callee reads, and the same value given away by
+                // a later `in` argument, are one object the callee would read
+                // after taking it. The other order is a use after a move.
+                let ref_then_moved = modes.0 == Some(ParamMode::Ref)
+                    && modes.1 == Some(ParamMode::In)
+                    && !self.expr_type(*later).is_copy();
+                if !is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) && !ref_then_moved {
                     continue;
                 }
                 let name = self.bindings[later_root.0 as usize].name.C();
                 let expr_key = later.key();
-                self.errors.push(AnalysisError::AliasedMutableArgument { expr_key, name });
+                if is_borrow_conflict(modes.0) || is_borrow_conflict(modes.1) {
+                    self.errors.push(AnalysisError::AliasedMutableArgument { expr_key, name });
+                } else {
+                    self.errors.push(AnalysisError::BorrowedArgumentMoved { expr_key, name });
+                }
                 break;
             }
         }
@@ -2023,11 +2048,21 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         ctx.schedule.before_try_return.insert(stmt_idx, drops);
     }
 
+    // A key looked up is read where the place is reached, through a
+    // reference if it is not copied, so it is held while the later keys run.
+    let held_before_keys = ctx.held.len();
     for step in &place.steps {
         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-            ctx.analyze_expr_moves(ctx.expr(idx.index), idx.error_mode.is_none());
+            let key = ctx.expr(idx.index);
+            ctx.analyze_expr_moves(key, idx.error_mode.is_none());
+            if idx.error_mode.is_some() && !ctx.expr_type(key).is_copy() {
+                if let Some(root) = ctx.borrowed_root(key) {
+                    ctx.held.push(Held { root, call: None });
+                }
+            }
         }
     }
+    ctx.held.truncate(held_before_keys);
     if value_pushed {
         ctx.held.pop();
     }

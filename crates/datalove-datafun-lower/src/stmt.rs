@@ -9,7 +9,7 @@ use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{CursorKind, IrType, Operand, ValueId, SlotId, Instruction, Terminator, SlotDest, ParamMode};
 use datalove_datafun_sema::Destructure;
 use super::context::LowerCtx;
-use super::expr::{lower_expression, lower_expression_for_ref, lower_operand, operand_type, field_type_from_base};
+use super::expr::{lower_expression, lower_expression_for_ref, operand_type, field_type_from_base};
 use super::LowerError;
 
 /// Check if a set statement is a self-assignment (set v0 = v0).
@@ -1082,17 +1082,28 @@ pub(crate) fn emit_collection_element_ref(
 
 /// Evaluate the keys of a place's index steps, left to right.
 ///
-/// A key looked up with `?` or `!` is borrowed. The one a bare index inserts
-/// is owned, and a temporary until the upsert takes it.
+/// A key looked up with `?` or `!` is borrowed, but read now if it is a copy
+/// and a later key may write back to it (`read_copy_now`). The one a bare
+/// index inserts is owned, and a temporary until the upsert takes it.
 fn lower_place_keys<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
 ) -> Result<Vec<Operand>, LowerError> {
+    let indexes: Vec<_> = place
+        .steps
+        .iter()
+        .filter_map(|step| match step {
+            ast::PlaceStep::Index(idx) => Some(idx),
+            _ => None,
+        })
+        .collect();
     let mut keys = Vec::new();
-    for step in &place.steps {
-        let ast::PlaceStep::Index(idx) = step else { continue };
+    for (i, idx) in indexes.iter().enumerate() {
         let key = match idx.error_mode {
-            Some(_) => lower_operand(ctx, ctx.expr(idx.index))?,
+            Some(_) => {
+                let later_writes = indexes[i + 1..].iter().any(|later| crate::expr::writes_back(ctx, ctx.expr(later.index)));
+                crate::expr::lower_operand_now(ctx, ctx.expr(idx.index), later_writes)?
+            }
             None => {
                 let key_id = lower_expression(ctx, ctx.expr(idx.index))?;
                 ctx.record_expr_temp(key_id, ctx.expr_type(ctx.expr(idx.index)));

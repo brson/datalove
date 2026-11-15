@@ -2326,7 +2326,7 @@ from Datafun through literals and data files.
 | O007 | MoveInLoop | Moving outer-scoped linear value in loop |
 | O008 | InconsistentBranchMove | Branches disagree on whether a value is held: moved, or `set` again, in one but not another |
 | O009 | OutParamPartialWrite | Writing fields of `out` param individually |
-| O010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out` |
+| O010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out`, or a `ref` one is then moved |
 | O011 | CannotMutateImmutable | Immutable binding passed as `mut`/`out` |
 | O012 | CannotMutateTemporary | Temporary passed as `mut`/`out` |
 | O013 | UseAfterMoveInEarlierUnit | Using a binding an earlier script unit gave away |
@@ -2377,6 +2377,14 @@ var s: string = "hi"
 call grow(mut s, ref s)    // error (O010): aliased mutable argument
 ```
 
+A `ref` argument followed by the same binding given away to an `in`
+parameter is an error too, since the callee would read what it had taken:
+
+```datalove
+debuglog f(ref s, s)       // error (O010): s: string is not a copy
+debuglog f(ref s, s@)      // ok: a clone is given away
+```
+
 Two `ref` arguments are permitted, as are two reads of a copy value:
 
 ```datalove
@@ -2403,8 +2411,9 @@ let y = first(a, set9(mut a))     // 9 is written, but `first` gets 1
 Some operands are read through a reference once the rest of the expression
 has run: an argument passed `ref`, `mut` or `out`, until its call is made;
 an operator's operand that is not a copy, while the other is evaluated; an
-index's base, while its key is; and a compound `set`'s value that is not a
-copy, while the keys are. Taking the variable such an operand
+index's base, while its key is; a `set`'s key looked up with `!` or `?`
+that is not a copy, while the later keys are; and a compound `set`'s value
+that is not a copy, while the keys are. Taking the variable such an operand
 reads `mut` or `out`, or moving it, before then is an error, since it would
 change what the reference reads, or free it:
 
@@ -2415,7 +2424,13 @@ call set77(mut xs[0]!, grow(mut xs))   // error (O017): grow may move the buffer
 let c = xs[grow(mut xs)]!              // error (O017)
 set xs[k(mut xs)]! += xs[1]!           // error (O017): the value is read after the key
 set xs[0]! = grow(mut xs)              // ok: the value runs before the place is reached
+set ms[k]![eat(k)] = v                 // error (O017): k: string is still read
+set xss[i]![seti(mut i)]! = v          // ok: i is a copy, read before seti runs
 ```
+
+A type hint changes nothing about how its operand is read: `(: [int] / xs)[0]!`
+borrows `xs` as `xs[0]!` does, and `list.push(mut xs, : int / xs[0]!)` is O010 as the unhinted
+call is.
 
 A `set` runs its value, then its keys, left to right, and only then reaches
 its place, so either may change the place's variable: the write goes to

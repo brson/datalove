@@ -1,0 +1,10 @@
+[31m[O017] Error:[0m `xs` is still read by an earlier operand
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/148_hinted_operand_changed_by_a_later_one.dfs:11:34 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m11 │[0m [38;5;249md[0m[38;5;249me[0m[38;5;249mb[0m[38;5;249mu[0m[38;5;249mg[0m[38;5;249ml[0m[38;5;249mo[0m[38;5;249mg[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m:[0m[38;5;249m [0m[38;5;249m[[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m/[0m[38;5;249m [0m[38;5;249mx[0m[38;5;249ms[0m[38;5;249m)[0m[38;5;249m[[0m[38;5;249mg[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mw[0m[38;5;249m([0m[38;5;249mm[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m [0m[38;5;201mx[0m[38;5;201ms[0m[38;5;249m)[0m[38;5;249m][0m[38;5;249m![0m
+ [38;5;240m   │[0m                                  [38;5;201m─[0m[38;5;201m┬[0m  
+ [38;5;240m   │[0m                                   [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m changes or moves what an earlier operand reads
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mNote[0m: an earlier argument passed `ref`, `mut` or `out`, an operator's operand, an index's base, a `set`'s key looked up, or a compound `set`'s value is read through a reference after the rest of the expression runs; clone it with `@` first, or compute this part in a statement before
+[38;5;246m────╯[0m
+Error: Ownership error

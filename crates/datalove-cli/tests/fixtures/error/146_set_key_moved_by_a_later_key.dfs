@@ -1,0 +1,11 @@
+// A `set`'s key looked up with `!` is read when the place is reached, after
+// the later keys run, so a later key may not move it (O017).
+
+fun eat(k: string): string
+  ret "a"
+end fun
+
+var ms: %{string = %{string = string}} = %{"a" = %{"a" = "aa"}}
+var k: string = "a"
+set ms[k]![eat(k)] = "v"
+debuglog ms
