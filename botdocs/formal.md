@@ -614,7 +614,12 @@ Four things are proved of it:
   early from inside an expression, is `Stop.returned`, carrying the
   variables as they were, for that. Copying in and out is what writing in
   place does, the ownership analysis keeping an argument from being read
-  another way during the call. The theorems for expressions are of
+  another way during the call, and keeping anything later in an expression
+  from changing what an earlier operand reads by reference (O017), so that
+  reading every operand as it is evaluated, as the model does, agrees with
+  the Rust, which reads a copy one then and others when they are used. A
+  `set` runs its value, then its keys, and only then reaches its place, as
+  the variable is once they have run (`setPlan`, `writeSteps`). The theorems for expressions are of
   evaluating from any variables that line up with the context (`Agree`),
   and say they still line up after (`SoundT`); what a parameter comes to is
   of its type, so writing it back keeps them so (`Fun.writeBack_sound`), a

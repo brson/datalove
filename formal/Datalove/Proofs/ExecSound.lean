@@ -511,126 +511,197 @@ theorem finishBinop_quiet {Γ : Ctx} (hb : Γ.bounds = []) {op : BinOp} {t : Ty}
      · rename_i hc; rcases ha with h | h <;> simp_all
      · exact Quiet.pure _)
 
+/-- Keys' values, one each, each of its key's type. -/
+def KeysFit (kvs : List Val) (keys : List (Expr × Ty)) : Prop :=
+  kvs.length = keys.length ∧ ∀ p ∈ kvs.zip keys, HasType p.1 p.2.2
+
+/-- Writing a `set`'s value through its steps, with its keys, into what a
+variable of type `t` holds gives a value of type `t`, or returns early as an
+index's mode says, or stops at what is not run or not set. -/
+theorem writeSteps_sound {Γ : Ctx} (hb : Γ.bounds = []) {op : Option BinOp} {r : Val} :
+    ∀ (t vt : Ty) (keys : List (Expr × Ty)) (old : Option Val) (steps : List Step) (kvs : List Val),
+      setPlan op t steps = some (vt, keys) → KeysFit kvs keys → HasType r vt →
+      (∀ v, old = some v → HasType v t) →
+      (∀ o, op = some o → arithAdmits o vt (Γ.boundOf vt) = true ∧ fits Γ (needs o) = true) →
+      (∀ k m, Step.index k (some m) ∈ steps → Γ.fitsMode m = true) →
+      Sound Γ.ret (HasType · t) (writeSteps op t old steps kvs r)
+  | t, vt, keys, old, [], kvs, hp, _, hr, hold, hop, _ => by
+    simp only [setPlan, Option.some.injEq, Prod.mk.injEq] at hp
+    obtain ⟨rfl, rfl⟩ := hp
+    cases op with
+    | none => simp only [writeSteps]; exact Sound.pure' hr
+    | some o =>
+      obtain ⟨ha, hf⟩ := hop o rfl
+      simp only [writeSteps]
+      cases old with
+      | none => exact trivial
+      | some v => exact binOp_sound hb (finishBinop_quiet hb ha hf) (hold v rfl) hr
+  | t, vt, keys, old, [.index k none], kvs, hp, hk, hr, hold, _, _ => by
+    cases op with
+    | some _ => simp [setPlan] at hp
+    | none =>
+      cases hx : t.expose
+      case map kt vt' =>
+        simp only [setPlan, hx, Option.some.injEq, Prod.mk.injEq] at hp
+        obtain ⟨rfl, rfl⟩ := hp
+        obtain ⟨hl, hks⟩ := hk
+        match kvs, hl with
+        | [kv], _ =>
+          have hkv : HasType kv kt := hks (kv, (k, kt)) (by simp)
+          simp only [writeSteps]
+          cases old with
+          | none => exact trivial
+          | some o =>
+            have ho := (hold o rfl).expose
+            rw [hx] at ho
+            obtain ⟨es, rfl, hks', hvs⟩ := ho.map_inv
+            exact Sound.map' (insertKey_typed hkv hr hks' hvs) (fun _ ⟨h1, h2⟩ => roll_of hx (.map h1 h2))
+      all_goals simp [setPlan, hx] at hp
+  | t, vt, keys, old, .field s :: rest, kvs, hp, hk, hr, hold, hop, hm => by
+    simp only [setPlan] at hp
+    split at hp
+    · rename_i ft hf
+      simp only [writeSteps, hf]
+      cases old with
+      | none => exact trivial
+      | some v =>
+        refine Sound.bind' (fieldVal_sound (hold v rfl) hf) (fun part hpart => ?_)
+        refine Sound.bind' (writeSteps_sound hb ft vt keys (some part) rest kvs hp hk hr
+          (fun u hu => by cases hu; exact hpart) hop (fun k m hkm => hm k m (by simp [hkm]))) (fun w hw => ?_)
+        exact putField_sound (hold v rfl) hf hw
+    · simp at hp
+  | t, vt, keys, old, .index _ none :: _ :: _, kvs, hp, _, _, _, _, _ => by simp [setPlan] at hp
+  | t, vt, keys, old, .index k (some m) :: rest, kvs, hp, hk, hr, hold, hop, hm => by
+    simp only [setPlan] at hp
+    split at hp
+    · rename_i et kt hi
+      cases hrest : setPlan op et rest with
+      | none => simp [hrest] at hp
+      | some q =>
+        obtain ⟨vt', ks⟩ := q
+        simp only [hrest, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hp
+        obtain ⟨rfl, rfl⟩ := hp
+        obtain ⟨hl, hks⟩ := hk
+        match kvs, hl with
+        | kv :: kvs', hl =>
+          have hkv : HasType kv kt := hks (kv, (k, kt)) (by simp)
+          have hk' : KeysFit kvs' ks := ⟨by simpa using hl, fun p hp => hks p (by simp [hp])⟩
+          simp only [writeSteps, hi]
+          cases old with
+          | none => exact trivial
+          | some v =>
+            refine Sound.bind' (indexVal_sound (hold v rfl) hi hkv (missing_ok (hm k m (by simp))))
+              (fun part hpart => ?_)
+            refine Sound.bind' (writeSteps_sound hb et vt' ks (some part) rest kvs' hrest hk' hr
+              (fun u hu => by cases hu; exact hpart) hop (fun k' m' hkm => hm k' m' (by simp [hkm])))
+              (fun w hw => ?_)
+            exact putIndex_sound (hold v rfl) hi hkv hw
+    · simp at hp
+
 section
 variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallOk sigs call)
 include hcall
 set_option linter.unusedSectionVars false
 
-theorem execSetValue_sound {n : Nat} {Γ : Ctx} {t : Ty} {old : Option Val} {op : Option BinOp}
-    {e : Expr} (h : SQuiet (setValue env n Γ t op e) ()) (hold : ∀ v, old = some v → HasType v t)
-    (hb : Γ.Runs sigs) : SoundT Γ.vars Γ.ret (HasType · t) (execSetValue env call n Γ t old op e) := by
-  unfold setValue at h
-  cases op with
-  | none =>
-    obtain ⟨_, hc, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
-    obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
-    exact evalC_sound env sigs call hcall n Γ e t hc hb
-  | some op =>
-    dsimp only at h
-    obtain ⟨_, hc, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
-    obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
-    split at h
-    · simp at h
-    rename_i ha
-    rw [SQuiet.reportIf_iff] at h
-    simp only [execSetValue]
-    refine SoundT.bind' (evalC_sound env sigs call hcall n _ e t hc hb) (fun r hr => ?_)
-    cases old with
-    | none => exact SoundT.uninit
-    | some o =>
-      exact SoundT.here <| binOp_sound hb.1 (finishBinop_quiet hb.1 (by simpa using ha) (by simpa using h)) (hold o rfl) hr
-
-theorem execSetIndex_sound {n : Nat} {Γ : Ctx} {t : Ty} {k : Expr} {mode : Option IdxMode}
-    {op : Option BinOp} {e : Expr} {old : Option Val} (h : SQuiet (setIndex env n Γ t k mode op e) ())
-    (hold : ∀ v, old = some v → HasType v t) (hb : Γ.Runs sigs)
-    (hm : ∀ m, mode = some m → Γ.fitsMode m = true) :
-    SoundT Γ.vars Γ.ret (HasType · t) (execSetIndex env call n Γ t k mode op e old) := by
-  unfold setIndex at h
-  cases mode with
-  | none =>
-    cases op with
-    | some _ => simp at h
+omit hcall in
+/-- A `set` target that checks has a plan: its value checks at the type it
+is written at, each key at its own, and a compound one's operator is admitted
+there. -/
+theorem setPlan_checks {n : Nat} {Γ : Ctx} {op : Option BinOp} {e : Expr} :
+    ∀ (t : Ty) (steps : List Step), SQuiet (setSteps env n Γ t op e steps) () →
+      ∃ vt keys, setPlan op t steps = some (vt, keys) ∧
+        Quiet (checkF env n (match op with | none => Γ | some _ => Γ.borrow) e vt) () ∧
+        (∀ p ∈ keys, Quiet (checkF env n Γ p.1 p.2) ()) ∧
+        (∀ o, op = some o → arithAdmits o vt (Γ.boundOf vt) = true ∧ fits Γ (needs o) = true)
+  | t, [], h => by
+    simp only [setSteps] at h
+    unfold setValue at h
+    refine ⟨t, [], by simp [setPlan], ?_, by simp, ?_⟩ <;> cases op with
     | none =>
+      obtain ⟨_, hc, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
+      obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
+      first | exact hc | (intro o ho; cases ho)
+    | some o =>
       dsimp only at h
-      split at h
-      · rename_i kt vt hx
-        obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
-        obtain ⟨_, hv, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
+      obtain ⟨_, hc, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
+      obtain ⟨_, -, hc⟩ := SQuiet.chk_inv hc
+      first
+        | exact hc
+        | (intro o' ho
+           cases ho
+           split at h
+           · simp at h
+           rename_i ha
+           rw [SQuiet.reportIf_iff] at h
+           exact ⟨by simpa using ha, by simpa using h⟩)
+  | t, [.index k mode], h => by
+    simp only [setSteps] at h
+    unfold setIndex at h
+    cases mode with
+    | none =>
+      cases op with
+      | some _ => simp at h
+      | none =>
+        dsimp only at h
+        split at h
+        · rename_i kt vt hx
+          obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
+          obtain ⟨_, hv, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
+          obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
+          obtain ⟨_, -, hv⟩ := SQuiet.chk_inv hv
+          refine ⟨vt, [(k, kt)], by simp [setPlan, hx], hv, by simpa using hk, fun o ho => by cases ho⟩
+        · simp at h
+    | some m =>
+      dsimp only at h
+      cases hi : indexTypes t with
+      | error c => simp only [hi] at h; simp at h
+      | ok p =>
+        obtain ⟨et, kt⟩ := p
+        simp only [hi] at h
+        split at h
+        · simp at h
+        obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => setValue_appends _ _ _ _ _ _) h
         obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
-        obtain ⟨_, -, hv⟩ := SQuiet.chk_inv hv
-        simp only [execSetIndex, hx]
-        refine SoundT.bind' (evalC_sound env sigs call hcall n Γ k kt hk hb) (fun kv hkv => ?_)
-        refine SoundT.bind' (evalC_sound env sigs call hcall n Γ e vt hv hb) (fun nv hnv => ?_)
-        cases old with
-        | none => exact SoundT.uninit
-        | some o =>
-          have ho := (hold o rfl).expose
-          rw [hx] at ho
-          obtain ⟨es, rfl, hks, hvs⟩ := ho.map_inv
-          exact SoundT.map' (SoundT.here (insertKey_typed hkv hnv hks hvs)) (fun _ ⟨h1, h2⟩ => roll_of hx (.map h1 h2))
-      · simp at h
-  | some m =>
-    dsimp only at h
-    cases hi : indexTypes t with
-    | error c => simp only [hi] at h; simp at h
-    | ok p =>
-      obtain ⟨et, kt⟩ := p
-      simp only [hi] at h
-      split at h
-      · simp at h
-      rename_i hview
-      obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => setValue_appends _ _ _ _ _ _) h
-      obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
-      simp only [execSetIndex, hi, hview, Bool.false_eq_true, ↓reduceIte]
-      refine SoundT.bind' (evalC_sound env sigs call hcall n Γ k kt hk hb) (fun kv hkv => ?_)
-      cases old with
-      | none => exact SoundT.uninit
-      | some o =>
-        refine SoundT.bind' (SoundT.here <| indexVal_sound (hold o rfl) hi hkv (missing_ok (hm m rfl))) (fun part hp => ?_)
-        refine SoundT.bind' (execSetValue_sound env sigs call hcall h (fun v hv => by cases hv; exact hp) hb) (fun w hw => ?_)
-        exact SoundT.here <| putIndex_sound (hold o rfl) hi hkv hw
-
-theorem execSetSteps_sound {n : Nat} {Γ : Ctx} {op : Option BinOp} {e : Expr}
-    (hb : Γ.Runs sigs) :
-    ∀ (t : Ty) (old : Option Val) (steps : List Step), SQuiet (setSteps env n Γ t op e steps) () →
-      (∀ v, old = some v → HasType v t) → (∀ k m, Step.index k (some m) ∈ steps → Γ.fitsMode m = true) →
-      SoundT Γ.vars Γ.ret (HasType · t) (execSetSteps env call n Γ op e t old steps)
-  | t, old, [], h, hold, _ => by
-    simp only [setSteps] at h; simp only [execSetSteps]
-    exact execSetValue_sound env sigs call hcall h hold hb
-  | t, old, [.index k mode], h, hold, hm => by
-    simp only [setSteps] at h; simp only [execSetSteps]
-    exact execSetIndex_sound env sigs call hcall h hold hb (fun m e => hm k m (by simp [e]))
-  | t, old, .field s :: rest, h, hold, hm => by
+        obtain ⟨vt, keys, hp, hv, hks, hop⟩ := setPlan_checks et [] (by simpa [setSteps] using h)
+        simp only [setPlan, Option.some.injEq, Prod.mk.injEq] at hp
+        obtain ⟨rfl, rfl⟩ := hp
+        exact ⟨et, [(k, kt)], by simp [setPlan, hi], hv, by simpa using hk, hop⟩
+  | t, .field s :: rest, h => by
     simp only [setSteps] at h
     split at h
     · rename_i ft hf
-      simp only [execSetSteps, hf]
-      cases old with
-      | none => exact SoundT.uninit
-      | some v =>
-        refine SoundT.bind' (SoundT.here <| fieldVal_sound (hold v rfl) hf) (fun part hp => ?_)
-        refine SoundT.bind' (execSetSteps_sound hb ft (some part) rest h (fun u hu => by cases hu; exact hp)
-          (fun k m hk => hm k m (by simp [hk]))) (fun w hw => ?_)
-        exact SoundT.here <| putField_sound (hold v rfl) hf hw
+      obtain ⟨vt, keys, hp, hv, hks, hop⟩ := setPlan_checks ft rest h
+      exact ⟨vt, keys, by simp [setPlan, hf, hp], hv, hks, hop⟩
     · simp at h
-  | t, old, .index _ none :: _ :: _, h, _, _ => by simp [setSteps] at h
-  | t, old, .index k (some m) :: st :: rest, h, hold, hm => by
+  | t, .index _ none :: _ :: _, h => by simp [setSteps] at h
+  | t, .index k (some m) :: st :: rest, h => by
     simp only [setSteps] at h
     split at h
     · simp at h
     rename_i et kt hi
     obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => setSteps_appends _ _ _ _ _ _ _) h
     obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
-    simp only [execSetSteps, hi]
-    refine SoundT.bind' (evalC_sound env sigs call hcall n Γ k kt hk hb) (fun kv hkv => ?_)
-    cases old with
-    | none => exact SoundT.uninit
-    | some v =>
-      refine SoundT.bind' (SoundT.here <| indexVal_sound (hold v rfl) hi hkv (missing_ok (hm k m (by simp)))) (fun part hp => ?_)
-      refine SoundT.bind' (execSetSteps_sound hb et (some part) (st :: rest) h
-        (fun u hu => by cases hu; exact hp) (fun k' m' hk' => hm k' m' (by simp_all))) (fun w hw => ?_)
-      exact SoundT.here <| putIndex_sound (hold v rfl) hi hkv hw
+    obtain ⟨vt, keys, hp, hv, hks, hop⟩ := setPlan_checks et (st :: rest) h
+    refine ⟨vt, (k, kt) :: keys, by simp [setPlan, hi, hp], hv, ?_, hop⟩
+    intro p hp'
+    rcases List.mem_cons.mp hp' with rfl | hp'
+    · exact hk
+    · exact hks p hp'
+
+/-- A `set`'s keys evaluate to values of their types. -/
+theorem evalKeys_sound {n : Nat} {Γ : Ctx} (hb : Γ.Runs sigs) : ∀ (keys : List (Expr × Ty)),
+    (∀ p ∈ keys, Quiet (checkF env n Γ p.1 p.2) ()) →
+    SoundT Γ.vars Γ.ret (fun kvs => KeysFit kvs keys) (evalKeys env call n Γ keys)
+  | [], _ => SoundT.pure' ⟨rfl, by simp⟩
+  | (k, kt) :: ks, h => by
+    simp only [evalKeys]
+    refine SoundT.bind' (evalC_sound env sigs call hcall n Γ k kt (h (k, kt) (by simp)) hb) (fun v hv => ?_)
+    refine SoundT.bind' (evalKeys_sound hb ks (fun p hp => h p (by simp [hp]))) (fun vs ⟨hl, hvs⟩ => ?_)
+    refine SoundT.pure' ⟨by simp [hl], fun p hp => ?_⟩
+    simp only [List.zip_cons_cons, List.mem_cons] at hp
+    rcases hp with rfl | hp
+    · exact hv
+    · exact hvs p hp
 
 end
 
@@ -871,11 +942,19 @@ theorem execSet_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {x : String} {steps : Lis
     obtain ⟨_, -, h⟩ := SQuiet.bind_inv
       (fun _ => Appends.bind (reportModes_appends _ _) (fun _ => setSteps_appends _ _ _ _ _ _ _)) h
     obtain ⟨_, h2, h⟩ := SQuiet.bind_inv (fun _ => setSteps_appends _ _ _ _ _ _ _) h
-    obtain ⟨o, ho, hot⟩ := hρ.lookup x t k hl
-    simp only [execSet, hl, ho]
-    exact SoundS.bind' (SoundS.ofT (execSetSteps_sound env sigs call hcall hb t o steps h hot
-      (fun k m hk => reportModes_fits h2 m (setModes_mem steps [] m (.inr ⟨k, hk⟩)))) hρ)
-      (fun ⟨w, ρ'⟩ hw => setVar_agree hw.2 hl hw.1)
+    obtain ⟨vt, keys, hp, hv, hks, hop⟩ := setPlan_checks env t steps h
+    have hm : ∀ k m, Step.index k (some m) ∈ steps → Γ.fitsMode m = true :=
+      fun k m hk => reportModes_fits h2 m (setModes_mem steps [] m (.inr ⟨k, hk⟩))
+    cases op <;>
+    · simp only [execSet, hl, hp]
+      refine SoundS.bind' (SoundS.ofT (P := (HasType · t)) ?_ hρ)
+        (fun ⟨w, ρ'⟩ ⟨hw, hρ'⟩ => setVar_agree hρ' hl hw)
+      refine SoundT.bind' (evalC_sound env sigs call hcall n _ e vt hv hb) (fun r hr => ?_)
+      refine SoundT.bind' (evalKeys_sound env sigs call hcall hb keys hks) (fun kvs hkvs => ?_)
+      refine SoundT.get' (fun ρ1 hρ1 => ?_)
+      obtain ⟨o, ho, hot⟩ := hρ1.lookup x t k hl
+      simp only [ho]
+      exact SoundT.here (writeSteps_sound hb.1 t vt keys o steps kvs hp hkvs hr hot hop hm)
 
 theorem execRet_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {e : Option Expr} {P : VEnv → Prop}
     (h : SQuiet (checkRet env n Γ e) ()) (hb : Γ.Runs sigs) (hρ : Agree Γ.vars ρ) :

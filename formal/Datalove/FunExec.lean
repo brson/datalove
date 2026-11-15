@@ -134,79 +134,77 @@ def execFor (body : VEnv → EvalM VEnv) (names : List String) : List (List Val)
     | .error (.cont ρ') => execFor body names rest (restore ρ ρ')
     | .error s => throw s
 
-/-- What a `set` writes, as `setValue` types it. -/
-def execSetValue (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (t : Ty) (old : Option Val)
-    (op : Option BinOp) (e : Expr) : EvalT Val :=
-  match op with
-  | none => evalC env call n Γ e t
-  | some op => do
-    let r ← evalC env call n Γ.borrow e t
-    match old with
-    | some o => here (binOp op t o r)
+/-- What a `set` target's steps need evaluated, by the types `setSteps`
+walks: the type the value is written at, and each key with its type, in
+order. None where the checker refuses the target, a compound `set` that
+inserts into a map among it. -/
+def setPlan (op : Option BinOp) : Ty → List Step → Option (Ty × List (Expr × Ty))
+  | t, [] => some (t, [])
+  | t, [.index k none] => match op, t.expose with
+    | none, .map kt vt => some (vt, [(k, kt)])
+    | _, _ => none
+  | t, .field s :: rest => match fieldType t s with
+    | .ok ft => setPlan op ft rest
+    | .error _ => none
+  | _, .index _ none :: _ => none
+  | t, .index k (some _) :: rest => match indexTypes t with
+    | .ok (et, kt) => (setPlan op et rest).map fun (vt, ks) => (vt, (k, kt) :: ks)
+    | .error _ => none
+
+/-- A `set`'s keys, in order. -/
+def evalKeys (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) : List (Expr × Ty) → EvalT (List Val)
+  | [] => pure []
+  | (k, kt) :: ks => do
+    let v ← evalC env call n Γ k kt
+    let vs ← evalKeys env call n Γ ks
+    pure (v :: vs)
+
+/-- What a variable that held `old`, of type `t`, holds once a `set` writes
+`r` through its steps, with its keys' values `kvs`: a compound one's
+operator applied to what is there. -/
+def writeSteps (op : Option BinOp) : Ty → Option Val → List Step → List Val → Val → EvalM Val
+  | t, old, [], _, r => match op with
+    | none => pure r
+    | some op => match old with
+      | some o => binOp op t o r
+      | none => throw .uninit
+  | _, old, [.index _ none], [kv], r => match old with
+    | some (.map es) => .map <$> insertKey kv r es
+    | some _ => throw .wrong
     | none => throw .uninit
+  | t, old, .field s :: rest, kvs, r => match fieldType t s, old with
+    | .ok ft, some v => do
+      let part ← fieldVal v s
+      let w ← writeSteps op ft (some part) rest kvs r
+      putField v s w
+    | .ok _, none => throw .uninit
+    | .error _, _ => throw .wrong
+  | t, old, .index _ (some m) :: rest, kv :: kvs, r => match indexTypes t, old with
+    | .ok (et, _), some v => do
+      let part ← indexVal m v kv
+      let w ← writeSteps op et (some part) rest kvs r
+      putIndex v kv w
+    | .ok _, none => throw .uninit
+    | .error _, _ => throw .wrong
+  | _, _, _, _, _ => throw .wrong
 
-/-- A `set` target's last step, an index, as `setIndex` types it. -/
-def execSetIndex (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr)
-    (mode : Option IdxMode) (op : Option BinOp) (e : Expr) (old : Option Val) : EvalT Val :=
-  match mode, op with
-  | none, some _ => throw .wrong
-  | none, none => match t.expose with
-    | .map kt vt => do
-      let kv ← evalC env call n Γ k kt
-      let nv ← evalC env call n Γ e vt
-      match old with
-      | some (.map es) => .map <$> here (insertKey kv nv es)
-      | some _ => throw .wrong
-      | none => throw .uninit
-    | _ => throw .wrong
-  | some m, _ => match indexTypes t with
-    | .error _ => throw .wrong
-    | .ok (et, kt) =>
-      if isView t then throw .wrong
-      else do
-        let kv ← evalC env call n Γ k kt
-        match old with
-        | some v => do
-          let part ← here (indexVal m v kv)
-          let w ← execSetValue env call n Γ et (some part) op e
-          here (putIndex v kv w)
-        | none => throw .uninit
-
-/-- A `set` target's steps from a value of type `t`, as `setSteps` types
-them: the value with the place written. -/
-def execSetSteps (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (op : Option BinOp) (e : Expr) :
-    Ty → Option Val → List Step → EvalT Val
-  | t, old, [] => execSetValue env call n Γ t old op e
-  | t, old, [.index k mode] => execSetIndex env call n Γ t k mode op e old
-  | t, old, .field s :: rest => match fieldType t s with
-    | .ok ft => match old with
-      | some v => do
-        let part ← here (fieldVal v s)
-        let w ← execSetSteps env call n Γ op e ft (some part) rest
-        here (putField v s w)
-      | none => throw .uninit
-    | .error _ => throw .wrong
-  | _, _, .index _ none :: _ => throw .wrong
-  | t, old, .index k (some m) :: rest => match indexTypes t with
-    | .error _ => throw .wrong
-    | .ok (et, kt) => do
-      let kv ← evalC env call n Γ k kt
-      match old with
-      | some v => do
-        let part ← here (indexVal m v kv)
-        let w ← execSetSteps env call n Γ op e et (some part) rest
-        here (putIndex v kv w)
-      | none => throw .uninit
-
-/-- `set x … = e`, as `checkSet` types it: the place's old value read, then
-the value written, which may have changed other variables, set. -/
+/-- `set x … = e`, as `checkSet` types it: the value, then the keys, left to
+right, and only then the place, as the variable is once they have run, which
+may have changed it. -/
 def execSet (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (x : String) (steps : List Step)
     (op : Option BinOp) (e : Expr) : EvalM VEnv :=
-  match Γ.lookup x, ρ.lookup x with
-  | some (t, _), some old => do
-    let (w, ρ') ← (execSetSteps env call n Γ op e t old steps).run ρ
-    pure (setVar x w ρ')
-  | _, _ => throw .wrong
+  match Γ.lookup x with
+  | some (t, _) => match setPlan op t steps with
+    | some (vt, keys) => do
+      let (w, ρ') ← (do
+        let r ← evalC env call n (match op with | none => Γ | some _ => Γ.borrow) e vt
+        let kvs ← evalKeys env call n Γ keys
+        match (← get).lookup x with
+        | some old => here (writeSteps op t old steps kvs r)
+        | none => throw Stop.wrong).run ρ
+      pure (setVar x w ρ')
+    | none => throw .wrong
+  | none => throw .wrong
 
 /-- `let` or `var` with a value, as `bindChecked` types it. -/
 def execBind (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (p : Pat) (hint : Option Hint) (e : Expr) :

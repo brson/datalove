@@ -880,8 +880,11 @@ fn dump() {
 /// function and at the top level, `set` through an index, and `mut` and
 /// `out` arguments written back, an early return's included, and calls
 /// that write back inside an expression, read after in it, or returned
-/// early from after.
+/// early from after; a `set` whose value or key changes its target, which it
+/// reaches only after them; and copy arguments and operands read where
+/// written.
 const RUN_CORPUS: &[&str] = &[
+    "fun grow(mut xs: [int]): int\n  set xs = [7, 8, 9]\n  ret 10\nend fun\nfun key(mut xs: [int]): index\n  set xs = [1, 2, 3]\n  ret : index / 2\nend fun\nfun set9(mut x: u8): u8\n  set x = : u8 / 9\n  ret : u8 / 0\nend fun\nfun first(x: u8, y: u8): u8\n  ret x\nend fun\nvar xs: [int] = [1, 2]\nset xs[(: index / 0)]! = grow(mut xs)\ndebuglog xs\nvar ys: [int] = [1, 2]\nset ys[key(mut ys)]! = 5\ndebuglog ys\nvar zs: [int] = [1, 2]\nset zs[(: index / 1)]! += grow(mut zs)\ndebuglog zs\nvar a: u8 = : u8 / 1\ndebuglog first(a, set9(mut a))\ndebuglog a +! set9(mut a)\ndebuglog a\nret ok ()\n",
     "fun set7(mut x: u8): u8\n  set x = : u8 / 7\n  ret x@\nend fun\nfun g(mut x: u8): !u8\n  let y = set7(mut x) +! (: u8 / 250)\n  ret ok y\nend fun\nvar a: u8 = : u8 / 1\nlet r = g(mut a)\ndebuglog r\ndebuglog a\n",
     "fun bump(mut x: int): int\n  set x = x + 1\n  ret x@\nend fun\nvar a: int = 1\nlet y = bump(mut a) + bump(mut a)\ndebuglog y\ndebuglog a\nlet z: int = bump(mut a)\ndebuglog z\nvar hit: int = 0\nif bump(mut a) == 5\n  set hit = 1\nend if\ndebuglog hit\ndebuglog [bump(mut a), a@]\nlet w = bump(mut a) + a\ndebuglog w\n",
     "fun bump(mut x: u8, by: u8): !u8\n  set x = x +! by\n  ret ok x\nend fun\nfun split(n: int, out q: int, out r: int)\n  set q = n - 1\n  set r = n * 2\nend fun\nfun swap(mut a: i32, mut b: i32)\n  let t = a\n  set a = b\n  set b = t\nend fun\nfun early(mut x: u8): !()\n  set x = : u8 / 7\n  let y: u8 = (: u8 / 250) +! x\n  set x = : u8 / 9\n  ret ok ()\nend fun\nvar a: u8 = : u8 / 10\nlet r1 = bump(mut a, : u8 / 5)\ndebuglog r1\ndebuglog a\nlet r2 = bump(mut a, : u8 / 250)\ndebuglog r2\ndebuglog a\nvar q: int\nvar r: int\ncall split(1234, out q, out r)\ndebuglog q\ndebuglog r\nvar x: i32 = : i32 / 1\nvar y: i32 = : i32 / 2\ncall swap(mut x, mut y)\ndebuglog (x, y)\nvar e: u8 = : u8 / 0\nlet r3 = early(mut e)\ndebuglog r3\ndebuglog e\n",
