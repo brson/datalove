@@ -59,9 +59,10 @@ where
 
 /-- A map's entries with the value at a key replaced, the first entry
 `indexVal` would read. -/
-def replaceKey (k w : Val) : List (Val × Val) → List (Val × Val)
-  | [] => []
-  | (k', u) :: es => if keyEq k k' then (k', w) :: es else (k', u) :: replaceKey k w es
+def replaceKey (k w : Val) : List (Val × Val) → EvalM (List (Val × Val))
+  | [] => pure []
+  | (k', u) :: es => do
+    if ← keyEq k k' then pure ((k', w) :: es) else ((k', u) :: ·) <$> replaceKey k w es
 
 /-- A list, map or tensor of rank one or less with its element at a key
 replaced, which `indexVal` read. A tensor's slice is not written. -/
@@ -70,7 +71,7 @@ def putIndex (v k w : Val) : EvalM Val :=
   | .list vs => match numOf k with
     | some i => pure (.list (vs.set i.toNat w))
     | none => throw .wrong
-  | .map es => pure (.map (replaceKey k w es))
+  | .map es => .map <$> replaceKey k w es
   | .tensor shape vs => match shape with
     | [] | [_] => match numOf k with
       | some i => pure (.tensor shape (vs.set i.toNat w))
@@ -79,8 +80,10 @@ def putIndex (v k w : Val) : EvalM Val :=
   | _ => throw .wrong
 
 /-- A map with a value at a key, replaced or added. -/
-def insertKey (k w : Val) (es : List (Val × Val)) : List (Val × Val) :=
-  if es.any (fun e => keyEq k e.1) then replaceKey k w es else es ++ [(k, w)]
+def insertKey (k w : Val) (es : List (Val × Val)) : EvalM (List (Val × Val)) := do
+  match ← findKey k es with
+  | some _ => replaceKey k w es
+  | none => pure (es ++ [(k, w)])
 
 /-- Elements with their positions, as `index` values, or `unsupported` for
 more than `index` counts, which no collection in memory holds. -/
@@ -152,7 +155,7 @@ def execSetIndex (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEn
       let kv ← evalC env call n Γ ρ k kt
       let nv ← evalC env call n Γ ρ e vt
       match old with
-      | some (.map es) => pure (.map (insertKey kv nv es))
+      | some (.map es) => .map <$> insertKey kv nv es
       | some _ => throw .wrong
       | none => throw .uninit
     | _ => throw .wrong

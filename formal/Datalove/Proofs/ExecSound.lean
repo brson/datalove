@@ -469,32 +469,40 @@ theorem putField_sound {R : Ret} {v w : Val} {t ft : Ty} {s : Sel} (hv : HasType
       exact Sound.pure' (roll_of hT (.struct h1 h2))
     · simp [throw, throwThe, MonadExceptOf.throw] at hf
 
-theorem replaceKey_typed {k w : Val} {kt vt : Ty} (hw : HasType w vt) :
+theorem replaceKey_typed {R : Ret} {k w : Val} {kt vt : Ty} (hw : HasType w vt) :
     ∀ (es : List (Val × Val)), (∀ p ∈ es, HasType p.1 kt) → (∀ p ∈ es, HasType p.2 vt) →
-      (∀ p ∈ replaceKey k w es, HasType p.1 kt) ∧ (∀ p ∈ replaceKey k w es, HasType p.2 vt)
-  | [], _, _ => ⟨by simp [replaceKey], by simp [replaceKey]⟩
+      Sound R (fun es' => (∀ p ∈ es', HasType p.1 kt) ∧ (∀ p ∈ es', HasType p.2 vt)) (replaceKey k w es)
+  | [], _, _ => ⟨by simp, by simp⟩
   | (k', u) :: es, hk, hv => by
-    simp only [replaceKey]
-    split
-    · refine ⟨fun p hp => ?_, fun p hp => ?_⟩ <;> simp only [List.mem_cons] at hp <;> rcases hp with rfl | hp
-      · exact hk (k', u) (by simp)
-      · exact hk p (by simp [hp])
-      · exact hw
-      · exact hv p (by simp [hp])
-    · obtain ⟨h1, h2⟩ := replaceKey_typed hw es (fun p hp => hk p (by simp [hp])) (fun p hp => hv p (by simp [hp]))
-      refine ⟨fun p hp => ?_, fun p hp => ?_⟩ <;> simp only [List.mem_cons] at hp <;> rcases hp with rfl | hp
-      · exact hk (k', u) (by simp)
-      · exact h1 p hp
-      · exact hv (k', u) (by simp)
-      · exact h2 p hp
+    rw [replaceKey]
+    unfold keyEq
+    cases valEq? k k' with
+    | none => exact Sound.unsupported
+    | some r =>
+      cases r
+      · refine Sound.map' (replaceKey_typed hw es (fun p hp => hk p (by simp [hp]))
+          (fun p hp => hv p (by simp [hp]))) (fun es' ⟨h1, h2⟩ => ⟨fun p hp => ?_, fun p hp => ?_⟩) <;>
+          simp only [List.mem_cons] at hp <;> rcases hp with rfl | hp
+        · exact hk (k', u) (by simp)
+        · exact h1 p hp
+        · exact hv (k', u) (by simp)
+        · exact h2 p hp
+      · refine Sound.pure' ⟨fun p hp => ?_, fun p hp => ?_⟩ <;> simp only [List.mem_cons] at hp <;>
+          rcases hp with rfl | hp
+        · exact hk (k', u) (by simp)
+        · exact hk p (by simp [hp])
+        · exact hw
+        · exact hv p (by simp [hp])
 
-theorem insertKey_typed {k w : Val} {kt vt : Ty} (hk : HasType k kt) (hw : HasType w vt)
+theorem insertKey_typed {R : Ret} {k w : Val} {kt vt : Ty} (hk : HasType k kt) (hw : HasType w vt)
     {es : List (Val × Val)} (hks : ∀ p ∈ es, HasType p.1 kt) (hvs : ∀ p ∈ es, HasType p.2 vt) :
-    (∀ p ∈ insertKey k w es, HasType p.1 kt) ∧ (∀ p ∈ insertKey k w es, HasType p.2 vt) := by
+    Sound R (fun es' => (∀ p ∈ es', HasType p.1 kt) ∧ (∀ p ∈ es', HasType p.2 vt)) (insertKey k w es) := by
   simp only [insertKey]
-  split
-  · exact replaceKey_typed hw es hks hvs
-  · refine ⟨fun p hp => ?_, fun p hp => ?_⟩ <;> simp only [List.mem_append, List.mem_singleton] at hp <;>
+  refine Sound.bind' (findKey_sound (k := k) hvs) (fun o _ => ?_)
+  cases o with
+  | some _ => exact replaceKey_typed hw es hks hvs
+  | none =>
+    refine Sound.pure' ⟨fun p hp => ?_, fun p hp => ?_⟩ <;> simp only [List.mem_append, List.mem_singleton] at hp <;>
       rcases hp with hp | rfl
     · exact hks p hp
     · exact hk
@@ -521,8 +529,7 @@ theorem putIndex_sound {R : Ret} {v kv w : Val} {t et kt : Ty} (hv : HasType v t
     obtain ⟨rfl, rfl⟩ := hi
     obtain ⟨es, rfl, hks, hvs⟩ := he.map_inv
     simp only [putIndex]
-    obtain ⟨h1, h2⟩ := replaceKey_typed hw es hks hvs
-    exact Sound.pure' (roll_of hT (.map h1 h2))
+    exact Sound.map' (replaceKey_typed hw es hks hvs) (fun _ ⟨h1, h2⟩ => roll_of hT (.map h1 h2))
   case tensor e r =>
     obtain ⟨rfl, rfl⟩ := hi
     obtain ⟨shape, vs, rfl, hs, hl, hvs⟩ := he.tensor_inv
@@ -609,8 +616,7 @@ theorem execSetIndex_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {t : Ty} {k : Expr} 
           have ho := (hold o rfl).expose
           rw [hx] at ho
           obtain ⟨es, rfl, hks, hvs⟩ := ho.map_inv
-          obtain ⟨h1, h2⟩ := insertKey_typed hkv hnv hks hvs
-          exact Sound.pure' (roll_of hx (.map h1 h2))
+          exact Sound.map' (insertKey_typed hkv hnv hks hvs) (fun _ ⟨h1, h2⟩ => roll_of hx (.map h1 h2))
       · simp at h
   | some m =>
     dsimp only at h

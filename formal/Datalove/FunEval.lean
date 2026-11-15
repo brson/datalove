@@ -25,8 +25,11 @@ fields, indexes and calls. A call goes to a `CallFn` the evaluator is given
 back, `mut` or `out`, or with type arguments that are not ground, is
 `Stop.unsupported`. `@`
 converts between types whose values are the same: a wider number, an atom or
-term into an enum, a clone. A comparison's answer is not modelled
-(`compareOp`), since soundness needs only that it is a `bool`.
+term into an enum, a clone. A comparison, and whether two map keys are one,
+are answered where the values' contents are modelled (`valEq?`): numbers,
+booleans and what is built of them. A string, a float, `data` or `error`
+carries nothing here, so comparing one, or looking one up as a map's key, is
+`Stop.unsupported`.
 -/
 
 namespace Datalove.Fun
@@ -79,8 +82,6 @@ not do yet. -/
 def writesBack (params : List (Mode × Ty)) : Bool :=
   params.any fun (m, _) => m == .mut || m == .out
 
-/-- What a comparison answers. Not modelled: it is a `bool`. -/
-opaque compareOp : BinOp → Ty → Val → Val → Bool
 
 /-- An integer value, decimal or hex. -/
 def numOf : Val → Option Int
@@ -110,10 +111,70 @@ of the type, or the failure. -/
 def fallible (op : BinOp) (t : Ty) (r : Int) : EvalM Val :=
   if inRangeB t r then pure (.int r) else throw (failOf (needs op))
 
+mutual
+
+/-- Whether two values are equal, where their contents are modelled: none
+for a string, a float, `data`, `error`, a map, a set, a tensor or a table, or
+what holds one. Values compared are of one type. -/
+partial def valEq? : Val → Val → Option Bool
+  | .bool a, .bool b => some (a == b)
+  | .atom a, .atom b => some (a == b)
+  | .term a v, .term b w => if a != b then some false else valEq? v w
+  | .none, .none => some true
+  | .some v, .some w => valEq? v w
+  | .none, .some _ | .some _, .none => some false
+  | .ok v, .ok w | .er v, .er w => valEq? v w
+  | .ok _, .er _ | .er _, .ok _ => some false
+  | .tuple vs, .tuple ws => valsEq? vs ws
+  | .list vs, .list ws => valsEq? vs ws
+  | .struct fs, .struct gs => valsEq? (fs.map (·.2)) (gs.map (·.2))
+  | a, b => match numOf a, numOf b with
+    | some x, some y => some (x == y)
+    | _, _ => none
+
+/-- Whether two lists of values are equal, where that is known. -/
+partial def valsEq? : List Val → List Val → Option Bool
+  | [], [] => some true
+  | v :: vs, w :: ws => match valEq? v w with
+    | some true => valsEq? vs ws
+    | some false => some false
+    | none => none
+  | _, _ => some false
+
+end
+
+/-- What a comparison answers, where it is known: an order of numbers, and
+equality of what `valEq?` compares. -/
+def compareOp? (op : BinOp) (va vb : Val) : Option Bool :=
+  match op with
+  | .eq => valEq? va vb
+  | .ne => (valEq? va vb).map (!·)
+  | .lt | .gt | .le | .ge => match numOf va, numOf vb with
+    | some a, some b => some (match op with
+      | .lt => decide (a < b)
+      | .gt => decide (a > b)
+      | .le => decide (a ≤ b)
+      | _ => decide (a ≥ b))
+    | _, _ => none
+  | _ => none
+
+/-- Whether two map keys are one, or `unsupported` where that is not known. -/
+def keyEq (a b : Val) : EvalM Bool :=
+  match valEq? a b with
+  | some r => pure r
+  | none => throw .unsupported
+
+/-- The value at a key of a map's entries, the first entry's of it. -/
+def findKey (k : Val) : List (Val × Val) → EvalM (Option Val)
+  | [] => pure none
+  | (k', w) :: es => do if ← keyEq k k' then pure (some w) else findKey k es
+
 /-- `a ⊕ b` with operands of type `t`. -/
 def binOp (op : BinOp) (t : Ty) (va vb : Val) : EvalM Val :=
   match op with
-  | .lt | .gt | .le | .ge | .eq | .ne => pure (.bool (compareOp op t va vb))
+  | .lt | .gt | .le | .ge | .eq | .ne => match compareOp? op va vb with
+    | some b => pure (.bool b)
+    | none => throw .unsupported
   | .and | .or | .xor => match va, vb with
     | .bool a, .bool b => pure (.bool (match op with
       | .and => a && b
@@ -152,10 +213,6 @@ def unOp (op : UnOp) (t : Ty) (v : Val) : EvalM Val :=
     | none => throw .wrong
   | _, _ => throw .wrong
 
-/-- Whether two keys are one. Not modelled: a map lookup finds some entry,
-or none. -/
-opaque keyEq : Val → Val → Bool
-
 /-- How many elements a tensor of a shape holds. -/
 def shapeSize (shape : List Nat) : Nat := shape.foldl (· * ·) 1
 
@@ -184,8 +241,8 @@ def indexVal (m : IdxMode) (v k : Val) : EvalM Val :=
       | some w => pure w
       | none => throw (missing m)
     | none => throw .wrong
-  | .map es => match es.find? (fun e => keyEq k e.1) with
-    | some e => pure e.2
+  | .map es => do match ← findKey k es with
+    | some w => pure w
     | none => throw (missing m)
   | .tensor shape vs => match numOf k with
     | some i => if i < 0 then throw (missing m) else match shape with

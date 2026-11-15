@@ -105,6 +105,7 @@ formal-build:
 # without it.
 test-formal SEED='0' COUNT='1000':
     just formal-build
+    cargo build -p datalove-cli
     FORMAL_ORACLE_TEST=1 FORMAL_ORACLE_SEED={{SEED}} FORMAL_ORACLE_COUNT={{COUNT}} FORMAL_LIT_SEED={{SEED}} FORMAL_LIT_COUNT={{COUNT}} FORMAL_FUN_SEED={{SEED}} FORMAL_FUN_COUNT={{COUNT}} cargo test -p datalove-formal-tests --test oracle_tests --test lit_tests --test fun_tests
 
 # Break each reach rule in turn, by the faults in scripts/reach-faults.toml,

@@ -11,12 +11,17 @@ line, and writes one answer per line to stdout, in order:
 {"pair": [A, B]} →  {"equiv": b, "meet": b, "adapt": b}
 {"type": T}      →  {"copy": b, "wf": b, "expose": T}
 {"synth": E}     →  {"ok": T} or {"err": code}
+{"run": S}       →  {"log": [line, ...], "end": how, "returned": line or null} or {"unsupported": what}
 {"fun": S}       →  {"codes": [code, ...], "inits": [T or null, ...]} or {"unsupported": what}
 ```
 
 A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes. Its
 `inits` are the types the checker synthesizes for each `let`, `var` and
-`const` with a value and no hint, in source order (`Fun.traceScript`).
+`const` with a value and no hint, in source order (`Fun.traceScript`). A
+`run` is the script run (`Fun.runScript`), each top-level `debuglog` printed
+as the Rust prints it (`Fun.showVal`), what the model does not know of a
+value as U+0001, and how it ended: `ok`, or the `Stop` it stopped at, with
+what it returned early, which the CLI prints after its logs.
 
 `synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
 asks about both modes.
@@ -63,6 +68,18 @@ def answer (q : Json) : Except String Json := do
           ("inits", Json.arr ((Fun.traceScript ss).toArray.map fun
             | .some t => t.toJson
             | .none => Json.null))]
+      | .error e => Json.mkObj [("unsupported", e)]
+  if let .ok script := q.getObjVal? "run" then
+    return match Fun.scriptFromSerde script with
+      | .ok ss =>
+        let out := Fun.runScript 10000 100 ss
+        Json.mkObj [("log", Json.arr (out.log.toArray.map fun (t, v) => Json.str (Fun.showVal t v))),
+          ("end", match out.result with
+            | .ok _ => "ok"
+            | .error s => s.name),
+          ("returned", match out.result with
+            | .error (.early r) => Json.str (Fun.showVal (.result Fun.unitTy) r)
+            | _ => Json.null)]
       | .error e => Json.mkObj [("unsupported", e)]
   if let .ok world := q.getObjVal? "world" then
     let read : Except String (List Fun.ModuleSrc) := do

@@ -428,7 +428,10 @@ theorem binOp_sound {Γ : Ctx} (hb : Γ.bounds = []) {op : BinOp} {t r : Ty} {va
   all_goals first
     | done
     | (split at hf
-       · rw [Quiet.pure_iff] at hf; subst hf; exact Sound.pure' HasType.bool
+       · rw [Quiet.pure_iff] at hf; subst hf
+         split
+         · exact Sound.pure' HasType.bool
+         · exact Sound.unsupported
        · simp at hf)
     | (split at hf
        · rename_i hc
@@ -574,6 +577,21 @@ theorem missing_ok {Γ : Ctx} {m : IdxMode} (h : Γ.fitsMode m = true) : StopOk 
   · exact EarlyOk.none_of h
   · exact EarlyOk.er_of h .error
 
+/-- A map lookup finds a value of the map's value type, or none, or stops
+where whether two keys are one is not known. -/
+theorem findKey_sound {R : Ret} {k : Val} {w : Ty} : ∀ {es : List (Val × Val)}, (∀ p ∈ es, HasType p.2 w) →
+    Sound R (fun o => ∀ v, o = some v → HasType v w) (findKey k es)
+  | [], _ => fun v h => by cases h
+  | (k', u) :: es, h => by
+    rw [findKey]
+    unfold keyEq
+    cases valEq? k k' with
+    | none => exact Sound.unsupported
+    | some r =>
+      cases r
+      · exact findKey_sound (fun p hp => h p (List.mem_cons_of_mem _ hp))
+      · exact Sound.pure' (fun v e => by cases e; exact h _ List.mem_cons_self)
+
 theorem indexVal_sound {R : Ret} {m : IdxMode} {v kv : Val} {t et kt : Ty} (h : HasType v t)
     (hi : indexTypes t = .ok (et, kt)) (hk : HasType kv kt) (hm : StopOk R (missing m)) :
     Sound R (HasType · et) (indexVal m v kv) := by
@@ -595,9 +613,10 @@ theorem indexVal_sound {R : Ret} {m : IdxMode} {v kv : Val} {t et kt : Ty} (h : 
     obtain ⟨rfl, rfl⟩ := hi
     obtain ⟨es, rfl, -, hvs⟩ := he.map_inv
     simp only [indexVal]
-    split
-    · rename_i p hp; exact Sound.pure' (hvs p (List.mem_of_find?_eq_some hp))
-    · exact hm
+    refine Sound.bind' (findKey_sound hvs) (fun o ho => ?_)
+    cases o with
+    | none => exact hm
+    | some v => exact Sound.pure' (ho v rfl)
   case tensor e r =>
     obtain ⟨rfl, rfl⟩ := hi
     obtain ⟨shape, vs, rfl, hs, hl, hvs⟩ := he.tensor_inv

@@ -349,6 +349,25 @@ are compared too: the oracle lists the model's by `Fun.traceScript`, in
 it in, and the test lists the Rust's from its expression types. A thousand
 seeds compare about 4700 such types, and all agree.
 
+`runs_agree` holds the runtime to the model's evaluation. Each generated
+script, as written and changed, that checks gets a driver: for each function
+that is not generic and whose parameters take literals, top-level
+`debuglog`s of calls with literals of their types, at and near their ranges'
+ends. The model runs it (`Fun.runScript`, the oracle printing each logged
+value as `debuglog` does, `Fun.showVal` in `FunShow.lean`), and so does the
+CLI. Every line must agree, up to what the model does not carry, a string's
+text, a float, an error's message, a map's or set's entries, which match
+anything; a script the model runs to its end, or to an early return, the CLI
+must too, printing what it returned early last. Where the model stops at
+what it does not run, what it logged must be what the CLI logged first. A
+script a later phase refuses, the ownership analysis say, is skipped and
+counted. A corpus written by hand runs first, for what generated functions
+rarely do with their parameters: checked and optional arithmetic at its
+bounds, division, indexes in and out of range, `for`, `loop`, recursion,
+`match`, a binding `if`, and `!` and `set` through an index. A thousand
+seeds run about 870 scripts, logging about 4200 lines, all agreeing, a
+quarter of them with something the model does not carry.
+
 What it found:
 
 - **No rule of the slice differs** between the doc and the code. The
@@ -526,8 +545,10 @@ Four things are proved of it:
   any that do what calls may (`CallOk`), below. What an operator does depends on its operands' type, as
   `a +! b` overflows at `u8`'s bounds or `i8`'s, so evaluation follows the
   checker one function for one and takes the types it gives, as a compiled
-  program carries them; a comparison's answer, and whether two map keys are
-  one, are not modelled, being only a `bool`. It holds for any inference, since what inference finds is checked
+  program carries them. A string, a float, `data` and `error` carry nothing
+  in the model, so a comparison, or a map lookup, is answered where the
+  values' contents are modelled, numbers and booleans and what is built of
+  them, and is otherwise not run. It holds for any inference, since what inference finds is checked
   before it is used, and of contexts with no type parameter's bound, as an
   instance's are, so of a generic through the check-once theorem. Proving it
   changed two things. A hex literal's value is also the integer it spells

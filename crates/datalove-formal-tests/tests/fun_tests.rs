@@ -17,7 +17,9 @@
 //! typechecked, and the codes of every diagnostic the Rust reports, in order,
 //! are compared with the model's. Each generated script also runs with its
 //! bindings' hints dropped, and where both check a script cleanly, the types
-//! they give its unhinted bindings are compared as well.
+//! they give its unhinted bindings are compared as well. `runs_agree` runs
+//! scripts that check, with a driver calling their functions, in the model
+//! and with the CLI, and compares what they log.
 //!
 //! Needs the oracle built, so it runs only when asked, as `oracle_tests` does:
 //!
@@ -870,4 +872,238 @@ fn dump() {
         text = mutate(&mut rng, &text);
     }
     println!("{text}");
+}
+
+/// Scripts written by hand for `runs_agree`, each run as it is: checked and
+/// optional arithmetic at its bounds, division, indexes in and out of range,
+/// `for`, `loop` with `break`, recursion, `match`, a binding `if`, `!` in a
+/// function and at the top level, and `set` through an index.
+const RUN_CORPUS: &[&str] = &[
+    "fun add(a: u8, b: u8): !u8\n  ret ok (a +! b)\nend fun\nfun addq(a: i8, b: i8): ?i8\n  ret some (a +? b)\nend fun\nfun div(a: i32, b: i32): !i32\n  ret ok (a /! b)\nend fun\ndebuglog add(: u8 / 100, : u8 / 155)\ndebuglog add(: u8 / 100, : u8 / 156)\ndebuglog addq(: i8 / -100, : i8 / -28)\ndebuglog addq(: i8 / -100, : i8 / -29)\ndebuglog div(: i32 / -7, : i32 / 2)\ndebuglog div(: i32 / 7, : i32 / -2)\ndebuglog div(: i32 / 7, : i32 / 0)\ndebuglog div(: i32 / -2147483648, : i32 / -1)\n",
+    "fun at(l: [u8], i: index): ?u8\n  ret some l[i]?\nend fun\nfun sum(l: [u32]): int\n  var s: int = 0\n  for x in ref l\n    set s += x@\n  end for\n  ret s\nend fun\nfun fact(n: int): int\n  if n .< 2\n    ret 1\n  end if\n  ret n * fact(n - 1)\nend fun\nfun count(n: int): int\n  var i: int = 0\n  loop while i .< n\n    set i += 1\n    if i == 7\n      break\n    end if\n  end loop\n  ret i\nend fun\ndebuglog at([1, 2, 3], : index / 1)\ndebuglog at([1, 2, 3], : index / 3)\ndebuglog sum([1, 2, 4294967295])\ndebuglog fact(20)\ndebuglog count(3)\ndebuglog count(100)\n",
+    "type E: enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
+];
+
+/// Literals of the types a driver can pass, each written with its type.
+const ARG_LITERALS: &[(&str, &[&str])] = &[
+    ("u8", &["0", "1", "200", "255"]),
+    ("i8", &["-128", "-1", "0", "127"]),
+    ("u16", &["0", "300", "65535"]),
+    ("i16", &["-32768", "5", "32767"]),
+    ("u32", &["0", "70000", "4294967295"]),
+    ("i32", &["-2147483648", "0", "2147483647"]),
+    ("u64", &["0", "5", "18446744073709551615"]),
+    ("i64", &["-9223372036854775808", "-5", "9223372036854775807"]),
+    ("int", &["-1000", "0", "12345678901234567890"]),
+    ("index", &["0", "3"]),
+    ("offset", &["-2", "0", "5"]),
+    ("bool", &["true", "false"]),
+];
+
+/// A script's driver: for each function that is not generic and whose
+/// parameters all take a literal, a top-level `debuglog` of a call with
+/// literals of their types, a few times over.
+fn driver(rng: &mut SeededRng, text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        let Some(rest) = line.strip_prefix("fun ") else { continue };
+        let Some(open) = rest.find('(') else { continue };
+        let name = &rest[..open];
+        if name.contains('<') {
+            continue;
+        }
+        let Some(close) = rest.rfind(')') else { continue };
+        let params = &rest[open + 1..close];
+        let mut types = Vec::new();
+        let mut ok = true;
+        if !params.trim().is_empty() {
+            for p in params.split(", ") {
+                let Some((_, ty)) = p.split_once(": ") else { ok = false; break };
+                match ARG_LITERALS.iter().find(|(t, _)| *t == ty.trim()) {
+                    Some(entry) => types.push(entry),
+                    None => { ok = false; break }
+                }
+            }
+        }
+        if !ok {
+            continue;
+        }
+        for _ in 0..3 {
+            let args: Vec<String> = types.iter()
+                .map(|(t, lits)| fmt!(": {t} / {}", lits[rng.random_range(0..lits.len())]))
+                .collect();
+            out += &fmt!("debuglog {name}({})\n", args.join(", "));
+        }
+    }
+    out
+}
+
+/// What running a script with the CLI came to.
+enum RustRun {
+    /// What its `debuglog`s printed, and whether it exited successfully.
+    Ran(Vec<String>, bool),
+    /// A phase after type checking refused it, the ownership analysis say.
+    Refused(String),
+    /// It ran past the time it was given.
+    TimedOut,
+}
+
+/// A script run with the CLI.
+fn rust_run(text: &str) -> RustRun {
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let binary = workspace.join("target").join(profile).join("datalove");
+    assert!(binary.exists(), "{} not built; `just test-formal` builds it", binary.display());
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("script.dl");
+    std::fs::write(&path, text).X();
+    let mut child = std::process::Command::new(&binary)
+        .arg("script").arg(&path)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn().X();
+    let start = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().X() {
+            break Some(status);
+        }
+        if start.elapsed() > std::time::Duration::from_secs(5) {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    // `debuglog` writes to stderr.
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().X(), &mut stderr).X();
+    let Some(status) = status else { return RustRun::TimedOut };
+    // Diagnostics are colored whatever the environment says.
+    let ansi = rmx::regex::Regex::new("\x1b\\[[0-9;]*m").X();
+    let lines: Vec<String> = stderr.lines().map(|l| ansi.replace_all(l, "").into_owned()).collect();
+    // A diagnostic is `[CODE] Error: ...`, which no value prints as.
+    let refused = lines.first().filter(|l| {
+        let l = l.as_bytes();
+        l.first() == Some(&b'[') && l.get(1).is_some_and(u8::is_ascii_uppercase) && l.contains(&b']')
+            && String::from_utf8_lossy(l).contains("] Error:")
+    });
+    match refused {
+        Some(line) => RustRun::Refused(line.C()),
+        None => RustRun::Ran(lines, status.success()),
+    }
+}
+
+/// Whether a line the Rust printed is the one the model printed, what the
+/// model does not know (U+0001) matching anything.
+fn line_matches(model: &str, rust: &str) -> bool {
+    let parts: Vec<&str> = model.split('\u{1}').collect();
+    if parts.len() == 1 {
+        return model == rust;
+    }
+    let pattern = parts.iter().map(|p| regex_escape(p)).collect::<Vec<_>>().join(".*");
+    rmx::regex::Regex::new(&fmt!("^{pattern}$")).X().is_match(rust)
+}
+
+fn regex_escape(s: &str) -> String {
+    rmx::regex::escape(s)
+}
+
+/// Generated scripts that check, with a driver calling their functions,
+/// run by the model and by the Rust: each top-level `debuglog` prints the
+/// same, up to what the model does not know of a value, and a script the
+/// model runs to its end, or to an early return, the Rust does too, printing
+/// nothing more. Where the model stops at what it does not run, what it
+/// printed before is what the Rust printed first.
+#[test]
+fn runs_agree() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the run tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let mut config = config();
+    config.debuglog_probability = 0;
+    let mut cases = Vec::new();
+    for text in RUN_CORPUS {
+        let (codes, script, _) = rust_side(text);
+        assert!(codes.is_empty(), "a run corpus script does not check: {codes:?}\n{text}");
+        cases.push(("corpus".S(), text.S(), script));
+    }
+    for seed in seeds.iter() {
+        let session = datalove_worldgen::gen_session_seeded(seed, config.C());
+        let text = session.modules.first().map(|m| m.1.C()).unwrap_or_default();
+        let mut rng = SeededRng::derive(seed, "drive");
+        // As generated, and changed as `statement_typing_agrees` changes it,
+        // where that still checks: the changes compute from the parameters.
+        let mut mutated = text.C();
+        let mut mrng = SeededRng::derive(seed, "mutate");
+        for _ in 0..mrng.random_range(1..=MAX_MUTATIONS) {
+            mutated = mutate(&mut mrng, &mutated);
+        }
+        for (kind, text) in [("", text), (", changed", mutated)] {
+            // The model keeps only the top level's `debuglog`s.
+            let text: String = text.lines()
+                .filter(|l| !(l.starts_with(' ') && l.trim_start().starts_with("debuglog ")))
+                .map(|l| fmt!("{l}\n"))
+                .collect();
+            let drive = driver(&mut rng, &text);
+            if drive.is_empty() {
+                continue;
+            }
+            let text = fmt!("{}\n{drive}", text.trim_end());
+            let (codes, script, _) = rust_side(&text);
+            if codes.is_empty() {
+                cases.push((fmt!("seed {seed}{kind}"), text, script));
+            }
+        }
+    }
+    let queries: Vec<Value> = cases.iter().map(|(_, _, script)| json!({ "run": script })).collect();
+    let answers = ask_oracle(&queries);
+
+    let mut ends = BTreeMap::<String, usize>::new();
+    let mut lines = 0;
+    let mut unknown = 0;
+    let mut mismatches = Vec::new();
+    for ((what, text, _), oracle) in cases.iter().zip(&answers) {
+        if let Some(why) = oracle.get("unsupported") {
+            *ends.entry(fmt!("unsupported script: {why}")).or_default() += 1;
+            continue;
+        }
+        let mut model: Vec<String> = oracle["log"].as_array().X().iter().map(|l| l.as_str().X().S()).collect();
+        let end = oracle["end"].as_str().X().S();
+        // The CLI prints what a script returns early, after what it logged.
+        if let Some(returned) = oracle["returned"].as_str() {
+            model.push(returned.S());
+        }
+        *ends.entry(end.C()).or_default() += 1;
+        let rust = rust_run(text);
+        let finished = end == "ok" || end == "early";
+        let (agree, out) = match &rust {
+            RustRun::Ran(out, success) => {
+                let prefix = model.len() <= out.len()
+                    && model.iter().zip(out).all(|(m, r)| line_matches(m, r));
+                (if finished { prefix && model.len() == out.len() && *success } else { prefix }, fmt!("{out:?}"))
+            }
+            RustRun::Refused(line) => {
+                *ends.entry(fmt!("refused: {}", &line[..line.find(']').X() + 1])).or_default() += 1;
+                continue;
+            }
+            // Out of time: the model must not have finished.
+            RustRun::TimedOut => (!finished, "timed out".S()),
+        };
+        if agree {
+            lines += model.len();
+            unknown += model.iter().filter(|l| l.contains('\u{1}')).count();
+        } else {
+            mismatches.push(fmt!("{what}:\n{text}    model ({end}): {model:?}\n    rust: {out}"));
+        }
+    }
+    println!(
+        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; ends {ends:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(10) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model run {} scripts differently", mismatches.len());
 }
