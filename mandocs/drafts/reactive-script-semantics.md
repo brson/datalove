@@ -1,58 +1,28 @@
 <!--
 
 _Title_: Reactive compilation and evaluation based on analysis of bindings with linear types
-_Summary_: With a simple linear type system we correctly decide which
-           code units to recompile and rerun when code and input changes
-           based on a simple fixed-point analysis of how bindings are used.
-
-_Audience_: PL practitioners
-
-_Problem_:
-Datalove incrementally recompiles and reexecutes only dependent script units
-when dependent code and data changes.
-How do we decide which code to recompile and rerun and when?
-
-_ABTstract_:
-A reactive notebook-style script should rerun only what an edit affects,
-_and_ Datalove's linear types tell the compiler exactly which
-earlier bindings each unit reads, moves or mutates.
-_But_ a move or mutation leaves its effect behind in an earlier unit's state.
-When that unit is edited, broken or deleted,
-the environment no longer matches the code.
-_Therefore_ we derive which units to rerun from the few ways a unit can touch an earlier binding.
-The rules are applied until nothing more needs to rerun,
-and every case is checked by a literate test suite.
+_Summary_: With a simple linear type system we can correctly decide which
+           code units to recompile and rerun after changes to code and input
+           based on a simple analysis of how bindings are accessed.
 
 -->
 
 
 
-
-Datalove is an interactive scripting language and environment.
-The compiler quickly re-compiles the program
-whenever its code changes.
-The program quickly re-runs whenever its code or data changes.
-Both recompilation and rerun are incremental,
-performing only the work necessary to compute the changes.
-It is _reactive_ to changes to both code and data.
-Reruns are deterministic.
-In the presence of arbitrary changes to a live coding session
-Datalove produces the same results as if it had been run fresh.
-
-I developed a simple set of recursive rules for deciding which code
-must be recompiled and rerun when individual script units
-are interactively modified or their inputs change.
-These rules are based on analyzing variable bindings
-and their subsequent usage within a linear type system.
-I did this by progressively developing verifiable counter-examples
-until I was satisfied of their correctness.
-I did not prove correctness.
-
+In reactive notebooks when a cell is edited subsequent cells are rerun to recalculate the results.
+If we allow a cell to mutate a prior cell's bindings then after an edit
+we cannot simply rerun subsequent cells and still produce the same results as a fresh run,
+as prior cells may be in a mutated state different from what a fresh run would have produced
+at the point of edit.
+Therefore we also must rerun prior cells to restore their state before reruning subsequent cells.
+Within a linear type system we can precisely identify all reads and writes of prior cells.
+By analyzing five kinds of data accesses we can select a subset of prior and subsequent cells
+to rerun that always produces the same result as a fresh run of all cells.
 
 
 **Part 1. Background**
 
-- [What is a reactive script?](#user-content-what-is-a-reactive-script)
+- [What is a reactive notebook?](#user-content-what-is-a-reactive-notebook)
 - [Datalove's design for reactivity](#user-content-dataloves-design-for-reactivity)
 
 **Part 2. Experiments**
@@ -72,35 +42,47 @@ I did not prove correctness.
 
 
 
-## What is a reactive script?
+## What is a reactive notebook?
 
-<!--
+Scientific notebooks provide an interactive scripting environment
+typically used for data exploration and scientific computing.
+They are based on cells of code that may be executed independently,
+or executed in sequence,
+subsequent cells refering to the results of prior cells.
 
-_And_ this is a primer on reactive scripts.
+The well-known example of scientific notebooks is Jupyter.
+In Jupyter one can edit and run arbitrary cells on demand.
+Jupyter does not track dependencies between cells
+and does not rerun subsequent cells after edits.
+The results across the notebook can become unsynchronized
+and disagree with each other.
 
-Thesis: rerun dependent code.
-Antithesis: hidden state problem?
+You edit cell 3, causing it to produce a different result,
+but cell 10 which depends on cell 3 still reflects the earlier result.
+You delete the cell that defined variable `foo` but the variable
+`foo` continues to exist in the environment at its previously-evaluated value.
+You run cells out of order and it produces a state that no fresh in-order
+run could possibly reproduce.
+This general confusion is sometimes called a "hidden state" problem.
 
-Don't want to compare to existing systems.
-It's not really my goal to solve a _new_ problem, just _my_ problem.
+_Reactive notebooks_ attempt to eliminate this confusion
+by tracking data dependencies between cells and rerunning dependents after edits.
+They attempt to maintain the key invariant:
+_A partial rerun after an edit always produces the same results as a fresh re-run_.
 
-Motivating example.
+Common reactive notebooks accomplish this only under restricted scenarios
+that cannot be verified within the type systems of their chosen languages.
+One of those restrictions is that cells may not mutate the state of other cells.
+Once this happens the dependency tracking fails and the invariant breaks.
+This is the subject of
+[When Do Reactive Notebooks Fail to React?](https://arxiv.org/abs/2511.21994), by Lu et. al. 2025.
+They examined existing reactive notebooks to find cases where
+replay behavior is unsound compared to a fresh run.
 
--->
-
-Datalove is an interactive scripting language.
-The compiler and interpreter live together in a long-running engine.
-Datalove scripts are reactive:
-a script runs to completion,
-then the engine waits for some external force to change the code or input data,
-then it recompiles and reruns the script to completion again.
-With careful design the engine avoids fully recompiling and rerunning the script.
-As the code changes and as its input data changes,
-the engine preserves its existing state and only reevaluates
-what is necessary to produce a correct new result.
-
-Here is an example script one might hack on interactively,
-performing a simple data transformation.
+To illustrate the problem of reactivity in the face of mutations,
+below is an example script one might hack on interactively.
+It is written in Datalove,
+an interactive scripting language with a linear type system.
 It reads a month of bank transactions,
 sorts each payee into a category,
 totals the categories,
