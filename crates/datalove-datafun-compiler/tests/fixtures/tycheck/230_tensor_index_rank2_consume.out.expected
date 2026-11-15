@@ -6,10 +6,10 @@
         {
           "message": "this would move the element out",
           "span": [
-            182,
+            181,
             186
           ],
-          "text": "[i]?"
+          "text": "t[i]?"
         }
       ],
       "message": "an element of type `[|u32, 1|]` cannot be read out of what holds it",

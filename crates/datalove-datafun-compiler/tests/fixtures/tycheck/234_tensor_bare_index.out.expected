@@ -6,10 +6,10 @@
         {
           "message": "cannot infer type",
           "span": [
-            92,
+            91,
             95
           ],
-          "text": "[i]"
+          "text": "t[i]"
         }
       ],
       "message": "bare index `a[i]` requires `?` or `!` suffix"

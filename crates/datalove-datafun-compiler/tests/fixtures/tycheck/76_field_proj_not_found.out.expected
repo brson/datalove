@@ -6,10 +6,10 @@
         {
           "message": "no such field",
           "span": [
-            34,
+            33,
             38
           ],
-          "text": ".age"
+          "text": "s.age"
         }
       ],
       "message": "`{ name: string }` has no field `age`"

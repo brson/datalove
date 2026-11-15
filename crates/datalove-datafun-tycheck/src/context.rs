@@ -807,7 +807,7 @@ replace the view rather than the elements it shows. Index down to single element
         alias: InternedText<'db>,
         name: InternedText<'db>,
     ) -> Result<crate::QualifiedFunction<'db>, TypeError> {
-        let site = ErrorSite::Expr(expr.key());
+        let site = ErrorSite::Callee(expr.key());
         let module = alias.as_str(self.db);
         let item = name.as_str(self.db);
         if self.below.requires.contains(&alias) {

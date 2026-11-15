@@ -75,6 +75,9 @@ impl Default for RecoveryHint {
 pub enum ErrorSite<'db> {
     /// An expression.
     Expr(ExprKey<'db>),
+    /// A call's callee, `f` or `m.f`: the call's expression up to its `(`,
+    /// for a fault in the name rather than the call.
+    Callee(ExprKey<'db>),
     /// A `set` statement's target, by its span index.
     Set(u32),
     /// A function's signature, by its span index.

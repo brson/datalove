@@ -6,10 +6,10 @@
         {
           "message": "only a struct or a tuple has fields",
           "span": [
-            20,
+            19,
             22
           ],
-          "text": ".0"
+          "text": "x.0"
         }
       ],
       "message": "`int` has no fields"

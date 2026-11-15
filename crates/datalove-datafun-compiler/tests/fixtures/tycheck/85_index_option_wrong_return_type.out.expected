@@ -6,10 +6,10 @@
         {
           "message": "this can return early",
           "span": [
-            107,
+            106,
             111
           ],
-          "text": "[i]?"
+          "text": "a[i]?"
         }
       ],
       "message": "`?` can return early, so the function has to return an option `?T`, and it returns `u32`"

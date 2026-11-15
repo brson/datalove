@@ -6,10 +6,10 @@
         {
           "message": "this would move the field out",
           "span": [
-            232,
+            231,
             234
           ],
-          "text": ".r"
+          "text": "s.r"
         }
       ],
       "message": "a field of type `!u32` cannot be read out of what holds it",

@@ -49,9 +49,9 @@
           "message": "expected 1 argument",
           "span": [
             147,
-            159
+            165
           ],
-          "text": "base.add_one"
+          "text": "base.add_one(x, x)"
         },
         {
           "message": "function `add_one` defined here with 1 parameter",

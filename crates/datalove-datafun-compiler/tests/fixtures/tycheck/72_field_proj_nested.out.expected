@@ -6,10 +6,10 @@
         {
           "message": "this would move the field out",
           "span": [
-            48,
+            42,
             50
           ],
-          "text": ".0"
+          "text": "nested.0"
         }
       ],
       "message": "a field of type `(int, int)` cannot be read out of what holds it",
@@ -23,10 +23,10 @@
         {
           "message": "this would move the field out",
           "span": [
-            70,
+            62,
             72
           ],
-          "text": ".0"
+          "text": "nested.1.0"
         }
       ],
       "message": "a field of type `int` cannot be read out of what holds it",

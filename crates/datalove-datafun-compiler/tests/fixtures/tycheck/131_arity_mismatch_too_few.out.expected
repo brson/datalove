@@ -7,9 +7,9 @@
           "message": "expected 2 arguments",
           "span": [
             76,
-            79
+            82
           ],
-          "text": "add"
+          "text": "add(1)"
         },
         {
           "message": "function `add` defined here with 2 parameters",

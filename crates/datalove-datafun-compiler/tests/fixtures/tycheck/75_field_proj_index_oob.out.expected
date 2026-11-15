@@ -6,10 +6,10 @@
         {
           "message": "no such element",
           "span": [
-            24,
+            23,
             26
           ],
-          "text": ".5"
+          "text": "t.5"
         }
       ],
       "message": "a tuple of 2 has no element 5"

@@ -7,9 +7,9 @@
           "message": "expected 1 argument",
           "span": [
             71,
-            77
+            86
           ],
-          "text": "double"
+          "text": "double(1, 2, 3)"
         },
         {
           "message": "function `double` defined here with 1 parameter",

@@ -13,6 +13,26 @@ use datalove_datafun_ast::ast::ExprKey;
 
 use crate::{DatafunSpans, ModuleId, ParsedModuleGraph, PendingDiagnostic, RecoveryHint};
 
+/// The root name `root` of the place spanned by `place`: `t` of `t.0`.
+///
+/// A place is spanned from its root, which is written first.
+fn root_span(db: &dyn crate::Db, place: TextSpan, root: &str) -> TextSpan {
+    let span = place.span.start..place.span.start + root.len();
+    assert_eq!(&place.source.as_str(db)[span.C()], root, "a place's span begins with its root");
+    TextSpan::new(place.source, span)
+}
+
+/// The callee of the call spanned by `call`: its text up to the `(`.
+///
+/// A call is spanned from its callee through its `)`, and the callee, `f`
+/// or `m.f`, has no `(` in it, being written against the one that opens the
+/// arguments.
+fn callee_span(db: &dyn crate::Db, call: TextSpan) -> TextSpan {
+    let text = &call.source.as_str(db)[call.span.C()];
+    let open = text.find('(').unwrap_or_else(|| panic!("a call's span has its `(`: {text:?}"));
+    TextSpan::new(call.source, call.span.start..call.span.start + open)
+}
+
 /// Trait for looking up spans during diagnostic emission.
 ///
 /// Abstracts over local spans (DatafunSpans) and module graph spans
@@ -254,13 +274,13 @@ fn build<'db>(
         PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name, below } => {
             let builder = DiagnosticBuilder::error(db, &format!("cannot find value `{}` in this scope", name.as_str(db)))
                 .code(FCode::UndefinedVariable.as_str())
-                .primary_label(spans.lookup_expr(db, *expr_key).expect(NO_SPAN), "not found in this scope");
+                .primary_label(root_span(db, spans.lookup_expr(db, *expr_key).expect(NO_SPAN), name.as_str(db)), "not found in this scope");
             note_below(builder, *below, name.as_str(db))
         }
         PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name, below } => {
             let builder = DiagnosticBuilder::error(db, &format!("cannot find function `{}` in this scope", name.as_str(db)))
                 .code(FCode::UndefinedFunction.as_str())
-                .primary_label(spans.lookup_expr(db, *expr_key).expect(NO_SPAN), "not found in this scope");
+                .primary_label(callee_span(db, spans.lookup_expr(db, *expr_key).expect(NO_SPAN)), "not found in this scope");
             note_below(builder, *below, name.as_str(db))
         }
         PendingDiagnostic::DuplicateImport { local_index, module_id: _, name, first } => {
@@ -321,6 +341,7 @@ drop the return type.")
         PendingDiagnostic::Coded { site, module_id: _, code, message, label, note } => {
             let ts = match site {
                 crate::ErrorSite::Expr(key) => spans.lookup_expr(db, *key),
+                crate::ErrorSite::Callee(key) => spans.lookup_expr(db, *key).map(|call| callee_span(db, call)),
                 crate::ErrorSite::Set(local_index) => spans.lookup_set(db, *local_index),
                 crate::ErrorSite::Fun(local_index) => spans.lookup_fun(db, *local_index),
                 crate::ErrorSite::Import(local_index) => spans.lookup_import(db, *local_index),

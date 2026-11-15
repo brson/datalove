@@ -105,9 +105,11 @@ impl<'db> Parser<'db> {
     /// can be decomposed into a root name + field steps, produces
     /// `ExprFunKind::Place` instead of `TryOption(Index(...))`.
     pub(super) fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprId) -> ast::ExprId {
-        // Where the whole chain begins. A postfix operator's own expression is
-        // spanned from the operator, but a call names what it calls from the
-        // start: all of `u8.max_value`.
+        // Where the whole chain begins. `?`, `!` and `@` are spanned from the
+        // operator, which is what a diagnostic about them points at: the `!`
+        // that returned early. A place, projection, index or call is all of
+        // what it reads or calls, from the start of the chain: all of `t.0`,
+        // `l[0]!` or `u8.max_value()`.
         let chain_start = self.expr_span_start(expr);
         loop {
             // A postfix operator is written against what it operates on, so
@@ -152,7 +154,7 @@ impl<'db> Parser<'db> {
                             self.next(); // consume .
                             let field = self.parse_field_selector();
                             let end_pos = self.last_byte_end();
-                            let span = op_span.start..end_pos;
+                            let span = chain_start..end_pos;
                             // If base is a Place, push Field step directly.
                             if let ast::ExprFunKind::Place(place) = self.expr_kind(expr) {
                                 let root = place.root;
@@ -178,7 +180,7 @@ impl<'db> Parser<'db> {
                 Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                     // Index access: expr[index_expr]
                     let text = self.source_text();
-                    let start_pos = self.current_byte_pos();
+                    let start_pos = chain_start;
                     let inner = match self.next() {
                         Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
                         _ => unreachable!(),
@@ -265,6 +267,7 @@ impl<'db> Parser<'db> {
         };
         let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
         let callee = TextSpan::new(text, start..callee_end);
+        let call_span = TextSpan::new(text, start..self.last_byte_end());
 
         let qualified = match self.expr_kind(base) {
             ast::ExprFunKind::Place(place) => match place.steps.as_slice() {
@@ -289,7 +292,7 @@ impl<'db> Parser<'db> {
             args,
             arg_modes,
         };
-        self.create_expr(ast::ExprFunKind::FunctionCall(call), callee)
+        self.create_expr(ast::ExprFunKind::FunctionCall(call), call_span)
     }
 
     /// Parse what follows a `.`: a field's name, or a tuple's index.
@@ -726,7 +729,8 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                             _ => unreachable!(),
                                         };
                                         let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
-                                        // For function calls, span should include the parens, but for now just use the name span.
+                                        // The call is all of it, the name through the `)`.
+                                        let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                         let call = ast::ExprFunctionCall {
                                             local_index: self.next_call_index(),
                                             qualifier: None,

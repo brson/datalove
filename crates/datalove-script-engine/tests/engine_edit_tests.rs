@@ -1153,7 +1153,7 @@ fn a_failed_unit_s_name_is_reported_where_it_is_used() {
         ("if true\n  set n +!= 1\nend if", "n", "unit 3:2:7"),
         ("if true\n  set l[0]! = 5\nend if", "l", "unit 3:2:7"),
         ("if true\n  set t.0 = 5\nend if", "t", "unit 3:2:7"),
-        ("let x = l[0]!", "l", "unit 3:1:10"),
+        ("let x = l[0]!", "l", "unit 3:1:9"),
         ("let g: int = f()", "f", "unit 3:1:14"),
         ("set a = 3", "a", "unit 3:1:5"),
         ("if true\n  set a = 4\nend if", "a", "unit 3:2:7"),

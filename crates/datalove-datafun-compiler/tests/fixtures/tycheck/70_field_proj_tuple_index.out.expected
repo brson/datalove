@@ -6,10 +6,10 @@
         {
           "message": "this would move the field out",
           "span": [
-            24,
+            23,
             26
           ],
-          "text": ".0"
+          "text": "t.0"
         }
       ],
       "message": "a field of type `int` cannot be read out of what holds it",
@@ -23,10 +23,10 @@
         {
           "message": "this would move the field out",
           "span": [
-            36,
+            35,
             38
           ],
-          "text": ".1"
+          "text": "t.1"
         }
       ],
       "message": "a field of type `int` cannot be read out of what holds it",

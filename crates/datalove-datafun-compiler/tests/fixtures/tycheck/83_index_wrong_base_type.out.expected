@@ -6,10 +6,10 @@
         {
           "message": "cannot infer type",
           "span": [
-            88,
+            87,
             92
           ],
-          "text": "[i]?"
+          "text": "a[i]?"
         }
       ],
       "message": "`u32` cannot be indexed; a list `[T]`, a map `%{K = V}` or a tensor `[|T, N|]` can"

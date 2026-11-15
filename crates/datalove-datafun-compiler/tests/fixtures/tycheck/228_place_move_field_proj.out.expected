@@ -6,10 +6,10 @@
         {
           "message": "this would move the field out",
           "span": [
-            217,
+            212,
             219
           ],
-          "text": ".0"
+          "text": "a[i]?.0"
         }
       ],
       "message": "a field of type `int` cannot be read out of what holds it",

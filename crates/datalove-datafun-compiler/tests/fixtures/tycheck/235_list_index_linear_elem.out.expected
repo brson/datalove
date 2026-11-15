@@ -6,10 +6,10 @@
         {
           "message": "this would move the element out",
           "span": [
-            135,
+            134,
             139
           ],
-          "text": "[i]?"
+          "text": "a[i]?"
         }
       ],
       "message": "an element of type `string` cannot be read out of what holds it",
