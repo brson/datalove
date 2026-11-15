@@ -106,13 +106,15 @@ The transactions live in a data file, `local/home/transactions.dlt`:
 ]
 ```
 
-And the script reads them:
+And the script reads them, in eight cells:
 
 ```datalove
+// cell 1
 require module sys/std/list
 require module sys/std/map
 require module sys/std/string
 
+// cell 2
 require data local/home/transactions: [
   {
     day: u32,
@@ -121,6 +123,7 @@ require data local/home/transactions: [
   }
 ]
 
+// cell 3
 fun category(ref payee: string): string
   if (
     string.starts_with(ref payee, ref "TRADER JOES")
@@ -141,6 +144,7 @@ fun category(ref payee: string): string
   ret "other"
 end fun
 
+// cell 4
 let budget: %{string = int} = %{
   "groceries" = 25000,
   "dining" = 15000,
@@ -149,13 +153,17 @@ let budget: %{string = int} = %{
   "other" = 5000
 }
 
+// cell 5
 var spent: %{string = int} = %{}
+
+// cell 6
 for t in ref transactions
   let c = category(ref t.payee)
   let so_far = map.get_or(ref spent, ref c, 0)
   call map.insert(mut spent, c, so_far + t.cents)
 end for
 
+// cell 7
 var over: [string] = []
 for c, amount in ref spent
   if amount .> budget[c]!
@@ -163,18 +171,18 @@ for c, amount in ref spent
   end if
 end for
 
+// cell 8
 let output = {
   spent = spent,
   over = over
 }
 ```
 
-This processes input `transactions` and produces `output`.
 Datalove today has no programmatic access to I/O at runtime.
 The `require data` statement includes data at compile time,
 bound to a variable named `transactions`,
 and `output` just produces a binding observable in the runtime environment.
-Let's just assume these are reasonable standins for some future way to
+Let's just assume these are reasonable stand-ins for some future way to
 impose I/O on a script.
 
 > The `%{string = int}` type is a map from `string` to `int`.
@@ -184,7 +192,7 @@ impose I/O on a script.
 > [treats `<` and `>` as matched brackets in the lexer](../datafun.md#user-content-comparison-and-equality).
 > The remaining Datalove syntax in this example is similar to other common languages.
 
-On first run the script produces `output`:
+Run in order, the cells produce `output`:
 
 ```datalove
 {
@@ -199,17 +207,10 @@ On first run the script produces `output`:
 }
 ```
 
-In this script I expect to trigger recompilation and/or reevaluation
-when the input `transactions` changes,
-or when the script code itself changes,
-or when any of the modules it imports changes.
-
-**Imagine we are developing this script experimentally in an interactive live coding environment**.
-
-In the initial output nothing is overbudget,
-but "Bi-Rite" is a grocery store,
-and its transactions are currently being accumulated in the "other" category.
-So I teach the `category` function about it:
+Nothing is over budget,
+but Bi-Rite is a grocery store,
+and its $33.15 is landing in "other".
+So I teach cell 3 about it:
 
 ```datalove
 fun category(ref payee: string): string
@@ -222,10 +223,31 @@ fun category(ref payee: string): string
   ...
 ```
 
-When the script reevaluates,
-"groceries" goes to 27134,
-"other" disappears,
-and groceries is now over budget:
+Which cells rerun?
+The obvious answer is the cells that depend on the one I edited:
+cell 6 calls `category`,
+and cells 7 and 8 use what cell 6 computed.
+Cells 4 and 5 don't mention `category` at all.
+Rerun cells 6 through 8 and the output is:
+
+```datalove
+{
+  spent = %{
+    "bills" = 25506,
+    "car" = 9300,
+    "dining" = 26870,
+    "groceries" = 50953,
+    "other" = 3315
+  },
+  over = ["bills", "dining", "groceries"]
+}
+```
+
+Everything doubled,
+and I'm suddenly over budget on nearly everything.
+Cell 6 doesn't build `spent`, it adds to it,
+and the `spent` it found was the one it had already filled the last time it ran.
+A fresh run gives:
 
 ```datalove
 {
@@ -239,61 +261,35 @@ and groceries is now over budget:
 }
 ```
 
-What actually needs to recompile here?
-Definitely the `category` function I changed.
-Definitely not the imported modules.
-The rest of the script?
-Since the type of `category` didn't change I expect the rest of the script doesn't need to recompile.
+To get that,
+cell 5 has to rerun before cell 6,
+emptying `spent` again,
+though cell 5 has nothing to do with `category`.
+The edit was to cell 3,
+the cell it forced to rerun was cell 6,
+and cell 6 reached back to cell 5.
 
-What actually needs to rerun here?
-A less obvious question.
-Probably anything that depends on the result of `category`.
-Not everything does:
+The typical way to avoid this is to keep the declaration of `spent`
+in the same cell as the code that fills it.
+Reactive notebooks generally make that a rule.
 
-```datalove
-let budget: %{string = int} = %{
-  "groceries" = 25000,
-  "dining" = 15000,
-  "car" = 10000,
-  "bills" = 15000,
-  "other" = 5000
-}
+Moves make it worse.
+Cell 8 _moves_ `spent` and `over` into `output`,
+leaving the two bindings empty.
+Now raise the dining budget in cell 4.
+Cell 7 reads `budget`, so it reruns,
+and goes to read `spent`,
+which cell 8 already gave away.
+Cell 7 can only rerun once cells 5 and 6 rerun before it to rebuild `spent`,
+though neither has anything to do with the budget.
 
-var spent: %{string = int} = %{}
-for t in ref transactions
-  let c = category(ref t.payee)
-  let so_far = map.get_or(ref spent, ref c, 0)
-  call map.insert(mut spent, c, so_far + t.cents)
-end for
-```
-
-`budget` is calculated before `category` is ever mentioned.
-Probably doesn't need to run again.
-`spent` is built from a calculation that uses `category` so
-any code that writes or reads it probably does.
-
-Continuing, imagine the month goes on,
-and my bank appends a coffee to the data file:
-
-```datalove
-  {day = 29, payee = "BLUE BOTTLE COFFEE", cents = 1890}
-```
-
-The totals for "dining" change putting me overbudget,
-`over` becoming `["dining", "groceries"]`.
-If I then change the code to increase the dining budget,
-then `over` reevaluates back to `["groceries"]`.
-
-What actually needs to recompile?
-What actually needs to rerun?
-Let's not belabor this.
-You get the idea. Inputs change.
-Reevaluate just what needs to reevaluate.
-
-I'll develop the rules Datalove follows to make
-these cases and more work correctly.
-The rules are based on analyzing how bindings are used within a linear typesystem.
-I'll end with a live demonstration of how this particular script actually reacts to modifications.
+In both cases the cells to rerun appear before the edit as well as after it.
+Which ones depends on what each cell did to the bindings of the cells before it:
+read them, moved them, overwrote them or updated them.
+In Datalove the type checker already knows,
+and the rest of this post builds the rerun rules from those accesses.
+It ends with this script running live in the Datalove engine,
+making these same edits.
 
 
 
@@ -1276,8 +1272,8 @@ _Therefore_ we implemented this.
 Here's a cool demo. Use original motivating example.
 -->
 
-This is the same script from the intro,
-divided by hand into script units.
+This is the script from the intro,
+each cell a script unit.
 This is a replay captured from the actual Datalove scripting engine.
 It is presented in a similar style to the actual Datalove interactive CLI
 (the `datalove repl` command).

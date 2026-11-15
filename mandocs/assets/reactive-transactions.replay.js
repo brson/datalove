@@ -4,7 +4,7 @@ DataloveReplay.register("reactive-transactions", {
   "version": 1,
   "steps": [
     {
-      "input": "require module sys/std/list",
+      "input": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
       "outcome": {
         "Unit": {
           "Ran": []
@@ -14,7 +14,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -26,148 +26,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        }
-      ],
-      "environment": []
-    },
-    {
-      "input": "require module sys/std/map",
-      "outcome": {
-        "Unit": {
-          "Ran": []
-        }
-      },
-      "units": [
-        {
-          "number": 1,
-          "expression": false,
-          "source": "require module sys/std/list",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 1,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": true,
-          "ran": true,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        }
-      ],
-      "environment": []
-    },
-    {
-      "input": "require module sys/std/string",
-      "outcome": {
-        "Unit": {
-          "Ran": []
-        }
-      },
-      "units": [
-        {
-          "number": 1,
-          "expression": false,
-          "source": "require module sys/std/list",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 1,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": true,
-          "ran": true,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -199,7 +59,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -211,54 +71,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -269,7 +83,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -287,7 +101,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -333,7 +147,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -345,54 +159,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -403,7 +171,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -421,7 +189,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -442,7 +210,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -458,7 +226,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -508,7 +276,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -520,54 +288,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -578,7 +300,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -596,7 +318,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -617,7 +339,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -633,7 +355,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -651,7 +373,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
           "status": "Ran",
@@ -669,7 +391,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -707,7 +429,7 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+      "input": "var spent: %{string = int} = %{}",
       "outcome": {
         "Unit": {
           "Ran": [
@@ -715,7 +437,7 @@ DataloveReplay.register("reactive-transactions", {
               "Slot": {
                 "name": "spent",
                 "ty": "%{string = int}",
-                "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+                "value": "%{}"
               }
             }
           ]
@@ -725,7 +447,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -737,54 +459,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -795,7 +471,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -813,7 +489,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -834,7 +510,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -850,7 +526,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -868,7 +544,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
           "status": "Ran",
@@ -886,7 +562,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -905,9 +581,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -915,7 +591,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -923,7 +599,212 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 7,
+            "unit": 5,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "spent",
+                "%{}"
+              ]
+            ],
+            "provides": [
+              "spent"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        }
+      ],
+      "environment": [
+        {
+          "name": "budget",
+          "ty": "%{string = int}",
+          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+        },
+        {
+          "name": "category",
+          "ty": "fun(string): string",
+          "value": "-"
+        },
+        {
+          "name": "spent",
+          "ty": "%{string = int}",
+          "value": "%{}"
+        },
+        {
+          "name": "transactions",
+          "ty": "[{ day: u32, payee: string, cents: int }]",
+          "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+        }
+      ]
+    },
+    {
+      "input": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+      "outcome": {
+        "Unit": {
+          "Ran": []
+        }
+      },
+      "units": [
+        {
+          "number": 1,
+          "expression": false,
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 1,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "list",
+              "map",
+              "string"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 2,
+          "expression": false,
+          "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "transactions",
+                  "ty": "[{ day: u32, payee: string, cents: int }]",
+                  "value": "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 2,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "transactions",
+                "[{day = 1, payee = \"TRADER JOES #552\", cents = 8412}, {day = 2, payee = \"SHELL OIL 5741\", cents = 4650}, {day = 3, payee = \"BLUE BOTTLE COFFEE\", cents = 675}, {day = 5, payee = \"SAFEWAY 1123\", cents = 6230}, {day = 7, payee = \"TAQUERIA EL FAROLITO\", cents = 2380}, {day = 9, payee = \"PG&E\", cents = 11204}, {day = 12, payee = \"BLUE BOTTLE COFFEE\", cents = 540}, {day = 14, payee = \"TRADER JOES #552\", cents = 9177}, {day = 18, payee = \"NETFLIX.COM\", cents = 1549}, {day = 21, payee = \"ZUNI CAFE\", cents = 9840}, {day = 26, payee = \"BI-RITE MARKET\", cents = 3315}]"
+              ]
+            ],
+            "provides": [
+              "transactions"
+            ],
+            "reads": [
+              "transactions"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 3,
+          "expression": false,
+          "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Function": {
+                  "name": "category"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 3,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [
+              "category"
+            ],
+            "reads": [
+              "category",
+              "payee",
+              "string"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 4,
+          "expression": false,
+          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Value": {
+                  "name": "budget",
+                  "ty": "%{string = int}",
+                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 4,
+            "diagnostics": "",
+            "bindings": [
+              [
+                "budget",
+                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+              ]
+            ],
+            "provides": [
+              "budget"
+            ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 5,
+          "expression": false,
+          "source": "var spent: %{string = int} = %{}",
+          "status": "Ran",
+          "outcome": {
+            "Ran": [
+              {
+                "Slot": {
+                  "name": "spent",
+                  "ty": "%{string = int}",
+                  "value": "%{}"
+                }
+              }
+            ]
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -934,18 +815,41 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
+            "reads": [],
+            "takes": [],
+            "overwrites": [],
+            "updates": [],
+            "revives": []
+          }
+        },
+        {
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": true,
+          "ran": true,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
             "reads": [
               "c",
               "category",
               "so_far",
-              "spent",
               "t",
               "transactions",
               "map"
             ],
             "takes": [],
             "overwrites": [],
-            "updates": [],
+            "updates": [
+              "spent"
+            ],
             "revives": []
           }
         }
@@ -992,7 +896,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -1004,54 +908,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -1062,7 +920,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -1080,7 +938,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -1101,7 +959,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -1117,7 +975,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -1135,7 +993,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
           "status": "Ran",
@@ -1153,7 +1011,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -1172,9 +1030,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -1182,7 +1040,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -1190,7 +1048,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -1201,15 +1059,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -1217,7 +1067,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "Ran",
@@ -1235,7 +1116,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [
               [
@@ -1308,7 +1189,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -1320,54 +1201,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -1378,7 +1213,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -1396,7 +1231,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -1417,7 +1252,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -1433,7 +1268,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -1451,7 +1286,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
           "status": "Ran",
@@ -1469,7 +1304,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -1488,9 +1323,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -1498,7 +1333,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -1506,7 +1341,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -1517,15 +1352,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -1533,7 +1360,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "Ran",
@@ -1551,7 +1409,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [
               [
@@ -1577,7 +1435,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "Ran",
@@ -1595,7 +1453,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 9,
+            "unit": 8,
             "diagnostics": "",
             "bindings": [
               [
@@ -1651,11 +1509,11 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 5 fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
+      "input": "/edit 3 fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
       "outcome": {
         "Edited": [
           {
-            "unit": 5,
+            "unit": 3,
             "compiled": true,
             "eval": {
               "Ran": [
@@ -1668,7 +1526,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 7,
+            "unit": 5,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -1676,14 +1534,21 @@ DataloveReplay.register("reactive-transactions", {
                   "Slot": {
                     "name": "spent",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                    "value": "%{}"
                   }
                 }
               ]
             }
           },
           {
-            "unit": 8,
+            "unit": 6,
+            "compiled": false,
+            "eval": {
+              "Ran": []
+            }
+          },
+          {
+            "unit": 7,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -1698,7 +1563,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 9,
+            "unit": 8,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -1718,7 +1583,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -1730,54 +1595,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -1788,7 +1607,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -1806,7 +1625,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -1827,7 +1646,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -1843,7 +1662,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -1861,7 +1680,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
           "status": "Ran",
@@ -1879,7 +1698,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -1898,9 +1717,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -1908,7 +1727,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -1916,7 +1735,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -1927,15 +1746,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -1943,7 +1754,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "Ran",
@@ -1961,7 +1803,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [
               [
@@ -1987,7 +1829,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "Ran",
@@ -2005,7 +1847,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 9,
+            "unit": 8,
             "diagnostics": "",
             "bindings": [
               [
@@ -2065,7 +1907,7 @@ DataloveReplay.register("reactive-transactions", {
       "outcome": {
         "Edited": [
           {
-            "unit": 4,
+            "unit": 2,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2080,7 +1922,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 7,
+            "unit": 5,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2088,14 +1930,21 @@ DataloveReplay.register("reactive-transactions", {
                   "Slot": {
                     "name": "spent",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                    "value": "%{}"
                   }
                 }
               ]
             }
           },
           {
-            "unit": 8,
+            "unit": 6,
+            "compiled": false,
+            "eval": {
+              "Ran": []
+            }
+          },
+          {
+            "unit": 7,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2110,7 +1959,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 9,
+            "unit": 8,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2130,7 +1979,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -2142,54 +1991,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -2200,7 +2003,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -2218,7 +2021,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -2239,7 +2042,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -2255,7 +2058,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -2273,7 +2076,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
           "status": "Ran",
@@ -2291,7 +2094,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -2310,9 +2113,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -2320,7 +2123,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -2328,7 +2131,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -2339,15 +2142,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -2355,7 +2150,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "Ran",
@@ -2373,7 +2199,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [
               [
@@ -2399,7 +2225,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "Ran",
@@ -2417,7 +2243,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 9,
+            "unit": 8,
             "diagnostics": "",
             "bindings": [
               [
@@ -2473,11 +2299,11 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
       "outcome": {
         "Edited": [
           {
-            "unit": 6,
+            "unit": 4,
             "compiled": true,
             "eval": {
               "Ran": [
@@ -2492,7 +2318,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 7,
+            "unit": 5,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2500,14 +2326,21 @@ DataloveReplay.register("reactive-transactions", {
                   "Slot": {
                     "name": "spent",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                    "value": "%{}"
                   }
                 }
               ]
             }
           },
           {
-            "unit": 8,
+            "unit": 6,
+            "compiled": false,
+            "eval": {
+              "Ran": []
+            }
+          },
+          {
+            "unit": 7,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2522,7 +2355,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 9,
+            "unit": 8,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2542,7 +2375,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -2554,54 +2387,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -2612,7 +2399,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -2630,7 +2417,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -2651,7 +2438,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -2667,7 +2454,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -2685,7 +2472,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
           "status": "Ran",
@@ -2703,7 +2490,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -2722,9 +2509,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -2732,7 +2519,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -2740,7 +2527,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -2751,15 +2538,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -2767,7 +2546,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "Ran",
@@ -2785,7 +2595,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [
               [
@@ -2811,7 +2621,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "Ran",
@@ -2829,7 +2639,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 9,
+            "unit": 8,
             "diagnostics": "",
             "bindings": [
               [
@@ -2885,11 +2695,11 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"bills\" = 15000\n}",
+      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"bills\" = 15000\n}",
       "outcome": {
         "Edited": [
           {
-            "unit": 6,
+            "unit": 4,
             "compiled": true,
             "eval": {
               "Ran": [
@@ -2904,7 +2714,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 7,
+            "unit": 5,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -2912,26 +2722,33 @@ DataloveReplay.register("reactive-transactions", {
                   "Slot": {
                     "name": "spent",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                    "value": "%{}"
                   }
                 }
               ]
             }
           },
           {
-            "unit": 8,
+            "unit": 6,
+            "compiled": false,
+            "eval": {
+              "Ran": []
+            }
+          },
+          {
+            "unit": 7,
             "compiled": false,
             "eval": {
               "ReturnedEarly": "er error \"key not found\""
             }
           },
           {
-            "unit": 9,
+            "unit": 8,
             "compiled": false,
             "eval": {
               "Blocked": {
                 "on": [
-                  8
+                  7
                 ]
               }
             }
@@ -2942,7 +2759,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -2954,54 +2771,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -3012,7 +2783,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -3030,7 +2801,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -3051,7 +2822,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -3067,7 +2838,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -3085,7 +2856,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"bills\" = 15000\n}",
           "status": "Ran",
@@ -3103,7 +2874,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -3122,9 +2893,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -3132,7 +2903,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -3140,7 +2911,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -3151,15 +2922,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -3167,7 +2930,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "ReturnedEarly",
@@ -3177,7 +2971,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -3198,21 +2992,21 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "Blocked",
           "outcome": {
             "Blocked": {
               "on": [
-                8
+                7
               ]
             }
           },
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 9,
+            "unit": 8,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -3253,18 +3047,18 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
+      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
       "outcome": {
         "Edited": [
           {
-            "unit": 6,
+            "unit": 4,
             "compiled": true,
             "eval": {
               "NotCompiled": "mismatched types: expected `int`, found `string`"
             }
           },
           {
-            "unit": 7,
+            "unit": 5,
             "compiled": false,
             "eval": {
               "Ran": [
@@ -3272,21 +3066,28 @@ DataloveReplay.register("reactive-transactions", {
                   "Slot": {
                     "name": "spent",
                     "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                    "value": "%{}"
                   }
                 }
               ]
             }
           },
           {
-            "unit": 8,
+            "unit": 6,
+            "compiled": false,
+            "eval": {
+              "Ran": []
+            }
+          },
+          {
+            "unit": 7,
             "compiled": true,
             "eval": {
               "NotCompiled": "cannot find `budget` in this scope"
             }
           },
           {
-            "unit": 9,
+            "unit": 8,
             "compiled": true,
             "eval": {
               "NotCompiled": "cannot find `over` in this scope"
@@ -3298,7 +3099,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -3310,54 +3111,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -3368,7 +3123,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -3386,7 +3141,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -3407,7 +3162,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -3423,7 +3178,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -3441,7 +3196,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
           "status": "NotCompiled",
@@ -3451,8 +3206,8 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": false,
           "detail": {
-            "unit": 6,
-            "diagnostics": "\u001b[31m[F016] Error:\u001b[0m mismatched types: expected `int`, found `string`\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 6:4:11 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m4 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249mc\u001b[0m\u001b[38;5;249ma\u001b[0m\u001b[38;5;249mr\u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m=\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;201ml\u001b[0m\u001b[38;5;201mo\u001b[0m\u001b[38;5;201mt\u001b[0m\u001b[38;5;201ms\u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;249m,\u001b[0m\n \u001b[38;5;240m  │\u001b[0m           \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m              \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m type mismatch\n\u001b[38;5;246m───╯\u001b[0m\n",
+            "unit": 4,
+            "diagnostics": "\u001b[31m[F016] Error:\u001b[0m mismatched types: expected `int`, found `string`\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 4:4:11 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m4 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249mc\u001b[0m\u001b[38;5;249ma\u001b[0m\u001b[38;5;249mr\u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m=\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;201ml\u001b[0m\u001b[38;5;201mo\u001b[0m\u001b[38;5;201mt\u001b[0m\u001b[38;5;201ms\u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;249m,\u001b[0m\n \u001b[38;5;240m  │\u001b[0m           \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m              \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m type mismatch\n\u001b[38;5;246m───╯\u001b[0m\n",
             "bindings": [],
             "provides": [],
             "reads": [],
@@ -3463,9 +3218,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -3473,7 +3228,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -3481,7 +3236,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": true,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -3492,15 +3247,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -3508,7 +3255,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": true,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "NotCompiled",
@@ -3518,8 +3296,8 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": false,
           "detail": {
-            "unit": 8,
-            "diagnostics": "\u001b[31m[F001] Error:\u001b[0m cannot find value `budget` in this scope\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 8:3:22 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m3 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249mi\u001b[0m\u001b[38;5;249mf\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249ma\u001b[0m\u001b[38;5;249mm\u001b[0m\u001b[38;5;249mo\u001b[0m\u001b[38;5;249mu\u001b[0m\u001b[38;5;249mn\u001b[0m\u001b[38;5;249mt\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m.\u001b[0m\u001b[38;5;249m>\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249mb\u001b[0m\u001b[38;5;249mu\u001b[0m\u001b[38;5;249md\u001b[0m\u001b[38;5;249mg\u001b[0m\u001b[38;5;249me\u001b[0m\u001b[38;5;249mt\u001b[0m\u001b[38;5;201m[\u001b[0m\u001b[38;5;201mc\u001b[0m\u001b[38;5;201m]\u001b[0m\u001b[38;5;201m!\u001b[0m\n \u001b[38;5;240m  │\u001b[0m                      \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m                        \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m not found in this scope\n\u001b[38;5;246m───╯\u001b[0m\n",
+            "unit": 7,
+            "diagnostics": "\u001b[31m[F001] Error:\u001b[0m cannot find value `budget` in this scope\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 7:3:22 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m3 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249mi\u001b[0m\u001b[38;5;249mf\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249ma\u001b[0m\u001b[38;5;249mm\u001b[0m\u001b[38;5;249mo\u001b[0m\u001b[38;5;249mu\u001b[0m\u001b[38;5;249mn\u001b[0m\u001b[38;5;249mt\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m.\u001b[0m\u001b[38;5;249m>\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249mb\u001b[0m\u001b[38;5;249mu\u001b[0m\u001b[38;5;249md\u001b[0m\u001b[38;5;249mg\u001b[0m\u001b[38;5;249me\u001b[0m\u001b[38;5;249mt\u001b[0m\u001b[38;5;201m[\u001b[0m\u001b[38;5;201mc\u001b[0m\u001b[38;5;201m]\u001b[0m\u001b[38;5;201m!\u001b[0m\n \u001b[38;5;240m  │\u001b[0m                      \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m                        \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m not found in this scope\n\u001b[38;5;246m───╯\u001b[0m\n",
             "bindings": [],
             "provides": [],
             "reads": [],
@@ -3530,7 +3308,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "NotCompiled",
@@ -3540,8 +3318,8 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": false,
           "detail": {
-            "unit": 9,
-            "diagnostics": "\u001b[31m[F001] Error:\u001b[0m cannot find value `over` in this scope\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 9:3:10 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m3 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249mo\u001b[0m\u001b[38;5;249mv\u001b[0m\u001b[38;5;249me\u001b[0m\u001b[38;5;249mr\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m=\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;201mo\u001b[0m\u001b[38;5;201mv\u001b[0m\u001b[38;5;201me\u001b[0m\u001b[38;5;201mr\u001b[0m\n \u001b[38;5;240m  │\u001b[0m          \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m            \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m not found in this scope\n\u001b[38;5;246m───╯\u001b[0m\n",
+            "unit": 8,
+            "diagnostics": "\u001b[31m[F001] Error:\u001b[0m cannot find value `over` in this scope\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 8:3:10 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m3 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249mo\u001b[0m\u001b[38;5;249mv\u001b[0m\u001b[38;5;249me\u001b[0m\u001b[38;5;249mr\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m=\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;201mo\u001b[0m\u001b[38;5;201mv\u001b[0m\u001b[38;5;201me\u001b[0m\u001b[38;5;201mr\u001b[0m\n \u001b[38;5;240m  │\u001b[0m          \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m            \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m not found in this scope\n\u001b[38;5;246m───╯\u001b[0m\n",
             "bindings": [],
             "provides": [],
             "reads": [],
@@ -3571,11 +3349,11 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 6 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
+      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
       "outcome": {
         "Edited": [
           {
-            "unit": 6,
+            "unit": 4,
             "compiled": true,
             "eval": {
               "Ran": [
@@ -3590,7 +3368,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 8,
+            "unit": 7,
             "compiled": true,
             "eval": {
               "Ran": [
@@ -3605,7 +3383,7 @@ DataloveReplay.register("reactive-transactions", {
             }
           },
           {
-            "unit": 9,
+            "unit": 8,
             "compiled": true,
             "eval": {
               "Ran": [
@@ -3625,7 +3403,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -3637,54 +3415,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -3695,7 +3427,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -3713,7 +3445,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -3734,7 +3466,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -3750,7 +3482,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -3768,7 +3500,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
           "status": "Ran",
@@ -3786,7 +3518,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -3805,9 +3537,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -3815,7 +3547,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -3823,7 +3555,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -3834,15 +3566,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -3850,7 +3574,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "Ran",
@@ -3868,7 +3623,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [
               [
@@ -3894,7 +3649,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "Ran",
@@ -3912,7 +3667,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 9,
+            "unit": 8,
             "diagnostics": "",
             "bindings": [
               [
@@ -3981,7 +3736,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 1,
           "expression": false,
-          "source": "require module sys/std/list",
+          "source": "require module sys/std/list\nrequire module sys/std/map\nrequire module sys/std/string",
           "status": "Ran",
           "outcome": {
             "Ran": []
@@ -3993,54 +3748,8 @@ DataloveReplay.register("reactive-transactions", {
             "diagnostics": "",
             "bindings": [],
             "provides": [
-              "list"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 2,
-          "expression": false,
-          "source": "require module sys/std/map",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 2,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
-              "map"
-            ],
-            "reads": [],
-            "takes": [],
-            "overwrites": [],
-            "updates": [],
-            "revives": []
-          }
-        },
-        {
-          "number": 3,
-          "expression": false,
-          "source": "require module sys/std/string",
-          "status": "Ran",
-          "outcome": {
-            "Ran": []
-          },
-          "compiled": false,
-          "ran": false,
-          "detail": {
-            "unit": 3,
-            "diagnostics": "",
-            "bindings": [],
-            "provides": [
+              "list",
+              "map",
               "string"
             ],
             "reads": [],
@@ -4051,7 +3760,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 4,
+          "number": 2,
           "expression": false,
           "source": "require data local/home/transactions: [\n  {\n    day: u32,\n    payee: string,\n    cents: int,\n  }\n]",
           "status": "Ran",
@@ -4069,7 +3778,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 4,
+            "unit": 2,
             "diagnostics": "",
             "bindings": [
               [
@@ -4090,7 +3799,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 5,
+          "number": 3,
           "expression": false,
           "source": "fun category(ref payee: string): string\n  if (\n    string.starts_with(ref payee, ref \"TRADER JOES\")\n    or string.starts_with(ref payee, ref \"SAFEWAY\")\n    or string.starts_with(ref payee, ref \"BI-RITE\")\n  )\n    ret \"groceries\"\n  else if (\n    string.contains(ref payee, ref \"COFFEE\")\n    or string.contains(ref payee, ref \"CAFE\")\n    or string.starts_with(ref payee, ref \"TAQUERIA\")\n  )\n    ret \"dining\"\n  else if string.starts_with(ref payee, ref \"SHELL\")\n    ret \"car\"\n  else if payee == \"PG&E\" or payee == \"NETFLIX.COM\"\n    ret \"bills\"\n  end if\n  ret \"other\"\nend fun",
           "status": "Ran",
@@ -4106,7 +3815,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 5,
+            "unit": 3,
             "diagnostics": "",
             "bindings": [],
             "provides": [
@@ -4124,7 +3833,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 6,
+          "number": 4,
           "expression": false,
           "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
           "status": "Ran",
@@ -4142,7 +3851,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 6,
+            "unit": 4,
             "diagnostics": "",
             "bindings": [
               [
@@ -4161,9 +3870,9 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 7,
+          "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}\nfor t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "source": "var spent: %{string = int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
@@ -4171,7 +3880,7 @@ DataloveReplay.register("reactive-transactions", {
                 "Slot": {
                   "name": "spent",
                   "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                  "value": "%{}"
                 }
               }
             ]
@@ -4179,7 +3888,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 7,
+            "unit": 5,
             "diagnostics": "",
             "bindings": [
               [
@@ -4190,15 +3899,7 @@ DataloveReplay.register("reactive-transactions", {
             "provides": [
               "spent"
             ],
-            "reads": [
-              "c",
-              "category",
-              "so_far",
-              "spent",
-              "t",
-              "transactions",
-              "map"
-            ],
+            "reads": [],
             "takes": [],
             "overwrites": [],
             "updates": [],
@@ -4206,7 +3907,38 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 8,
+          "number": 6,
+          "expression": false,
+          "source": "for t in ref transactions\n  let c = category(ref t.payee)\n  let so_far = map.get_or(ref spent, ref c, 0)\n  call map.insert(mut spent, c, so_far + t.cents)\nend for",
+          "status": "Ran",
+          "outcome": {
+            "Ran": []
+          },
+          "compiled": false,
+          "ran": false,
+          "detail": {
+            "unit": 6,
+            "diagnostics": "",
+            "bindings": [],
+            "provides": [],
+            "reads": [
+              "c",
+              "category",
+              "so_far",
+              "t",
+              "transactions",
+              "map"
+            ],
+            "takes": [],
+            "overwrites": [],
+            "updates": [
+              "spent"
+            ],
+            "revives": []
+          }
+        },
+        {
+          "number": 7,
           "expression": false,
           "source": "var over: [string] = []\nfor c, amount in ref spent\n  if amount .> budget[c]!\n    call list.push(mut over, c@)\n  end if\nend for",
           "status": "Ran",
@@ -4224,7 +3956,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 8,
+            "unit": 7,
             "diagnostics": "",
             "bindings": [
               [
@@ -4250,7 +3982,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 9,
+          "number": 8,
           "expression": false,
           "source": "let output = {\n  spent = spent,\n  over = over\n}",
           "status": "Ran",
@@ -4268,7 +4000,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": false,
           "ran": false,
           "detail": {
-            "unit": 9,
+            "unit": 8,
             "diagnostics": "",
             "bindings": [
               [
@@ -4290,7 +4022,7 @@ DataloveReplay.register("reactive-transactions", {
           }
         },
         {
-          "number": 10,
+          "number": 9,
           "expression": true,
           "source": "output",
           "status": "Ran",
@@ -4303,7 +4035,7 @@ DataloveReplay.register("reactive-transactions", {
           "compiled": true,
           "ran": true,
           "detail": {
-            "unit": 10,
+            "unit": 9,
             "diagnostics": "",
             "bindings": [],
             "provides": [],
