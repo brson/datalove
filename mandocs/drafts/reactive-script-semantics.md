@@ -68,7 +68,7 @@ This general confusion is sometimes called a "hidden state" problem.
 _Reactive notebooks_ attempt to eliminate this confusion
 by tracking data dependencies between cells and rerunning dependents after edits.
 They attempt to maintain the key invariant:
-_A partial rerun after an edit always produces the same results as a fresh re-run_.
+_The results presented always equal what a fresh run of the whole notebook would produce_.
 
 Common reactive notebooks accomplish this only under restricted scenarios
 that cannot be verified within the type systems of their chosen languages.
