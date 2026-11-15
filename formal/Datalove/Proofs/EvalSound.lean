@@ -335,7 +335,7 @@ deep as they were given. -/
 def StopOk (R : Ret) : Stop → Prop
   | .early r => EarlyOk R r
   | .unsupported | .uninit | .diverge => True
-  | .fuel | .wrong | .retVoid | .brk _ | .cont _ => False
+  | .fuel | .wrong | .retVoid | .brk _ | .cont _ | .returned _ _ => False
 
 /-- What evaluation gives meets `P`, or stops as a checked expression may. -/
 def Sound {α} (R : Ret) (P : α → Prop) (m : EvalM α) : Prop :=
@@ -489,26 +489,31 @@ def Sig.retTy (sig : Sig) (θ : List (String × Ty)) : Ty :=
   | .ty r => r.inst θ
   | .void => unitTy
 
-/-- What a call may do: give a value of the type it returns, or stop at what
-is not run yet, at a variable read before it was set, or out of calls. -/
-def CallRes (T : Ty) (m : EvalM Val) : Prop :=
+/-- Values for a function's parameters, one each, each there is of its
+parameter's type with the type arguments substituted. -/
+def ArgsFit (θ : List (String × Ty)) (vals : List (Option Val)) (ps : List (Mode × Ty)) : Prop :=
+  vals.length = ps.length ∧ ∀ q ∈ vals.zip ps, ∀ v, q.1 = some v → HasType v (q.2.2.inst θ)
+
+/-- What a call may do: give a value of the type it returns, and what each
+parameter came to, of its type, or stop at what is not run yet, at a
+variable read before it was set, or out of calls. -/
+def CallRes (sig : Sig) (θ : List (String × Ty)) (m : EvalM (Val × List (Option Val))) : Prop :=
   match m with
-  | .ok v => HasType v T
+  | .ok (v, after) => HasType v (sig.retTy θ) ∧ ArgsFit θ after sig.params
   | .error s => s = .unsupported ∨ s = .uninit ∨ s = .diverge
 
 /-- Calls that do what calls may, for each function of the program called
-as a checked call calls it: with ground type arguments its bounds admit,
-none of its parameters writing back, and arguments of its parameters'
-types. -/
+as a checked call calls it: with ground type arguments its bounds admit, and
+arguments of its parameters' types, none for an `out` one. -/
 def CallOk (sigs : List (String × Sig)) (call : CallFn) : Prop :=
-  ∀ f sig θ vals, sigs.lookup f = some sig → writesBack sig.params = false → groundArgs θ = true →
+  ∀ f sig θ vals, sigs.lookup f = some sig → groundArgs θ = true →
     (∀ p b, (p, some b) ∈ sig.tparams → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true) →
-    vals.length = sig.params.length → (∀ q ∈ vals.zip sig.params, HasType q.1 (q.2.2.inst θ)) →
-    CallRes (sig.retTy θ) (call f θ vals)
+    ArgsFit θ vals sig.params → CallRes sig θ (call f θ vals)
 
-theorem CallRes.sound {R : Ret} {T : Ty} {m : EvalM Val} (h : CallRes T m) : Sound R (HasType · T) m := by
+theorem CallRes.sound {R : Ret} {sig : Sig} {θ : List (String × Ty)} {m : EvalM (Val × List (Option Val))}
+    (h : CallRes sig θ m) : Sound R (fun r => HasType r.1 (sig.retTy θ) ∧ ArgsFit θ r.2 sig.params) m := by
   cases m with
-  | ok v => exact h
+  | ok r => exact h
   | error s => rcases h with rfl | rfl | rfl <;> trivial
 
 theorem Ctx.admits_nil {Γ : Ctx} (hb : Γ.bounds = []) {b : Bound} {t : Ty} (h : Γ.admits b t = true) :
@@ -1401,12 +1406,15 @@ theorem evalCall_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (f : String) (args
         have := h92 _ hp
         simp only [hu] at this
         exact ⟨u, hu, Ctx.admits_nil hb.1 this⟩
-      refine (hcall f sig θ vals (hb.2 ▸ hs) (by simpa using hw.1) (by simpa using hw.2) hbd
-        (by simp [hl, hlen']) (fun q hq => ?_)).sound
-      have := hv (q.1, (q.2.1, q.2.2.inst θ)) (by
+      refine Sound.map' (hcall f sig θ (vals.map some) (hb.2 ▸ hs) (by simpa using hw.2) hbd
+        ⟨by simp [hl, hlen'], fun q hq v hqv => ?_⟩).sound (fun r hr => hr.1)
+      rw [List.zip_map_left] at hq
+      obtain ⟨⟨a, b⟩, hab, rfl⟩ := List.mem_map.mp hq
+      have hav : a = v := Option.some.inj hqv
+      subst hav
+      exact hv (a, (b.1, b.2.inst θ)) (by
         rw [List.zip_map_right]
-        exact List.mem_map.mpr ⟨q, hq, rfl⟩)
-      exact this
+        exact List.mem_map.mpr ⟨(a, b), hab, rfl⟩)
 
 /-- A call's checked arguments evaluate to values of their parameters'
 types. -/

@@ -877,8 +877,10 @@ fn dump() {
 /// Scripts written by hand for `runs_agree`, each run as it is: checked and
 /// optional arithmetic at its bounds, division, indexes in and out of range,
 /// `for`, `loop` with `break`, recursion, `match`, a binding `if`, `!` in a
-/// function and at the top level, and `set` through an index.
+/// function and at the top level, `set` through an index, and `mut` and
+/// `out` arguments written back, an early return's included.
 const RUN_CORPUS: &[&str] = &[
+    "fun bump(mut x: u8, by: u8): !u8\n  set x = x +! by\n  ret ok x\nend fun\nfun split(n: int, out q: int, out r: int)\n  set q = n - 1\n  set r = n * 2\nend fun\nfun swap(mut a: i32, mut b: i32)\n  let t = a\n  set a = b\n  set b = t\nend fun\nfun early(mut x: u8): !()\n  set x = : u8 / 7\n  let y: u8 = (: u8 / 250) +! x\n  set x = : u8 / 9\n  ret ok ()\nend fun\nvar a: u8 = : u8 / 10\nlet r1 = bump(mut a, : u8 / 5)\ndebuglog r1\ndebuglog a\nlet r2 = bump(mut a, : u8 / 250)\ndebuglog r2\ndebuglog a\nvar q: int\nvar r: int\ncall split(1234, out q, out r)\ndebuglog q\ndebuglog r\nvar x: i32 = : i32 / 1\nvar y: i32 = : i32 / 2\ncall swap(mut x, mut y)\ndebuglog (x, y)\nvar e: u8 = : u8 / 0\nlet r3 = early(mut e)\ndebuglog r3\ndebuglog e\n",
     "fun add(a: u8, b: u8): !u8\n  ret ok (a +! b)\nend fun\nfun addq(a: i8, b: i8): ?i8\n  ret some (a +? b)\nend fun\nfun div(a: i32, b: i32): !i32\n  ret ok (a /! b)\nend fun\ndebuglog add(: u8 / 100, : u8 / 155)\ndebuglog add(: u8 / 100, : u8 / 156)\ndebuglog addq(: i8 / -100, : i8 / -28)\ndebuglog addq(: i8 / -100, : i8 / -29)\ndebuglog div(: i32 / -7, : i32 / 2)\ndebuglog div(: i32 / 7, : i32 / -2)\ndebuglog div(: i32 / 7, : i32 / 0)\ndebuglog div(: i32 / -2147483648, : i32 / -1)\n",
     "fun at(l: [u8], i: index): ?u8\n  ret some l[i]?\nend fun\nfun sum(l: [u32]): int\n  var s: int = 0\n  for x in ref l\n    set s += x@\n  end for\n  ret s\nend fun\nfun fact(n: int): int\n  if n .< 2\n    ret 1\n  end if\n  ret n * fact(n - 1)\nend fun\nfun count(n: int): int\n  var i: int = 0\n  loop while i .< n\n    set i += 1\n    if i == 7\n      break\n    end if\n  end loop\n  ret i\nend fun\ndebuglog at([1, 2, 3], : index / 1)\ndebuglog at([1, 2, 3], : index / 3)\ndebuglog sum([1, 2, 4294967295])\ndebuglog fact(20)\ndebuglog count(3)\ndebuglog count(100)\n",
     "type E: enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
@@ -901,10 +903,14 @@ const ARG_LITERALS: &[(&str, &[&str])] = &[
 ];
 
 /// A script's driver: for each function that is not generic and whose
-/// parameters all take a literal, a top-level `debuglog` of a call with
-/// literals of their types, a few times over.
+/// parameters all take a literal, a top-level call with literals of their
+/// types, a few times over, logged. A `mut` argument is a variable set to a
+/// literal, an `out` one a variable with none; the call is then a binding's
+/// value, the one place a call that writes back runs, and the variables are
+/// logged after it.
 fn driver(rng: &mut SeededRng, text: &str) -> String {
     let mut out = String::new();
+    let mut fresh = 0;
     for line in text.lines() {
         let Some(rest) = line.strip_prefix("fun ") else { continue };
         let Some(open) = rest.find('(') else { continue };
@@ -914,13 +920,19 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
         }
         let Some(close) = rest.rfind(')') else { continue };
         let params = &rest[open + 1..close];
-        let mut types = Vec::new();
+        let mut parsed = Vec::new();
         let mut ok = true;
         if !params.trim().is_empty() {
             for p in params.split(", ") {
-                let Some((_, ty)) = p.split_once(": ") else { ok = false; break };
+                let Some((head, ty)) = p.split_once(": ") else { ok = false; break };
+                let mode = match head.split_once(' ') {
+                    None => "",
+                    Some(("mut", _)) => "mut",
+                    Some(("out", _)) => "out",
+                    Some(_) => { ok = false; break }
+                };
                 match ARG_LITERALS.iter().find(|(t, _)| *t == ty.trim()) {
-                    Some(entry) => types.push(entry),
+                    Some(entry) => parsed.push((mode, entry)),
                     None => { ok = false; break }
                 }
             }
@@ -928,11 +940,37 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
         if !ok {
             continue;
         }
+        let writes = parsed.iter().any(|(m, _)| !m.is_empty());
         for _ in 0..3 {
-            let args: Vec<String> = types.iter()
-                .map(|(t, lits)| fmt!(": {t} / {}", lits[rng.random_range(0..lits.len())]))
-                .collect();
-            out += &fmt!("debuglog {name}({})\n", args.join(", "));
+            let mut decls = String::new();
+            let mut written = Vec::new();
+            let args: Vec<String> = parsed.iter().map(|(mode, (t, lits))| {
+                let lit = lits[rng.random_range(0..lits.len())];
+                match *mode {
+                    "" => fmt!(": {t} / {lit}"),
+                    m => {
+                        fresh += 1;
+                        let v = fmt!("w{fresh}");
+                        if m == "mut" {
+                            decls += &fmt!("var {v}: {t} = : {t} / {lit}\n");
+                        } else {
+                            decls += &fmt!("var {v}: {t}\n");
+                        }
+                        written.push(v.C());
+                        fmt!("{m} {v}")
+                    }
+                }
+            }).collect();
+            if writes {
+                fresh += 1;
+                out += &decls;
+                out += &fmt!("let w{fresh} = {name}({})\ndebuglog w{fresh}\n", args.join(", "));
+                for v in written {
+                    out += &fmt!("debuglog {v}\n");
+                }
+            } else {
+                out += &fmt!("debuglog {name}({})\n", args.join(", "));
+            }
         }
     }
     out
@@ -1023,6 +1061,7 @@ fn runs_agree() {
     let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
     let mut config = config();
     config.debuglog_probability = 0;
+    config.param_mode_probability = 30;
     let mut cases = Vec::new();
     for text in RUN_CORPUS {
         let (codes, script, _) = rust_side(text);
@@ -1063,9 +1102,11 @@ fn runs_agree() {
     let mut ends = BTreeMap::<String, usize>::new();
     let mut lines = 0;
     let mut unknown = 0;
+    let mut writing = 0;
     let mut mismatches = Vec::new();
     for ((what, text, _), oracle) in cases.iter().zip(&answers) {
         if let Some(why) = oracle.get("unsupported") {
+            assert!(what != "corpus", "the model does not take a run corpus script ({why}):\n{text}");
             *ends.entry(fmt!("unsupported script: {why}")).or_default() += 1;
             continue;
         }
@@ -1092,6 +1133,9 @@ fn runs_agree() {
             RustRun::TimedOut => (!finished, "timed out".S()),
         };
         if agree {
+            if text.contains("mut w") || text.contains("out w") {
+                writing += 1;
+            }
             lines += model.len();
             unknown += model.iter().filter(|l| l.contains('\u{1}')).count();
         } else {
@@ -1099,7 +1143,7 @@ fn runs_agree() {
         }
     }
     println!(
-        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; ends {ends:?}",
+        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; {writing} writing back through a call; ends {ends:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(10) {

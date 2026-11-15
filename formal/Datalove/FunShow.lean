@@ -51,5 +51,6 @@ def Stop.name : Stop → String
   | .retVoid => "retVoid"
   | .brk _ => "brk"
   | .cont _ => "cont"
+  | .returned _ _ => "returned"
 
 end Datalove.Fun

@@ -364,7 +364,12 @@ script a later phase refuses, the ownership analysis say, is skipped and
 counted. A corpus written by hand runs first, for what generated functions
 rarely do with their parameters: checked and optional arithmetic at its
 bounds, division, indexes in and out of range, `for`, `loop`, recursion,
-`match`, a binding `if`, and `!` and `set` through an index. A thousand
+`match`, a binding `if`, `!` and `set` through an index, and `mut` and `out`
+arguments written back, an early return's included. For this test worldgen
+writes `mut`, `out` and `ref` parameters, and the driver passes a `mut` or
+`out` argument as a variable, set or not, binds the call's value, and logs
+the variables after it; a thousand seeds write back through about 170
+scripts' calls. A thousand
 seeds run about 870 scripts, logging about 4200 lines, all agreeing, a
 quarter of them with something the model does not carry.
 
@@ -566,8 +571,9 @@ Four things are proved of it:
   bound. Otherwise it breaks or continues inside a loop; or it returns early with a value
   of the return type, or with none from a function that returns nothing.
   It may also stop where the model has not
-  gone: a call with a `mut` or `out` parameter, or with a type argument
-  that has a `rec` in it; a read of a variable declared with no value, which
+  gone: a call with a `mut` or `out` parameter anywhere but as a `call`
+  statement or a binding's value with no hint, or written back to more than
+  a variable, or a call with a type argument that has a `rec` in it; a read of a variable declared with no value, which
   the ownership analysis refuses (O005); a `set` through a tensor's slice; a
   `for` with an index over more elements than `index` counts; and a loop run
   more often than it was given, or calls nested deeper than they were given.
@@ -594,10 +600,23 @@ Four things are proved of it:
   its declaration checking quietly in a script (`Fun.body_checks`, by the
   check-once theorem), where the body declares no type alias and its
   signature's type parameters are its declaration's; that a script's consts
-  hold values of their types is left to running a script, which is next.
-  Calls that write back, through `mut` or `out`, are not run: they make
-  evaluating an expression change variables, which the evaluator would
-  have to thread through.
+  hold values of their types is left to running a script, below.
+
+  A call with a `mut` or `out` parameter runs where it is a statement's whole
+  expression: a `call`, or the value of a `let` or `var` with no hint
+  (`execWB`, in `FunExec.lean`). Its arguments are copied in, an `out` one
+  as no value, and what each parameter came to is written back to its
+  argument's variable, as `paramsAfter` reads it from the body's variables
+  when it returns, an early return's included. A statement's early return or
+  `ret` leaves its block as `Stop.returned`, carrying the variables, for
+  that. Copying in and out is what writing in place does, the ownership
+  analysis keeping an argument from being read another way during the call.
+  What a parameter comes to is of its type, so writing it back keeps the
+  caller's variables at theirs (`Fun.execWB_sound`); a `mut` or `out`
+  argument checks against its parameter's type, so the variable is of it.
+  Inside a larger expression the call is not run, since evaluating an
+  expression would then change variables, and neither is writing back to a
+  field or element.
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by
@@ -716,12 +735,13 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **Calls that write back.** A call with a `mut` or `out` parameter stops
-  as unsupported; running it writes into the caller's places, so evaluating
-  an expression changes variables, and the evaluator and its proof would
-  thread them through. A call with a recursive type argument stops as well,
-  until the check-once theorem takes one, and so does a call of a function
-  a script declares below it.
+- **Calls that write back from inside an expression, or to a part of a
+  variable.** A call with a `mut` or `out` parameter runs only as a
+  statement's whole expression, and writes back only to a variable; inside
+  a larger expression evaluating would change variables, which the
+  evaluator and its proof would thread through. A call with a recursive type
+  argument stops as well, until the check-once theorem takes one, and so
+  does a call of a function a script declares below it.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

@@ -246,8 +246,12 @@ def TopOk (r : EvalM Unit) : Prop :=
 /-- A statement's stop at the top level, outside any loop, is one a script
 may end with. -/
 theorem StopOkS.top {Γ : Ctx} {B : Prop} {s : Stop} (h : StopOkS Γ B s) (hl : Γ.inLoop = false)
-    (hr : Γ.ret = .ty (.result unitTy)) : StopOk (.ty (.result unitTy)) s := by
+    (hr : Γ.ret = .ty (.result unitTy)) : StopOk (.ty (.result unitTy)) s.unreturn := by
   cases s with
+  | returned o ρ =>
+    cases o with
+    | some r => show EarlyOk _ r; rw [← hr]; exact h.1
+    | none => exact absurd ((show Γ.ret = .void from h.1).symm.trans hr) (by simp)
   | early r => show EarlyOk _ r; rw [← hr]; exact h
   | retVoid => exact absurd ((show Γ.ret = .void from h).symm.trans hr) (by simp)
   | brk ρ => exact absurd h.1 (by simp [hl])

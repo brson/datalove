@@ -22,8 +22,8 @@ of the wrong kind (`Stop.wrong`).
 It evaluates literals, variables, places, hints, operators, `?`, `!`, `@`,
 fields, indexes and calls. A call goes to a `CallFn` the evaluator is given
 (`FunCall.lean` runs the function's body); one with a parameter that writes
-back, `mut` or `out`, or with type arguments that are not ground, is
-`Stop.unsupported`. `@`
+back, `mut` or `out`, inside an expression, or with type arguments that are
+not ground, is `Stop.unsupported`. `@`
 converts between types whose values are the same: a wider number, an atom or
 term into an enum, a clone. A comparison, and whether two map keys are one,
 are answered where the values' contents are modelled (`valEq?`): numbers,
@@ -60,6 +60,11 @@ inductive Stop where
   /-- A loop that ran as many times as it was given, or calls nested as
   deep. -/
   | diverge
+  /-- A function's body returned, with a value or none, the variables as
+  they were: what an early return or `ret` from a statement is once the
+  block it is in has seen it, so that a call can write back what its
+  `mut` and `out` parameters came to. -/
+  | returned (r : Option Val) (ρ : List (String × Option Val))
 
 abbrev EvalM := Except Stop
 
@@ -68,17 +73,19 @@ before it is set. -/
 abbrev VEnv := List (String × Option Val)
 
 /-- What calls do: the function's name, its type arguments, and its
-arguments' values, to what it returns. `FunCall.lean` builds the real one,
-running the function's body, from a program. -/
-abbrev CallFn := String → List (String × Ty) → List Val → EvalM Val
+arguments' values, none for an `out` argument, to what it returns and what
+each parameter came to, which a `mut` or `out` argument is written back
+from. `FunCall.lean` builds the real one, running the function's body, from
+a program. -/
+abbrev CallFn := String → List (String × Ty) → List (Option Val) → EvalM (Val × List (Option Val))
 
 /-- Type arguments with no type parameter and no `rec` in them, which the
 check-once theorem takes. -/
 def groundArgs (θ : List (String × Ty)) : Bool :=
   θ.all fun (_, t) => !t.containsVar && !t.containsRec
 
-/-- Whether a parameter mode writes back into its argument, which calls do
-not do yet. -/
+/-- Whether a parameter mode writes back into its argument, which a call
+does only as a statement, or a binding's value (`FunExec.lean`). -/
 def writesBack (params : List (Mode × Ty)) : Bool :=
   params.any fun (m, _) => m == .mut || m == .out
 
@@ -407,7 +414,7 @@ def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → String 
       if writesBack sig.params || !groundArgs θ then throw .unsupported
       else do
         let vals ← evalArgs env call n Γ ρ args (sig.params.map fun (m, t) => (m, t.inst θ))
-        call f θ vals
+        (·.1) <$> call f θ (vals.map some)
     | _, _ => throw .wrong
 
 /-- A call's arguments, as `argsF` checks them. -/

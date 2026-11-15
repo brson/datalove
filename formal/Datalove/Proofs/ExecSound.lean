@@ -43,11 +43,18 @@ inductive Fits : List (String × Ty) → List (String × Option Val) → Prop wh
 def Ext (vars : List (String × Ty × Kind)) (ρ : VEnv) : Prop :=
   ∃ δ ρ1, ρ = δ ++ ρ1 ∧ Agree vars ρ1
 
+/-- A body's return the function's type takes: a value of its return type,
+or none from a function returning nothing. -/
+def RetOk (R : Ret) : Option Val → Prop
+  | some r => EarlyOk R r
+  | none => R = .void
+
 /-- Why running a checked block may not end normally: a `break` only where
 `B`, which says the block has one of its own. -/
 def StopOkS (Γ : Ctx) (B : Prop) : Stop → Prop
   | .early r => EarlyOk Γ.ret r
   | .retVoid => Γ.ret = .void
+  | .returned o ρ => RetOk Γ.ret o ∧ Ext Γ.vars ρ
   | .brk ρ => Γ.inLoop = true ∧ Ext Γ.vars ρ ∧ B
   | .cont ρ => Γ.inLoop = true ∧ Ext Γ.vars ρ
   | .unsupported | .uninit | .diverge => True
@@ -723,6 +730,7 @@ theorem StopOkS.lift {Γ Γ' : Ctx} (g : Grows Γ Γ') {s : Stop} (h : StopOkS �
   | early r => show EarlyOk Γ.ret r; rw [← hr]; exact h
   | retVoid => show Γ.ret = .void; rw [← hr]; exact h
   | brk ρ => exact ⟨by rw [← hl]; exact h.1, Ext.of_append (hv ▸ h.2.1), h.2.2⟩
+  | returned o ρ => exact ⟨hr ▸ h.1, Ext.of_append (hv ▸ h.2)⟩
   | cont ρ => exact ⟨by rw [← hl]; exact h.1, Ext.of_append (hv ▸ h.2)⟩
   | _ => exact h
 
@@ -767,10 +775,170 @@ theorem bindPat_vals {Γ : Ctx} {ρ : VEnv} (hρ : Agree Γ.vars ρ) {p : Pat} {
   rw [he]
   exact bindAllAs_agree hρ k hf
 
+/-- A statement's return, as its block passes it on with the variables, is
+one the function's type takes. -/
+theorem returnedAt_sound {Γ : Ctx} {B : Prop} {P : VEnv → Prop} {m : EvalM VEnv} {ρ : VEnv}
+    (h : SoundS Γ B P m) (hρ : Agree Γ.vars ρ) : SoundS Γ B P (returnedAt ρ m) := by
+  cases m with
+  | ok a => exact h
+  | error s => cases s <;> first | exact h | exact ⟨h, Ext.of_agree hρ⟩
+
+/-- A variable checked against a type is of that type, unfolded. -/
+theorem var_check {env : InferEnv} : ∀ {n : Nat} {Γ : Ctx} {x : String} {t : Ty},
+    Quiet (checkF env n Γ (.var x) t) () → ∃ u k, Γ.lookup x = some (u, k) ∧ u.expose = t.expose
+  | 0, _, _, _, h => by simp [checkF] at h
+  | n + 1, Γ, x, t, h => by
+    simp only [checkF] at h
+    rcases n with _ | n
+    · simp [checkForm] at h
+    simp only [checkForm] at h
+    rcases n with _ | n
+    · simp [subsumeF] at h
+    simp only [subsumeF] at h
+    obtain ⟨u, hu, h⟩ := h.bind_inv
+    split at h
+    · simp at h
+    rename_i hm
+    rcases n with _ | n
+    · simp [synthF] at hu
+    simp only [synthF] at hu
+    cases hl : ((Γ.enter (.var x)).enter (.var x)).lookup x with
+    | none => simp [hl] at hu
+    | some p =>
+      obtain ⟨u', k⟩ := p
+      simp only [hl] at hu
+      split at hu
+      · simp at hu
+      rw [Quiet.pure_iff] at hu; subst hu
+      exact ⟨u', k, hl, Ty.meet_iff.mp (by simpa using hm)⟩
+
+/-- Writing back what `mut` and `out` parameters came to, each of its
+parameter's type, keeps every variable at its type. -/
+theorem writeBack_sound {env : InferEnv} {R : Ret} : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (args : List (Option Mode × Expr))
+    (ps : List (Mode × Ty)) (after : List (Option Val)), Quiet (argsF env n Γ args ps) () → Agree Γ.vars ρ →
+    (∀ q ∈ after.zip ps, ∀ v, q.1 = some v → HasType v q.2.2) → Sound R (Agree Γ.vars) (writeBack ρ args ps after)
+  | 0, _, _, _, _, _, h, _, _ => by simp [argsF] at h
+  | n + 1, Γ, ρ, (mk, e) :: args, (mode, t) :: ps, a :: after, h, hρ, ha => by
+    simp only [argsF] at h
+    obtain ⟨⟨⟩, he, hr⟩ := h.bind_inv
+    have hrest : ∀ q ∈ after.zip ps, ∀ v, q.1 = some v → HasType v q.2.2 :=
+      fun q hq => ha q (by simp [hq])
+    simp only [writeBack]
+    split
+    · cases e
+      case var x =>
+        simp only [argVar]
+        rcases a with _ | v
+        · exact trivial
+        · obtain ⟨u, k, hl, hu⟩ := var_check he
+          have hw : HasType v u := roll_of hu (ha (some v, (mode, t)) (by simp) v rfl).expose
+          exact writeBack_sound n Γ _ args ps after hr (setVar_agree hρ hl hw) hrest
+      all_goals (simp only [argVar]; exact Sound.unsupported)
+    · exact writeBack_sound n Γ ρ args ps after hr hρ hrest
+  | _ + 1, _, ρ, [], _, _, _, hρ, _ => by simp only [writeBack]; exact hρ
+  | _ + 1, _, ρ, _ :: _, [], _, _, hρ, _ => by simp only [writeBack]; exact hρ
+  | _ + 1, _, ρ, _ :: _, _ :: _, [], _, hρ, _ => by simp only [writeBack]; exact hρ
+
+theorem zip_inst {θ : List (String × Ty)} {vals : List (Option Val)} {sps : List (Mode × Ty)} :
+    (∀ q ∈ vals.zip (sps.map fun (m, t) => (m, t.inst θ)), ∀ v, q.1 = some v → HasType v q.2.2) ↔
+      (∀ q ∈ vals.zip sps, ∀ v, q.1 = some v → HasType v (q.2.2.inst θ)) := by
+  rw [List.zip_map_right]
+  constructor
+  · intro h q hq v hv
+    exact h _ (List.mem_map.mpr ⟨q, hq, rfl⟩) v hv
+  · intro h q hq v hv
+    obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+    exact h q' hq' v hv
+
 section
 variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallOk sigs call)
 include hcall
 set_option linter.unusedSectionVars false
+
+/-- A write-back call's arguments evaluate to values of their parameters'
+types, none for an `out` one. -/
+theorem evalArgsWB_sound : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) (args : List (Option Mode × Expr))
+    (ps : List (Mode × Ty)), Quiet (argsF env n Γ args ps) () → Γ.Runs sigs → EnvOk Γ ρ →
+    Sound Γ.ret (fun vs => vs.length = min args.length ps.length ∧
+      ∀ q ∈ vs.zip ps, ∀ v, q.1 = some v → HasType v q.2.2) (evalArgsWB env call n Γ ρ args ps)
+  | 0, _, _, _, _, h, _, _ => by simp [argsF] at h
+  | n + 1, Γ, ρ, (mk, e) :: args, (mode, t) :: ps, h, hb, hρ => by
+    simp only [argsF] at h
+    obtain ⟨_, hc, h⟩ := h.bind_inv
+    simp only [evalArgsWB]
+    have rest : ∀ o : Option Val, (∀ v, o = some v → HasType v t) →
+        Sound Γ.ret (fun vs => vs.length = min ((mk, e) :: args).length ((mode, t) :: ps).length ∧
+          ∀ q ∈ vs.zip ((mode, t) :: ps), ∀ v, q.1 = some v → HasType v q.2.2)
+          (evalArgsWB env call n Γ ρ args ps >>= fun vs => pure (o :: vs)) := by
+      intro o ho
+      refine Sound.bind' (evalArgsWB_sound n Γ ρ args ps h hb hρ) (fun vs ⟨hl, hvs⟩ =>
+        Sound.pure' ⟨by simp [hl, Nat.succ_min_succ], fun q hq v hv => ?_⟩)
+      simp only [List.zip_cons_cons, List.mem_cons] at hq
+      rcases hq with rfl | hq
+      · exact ho v hv
+      · exact hvs q hq v hv
+    split
+    · exact rest none (fun v e => by cases e)
+    · exact Sound.bind' (Sound.map' (Q := fun o => ∀ v, o = some v → HasType v t)
+        (evalC_sound env sigs call hcall n _ ρ e t hc hb (hρ.forArg mode))
+        (fun v hv w e => by cases e; exact hv)) rest
+  | n + 1, Γ, ρ, [], _, _, _, _ => by simp only [evalArgsWB]; exact ⟨by simp, by simp⟩
+  | n + 1, Γ, ρ, _ :: _, [], _, _, _ => by simp only [evalArgsWB]; exact ⟨by simp, by simp⟩
+
+/-- A checked call with a parameter that writes back gives a value of its
+type, and leaves every variable at its type. -/
+theorem execWB_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {e : Expr} {t : Ty} (h : Quiet (synthF env n Γ e) t)
+    (hw : isWBCall Γ e = true) (hb : Γ.Runs sigs) (hρ : Agree Γ.vars ρ) :
+    Sound Γ.ret (fun r => HasType r.1 t ∧ Agree Γ.vars r.2) (execWB env call n Γ ρ e) := by
+  cases e <;> simp only [isWBCall, Bool.false_eq_true] at hw
+  rename_i f args
+  rcases n with _ | _ | m
+  · simp [synthF] at h
+  · simp [synthF, callF] at h
+  simp only [synthF] at h
+  simp only [callF] at h
+  cases hs : (Γ.enter (.call f args)).sigs.lookup f with
+  | none => simp only [hs] at h; simp at h
+  | some sig =>
+    simp only [hs] at h
+    split at h
+    · simp at h
+    rename_i hlen
+    obtain ⟨_, -, h⟩ := h.bind_inv
+    obtain ⟨_, -, h⟩ := h.bind_inv
+    obtain ⟨θ, hθ, h⟩ := h.bind_inv
+    rw [Quiet.liftE_iff] at hθ
+    obtain ⟨⟨⟩, ha, h⟩ := h.bind_inv
+    split at h
+    · simp at h
+    rename_i h92
+    split at h
+    · simp at h
+    rename_i h101
+    have ht : t = sig.retTy θ := by
+      unfold Sig.retTy; split <;> (rename_i hr; simp only [hr, Quiet.pure_iff] at h; exact h.symm)
+    subst ht
+    simp only [execWB, hs, hθ]
+    split
+    · exact Sound.unsupported
+    rename_i hg
+    have hbd : ∀ p b, (p, some b) ∈ sig.tparams → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true := by
+      intro p b hp
+      simp only [allDecided, List.all_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,
+        Bool.not_eq_false] at h101
+      simp only [boundsHold, List.all_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,
+        Bool.not_eq_false] at h92
+      obtain ⟨u, hu⟩ := Option.isSome_iff_exists.mp (h101 _ hp)
+      have := h92 _ hp
+      simp only [hu] at this
+      exact ⟨u, hu, Ctx.admits_nil hb.1 this⟩
+    have hlen' : args.length = sig.params.length := by simpa using hlen
+    refine Sound.bind' (evalArgsWB_sound env sigs call hcall m _ ρ args _ ha hb hρ.envOk)
+      (fun vals ⟨hl, hv⟩ => ?_)
+    refine Sound.bind' (hcall f sig θ vals (hb.2 ▸ hs) (by simpa using hg) hbd
+      ⟨by simp [hl, hlen'], zip_inst.mp hv⟩).sound (fun ⟨r, after⟩ ⟨hr1, _, hr2⟩ => ?_)
+    exact Sound.bind' (writeBack_sound m _ ρ args _ after ha hρ (zip_inst.mpr hr2))
+      (fun ρ' hρ' => Sound.pure' ⟨hr1, hρ'⟩)
 
 theorem bindChecked_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {p : Pat} {hint : Option Hint} {e : Expr} {k : Kind}
     {Γ' : Ctx} (h : SQuiet (bindChecked env n Γ p hint e k) Γ') (hb : Γ.Runs sigs) (hρ : Agree Γ.vars ρ) :
@@ -789,8 +957,10 @@ theorem bindChecked_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {p : Pat} {hint : Opt
     obtain ⟨Δ, hp, rfl⟩ := bindPat_sound h
     refine ⟨?_, Grows.bindAllAs Γ k Δ⟩
     simp only [execBind, hq]
-    exact SoundS.bind' (SoundS.of_sound (evalC_sound env sigs call hcall n Γ ρ e t hc hb hρ.envOk))
-      (fun v hv => bindPat_vals hρ hp hv)
+    exact SoundS.bind' (P := fun r : Val × VEnv => HasType r.1 t ∧ Agree Γ.vars r.2)
+      (SoundS.of_sound (Sound.map' (Q := fun r : Val × VEnv => HasType r.1 t ∧ Agree Γ.vars r.2)
+      (evalC_sound env sigs call hcall n Γ ρ e t hc hb hρ.envOk) (fun v hv => ⟨hv, hρ⟩)))
+      (fun r hr => bindPat_vals hr.2 hp hr.1)
   | none =>
     simp only [bindChecked] at h
     obtain ⟨rt, hrt, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
@@ -798,8 +968,14 @@ theorem bindChecked_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {p : Pat} {hint : Opt
     obtain ⟨Δ, hp, rfl⟩ := bindPat_sound h
     refine ⟨?_, Grows.bindAllAs Γ k Δ⟩
     simp only [execBind]
-    exact SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n Γ ρ e t hq hb hρ.envOk))
-      (fun v hv => bindPat_vals hρ hp hv)
+    split
+    · exact SoundS.bind' (P := fun r : Val × VEnv => HasType r.1 t ∧ Agree Γ.vars r.2)
+        (SoundS.of_sound (execWB_sound env sigs call hcall hq (by assumption) hb hρ))
+        (fun r hr => bindPat_vals hr.2 hp hr.1)
+    · exact SoundS.bind' (P := fun r : Val × VEnv => HasType r.1 t ∧ Agree Γ.vars r.2)
+        (SoundS.of_sound (Sound.map' (Q := fun r : Val × VEnv => HasType r.1 t ∧ Agree Γ.vars r.2)
+          (evalS_sound env sigs call hcall n Γ ρ e t hq hb hρ.envOk) (fun v hv => ⟨hv, hρ⟩)))
+        (fun r hr => bindPat_vals hr.2 hp hr.1)
 
 end
 
@@ -1118,8 +1294,12 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
       obtain ⟨_, -, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
       rw [SQuiet.pure_iff] at h; subst h
       simp only [execStmt]
-      exact ⟨SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n Γ ρ e t hq hb hρ.envOk))
-        (fun _ _ => ⟨hρ, rfl⟩), Grows.refl Γ⟩
+      refine ⟨?_, Grows.refl Γ⟩
+      split
+      · exact SoundS.bind' (SoundS.of_sound (execWB_sound env sigs call hcall hq (by assumption) hb hρ))
+          (fun r hr => ⟨hr.2, rfl⟩)
+      · exact SoundS.bind' (SoundS.of_sound (evalS_sound env sigs call hcall n Γ ρ e t hq hb hρ.envOk))
+          (fun _ _ => ⟨hρ, rfl⟩)
     case const_ x hint e =>
       simp only [checkStmtF] at h
       obtain ⟨Γ1, hb1, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
@@ -1408,7 +1588,7 @@ theorem execBlock_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (ss : List Stmt
     rw [execBlock.eq_def]; dsimp only
     have hrun : ((checkStmtF env n Γ s).run #[]).1 = Γ' := by unfold SQuiet at hs; rw [hs]
     rw [hrun]
-    refine SoundS.bind' (hs'.weakenB (fun h => by simp [hasBreak, h])) (fun ρ' h' => ?_)
+    refine SoundS.bind' (returnedAt_sound (hs'.weakenB (fun h => by simp [hasBreak, h])) hρ) (fun ρ' h' => ?_)
     exact ((SoundS.lift g (execBlock_sound n k Γ' ρ' ss h (g.runs hb) h'.1)).weakenB
       (fun h => by simp [hasBreak, h])).weaken
       (fun _ h => ⟨Ext.of_grows g h.1, by simp [completes, h'.2, h.2]⟩)

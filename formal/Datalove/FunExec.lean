@@ -12,9 +12,14 @@ scope is a prefix: leaving it drops what it bound and keeps what it set
 (`restore`).
 
 A loop runs at most as many times as it is given (`Stop.diverge`); a `for`
-walks a collection once. A call that writes back is not run yet
+walks a collection once. A call with a `mut` or `out` parameter runs as a
+statement's whole expression, a `call` or the value of a binding without a
+hint, copying in and writing back to its arguments' variables (`execWB`);
+elsewhere, or written back to a part of a variable, it is not run yet
 (`Stop.unsupported`), nor is a `set` through a tensor's slice, nor a `for`
-with an index over more elements than `index` counts.
+with an index over more elements than `index` counts. A statement's early
+return or `ret` leaves its block as `Stop.returned`, with the variables, so
+that a call can write back what its parameters came to.
 -/
 
 namespace Datalove.Fun
@@ -207,16 +212,78 @@ def execSet (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (x
     pure (setVar x w ρ)
   | _, _ => throw .wrong
 
+/-- Whether an expression is a call of a function with a parameter that
+writes back, which runs only as a statement's whole expression (`execWB`). -/
+def isWBCall (Γ : Ctx) : Expr → Bool
+  | .call f _ => match Γ.sigs.lookup f with
+    | some sig => writesBack sig.params
+    | none => false
+  | _ => false
+
+/-- A call's arguments, as `argsF` checks them, an `out` one passing no
+value. -/
+def evalArgsWB (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List (Option Mode × Expr) →
+    List (Mode × Ty) → EvalM (List (Option Val))
+  | 0, _, _, _, _ => throw .fuel
+  | n + 1, Γ, ρ, (_, e) :: args, (mode, t) :: params => do
+    let v ← if mode == .out then pure none else some <$> evalC env call n (Γ.forArg mode) ρ e t
+    let vs ← evalArgsWB env call n Γ ρ args params
+    pure (v :: vs)
+  | _ + 1, _, _, _, _ => pure []
+
+/-- The variable an argument names, which a `mut` or `out` argument is
+written back to. One with steps is not written back yet. -/
+def argVar : Expr → Option String
+  | .var x => some x
+  | _ => none
+
+/-- Each `mut` and `out` argument's variable set to what its parameter came
+to. -/
+def writeBack : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (Option Val) → EvalM VEnv
+  | ρ, (_, e) :: args, (mode, _) :: params, a :: after =>
+    if mode == .mut || mode == .out then
+      match argVar e, a with
+      | some x, some v => writeBack (setVar x v ρ) args params after
+      | some _, none => throw .uninit
+      | none, _ => throw .unsupported
+    else writeBack ρ args params after
+  | ρ, _, _, _ => pure ρ
+
+/-- A call with a parameter that writes back, as `synthF` types it: its
+value, and the variables with its `mut` and `out` arguments written back. -/
+def execWB (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr → EvalM (Val × VEnv)
+  | n + 2, Γ₀, ρ, .call f args =>
+    let Γ := Γ₀.enter (.call f args)
+    match Γ.sigs.lookup f, decided (env.call Γ f args none) with
+    | some sig, .ok θ =>
+      if !groundArgs θ then throw .unsupported
+      else do
+        let ps := sig.params.map fun (m, t) => (m, t.inst θ)
+        let vals ← evalArgsWB env call n Γ ρ args ps
+        let (r, after) ← call f θ vals
+        let ρ' ← writeBack ρ args ps after
+        pure (r, ρ')
+    | _, _ => throw .wrong
+  | _, _, _, _ => throw .fuel
+
 /-- `let` or `var` with a value, as `bindChecked` types it. -/
 def execBind (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (p : Pat) (hint : Option Hint) (e : Expr) :
     EvalM VEnv := do
-  let v ← match hint with
+  let (v, ρ) ← match hint with
     | some h => match Γ.hint h with
-      | .ok t => evalC env call n Γ ρ e t
+      | .ok t => (·, ρ) <$> evalC env call n Γ ρ e t
       | .error _ => throw .wrong
-    | none => evalS env call n Γ ρ e
+    | none => if isWBCall Γ e then execWB env call n Γ ρ e else (·, ρ) <$> evalS env call n Γ ρ e
   let vals ← patValues p v
   pure (bindVals ρ (vals.map fun (x, w) => (x, some w)))
+
+/-- What a block does with a statement's early return or `ret`: it is the
+body's return, with the variables as they were before the statement. -/
+def returnedAt (ρ : VEnv) (m : EvalM VEnv) : EvalM VEnv :=
+  match m with
+  | .error (.early r) => throw (.returned (some r) ρ)
+  | .error .retVoid => throw (.returned none ρ)
+  | m => m
 
 /-- `ret` or `ret e`, as `checkRet` types it. -/
 def execRet (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Option Expr) : EvalM VEnv :=
@@ -274,7 +341,9 @@ def execStmt (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv →
     | .brk => throw (.brk ρ)
     | .cont => throw (.cont ρ)
     | .debuglog e => do let _ ← evalS env call n Γ.borrow ρ e; pure ρ
-    | .call e => do let _ ← evalS env call n Γ ρ e; pure ρ
+    | .call e =>
+      if isWBCall Γ e then do let (_, ρ') ← execWB env call n Γ ρ e; pure ρ'
+      else do let _ ← evalS env call n Γ ρ e; pure ρ
     | .const_ x hint e => do
       let ρ' ← execBind env call n { Γ with constExpr := true } ρ (.name x) hint e
       pure ρ'
@@ -329,7 +398,7 @@ def execBlock (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv �
   | 0, _, _, _, _ => throw .fuel
   | _ + 1, _, _, ρ, [] => pure ρ
   | n + 1, k, Γ, ρ, s :: ss => do
-    let ρ' ← execStmt env call n k Γ ρ s
+    let ρ' ← returnedAt ρ (execStmt env call n k Γ ρ s)
     execBlock env call n k ((checkStmtF env n Γ s).run #[]).1 ρ' ss
 
 end

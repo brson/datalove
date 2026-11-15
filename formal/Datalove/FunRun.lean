@@ -46,6 +46,13 @@ def funEntry (sigs : List (String × Sig)) (Γ : Ctx) (ρ : VEnv) : FunDecl → 
       else none
     | none => none
 
+/-- How a top-level statement's stop ends the script: a return from a block
+inside it is the script's early return. -/
+def Stop.unreturn : Stop → Stop
+  | .returned (some r) _ => .early r
+  | .returned none _ => .retVoid
+  | s => s
+
 /-- A script's statements from `Γ` and `ρ`, as `checkScript` checks them,
 loops running at most `k` times and calls nesting at most `d` deep. -/
 def runTop (sigs : List (String × Sig)) (k d : Nat) :
@@ -61,7 +68,7 @@ def runTop (sigs : List (String × Sig)) (k d : Nat) :
   | Γ, ρ, funs, log, s :: ss =>
     match execStmt inferEnv (runCall inferEnv sigs funs k d) fuel k Γ ρ s with
     | .ok ρ' => runTop sigs k d ((checkStmt Γ s).run #[]).1 ρ' funs log ss
-    | .error e => ⟨log, throw e⟩
+    | .error e => ⟨log, throw e.unreturn⟩
 
 /-- A script run, its loops at most `k` times and its calls at most `d`
 deep. -/

@@ -9,9 +9,11 @@ function's body, as an instance, under the context the check-once theorem
 checks it in (`funCtx`, with the type arguments substituted), with the
 parameters bound to the arguments' values and the consts in scope to
 theirs. A `ret e` is what the call gives, a `ret` or a body that ends gives
-the unit. Calls nest at most as deep as they are given (`Stop.diverge`). A
-function not in the table, as one a script declares below the call is not
-yet, is not run (`Stop.unsupported`).
+the unit, and with it what each parameter came to, for the caller to write
+back a `mut` or `out` argument from (`paramsAfter`). Calls nest at most as
+deep as they are given (`Stop.diverge`). A function not in the table, as one
+a script declares below the call is not yet, is not run
+(`Stop.unsupported`).
 
 It takes `funCtx` and `Ctx.inst` from the proofs, so that the context a body
 runs in is by definition the one it was checked in.
@@ -36,8 +38,13 @@ def unitVal : Val := .tuple []
 
 /-- The variables a body starts with, as `funCtx` lists them: the parameters,
 the last innermost, bound to the arguments, then the consts. -/
-def argVals (params : List (Mode × String × Hint)) (vals : List Val) (cvals : VEnv) : VEnv :=
-  (params.zip vals).reverse.map (fun ((_, x, _), v) => (x, some v)) ++ cvals
+def argVals (params : List (Mode × String × Hint)) (vals : List (Option Val)) (cvals : VEnv) : VEnv :=
+  (params.zip vals).reverse.map (fun ((_, x, _), v) => (x, v)) ++ cvals
+
+/-- What each parameter came to, in order, from the variables a body ended
+with back in its own scope. -/
+def paramsAfter (params : List (Mode × String × Hint)) (ρ : VEnv) : List (Option Val) :=
+  ((ρ.take params.length).map (·.2)).reverse
 
 /-- Calls into a program of functions `funs`, typed by `sigs`, nested at most
 `d` deep, each loop running at most `k` times. -/
@@ -47,14 +54,14 @@ def runCall (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String 
   | d + 1 => fun f θ vals =>
     match sigs.lookup f, funs.lookup f with
     | some sig, some fi =>
+      let ρ := argVals fi.params vals fi.cvals
       match execBlock env (runCall env sigs funs k d) fuel k
-          ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ)
-          (argVals fi.params vals fi.cvals) fi.body with
-      | .ok _ => match sig.ret with
-        | .void => pure unitVal
+          ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ) ρ fi.body with
+      | .ok ρ' => match sig.ret with
+        | .void => pure (unitVal, paramsAfter fi.params (restore ρ ρ'))
         | .ty _ => throw .wrong
-      | .error (.early v) => pure v
-      | .error .retVoid => pure unitVal
+      | .error (.returned (some v) ρ') => pure (v, paramsAfter fi.params (restore ρ ρ'))
+      | .error (.returned none ρ') => pure (unitVal, paramsAfter fi.params (restore ρ ρ'))
       | .error s => throw s
     -- A function a script declares below where it is called is not in the
     -- table yet.
