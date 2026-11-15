@@ -522,6 +522,23 @@ Four things are proved of it:
   name, as checking a term against it does, where `@` asked of any
   (`Variants.hasTerm`); the two differ only for an enum naming a variant
   twice, which the parser refuses.
+- **A datafun block that checks keeps its variables at their types**
+  (`Fun.execBlock_sound`, in `Proofs/ExecSound.lean`, of the statements run
+  in `FunExec.lean`), for every statement, with calls not run. Where a block
+  checks quietly in a context with no type parameter's bound, and its
+  variables line up with the context's, each that is set holding a value of
+  its type (`Agree`), running it leaves its scope's variables so, with more
+  bound. Otherwise it breaks or continues inside a loop; or it returns early with a value
+  of the return type, or with none from a function that returns nothing.
+  It may also stop where the model has not
+  gone: a call; a read of a variable declared with no value, which
+  the ownership analysis refuses (O005); a `set` through a tensor's slice; a
+  `for` with an index over more elements than `index` counts; and a loop run
+  more often than it was given. As with expressions, running follows the checker
+  one function for one, asking it for the context after each statement, and
+  a `match` walks its cases as `checkCases` does, each at one less fuel. A
+  scope is a prefix of the variables, so leaving a block drops what it bound
+  and keeps what it set.
 - **Inference under a generic steps with inference under its instances**
   (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
   arguments touches only known types, so a variable keeps its number, and
@@ -624,9 +641,9 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **Evaluation of the rest of datafun.** `Fun.evalS_sound` takes every
-  form but calls; calls come next, which need a function's body evaluated,
-  and with them statements, which is what says what `ret e` returns.
+- **Calls.** `Fun.evalS_sound` and `Fun.execBlock_sound` take every
+  expression and statement but calls, which come next. A call runs its
+  function's body with the arguments bound, and returns what `ret e` gives.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

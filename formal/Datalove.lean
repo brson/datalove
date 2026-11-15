@@ -28,3 +28,5 @@ import Datalove.Proofs.Variants
 import Datalove.Proofs.Lockstep
 import Datalove.FunEval
 import Datalove.Proofs.EvalSound
+import Datalove.FunExec
+import Datalove.Proofs.ExecSound
