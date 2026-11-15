@@ -252,8 +252,8 @@ theorem StopOkS.top {Γ : Ctx} {B : Prop} {s : Stop} (h : StopOkS Γ B s) (hl : 
     cases o with
     | some r => show EarlyOk _ r; rw [← hr]; exact h.1
     | none => exact absurd ((show Γ.ret = .void from h.1).symm.trans hr) (by simp)
-  | early r => show EarlyOk _ r; rw [← hr]; exact h
-  | retVoid => exact absurd ((show Γ.ret = .void from h).symm.trans hr) (by simp)
+  | early r => exact h.elim
+  | retVoid => exact h.elim
   | brk ρ => exact absurd h.1 (by simp [hl])
   | cont ρ => exact absurd h.1 (by simp [hl])
   | _ => exact h
@@ -329,19 +329,28 @@ theorem runTop_sound (ss0 : List Stmt) (k d : Nat) :
       obtain ⟨_, h1, h2⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) hs'
       rw [SQuiet.pure_iff] at h2; subst h2
       obtain ⟨t, rfl, hq⟩ := SQuiet.chk_inv h1
-      have he := evalS_sound inferEnv _ _ hcall (fuel - 1) Γ.borrow ρ e t hq hb hρ.envOk.borrow
+      have he := evalS_sound inferEnv _ _ hcall (fuel - 1) Γ.borrow e t hq hb ρ hρ
       simp only [runTop, typeOf_quiet hq]
-      rcases hres : evalS inferEnv (runCall inferEnv (resolveNames ss0).1 funs k d) (fuel - 1) Γ.borrow ρ e
-        with s' | v
+      rcases hres : (evalS inferEnv (runCall inferEnv (resolveNames ss0).1 funs k d) (fuel - 1) Γ.borrow e).run ρ
+        with s' | ⟨v, ρ'⟩
       · rw [hres] at he
         simp only
-        exact ⟨show StopOk _ s' by rw [← hr]; exact he, hlog⟩
+        refine ⟨?_, hlog⟩
+        show StopOk _ s'.unreturn
+        rw [← hr]
+        cases s' with
+        | returned o ρ'' =>
+          cases o with
+          | some r => exact he.1
+          | none => exact he.elim
+        | early r => exact he.elim
+        | _ => exact he
       · rw [hres] at he
         simp only
-        refine runTop_sound ss0 k d ss Γ ρ funs _ h hb hl hr hρ hc hp (fun p hp' => ?_)
+        refine runTop_sound ss0 k d ss Γ ρ' funs _ h hb hl hr he.2 hc hp (fun p hp' => ?_)
         rcases List.mem_append.mp hp' with hp' | hp'
         · exact hlog p hp'
-        · simp only [List.mem_singleton] at hp'; subst hp'; exact he
+        · simp only [List.mem_singleton] at hp'; subst hp'; exact he.1
     all_goals
       simp only [checkTop] at h
       obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h

@@ -20,10 +20,12 @@ is a value of the function's return type, and no operation meets an operand
 of the wrong kind (`Stop.wrong`).
 
 It evaluates literals, variables, places, hints, operators, `?`, `!`, `@`,
-fields, indexes and calls. A call goes to a `CallFn` the evaluator is given
-(`FunCall.lean` runs the function's body); one with a parameter that writes
-back, `mut` or `out`, inside an expression, or with type arguments that are
-not ground, is `Stop.unsupported`. `@`
+fields, indexes and calls, reading the variables in scope as it goes
+(`EvalT`). A call goes to a `CallFn` the evaluator is given (`FunCall.lean`
+runs the function's body), and writes back to its `mut` and `out` arguments'
+variables, so a variable read after it in the same expression reads what it
+came to. One with type arguments that are not ground is
+`Stop.unsupported`, and so is writing back to a part of a variable. `@`
 converts between types whose values are the same: a wider number, an atom or
 term into an enum, a clone. A comparison, and whether two map keys are one,
 are answered where the values' contents are modelled (`valEq?`): numbers,
@@ -83,11 +85,6 @@ abbrev CallFn := String → List (String × Ty) → List (Option Val) → EvalM 
 check-once theorem takes. -/
 def groundArgs (θ : List (String × Ty)) : Bool :=
   θ.all fun (_, t) => !t.containsVar && !t.containsRec
-
-/-- Whether a parameter mode writes back into its argument, which a call
-does only as a statement, or a binding's value (`FunExec.lean`). -/
-def writesBack (params : List (Mode × Ty)) : Bool :=
-  params.any fun (m, _) => m == .mut || m == .out
 
 
 /-- An integer value, decimal or hex. -/
@@ -269,81 +266,120 @@ def typeOf (m : ChkM Ty) : EvalM Ty :=
   | .ok t => pure t
   | .error _ => throw .wrong
 
+/-- Evaluation, reading and writing the variables in scope: a call writes
+back to its `mut` and `out` arguments' variables. -/
+abbrev EvalT := StateT VEnv EvalM
+
+/-- Set the innermost variable of a name. -/
+def setVar (x : String) (v : Val) : VEnv → VEnv
+  | [] => []
+  | (y, o) :: ρ => if y == x then (y, some v) :: ρ else (y, o) :: setVar x v ρ
+
+/-- The variable an argument names, which a `mut` or `out` argument is
+written back to. One with steps is not written back yet. -/
+def argVar : Expr → Option String
+  | .var x => some x
+  | _ => none
+
+/-- Each `mut` and `out` argument's variable set to what its parameter came
+to. -/
+def writeBack : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (Option Val) → EvalM VEnv
+  | ρ, (_, e) :: args, (mode, _) :: params, a :: after =>
+    if mode == .mut || mode == .out then
+      match argVar e, a with
+      | some x, some v => writeBack (setVar x v ρ) args params after
+      | some _, none => throw .uninit
+      | none, _ => throw .unsupported
+    else writeBack ρ args params after
+  | ρ, _, _, _ => pure ρ
+
+/-- An early return, with the variables as they are, so that a call can
+write back what its parameters came to. -/
+def earlyHere {α} (r : Val) : EvalT α := do throw (.returned (some r) (← get))
+
+/-- A step that reads no variable, its early return given the variables as
+they are. -/
+def here {α} (m : EvalM α) : EvalT α :=
+  match m with
+  | .ok a => pure a
+  | .error (.early r) => earlyHere r
+  | .error s => throw s
+
 mutual
 
 /-- What `e` evaluates to, as `synthF` types it. -/
-def evalS (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr → EvalM Val
-  | 0, _, _, _ => throw .fuel
-  | n + 1, Γ₀, ρ, e =>
+def evalS (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT Val
+  | 0, _, _ => throw .fuel
+  | n + 1, Γ₀, e =>
     let Γ := Γ₀.enter e
     match e with
     | .hinted h inner => do
       let t ← match Γ.hint h with
         | .ok t => pure t
         | .error _ => throw .wrong
-      evalForm env call n Γ ρ inner t
-    | .var x => match ρ.lookup x with
+      evalForm env call n Γ inner t
+    | .var x => do match (← get).lookup x with
       | some (some v) => pure v
       | some none => throw .uninit
       | none => throw .wrong
     | .binop op a b => do
-      let (t, va, vb) ← evalPair env call n Γ ρ a b none
-      binOp op t va vb
+      let (t, va, vb) ← evalPair env call n Γ a b none
+      here (binOp op t va vb)
     | .unop op a => do
-      let t ← typeOf (synthF env n Γ.borrow a)
-      let v ← evalS env call n Γ.borrow ρ a
-      unOp op t v
+      let t ← here (typeOf (synthF env n Γ.borrow a))
+      let v ← evalS env call n Γ.borrow a
+      here (unOp op t v)
     | .tryOpt a => do
-      match ← evalS env call n Γ ρ a with
-      | .none => throw (.early .none)
+      match ← evalS env call n Γ a with
+      | .none => earlyHere .none
       | .some v => pure v
       | _ => throw .wrong
     | .tryRes a => do
-      match ← evalS env call n Γ ρ a with
-      | .er v => throw (.early (.er v))
+      match ← evalS env call n Γ a with
+      | .er v => earlyHere (.er v)
       | .ok v => pure v
       | _ => throw .wrong
-    | .adapt a => evalS env call n Γ.borrow ρ a
-    | .call f args => evalCall env call n Γ ρ f args none
-    | .place x steps => match ρ.lookup x, Γ.lookup x with
-      | some (some v), some (t, _) => evalSteps env call n Γ ρ t v steps
+    | .adapt a => evalS env call n Γ.borrow a
+    | .call f args => evalCall env call n Γ f args none
+    | .place x steps => do match (← get).lookup x, Γ.lookup x with
+      | some (some v), some (t, _) => evalSteps env call n Γ t v steps
       | some none, _ => throw .uninit
       | _, _ => throw .wrong
-    | .proj b s => do fieldVal (← evalS env call n Γ ρ b) s
+    | .proj b s => do here (fieldVal (← evalS env call n Γ b) s)
     | .index b k mode => match mode with
       | none => throw .wrong
       | some m => do
-        let bt ← typeOf (synthF env n Γ b)
+        let bt ← here (typeOf (synthF env n Γ b))
         let (_, kt) ← match indexTypes bt with
           | .ok p => pure p
           | .error _ => throw .wrong
-        let v ← evalS env call n Γ ρ b
-        let kv ← evalC env call n Γ ρ k kt
-        indexVal m v kv
+        let v ← evalS env call n Γ b
+        let kv ← evalC env call n Γ k kt
+        here (indexVal m v kv)
     | e => do
-      let t ← typeOf (synthF env (n + 1) Γ₀ e)
-      evalForm env call n Γ ρ e t
+      let t ← here (typeOf (synthF env (n + 1) Γ₀ e))
+      evalForm env call n Γ e t
 
 /-- What `e` evaluates to, as `checkF` checks it against `t`. -/
-def evalC (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr → Ty → EvalM Val
-  | 0, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, .hinted h inner, expected => evalForm env call n (Γ.enter (.hinted h inner)) ρ inner expected
-  | n + 1, Γ, ρ, e, expected => evalForm env call n (Γ.enter e) ρ e expected
+def evalC (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → Ty → EvalT Val
+  | 0, _, _, _ => throw .fuel
+  | n + 1, Γ, .hinted h inner, expected => evalForm env call n (Γ.enter (.hinted h inner)) inner expected
+  | n + 1, Γ, e, expected => evalForm env call n (Γ.enter e) e expected
 
 /-- What `e` evaluates to, as `checkForm` checks it against `expected`. -/
-def evalForm (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr → Ty → EvalM Val
-  | 0, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, e, expected =>
+def evalForm (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → Ty → EvalT Val
+  | 0, _, _, _ => throw .fuel
+  | n + 1, Γ, e, expected =>
     match e with
     | .none_ => pure .none
     | .er p => match expected.expose with
-      | .result _ => .er <$> evalC env call n Γ ρ p .error
+      | .result _ => .er <$> evalC env call n Γ p .error
       | _ => throw .wrong
     | .some_ p => match expected.expose with
-      | .option t => .some <$> evalC env call n Γ ρ p t
+      | .option t => .some <$> evalC env call n Γ p t
       | _ => throw .wrong
     | .ok p => match expected.expose with
-      | .result t => .ok <$> evalC env call n Γ ρ p t
+      | .result t => .ok <$> evalC env call n Γ p t
       | _ => throw .wrong
     | .tt => pure (.bool true)
     | .ff => pure (.bool false)
@@ -352,160 +388,164 @@ def evalForm (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr �
     | .float => pure .float
     | .hex k => pure (.hex k)
     | .tuple es => match expected.expose with
-      | .tuple ts => .tuple <$> evalPairs env call n Γ ρ es (Lit.tysList ts)
+      | .tuple ts => .tuple <$> evalPairs env call n Γ es (Lit.tysList ts)
       | _ => throw .wrong
     | .struct fs => match expected.expose with
-      | .struct ts => .struct <$> evalFields env call n Γ ρ fs (Lit.fieldsList ts)
+      | .struct ts => .struct <$> evalFields env call n Γ fs (Lit.fieldsList ts)
       | _ => throw .wrong
     | .list es => match expected.expose with
-      | .list t => .list <$> evalAll env call n Γ ρ es t
+      | .list t => .list <$> evalAll env call n Γ es t
       | _ => throw .wrong
     | .set es => match expected.expose with
-      | .set t => .set <$> evalAll env call n Γ ρ es t
+      | .set t => .set <$> evalAll env call n Γ es t
       | _ => throw .wrong
     | .map es => match expected.expose with
-      | .map k v => .map <$> evalEntries env call n Γ ρ es k v
+      | .map k v => .map <$> evalEntries env call n Γ es k v
       | _ => throw .wrong
     | .tensor shape es => match expected.expose with
-      | .tensor t _ => .tensor shape <$> evalAll env call n Γ ρ es t
+      | .tensor t _ => .tensor shape <$> evalAll env call n Γ es t
       | _ => throw .wrong
     | .table header rows => match expected.expose with
-      | .table cols => .table header <$> evalRows env call n Γ ρ rows (Lit.fieldsList cols)
+      | .table cols => .table header <$> evalRows env call n Γ rows (Lit.fieldsList cols)
       | _ => throw .wrong
     | .atom a => pure (.atom a)
     | .term a p => match expected.expose with
-      | .term _ t => .term a <$> evalC env call n Γ ρ p t
+      | .term _ t => .term a <$> evalC env call n Γ p t
       | .enum vs => match Lit.Variants.termPayload a vs with
-        | some t => .term a <$> evalC env call n Γ ρ p t
+        | some t => .term a <$> evalC env call n Γ p t
         | none => throw .wrong
       | _ => throw .wrong
-    | .enum inner => evalC env call n Γ ρ inner expected
-    | .data p => do let _ ← evalS env call n Γ ρ p; pure .data
-    | .error p => do let _ ← evalS env call n Γ ρ p; pure .error
+    | .enum inner => evalC env call n Γ inner expected
+    | .data p => do let _ ← evalS env call n Γ p; pure .data
+    | .error p => do let _ ← evalS env call n Γ p; pure .error
     | .unop .neg a =>
       let t := expected.expose
       let float := isFloatT t || Γ.boundOf t == Option.some .float
       match a with
       | .int k => match Lit.intRange t with
         | some _ => pure (.int (-k))
-        | none => if float then do unOp .neg t (← evalC env call n Γ.borrow ρ a t) else evalSub env call n Γ ρ e
-      | _ => if float then do unOp .neg t (← evalC env call n Γ.borrow ρ a t) else evalSub env call n Γ ρ e
+        | none => if float then do here (unOp .neg t (← evalC env call n Γ.borrow a t)) else evalSub env call n Γ e
+      | _ => if float then do here (unOp .neg t (← evalC env call n Γ.borrow a t)) else evalSub env call n Γ e
     | .binop op a b =>
       if yieldsOperand op then do
-        let (t, va, vb) ← evalPair env call n Γ ρ a b (some expected)
-        binOp op t va vb
-      else evalSub env call n Γ ρ e
-    | .adapt a => evalS env call n Γ.borrow ρ a
-    | .call f args => evalCall env call n Γ ρ f args (some expected)
+        let (t, va, vb) ← evalPair env call n Γ a b (some expected)
+        here (binOp op t va vb)
+      else evalSub env call n Γ e
+    | .adapt a => evalS env call n Γ.borrow a
+    | .call f args => evalCall env call n Γ f args (some expected)
     | .unop _ _ | .var _ | .tryOpt _ | .tryRes _ | .hinted _ _
-    | .place _ _ | .proj _ _ | .index _ _ _ => evalSub env call n Γ ρ e
+    | .place _ _ | .proj _ _ | .index _ _ _ => evalSub env call n Γ e
 
 /-- A call, as `callF` types it: its type arguments inferred, its arguments
-evaluated against its parameters' types with them substituted, and the
-function called with their values. A call with a parameter that writes back
-(`mut`, `out`), or with type arguments that are not ground, is not run
-yet. -/
-def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → String → List (Option Mode × Expr) →
-    Option Ty → EvalM Val
-  | 0, _, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, f, args, expected =>
+evaluated against its parameters' types with them substituted, the function
+called with their values, and each `mut` and `out` argument's variable set to
+what its parameter came to. A call with type arguments that are not ground
+is not run yet. -/
+def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → String → List (Option Mode × Expr) →
+    Option Ty → EvalT Val
+  | 0, _, _, _, _ => throw .fuel
+  | n + 1, Γ, f, args, expected =>
     match Γ.sigs.lookup f, decided (env.call Γ f args expected) with
     | some sig, .ok θ =>
-      if writesBack sig.params || !groundArgs θ then throw .unsupported
+      if !groundArgs θ then throw .unsupported
       else do
-        let vals ← evalArgs env call n Γ ρ args (sig.params.map fun (m, t) => (m, t.inst θ))
-        (·.1) <$> call f θ (vals.map some)
+        let ps := sig.params.map fun (m, t) => (m, t.inst θ)
+        let vals ← evalArgs env call n Γ args ps
+        let (r, after) ← here (call f θ vals)
+        set (← here (writeBack (← get) args ps after))
+        pure r
     | _, _ => throw .wrong
 
-/-- A call's arguments, as `argsF` checks them. -/
-def evalArgs (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List (Option Mode × Expr) →
-    List (Mode × Ty) → EvalM (List Val)
-  | 0, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, (_, e) :: args, (mode, t) :: params => do
-    let v ← evalC env call n (Γ.forArg mode) ρ e t
-    let vs ← evalArgs env call n Γ ρ args params
+/-- A call's arguments, as `argsF` checks them, an `out` one passing no
+value. -/
+def evalArgs (env : InferEnv) (call : CallFn) : Nat → Ctx → List (Option Mode × Expr) →
+    List (Mode × Ty) → EvalT (List (Option Val))
+  | 0, _, _, _ => throw .fuel
+  | n + 1, Γ, (_, e) :: args, (mode, t) :: params => do
+    let v ← if mode == .out then pure none else some <$> evalC env call n (Γ.forArg mode) e t
+    let vs ← evalArgs env call n Γ args params
     pure (v :: vs)
-  | _ + 1, _, _, _, _ => pure []
+  | _ + 1, _, _, _ => pure []
 
 /-- A place's steps from a value of type `t`, as `stepsF` types them. -/
-def evalSteps (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Ty → Val → List Step → EvalM Val
-  | 0, _, _, _, _, _ => throw .fuel
-  | _ + 1, _, _, _, v, [] => pure v
-  | n + 1, Γ, ρ, t, v, [st] => evalStep env call n Γ ρ t v st
-  | n + 1, Γ, ρ, t, v, st :: rest => do
-    let u ← typeOf (stepF env n Γ.through t st)
-    let w ← evalStep env call n Γ.through ρ t v st
-    evalSteps env call n Γ ρ u w rest
+def evalSteps (env : InferEnv) (call : CallFn) : Nat → Ctx → Ty → Val → List Step → EvalT Val
+  | 0, _, _, _, _ => throw .fuel
+  | _ + 1, _, _, v, [] => pure v
+  | n + 1, Γ, t, v, [st] => evalStep env call n Γ t v st
+  | n + 1, Γ, t, v, st :: rest => do
+    let u ← here (typeOf (stepF env n Γ.through t st))
+    let w ← evalStep env call n Γ.through t v st
+    evalSteps env call n Γ u w rest
 
 /-- A step from a value of type `t`, as `stepF` types it. -/
-def evalStep (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Ty → Val → Step → EvalM Val
-  | 0, _, _, _, _, _ => throw .fuel
-  | _ + 1, _, _, _, v, .field s => fieldVal v s
-  | _ + 1, _, _, _, _, .index _ none => throw .wrong
-  | n + 1, Γ, ρ, t, v, .index k (some m) => do
+def evalStep (env : InferEnv) (call : CallFn) : Nat → Ctx → Ty → Val → Step → EvalT Val
+  | 0, _, _, _, _ => throw .fuel
+  | _ + 1, _, _, v, .field s => here (fieldVal v s)
+  | _ + 1, _, _, _, .index _ none => throw .wrong
+  | n + 1, Γ, t, v, .index k (some m) => do
     let (_, kt) ← match indexTypes t with
       | .ok p => pure p
       | .error _ => throw .wrong
-    let kv ← evalC env call n Γ ρ k kt
-    indexVal m v kv
+    let kv ← evalC env call n Γ k kt
+    here (indexVal m v kv)
 
 /-- What `e` evaluates to, as `subsumeF` synthesizes it. -/
-def evalSub (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr → EvalM Val
-  | 0, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, e => evalS env call n Γ ρ e
+def evalSub (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT Val
+  | 0, _, _ => throw .fuel
+  | n + 1, Γ, e => evalS env call n Γ e
 
 /-- Two operands, as `pairF` types them: their type, and their values
 checked against it. -/
-def evalPair (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr → Expr → Option Ty → EvalM (Ty × Val × Val)
-  | 0, _, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, a, b, expected => do
-    let t ← typeOf (pairF env (n + 1) Γ a b expected)
-    let va ← evalC env call n Γ.borrow ρ a t
-    let vb ← evalC env call n Γ.borrow ρ b t
+def evalPair (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → Expr → Option Ty → EvalT (Ty × Val × Val)
+  | 0, _, _, _, _ => throw .fuel
+  | n + 1, Γ, a, b, expected => do
+    let t ← here (typeOf (pairF env (n + 1) Γ a b expected))
+    let va ← evalC env call n Γ.borrow a t
+    let vb ← evalC env call n Γ.borrow b t
     pure (t, va, vb)
 
-def evalPairs (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List Expr → List Ty → EvalM (List Val)
-  | 0, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, e :: es, t :: ts => do
-    let v ← evalC env call n Γ ρ e t
-    let vs ← evalPairs env call n Γ ρ es ts
+def evalPairs (env : InferEnv) (call : CallFn) : Nat → Ctx → List Expr → List Ty → EvalT (List Val)
+  | 0, _, _, _ => throw .fuel
+  | n + 1, Γ, e :: es, t :: ts => do
+    let v ← evalC env call n Γ e t
+    let vs ← evalPairs env call n Γ es ts
     pure (v :: vs)
-  | _ + 1, _, _, _, _ => pure []
+  | _ + 1, _, _, _ => pure []
 
-def evalFields (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List (String × Expr) → List (String × Ty) →
-    EvalM (List (String × Val))
-  | 0, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, (m, e) :: fs, (_, t) :: ts => do
-    let v ← evalC env call n Γ ρ e t
-    let vs ← evalFields env call n Γ ρ fs ts
+def evalFields (env : InferEnv) (call : CallFn) : Nat → Ctx → List (String × Expr) → List (String × Ty) →
+    EvalT (List (String × Val))
+  | 0, _, _, _ => throw .fuel
+  | n + 1, Γ, (m, e) :: fs, (_, t) :: ts => do
+    let v ← evalC env call n Γ e t
+    let vs ← evalFields env call n Γ fs ts
     pure ((m, v) :: vs)
-  | _ + 1, _, _, _, _ => pure []
+  | _ + 1, _, _, _ => pure []
 
-def evalAll (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List Expr → Ty → EvalM (List Val)
-  | 0, _, _, _, _ => throw .fuel
-  | _ + 1, _, _, [], _ => pure []
-  | n + 1, Γ, ρ, e :: es, t => do
-    let v ← evalC env call n Γ ρ e t
-    let vs ← evalAll env call n Γ ρ es t
+def evalAll (env : InferEnv) (call : CallFn) : Nat → Ctx → List Expr → Ty → EvalT (List Val)
+  | 0, _, _, _ => throw .fuel
+  | _ + 1, _, [], _ => pure []
+  | n + 1, Γ, e :: es, t => do
+    let v ← evalC env call n Γ e t
+    let vs ← evalAll env call n Γ es t
     pure (v :: vs)
 
-def evalEntries (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List (Expr × Expr) → Ty → Ty →
-    EvalM (List (Val × Val))
-  | 0, _, _, _, _, _ => throw .fuel
-  | _ + 1, _, _, [], _, _ => pure []
-  | n + 1, Γ, ρ, (ke, ve) :: es, k, v => do
-    let kv ← evalC env call n Γ ρ ke k
-    let vv ← evalC env call n Γ ρ ve v
-    let rest ← evalEntries env call n Γ ρ es k v
+def evalEntries (env : InferEnv) (call : CallFn) : Nat → Ctx → List (Expr × Expr) → Ty → Ty →
+    EvalT (List (Val × Val))
+  | 0, _, _, _, _ => throw .fuel
+  | _ + 1, _, [], _, _ => pure []
+  | n + 1, Γ, (ke, ve) :: es, k, v => do
+    let kv ← evalC env call n Γ ke k
+    let vv ← evalC env call n Γ ve v
+    let rest ← evalEntries env call n Γ es k v
     pure ((kv, vv) :: rest)
 
-def evalRows (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List (List Expr) → List (String × Ty) →
-    EvalM (List (List Val))
-  | 0, _, _, _, _ => throw .fuel
-  | _ + 1, _, _, [], _ => pure []
-  | n + 1, Γ, ρ, r :: rs, cols => do
-    let vs ← evalPairs env call n Γ ρ r (cols.map (·.2))
-    let rest ← evalRows env call n Γ ρ rs cols
+def evalRows (env : InferEnv) (call : CallFn) : Nat → Ctx → List (List Expr) → List (String × Ty) →
+    EvalT (List (List Val))
+  | 0, _, _, _ => throw .fuel
+  | _ + 1, _, [], _ => pure []
+  | n + 1, Γ, r :: rs, cols => do
+    let vs ← evalPairs env call n Γ r (cols.map (·.2))
+    let rest ← evalRows env call n Γ rs cols
     pure (vs :: rest)
 
 end

@@ -12,14 +12,13 @@ scope is a prefix: leaving it drops what it bound and keeps what it set
 (`restore`).
 
 A loop runs at most as many times as it is given (`Stop.diverge`); a `for`
-walks a collection once. A call with a `mut` or `out` parameter runs as a
-statement's whole expression, a `call` or the value of a binding without a
-hint, copying in and writing back to its arguments' variables (`execWB`);
-elsewhere, or written back to a part of a variable, it is not run yet
-(`Stop.unsupported`), nor is a `set` through a tensor's slice, nor a `for`
-with an index over more elements than `index` counts. A statement's early
-return or `ret` leaves its block as `Stop.returned`, with the variables, so
-that a call can write back what its parameters came to.
+walks a collection once. A statement's expressions run from the variables
+as they are, and may change them, a call writing back to its `mut` and `out`
+arguments; the statement goes on from what they leave. A `set` through a
+tensor's slice is not run yet (`Stop.unsupported`), nor a `for` with an
+index over more elements than `index` counts. A return, by `ret` or early
+from an expression, is `Stop.returned`, with the variables, so that a call
+can write back what its parameters came to.
 -/
 
 namespace Datalove.Fun
@@ -29,11 +28,6 @@ open Lit (Val)
 /-- The variables after a block, back to the scope it began in: what it bound
 dropped, what it set kept. -/
 def restore (ρ ρ' : VEnv) : VEnv := ρ'.drop (ρ'.length - ρ.length)
-
-/-- Set the innermost variable of a name. -/
-def setVar (x : String) (v : Val) : VEnv → VEnv
-  | [] => []
-  | (y, o) :: ρ => if y == x then (y, some v) :: ρ else (y, o) :: setVar x v ρ
 
 /-- Bind names in order, each innermost of those before it, as
 `Ctx.bindAllAs` does. -/
@@ -118,10 +112,11 @@ where
 
 /-- A loop's iterations, at most `k`, each with the condition first: a body
 that ends, or continues, goes round again, one that breaks stops. -/
-def execLoop (cond : VEnv → EvalM Bool) (body : VEnv → EvalM VEnv) : Nat → VEnv → EvalM VEnv
+def execLoop (cond : VEnv → EvalM (Bool × VEnv)) (body : VEnv → EvalM VEnv) : Nat → VEnv → EvalM VEnv
   | 0, _ => throw .diverge
   | k + 1, ρ => do
-    if !(← cond ρ) then return ρ
+    let (b, ρ) ← cond ρ
+    if !b then return ρ
     match body ρ with
     | .ok ρ' => execLoop cond body k (restore ρ ρ')
     | .error (.brk ρ') => pure (restore ρ ρ')
@@ -140,27 +135,27 @@ def execFor (body : VEnv → EvalM VEnv) (names : List String) : List (List Val)
     | .error s => throw s
 
 /-- What a `set` writes, as `setValue` types it. -/
-def execSetValue (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (old : Option Val)
-    (op : Option BinOp) (e : Expr) : EvalM Val :=
+def execSetValue (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (t : Ty) (old : Option Val)
+    (op : Option BinOp) (e : Expr) : EvalT Val :=
   match op with
-  | none => evalC env call n Γ ρ e t
+  | none => evalC env call n Γ e t
   | some op => do
-    let r ← evalC env call n Γ.borrow ρ e t
+    let r ← evalC env call n Γ.borrow e t
     match old with
-    | some o => binOp op t o r
+    | some o => here (binOp op t o r)
     | none => throw .uninit
 
 /-- A `set` target's last step, an index, as `setIndex` types it. -/
-def execSetIndex (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (t : Ty) (k : Expr)
-    (mode : Option IdxMode) (op : Option BinOp) (e : Expr) (old : Option Val) : EvalM Val :=
+def execSetIndex (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr)
+    (mode : Option IdxMode) (op : Option BinOp) (e : Expr) (old : Option Val) : EvalT Val :=
   match mode, op with
   | none, some _ => throw .wrong
   | none, none => match t.expose with
     | .map kt vt => do
-      let kv ← evalC env call n Γ ρ k kt
-      let nv ← evalC env call n Γ ρ e vt
+      let kv ← evalC env call n Γ k kt
+      let nv ← evalC env call n Γ e vt
       match old with
-      | some (.map es) => .map <$> insertKey kv nv es
+      | some (.map es) => .map <$> here (insertKey kv nv es)
       | some _ => throw .wrong
       | none => throw .uninit
     | _ => throw .wrong
@@ -169,127 +164,69 @@ def execSetIndex (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEn
     | .ok (et, kt) =>
       if isView t then throw .wrong
       else do
-        let kv ← evalC env call n Γ ρ k kt
+        let kv ← evalC env call n Γ k kt
         match old with
         | some v => do
-          let part ← indexVal m v kv
-          let w ← execSetValue env call n Γ ρ et (some part) op e
-          putIndex v kv w
+          let part ← here (indexVal m v kv)
+          let w ← execSetValue env call n Γ et (some part) op e
+          here (putIndex v kv w)
         | none => throw .uninit
 
 /-- A `set` target's steps from a value of type `t`, as `setSteps` types
 them: the value with the place written. -/
-def execSetSteps (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (op : Option BinOp) (e : Expr) :
-    Ty → Option Val → List Step → EvalM Val
-  | t, old, [] => execSetValue env call n Γ ρ t old op e
-  | t, old, [.index k mode] => execSetIndex env call n Γ ρ t k mode op e old
+def execSetSteps (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (op : Option BinOp) (e : Expr) :
+    Ty → Option Val → List Step → EvalT Val
+  | t, old, [] => execSetValue env call n Γ t old op e
+  | t, old, [.index k mode] => execSetIndex env call n Γ t k mode op e old
   | t, old, .field s :: rest => match fieldType t s with
     | .ok ft => match old with
       | some v => do
-        let part ← fieldVal v s
-        let w ← execSetSteps env call n Γ ρ op e ft (some part) rest
-        putField v s w
+        let part ← here (fieldVal v s)
+        let w ← execSetSteps env call n Γ op e ft (some part) rest
+        here (putField v s w)
       | none => throw .uninit
     | .error _ => throw .wrong
   | _, _, .index _ none :: _ => throw .wrong
   | t, old, .index k (some m) :: rest => match indexTypes t with
     | .error _ => throw .wrong
     | .ok (et, kt) => do
-      let kv ← evalC env call n Γ ρ k kt
+      let kv ← evalC env call n Γ k kt
       match old with
       | some v => do
-        let part ← indexVal m v kv
-        let w ← execSetSteps env call n Γ ρ op e et (some part) rest
-        putIndex v kv w
+        let part ← here (indexVal m v kv)
+        let w ← execSetSteps env call n Γ op e et (some part) rest
+        here (putIndex v kv w)
       | none => throw .uninit
 
-/-- `set x … = e`, as `checkSet` types it. -/
+/-- `set x … = e`, as `checkSet` types it: the place's old value read, then
+the value written, which may have changed other variables, set. -/
 def execSet (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (x : String) (steps : List Step)
     (op : Option BinOp) (e : Expr) : EvalM VEnv :=
   match Γ.lookup x, ρ.lookup x with
   | some (t, _), some old => do
-    let w ← execSetSteps env call n Γ ρ op e t old steps
-    pure (setVar x w ρ)
+    let (w, ρ') ← (execSetSteps env call n Γ op e t old steps).run ρ
+    pure (setVar x w ρ')
   | _, _ => throw .wrong
-
-/-- Whether an expression is a call of a function with a parameter that
-writes back, which runs only as a statement's whole expression (`execWB`). -/
-def isWBCall (Γ : Ctx) : Expr → Bool
-  | .call f _ => match Γ.sigs.lookup f with
-    | some sig => writesBack sig.params
-    | none => false
-  | _ => false
-
-/-- A call's arguments, as `argsF` checks them, an `out` one passing no
-value. -/
-def evalArgsWB (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → List (Option Mode × Expr) →
-    List (Mode × Ty) → EvalM (List (Option Val))
-  | 0, _, _, _, _ => throw .fuel
-  | n + 1, Γ, ρ, (_, e) :: args, (mode, t) :: params => do
-    let v ← if mode == .out then pure none else some <$> evalC env call n (Γ.forArg mode) ρ e t
-    let vs ← evalArgsWB env call n Γ ρ args params
-    pure (v :: vs)
-  | _ + 1, _, _, _, _ => pure []
-
-/-- The variable an argument names, which a `mut` or `out` argument is
-written back to. One with steps is not written back yet. -/
-def argVar : Expr → Option String
-  | .var x => some x
-  | _ => none
-
-/-- Each `mut` and `out` argument's variable set to what its parameter came
-to. -/
-def writeBack : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (Option Val) → EvalM VEnv
-  | ρ, (_, e) :: args, (mode, _) :: params, a :: after =>
-    if mode == .mut || mode == .out then
-      match argVar e, a with
-      | some x, some v => writeBack (setVar x v ρ) args params after
-      | some _, none => throw .uninit
-      | none, _ => throw .unsupported
-    else writeBack ρ args params after
-  | ρ, _, _, _ => pure ρ
-
-/-- A call with a parameter that writes back, as `synthF` types it: its
-value, and the variables with its `mut` and `out` arguments written back. -/
-def execWB (env : InferEnv) (call : CallFn) : Nat → Ctx → VEnv → Expr → EvalM (Val × VEnv)
-  | n + 2, Γ₀, ρ, .call f args =>
-    let Γ := Γ₀.enter (.call f args)
-    match Γ.sigs.lookup f, decided (env.call Γ f args none) with
-    | some sig, .ok θ =>
-      if !groundArgs θ then throw .unsupported
-      else do
-        let ps := sig.params.map fun (m, t) => (m, t.inst θ)
-        let vals ← evalArgsWB env call n Γ ρ args ps
-        let (r, after) ← call f θ vals
-        let ρ' ← writeBack ρ args ps after
-        pure (r, ρ')
-    | _, _ => throw .wrong
-  | _, _, _, _ => throw .fuel
 
 /-- `let` or `var` with a value, as `bindChecked` types it. -/
 def execBind (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (p : Pat) (hint : Option Hint) (e : Expr) :
     EvalM VEnv := do
   let (v, ρ) ← match hint with
     | some h => match Γ.hint h with
-      | .ok t => (·, ρ) <$> evalC env call n Γ ρ e t
+      | .ok t => (evalC env call n Γ e t).run ρ
       | .error _ => throw .wrong
-    | none => if isWBCall Γ e then execWB env call n Γ ρ e else (·, ρ) <$> evalS env call n Γ ρ e
+    | none => (evalS env call n Γ e).run ρ
   let vals ← patValues p v
   pure (bindVals ρ (vals.map fun (x, w) => (x, some w)))
 
-/-- What a block does with a statement's early return or `ret`: it is the
-body's return, with the variables as they were before the statement. -/
-def returnedAt (ρ : VEnv) (m : EvalM VEnv) : EvalM VEnv :=
-  match m with
-  | .error (.early r) => throw (.returned (some r) ρ)
-  | .error .retVoid => throw (.returned none ρ)
-  | m => m
-
-/-- `ret` or `ret e`, as `checkRet` types it. -/
+/-- `ret` or `ret e`, as `checkRet` types it: the body's return, with the
+variables as its value left them. -/
 def execRet (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Option Expr) : EvalM VEnv :=
   match Γ.ret, e with
-  | .ty r, some e => do throw (.early (← evalC env call n Γ ρ e r))
-  | .void, none => throw .retVoid
+  | .ty r, some e => do
+    let (v, ρ') ← (evalC env call n Γ e r).run ρ
+    throw (.returned (some v) ρ')
+  | .void, none => throw (.returned none ρ)
   | _, _ => throw .wrong
 
 /-- A condition's truth. -/
@@ -317,12 +254,13 @@ def execStmt (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv →
     | .fun_ _ => pure ρ
     | .ret e => execRet env call n Γ ρ e
     | .if_ c none none t e => do
-      if ← boolOf (← evalC env call n Γ ρ c .bool) then
+      let (cv, ρ) ← (evalC env call n Γ c .bool).run ρ
+      if ← boolOf cv then
         return restore ρ (← execBlock env call n k Γ ρ t)
       else execElse env call n k Γ ρ e
     | .if_ c thenB elseB t e => do
       let ct ← typeOf (synthF env n Γ c)
-      let v ← evalS env call n Γ ρ c
+      let (v, ρ) ← (evalS env call n Γ c).run ρ
       match ct.expose, v with
       | .option p, .some w =>
         return restore ρ (← execBlock env call n k (bindOpt Γ thenB p) (bindVals ρ (thenB.toList.map (·, some w))) t)
@@ -334,23 +272,23 @@ def execStmt (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv →
           >>= fun ρ' => pure (restore ρ ρ')
       | _, _ => throw .wrong
     | .loop c body =>
-      let cond : VEnv → EvalM Bool := fun ρ => match c with
-        | some c => do boolOf (← evalC env call n Γ ρ c .bool)
-        | none => pure true
+      let cond : VEnv → EvalM (Bool × VEnv) := fun ρ => match c with
+        | some c => do
+          let (cv, ρ) ← (evalC env call n Γ c .bool).run ρ
+          pure (← boolOf cv, ρ)
+        | none => pure (true, ρ)
       execLoop cond (fun ρ => execBlock env call n k { Γ with inLoop := true } ρ body) k ρ
     | .brk => throw (.brk ρ)
     | .cont => throw (.cont ρ)
-    | .debuglog e => do let _ ← evalS env call n Γ.borrow ρ e; pure ρ
-    | .call e =>
-      if isWBCall Γ e then do let (_, ρ') ← execWB env call n Γ ρ e; pure ρ'
-      else do let _ ← evalS env call n Γ ρ e; pure ρ
+    | .debuglog e => do let (_, ρ) ← (evalS env call n Γ.borrow e).run ρ; pure ρ
+    | .call e => do let (_, ρ) ← (evalS env call n Γ e).run ρ; pure ρ
     | .const_ x hint e => do
       let ρ' ← execBind env call n { Γ with constExpr := true } ρ (.name x) hint e
       pure ρ'
     | .type_ _ _ => pure ρ
     | .match_ e cases dflt => do
       let t ← typeOf (synthF env n Γ e)
-      let v ← evalS env call n Γ ρ e
+      let (v, ρ) ← (evalS env call n Γ e).run ρ
       match t.expose with
       | .enum vs =>
         let name := match v with
@@ -367,7 +305,7 @@ def execStmt (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv →
     | .for_ names coll body => match forBindings env n Γ names coll |>.run #[] with
       | (some Δ, _) => do
         let t ← typeOf (synthF env n Γ.borrow coll)
-        let v ← evalS env call n Γ.borrow ρ coll
+        let (v, ρ) ← (evalS env call n Γ.borrow coll).run ρ
         let items ← walkItems t.expose names v
         execFor (fun ρ => execBlock env call n k ({ Γ with inLoop := true }.bindAll Δ) ρ body) names items ρ
       | (none, _) => throw .wrong
@@ -398,7 +336,7 @@ def execBlock (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv �
   | 0, _, _, _, _ => throw .fuel
   | _ + 1, _, _, ρ, [] => pure ρ
   | n + 1, k, Γ, ρ, s :: ss => do
-    let ρ' ← returnedAt ρ (execStmt env call n k Γ ρ s)
+    let ρ' ← execStmt env call n k Γ ρ s
     execBlock env call n k ((checkStmtF env n Γ s).run #[]).1 ρ' ss
 
 end

@@ -62,9 +62,9 @@ def runTop (sigs : List (String × Sig)) (k d : Nat) :
     runTop sigs k d Γ ρ (funs ++ (funEntry sigs Γ ρ f).toList) log ss
   | Γ, ρ, funs, log, .debuglog e :: ss =>
     let call := runCall inferEnv sigs funs k d
-    match typeOf (synthF inferEnv (fuel - 1) Γ.borrow e), evalS inferEnv call (fuel - 1) Γ.borrow ρ e with
-    | .ok t, .ok v => runTop sigs k d Γ ρ funs (log ++ [(t, v)]) ss
-    | .error s, _ | _, .error s => ⟨log, throw s⟩
+    match typeOf (synthF inferEnv (fuel - 1) Γ.borrow e), (evalS inferEnv call (fuel - 1) Γ.borrow e).run ρ with
+    | .ok t, .ok (v, ρ') => runTop sigs k d Γ ρ' funs (log ++ [(t, v)]) ss
+    | .error s, _ | _, .error s => ⟨log, throw s.unreturn⟩
   | Γ, ρ, funs, log, s :: ss =>
     match execStmt inferEnv (runCall inferEnv sigs funs k d) fuel k Γ ρ s with
     | .ok ρ' => runTop sigs k d ((checkStmt Γ s).run #[]).1 ρ' funs log ss

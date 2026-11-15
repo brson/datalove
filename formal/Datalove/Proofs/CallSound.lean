@@ -117,28 +117,6 @@ theorem paramsAfter_fit {sigs : List (String × Sig)} {fi : FunInfo} {sig : Sig}
   rw [← List.map_reverse]
   exact params_fit θ fi.params sig.params _ hp hr
 
-/-- A block never lets a statement's early return or `ret` out as such: it
-has become `Stop.returned`. -/
-theorem execBlock_returned {env : InferEnv} {call : CallFn} : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (ss : List Stmt)
-    (s : Stop), execBlock env call n k Γ ρ ss = .error s → (∀ r, s ≠ .early r) ∧ s ≠ .retVoid
-  | 0, _, _, _, _, s, h => by
-    rw [execBlock.eq_def] at h; cases h; exact ⟨fun _ => by simp, by simp⟩
-  | _ + 1, _, _, _, [], s, h => by rw [execBlock.eq_def] at h; cases h
-  | n + 1, k, Γ, ρ, s0 :: ss, s, h => by
-    rw [execBlock.eq_def] at h
-    dsimp only at h
-    unfold returnedAt at h
-    cases he : execStmt env call n k Γ ρ s0 with
-    | ok ρ' =>
-      rw [he] at h
-      exact execBlock_returned n k _ ρ' ss s h
-    | error s1 =>
-      rw [he] at h
-      cases s1 <;>
-        (simp only [bind, Except.bind, throw, throwThe, MonadExceptOf.throw, Except.error.injEq] at h
-         subst h
-         exact ⟨fun _ => by simp, by simp⟩)
-
 theorem unitVal_typed : HasType unitVal unitTy := .tuple (by simp [Lit.tysList]) (by simp)
 
 section
@@ -159,13 +137,11 @@ theorem runCall_ok (h : ProgOk env sigs funs) (k : Nat) : ∀ d, CallOk sigs (ru
     have hρ := argVals_agree (sigs := sigs) hpl hv hc
     have hr := execBlock_sound env sigs (runCall env sigs funs k d) (runCall_ok h k d) fuel k _ _ fi.body
       hbody ⟨rfl, rfl⟩ hρ
-    have hne := execBlock_returned (env := env) (call := runCall env sigs funs k d) fuel k
-      ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ) (argVals fi.params vals fi.cvals) fi.body
     have after : ∀ ρ', Ext ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ).vars ρ' →
         ArgsFit θ (paramsAfter fi.params (restore (argVals fi.params vals fi.cvals) ρ')) sig.params :=
       fun ρ' he => paramsAfter_fit hpl (restore_agree hρ he)
     simp only [runCall, hs, hfi]
-    generalize execBlock _ _ _ _ _ _ _ = r at hr hne ⊢
+    generalize execBlock _ _ _ _ _ _ _ = r at hr ⊢
     cases r with
     | ok ρ' =>
       cases hret : sig.ret with
@@ -176,8 +152,8 @@ theorem runCall_ok (h : ProgOk env sigs funs) (k : Nat) : ∀ d, CallOk sigs (ru
         cases h63
     | error s =>
       cases s with
-      | early v => exact absurd rfl ((hne _ rfl).1 v)
-      | retVoid => exact absurd rfl (hne _ rfl).2
+      | early v => exact hr.elim
+      | retVoid => exact hr.elim
       | returned o ρ' =>
         obtain ⟨hT, hx⟩ := hr
         cases o with
