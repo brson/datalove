@@ -26,8 +26,8 @@ and the language can perform no direct I/O.
 Focus on ergonomic scripting experience and the REPL.
 
 - [ ] interactive CLI UX
-- [ ] module and script compile reactivity
-- [ ] script interpreter reactivity
+- [x] module and script compile reactivity
+- [x] script interpreter reactivity
 - [ ] repl error and abort semantics
 - [ ] assert statements
 - [ ] rational numbers
@@ -38,16 +38,12 @@ Focus on ergonomic scripting experience and the REPL.
 - [ ] multiple concurrent interactive scripts
 - [ ] std docs, in-repl docs, generated docs
 - [ ] pipeline I/O
-- [ ] virtual I/O for all existing file access
+- [x] virtual I/O for all existing file access
 
 
 
 
 ## In progress
-
-- repl ux
-- script reactivity
-- multiple script sessions
 
 
 ## On deck
