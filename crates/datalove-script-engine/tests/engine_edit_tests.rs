@@ -1027,6 +1027,64 @@ fn a_const_calls_its_own_unit_s_function_over_an_earlier_one() {
     assert_eq!(value_of(&mut engine, "R"), "5");
 }
 
+/// The value `name` has after running `source`, whose last unit compiled.
+fn value_after(source: &str, name: &str) -> String {
+    let mut engine = engine();
+    let units = run(&mut engine, source).len() as u32;
+    assert_eq!(engine.unit_diagnostics(units, "unit", TextStyle::Plain), "");
+    value_of(&mut engine, name)
+}
+
+/// An earlier unit's function a const calls may call into a module.
+#[test]
+fn a_const_calls_an_earlier_function_that_calls_a_module() {
+    let source = "require module sys/std/option\nimport option.unwrap_or\n\
+        fun pick(): u32\n  let n: ?u32 = none\n  ret unwrap_or(n, 7)\nend fun\n---\n\
+        const R: u32 = pick()";
+    assert_eq!(value_after(source, "R"), "7");
+}
+
+/// A const may call an earlier unit's function with const parameters, one
+/// with a const of its own in the body too.
+#[test]
+fn a_const_calls_an_earlier_function_with_const_parameters() {
+    let plain = "fun f(const n: u32): u32\n  ret n\nend fun\n---\nconst N: u32 = 4\nconst R: u32 = f(N)";
+    assert_eq!(value_after(plain, "R"), "4");
+    let with_const = "fun f(const n: u32): u32\n  const k: u32 = n\n  ret k\nend fun\n---\n\
+        const N: u32 = 4\nconst R: u32 = f(N)";
+    assert_eq!(value_after(with_const, "R"), "4");
+}
+
+/// A const may call an earlier unit's generic function, and its `inline` one.
+#[test]
+fn a_const_calls_an_earlier_generic_or_inline_function() {
+    let generic = "fun id<T>(x: T): T\n  ret x\nend fun\n---\nconst R: u32 = id(6)";
+    assert_eq!(value_after(generic, "R"), "6");
+    let inline = "fun one(): u32\n  inline\n  ret 8\nend fun\n---\nconst R: u32 = one()";
+    assert_eq!(value_after(inline, "R"), "8");
+}
+
+/// A const reaches an earlier unit's function through one of its own unit's,
+/// and so does a const in a function's body.
+#[test]
+fn a_const_reaches_an_earlier_function_through_its_own_unit() {
+    let through = "fun one(): u32\n  ret 9\nend fun\n---\nfun two(): u32\n  ret one()\nend fun\n\
+        const R: u32 = two()";
+    assert_eq!(value_after(through, "R"), "9");
+    let in_body = "fun one(): u32\n  ret 3\nend fun\n---\nfun g(): u32\n  const k: u32 = one()\n  ret k\nend fun\n\
+        const R: u32 = g()";
+    assert_eq!(value_after(in_body, "R"), "3");
+}
+
+/// A const in the body of a function with const parameters, evaluated for
+/// each copy, may call an earlier unit's function.
+#[test]
+fn a_copy_s_const_calls_an_earlier_function() {
+    let source = "fun one(): u32\n  ret 2\nend fun\n---\nfun f(const n: u32): u32\n  const k: u32 = one()\n  ret k\nend fun\n\
+        const N: u32 = 1\nlet r = f(N)";
+    assert_eq!(value_after(source, "r"), "2");
+}
+
 /// Ownership errors are a unit's diagnostics too, for a fragment and for an
 /// expression, and each unit keeps its own while the others change.
 #[test]
