@@ -33,7 +33,7 @@ to rerun that always produces the same result as a fresh run of all cells.
 
 **Part 2. Experiments**
 
-- [If one unit moves or mutates a binding how does that affect preceding units on replay?](#user-content-if-one-unit-moves-or-mutates-a-binding-how-does-that-affect-preceding-units-on-replay)
+- [How does editing a unit affect preceding units?](#user-content-how-does-editing-a-unit-affect-preceding-units)
 - [But what about edits that change what a unit does?](#user-content-but-what-about-edits-that-change-what-a-unit-does)
 - [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
 - [A complete set of rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-rules-for-recompiles-and-reruns-for-moves-and-mutations)
@@ -301,7 +301,7 @@ making these same edits.
 
 
 
-## If one unit moves or mutates a binding how does that affect preceding units on replay?
+## How does editing a unit affect preceding units?
 
 Whatever we rerun,
 the session must end up as a fresh run of the current code
