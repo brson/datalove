@@ -340,6 +340,15 @@ worldgen writes names its type parameter in a parameter. Thirty thousand
 scripts from a random seed agree on every diagnostic, all but the 1216 that
 do not parse inside the slice, reaching every statement code the slice has.
 
+Diagnostics say nothing of a script that checks, and worldgen writes a hint
+on nearly every binding, so each generated script also runs with the hints
+dropped from its `let`s and `var`s. Where both sides check a script cleanly,
+the types they give each `let`, `var` and `const` with a value and no hint
+are compared too: the oracle lists the model's by `Fun.traceScript`, in
+`FunTrace.lean`, which synthesizes each in the context the checker reaches
+it in, and the test lists the Rust's from its expression types. A thousand
+seeds compare about 4700 such types, and all agree.
+
 What it found:
 
 - **No rule of the slice differs** between the doc and the code. The

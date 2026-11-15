@@ -105,7 +105,7 @@ pub fn hint_to_json(db: &Db, hint: &TypeHint<'_>) -> Value {
 }
 
 /// A type in the oracle's encoding.
-pub fn type_to_json(db: &Db, ty: &Type<'_>) -> Value {
+pub fn type_to_json(db: &dyn salsa::Database, ty: &Type<'_>) -> Value {
     let named = |fs: &[datalove_datalit::tycheck::TypeNamedField<'_>]| -> Value {
         fs.iter().map(|f| json!([f.name.as_str(db), type_to_json(db, &f.ty)])).collect()
     };

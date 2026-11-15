@@ -32,3 +32,4 @@ import Datalove.FunExec
 import Datalove.Proofs.ExecSound
 import Datalove.FunCall
 import Datalove.Proofs.CallSound
+import Datalove.FunTrace

@@ -11,10 +11,12 @@ line, and writes one answer per line to stdout, in order:
 {"pair": [A, B]} →  {"equiv": b, "meet": b, "adapt": b}
 {"type": T}      →  {"copy": b, "wf": b, "expose": T}
 {"synth": E}     →  {"ok": T} or {"err": code}
-{"fun": S}       →  {"codes": [code, ...]} or {"unsupported": what}
+{"fun": S}       →  {"codes": [code, ...], "inits": [T or null, ...]} or {"unsupported": what}
 ```
 
-A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes.
+A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes. Its
+`inits` are the types the checker synthesizes for each `let`, `var` and
+`const` with a value and no hint, in source order (`Fun.traceScript`).
 
 `synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
 asks about both modes.
@@ -57,7 +59,10 @@ def answer (q : Json) : Except String Json := do
       | .error c => Json.mkObj [("err", c)]
   if let .ok script := q.getObjVal? "fun" then
     return match Fun.scriptFromSerde script with
-      | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str))]
+      | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str)),
+          ("inits", Json.arr ((Fun.traceScript ss).toArray.map fun
+            | .some t => t.toJson
+            | .none => Json.null))]
       | .error e => Json.mkObj [("unsupported", e)]
   if let .ok world := q.getObjVal? "world" then
     let read : Except String (List Fun.ModuleSrc) := do

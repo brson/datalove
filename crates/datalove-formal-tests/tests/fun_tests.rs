@@ -15,7 +15,9 @@
 //! called with what is at hand. Before
 //! them runs a corpus of cases written by hand. Each script is parsed and
 //! typechecked, and the codes of every diagnostic the Rust reports, in order,
-//! are compared with the model's.
+//! are compared with the model's. Each generated script also runs with its
+//! bindings' hints dropped, and where both check a script cleanly, the types
+//! they give its unhinted bindings are compared as well.
 //!
 //! Needs the oracle built, so it runs only when asked, as `oracle_tests` does:
 //!
@@ -31,6 +33,8 @@ use bct::random::SeededRng;
 use datalove_formal_tests::{ask_oracle, oracle_path};
 use datalove_worldgen::WorldGenConfig;
 use std::collections::BTreeMap;
+use datalove_datafun_ast::ast::{ExprArena, ExprFun, Statement};
+use datalove_datafun_tycheck::Type as DfType;
 
 const MAX_MUTATIONS: usize = 3;
 
@@ -407,8 +411,45 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     lines.join("\n") + "\n"
 }
 
-/// The codes of a script's type diagnostics, in order, and its serde AST.
-fn rust_side(text: &str) -> (Vec<String>, Value) {
+/// A script with the hint dropped from each `let` and `var` that has a value:
+/// `let x: T = e` written `let x = e`. A hint ends at the first ` = ` outside
+/// brackets, since a map type has one inside.
+fn drop_binding_hints(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        let indent = &line[..line.len() - trimmed.len()];
+        let rest = trimmed.strip_prefix("let ").or_else(|| trimmed.strip_prefix("var "));
+        let dropped = rest.and_then(|rest| {
+            let colon = rest.find(':')?;
+            let name = &rest[..colon];
+            if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                return None;
+            }
+            let hint = &rest[colon..];
+            let mut depth = 0i32;
+            let bytes = hint.as_bytes();
+            for i in 0..bytes.len() {
+                match bytes[i] {
+                    b'(' | b'[' | b'{' => depth += 1,
+                    b')' | b']' | b'}' => depth -= 1,
+                    b'=' if depth == 0 && i > 0 && bytes[i - 1] == b' ' && bytes.get(i + 1) == Some(&b' ') => {
+                        return Some(fmt!("{indent}{} {name} ={}", &trimmed[..3], &hint[i + 1..]));
+                    }
+                    _ => {}
+                }
+            }
+            None
+        });
+        out += &dropped.unwrap_or_else(|| line.S());
+        out += "\n";
+    }
+    out
+}
+
+/// The codes of a script's type diagnostics, in order, its serde AST, and the
+/// types it gives its bindings, as `init_types` lists them.
+fn rust_side(text: &str) -> (Vec<String>, Value, Vec<Value>) {
     let db = &datalove_datafun_compiler::Database::default();
     let source = bct::input::Source::new(db, text.S());
     let parsed = datalove_datafun_parser::parse_for_diagnostics(db, source);
@@ -419,7 +460,60 @@ fn rust_side(text: &str) -> (Vec<String>, Value) {
     let codes = diagnostics.iter()
         .map(|d| d.to_diagnostic(db).code.map(|c| c.as_str(db).S()).unwrap_or_else(|| "none".S()))
         .collect();
-    (codes, rmx::serde_json::to_value(&script).X())
+    let types = datalove_datafun_tycheck::typecheck_script_unit(db, unit, env).result(db).expr_types(db);
+    let mut inits = Vec::new();
+    if let datalove_datafun_tycheck::ScriptUnitKind::Fragment(parsed) = &datalove_datafun_tycheck::unit_ast(db, unit).kind {
+        let body = parsed.top.body(db);
+        init_types(db, &|e| types.get(e).cloned(), &body.arena, &body.statements, &mut inits);
+    }
+    (codes, rmx::serde_json::to_value(&script).X(), inits)
+}
+
+/// The types the Rust gives each `let`, `var` and `const` with a value and no
+/// hint, in source order, a function's body where the function is declared,
+/// as the oracle's `inits` lists the model's (`Fun.traceScript`). Null where
+/// it recorded none.
+fn init_types<'db>(
+    db: &'db datalove_datafun_compiler::Database,
+    type_of: &dyn Fn(ExprFun<'db>) -> Option<DfType<'db>>,
+    arena: &'db ExprArena<'db>,
+    statements: &'db [Statement<'db>],
+    out: &mut Vec<Value>,
+) {
+    let ty = |id| match type_of(arena.get(id)) {
+        Some(DfType::Datalit(t)) => datalove_formal_tests::type_to_json(db, &t),
+        Some(DfType::Function(_)) => json!("function"),
+        None => Value::Null,
+    };
+    for s in statements {
+        match s {
+            Statement::Let(l) if l.type_hint.is_none() => out.push(ty(l.value)),
+            Statement::Var(v) if v.type_hint.is_none() => {
+                if let Some(value) = v.value {
+                    out.push(ty(value));
+                }
+            }
+            Statement::Const(c) if c.type_hint.is_none() => out.push(ty(c.value)),
+            Statement::If(i) => {
+                init_types(db, type_of, arena, &i.then_body, out);
+                if let Some(e) = &i.else_body {
+                    init_types(db, type_of, arena, e, out);
+                }
+            }
+            Statement::Loop(l) => init_types(db, type_of, arena, &l.body, out),
+            Statement::For(f) => init_types(db, type_of, arena, &f.body, out),
+            Statement::Match(m) => {
+                for c in &m.cases {
+                    init_types(db, type_of, arena, &c.body, out);
+                }
+                if let Some(d) = &m.default_body {
+                    init_types(db, type_of, arena, d, out);
+                }
+            }
+            Statement::Fun(f) => init_types(db, type_of, &f.body.arena, &f.body.statements, out),
+            _ => {}
+        }
+    }
 }
 
 /// The codes of each module's type diagnostics, in order, checked as the
@@ -567,19 +661,24 @@ fn statement_typing_agrees() {
             text = mutate(&mut rng, &text);
         }
         cases.push((fmt!("seed {seed}"), text));
+        // The script as generated with its bindings' hints dropped, so that
+        // inference decides their types, which are compared where it checks.
+        let generated = session.modules.first().map(|m| m.1.C()).unwrap_or_default();
+        cases.push((fmt!("seed {seed}, unhinted"), drop_binding_hints(&generated)));
     }
 
     let mut queries = Vec::new();
     let mut rust = Vec::new();
     for (_, text) in &cases {
-        let (codes, script) = rust_side(text);
+        let (codes, script, inits) = rust_side(text);
         queries.push(json!({ "fun": script }));
-        rust.push(codes);
+        rust.push((codes, inits));
     }
     let answers = ask_oracle(&queries);
 
     let mut skipped = BTreeMap::<String, usize>::new();
     let mut agreed = 0;
+    let mut typed = 0;
     let mut outcomes = BTreeMap::<String, usize>::new();
     let mut mismatches = Vec::new();
     for (((what, text), rust), oracle) in cases.iter().zip(&rust).zip(&answers) {
@@ -592,7 +691,19 @@ fn statement_typing_agrees() {
             *skipped.entry(why.as_str().X().S()).or_default() += 1;
             continue;
         }
+        let (rust, rust_inits) = rust;
         let model: Vec<String> = oracle["codes"].as_array().X().iter().map(|c| c.as_str().X().S()).collect();
+        // Where both check the script cleanly, the types they give its
+        // bindings, which no diagnostic shows.
+        if rust.is_empty() && model.is_empty() {
+            let model_inits = oracle["inits"].as_array().X();
+            if rust_inits != model_inits {
+                mismatches.push(fmt!("{what}:\n{text}    rust types:  {}\n    model types: {}",
+                    Value::from(rust_inits.C()), Value::from(model_inits.C())));
+                continue;
+            }
+            typed += rust_inits.len();
+        }
         for c in rust {
             *outcomes.entry(c.C()).or_default() += 1;
         }
@@ -606,7 +717,7 @@ fn statement_typing_agrees() {
         }
     }
     println!(
-        "{} scripts over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}; codes {outcomes:?}",
+        "{} scripts over seeds {}..{}: {agreed} agree, {} differ, {typed} binding types compared; skipped {skipped:?}; codes {outcomes:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(15) {
@@ -690,7 +801,7 @@ fn instances_check() {
         }
         for text in [base, mutated] {
             // Clean: no type diagnostic, and nothing the parser could not read.
-            let (codes, script) = rust_side(&text);
+            let (codes, script, _) = rust_side(&text);
             if !codes.is_empty() || script.to_string().contains("ParseError") {
                 continue;
             }
@@ -703,7 +814,7 @@ fn instances_check() {
     let mut queries = Vec::new();
     let mut rust = Vec::new();
     for (_, text) in &cases {
-        let (codes, script) = rust_side(text);
+        let (codes, script, _) = rust_side(text);
         queries.push(json!({ "fun": script }));
         rust.push(codes);
     }
@@ -738,7 +849,7 @@ fn instances_check() {
 #[test]
 fn ast_of() {
     let Ok(path) = std::env::var("FORMAL_FUN_AST_OF") else { return };
-    let (codes, script) = rust_side(&std::fs::read_to_string(path).X());
+    let (codes, script, _) = rust_side(&std::fs::read_to_string(path).X());
     println!("{}", rmx::serde_json::to_string_pretty(&script).X());
     println!("rust:  {codes:?}");
     if oracle_path().exists() {
