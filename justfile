@@ -129,7 +129,7 @@ test-demos:
 test-extras: test-slow test-demos
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-64 test-cut test-extras
+test-ci: test test-64 test-cut test-extras test-formal
 
 # Run tests with sequential compilation, which is not part of CI.
 #
