@@ -377,7 +377,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
                 let (a, b) = (pick(rng, &["x", "a", "b", "k", "v"]), pick(rng, &["x", "a", "b", "k", "v"]));
                 let stmt = match rng.random_range(0..8) {
                     0 => fmt!("let w: #{{T}} = #{{}}"),
-                    1 => fmt!("var w: %{{{} = u8}}", pick(rng, &["T", "K", "V", "[T]", "?K"])),
+                    1 => fmt!("var w: %{{{} -> u8}}", pick(rng, &["T", "K", "V", "[T]", "?K"])),
                     2 => fmt!("let w: T = {a}"),
                     3 => fmt!("let w = {a} {} {b}", pick(rng, OPS)),
                     4 => fmt!("let w = {}{a}", pick(rng, &["-", "-?", "-!", "not "])),
