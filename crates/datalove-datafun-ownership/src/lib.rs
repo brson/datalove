@@ -46,7 +46,7 @@ use bct::lookup::LookupMap;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, FunKey, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
     StmtMatch, MatchCaseKind,
-    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey, ExprId, ExprArena, Body,
+    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey, ExprId, ExprArena, Body, FieldSelector, PlaceStep,
 };
 use datalove_datafun_ast::reachable::body_completes;
 use datalove_datafun_ast::ast::Binding;
@@ -167,11 +167,35 @@ struct AnalysisCtx<'a, 'db> {
 }
 
 /// A place an earlier operand reads through a reference.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Held<'db> {
-    root: Walked,
+    path: PlacePath<'db>,
     /// The call it is an argument of, if it is one.
     call: Option<ExprKey<'db>>,
+}
+
+/// A place as O010 and O017 tell places apart: the binding it starts from,
+/// and the fields it selects before its first index.
+///
+/// Two places overlap where they start from one binding and the fields of
+/// one begin the other's: `p.x` and `p.x.a` overlap, `p.x` and `p.y` do not.
+/// An index may reach any element, so a place is told apart only up to its
+/// first one: `p.xs[i]!` is all of `p.xs`, and `xs[i]!` and `xs[j]!` overlap.
+#[derive(Clone, PartialEq, Eq)]
+struct PlacePath<'db> {
+    root: Walked,
+    fields: Vec<FieldSelector<'db>>,
+}
+
+impl<'db> PlacePath<'db> {
+    /// The whole of a binding.
+    fn whole(root: Walked) -> Self {
+        PlacePath { root, fields: Vec::new() }
+    }
+
+    fn overlaps(&self, other: &PlacePath<'db>) -> bool {
+        self.root == other.root && self.fields.iter().zip(&other.fields).all(|(a, b)| a == b)
+    }
 }
 
 /// The root of a collection a `for` walks.
@@ -777,12 +801,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// Refuse taking `mut` or `out`, or moving, what an earlier operand
     /// still reads through a reference, saying whether it was. An argument
     /// beside another of the same call is O010's to compare.
-    fn check_not_held(&mut self, root: Walked, expr_key: ExprKey<'db>, call: Option<ExprKey<'db>>) -> bool {
-        let held = self.held.iter().any(|h| h.root == root && (h.call.is_none() || h.call != call));
+    fn check_not_held(&mut self, path: PlacePath<'db>, expr_key: ExprKey<'db>, call: Option<ExprKey<'db>>) -> bool {
+        let held = self.held.iter().any(|h| h.path.overlaps(&path) && (h.call.is_none() || h.call != call));
         if !held {
             return false;
         }
-        let name = match root {
+        let name = match path.root {
             Walked::Binding(id) => self.bindings[id.0 as usize].name.C(),
             Walked::Earlier(name) => name,
         };
@@ -790,23 +814,43 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         true
     }
 
-    /// What an operand an operator borrows reads through, if it reads a place.
-    fn borrowed_root(&self, expr: ExprFun<'db>) -> Option<Walked> {
+    /// The place an expression names, as O010 and O017 tell places apart.
+    /// A field of what is not a place (`f().a`) is none; a projection of a
+    /// place in parentheses is its base's, a part of it.
+    fn place_path(&self, expr: ExprFun<'db>) -> Option<PlacePath<'db>> {
         let expr = self.peel(expr);
         match expr.kind() {
-            ExprFunKind::Place(_) | ExprFunKind::FieldProj(_) => self.place_root(expr),
-            ExprFunKind::Index(idx) => self.borrowed_root(self.expr(idx.base)),
-            ExprFunKind::TryOption(t) => self.borrowed_root(self.expr(t.operand)),
-            ExprFunKind::TryResult(t) => self.borrowed_root(self.expr(t.operand)),
+            ExprFunKind::Place(place) => {
+                let fields = place.steps.iter()
+                    .map_while(|step| match step {
+                        PlaceStep::Field(field) => Some(field.C()),
+                        PlaceStep::Index(_) => None,
+                    })
+                    .collect();
+                Some(PlacePath { root: self.walked_root(place.root.text(self.db)), fields })
+            }
+            ExprFunKind::FieldProj(proj) => self.place_path(self.expr(proj.base)),
             _ => None,
         }
     }
 
-    /// Analyze `f` with `root`, if there is one, held by an earlier operand.
-    fn holding<T>(&mut self, root: Option<Walked>, f: impl FnOnce(&mut Self) -> T) -> T {
-        let pushed = root.is_some();
-        if let Some(root) = root {
-            self.held.push(Held { root, call: None });
+    /// What an operand an operator borrows reads through, if it reads a place.
+    fn borrowed_path(&self, expr: ExprFun<'db>) -> Option<PlacePath<'db>> {
+        let expr = self.peel(expr);
+        match expr.kind() {
+            ExprFunKind::Place(_) | ExprFunKind::FieldProj(_) => self.place_path(expr),
+            ExprFunKind::Index(idx) => self.borrowed_path(self.expr(idx.base)),
+            ExprFunKind::TryOption(t) => self.borrowed_path(self.expr(t.operand)),
+            ExprFunKind::TryResult(t) => self.borrowed_path(self.expr(t.operand)),
+            _ => None,
+        }
+    }
+
+    /// Analyze `f` with `path`, if there is one, held by an earlier operand.
+    fn holding<T>(&mut self, path: Option<PlacePath<'db>>, f: impl FnOnce(&mut Self) -> T) -> T {
+        let pushed = path.is_some();
+        if let Some(path) = path {
+            self.held.push(Held { path, call: None });
         }
         let r = f(self);
         if pushed {
@@ -820,7 +864,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         if self.check_not_walked(Walked::Binding(id), expr_key) {
             return;
         }
-        if self.check_not_held(Walked::Binding(id), expr_key, self.direct_arg_of) {
+        if self.check_not_held(PlacePath::whole(Walked::Binding(id)), expr_key, self.direct_arg_of) {
             return;
         }
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
@@ -1022,7 +1066,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         if self.check_not_walked(self.walked_root(place.root.text(self.db)), expr_key) {
             return;
         }
-        if self.check_not_held(self.walked_root(place.root.text(self.db)), expr_key, Some(call)) {
+        let path = self.place_path(arg).expect("a place has a path");
+        if self.check_not_held(path, expr_key, Some(call)) {
             return;
         }
         let Some(root) = self.expr_to_place_root(arg) else {
@@ -1051,11 +1096,10 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// `string_push_str(mut self, ref other)` called as `push_str(s, s)`
     /// reallocates `self` and then reads `other` through the freed pointer.
     ///
-    /// Comparison is on the root binding alone. Distinct fields of one value
-    /// (`f(mut p.x, ref p.y)`) do not overlap in fact, and distinct indexes
-    /// (`f(mut a[i]?, ref a[j]?)`) may or may not, but neither is admitted
-    /// yet: rejecting is sound, and nothing in the standard library or the
-    /// fixtures relies on either.
+    /// Places are compared by `PlacePath`: distinct fields of one value
+    /// (`f(mut p.x, ref p.y)`) do not overlap, and are admitted, while
+    /// distinct indexes (`f(mut a[i]?, ref a[j]?)`) may or may not, and are
+    /// rejected, as Rust rejects them.
     ///
     /// Arguments that are not places cannot alias: a nested call is evaluated
     /// to a value before this call runs. Nor can a copy given to an `in`
@@ -1071,8 +1115,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             let Some(later_root) = self.expr_to_place_root(*later) else {
                 continue;
             };
+            let later_path = self.place_path(*later).expect("a place has a path");
             for (i, earlier) in args.iter().enumerate().take(j) {
-                if self.expr_to_place_root(*earlier) != Some(later_root) {
+                if !self.place_path(*earlier).is_some_and(|p| p.overlaps(&later_path)) {
                     continue;
                 }
                 let modes = (callee_modes.get(i).copied(), callee_modes.get(j).copied());
@@ -1205,7 +1250,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // after the right one runs.
                 let lhs = self.expr(binop.lhs);
                 self.analyze_expr_moves(lhs, false);
-                let held = if self.expr_type(lhs).is_copy() { None } else { self.borrowed_root(lhs) };
+                let held = if self.expr_type(lhs).is_copy() { None } else { self.borrowed_path(lhs) };
                 self.holding(held, |ctx| ctx.analyze_expr_moves(ctx.expr(binop.rhs), false));
                 None
             }
@@ -1247,8 +1292,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     }
                     let callee_mode = callee_modes.get(i).copied();
                     if matches!(callee_mode, Some(ParamMode::Ref | ParamMode::Mut | ParamMode::Out)) {
-                        if let Some(root) = self.place_root(*arg) {
-                            self.held.push(Held { root, call: Some(call_key) });
+                        if let Some(path) = self.place_path(*arg) {
+                            self.held.push(Held { path, call: Some(call_key) });
                         }
                     }
 
@@ -1431,7 +1476,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // the base is read through a reference after the key runs.
                 let base = self.expr(idx.base);
                 self.analyze_expr_moves(base, false);
-                let held = self.borrowed_root(base);
+                let held = self.borrowed_path(base);
                 self.holding(held, |ctx| ctx.analyze_expr_moves(ctx.expr(idx.index), false));
                 None
             }
@@ -1488,7 +1533,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     }
                     // The place is reached through a reference to its root once
                     // its keys have run.
-                    let held = Some(self.walked_root(root_name));
+                    let held = self.place_path(expr);
                     self.holding(held, |ctx| {
                         for step in &place.steps {
                             if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
@@ -2034,10 +2079,10 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     // only once both have run, so they may change its root.
     let live_before_value = ctx.live_bindings_for_return();
     ctx.analyze_expr_moves(expr, !compound);
-    let value_held = if compound && !ctx.expr_type(expr).is_copy() { ctx.borrowed_root(expr) } else { None };
+    let value_held = if compound && !ctx.expr_type(expr).is_copy() { ctx.borrowed_path(expr) } else { None };
     let value_pushed = value_held.is_some();
-    if let Some(root) = value_held {
-        ctx.held.push(Held { root, call: None });
+    if let Some(path) = value_held {
+        ctx.held.push(Held { path, call: None });
     }
 
     // Then the keys, left to right. A bare index (upsert) consumes its key,
@@ -2075,8 +2120,8 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
             let key = ctx.expr(idx.index);
             ctx.analyze_expr_moves(key, idx.error_mode.is_none());
             if idx.error_mode.is_some() && !ctx.expr_type(key).is_copy() {
-                if let Some(root) = ctx.borrowed_root(key) {
-                    ctx.held.push(Held { root, call: None });
+                if let Some(path) = ctx.borrowed_path(key) {
+                    ctx.held.push(Held { path, call: None });
                 }
             }
         }

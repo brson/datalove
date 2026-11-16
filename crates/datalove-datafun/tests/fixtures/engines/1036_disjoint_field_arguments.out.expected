@@ -1,0 +1,123 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn grow(p0, p1):
+                    block0:
+                        v2 = call m0.u30(p0, p1)
+                        v3 = call m0.u30(p0, p1)
+                        return
+                    
+                    fn push2(p0, p1):
+                    block0:
+                        v0 = const "x"
+                        v7 = move v0
+                        v6 = call m0.u58(p0, v7) <string>
+                        v2 = const "y"
+                        v9 = move v2
+                        v8 = call m0.u58(p1, v9) <string>
+                        v4 = const "xx"
+                        v11 = move v4
+                        v10 = call m0.u58(p0, v11) <string>
+                        return
+                    
+                    fn len_then(p0, p1):
+                    block0:
+                        v3 = call m0.u0(p0)
+                        v2 = pack tuple/2 {v3, p1}
+                        return v2
+                    
+                    fn bump(p0):
+                    block0:
+                        v0 = const "z"
+                        v4 = move v0
+                        v3 = call m0.u58(p0, v4) <string>
+                        v5 = call m0.u56(p0) <string>
+                        return v5
+                    
+                    fn test():
+                    block0:
+                        v0 = const "ab"
+                        v1 = const "cd"
+                        v2 = const "a"
+                        v3 = list [v2]
+                        v4 = const "b"
+                        v5 = list [v4]
+                        v6 = pack tuple/4 {v0, v1, v3, v5}
+                        store.move s0, v6
+                        v7 = getfieldref s0.0
+                        v8 = getfieldref s0.1
+                        v9 = call m6.u0(*v7, *v8)
+                        v10 = getfieldref s0.2
+                        v11 = getfieldref s0.3
+                        v12 = call m6.u1(*v10, *v11)
+                        v13 = getfieldref s0.0
+                        v14 = getfieldref s0.3
+                        v15 = call m6.u3(*v14)
+                        v16 = call m6.u2(*v13, v15)
+                        v17 = getfieldref s0.0
+                        v18 = clone *v17
+                        v19 = getfieldref s0.1
+                        v20 = clone *v19
+                        v21 = getfieldref s0.2
+                        v22 = clone *v21
+                        v23 = getfieldref s0.3
+                        v24 = clone *v23
+                        v25 = pack tuple/5 {v18, v20, v22, v24, v16}
+                        drop s0
+                        return v25
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m6.u4()
+                        unit_end v0
+                """,
+            ),
+            output: "(\"abcdcd\", \"cd\", [\"a\", \"x\", \"xx\"], [\"b\", \"y\", \"z\"], (6, 3))",
+        ),
+    ],
+)

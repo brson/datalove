@@ -644,8 +644,10 @@ Four things are proved of it:
   being a location of its own; without it they differ
   (`PassBy.shared_differs`, `f(mut a, a)` by pointer twice). A location may
   be a part of a variable, `mut xs[i]!`, as well as a variable: locations
-  here are one or apart, and O010, comparing arguments by their variable,
-  leaves no two that overlap where either is written. Values here are never
+  here are one or apart, and O010, comparing arguments by their variable
+  and the fields before any index, leaves no two that overlap where either
+  is written: distinct fields are apart, and a place holding another, or
+  two elements of one collection, are refused. Values here are never
   freed, so a `ref` argument moved under it, also O010, is outside this.
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in

@@ -1526,7 +1526,7 @@ gives each its `OCode`.
 | O007 | `MoveInLoop` | Moving outer-scoped value in loop |
 | O008 | `InconsistentBranchMove` | Value moved, or `set` again after a move, in one merging branch only |
 | O009 | `OutParamPartialWrite` | Field write to `out` param |
-| O010 | `AliasedMutableArgument` | Two arguments share a place root, one `mut`/`out` and the other not a copy `in`, or a `ref` one is followed by a move |
+| O010 | `AliasedMutableArgument` | Two arguments overlap (`PlacePath`: one variable, the fields of one beginning the other's), one `mut`/`out` and the other not a copy `in`, or a `ref` one is followed by a move |
 | O011 | `CannotMutateImmutable` | `let` binding or `in` param passed as `mut`/`out` |
 | O012 | `CannotMutateTemporary` | Non-place argument passed as `mut`/`out` |
 | O013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
@@ -1656,7 +1656,10 @@ A value a function changes, takes over or writes overlaps no other value it
 is handed, as a `&mut` overlaps nothing; only `AnyRef`s may share one. For
 the arguments of a call the ownership checker sees to it (O010), and for an
 operand read through a reference after the rest of an expression runs, which
-a later one may not change or move (O017). A copy operand, and a copy `in`
+a later one may not change or move (O017). Both compare places by
+`PlacePath`, a variable and the fields selected before its first index, so
+distinct fields are distinct places and two elements of one collection are
+one. A copy operand, and a copy `in`
 argument, or a copy key of a `set`'s place, is lowered as a `Copy` where it
 is evaluated (`read_copy_now`) when a later operand may write back, so it is
 not held; so is a copy `in` argument whose variable the same call passes

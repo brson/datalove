@@ -1,0 +1,10 @@
+// Elements of one list are told apart only up to the index, which may reach
+// any element, so two of them passed beside a `mut` one are one place
+// (O010), even at keys that differ. Fields are told apart; elements are not.
+
+fun f(mut a: u8, ref b: u8)
+  set a = b
+end fun
+
+var xs: [u8] = [: u8 / 1, : u8 / 2]
+call f(mut xs[(: index / 0)]!, ref xs[(: index / 1)]!)

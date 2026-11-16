@@ -1,0 +1,51 @@
+----------
+module local/test/main
+----------
+
+// Distinct fields of one variable are distinct places: one may be passed
+// `mut` beside another passed `ref` or `mut`, and changed by a later
+// argument while an earlier one reads another by reference. The heap
+// fields grow, reallocating, while their siblings are read.
+require module sys/std/list
+require module sys/std/string
+
+fun grow(mut s: string, ref t: string)
+    call string.push_str(mut s, ref t)
+    call string.push_str(mut s, ref t)
+end fun
+
+fun push2(mut xs: [string], mut ys: [string])
+    call list.push(mut xs, "x")
+    call list.push(mut ys, "y")
+    call list.push(mut xs, "xx")
+end fun
+
+fun len_then(ref s: string, n: index): (index, index)
+    ret (string.len(ref s), n)
+end fun
+
+fun bump(mut xs: [string]): index
+    call list.push(mut xs, "z")
+    ret list.len(ref xs)
+end fun
+
+fun test(): (string, string, [string], [string], (index, index))
+    var q: (string, string, [string], [string]) = ("ab", "cd", ["a"], ["b"])
+    call grow(mut q.0, ref q.1)
+    call push2(mut q.2, mut q.3)
+    let n: (index, index) = len_then(ref q.0, bump(mut q.3))
+    ret (q.0@, q.1@, q.2@, q.3@, n)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.test
+
+----------
+scriptunit-expr
+----------
+
+test()

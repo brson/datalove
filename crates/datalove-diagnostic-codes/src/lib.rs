@@ -128,7 +128,8 @@ codes! {
         InconsistentBranchMove = 8,
         /// Writing fields of an `out` parameter one at a time.
         OutParamPartialWrite = 9,
-        /// Two arguments share a place root, one of them `mut` or `out` and the
+        /// Two arguments overlap (one variable, the fields of one beginning the
+        /// other's, up to any index), one of them `mut` or `out` and the
         /// other not a copy given to an `in` parameter, or a `ref` one followed
         /// by one given away to an `in` parameter.
         AliasedMutableArgument = 10,

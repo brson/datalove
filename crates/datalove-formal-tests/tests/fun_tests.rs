@@ -1058,7 +1058,7 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
 
 /// Callees that write their `mut` parameter and then read another, called
 /// with one variable, or a part of one, given to both, and with parts of one
-/// variable given to each, at a copy type picked by `rng`: what the callee
+/// variable given to each, sibling fields written together among them, at a copy type picked by `rng`: what the callee
 /// reads is whether an `in` argument was read before the call, as the model
 /// reads it, or through a pointer to what it writes.
 fn shaped_calls(rng: &mut SeededRng) -> String {
@@ -1079,6 +1079,10 @@ fn shaped_calls(rng: &mut SeededRng) -> String {
     out += &fmt!("var wsp: ({t}, {t}) = ({c}, {b})\n");
     out += &fmt!("debuglog wsa(mut wsp.1, wsp.1)\ndebuglog wsp\n");
     out += &fmt!("var wsw: {t} = {c}\ndebuglog wsc(mut wsp.0, mut wsw)\ndebuglog (wsp, wsw)\n");
+    // Sibling fields are distinct places: one written beside another, and
+    // one held by an earlier argument while a later one writes the other.
+    out += &fmt!("set wsp = ({b}, {c})\ndebuglog wsc(mut wsp.0, mut wsp.1)\ndebuglog wsp\n");
+    out += &fmt!("set wsp = ({c}, {b})\ndebuglog wsa(mut wsp.1, wsb(wsp.0, mut wsp.0))\ndebuglog wsp\n");
     out
 }
 

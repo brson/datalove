@@ -1,0 +1,10 @@
+// A field passed `ref` inside a value passed `mut` to the same call is the
+// same place, in part: the callee would read what it writes (O010). Sibling
+// fields, `f(mut r.1, ref r.0)`, are distinct places, and fine.
+
+fun f(mut a: (u8, u8), ref b: u8)
+  set a = (b, b)
+end fun
+
+var r: (u8, (u8, u8)) = (: u8 / 1, (: u8 / 2, : u8 / 3))
+call f(mut r.1, ref r.1.0)

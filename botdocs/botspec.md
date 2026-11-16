@@ -2445,9 +2445,29 @@ F072 whatever the call, so it is written `xs[0]!@`, a clone that is no
 longer `xs`.
 
 Generic values (`T`) count as not a copy, which is safe but refuses more.
-Arguments are compared by the variable their place starts at. Distinct
-fields (`f(mut p.x, ref p.y)`) and distinct indexes (`f(mut a[i]?,
-ref a[j]?)`) are refused, even where they do not overlap in fact.
+
+Two arguments name the same place, in part, where they start from one
+variable and the fields of one begin the other's. A place is told apart
+only up to its first index, which may reach any element:
+
+| Arguments | Same place? |
+|---|---|
+| `p.x` and `p.y`, `p.0` and `p.1` | no: distinct fields |
+| `p.xs[i]!` and `p.y` | no: they part at a field |
+| `p.x` and `p.x.a` | yes: one holds the other |
+| `xs[i]!` and `xs[j]!`, even `xs[0]!` and `xs[1]!` | yes: elements are not told apart |
+
+```datalove
+call update(mut s.pos, ref s.vel)      // ok: distinct fields
+call swap(mut p.0, mut p.1)            // ok
+call f(mut r.1, ref r.1.0)             // error (O010): r.1 holds r.1.0
+call f(mut xs[0]!, ref xs[1]!)         // error (O010): one list's elements
+```
+
+As in Rust, distinct indexes are refused: whether `i` and `j` differ is not
+known, and a callee that grows the list moves every element. O017 tells
+places apart the same way, so `first(ref p.0, set9(mut p.1))` is fine and
+`first(ref r.1.0, reset(mut r.1))` is not.
 
 #### Operands across an expression (O017)
 

@@ -1,0 +1,15 @@
+// A field an earlier argument reads by reference may not be changed by a
+// later argument through what holds it (O017). A later argument changing a
+// sibling field is fine.
+
+fun first(ref a: u8, b: u8): u8
+  ret a
+end fun
+
+fun reset(mut p: (u8, u8)): u8
+  set p = (: u8 / 0, : u8 / 0)
+  ret : u8 / 0
+end fun
+
+var r: (u8, (u8, u8)) = (: u8 / 1, (: u8 / 2, : u8 / 3))
+debuglog first(ref r.1.0, reset(mut r.1))
