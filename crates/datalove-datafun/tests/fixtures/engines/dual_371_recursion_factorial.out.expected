@@ -30,32 +30,33 @@ Analysis(
                         v3 = ok v2
                         return v3
                     block2:
-                        v4 = const 1u32
-                        v5, v6 = sub.checked p0, v4
-                        branch v6, block3, block4
+                        v4 = copy p0
+                        v5 = const 1u32
+                        v6, v7 = sub.checked p0, v5
+                        branch v7, block3, block4
                     block3:
-                        v7 = const "arithmetic overflow"
-                        v8 = error_from v7
-                        v9 = err v8
-                        return v9
+                        v8 = const "arithmetic overflow"
+                        v9 = error_from v8
+                        v10 = err v9
+                        return v10
                     block4:
-                        v10 = call u0(v5)
-                        v11, v12, v13 = unwrap_result v10
-                        branch v13, block6, block5
+                        v11 = call u0(v6)
+                        v12, v13, v14 = unwrap_result v11
+                        branch v14, block6, block5
                     block5:
-                        v14 = err v12
-                        return v14
+                        v15 = err v13
+                        return v15
                     block6:
-                        v15, v16 = mul.checked p0, v11
-                        branch v16, block7, block8
+                        v16, v17 = mul.checked v4, v12
+                        branch v17, block7, block8
                     block7:
-                        v17 = const "arithmetic overflow"
-                        v18 = error_from v17
-                        v19 = err v18
-                        return v19
-                    block8:
-                        v20 = ok v15
+                        v18 = const "arithmetic overflow"
+                        v19 = error_from v18
+                        v20 = err v19
                         return v20
+                    block8:
+                        v21 = ok v16
+                        return v21
                 """,
             ),
             output: "(fragment executed)",

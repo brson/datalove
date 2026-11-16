@@ -938,6 +938,12 @@ pub struct DropSchedule {
     /// first; a tracked one asks its tracking byte.
     pub set_over_moved: std::collections::BTreeSet<usize>,
 
+    /// The copy `in` arguments, by expression index, whose variable the same
+    /// call also passes `mut` or `out`. O010 admits them on lowering reading
+    /// each into a value of its own before the call, so the callee does not
+    /// see what it writes through the other parameter.
+    pub copied_in_args: std::collections::BTreeSet<u32>,
+
     /// Drops to emit where control runs off the end of a function body.
     ///
     /// A `ret` schedules its own drops against its statement index, but a body

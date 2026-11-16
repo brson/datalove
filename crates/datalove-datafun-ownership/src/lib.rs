@@ -1085,9 +1085,20 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // A copy given to an `in` parameter is read before the call,
                 // into a value of its own, so the callee writing the other
                 // argument cannot change it.
-                let copied_in = (modes.0 == Some(ParamMode::In) && self.expr_type(*earlier).is_copy())
-                    || (modes.1 == Some(ParamMode::In) && self.expr_type(*later).is_copy());
-                if copied_in || (!is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) && !ref_then_moved) {
+                let copied_in = if modes.0 == Some(ParamMode::In) && self.expr_type(*earlier).is_copy() {
+                    Some(earlier)
+                } else if modes.1 == Some(ParamMode::In) && self.expr_type(*later).is_copy() {
+                    Some(later)
+                } else {
+                    None
+                };
+                if let Some(arg) = copied_in {
+                    if is_borrow_conflict(modes.0) || is_borrow_conflict(modes.1) {
+                        self.schedule.copied_in_args.insert(arg.key().local_index);
+                    }
+                    continue;
+                }
+                if !is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) && !ref_then_moved {
                     continue;
                 }
                 let name = self.bindings[later_root.0 as usize].name.C();

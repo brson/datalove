@@ -168,17 +168,13 @@ fn lower_operand_here<'db>(
     }
 }
 
-/// The variable a place names, through any hints: what the ownership
-/// analysis compares arguments by.
-fn place_root_name<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<&'db str> {
-    match peel_hints(ctx, expr).kind() {
-        ExprFunKind::Place(place) => Some(place.root.text(ctx.db).as_ref()),
-        _ => None,
-    }
-}
-
-/// Whether evaluating `expr` may write to a variable: whether it holds a call
-/// with a `mut` or `out` argument, which writes back to it.
+/// Whether evaluating `expr` may write to a variable: whether it holds a call.
+///
+/// Only a call with a `mut` or `out` argument writes back today, but every
+/// call is counted, so that a way of writing a caller's variable that is not
+/// marked at the call (a method's `mut self`, a closure's capture) cannot
+/// leave an operand before it read late. The cost is a `Copy` of a copy
+/// operand before a call that writes nothing.
 pub fn writes_back<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> bool {
     let any = |ids: &mut dyn Iterator<Item = ast::ExprId>| {
         for id in ids {
@@ -189,10 +185,7 @@ pub fn writes_back<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> bool {
         false
     };
     match expr.kind() {
-        ExprFunKind::FunctionCall(call) => {
-            call.arg_modes.iter().any(|m| matches!(m, Some(ParamMode::Mut | ParamMode::Out)))
-                || any(&mut call.args.iter().copied())
-        }
+        ExprFunKind::FunctionCall(_) => true,
         ExprFunKind::IntrinsicCall(icall) => any(&mut icall.args.iter().copied()),
         ExprFunKind::BinOp(binop) => any(&mut [binop.lhs, binop.rhs].into_iter()),
         ExprFunKind::UnaryOp(unary) => writes_back(ctx, ctx.expr(unary.operand)),
@@ -724,16 +717,11 @@ fn lower_expression_here<'db>(
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
                 // A copy `in` argument is read now if a later argument may
                 // write back to its variable, or if the callee is handed that
-                // variable `mut` or `out` too: passed by pointer, it would see
-                // what the callee writes.
+                // variable `mut` or `out` too, as the ownership analysis
+                // found admitting it (`copied_in_args`): passed by pointer,
+                // it would see what the callee writes.
                 let later_writes = call_args[i + 1..].iter().any(|a| writes_back(ctx, expr.at(*a)))
-                    || (mode == ParamMode::In && place_root_name(ctx, expr.at(*arg)).is_some_and(|root| {
-                        call_args.iter().enumerate().any(|(k, other)| {
-                            k != i
-                                && matches!(param_modes.get(k), Some(ParamMode::Mut | ParamMode::Out))
-                                && place_root_name(ctx, expr.at(*other)) == Some(root)
-                        })
-                    }));
+                    || ctx.body.drop_schedule.copied_in_args.contains(&expr.at(*arg).key().local_index);
                 let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i), &mut out_drops, later_writes)?;
                 // Track in-mode args as pending intermediate, a binding handed
                 // over as well as a value: a later argument's `?` returns

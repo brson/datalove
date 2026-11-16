@@ -135,52 +135,53 @@ Analysis(
                         v8, v9 = unwrap_option v7
                         branch v9, block5, block10
                     block5:
-                        v10 = getfield v8.1
-                        v11 = getfieldref v8.0
-                        v12 = clone *v11
-                        v13 = call m0.u2(v12)
-                        v14, v15 = mul.checked v10, v13
-                        branch v15, block6, block7
+                        v10 = copy s1
+                        v11 = getfield v8.1
+                        v12 = getfieldref v8.0
+                        v13 = clone *v12
+                        v14 = call m0.u2(v13)
+                        v15, v16 = mul.checked v11, v14
+                        branch v16, block6, block7
                     block6:
-                        v16 = const "arithmetic overflow"
-                        v17 = error_from v16
-                        v18 = err v17
+                        v17 = const "arithmetic overflow"
+                        v18 = error_from v17
+                        v19 = err v18
                         drop v8
-                        return v18
+                        return v19
                     block7:
-                        v19, v20 = add.checked s1, v14
-                        branch v20, block8, block9
+                        v20, v21 = add.checked v10, v15
+                        branch v21, block8, block9
                     block8:
-                        v21 = const "arithmetic overflow"
-                        v22 = error_from v21
-                        v23 = err v22
+                        v22 = const "arithmetic overflow"
+                        v23 = error_from v22
+                        v24 = err v23
                         drop v8
-                        return v23
+                        return v24
                     block9:
-                        store.copy s1, v19
+                        store.copy s1, v20
                         drop v8
                         goto block11
                     block10:
                         goto block11
                     block11:
-                        v24 = const 1index
-                        v25, v26 = add.checked s2, v24
-                        branch v26, block12, block13
+                        v25 = const 1index
+                        v26, v27 = add.checked s2, v25
+                        branch v27, block12, block13
                     block12:
-                        v27 = const "arithmetic overflow"
-                        v28 = error_from v27
-                        v29 = err v28
-                        return v29
+                        v28 = const "arithmetic overflow"
+                        v29 = error_from v28
+                        v30 = err v29
+                        return v30
                     block13:
-                        store.copy s2, v25
+                        store.copy s2, v26
                         goto block1
                     block14:
-                        v30 = load.copy s0
-                        v31 = load.copy s1
-                        v32 = const 0.25f64
-                        v33 = pack tuple/3 {v30, v31, v32}
-                        v34 = ok v33
-                        return v34
+                        v31 = load.copy s0
+                        v32 = load.copy s1
+                        v33 = const 0.25f64
+                        v34 = pack tuple/3 {v31, v32, v33}
+                        v35 = ok v34
+                        return v35
                     
                     fn first_sku():
                     block0:
