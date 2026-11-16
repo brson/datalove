@@ -122,7 +122,7 @@ _Collections_
 | Name   | Type                             | Literal                          |
 |--------|----------------------------------|----------------------------------|
 | list   | `[T]`                            | `[1, 2, 3]`                      |
-| map    | `%{ K = V }`                     | `%{ 0 = 5, 1 = 2 }`              |
+| map    | `%{ K -> V }`                    | `%{ 0 -> 5, 1 -> 2 }`            |
 | set    | `#{ K }`                         | `#{ 1, 2, 3 }`                   |
 | table  | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` |
 | tensor | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           |
@@ -726,7 +726,7 @@ and copying one is an explicit clone with `@`.
 
 ```datalove
 let xs = [10, 20, 30]
-let ages = %{ "ada" = 36, "alan" = 41 }
+let ages = %{ "ada" -> 36, "alan" -> 41 }
 let primes = #{ 7, 2, 5, 3, 2 }
 let grid = [| 1 2 3, 4 5 6 |]
 let points = {| x, y; 1, 2; 3, 4 |}
@@ -748,7 +748,7 @@ so it needs a type annotation.
 
 ```datalove
 let names: [string] = []
-let scores: %{string = u32} = %{}
+let scores: %{string -> u32} = %{}
 let seen: #{u64} = #{}
 
 debuglog (names, scores, seen)
@@ -804,11 +804,11 @@ fun second(xs: [u32]): ?u32
   ret some (xs[1]?)
 end fun
 
-fun age_of(ages: %{string = u32}, name: string): !u32
+fun age_of(ages: %{string -> u32}, name: string): !u32
   ret ok (ages[name]!)
 end fun
 
-let ages: %{string = u32} = %{ "ada" = 36, "alan" = 41 }
+let ages: %{string -> u32} = %{ "ada" -> 36, "alan" -> 41 }
 
 debuglog (second([5, 6, 7]), second([5]))
 debuglog (age_of(ages@, "ada"), age_of(ages, "grace"))
@@ -865,7 +865,7 @@ A list has no bare form, since its elements must exist to be overwritten.
 var xs = [1, 2, 3]
 set xs[0]! = 10
 
-var ages = %{ "ada" = 36 }
+var ages = %{ "ada" -> 36 }
 // Update an existing key, failing if it is absent.
 set ages["ada"]! = 37
 // Insert or overwrite.
@@ -886,7 +886,7 @@ require module sys/std/set
 var xs = [1, 2]
 call list.push(mut xs, 3)
 
-var ages = %{ "ada" = 36 }
+var ages = %{ "ada" -> 36 }
 call map.insert(mut ages, "alan", 41)
 let who = "ada"
 
@@ -1650,7 +1650,7 @@ There are three bounds.
   [Comparison and equality](#user-content-comparison-and-equality),
   through the functions in `sys/std/ord`,
   as in the `largest` example there.
-  A set or map over a type parameter, `#{T}` or `%{T = V}`,
+  A set or map over a type parameter, `#{T}` or `%{T -> V}`,
   keeps its elements in order, so it requires `T is ord`.
   The other two bounds imply `ord`.
 - `float` admits `f32` and `f64`.

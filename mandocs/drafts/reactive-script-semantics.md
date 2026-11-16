@@ -152,16 +152,16 @@ fun category(ref payee: string): string
 end fun
 
 // unit 4
-let budget: %{string = int} = %{
-  "groceries" = 25000,
-  "dining" = 15000,
-  "car" = 10000,
-  "bills" = 15000,
-  "other" = 5000
+let budget: %{string -> int} = %{
+  "groceries" -> 25000,
+  "dining" -> 15000,
+  "car" -> 10000,
+  "bills" -> 15000,
+  "other" -> 5000
 }
 
 // unit 5
-var spent: %{string = int} = %{}
+var spent: %{string -> int} = %{}
 
 // unit 6
 for t in ref transactions
@@ -192,7 +192,7 @@ and `output` just produces a binding observable in the runtime environment.
 Let's just assume these are reasonable stand-ins for some future way to
 impose I/O on a script.
 
-> The `%{string = int}` type is a map from `string` to `int`.
+> The `%{string -> int}` type is a map from `string` to `int`.
 > The `!` sigil indicates sites of potential early-return errors,
 > here a missing key in the `budget` map, `budget[c]!`.
 > "Greater than" is spelled `.>` because Datalove
@@ -204,11 +204,11 @@ Run in order, the script units produce `output`:
 ```datalove
 {
   spent = %{
-    "bills" = 12753,
-    "car" = 4650,
-    "dining" = 13435,
-    "groceries" = 23819,
-    "other" = 3315
+    "bills" -> 12753,
+    "car" -> 4650,
+    "dining" -> 13435,
+    "groceries" -> 23819,
+    "other" -> 3315
   },
   over = []
 }
@@ -239,11 +239,11 @@ Rerun those and the output is:
 ```datalove
 {
   spent = %{
-    "bills" = 25506,
-    "car" = 9300,
-    "dining" = 26870,
-    "groceries" = 50953,
-    "other" = 3315
+    "bills" -> 25506,
+    "car" -> 9300,
+    "dining" -> 26870,
+    "groceries" -> 50953,
+    "other" -> 3315
   },
   over = ["bills", "dining", "groceries"]
 }
@@ -260,10 +260,10 @@ A fresh run gives:
 ```datalove
 {
   spent = %{
-    "bills" = 12753,
-    "car" = 4650,
-    "dining" = 13435,
-    "groceries" = 27134
+    "bills" -> 12753,
+    "car" -> 4650,
+    "dining" -> 13435,
+    "groceries" -> 27134
   },
   over = ["groceries"]
 }

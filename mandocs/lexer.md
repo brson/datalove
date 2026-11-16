@@ -57,7 +57,7 @@ The set includes:
   the optional variants `+? -? *? /?`,
   and the checked variants `+! -! *! /!`.
 - Comparison: `.< .> <= >= == !=`.
-- Punctuation: `. , ; : = | ? ! @`.
+- Punctuation: `. , ; : = -> | ? ! @`.
 
 Characters that are neither whitespace, word characters, nor the start of a sigil
 are lexed as errors.
@@ -92,7 +92,8 @@ The map and set openers `%{` and `#{` close with a plain `}`.
 Braces are matched before parsing,
 so the parser sees a tree in which every brace pair is a branch.
 Because `<` and `>` are braces,
-"less than" and "greater than" are spelled `.<` and `.>`.
+"less than" and "greater than" are spelled `.<` and `.>`,
+and the `>` of the map arrow `->` is part of that one sigil, not a brace.
 
 An unmatched open or close brace is an error,
 but the bracer recovers by inserting the missing close or dropping the stray one,

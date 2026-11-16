@@ -8,6 +8,11 @@ and for destructuring syntax to look identical to literal syntax;
 and for all types to use sigils and braces that are both visually distinct
 but also evocative of other types that use the same sigils and braces.
 
+`:` and `=` follow names: a struct field's type follows `:`,
+and its value follows `=`.
+Everything else is punctuated the same in a type as in its literal,
+including the `->` between a map's keys and values.
+
 Curly braces `{ }` are for structish types,
 square braces `[ ]` are for arrayish types, etc.
 
@@ -39,7 +44,7 @@ Fixed-width integers and `f32` require a type hint or checking context.
 | Type                             | Literal                          | Destructuring                    |
 |----------------------------------|----------------------------------|----------------------------------|
 | `[T]`                            | `[1, 2, 3]`                      | n/a                              |
-| `%{ K = V }`                     | `%{ 0 = 5, 1 = 2 }`              | n/a                              |
+| `%{ K -> V }`                    | `%{ 0 -> 5, 1 -> 2 }`            | n/a                              |
 | `#{ K }`                         | `#{ 1, 2, 3 }`                   | n/a                              |
 | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` | n/a                              |
 | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           | n/a                              |
@@ -49,7 +54,7 @@ Fixed-width integers and `f32` require a type hint or checking context.
 let a: [int] = [1, 2, 3]
 
 // Maps
-let a: %{int=int} = %{ 0 = 5, 1 = 2 }
+let a: %{int -> int} = %{ 0 -> 5, 1 -> 2 }
 
 // Sets
 let a: #{int} = #{ 1, 2, 3 }

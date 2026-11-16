@@ -329,12 +329,12 @@ Operations are in `sys/std/list`.
 
 ## Maps and sets
 
-`%{K = V}` maps keys to values
+`%{K -> V}` maps keys to values
 and `#{T}` is a set of unique values.
 Both are ordered by key.
 
 ```datalove
-let m: %{string = u32} = %{ "a" = 1, "b" = 2 }
+let m: %{string -> u32} = %{ "a" -> 1, "b" -> 2 }
 let s: #{int} = #{ 3, 1, 2 }
 ```
 

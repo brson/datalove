@@ -52,7 +52,7 @@ and syntax of Datalove in general.
   score = 99.5,
   flags = 0xFF,
   tags = ["fast", "typed", "portable"],
-  counts = %{ "a" = 1, "b" = 2, "c" = 3 },
+  counts = %{ "a" -> 1, "b" -> 2, "c" -> 3 },
   ids = #{ 10, 20, 30 },
   matrix = [| 1.0 0.0, 0.0 1.0 |],
   cube = [|
@@ -182,12 +182,12 @@ against an external type context.
   name: string,
   version: (u32, u32, u32),
   tag: (bool,),
-  counts: %{string = int},
+  counts: %{string -> int},
 } / {
   name = "datalove",
   version = (0, 1, 0),
   tag = (true,),
-  counts = %{ "a" = 1, "b" = 2, "c" = 3 },
+  counts = %{ "a" -> 1, "b" -> 2, "c" -> 3 },
 }
 ```
 
@@ -210,8 +210,11 @@ against an external type context.
 }
 ```
 
-Types are generally spelled the same way as their values,
-but with the type sigil, `:`, replaced with the value-assignment sigil, `=`.
+Types are generally spelled the same way as their values.
+Where a name is followed by a type, as a struct field's is,
+the value puts the value-assignment sigil, `=`, in place of the type sigil, `:`.
+Where there is no name, nothing changes:
+`[T]` and `[e]`, `(T, U)` and `(e, f)`, `%{K -> V}` and `%{k -> v}`.
 
 ```datalove
 : {
@@ -439,7 +442,7 @@ A numeric literal contains no whitespace or comments.
 | Name   | Type                             | Literal                          |
 |--------|----------------------------------|----------------------------------|
 | list   | `[T]`                            | `[1, 2, 3]`                      |
-| map    | `%{ K = V }`                     | `%{ 0 = 5, 1 = 2 }`              |
+| map    | `%{ K -> V }`                    | `%{ 0 -> 5, 1 -> 2 }`            |
 | set    | `#{ K }`                         | `#{ 1, 2, 3 }`                   |
 | table  | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` |
 | tensor | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           |
@@ -479,13 +482,15 @@ and `[: u8 / 1, : u16 / 2]` is an error.
 A key-value mapping, ordered by key.
 
 ```datalove
-%{ "a" = 1, "b" = 2 }          // %{string = int}
-: %{u32 = string} / %{ 1 = "x", 2 = "y" }
-: %{string = u32} / %{}        // empty map
+%{ "a" -> 1, "b" -> 2 }          // %{string -> int}
+: %{u32 -> string} / %{ 1 -> "x", 2 -> "y" }
+: %{string -> u32} / %{}        // empty map
 ```
 
-Entries use `=` to separate keys from values,
-same as struct field assignment.
+Entries use `->` to separate keys from values,
+the same in the type as in the value.
+A key is a value rather than a name,
+so a map takes neither of the name sigils, `:` and `=`, that a struct does.
 All keys must have the same type,
 and all values must have the same type.
 Any type may be a key.
@@ -493,7 +498,7 @@ Any type may be a key.
 A map's entries are kept in the [total ordering](#user-content-comparison-and-total-ordering)
 of their keys,
 not in the order they were written:
-`%{ 2 = 0, 1 = 0 }` and `%{ 1 = 0, 2 = 0 }` are the same map.
+`%{ 2 -> 0, 1 -> 0 }` and `%{ 1 -> 0, 2 -> 0 }` are the same map.
 A key written more than once keeps the last value written for it.
 
 
@@ -648,7 +653,7 @@ its rank is its shape's, hint or not.
 
 ```ebnf
 list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
-map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;
+map_type       = "%{", ws, type, ws, "->", ws, type, [ ws, "," ], ws, "}" ;
 set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
 table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
 tensor_type    = "[|", ws, type, ws, ",", ws, rank, [ ws, "," ], ws, "|]" ;
@@ -667,7 +672,7 @@ extent         = digit_run ;
 
 expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
-entry          = full_expr, ws, "=", ws, full_expr ;
+entry          = full_expr, ws, "->", ws, full_expr ;
 
 table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ] ;
 table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;

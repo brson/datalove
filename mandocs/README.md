@@ -98,8 +98,8 @@ strings, lists, maps and sets.
   tags = #{ "utopia", "anarchism", "physics" },
   status = atom InPrint,
   translations = %{
-    "fr" = "Les Dépossédés",
-    "de" = "Planet der Habenichtse"
+    "fr" -> "Les Dépossédés",
+    "de" -> "Planet der Habenichtse"
   },
   on_loan = false,
 }
