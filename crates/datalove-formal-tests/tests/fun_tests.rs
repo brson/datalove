@@ -220,6 +220,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     }
     let i = rng.random_range(0..lines.len());
     let line = lines[i].C();
+    let original = line.C();
     let indent: String = line.chars().take_while(|c| *c == ' ').collect();
     let is_alias = line.trim_start().starts_with("type ");
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
@@ -264,12 +265,16 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             Some(p) => fmt!("{} {}", &line[..p + 2].trim_end(), pick(rng, VALUES)),
             None => line,
         },
-        // An operator swapped.
+        // An operator swapped, not a hint's `/`.
         2 => {
             let to = pick(rng, OPS);
-            match [" + ", " - ", " * ", " / ", " +! ", " -! ", " *! ", " /! ", " +? ", " -? ", " *? ", " /? ", " == ", " .< "]
-                .iter().find(|op| line.contains(*op)) {
-                Some(op) => line.replacen(op, &fmt!(" {to} "), 1),
+            let found = [" + ", " - ", " * ", " / ", " +! ", " -! ", " *! ", " /! ", " +? ", " -? ", " *? ", " /? ", " == ", " .< "]
+                .iter()
+                .flat_map(|op| line.match_indices(*op))
+                .filter(|(p, op)| *op != " / " || !ends_in_hint(&line[..*p]))
+                .min_by_key(|(p, _)| *p);
+            match found {
+                Some((p, op)) => fmt!("{} {to} {}", &line[..p], &line[p + op.len()..]),
                 None => line,
             }
         }
@@ -280,8 +285,8 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             line
         },
         // A name made one nothing binds.
-        4 => match line.find(" v").or_else(|| line.find(" p")) {
-            Some(p) => fmt!("{} zz{}", &line[..p], &line[p + 1..]),
+        4 => match rmx::regex::Regex::new(r"\b[vp][0-9]").X().find(&line) {
+            Some(m) => fmt!("{}zz{}", &line[..m.start()], &line[m.start()..]),
             None => line,
         },
         // A `ret` dropped.
@@ -326,9 +331,10 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             let names = pick(rng, &["w", "i, w", "k, w"]);
             fmt!("{line}\n{indent}for {names} in ref {}\n{indent}  debuglog w\n{indent}  let z: u8 = w\n{indent}end for", name(rng))
         }
-        // A step into something in scope, read moved or borrowed.
+        // A step into something in scope, read moved or borrowed. A literal
+        // is put in parentheses, since `1.a` lexes as a float.
         15 => {
-            let (a, st) = (name(rng), step(rng));
+            let (a, st) = (fmt!("({})", name(rng)), step(rng));
             match rng.random_range(0..4) {
                 0 => fmt!("{line}\n{indent}debuglog {a}{st}"),
                 1 => fmt!("{line}\n{indent}let w = {a}{st}@"),
@@ -336,9 +342,10 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
                 _ => fmt!("{line}\n{indent}let w = {a}{st}"),
             }
         }
-        // A `set` through a place, plain or compound.
+        // A `set` through a place, plain or compound. A place's root is a
+        // variable, so no literal is set.
         16 => {
-            let (a, st) = (name(rng), step(rng));
+            let (a, st) = (pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2"]), step(rng));
             let op = pick(rng, &["", "", "+", "+!", "*?"]);
             fmt!("{line}\n{indent}set {a}{st} {op}= {}", pick(rng, VALUES))
         }
@@ -373,8 +380,11 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
                         .map(|b| line.replacen(&fmt!(" is {b},"), &fmt!(" is {bound},"), 1))
                         .unwrap_or(line),
                 }
-            } else if line.starts_with("fun gen") {
-                fmt!("{line} where {{ {} is {bound}, }}", pick(rng, &["T", "K", "V"]))
+            } else if let Some(tps) = line.strip_prefix("fun gen").and_then(|l| Some(&l[l.find('<')? + 1..l.find('>')?])) {
+                // A bound on one of the generic's own type parameters: one on
+                // another is a parse error.
+                let tps: Vec<&str> = tps.split(", ").collect();
+                fmt!("{line} where {{ {} is {bound}, }}", pick(rng, &tps))
             } else {
                 let (a, b) = (pick(rng, &["x", "a", "b", "k", "v"]), pick(rng, &["x", "a", "b", "k", "v"]));
                 let stmt = match rng.random_range(0..8) {
@@ -411,8 +421,37 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
         // A literal at a range's edge, negated.
         _ => fmt!("{line}\n{indent}let w: {} = -{}", pick(rng, &["i8", "u8", "i16", "f32", "int"]), pick(rng, &["5", "128", "129", "300", "1.5"])),
     };
+    // What is added after a `match` would come between it and its first
+    // case, which does not parse: it goes before the `match` instead.
+    let changed = match changed.strip_prefix(&fmt!("{original}\n")) {
+        Some(added) if original.trim_start().starts_with("match ") => fmt!("{added}\n{original}"),
+        _ => changed,
+    };
     lines[i] = changed;
     lines.join("\n") + "\n"
+}
+
+/// Whether `before` ends in a hint's type, so that a ` / ` after it is the
+/// hint's: going back over a type's brackets and words, a `:` that does not
+/// follow a name, as a binding's or a field's does.
+fn ends_in_hint(before: &str) -> bool {
+    let bytes = before.as_bytes();
+    let mut depth = 0;
+    for i in (0..bytes.len()).rev() {
+        match bytes[i] {
+            b')' | b']' | b'}' => depth += 1,
+            b'(' | b'[' | b'{' if depth == 0 => return false,
+            b'(' | b'[' | b'{' => depth -= 1,
+            b':' if depth == 0 => {
+                return i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            }
+            _ if depth > 0 => {}
+            b' ' | b'?' | b'!' | b'#' | b'%' | b'_' => {}
+            c if c.is_ascii_alphanumeric() => {}
+            _ => return false,
+        }
+    }
+    false
 }
 
 /// A script with the hint dropped from each `let` and `var` that has a value:
@@ -451,25 +490,20 @@ fn drop_binding_hints(text: &str) -> String {
     out
 }
 
-/// Whether a script parses without a diagnostic.
-///
-/// A script that does not is not type checked: the CLI stops at its parse
-/// errors, and the type checker is not made to run on what they leave.
-fn parses(text: &str) -> bool {
-    let db = &datalove_datafun_compiler::Database::default();
-    let source = bct::input::Source::new(db, text.S());
-    datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, source).is_empty()
-}
-
 /// The codes of a script's type diagnostics, in order, its serde AST, and the
-/// types it gives its bindings, as `init_types` lists them. `None` where the
-/// script does not parse.
-fn rust_side(text: &str) -> Option<(Vec<String>, Value, Vec<Value>)> {
-    if !parses(text) {
-        return None;
-    }
+/// types it gives its bindings, as `init_types` lists them.
+///
+/// Every script the tests make parses, the mutations included: one that does
+/// not is a failure, of the test, rather than something to type check, as the
+/// CLI does not, or to skip, which would hide a change of syntax the
+/// generators have not followed.
+fn rust_side(text: &str) -> (Vec<String>, Value, Vec<Value>) {
     let db = &datalove_datafun_compiler::Database::default();
     let source = bct::input::Source::new(db, text.S());
+    let errors = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, source);
+    if let Some(e) = errors.first() {
+        panic!("a script the tests made does not parse: {}\n{text}", e.to_diagnostic(db).message.as_str(db));
+    }
     let parsed = datalove_datafun_parser::parse_for_diagnostics(db, source);
     let script = datalove_datafun_ast::ast_serde::Script::from_ast(db, parsed.C());
     let (unit, env) = datalove_datafun_tycheck::single_fragment_script(db, source);
@@ -484,7 +518,7 @@ fn rust_side(text: &str) -> Option<(Vec<String>, Value, Vec<Value>)> {
         let body = parsed.top.body(db);
         init_types(db, &|e| types.get(e).cloned(), &body.arena, &body.statements, &mut inits);
     }
-    Some((codes, rmx::serde_json::to_value(&script).X(), inits))
+    (codes, rmx::serde_json::to_value(&script).X(), inits)
 }
 
 /// The types the Rust gives each `let`, `var` and `const` with a value and no
@@ -580,7 +614,6 @@ fn world_typing_agrees() {
     config.module_count = (1, 3);
     config.qualified_calls = true;
     let mut cases: Vec<(String, Vec<(String, String)>)> = Vec::new();
-    let mut unparsed = 0;
     for world in WORLD_CORPUS {
         cases.push(("corpus".S(), world.iter().map(|(p, t)| (p.S(), t.S())).collect()));
     }
@@ -595,17 +628,13 @@ fn world_typing_agrees() {
             let m = rng.random_range(0..modules.len());
             modules[m].1 = mutate(&mut rng, &modules[m].1);
         }
-        if modules.iter().all(|(_, text)| parses(text)) {
-            cases.push((fmt!("seed {seed}"), modules));
-        } else {
-            unparsed += 1;
-        }
+        cases.push((fmt!("seed {seed}"), modules));
     }
     let mut queries = Vec::new();
     let mut rust = Vec::new();
     for (_, modules) in &cases {
         let world: Vec<_> = modules.iter()
-            .map(|(path, text)| json!({ "path": path, "script": rust_side(text).X().1 }))
+            .map(|(path, text)| json!({ "path": path, "script": rust_side(text).1 }))
             .collect();
         queries.push(json!({ "world": world }));
         rust.push(rust_world_side(modules));
@@ -634,7 +663,7 @@ fn world_typing_agrees() {
         }
     }
     println!(
-        "{} worlds over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}; {unparsed} not parsed",
+        "{} worlds over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(10) {
@@ -690,17 +719,10 @@ fn statement_typing_agrees() {
         cases.push((fmt!("seed {seed}, unhinted"), drop_binding_hints(&generated)));
     }
 
-    let mut unparsed = 0;
-    cases.retain(|(what, text)| {
-        let ok = parses(text);
-        assert!(ok || what != "corpus", "a corpus script does not parse:\n{text}");
-        unparsed += usize::from(!ok);
-        ok
-    });
     let mut queries = Vec::new();
     let mut rust = Vec::new();
     for (_, text) in &cases {
-        let (codes, script, inits) = rust_side(text).X();
+        let (codes, script, inits) = rust_side(text);
         queries.push(json!({ "fun": script }));
         rust.push((codes, inits));
     }
@@ -747,7 +769,7 @@ fn statement_typing_agrees() {
         }
     }
     println!(
-        "{} scripts over seeds {}..{}: {agreed} agree, {} differ, {typed} binding types compared; skipped {skipped:?}, {unparsed} not parsed; codes {outcomes:?}",
+        "{} scripts over seeds {}..{}: {agreed} agree, {} differ, {typed} binding types compared; skipped {skipped:?}; codes {outcomes:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(15) {
@@ -830,8 +852,8 @@ fn instances_check() {
             mutated = mutate(&mut rng, &mutated);
         }
         for text in [base, mutated] {
-            // Clean: it parses, with no type diagnostic.
-            let Some((codes, _, _)) = rust_side(&text) else { continue };
+            // Clean: no type diagnostic.
+            let (codes, _, _) = rust_side(&text);
             if !codes.is_empty() {
                 continue;
             }
@@ -843,10 +865,8 @@ fn instances_check() {
 
     let mut queries = Vec::new();
     let mut rust = Vec::new();
-    for (seed, text) in &cases {
-        let Some((codes, script, _)) = rust_side(text) else {
-            panic!("seed {seed}: an instance of a script that parses does not:\n{text}");
-        };
+    for (_, text) in &cases {
+        let (codes, script, _) = rust_side(text);
         queries.push(json!({ "fun": script }));
         rust.push(codes);
     }
@@ -881,10 +901,7 @@ fn instances_check() {
 #[test]
 fn ast_of() {
     let Ok(path) = std::env::var("FORMAL_FUN_AST_OF") else { return };
-    let Some((codes, script, _)) = rust_side(&std::fs::read_to_string(path).X()) else {
-        println!("it does not parse");
-        return;
-    };
+    let (codes, script, _) = rust_side(&std::fs::read_to_string(path).X());
     println!("{}", rmx::serde_json::to_string_pretty(&script).X());
     println!("rust:  {codes:?}");
     if oracle_path().exists() {
@@ -1204,9 +1221,8 @@ fn runs_agree() {
     config.debuglog_probability = 0;
     config.param_mode_probability = 30;
     let mut cases = Vec::new();
-    let mut unparsed = 0;
     for text in RUN_CORPUS {
-        let (codes, script, _) = rust_side(text).unwrap_or_else(|| panic!("a run corpus script does not parse:\n{text}"));
+        let (codes, script, _) = rust_side(text);
         assert!(codes.is_empty(), "a run corpus script does not check: {codes:?}\n{text}");
         cases.push(("corpus".S(), text.S(), script));
     }
@@ -1232,10 +1248,9 @@ fn runs_agree() {
                 continue;
             }
             let text = fmt!("{}\n{drive}", text.trim_end());
-            match rust_side(&text) {
-                Some((codes, script, _)) if codes.is_empty() => cases.push((fmt!("seed {seed}{kind}"), text, script)),
-                Some(_) => {}
-                None => unparsed += 1,
+            let (codes, script, _) = rust_side(&text);
+            if codes.is_empty() {
+                cases.push((fmt!("seed {seed}{kind}"), text, script));
             }
         }
     }
@@ -1286,7 +1301,7 @@ fn runs_agree() {
         }
     }
     println!(
-        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; {writing} writing back through a call; {unparsed} not parsed; ends {ends:?}",
+        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; {writing} writing back through a call; ends {ends:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(10) {
@@ -1294,3 +1309,4 @@ fn runs_agree() {
     }
     assert!(mismatches.is_empty(), "the Rust and the model run {} scripts differently", mismatches.len());
 }
+

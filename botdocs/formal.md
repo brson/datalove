@@ -717,10 +717,19 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
   calling them qualified, changes a module at a time as the scripts are,
   checks them through the Rust's module graph, and holds each module's codes
   to `checkWorld`'s. A diagnostic is the module's whose source its first
-  label points into. Over five thousand seeds 3367 worlds agree and none
-  differ; the rest are skipped, for parse errors, for a mutation that leaves
-  a statement at the top level, where the model takes only declarations,
-  or for one that leaves a require or import below a declaration.
+  label points into. Over five thousand seeds 3480 worlds agree and none
+  differ; the rest are skipped, for a mutation that leaves a statement at
+  the top level, where the model takes only declarations, or for one that
+  leaves a require or import below a declaration.
+- Every script `fun_tests` makes parses, mutated or not, and `rust_side`
+  fails the test on one that does not, before type checking it: the type
+  checker is not made to run on what a parse error leaves, which the CLI
+  never does, and a syntax change the generators have not followed fails
+  loudly rather than thinning the tests. The text mutations keep to what
+  parses: an operator swap passes over a hint's `/`, a `set` is through a
+  variable, a step from a literal parenthesizes it, a bound names one of the
+  generic's own type parameters, and a line added after a `match` goes
+  before it instead.
 - `law_tests` runs in `just test`. `FORMAL_LAWS_SEED`, `FORMAL_LAWS_COUNT` and
   `FORMAL_LAWS_SIZE` widen it. Size 8 takes a few seconds in release; size 10
   runs out of memory, and is also the smallest at which two distinct types
