@@ -221,6 +221,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
     let i = rng.random_range(0..lines.len());
     let line = lines[i].C();
     let indent: String = line.chars().take_while(|c| *c == ' ').collect();
+    let is_alias = line.trim_start().starts_with("type ");
     let pick = |rng: &mut SeededRng, from: &[&str]| from[rng.random_range(0..from.len())].S();
     let name = |rng: &mut SeededRng| pick(rng, &["p0", "p1", "p2", "v0", "v1", "v2", "1", "0x10", "1.5", "true"]);
     let step = |rng: &mut SeededRng| pick(rng, STEPS);
@@ -257,8 +258,9 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
                 None => line,
             }
         }
-        // What the line binds, sets or returns, replaced by a value.
-        1 => match line.find(" = ").or_else(|| line.find("ret ").map(|p| p + 1)) {
+        // What the line binds, sets or returns, replaced by a value. A type
+        // alias's `=` is followed by a type, not a value.
+        1 => match line.find(" = ").filter(|_| !is_alias).or_else(|| line.find("ret ").map(|p| p + 1)) {
             Some(p) => fmt!("{} {}", &line[..p + 2].trim_end(), pick(rng, VALUES)),
             None => line,
         },
@@ -272,7 +274,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             }
         }
         // `?`, `!` or `@` added to the end of a value.
-        3 => if line.contains(" = ") || line.trim_start().starts_with("ret ") {
+        3 => if (line.contains(" = ") && !is_alias) || line.trim_start().starts_with("ret ") {
             fmt!("{line}{}", pick(rng, &["?", "!", "@"]))
         } else {
             line
