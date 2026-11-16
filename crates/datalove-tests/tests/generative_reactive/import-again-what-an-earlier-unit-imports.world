@@ -2,13 +2,13 @@
 module local/gen/math_0
 ----------
 
-type Type0: i32
+type Type0 = i32
 
 const CONST0_0: u32 = : u32 / 239
 
-type Enum0_0: enum { term Enum0_0V0 f32, atom Enum0_0V1, term Enum0_0V2 u32 }
+type Enum0_0 = enum { term Enum0_0V0 f32, atom Enum0_0V1, term Enum0_0V2 u32 }
 
-type Enum0_1: enum { atom Enum0_1V0, term Enum0_1V1 string }
+type Enum0_1 = enum { atom Enum0_1V0, term Enum0_1V1 string }
 
 fun gen0_0<T>(a: T, b: T): T where { T is float, }
   ret a * b

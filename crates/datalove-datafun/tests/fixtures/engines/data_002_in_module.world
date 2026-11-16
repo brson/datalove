@@ -17,7 +17,7 @@ data local/shop/rates
 module local/shop/report
 ----------
 
-type Order: {sku: string, qty: u32, price: f64}
+type Order = {sku: string, qty: u32, price: f64}
 
 require data local/shop/orders: [Order]
 require data local/shop/rates: %{string -> u32}

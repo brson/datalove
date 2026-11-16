@@ -18,7 +18,7 @@ require module sys/std/u32
 
 const ITERATIONS: u32 = 8000
 
-type Tree: rec T [?T]
+type Tree = rec T [?T]
 
 // AWFY's Random: a 16-bit linear congruential generator.
 fun next_random(mut seed: u32): u32

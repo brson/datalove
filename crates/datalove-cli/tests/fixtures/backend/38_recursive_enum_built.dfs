@@ -4,7 +4,7 @@
 require module sys/std/list
 require module sys/std/map
 
-type Json: rec J enum { atom Null, term Num f64, term Arr [J], term Obj %{string -> J} }
+type Json = rec J enum { atom Null, term Num f64, term Arr [J], term Obj %{string -> J} }
 
 fun numbers(n: u32): Json
   var items: [Json] = []

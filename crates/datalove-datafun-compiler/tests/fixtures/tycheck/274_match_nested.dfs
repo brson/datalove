@@ -1,5 +1,5 @@
 // A match whose arm is another match, each over its own input.
-type Side: enum { atom Left, atom Right }
+type Side = enum { atom Left, atom Right }
 
 fun pick(a: Side, b: Side): u32
   match a

@@ -7,7 +7,7 @@ scriptunit-fragment
 // emitted tydesc, the generated code and the runtime must all agree on the
 // per-variant payload offsets. Logging the enum itself exercises the tydesc
 // path in the runtime; matching exercises the generated code.
-type Mixed: enum { term Small u8, term Big u64, atom None }
+type Mixed = enum { term Small u8, term Big u64, atom None }
 
 let a: Mixed = term Small 7
 debuglog a

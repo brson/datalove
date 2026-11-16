@@ -13,7 +13,7 @@
 //
 // An enum literal had the same gap, and is here for the same reason.
 
-type Tagged: enum { atom Empty, term Note string, term Count u32 }
+type Tagged = enum { atom Empty, term Note string, term Count u32 }
 
 // The plain case: a binding moved into a term.
 fun from_a_binding(): term Note string

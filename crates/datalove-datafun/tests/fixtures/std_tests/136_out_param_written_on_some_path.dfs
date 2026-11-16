@@ -43,7 +43,7 @@ fun writes_in_loop(out n: u32)
 end fun
 
 // Every arm of a match writes it.
-type Side: enum { atom Left, atom Right }
+type Side = enum { atom Left, atom Right }
 fun writes_in_match(out n: u32, s: Side)
   match s
   case atom Left

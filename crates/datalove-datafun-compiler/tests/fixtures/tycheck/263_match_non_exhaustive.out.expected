@@ -6,8 +6,8 @@
         {
           "message": "every variant needs a case, or there is a `case default`",
           "span": [
-            183,
-            184
+            184,
+            185
           ],
           "text": "c"
         }

@@ -168,7 +168,7 @@ inductive Stmt where
   | for_ (names : List String) (coll : Expr) (body : List Stmt)
   /-- `const x = e` or `const x: h = e`. -/
   | const_ (x : String) (hint : Option Hint) (e : Expr)
-  /-- `type n: h`, an alias, at a script's top level. -/
+  /-- `type n = h`, an alias, at a script's top level. -/
   | type_ (n : String) (h : Hint)
   /-- `match e ... end match`: its cases in order, and its `case default`. -/
   | match_ (e : Expr) (cases : List Case) (dflt : Option (List Stmt))
@@ -1539,7 +1539,7 @@ def checkSet (env : InferEnv) (n : Nat) (Γ : Ctx) (x : String) (steps : List St
     reportModes Γ (setModes steps) >>= fun _ =>
     setSteps env n Γ t op e steps
 
-/-- `type n: h`: the aliases with `n` naming `h`'s type, or what is wrong. A
+/-- `type n = h`: the aliases with `n` naming `h`'s type, or what is wrong. A
 name an alias already has is F066, its body not looked at; a body that does
 not convert leaves the name unnamed, for a later alias to take. -/
 def defineAlias (aliases : Aliases) (n : String) (h : Hint) : Except Code Aliases :=

@@ -20,7 +20,7 @@ require module sys/std/u32
 
 const ITERATIONS: u32 = 2000
 
-type Json: rec J enum {
+type Json = rec J enum {
   atom Null,
   atom True,
   atom False,
@@ -33,7 +33,7 @@ type Json: rec J enum {
 // What `current` holds past the end of the input.
 const END: u32 = 256
 
-type Parser: {
+type Parser = {
   input: string,
   // One past the position of `current`: AWFY's `index` plus one, which
   // starts at -1.

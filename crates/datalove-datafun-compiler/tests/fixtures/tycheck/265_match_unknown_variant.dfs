@@ -1,5 +1,5 @@
 // A case naming something the enum does not have.
-type Colour: enum { atom Red, atom Blue }
+type Colour = enum { atom Red, atom Blue }
 
 fun name_of(c: Colour): string
   match c

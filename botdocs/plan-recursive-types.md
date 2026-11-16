@@ -36,7 +36,7 @@ phase 5, are not done.
 ## The problem
 
 Datalove cannot write a tree. An alias cannot name itself
-(`type L: ?(int, L)` is F064), and datalit has no aliases at all, because
+(`type L = ?(int, L)` is F064), and datalit has no aliases at all, because
 it is an expression language with no statements. The obvious fixes each break
 a constraint the draft sets:
 
@@ -93,7 +93,7 @@ The value is ordinary datalit. Only the type is new. JSON, the canonical
 recursive data, needs nothing further:
 
 ```datalove
-type Json: rec J enum {
+type Json = rec J enum {
   atom Null,
   term Bool bool,
   term Num f64,
@@ -106,7 +106,7 @@ type Json: rec J enum {
 - `rec` starts a type, so it joins the "type alias, type parameter" row of
   the reserved-word table (botspec Section 2.1). The parser recognizes it by
   the word alone, as that section requires.
-- `type Json: rec J ...` is an ordinary alias whose value is a `rec` type.
+- `type Json = rec J ...` is an ordinary alias whose value is a `rec` type.
   A self-referencing alias without `rec` stays F064. A later ergonomic mode
   could desugar it.
 - A `rec` name that shadows an alias, a type parameter or an outer `rec`

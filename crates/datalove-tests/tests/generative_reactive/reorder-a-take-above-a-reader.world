@@ -2,14 +2,14 @@
 module local/gen/data_0
 ----------
 
-type Type0: f64
-type Type1: [u64]
+type Type0 = f64
+type Type1 = [u64]
 
 const CONST0_0: string = "data"
 
-type Enum0_0: enum { term Enum0_0V0 %{f64 -> [offset]}, term Enum0_0V1 string }
+type Enum0_0 = enum { term Enum0_0V0 %{f64 -> [offset]}, term Enum0_0V1 string }
 
-type Enum0_1: enum { term Enum0_1V0 i16, term Enum0_1V1 index, term Enum0_1V2 string, atom Enum0_1V3 }
+type Enum0_1 = enum { term Enum0_1V0 i16, term Enum0_1V1 index, term Enum0_1V2 string, atom Enum0_1V3 }
 
 fun gen0_0<T>(a: T, b: T): [T]
   ret [a, b]
@@ -39,11 +39,11 @@ end fun
 module local/gen/core_1
 ----------
 
-type Type0: i16
+type Type0 = i16
 
 const CONST1_0: index = : index / 72
 
-type Enum1_0: enum { atom Enum1_0V0, term Enum1_0V1 (f32, {}, offset), atom Enum1_0V2 }
+type Enum1_0 = enum { atom Enum1_0V0, term Enum1_0V1 (f32, {}, offset), atom Enum1_0V2 }
 
 fun gen1_0<T>(a: T, b: T): bool where { T is fixedint, }
   ret a >= b

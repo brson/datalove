@@ -66,18 +66,21 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Type hint / expression separator: `: u32 / @42`
 
 ### Structural
-- `:` - Colon
+- `:` - Colon: annotates; what follows is the type of what it annotates
   - Type hint separator: `let x: u32`
   - Function parameter types: `fun foo(x: u32)`
   - Function return types: `fun foo(): u32`
   - Struct field type separator: `struct { x: u32 }`
+  - Type hint before an expression: `: u32 / 1`
 
-- `=` - Equals
+- `=` - Equals: defines; what follows is what a name stands for
   - Assignment in let statements: `let x = value`
   - Struct field assignment: `{ x = 1 }`
+  - Type alias definition: `type Point = { x: f32 }`
 
-  `:` and `=` follow a name: `:` gives its type and `=` its value. Where the
-  left side is not a name, as a map key is not, neither is used.
+  A type alias takes `=` and not `:`, since `Point` is the type rather than a
+  value of it. Where the left side is not a name, as a map key is not,
+  neither sigil is used.
 
 - `|` - Pipe
   - Binding delimiter in if statements: `if condition |x|`
@@ -168,7 +171,7 @@ Compound assignment in `set`, as bare arithmetic: `set total += amount`.
 - `:-` - ColonDash: Reserved, not yet used in parser
 - `->` - Arrow: Key-value separator in map types and literals, the same in
   both: `%{string -> u32}`, `%{"a" -> 1}`. A map is a finite function, and a
-  key is a value rather than a name, so neither `:` nor `=` belongs there
+  key is a value rather than a name, so neither `:` nor `=` belongs there.
 
 ## Three-Character Sigils
 

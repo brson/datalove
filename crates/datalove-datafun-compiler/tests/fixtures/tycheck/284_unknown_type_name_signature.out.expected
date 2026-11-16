@@ -14,7 +14,7 @@
       ],
       "message": "unknown type `NoA`",
       "notes": [
-        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+        "a bare name in type position is a type alias, written `type Name = <type>`, or one of the type parameters of the generic function it appears in."
       ]
     },
     {
@@ -31,7 +31,7 @@
       ],
       "message": "unknown type `NoB`",
       "notes": [
-        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+        "a bare name in type position is a type alias, written `type Name = <type>`, or one of the type parameters of the generic function it appears in."
       ]
     },
     {
@@ -48,7 +48,7 @@
       ],
       "message": "unknown type `NoC`",
       "notes": [
-        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+        "a bare name in type position is a type alias, written `type Name = <type>`, or one of the type parameters of the generic function it appears in."
       ]
     }
   ],

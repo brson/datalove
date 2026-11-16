@@ -324,7 +324,7 @@ drop the return type.")
             let mut builder = DiagnosticBuilder::error(db, &format!("unknown type `{}`", name.as_str(db)))
                 .code(FCode::UnknownType.as_str())
                 .primary_label(spans.lookup_alias(db, *local_index).expect(NO_SPAN), "no type of this name is in scope")
-                .note("a bare name in type position is a type alias, written `type Name: \
+                .note("a bare name in type position is a type alias, written `type Name = \
 <type>`, or one of the type parameters of the generic function it appears in.");
             if let Some(suggestion) = datalove_datalit::parser_util::type_name_suggestion(name.as_str(db)) {
                 builder = builder.note(&suggestion);

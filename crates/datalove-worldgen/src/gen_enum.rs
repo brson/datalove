@@ -64,7 +64,7 @@ pub fn format_enum<'db>(db: &'db dyn salsa::Database, def: &EnumDef<'db>) -> Str
             Option::None => format!("atom {}", v.name),
         })
         .collect();
-    format!("type {}: enum {{ {} }}", def.name, variants.join(", "))
+    format!("type {} = enum {{ {} }}", def.name, variants.join(", "))
 }
 
 /// Write a value of an enum type, and whatever has to be written before it.

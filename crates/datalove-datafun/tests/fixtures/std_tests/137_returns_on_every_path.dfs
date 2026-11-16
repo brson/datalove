@@ -39,7 +39,7 @@ fun loops_forever_until_return(n: u32): !u32
 end fun
 
 // Every arm of a match returns, and a match covers every variant.
-type Side: enum { atom Left, atom Right, term Other u8 }
+type Side = enum { atom Left, atom Right, term Other u8 }
 fun every_arm(s: Side): u32
   match s
   case atom Left

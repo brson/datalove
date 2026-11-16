@@ -1,5 +1,5 @@
 // A default arm stands for every variant not named, so naming one is enough.
-type Colour: enum { atom Red, atom Blue, atom Green }
+type Colour = enum { atom Red, atom Blue, atom Green }
 
 fun is_red(c: Colour): bool
   match c

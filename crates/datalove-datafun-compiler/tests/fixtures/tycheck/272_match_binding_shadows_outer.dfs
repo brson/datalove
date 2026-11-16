@@ -1,6 +1,6 @@
 // A binding may take a name already in scope, and the outer one comes back
 // after the match.
-type Tagged: enum { atom Empty, term Note string }
+type Tagged = enum { atom Empty, term Note string }
 
 fun describe(t: Tagged): string
   let text: string = "outer"

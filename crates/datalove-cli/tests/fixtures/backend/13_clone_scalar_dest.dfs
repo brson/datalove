@@ -12,7 +12,7 @@
 // cranelift backends had it, the jit and the aot; the interpreter and the C
 // backend were right, which is why the dual fixtures did not see it.
 
-type Note: enum { atom Nil, term V u32 }
+type Note = enum { atom Nil, term V u32 }
 
 fun widen(n: u32): Note
   let t: term V u32 = term V n
@@ -29,13 +29,13 @@ fun payload_of(e: Note): u32
 end fun
 
 // Every scalar shape a payload can be, since the load has to name a width.
-type EU8: enum { atom Nil, term V u8 }
-type EU64: enum { atom Nil, term V u64 }
-type EI16: enum { atom Nil, term V i16 }
-type EF32: enum { atom Nil, term V f32 }
-type EF64: enum { atom Nil, term V f64 }
-type EBool: enum { atom Nil, term V bool }
-type EIndex: enum { atom Nil, term V index }
+type EU8 = enum { atom Nil, term V u8 }
+type EU64 = enum { atom Nil, term V u64 }
+type EI16 = enum { atom Nil, term V i16 }
+type EF32 = enum { atom Nil, term V f32 }
+type EF64 = enum { atom Nil, term V f64 }
+type EBool = enum { atom Nil, term V bool }
+type EIndex = enum { atom Nil, term V index }
 
 fun w8(n: u8): EU8
   let t: term V u8 = term V n
@@ -74,7 +74,7 @@ end fun
 
 // A linear payload, which was always right, so that fixing the scalar does not
 // quietly change it.
-type Held: enum { atom Nil, term V string }
+type Held = enum { atom Nil, term V string }
 
 fun widen_string(s: string): Held
   let t: term V string = term V s

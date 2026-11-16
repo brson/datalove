@@ -27,7 +27,7 @@ without special logic programming syntax.
 Atoms as propositions, sets as interpretations.
 
 ```datalove
-type Prop: enum {
+type Prop = enum {
   atom Raining,
   atom Cold,
   atom Wet,
@@ -66,7 +66,7 @@ Propositional Datalog: monotone set growth to a fixed point.
 Terms carry data. A set of terms is a relation.
 
 ```datalove
-type Fact: enum {
+type Fact = enum {
   term Parent (string, string),
   term Ancestor (string, string),
 }
@@ -123,7 +123,7 @@ evaluation iterates to a fixed point.
 Atoms are perfect for finite lattice elements.
 
 ```datalove
-type Sign: enum {
+type Sign = enum {
   atom Bottom,
   atom Neg,
   atom Zero,
@@ -197,7 +197,7 @@ Atoms express richer truth values than bool.
 
 ```datalove
 // Three-valued logic (Kleene).
-type Tri: enum {
+type Tri = enum {
   atom T,
   atom F,
   atom U,
@@ -220,7 +220,7 @@ fun tri_and(a: Tri, b: Tri): Tri
 end fun
 
 // Four-valued logic (Belnap) for paraconsistent reasoning.
-type Belnap: enum {
+type Belnap = enum {
   atom Neither,
   atom True,
   atom False,
@@ -235,7 +235,7 @@ exactly what arises in logic programming with negation.
 ## Pattern: Constraint Propagation
 
 ```datalove
-type CellValue: enum {
+type CellValue = enum {
   atom Any,
   term Exactly int,
   term OneOf set { int },
@@ -275,7 +275,7 @@ Propagation iterates to a fixed point -- same shape again.
 ## Pattern: State Machines
 
 ```datalove
-type ConnState: enum {
+type ConnState = enum {
   atom Idle,
   atom Connecting,
   term Connected int,
@@ -321,7 +321,7 @@ but could equivalently be a set of tagged triples (the relational pattern).
 Terms carry witnesses alongside conclusions.
 
 ```datalove
-type Judgment: enum {
+type Judgment = enum {
   term Holds (string, string),
   term Refuted (string, string),
   term Conditional (string, string),
@@ -863,7 +863,7 @@ It could be deferred to a later version.
 Putting it all together.
 
 ```datalove
-type Fact: enum {
+type Fact = enum {
   term Parent (string, string),
   term Ancestor (string, string),
   term Childless string,

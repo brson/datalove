@@ -11,4 +11,4 @@ const CONSTANT: NoC = 1
 let hinted = : NoD / 1
 let nested: [NoE] = [1]
 let deeper = : %{NoF -> u32} / %{1 -> 2}
-type Aliased: [NoG]
+type Aliased = [NoG]

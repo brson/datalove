@@ -11,7 +11,7 @@ term Arr [term Num 1.0, term Obj %{ "k" -> atom Null }]
 scriptunit-fragment
 ----------
 
-type Json: rec J enum { atom Null, term Num f64, term Arr [J], term Obj %{string -> J} }
+type Json = rec J enum { atom Null, term Num f64, term Arr [J], term Obj %{string -> J} }
 
 require data local/app/tree
 require data local/app/doc: Json

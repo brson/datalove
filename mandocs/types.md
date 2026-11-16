@@ -276,7 +276,7 @@ Anonymous enums are sets of atom and term types
 where all the names are unique.
 
 ```datalove
-type MyEnum: enum {
+type MyEnum = enum {
   atom Foo,
   term Bar int,
   term Baz (f32, f32),

@@ -422,7 +422,7 @@ data files. None stopped it; each cost a detour.
 
 ### A printed type loses its alias
 
-**Reproduced.** `type Color: enum { atom Red, atom Blue }` and a `let c: Color`
+**Reproduced.** `type Color = enum { atom Red, atom Blue }` and a `let c: Color`
 show `c` as `enum { atom Red, atom Blue }`, in the REPL and in every message.
 The typechecker expands an alias into what it names, and nothing after the
 parse keeps the name: `TypeHint::Alias` is the last form with one. Showing the

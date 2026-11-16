@@ -12,7 +12,7 @@
 // The edge is dead either way, the typechecker having seen that the match
 // covers every variant, so it goes to an arm instead.
 
-type Side: enum { atom Left, atom Right, term Other u8 }
+type Side = enum { atom Left, atom Right, term Other u8 }
 
 fun every_arm(s: Side): u32
   match s
@@ -27,7 +27,7 @@ end fun
 
 // A payload on the heap, so the arm that takes it has something to let go of
 // and a wrong arm would be visible as a leak rather than a wrong number.
-type Held: enum { atom Nothing, term Text string }
+type Held = enum { atom Nothing, term Text string }
 
 fun length_of(h: Held): index
   match h

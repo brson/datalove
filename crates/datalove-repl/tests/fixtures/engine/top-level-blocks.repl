@@ -6,7 +6,7 @@ if flag
   set b = 500
 end if
 ---
-type Flag: enum { atom Yes, atom No }
+type Flag = enum { atom Yes, atom No }
 let f: Flag = atom No
 ---
 match f

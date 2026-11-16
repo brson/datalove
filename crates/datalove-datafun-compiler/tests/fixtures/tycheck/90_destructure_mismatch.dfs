@@ -1,4 +1,4 @@
-type S: enum { atom A, term B int }
+type S = enum { atom A, term B int }
 
 let (a, b) = (1, 2, 3)
 let {c} = {c = 1, d = 2}

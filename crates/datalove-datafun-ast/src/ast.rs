@@ -768,7 +768,7 @@ pub struct StmtDebugLog {
     pub value: ExprId,
 }
 
-/// Type alias statement: `type Name: structural_type`.
+/// Type alias statement: `type Name = structural_type`.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtTypeAlias<'db> {

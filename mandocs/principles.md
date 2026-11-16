@@ -28,7 +28,7 @@ their capabilities, memory layout and literal syntax,
 and derives everything else from them.
 
 ```datalove
-type Point: { x: f32, y: f32 }
+type Point = { x: f32, y: f32 }
 
 let points: [Point] = [{ x = 1.0, y = 2.0 }, { x = 3.0, y = 4.0 }]
 ```

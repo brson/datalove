@@ -8,8 +8,8 @@
 require module sys/std/float
 import float.nan
 
-type Colour: enum { atom Red, atom Blue }
-type Tagged: enum { atom Empty, term Note string, term Count u32 }
+type Colour = enum { atom Red, atom Blue }
+type Tagged = enum { atom Empty, term Note string, term Count u32 }
 
 let n: f64 = nan()
 

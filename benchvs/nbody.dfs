@@ -20,7 +20,7 @@ const PI: f64 = 3.141592653589793
 const SOLAR_MASS: f64 = 4.0 * PI * PI
 const DAYS_PER_YEAR: f64 = 365.24
 
-type Body: { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
+type Body = { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
 
 fun body(x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64): Body
   ret { x = x, y = y, z = z,

@@ -85,8 +85,8 @@
         {
           "message": "`native` is only read at the top level",
           "span": [
-            196,
-            202
+            197,
+            203
           ],
           "text": "native"
         }

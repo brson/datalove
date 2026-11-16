@@ -152,7 +152,7 @@ but values are still written structurally.
 They are spelled with `PascalCase` by convention.
 
 ```datalove
-type Shape: enum {
+type Shape = enum {
   atom Circle,
   term Rect (f32, f32),
 }
@@ -588,7 +588,7 @@ Enums are destructured with `match`.
 `match` is a statement, not an expression, and does not yield a value.
 
 ```datalove
-type Shape: enum {
+type Shape = enum {
   atom Point,
   term Rect (f32, f32),
 }
@@ -610,7 +610,7 @@ debuglog area
 Use `case default` for a catch-all.
 
 ```datalove
-type Shape: enum {
+type Shape = enum {
   atom Point,
   term Rect (f32, f32),
 }
@@ -1145,7 +1145,7 @@ and on options, tuples, structs, terms and enums made of those.
 These are compared structurally, part by part.
 
 ```datalove
-type Shape: enum {
+type Shape = enum {
   atom Circle,
   term Rect (f64, f64),
 }

@@ -6,8 +6,8 @@
         {
           "message": "`case term` matches a variant with a payload",
           "span": [
-            142,
-            143
+            143,
+            144
           ],
           "text": "t"
         }

@@ -35,7 +35,7 @@ application-shaped program, and it is not in `benchvs`.
 Checked against the language as of this survey:
 
 - **No objects, shared mutable references or recursive types.** A struct
-  cannot name itself (`type Node: { v: u32, children: [Node] }` is F064,
+  cannot name itself (`type Node = { v: u32, children: [Node] }` is F064,
   unknown type), and values are owned, so a linked structure is an *arena*: a
   list of structs, linked by `?index`. A struct field in a list element is
   written in place with `set xs[i]!.f = v`, and reading another element in the

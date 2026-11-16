@@ -4,12 +4,12 @@
 scriptunit-fragment
 ----------
 
-type E: rec E enum {
+type E = rec E enum {
     term Lit int,
     term Block [rec S enum { term Let E, term Seq [S] }],
 }
 
-type T: rec T [?T]
+type T = rec T [?T]
 
 fun depth(ref t: T): int
     var best: int = 0

@@ -5,7 +5,7 @@ module local/test/collconst
 // Const parameters of linear types: collections, a struct holding one, and an
 // enum with a collection payload. Each distinct value gets its own copy.
 
-type Shape: enum {
+type Shape = enum {
     atom Empty,
     term Points [int],
 }

@@ -1,2 +1,2 @@
-type E: enum { atom A, atom B }
+type E = enum { atom A, atom B }
 let x: E = : E / enum 3

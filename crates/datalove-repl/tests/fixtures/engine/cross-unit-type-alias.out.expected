@@ -1,10 +1,10 @@
 [
   {
-    "input": "type Flag: enum { atom Yes, atom No }",
+    "input": "type Flag = enum { atom Yes, atom No }",
     "parse": {
       "Command": {
         "Unit": {
-          "Fragment": "type Flag: enum { atom Yes, atom No }"
+          "Fragment": "type Flag = enum { atom Yes, atom No }"
         }
       }
     },
@@ -46,11 +46,11 @@
     ]
   },
   {
-    "input": "type Flags: [Flag]",
+    "input": "type Flags = [Flag]",
     "parse": {
       "Command": {
         "Unit": {
-          "Fragment": "type Flags: [Flag]"
+          "Fragment": "type Flags = [Flag]"
         }
       }
     },

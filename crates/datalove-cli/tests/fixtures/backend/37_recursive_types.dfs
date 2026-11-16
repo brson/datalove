@@ -5,7 +5,7 @@ require module sys/std/list
 require module sys/std/mem
 
 // Storage: a tree of lists, four children deep, whose leaves hold empties.
-type Tree: rec T [?T]
+type Tree = rec T [?T]
 
 fun build(depth: u32, mut count: u32): !Tree
   set count = count +! 1
@@ -29,7 +29,7 @@ debuglog count
 
 // Towers: three piles of disks, each pile a list of at most one, moved by
 // swapping buffers rather than building new ones.
-type Disk: rec D { size: u32, next: [D] }
+type Disk = rec D { size: u32, next: [D] }
 
 fun push_disk(mut piles: [[Disk]], pile: index, disk: Disk): !()
   var d = disk

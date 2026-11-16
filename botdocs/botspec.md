@@ -667,15 +667,15 @@ let d: enum { atom Red, atom Blue } = a@    // ok
 Type aliases provide names for structural types:
 
 ```datalove
-type Point: { x: f32, y: f32 }
-type Age: u32
+type Point = { x: f32, y: f32 }
+type Age = u32
 ```
 
 Aliases are purely syntactic; they introduce no new types. Enum types are
 commonly given aliases:
 
 ```datalove
-type Color: enum { atom Red, atom Blue, term Custom string }
+type Color = enum { atom Red, atom Blue, term Custom string }
 ```
 
 ### 3.8 Recursive Types
@@ -718,7 +718,7 @@ that takes a value apart reads it as its unfolding: a projection, an index,
 `for`, `match`, a destructuring `let`, the binding `if`, `?` and `!`.
 
 ```datalove
-type Node: rec Node { name: string, kids: [Node] }
+type Node = rec Node { name: string, kids: [Node] }
 
 fun count(ref n: Node): int
     var total: int = 1
@@ -732,7 +732,7 @@ end fun
 A tree whose nodes are lists is pushed into as the list it is:
 
 ```datalove
-type Tree: rec T [?T]
+type Tree = rec T [?T]
 
 fun leaf(): Tree
     var node: Tree = []
@@ -1063,7 +1063,7 @@ that lists it (Section 3.6). Like every `@`, it copies, and the original stays
 usable:
 
 ```datalove
-type Color: enum { atom Red, atom Blue }
+type Color = enum { atom Red, atom Blue }
 let a = atom Red
 let c: Color = a@            // atom widens to enum
 ```

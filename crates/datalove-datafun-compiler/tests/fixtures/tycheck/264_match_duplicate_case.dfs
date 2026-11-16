@@ -1,5 +1,5 @@
 // The same variant named twice.
-type Colour: enum { atom Red, atom Blue }
+type Colour = enum { atom Red, atom Blue }
 
 fun name_of(c: Colour): string
   match c

@@ -1,4 +1,4 @@
-type Color: enum { atom Red, atom Blue }
+type Color = enum { atom Red, atom Blue }
 let c: Color = atom Red
 match c
 case atom Red

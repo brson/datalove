@@ -9,12 +9,12 @@ require module sys/std/map
 require module sys/std/u64
 require module sys/std/index
 
-type Product: {id: u32, name: string, category: string, price: u32, cost: u32}
-type Tier: enum { atom Bronze, atom Silver, atom Gold }
-type Customer: {id: u32, name: string, city: string, country: string, joined: u32, tier: Tier}
-type Status: enum { atom Delivered, atom Shipped, atom Returned, atom Cancelled }
-type Line: {product: u32, qty: u32, discount: u32}
-type Order: {id: u32, customer: u32, day: u32, status: Status, lines: [Line]}
+type Product = {id: u32, name: string, category: string, price: u32, cost: u32}
+type Tier = enum { atom Bronze, atom Silver, atom Gold }
+type Customer = {id: u32, name: string, city: string, country: string, joined: u32, tier: Tier}
+type Status = enum { atom Delivered, atom Shipped, atom Returned, atom Cancelled }
+type Line = {product: u32, qty: u32, discount: u32}
+type Order = {id: u32, customer: u32, day: u32, status: Status, lines: [Line]}
 
 require data local/store/products: [Product]
 require data local/store/customers: [Customer]

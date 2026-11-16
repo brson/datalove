@@ -108,7 +108,7 @@ and function types, which appear only in `Σ`. Functions are not values: no
 expression has a function type, and a name that is not a variable is not an
 expression.
 
-A type alias (`type Point: {x: f32, y: f32}`) is a name for a structural
+A type alias (`type Point = {x: f32, y: f32}`) is a name for a structural
 type and is expanded before types are compared. An unknown name is F064; an
 alias defined twice is F066. A script unit sees the aliases earlier units
 declared, and one it declares itself shadows them.
@@ -122,7 +122,7 @@ same conditions, T062 to T065, reported at the name they are about. Datafun
 adds one: no type parameter is inside a `rec` body (T066), so a recursive type
 is never generic. A `rec` name may not be the name of an alias or type
 parameter in scope either (T063). An alias may name a recursive type, and
-`type Json: rec J ...` is the usual way to write one.
+`type Json = rec J ...` is the usual way to write one.
 
 Several rules test a type against a class:
 

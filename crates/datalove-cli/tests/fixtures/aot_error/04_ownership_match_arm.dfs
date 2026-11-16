@@ -1,6 +1,6 @@
 // One arm of a `match` gives a binding away and another does not. The error
 // names the arms and points at the move.
-type Shape: enum { atom Circle, atom Square }
+type Shape = enum { atom Circle, atom Square }
 
 fun pick(shape: Shape, s: string): string
   match shape

@@ -882,7 +882,7 @@ fn a_write_is_an_overwrite_only_when_it_needs_nothing_the_binding_held() {
         "fun fill(out n: int)\n  set n = 42\nend fun\n\
          fun bump(mut n: int)\n  set n = n + 1\nend fun\n\
          fun do_nothing()\nend fun",
-        "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom Yes",
+        "type Flag = enum { atom Yes, atom No }\nlet f: Flag = atom Yes",
     ];
     for source in setup {
         let eval = engine.eval(Unit::Fragment(source.S()));

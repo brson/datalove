@@ -108,29 +108,29 @@ const CORPUS: &[&str] = &[
     // Aliases: resolved with the signatures, in order, before anything is
     // checked, each seeing only the aliases above it. A name taken is F066
     // and the first stays; a body that does not convert leaves the name free.
-    "let a = 1 + \"s\"\ntype E: enum { atom A, term B u8 }\ntype P: (u8, Zz)\nfun f(e: E, q: Qq): u8\n  ret 0\nend fun\ntype E: enum { atom C }\nlet b: E = enum { atom A }\nlet c: Nope = 1\n",
-    "fun f(q: Qq): u8\n  ret 0\nend fun\ntype P: (u8, Zz)\nlet b: E = enum { atom A }\ntype E: enum { atom A }\nlet c: E = enum { atom A }\n",
-    "fun f(e: E): u8\n  let x: E = 1\n  ret 0\nend fun\ntype E: u8\ntype P: (u8, Zz)\nlet a: P = (1, 2)\nfun g(p: P): u8\n  ret 0\nend fun\n",
-    "type E: Zz\ntype E: u8\nlet x: E = 300\ntype E: u8\ntype L: [L]\nlet a: L = []\ntype A: u8\ntype B: (A, A)\nlet y: B = (1, 300)\n",
+    "let a = 1 + \"s\"\ntype E = enum { atom A, term B u8 }\ntype P = (u8, Zz)\nfun f(e: E, q: Qq): u8\n  ret 0\nend fun\ntype E = enum { atom C }\nlet b: E = enum { atom A }\nlet c: Nope = 1\n",
+    "fun f(q: Qq): u8\n  ret 0\nend fun\ntype P = (u8, Zz)\nlet b: E = enum { atom A }\ntype E = enum { atom A }\nlet c: E = enum { atom A }\n",
+    "fun f(e: E): u8\n  let x: E = 1\n  ret 0\nend fun\ntype E = u8\ntype P = (u8, Zz)\nlet a: P = (1, 2)\nfun g(p: P): u8\n  ret 0\nend fun\n",
+    "type E = Zz\ntype E = u8\nlet x: E = 300\ntype E = u8\ntype L = [L]\nlet a: L = []\ntype A = u8\ntype B = (A, A)\nlet y: B = (1, 300)\n",
     // An alias's `rec` is datalit's, a `rec` may not take an alias's name, and
     // a recursive alias is no map's key or set's element.
-    "type J: rec J u8\nlet x: J = 1\ntype A: u8\ntype K: rec A [A]\ntype R: rec R [R]\nlet m: %{R -> u8} = %{}\nlet s: #{(u8, R)} = #{}\nlet l: [R] = []\ntype S: rec S (R, [S])\n",
-    "fun f(): u8\n  ret 0\nend fun\ntype f: u8\nfun f(): u8\n  ret 1\nend fun\nlet x: Zz = 1\ntype E: enum { atom A }\nfun g(e: E, z: Zz): u8\n  let y: Qq = 1\n  ret 0\nend fun\nlet h: E = : E / enum { atom A }\nlet k = : Qq / 1\n",
+    "type J = rec J u8\nlet x: J = 1\ntype A = u8\ntype K = rec A [A]\ntype R = rec R [R]\nlet m: %{R -> u8} = %{}\nlet s: #{(u8, R)} = #{}\nlet l: [R] = []\ntype S = rec S (R, [S])\n",
+    "fun f(): u8\n  ret 0\nend fun\ntype f = u8\nfun f(): u8\n  ret 1\nend fun\nlet x: Zz = 1\ntype E = enum { atom A }\nfun g(e: E, z: Zz): u8\n  let y: Qq = 1\n  ret 0\nend fun\nlet h: E = : E / enum { atom A }\nlet k = : Qq / 1\n",
     // Patterns: a tuple's and a struct's parts, an atom's and a term's; one
     // that does not fit is F071 and binds nothing.
     "let (a, b) = (1, \"s\")\nlet c: string = b\nlet (d, e, f) = (1, 2)\nlet g = d\nlet (h,) = (true,)\nlet () = ()\nlet (i, j): (u8, u8) = (1, 300)\nlet k: u8 = i\n",
     "let {x, y} = {x = 1, y = true}\nlet z: bool = y\nlet {x = p, y = q} = {y = 1, x = 2}\nlet {x} = {x = 1, y = 2}\nlet {x, w} = {x = 1}\nlet r = p\n",
     "let atom A = atom A\nlet atom B = atom A\nlet term T v = term T 5\nlet w: int = v\nlet term U u = term T 5\nlet s = u\n",
-    "type E: enum { atom A, term B u8 }\nfun f(e: E, l: [u8], o: ?u8): u8\n  let atom A = e\n  let (a, b) = l\n  let {x} = o\n  let (c, d) = 1\n  ret 0\nend fun\n",
-    "type L: rec L (u8, [L])\nfun f(l: L): u8\n  let (n, rest) = l\n  let m: [L] = rest\n  ret n\nend fun\nvar (a, b) = (1, 2)\nset a = 3\nset b += 1\nvar (c, d): (u8, u8) = (1, 2)\nvar e: (u8, u8)\n",
+    "type E = enum { atom A, term B u8 }\nfun f(e: E, l: [u8], o: ?u8): u8\n  let atom A = e\n  let (a, b) = l\n  let {x} = o\n  let (c, d) = 1\n  ret 0\nend fun\n",
+    "type L = rec L (u8, [L])\nfun f(l: L): u8\n  let (n, rest) = l\n  let m: [L] = rest\n  ret n\nend fun\nvar (a, b) = (1, 2)\nset a = 3\nset b += 1\nvar (c, d): (u8, u8) = (1, 2)\nvar e: (u8, u8)\n",
     // `match`: an enum's variants each once, of the right kind, or a
     // default; a term case binds the payload.
-    "type E: enum { atom A, term B u8, atom C }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case term B x\n    ret x\n  case atom C\n    ret 3\n  end match\nend fun\nfun g(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case default\n    ret 2\n  end match\nend fun\n",
-    "type E: enum { atom A, term B u8, atom C }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret true\n  case atom A\n    ret zz\n  case atom B\n    ret zz\n  case term C y\n    ret y\n  case term D z\n    ret z\n  end match\n  ret 0\nend fun\n",
-    "type E: enum { atom A, term B u8 }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  end match\nend fun\nfun g(n: u8): u8\n  match n\n  case atom A\n    ret zz\n  end match\n  match zz\n  case atom A\n    ret zz\n  end match\n  ret 0\nend fun\n",
+    "type E = enum { atom A, term B u8, atom C }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case term B x\n    ret x\n  case atom C\n    ret 3\n  end match\nend fun\nfun g(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case default\n    ret 2\n  end match\nend fun\n",
+    "type E = enum { atom A, term B u8, atom C }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret true\n  case atom A\n    ret zz\n  case atom B\n    ret zz\n  case term C y\n    ret y\n  case term D z\n    ret z\n  end match\n  ret 0\nend fun\n",
+    "type E = enum { atom A, term B u8 }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  end match\nend fun\nfun g(n: u8): u8\n  match n\n  case atom A\n    ret zz\n  end match\n  match zz\n  case atom A\n    ret zz\n  end match\n  ret 0\nend fun\n",
     // A `match` completes when an arm or its default does, and a `break` in
     // an arm is the loop's.
-    "type E: enum { atom A, atom B }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case atom B\n    debuglog 0\n  end match\nend fun\nfun g(e: E): u8\n  loop\n    match e\n    case atom A\n      break\n    case default\n      ret 1\n    end match\n  end loop\nend fun\nfun h(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case default\n    ret 2\n  end match\nend fun\n",
+    "type E = enum { atom A, atom B }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case atom B\n    debuglog 0\n  end match\nend fun\nfun g(e: E): u8\n  loop\n    match e\n    case atom A\n      break\n    case default\n      ret 1\n    end match\n  end loop\nend fun\nfun h(e: E): u8\n  match e\n  case atom A\n    ret 1\n  case default\n    ret 2\n  end match\nend fun\n",
     // Elements of what is not a place, refused unless borrowed.
     "fun mk(): [string]\n  ret [\"a\"]\nend fun\nfun f(): ?u8\n  let a = mk()[0]?\n  let b = mk()[0]?@\n  debuglog mk()[0]?\n  let c = mk()[0]? == \"a\"\n  ret none\nend fun\n",
     // Indexes: with `?` and `!` and neither, into what cannot be indexed,
@@ -163,7 +163,7 @@ const CORPUS: &[&str] = &[
     "fun o<T>(x: T): T where { T is ord, }\n  ret x\nend fun\nfun fl<T>(x: T): T where { T is float, }\n  ret o(x)\nend fun\nfun an<T>(x: T): T\n  ret o(x)\nend fun\nfun or2<T>(x: T): T where { T is ord, }\n  ret o(x)\nend fun\nfun fl2<T>(x: T): T where { T is float, }\n  ret fl(x)\nend fun\nfun i2<T>(x: T): T where { T is fixedint, }\n  ret fl(x)\nend fun\n",
     // Type parameters among names: no `rec` around one (T066), none named as
     // one (T063), one shadowing an alias, and none outside its function.
-    "type T: u8\nfun f<T>(x: T): rec L [(L, T)]\n  ret x\nend fun\nfun g<T>(x: rec T [T]): u8\n  ret 0\nend fun\nfun h<U>(x: T, y: U): U\n  let a: T = 300\n  let b: rec M [(M, U)] = []\n  ret y\nend fun\nfun k<T>(x: T): u8\n  let a: T = 300\n  ret 0\nend fun\nlet q: U = 1\nlet r: T = 300\n",
+    "type T = u8\nfun f<T>(x: T): rec L [(L, T)]\n  ret x\nend fun\nfun g<T>(x: rec T [T]): u8\n  ret 0\nend fun\nfun h<U>(x: T, y: U): U\n  let a: T = 300\n  let b: rec M [(M, U)] = []\n  ret y\nend fun\nfun k<T>(x: T): u8\n  let a: T = 300\n  ret 0\nend fun\nlet q: U = 1\nlet r: T = 300\n",
     // Generics calling generics, at the caller's type parameters.
     "fun id<T>(x: T): T\n  ret x\nend fun\nfun f<T>(x: T, l: [T]): [T]\n  let a: T = id(x)\n  let b = id(l)\n  let c: [T] = id([])\n  let d = id(x) == id(x)\n  let e: ?T = id(none)\n  ret b\nend fun\n",
     // `-` reads its operand borrowed, synthesized or checked against a float.
@@ -179,7 +179,7 @@ const CORPUS: &[&str] = &[
     "fun f(p: u8, const q: u8): u8\n  const x = p\n  let y = 1\n  const z = y\n  const w = q\n  set w = 2\n  ret x\nend fun\nconst k = 1\nlet k = 2\nfun g(): int\n  ret k\nend fun\nlet m = 1\nconst m = zz\nfun h(const v: int): int\n  ret v\nend fun\ndebuglog h(m)\n",
     // A recursive return type whose head is an option or a result is
     // returned into early as the option or result it unfolds to.
-    "type L: rec L ?[L]\nfun f(x: ?u8, l: [u8]): L\n  let y = x?\n  let a = l[0]?\n  let b = a +? a\n  ret some [none]\nend fun\ntype R: rec R ![R]\nfun g(x: !u8, mut m: [u8]): R\n  let y = x!\n  set m[0]! = 1\n  let z = x?\n  ret ok []\nend fun\n",
+    "type L = rec L ?[L]\nfun f(x: ?u8, l: [u8]): L\n  let y = x?\n  let a = l[0]?\n  let b = a +? a\n  ret some [none]\nend fun\ntype R = rec R ![R]\nfun g(x: !u8, mut m: [u8]): R\n  let y = x!\n  set m[0]! = 1\n  let z = x?\n  ret ok []\nend fun\n",
     // Every marker is reported before any argument is checked.
     "fun g(ref a: u8, b: u8)\nend fun\ncall g(1, ref true)\ncall g(ref true, ref 1)\n",
 ];
@@ -769,7 +769,7 @@ fn instances(rng: &mut SeededRng, text: &str) -> Vec<String> {
             } else {
                 ANY_ARGS
             };
-            aliases += &fmt!("type {p}: {}\n", pool[rng.random_range(0..pool.len())]);
+            aliases += &fmt!("type {p} = {}\n", pool[rng.random_range(0..pool.len())]);
         }
         let body = lines[i + 1..=end].join("\n");
         let text = text.trim_end();
@@ -890,7 +890,7 @@ const RUN_CORPUS: &[&str] = &[
     "fun bump(mut x: u8, by: u8): !u8\n  set x = x +! by\n  ret ok x\nend fun\nfun split(n: int, out q: int, out r: int)\n  set q = n - 1\n  set r = n * 2\nend fun\nfun swap(mut a: i32, mut b: i32)\n  let t = a\n  set a = b\n  set b = t\nend fun\nfun early(mut x: u8): !()\n  set x = : u8 / 7\n  let y: u8 = (: u8 / 250) +! x\n  set x = : u8 / 9\n  ret ok ()\nend fun\nvar a: u8 = : u8 / 10\nlet r1 = bump(mut a, : u8 / 5)\ndebuglog r1\ndebuglog a\nlet r2 = bump(mut a, : u8 / 250)\ndebuglog r2\ndebuglog a\nvar q: int\nvar r: int\ncall split(1234, out q, out r)\ndebuglog q\ndebuglog r\nvar x: i32 = : i32 / 1\nvar y: i32 = : i32 / 2\ncall swap(mut x, mut y)\ndebuglog (x, y)\nvar e: u8 = : u8 / 0\nlet r3 = early(mut e)\ndebuglog r3\ndebuglog e\n",
     "fun add(a: u8, b: u8): !u8\n  ret ok (a +! b)\nend fun\nfun addq(a: i8, b: i8): ?i8\n  ret some (a +? b)\nend fun\nfun div(a: i32, b: i32): !i32\n  ret ok (a /! b)\nend fun\ndebuglog add(: u8 / 100, : u8 / 155)\ndebuglog add(: u8 / 100, : u8 / 156)\ndebuglog addq(: i8 / -100, : i8 / -28)\ndebuglog addq(: i8 / -100, : i8 / -29)\ndebuglog div(: i32 / -7, : i32 / 2)\ndebuglog div(: i32 / 7, : i32 / -2)\ndebuglog div(: i32 / 7, : i32 / 0)\ndebuglog div(: i32 / -2147483648, : i32 / -1)\n",
     "fun at(l: [u8], i: index): ?u8\n  ret some l[i]?\nend fun\nfun sum(l: [u32]): int\n  var s: int = 0\n  for x in ref l\n    set s += x@\n  end for\n  ret s\nend fun\nfun fact(n: int): int\n  if n .< 2\n    ret 1\n  end if\n  ret n * fact(n - 1)\nend fun\nfun count(n: int): int\n  var i: int = 0\n  loop while i .< n\n    set i += 1\n    if i == 7\n      break\n    end if\n  end loop\n  ret i\nend fun\ndebuglog at([1, 2, 3], : index / 1)\ndebuglog at([1, 2, 3], : index / 3)\ndebuglog sum([1, 2, 4294967295])\ndebuglog fact(20)\ndebuglog count(3)\ndebuglog count(100)\n",
-    "type E: enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
+    "type E = enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
     "fun seti(mut i: index): index\n  set i = : index / 1\n  ret : index / 0\nend fun\nvar xss: [[u32]] = [[: u32 / 1, : u32 / 2], [: u32 / 3, : u32 / 4]]\nvar i: index = : index / 0\nset xss[i]![seti(mut i)]! = : u32 / 99\ndebuglog xss\nvar j: index = : index / 0\nset xss[j]![seti(mut j)]! +!= : u32 / 50\ndebuglog xss\nvar k: index = : index / 0\ndebuglog xss[k]![seti(mut k)]!\nvar xs: [int] = [1000000000000000000000000000001, 2]\ndebuglog (: [int] / xs)[(: index / 1)]!\ndebuglog xs\nvar s: string = \"a-long-heap-string-0123456789-abcdefghij\"\ndebuglog (: string / s) == \"x\"\ndebuglog s\nlet t = (: string / s)@\ndebuglog t\ndebuglog s\n",
     "fun f(mut x: u8, y: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun g(y: u8, mut x: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun h(mut xs: [u8], y: u8): u8\n  set xs = [y, y]\n  ret y\nend fun\nvar a: u8 = : u8 / 1\ndebuglog f(mut a, a)\ndebuglog a\nset a = : u8 / 1\ndebuglog g(a, mut a)\ndebuglog a\nset a = : u8 / 1\ndebuglog f(mut a, : u8 / a) +! f(mut a, a)\ndebuglog a\nvar xs: [u8] = [: u8 / 3, : u8 / 4]\ndebuglog h(mut xs, xs[(: index / 1)]!)\ndebuglog xs\n",
 ];

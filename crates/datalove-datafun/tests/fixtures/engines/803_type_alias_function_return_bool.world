@@ -6,7 +6,7 @@ scriptunit-fragment
 // This tests that the JIT correctly handles type alias return types.
 // Without the fix, the return type would be IrType::Error (16 bytes, sret)
 // instead of Bool (1 byte, register return), causing a calling convention mismatch.
-type MyBool: bool
+type MyBool = bool
 
 fun pass_through(b: bool): MyBool
     ret b

@@ -1,2 +1,2 @@
-type L: rec L [L]
-type M: %{L -> int}
+type L = rec L [L]
+type M = %{L -> int}

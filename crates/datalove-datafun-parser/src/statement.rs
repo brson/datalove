@@ -1404,13 +1404,19 @@ statements that run belong in a function or a script")
             }
         };
 
-        // Need `:` sigil.
-        if !self.eat_sigil(Sigil::Colon) {
+        // An alias defines its name, so it takes `=`; `:` would say the
+        // name is a value of the type.
+        if !self.eat_sigil(Sigil::Equals) {
+            let label = if self.peek_sigil(Sigil::Colon) {
+                "a type alias is defined with '=', not ':'"
+            } else {
+                "expected '='"
+            };
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
-                "expected ':' after type alias name",
-                PCode::TypeAliasWithoutColon,
-                "expected ':'"
+                "expected '=' after type alias name",
+                PCode::TypeAliasWithoutEquals,
+                label
             );
         }
 

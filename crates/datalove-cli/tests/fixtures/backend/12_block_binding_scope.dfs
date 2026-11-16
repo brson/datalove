@@ -13,7 +13,7 @@
 // refused the function outright, both jit and aot, for using a value not
 // defined on every path to it.
 
-type Note: enum { atom Nothing, term Text u32 }
+type Note = enum { atom Nothing, term Text u32 }
 
 // A match arm binding over a name from the enclosing body.
 fun arm_binding(n: Note): u32
@@ -80,7 +80,7 @@ end fun
 
 // A linear payload, so that a wrong arm would show up as a leak or a double
 // free rather than only as a wrong number.
-type Held: enum { atom Nothing, term Text string }
+type Held = enum { atom Nothing, term Text string }
 
 fun linear_binding(h: Held): string
   let text: string = "outer"

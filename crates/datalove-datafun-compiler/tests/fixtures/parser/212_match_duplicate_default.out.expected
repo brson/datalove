@@ -70,8 +70,8 @@
         {
           "message": "a match takes only one default arm",
           "span": [
-            105,
-            112
+            106,
+            113
           ],
           "text": "default"
         }

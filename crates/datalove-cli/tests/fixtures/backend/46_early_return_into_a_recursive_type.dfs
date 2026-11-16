@@ -2,12 +2,12 @@
 // returns early into it as into the option or result it unfolds to: `?`, `!`,
 // an index's `?` and `+?` all fit.
 
-type L: rec L ?[L]
+type L = rec L ?[L]
 fun f(x: ?u8): L
   let y = x?
   ret some [none]
 end fun
-type R: rec R ![R]
+type R = rec R ![R]
 fun g(x: !u8): R
   let y = x!
   ret ok []

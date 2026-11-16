@@ -1,7 +1,7 @@
 // A `match` writes an out parameter only if every arm that falls through
 // writes it. Each arm used to start with what the arm before it left, so a
 // write in the first arm counted for the second.
-type Flag: enum { atom Yes, atom No }
+type Flag = enum { atom Yes, atom No }
 fun do_nothing()
 end fun
 fun fill(f: Flag, out n: int)

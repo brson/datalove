@@ -119,7 +119,7 @@ fn reads_on(input: &str) -> bool {
 /// the line starts with.
 #[test]
 fn an_open_bracket_reads_on() {
-    assert!(reads_on("type Flag: enum {"));
+    assert!(reads_on("type Flag = enum {"));
     assert!(reads_on("let xs = ["));
     assert!(reads_on("[1, 2,"));
     assert!(reads_on("f(1,"));

@@ -6,8 +6,8 @@
         {
           "message": "type mismatch",
           "span": [
-            211,
-            212
+            212,
+            213
           ],
           "text": "1"
         }
@@ -20,8 +20,8 @@
         {
           "message": "type mismatch",
           "span": [
-            243,
-            244
+            244,
+            245
           ],
           "text": "2"
         }
@@ -34,8 +34,8 @@
         {
           "message": "type mismatch",
           "span": [
-            268,
-            269
+            269,
+            270
           ],
           "text": "3"
         }

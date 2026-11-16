@@ -1,8 +1,8 @@
-type Flag: enum { atom Yes, atom No }
+type Flag = enum { atom Yes, atom No }
 ---
 let f: Flag = atom No
 ---
-type Flags: [Flag]
+type Flags = [Flag]
 ---
 let fs: Flags = [atom Yes, f]
 ---

@@ -1,4 +1,4 @@
-type Node: rec Node { name: string, kids: [Node] }
+type Node = rec Node { name: string, kids: [Node] }
 
 fun leaf(name: string): Node
     ret { name = name, kids = [] }

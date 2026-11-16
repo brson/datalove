@@ -41,8 +41,8 @@
         {
           "message": "expected '{'",
           "span": [
-            49,
-            53
+            50,
+            54
           ],
           "text": "enum"
         }

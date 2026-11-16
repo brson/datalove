@@ -3,7 +3,7 @@
 scriptunit-fragment
 ----------
 
-type L: rec L { elt: int, next: [L] }
+type L = rec L { elt: int, next: [L] }
 
 fun sum(ref l: L): int
     var total: int = l.elt@

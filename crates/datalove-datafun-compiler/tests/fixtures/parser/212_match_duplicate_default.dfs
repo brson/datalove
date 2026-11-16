@@ -1,4 +1,4 @@
-type C: enum { atom Red, atom Blue }
+type C = enum { atom Red, atom Blue }
 let a: C = (atom Red)@
 match a
 case default

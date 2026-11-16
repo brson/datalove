@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Dual test: enum match with term binding
-type Shape: enum { atom Circle, term Rect int }
+type Shape = enum { atom Circle, term Rect int }
 let s: Shape = term Rect 99
 match s
 case atom Circle

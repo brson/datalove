@@ -92,11 +92,11 @@
     ]
   },
   {
-    "input": "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom No",
+    "input": "type Flag = enum { atom Yes, atom No }\nlet f: Flag = atom No",
     "parse": {
       "Command": {
         "Unit": {
-          "Fragment": "type Flag: enum { atom Yes, atom No }\nlet f: Flag = atom No"
+          "Fragment": "type Flag = enum { atom Yes, atom No }\nlet f: Flag = atom No"
         }
       }
     },

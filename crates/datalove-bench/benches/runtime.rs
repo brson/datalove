@@ -103,7 +103,7 @@ debuglog sum_int(20000)
 /// Key comparison walks both type descriptors structurally, so the cost of
 /// that walk scales with the key type's depth rather than the value's.
 const MAP_DEEP_SOURCE: &str = r#"
-type K: ((u32, u32), (u32, u32))
+type K = ((u32, u32), (u32, u32))
 
 fun build_deep(n: u32): !u32
   var m: %{K -> u32} = %{}

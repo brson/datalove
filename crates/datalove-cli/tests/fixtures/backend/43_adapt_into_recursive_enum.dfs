@@ -3,7 +3,7 @@
 // of the atom's or term's own type goes through `@`, which makes it the
 // variant it names.
 
-type Json: rec J enum { atom Null, term Num f64, term Arr [J] }
+type Json = rec J enum { atom Null, term Num f64, term Arr [J] }
 
 let null = atom Null
 let num = term Num 2.5
@@ -31,8 +31,8 @@ debuglog c
 
 // And from one: a recursive type whose unfolding is a term adapts to an enum
 // that lists the term, as the term does.
-type Chain: rec X term Link [X]
-type Linked: enum { atom End, term Link [Chain] }
+type Chain = rec X term Link [X]
+type Linked = enum { atom End, term Link [Chain] }
 let chain: Chain = term Link [term Link []]
 let linked: Linked = chain@
 debuglog linked

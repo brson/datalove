@@ -5,8 +5,8 @@
 scriptunit-fragment
 ----------
 
-type Point: { x: u32, y: u32 }
-type Node: rec Node { name: string, kids: [Node] }
+type Point = { x: u32, y: u32 }
+type Node = rec Node { name: string, kids: [Node] }
 
 fun make(): Point
     var p: Point

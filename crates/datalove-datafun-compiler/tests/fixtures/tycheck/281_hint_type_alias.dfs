@@ -1,10 +1,10 @@
 // A type alias in a hint, which synthesis resolved through no alias map and so
 // reported as unresolved -- `let a: Age = 5` worked where `: Age / 5` did not.
-type Age: u32
-type Ages: [u32]
-type MaybeAge: ?u32
-type Colour: enum { atom Red, atom Blue }
-type Point: { x: u32, y: u32 }
+type Age = u32
+type Ages = [u32]
+type MaybeAge = ?u32
+type Colour = enum { atom Red, atom Blue }
+type Point = { x: u32, y: u32 }
 
 let a = : Age / 5
 let b = : Ages / [1, 2, 3]

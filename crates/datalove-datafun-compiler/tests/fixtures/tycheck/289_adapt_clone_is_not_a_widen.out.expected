@@ -6,8 +6,8 @@
         {
           "message": "type mismatch",
           "span": [
-            214,
-            215
+            215,
+            216
           ],
           "text": "c"
         }

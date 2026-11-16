@@ -5,7 +5,7 @@
 
 require module sys/std/list
 
-type Tree: rec T [?T]
+type Tree = rec T [?T]
 
 fun tree(depth: u32): Tree
   var node: Tree = []

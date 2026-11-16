@@ -288,8 +288,8 @@ codes! {
         StrayToken = 21,
         /// `type` with no name.
         TypeAliasWithoutName = 22,
-        /// `type` without its `:`.
-        TypeAliasWithoutColon = 23,
+        /// `type` without its `=`.
+        TypeAliasWithoutEquals = 23,
         /// `const` with no name.
         ConstWithoutName = 24,
         /// `const` without its `=`.

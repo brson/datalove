@@ -5,7 +5,7 @@
 // operator scheduled drops for the bindings still held there. An expression
 // statement and a `match` input did not, so leaving through either leaked
 // them all.
-type C: enum { atom A, atom B }
+type C = enum { atom A, atom B }
 
 fun take(s: string, n: i32): ()
   ret ()

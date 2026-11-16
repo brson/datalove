@@ -7,9 +7,9 @@
 require module sys/std/list
 require module sys/std/mem
 
-type Disk: rec D { size: u32, next: [D] }
+type Disk = rec D { size: u32, next: [D] }
 
-type Wide: { a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64 }
+type Wide = { a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64 }
 
 fun bytes(): u32
   var xs: [u8] = []

@@ -42,7 +42,7 @@ If we were to solve this the obvious and easy way it might
 create an alias and use a hypothetical `box` type:
 
 ```datalove
-type List: {
+type List = {
   elt: int,
   next: ?box List
 }

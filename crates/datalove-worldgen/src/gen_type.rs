@@ -85,7 +85,7 @@ pub fn format_type_alias<'db>(
     name: &str,
     type_hint: TypeHint<'db>,
 ) -> String {
-    format!("type {}: {}", name, pretty_type_hint(db, type_hint))
+    format!("type {} = {}", name, pretty_type_hint(db, type_hint))
 }
 
 /// Generate a bool type.
@@ -200,7 +200,7 @@ mod tests {
     fn test_format_type_alias_inner<'db>(db: &'db dyn salsa::Database) {
         let ty = TypeHint::U32;
         let formatted = format_type_alias(db, "Counter", ty);
-        assert_eq!(formatted, "type Counter: u32");
+        assert_eq!(formatted, "type Counter = u32");
     }
 
     #[test]

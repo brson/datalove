@@ -104,7 +104,7 @@ param         = [ "const" ], [ "ref" | "mut" | "out" ], param_name, ":", type ;
 where_clause  = "where", "{", [ bound, { ",", bound }, [ "," ] ], "}" ;  (* P061, P062 *)
 bound         = NAME, "is", ( "ord" | "float" | "fixedint" ) ;
                 (* P063, P060; a parameter bounded twice: P078 *)
-type_alias    = "type", type_name, ":", type ;  (* P022, P023 *)
+type_alias    = "type", type_name, "=", type ;  (* P022, P023 *)
 
 (* ===== Modules  (statement.rs: parse_require, parse_import) ===== *)
 require_stmt  = "require", ( "module", lib_path
@@ -376,7 +376,7 @@ and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 | P020 | A `|` binding without its closing `|` |
 | P021 | A token left over after a statement or a bracket's last element |
 | P022 | `type` with no name |
-| P023 | `type` without its `:` |
+| P023 | `type` without its `=` |
 | P024 | `const` with no name |
 | P025 | `const` without its `=` |
 | P026 | A `var` with neither a type nor a value |

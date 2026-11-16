@@ -16,7 +16,7 @@ require module sys/std/u32
 
 const ITERATIONS: u32 = 9000
 
-type Disk: rec D { size: u32, next: [D] }
+type Disk = rec D { size: u32, next: [D] }
 
 // The size of the disk on top of a pile, if it has one.
 fun top_size(ref pile: [Disk]): ?u32

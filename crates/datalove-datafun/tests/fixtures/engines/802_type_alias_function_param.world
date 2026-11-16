@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Type alias used in function parameter.
-type MyInt: int
+type MyInt = int
 
 fun double(n: MyInt): MyInt
     ret n + n

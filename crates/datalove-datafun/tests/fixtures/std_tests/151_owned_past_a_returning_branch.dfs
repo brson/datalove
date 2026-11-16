@@ -57,7 +57,7 @@ fun nested(s: string, n: u32): string
 end fun
 
 // A match arm that returns is left out of the merge the same way.
-type Side: enum { atom Left, atom Right }
+type Side = enum { atom Left, atom Right }
 fun match_arm(s: string, side: Side): string
   var tag = "none"
   match side

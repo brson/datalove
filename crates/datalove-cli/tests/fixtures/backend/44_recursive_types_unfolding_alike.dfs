@@ -2,8 +2,8 @@
 // unfolded once is `Inner`, and both unfold to `[(Outer, Inner)]`. A compiled
 // backend gives the two one type descriptor, as they have one layout.
 
-type Outer: rec L rec M [(L, M)]
-type Inner: rec N [(Outer, N)]
+type Outer = rec L rec M [(L, M)]
+type Inner = rec N [(Outer, N)]
 let outer: Outer = [([], [])]
 let inner: Inner = outer@
 let back: Outer = inner@

@@ -4,7 +4,7 @@
 scriptunit-fragment
 ----------
 
-type Json: rec J enum {
+type Json = rec J enum {
     atom Null,
     term Bool bool,
     term Num f64,

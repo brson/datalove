@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Test enum match with default arm
-type Animal: enum { atom Cat, atom Dog, atom Bird }
+type Animal = enum { atom Cat, atom Dog, atom Bird }
 let a: Animal = atom Bird
 match a
 case atom Cat

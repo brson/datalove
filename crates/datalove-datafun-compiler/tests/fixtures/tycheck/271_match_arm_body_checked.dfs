@@ -1,5 +1,5 @@
 // Arm bodies are checked like any other statements, in every kind of arm.
-type Tagged: enum { atom Empty, term Note string, term Count u32 }
+type Tagged = enum { atom Empty, term Note string, term Count u32 }
 
 fun describe(t: Tagged): string
   match t

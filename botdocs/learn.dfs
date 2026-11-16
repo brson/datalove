@@ -232,7 +232,7 @@ let also_anything: data = data "hello"
 
 // A variant with no payload is an `atom`; one with a payload is a `term`.
 // An enum type lists them.
-type Shape: enum { atom Circle, atom Square, term Sided u8 }
+type Shape = enum { atom Circle, atom Square, term Sided u8 }
 
 let circle: Shape = atom Circle
 let pentagon: Shape = term Sided : u8 / 5
@@ -606,11 +606,11 @@ let scaled_up = scaled(FACTOR, 7)
 
 // An alias names a structural type. It is syntax only: there is no new type
 // and no runtime difference.
-type Age: u32
-type Point: { x: f32, y: f32 }
-type MaybeInt: ?int
-type IntResult: !int
-type PointList: [Point]
+type Age = u32
+type Point = { x: f32, y: f32 }
+type MaybeInt = ?int
+type IntResult = !int
+type PointList = [Point]
 
 fun make_point(x: f32, y: f32): Point
   ret { x = x, y = y }

@@ -4,7 +4,7 @@ fun outer(): u32
     fun inner(): u32
         ret 1
     end fun
-    type N: u32
+    type N = u32
     native fun nat(): u32
     ret 1
 end fun

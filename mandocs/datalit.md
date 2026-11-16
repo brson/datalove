@@ -211,8 +211,8 @@ against an external type context.
 ```
 
 Types are generally spelled the same way as their values.
-Where a name is followed by a type, as a struct field's is,
-the value puts the value-assignment sigil, `=`, in place of the type sigil, `:`.
+Where a name is annotated with a type, as a struct field's is,
+the value puts the defining sigil, `=`, in place of the annotating sigil, `:`.
 Where there is no name, nothing changes:
 `[T]` and `[e]`, `(T, U)` and `(e, f)`, `%{K -> V}` and `%{k -> v}`.
 

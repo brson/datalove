@@ -4,21 +4,33 @@ Datalove reserves some symbols to strongly mean one thing.
 
 | When you see | it means                       |
 |--------------|--------------------------------|
-| `:`          | type                           |
-| `=`          | value binding                  |
+| `:`          | annotate: has type             |
+| `=`          | define: stands for             |
 | `->`         | maps to (map key to value)     |
 | `?`          | option                         |
 | `!`          | result                         |
 | `@`          | adapt (clone / widen / coerce) |
 | `;`          | statement break / newline      |
 
-`:` and `=` only ever follow a name:
-`:` gives the name's type and `=` its value,
-so a struct's type is `{ x: T }` and its value `{ x = e }`.
-Where there is no name, a type and its value are written alike:
+`:` annotates: what follows it is the type of the name before it,
+`let x: u32`, or of the expression a hint precedes, `: u32 / 1`.
+`=` defines: what follows it is what a name stands for,
+a value for `let`, `const` or a struct field,
+and a type for `type`.
+So every declaration reads _keyword name: annotation = definition_:
+
+```datalove
+let x: u32 = 1
+const LIMIT: u32 = 10
+type Point = { x: f32, y: f32 }
+```
+
+A struct field is annotated in the struct's type and defined in its value,
+`{ x: T }` and `{ x = e }`.
+Where nothing is annotated or defined, a type and its value are written alike:
 `[T]` and `[e]`, `(T, U)` and `(e, f)`.
-A map's key is a value rather than a name,
-so a map takes neither name sigil, and uses `->` in both:
+A map's key is a value rather than a name, neither annotated nor defined,
+so a map uses `->` in both:
 `%{string -> u32}` and `%{"a" -> 1}`.
 
 Likewise some bracket pairs are strongly suggestive.

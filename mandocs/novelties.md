@@ -153,7 +153,7 @@ An atom or term stands alone as a type,
 and an enum is a closed union of them:
 
 ```datalove
-type Shape: enum { atom Empty, term Circle f64, term Square f64 }
+type Shape = enum { atom Empty, term Circle f64, term Square f64 }
 
 fun unit_circle(): term Circle f64
     ret term Circle 1.0

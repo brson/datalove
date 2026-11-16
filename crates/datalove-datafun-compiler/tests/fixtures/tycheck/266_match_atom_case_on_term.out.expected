@@ -6,8 +6,8 @@
         {
           "message": "`case atom` matches a variant with no payload",
           "span": [
-            167,
-            168
+            168,
+            169
           ],
           "text": "t"
         }

@@ -37,7 +37,7 @@
  [38;5;240m  │[0m                            [38;5;158m─[0m[38;5;158m─[0m[38;5;158m┬[0m[38;5;158m─[0m  
  [38;5;240m  │[0m                              [38;5;158m╰[0m[38;5;158m─[0m[38;5;158m─[0m[38;5;158m─[0m no type of this name is in scope
  [38;5;240m  │[0m 
- [38;5;240m  │[0m [38;5;115mNote[0m: a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in.
+ [38;5;240m  │[0m [38;5;115mNote[0m: a bare name in type position is a type alias, written `type Name = <type>`, or one of the type parameters of the generic function it appears in.
 [38;5;246m───╯[0m
 [31m[F086] Error:[0m function `fine` is defined twice
    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/rider_interface/local/broken/rider/rider.dli:4:1 [38;5;246m][0m

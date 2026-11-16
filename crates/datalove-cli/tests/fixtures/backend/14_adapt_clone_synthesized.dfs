@@ -10,7 +10,7 @@
 // dropped, and a clone of a linear payload is where a missed drop shows up as
 // a leak and a doubled one as a crash.
 
-type Held: enum { atom Nothing, term Text string }
+type Held = enum { atom Nothing, term Text string }
 
 // The shape the ownership analysis asks for: a match inside a loop, whose
 // input would otherwise be moved on the first turn.

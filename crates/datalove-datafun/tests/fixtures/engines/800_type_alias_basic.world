@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Basic type alias for int.
-type MyInt: int
+type MyInt = int
 
 let x: MyInt = 42
 

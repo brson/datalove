@@ -16,8 +16,8 @@
 // what it is given while the enum owns what it is built from. Moving it freed
 // the same payload twice.
 
-type Colour: enum { atom Red, atom Blue, atom Green }
-type Tagged: enum { atom Empty, term Note string, term Count u32 }
+type Colour = enum { atom Red, atom Blue, atom Green }
+type Tagged = enum { atom Empty, term Note string, term Count u32 }
 
 fun name_of(c: Colour): string
   match c

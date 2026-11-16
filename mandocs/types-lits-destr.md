@@ -8,10 +8,11 @@ and for destructuring syntax to look identical to literal syntax;
 and for all types to use sigils and braces that are both visually distinct
 but also evocative of other types that use the same sigils and braces.
 
-`:` and `=` follow names: a struct field's type follows `:`,
-and its value follows `=`.
+`:` annotates a name with its type and `=` defines what a name stands for,
+so a struct field's type follows `:` and its value follows `=`.
 Everything else is punctuated the same in a type as in its literal,
 including the `->` between a map's keys and values.
+See [sigil-logic](sigil-logic.md).
 
 Curly braces `{ }` are for structish types,
 square braces `[ ]` are for arrayish types, etc.
@@ -124,7 +125,7 @@ let atom Foo = a
 let term Bar x = t
 
 // Enums
-type Shape: enum {
+type Shape = enum {
   atom Circle,
   term Rect (f32, f32),
 }
@@ -174,7 +175,7 @@ end if
 Enums with `match`.
 
 ```datalove
-type Shape: enum {
+type Shape = enum {
   atom Point,
   term Rect (f32, f32),
 }

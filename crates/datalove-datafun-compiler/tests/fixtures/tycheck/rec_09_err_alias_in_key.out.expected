@@ -6,8 +6,8 @@
         {
           "message": "recursive type in a key",
           "span": [
-            28,
-            29
+            30,
+            31
           ],
           "text": "L"
         }

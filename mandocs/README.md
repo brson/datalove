@@ -142,7 +142,7 @@ recompile and reevaluate when changed.
 require module sys/std/list
 require module sys/std/u32
 
-type Book: {
+type Book = {
   title: string,
   author: string,
   price_cents: u32,

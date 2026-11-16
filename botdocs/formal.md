@@ -174,7 +174,7 @@ found the first two, and the law tests confirmed them before either was
 fixed:
 
 - An atom or term did not adapt to a recursive enum. With
-  `type Json: rec J enum { atom Null, term Arr [J] }` and `a = atom Null`,
+  `type Json = rec J enum { atom Null, term Arr [J] }` and `a = atom Null`,
   `let j: Json = a@` was F091, though `let e: enum { atom Null, term Arr [Json] } = a@`
   and then `let j: Json = e` both checked, and so did the literal
   `let j: Json = atom Null`.
