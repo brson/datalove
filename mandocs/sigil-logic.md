@@ -35,8 +35,29 @@ so a map uses `->` in both:
 
 Likewise some bracket pairs are strongly suggestive.
 
-| When you see | it means                        |
-|--------------|---------------------------------|
-| `<` … `>`    | generics                        |
-| `{` … `}`    | struct-like, structs and tables |
-| `[` … `]`    | array-like, lists and tensors   |
+| When you see | it means                                      |
+|--------------|-----------------------------------------------|
+| `(` … `)`    | positional and fixed: tuples, params, calls   |
+| `[` … `]`    | positional and growable: lists                |
+| `{` … `}`    | keyed: structs and enums, by name             |
+| `<` … `>`    | generics                                      |
+
+`[ ]` holds members found by position,
+and `{ }` members found by name or key rather than position.
+A struct's fields and an enum's variants are found by name,
+and a sigil before the `{` says what else keys it:
+
+| When you see | it means                                      |
+|--------------|-----------------------------------------------|
+| `%{` … `}`   | map: members found by key, `%{k -> v}`        |
+| `#{` … `}`   | set: members found by themselves, `#{e}`      |
+
+Earmuffs, a `|` inside the bracket, make the many-dimensional form
+of what the bracket holds:
+
+| When you see  | it means                                |
+|---------------|-----------------------------------------|
+| `[\|` … `\|]` | tensor: a list along several axes       |
+| `{\|` … `\|}` | table: rows of a struct, kept by column |
+| `(\|` … `\|)` | reserved                                |
+| `<\|` … `\|>` | reserved                                |
