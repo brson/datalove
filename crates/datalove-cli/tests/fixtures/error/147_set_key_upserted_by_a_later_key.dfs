@@ -1,7 +1,7 @@
 // A later bare index consumes its key, so it may not take the one an earlier
 // key looked up still reads (O017). `set ms[k]![k@] = ...` is fine.
 
-var ms: %{string = %{string = string}} = %{"a" = %{"a" = "aa"}}
+var ms: %{string -> %{string -> string}} = %{"a" -> %{"a" -> "aa"}}
 var k: string = "a"
 set ms[k]![k] = "v"
 debuglog ms

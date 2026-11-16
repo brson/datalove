@@ -5,7 +5,7 @@ fun eat(k: string): string
   ret "a"
 end fun
 
-var ms: %{string = %{string = string}} = %{"a" = %{"a" = "aa"}}
+var ms: %{string -> %{string -> string}} = %{"a" -> %{"a" -> "aa"}}
 var k: string = "a"
 set ms[k]![eat(k)] = "v"
 debuglog ms
