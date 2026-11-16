@@ -451,9 +451,23 @@ fn drop_binding_hints(text: &str) -> String {
     out
 }
 
+/// Whether a script parses without a diagnostic.
+///
+/// A script that does not is not type checked: the CLI stops at its parse
+/// errors, and the type checker is not made to run on what they leave.
+fn parses(text: &str) -> bool {
+    let db = &datalove_datafun_compiler::Database::default();
+    let source = bct::input::Source::new(db, text.S());
+    datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, source).is_empty()
+}
+
 /// The codes of a script's type diagnostics, in order, its serde AST, and the
-/// types it gives its bindings, as `init_types` lists them.
-fn rust_side(text: &str) -> (Vec<String>, Value, Vec<Value>) {
+/// types it gives its bindings, as `init_types` lists them. `None` where the
+/// script does not parse.
+fn rust_side(text: &str) -> Option<(Vec<String>, Value, Vec<Value>)> {
+    if !parses(text) {
+        return None;
+    }
     let db = &datalove_datafun_compiler::Database::default();
     let source = bct::input::Source::new(db, text.S());
     let parsed = datalove_datafun_parser::parse_for_diagnostics(db, source);
@@ -470,7 +484,7 @@ fn rust_side(text: &str) -> (Vec<String>, Value, Vec<Value>) {
         let body = parsed.top.body(db);
         init_types(db, &|e| types.get(e).cloned(), &body.arena, &body.statements, &mut inits);
     }
-    (codes, rmx::serde_json::to_value(&script).X(), inits)
+    Some((codes, rmx::serde_json::to_value(&script).X(), inits))
 }
 
 /// The types the Rust gives each `let`, `var` and `const` with a value and no
@@ -566,6 +580,7 @@ fn world_typing_agrees() {
     config.module_count = (1, 3);
     config.qualified_calls = true;
     let mut cases: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    let mut unparsed = 0;
     for world in WORLD_CORPUS {
         cases.push(("corpus".S(), world.iter().map(|(p, t)| (p.S(), t.S())).collect()));
     }
@@ -580,13 +595,17 @@ fn world_typing_agrees() {
             let m = rng.random_range(0..modules.len());
             modules[m].1 = mutate(&mut rng, &modules[m].1);
         }
-        cases.push((fmt!("seed {seed}"), modules));
+        if modules.iter().all(|(_, text)| parses(text)) {
+            cases.push((fmt!("seed {seed}"), modules));
+        } else {
+            unparsed += 1;
+        }
     }
     let mut queries = Vec::new();
     let mut rust = Vec::new();
     for (_, modules) in &cases {
         let world: Vec<_> = modules.iter()
-            .map(|(path, text)| json!({ "path": path, "script": rust_side(text).1 }))
+            .map(|(path, text)| json!({ "path": path, "script": rust_side(text).X().1 }))
             .collect();
         queries.push(json!({ "world": world }));
         rust.push(rust_world_side(modules));
@@ -615,7 +634,7 @@ fn world_typing_agrees() {
         }
     }
     println!(
-        "{} worlds over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}",
+        "{} worlds over seeds {}..{}: {agreed} agree, {} differ; skipped {skipped:?}; {unparsed} not parsed",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(10) {
@@ -671,10 +690,17 @@ fn statement_typing_agrees() {
         cases.push((fmt!("seed {seed}, unhinted"), drop_binding_hints(&generated)));
     }
 
+    let mut unparsed = 0;
+    cases.retain(|(what, text)| {
+        let ok = parses(text);
+        assert!(ok || what != "corpus", "a corpus script does not parse:\n{text}");
+        unparsed += usize::from(!ok);
+        ok
+    });
     let mut queries = Vec::new();
     let mut rust = Vec::new();
     for (_, text) in &cases {
-        let (codes, script, inits) = rust_side(text);
+        let (codes, script, inits) = rust_side(text).X();
         queries.push(json!({ "fun": script }));
         rust.push((codes, inits));
     }
@@ -721,7 +747,7 @@ fn statement_typing_agrees() {
         }
     }
     println!(
-        "{} scripts over seeds {}..{}: {agreed} agree, {} differ, {typed} binding types compared; skipped {skipped:?}; codes {outcomes:?}",
+        "{} scripts over seeds {}..{}: {agreed} agree, {} differ, {typed} binding types compared; skipped {skipped:?}, {unparsed} not parsed; codes {outcomes:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(15) {
@@ -804,9 +830,9 @@ fn instances_check() {
             mutated = mutate(&mut rng, &mutated);
         }
         for text in [base, mutated] {
-            // Clean: no type diagnostic, and nothing the parser could not read.
-            let (codes, script, _) = rust_side(&text);
-            if !codes.is_empty() || script.to_string().contains("ParseError") {
+            // Clean: it parses, with no type diagnostic.
+            let Some((codes, _, _)) = rust_side(&text) else { continue };
+            if !codes.is_empty() {
                 continue;
             }
             for inst in instances(&mut rng, &text) {
@@ -817,8 +843,10 @@ fn instances_check() {
 
     let mut queries = Vec::new();
     let mut rust = Vec::new();
-    for (_, text) in &cases {
-        let (codes, script, _) = rust_side(text);
+    for (seed, text) in &cases {
+        let Some((codes, script, _)) = rust_side(text) else {
+            panic!("seed {seed}: an instance of a script that parses does not:\n{text}");
+        };
         queries.push(json!({ "fun": script }));
         rust.push(codes);
     }
@@ -853,7 +881,10 @@ fn instances_check() {
 #[test]
 fn ast_of() {
     let Ok(path) = std::env::var("FORMAL_FUN_AST_OF") else { return };
-    let (codes, script, _) = rust_side(&std::fs::read_to_string(path).X());
+    let Some((codes, script, _)) = rust_side(&std::fs::read_to_string(path).X()) else {
+        println!("it does not parse");
+        return;
+    };
     println!("{}", rmx::serde_json::to_string_pretty(&script).X());
     println!("rust:  {codes:?}");
     if oracle_path().exists() {
@@ -1173,8 +1204,9 @@ fn runs_agree() {
     config.debuglog_probability = 0;
     config.param_mode_probability = 30;
     let mut cases = Vec::new();
+    let mut unparsed = 0;
     for text in RUN_CORPUS {
-        let (codes, script, _) = rust_side(text);
+        let (codes, script, _) = rust_side(text).unwrap_or_else(|| panic!("a run corpus script does not parse:\n{text}"));
         assert!(codes.is_empty(), "a run corpus script does not check: {codes:?}\n{text}");
         cases.push(("corpus".S(), text.S(), script));
     }
@@ -1200,9 +1232,10 @@ fn runs_agree() {
                 continue;
             }
             let text = fmt!("{}\n{drive}", text.trim_end());
-            let (codes, script, _) = rust_side(&text);
-            if codes.is_empty() {
-                cases.push((fmt!("seed {seed}{kind}"), text, script));
+            match rust_side(&text) {
+                Some((codes, script, _)) if codes.is_empty() => cases.push((fmt!("seed {seed}{kind}"), text, script)),
+                Some(_) => {}
+                None => unparsed += 1,
             }
         }
     }
@@ -1253,7 +1286,7 @@ fn runs_agree() {
         }
     }
     println!(
-        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; {writing} writing back through a call; ends {ends:?}",
+        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; {writing} writing back through a call; {unparsed} not parsed; ends {ends:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(10) {
